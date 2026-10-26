@@ -64,7 +64,9 @@ How it behaves:
   investigation's record.
 - **Credentials.** The service account token is read from its file, so a
   rotated token is used without a restart. A `kubeconfigSecret` is read on
-  each call, and the client is built again only when the file changes.
+  each call, and the client is built again only when the file changes. It
+  may hold only inline credentials; see
+  [Another cluster](#another-cluster-a-kubeconfig-secret).
 - **Size.** Results over 256 KiB are cut and marked as cut.
 
 ## Permissions
@@ -196,9 +198,23 @@ subjects:
 
 To read a cluster Sidekick does not run in, create a service account there
 with the same rules, put a kubeconfig file for it in a Secret, and name it
-in `kubeconfigSecret`. Use a token or client certificate written into the
-file; a kubeconfig that runs a command for credentials (`exec`) needs that
-command in the Sidekick image, which the official image does not have.
+in `kubeconfigSecret`.
+
+The file must carry its credentials itself. Sidekick accepts a `token`,
+`client-certificate-data` with `client-key-data`, or a `username` and
+`password`, with the cluster's CA in `certificate-authority-data`. It
+refuses a file that would make it run a program or read another file in
+its pod, and the source's calls fail with a message that names the user or
+cluster and the key to use instead:
+
+- `exec` credential plugins, such as `aws eks get-token`, and legacy
+  `auth-provider` plugins;
+- paths to files: `tokenFile`, `client-certificate`, `client-key` and
+  `certificate-authority`.
+
+`insecure-skip-tls-verify: true` works, but anyone on the network path to
+the cluster could then read and change Sidekick's requests, so Sidekick
+logs a warning each time it builds a client from such a file.
 
 ```yaml
 sources:
