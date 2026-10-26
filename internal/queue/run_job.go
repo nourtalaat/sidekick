@@ -90,7 +90,11 @@ func (r *Runner) renew(job db.Job, lease time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
 	defer cancel()
 
-	return renew(ctx, r.pool, job, lease)
+	if err := renew(ctx, r.pool, job, lease); err != nil {
+		return fmt.Errorf("renew lease: %w", err)
+	}
+
+	return nil
 }
 
 // finish records the result of a job's run: err from the handler, and the
