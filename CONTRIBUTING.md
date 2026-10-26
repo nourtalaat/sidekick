@@ -323,5 +323,6 @@ if err := a.RegisterJob(queue.KindRouteEvent, router, queue.KindOptions{}); err 
 Routes go on the main listener (`server.listen`); the metrics listener is
 reserved for `/metrics`, `/healthz` and `/readyz`. The job queue runs only
 when at least one handler is registered. Get the config, logger, metrics
-registry, tracer provider, database pool and plugin instances from the
-app's accessors rather than from globals.
+registry, tracer provider, database pool, secrets resolver (`Secrets`),
+redactor (`Redactor`) and plugin instances from the app's accessors rather
+than from globals.

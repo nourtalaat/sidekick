@@ -18,6 +18,8 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/queue"
+	"github.com/nourtalaat/sidekick/internal/registry"
+	"github.com/nourtalaat/sidekick/internal/secrets"
 	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 	"github.com/nourtalaat/sidekick/internal/store/storetest"
@@ -117,6 +119,53 @@ func TestNewStartUp(t *testing.T) {
 			if tt.wantLog != "" {
 				require.Contains(t, logs.String(), tt.wantLog)
 			}
+		})
+	}
+}
+
+func TestAccessors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		check func(t *testing.T, a *App, dbURL, logs string)
+	}{
+		{
+			name: "the redactor uses the configured rules and warns about the missing hash key",
+			check: func(t *testing.T, a *App, _, logs string) {
+				t.Helper()
+
+				res := a.Redactor().Text("login with password=hunter2")
+				require.NotContains(t, res.Text, "hunter2")
+				require.Equal(t, map[string]int{"password_pairs": 1}, res.Counts)
+				require.Contains(t, logs, `"component":"redact"`)
+				require.Contains(t, logs, "no redaction hash key is set")
+			},
+		},
+		{
+			name: "secrets resolve from the configured directory",
+			check: func(t *testing.T, a *App, dbURL, _ string) {
+				t.Helper()
+
+				value, err := secrets.ResolveText(t.Context(), a.Secrets(), registry.SecretRef{Name: "sidekick-db", Key: "url"})
+				require.NoError(t, err)
+				require.Equal(t, dbURL, value, "the database URL secret does not match")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dbURL := storetest.NewURL(t)
+			logs := &syncBuffer{}
+
+			a, err := newApp(t, dbURL, config.MigrationsStartup, logs)
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, a.Close()) })
+
+			tt.check(t, a, dbURL, logs.String())
 		})
 	}
 }
