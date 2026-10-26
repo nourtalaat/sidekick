@@ -36,7 +36,9 @@ Right after the answer, Sidekick sends each received event to the first
 [route](configuration.md#routes) that matches it and opens an
 investigation for it. For now every event gets an investigation of its
 own, even when the same alert fires again while an earlier one is still
-open.
+open. An event over a [rate limit](configuration.md#rate-limits) is not
+routed at once: its status becomes `delayed`, and it is routed once the
+window has room, or `skipped`, with the limit as its reason.
 
 Every secret is read again on each delivery, so a rotated token or key is
 used without a restart. An endpoint whose secret file is empty refuses

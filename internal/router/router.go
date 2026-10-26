@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -31,6 +33,15 @@ const SpanName = "router.route"
 
 // tracerName names the tracer of this package.
 const tracerName = "github.com/nourtalaat/sidekick/internal/router"
+
+// skipped counts an event that is not investigated, for reason.
+func (r *Router) skipped(route, reason string) {
+	if r.skippedEvents == nil {
+		return
+	}
+
+	r.skippedEvents.WithLabelValues(route, reason).Inc()
+}
 
 // Span attributes.
 const (
@@ -62,6 +73,9 @@ type Options struct {
 	// Logger receives one line per routed event, with IDs and the route
 	// only, never event text. Nil logs nothing.
 	Logger *slog.Logger
+	// Metrics is where the router registers sidekick_events_skipped_total.
+	// Nil records nothing.
+	Metrics prometheus.Registerer
 	// TracerProvider makes the tracer of the router.route spans. Nil means
 	// the global tracer provider.
 	TracerProvider trace.TracerProvider
@@ -74,6 +88,13 @@ type Router struct {
 	pool   *pgxpool.Pool
 	log    *slog.Logger
 	tracer trace.Tracer
+	// globalRate is budgets.rateLimit, nil for none.
+	globalRate *config.RateLimit
+	// skippedEvents counts the events a rate limit skipped; nil counts
+	// none.
+	skippedEvents *prometheus.CounterVec
+	// now is the clock of the rate limits. Tests replace it.
+	now func() time.Time
 }
 
 var _ queue.Handler = (*Router)(nil)
@@ -107,14 +128,32 @@ func New(opts Options) (*Router, error) {
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	return &Router{routes: routes, pool: opts.Pool, log: log, tracer: tp.Tracer(tracerName)}, nil
+	r := &Router{
+		routes:     routes,
+		pool:       opts.Pool,
+		log:        log,
+		tracer:     tp.Tracer(tracerName),
+		globalRate: opts.Config.Budgets.RateLimit,
+		now:        time.Now,
+	}
+
+	if opts.Metrics != nil {
+		r.skippedEvents, err = investigator.NewSkippedEvents(opts.Metrics)
+		if err != nil {
+			return nil, fmt.Errorf("set up the router metrics: %w", err)
+		}
+	}
+
+	return r, nil
 }
 
 // Handle routes the event of one route_event job inside a router.route
-// span, a child of the span that enqueued the job. In one transaction it
-// sets the event to routed with its route and a new group, opens that
-// group, creates a queued investigation for it, enqueues its investigate
-// job and enqueues the first publish job for each output of the route.
+// span, a child of the span that enqueued the job. It first checks the
+// global and the route's rate limits, which can hold the event. Then, in
+// one transaction, it sets the event to routed with its route and a new
+// group, opens that group, creates a queued investigation for it, enqueues
+// its investigate job and enqueues the first publish job for each output
+// of the route.
 //
 // It is safe to run more than once: an event that is no longer received,
 // because it was routed already or intake skipped it, is left as it is,
@@ -154,6 +193,15 @@ func (r *Router) Handle(ctx context.Context, job db.Job) (err error) {
 	span.SetAttributes(attribute.String(attrRoute, rt.name))
 	log = log.With("route", rt.name)
 
+	admitted, err := r.admit(ctx, job, ev, rt, log)
+	if err != nil {
+		return fmt.Errorf("event %s: %w", eventID, err)
+	}
+
+	if !admitted {
+		return nil
+	}
+
 	o, routed, err := r.open(ctx, ev, rt)
 	if err != nil {
 		return fmt.Errorf("route event %s: %w", eventID, err)
@@ -172,7 +220,8 @@ func (r *Router) Handle(ctx context.Context, job db.Job) (err error) {
 }
 
 // match loads the event with id and picks its route. It reports false for
-// an event that is not waiting to be routed. Errors that wrap
+// an event that is not waiting to be routed: received, or delayed by a
+// rate limit. Errors that wrap
 // queue.ErrGiveUp mean a retry cannot help.
 func (r *Router) match(ctx context.Context, id uuid.UUID) (ev db.Event, rt route, waiting bool, err error) {
 	ev, err = db.New(r.pool).GetEvent(ctx, id)
@@ -184,7 +233,7 @@ func (r *Router) match(ctx context.Context, id uuid.UUID) (ev db.Event, rt route
 		return db.Event{}, route{}, false, fmt.Errorf("load the event: %w", err)
 	}
 
-	if ev.Status != statusReceived || ev.Kind == string(event.KindResolved) {
+	if (ev.Status != statusReceived && ev.Status != statusDelayed) || ev.Kind == string(event.KindResolved) {
 		return ev, route{}, false, nil
 	}
 

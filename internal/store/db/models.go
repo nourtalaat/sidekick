@@ -124,6 +124,12 @@ type PublishState struct {
 	UpdatedAt       time.Time
 }
 
+type RateAdmission struct {
+	Scope      string
+	EventID    uuid.UUID
+	AdmittedAt time.Time
+}
+
 type SpendDaily struct {
 	Day          pgtype.Date
 	Route        string

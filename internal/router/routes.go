@@ -31,6 +31,8 @@ type route struct {
 	budget     []byte
 	// outputs are the sinks the investigation's updates go to.
 	outputs []string
+	// rateLimit is the route's own rate limit, nil for none.
+	rateLimit *config.RateLimit
 }
 
 // newRoutes prepares the routes of cfg in the order they are tried.
@@ -106,6 +108,7 @@ func newRoute(rc config.Route, globalRoles map[model.Role]string, strategies *st
 		connectors:      connectorsJSON,
 		budget:          budgetJSON,
 		outputs:         rc.Outputs,
+		rateLimit:       rc.RateLimit,
 	}, nil
 }
 
