@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 
+	"go.yaml.in/yaml/v3"
+
 	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/source"
@@ -35,6 +37,10 @@ var headerNamePattern = regexp.MustCompile("^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 // envNamePattern is the shape of an environment variable name.
 var envNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
+// errOAuthUnsupported is returned for a source that sets oauth.
+var errOAuthUnsupported = errors.New("oauth: MCP sources do not support OAuth yet; " +
+	"put a token in a Secret and send it with headers (or env for stdio), see docs/sources/mcp-authentication.md")
+
 // reservedHeaders are set by the MCP transports themselves, so config may
 // not set them.
 var reservedHeaders = []string{"Accept", "Content-Type", "Content-Length", "Host", "Last-Event-Id", "Mcp-Protocol-Version", "Mcp-Session-Id"}
@@ -54,6 +60,10 @@ type Config struct {
 	// Env is the environment of the stdio child process. The child gets
 	// only these variables and PATH, never Sidekick's own environment.
 	Env map[string]Value `yaml:"env"`
+	// OAuth is read only so that Validate can reject it with a clear
+	// message: MCP sources authenticate with static headers or env values
+	// from Secrets, and do not support OAuth yet.
+	OAuth yaml.Node `yaml:"oauth"`
 }
 
 // Value is a header or environment value: a plain value, or a secret with
@@ -66,10 +76,15 @@ type Value struct {
 
 // Validate checks the section without secrets or network calls: http and
 // sse need an absolute http or https url and a timeout the HTTP client can
-// honour, stdio needs a command, and each header and environment value is
-// set exactly one way. Each error starts with the key of its field.
+// honour, stdio needs a command, each header and environment value is set
+// exactly one way, and oauth is not set. Each error starts with the key of
+// its field.
 func (c *Config) Validate() error {
 	var errs []error
+
+	if c.OAuth.Kind != 0 {
+		errs = append(errs, errOAuthUnsupported)
+	}
 
 	switch c.transport() {
 	case TransportHTTP, TransportSSE:

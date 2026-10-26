@@ -15,6 +15,8 @@ without a real service in the way. The example is built and tested in CI,
 but nothing imports it, so it is not part of the `sidekick` binary. The MCP
 source in `internal/source/mcp` is the full version of every step,
 including a connection that is made in the background.
+[Authenticating MCP sources](../sources/mcp-authentication.md) explains
+why that source sends static headers from Secrets rather than using OAuth.
 
 ## The interface
 

@@ -54,6 +54,7 @@ func TestValidateFixtures(t *testing.T) {
 		{file: "source-bad-tool-glob", want: []string{`sources.signoz.tools.deny[1]: invalid glob "*delete[": syntax error in pattern`}},
 		{file: "source-negative-limits", want: []string{"sources.signoz.concurrency: must not be negative", "sources.signoz.timeout: must not be negative"}},
 		{file: "source-mcp-timeout-above-limit", want: []string{"sources.signoz.timeout: 1m1s is above 1m0s, the longest the HTTP client waits for response headers with transport http"}},
+		{file: "source-mcp-oauth", want: []string{"sources.sentry.oauth: MCP sources do not support OAuth yet; put a token in a Secret and send it with headers (or env for stdio), see docs/sources/mcp-authentication.md"}},
 		// Secrets
 		{file: "secret-missing-key", want: []string{"database.urlSecret.key: required"}},
 		{file: "plugin-secret-shape", want: []string{`sources.signoz.headers.Authorization.secret.name: "../signoz" must not be "." or ".." or contain "/" or "\"`}},
