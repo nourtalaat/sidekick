@@ -1,0 +1,36 @@
+{
+  "text": "Not sure yet: checkout-api p99 latency above 2s",
+  "attachments": [
+    {
+      "color": "#7C85A3",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": ":grey_question: *Not sure yet*\nThe model's report did not pass its checks 3 times, so this report holds only what the investigation recorded.",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*Findings*\n• Disk use on db-1 rose from 70% to 93% since 09:00.\n• _Hypothesis, no evidence yet:_ A backup job may have filled the disk.",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "Checked signoz",
+              "verbatim": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
