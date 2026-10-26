@@ -52,7 +52,7 @@ func (c *Connector) generateResponses(ctx context.Context, req model.Request, op
 
 	resp, requestID, err := c.streamResponse(ctx, params, opts)
 	if err != nil {
-		return model.Response{}, err
+		return model.Response{}, fmt.Errorf("response: %w", err)
 	}
 
 	out := fromResponse(resp)
@@ -111,12 +111,12 @@ func (c *Connector) streamResponse(ctx context.Context, params responses.Respons
 func (c *Connector) responseParams(req model.Request) (responses.ResponseNewParams, error) {
 	input, err := inputItems(req.Messages)
 	if err != nil {
-		return responses.ResponseNewParams{}, err
+		return responses.ResponseNewParams{}, fmt.Errorf("map input items: %w", err)
 	}
 
 	tools, err := responseTools(req.Tools)
 	if err != nil {
-		return responses.ResponseNewParams{}, err
+		return responses.ResponseNewParams{}, fmt.Errorf("map tools: %w", err)
 	}
 
 	p := responses.ResponseNewParams{

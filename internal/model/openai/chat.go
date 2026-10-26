@@ -52,7 +52,7 @@ func (c *Connector) generateChat(ctx context.Context, req model.Request, opts []
 
 	completion, requestID, err := c.streamChat(ctx, params, opts)
 	if err != nil {
-		return model.Response{}, err
+		return model.Response{}, fmt.Errorf("chat completion: %w", err)
 	}
 
 	out := fromChat(completion)
@@ -102,7 +102,7 @@ func (c *Connector) streamChat(ctx context.Context, params openai.ChatCompletion
 func (c *Connector) chatParams(req model.Request) (openai.ChatCompletionNewParams, error) {
 	messages, err := chatMessages(req.System, req.Messages)
 	if err != nil {
-		return openai.ChatCompletionNewParams{}, err
+		return openai.ChatCompletionNewParams{}, fmt.Errorf("map messages: %w", err)
 	}
 
 	p := openai.ChatCompletionNewParams{
@@ -116,7 +116,7 @@ func (c *Connector) chatParams(req model.Request) (openai.ChatCompletionNewParam
 	if req.ToolChoice.Mode != model.ToolChoiceNone || c.caps.ToolChoice {
 		tools, err := chatTools(req.Tools)
 		if err != nil {
-			return openai.ChatCompletionNewParams{}, err
+			return openai.ChatCompletionNewParams{}, fmt.Errorf("map tools: %w", err)
 		}
 
 		p.Tools = tools
