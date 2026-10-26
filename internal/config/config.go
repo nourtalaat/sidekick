@@ -324,7 +324,7 @@ func Load(ctx context.Context, path string, opts LoadOptions) (*Config, error) {
 // Parse decodes and checks a config file's content. On problems in the
 // content the error is Errors, which lists every problem with its field
 // path.
-func Parse(_ context.Context, data []byte, _ LoadOptions) (*Config, error) {
+func Parse(ctx context.Context, data []byte, opts LoadOptions) (*Config, error) {
 	doc, err := parseDocument(data)
 	if err != nil {
 		return nil, err
@@ -337,6 +337,15 @@ func Parse(_ context.Context, data []byte, _ LoadOptions) (*Config, error) {
 
 	d := decoder{errs: &errs}
 	d.decode(doc, reflect.ValueOf(cfg).Elem(), "")
+
+	var invalid Errors
+	if errors.As(Validate(ctx, cfg, opts), &invalid) {
+		for _, e := range invalid {
+			if !d.underFailed(e.Path) {
+				errs.addAll(Errors{e})
+			}
+		}
+	}
 
 	if err := errs.err(); err != nil {
 		return nil, err

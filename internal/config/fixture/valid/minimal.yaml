@@ -1,0 +1,13 @@
+# The smallest valid config: a database, one connector for the investigate
+# role, and the default route.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default

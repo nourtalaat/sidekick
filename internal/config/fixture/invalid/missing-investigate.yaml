@@ -1,0 +1,12 @@
+# No connector for the investigate role.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    judge: claude
+
+routes:
+  - name: default

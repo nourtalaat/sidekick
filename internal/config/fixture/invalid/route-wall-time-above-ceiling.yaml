@@ -1,0 +1,16 @@
+# A route wall time limit above the global ceiling.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+budgets:
+  perInvestigation: { maxToolCalls: 40, maxWallTime: 10m }
+
+routes:
+  - name: default
+    budgets: { maxWallTime: 15m }

@@ -1,0 +1,16 @@
+# The investigate role on a model without tool calling (MC-7).
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    local:
+      provider: openai
+      baseURL: http://vllm.ml.svc:8000/v1
+      model: qwen3-32b
+      capabilities: { toolCalling: false, contextTokens: 32768 }
+  roles:
+    investigate: local
+
+routes:
+  - name: default

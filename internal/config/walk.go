@@ -58,6 +58,12 @@ func (w *walker[T]) walk(v reflect.Value, path string, depth int) {
 			return
 		}
 
+		for i := range v.NumField() {
+			if f := v.Type().Field(i); f.Type == w.target && isInline(f) {
+				w.walk(v.Field(i), path, depth)
+			}
+		}
+
 		fields := structFields(v.Type())
 		for _, key := range fields.keys {
 			w.walk(v.FieldByIndex(fields.byKey[key]), joinPath(path, key), depth)

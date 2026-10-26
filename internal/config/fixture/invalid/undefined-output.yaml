@@ -1,0 +1,16 @@
+# A route that names an output that does not exist (OUT-5).
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+outputs:
+  slack-thread: { type: slack, channel: "#alerts" }
+
+routes:
+  - name: default
+    outputs: [slack-thread, slak-thread]

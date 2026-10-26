@@ -20,6 +20,8 @@ import (
 func TestParseFileProblems(t *testing.T) {
 	t.Parallel()
 
+	minimal := minimalYAML(t)
+
 	tests := []struct {
 		name string
 		yaml string
@@ -30,15 +32,15 @@ func TestParseFileProblems(t *testing.T) {
 		{name: "invalid YAML", yaml: "server: [\n", want: "invalid YAML: line 1: did not find expected node content"},
 		{name: "two documents", yaml: "server: {}\n---\nserver: {}\n", want: "the file must hold one YAML document"},
 		{name: "top level is a list", yaml: "- a\n", want: "expected a mapping, got a list"},
-		{name: "unknown top-level key", yaml: "servr: {}\n", want: `servr: unknown key (did you mean "server"?)`},
-		{name: "a later section", yaml: "watch: {}\n", want: "watch: unknown key"},
+		{name: "unknown top-level key", yaml: minimal + "servr: {}\n", want: `servr: unknown key (did you mean "server"?)`},
+		{name: "a later section", yaml: minimal + "watch: {}\n", want: "watch: unknown key"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			cfg, err := Parse(t.Context(), []byte(tt.yaml), LoadOptions{})
+			cfg, err := Parse(t.Context(), []byte(tt.yaml), testOptions())
 			require.EqualError(t, err, tt.want)
 			require.Nil(t, cfg)
 		})
@@ -48,6 +50,8 @@ func TestParseFileProblems(t *testing.T) {
 func TestParseDefaults(t *testing.T) {
 	t.Parallel()
 
+	minimal := minimalYAML(t)
+
 	tests := []struct {
 		name  string
 		yaml  string
@@ -55,7 +59,7 @@ func TestParseDefaults(t *testing.T) {
 	}{
 		{
 			name: "missing sections get their defaults",
-			yaml: "routes: [{name: default}]\n",
+			yaml: minimal,
 			check: func(t *testing.T, cfg *Config) {
 				t.Helper()
 				require.Equal(t, Server{Listen: ":8080", MetricsListen: ":9090"}, cfg.Server)
@@ -74,17 +78,16 @@ func TestParseDefaults(t *testing.T) {
 		},
 		{
 			name: "set values win over defaults",
-			yaml: `
+			yaml: baseYAML + `
 server: {listen: ":1"}
-database: {maxConns: 5}
 budgets: {perInvestigation: {maxToolCalls: 10}}
 routes:
   - {name: a, priority: 0, budgets: {maxWallTime: 1m}}
+  - {name: default}
 `,
 			check: func(t *testing.T, cfg *Config) {
 				t.Helper()
 				require.Equal(t, Server{Listen: ":1", MetricsListen: ":9090"}, cfg.Server)
-				require.Equal(t, 5, cfg.Database.MaxConns)
 				require.Equal(t, Limits{MaxToolCalls: 10, MaxWallTime: 10 * time.Minute}, cfg.Budgets.PerInvestigation)
 				require.Equal(t, 0, cfg.Routes[0].Priority)
 				require.Equal(t, Limits{MaxToolCalls: 10, MaxWallTime: time.Minute}, cfg.Routes[0].Budgets)
@@ -93,9 +96,12 @@ routes:
 		{
 			name: "plugin sections keep everything but their type",
 			yaml: `
+database: {urlSecret: {name: db, key: url}}
 model:
   connectors:
     claude: {provider: anthropic, model: m, effort: high}
+  roles: {investigate: claude}
+routes: [{name: default}]
 sources:
   k8s: {type: kubernetes, namespaces: [prod]}
 outputs:
@@ -103,10 +109,10 @@ outputs:
 intake:
   webhooks:
     am:
-      adapter: alertmanager
+      adapter: generic
       auth: {bearer: {name: hooks, key: am}}
       trusted: true
-      extra: 1
+      fields: {title: $.title}
 `,
 			check: func(t *testing.T, cfg *Config) {
 				t.Helper()
@@ -121,16 +127,16 @@ intake:
 				require.Equal(t, "slack", cfg.Outputs["slack-thread"].Type)
 
 				am := cfg.Intake.Webhooks["am"]
-				require.Equal(t, "alertmanager", am.Type)
+				require.Equal(t, "generic", am.Type)
 				require.Equal(t, "intake.webhooks.am", am.Path())
 				require.True(t, am.Trusted)
 				require.Equal(t, WebhookAuth{Bearer: &registry.SecretRef{Name: "hooks", Key: "am"}, Tolerance: DefaultHMACTolerance}, am.Auth)
-				require.Equal(t, []string{"extra", "1"}, nodeStrings(am.Node))
+				require.Equal(t, []string{"fields", ""}, nodeStrings(am.Node))
 			},
 		},
 		{
 			name: "webhook without auth still gets the default tolerance",
-			yaml: "intake: {webhooks: {ci: {adapter: generic}}}\n",
+			yaml: minimal + "intake: {webhooks: {ci: {adapter: generic, auth: {hmac: {name: h, key: ci}}}}}\n",
 			check: func(t *testing.T, cfg *Config) {
 				t.Helper()
 				require.Equal(t, DefaultHMACTolerance, cfg.Intake.Webhooks["ci"].Auth.Tolerance)
@@ -142,7 +148,7 @@ intake:
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			cfg, err := Parse(t.Context(), []byte(tt.yaml), LoadOptions{})
+			cfg, err := Parse(t.Context(), []byte(tt.yaml), testOptions())
 			require.NoError(t, err)
 			tt.check(t, cfg)
 		})
@@ -152,6 +158,8 @@ intake:
 func TestParsePluginSectionProblems(t *testing.T) {
 	t.Parallel()
 
+	minimal := minimalYAML(t)
+
 	tests := []struct {
 		name string
 		yaml string
@@ -159,23 +167,23 @@ func TestParsePluginSectionProblems(t *testing.T) {
 	}{
 		{
 			name: "section that is not a mapping",
-			yaml: "sources: {k8s: kubernetes}\n",
+			yaml: minimal + "sources: {k8s: kubernetes}\n",
 			want: Errors{{Path: "sources.k8s", Message: `expected a mapping, got "kubernetes"`}},
 		},
 		{
 			name: "type that is not a string",
-			yaml: "outputs: {x: {type: [slack]}}\n",
+			yaml: minimal + "outputs: {x: {type: [slack]}}\n",
 			want: Errors{{Path: "outputs.x.type", Message: "expected a string, got a list"}},
 		},
 		{
 			name: "webhook auth with an unknown key",
-			yaml: "intake: {webhooks: {ci: {adapter: generic, auth: {bearr: {name: a, key: b}}}}}\n",
+			yaml: minimal + "intake: {webhooks: {ci: {adapter: generic, auth: {hmac: {name: a, key: b}, bearr: {name: a, key: b}}}}}\n",
 			want: Errors{{Path: "intake.webhooks.ci.auth.bearr", Message: `unknown key (did you mean "bearer"?)`}},
 		},
 		{
-			name: "connector set twice",
-			yaml: "model:\n  connectors:\n    a: {provider: x}\n    a: {provider: y}\n",
-			want: Errors{{Path: "model.connectors.a", Message: "set more than once"}},
+			name: "source set twice",
+			yaml: minimal + "sources:\n  a: {type: mcp}\n  a: {type: kubernetes}\n",
+			want: Errors{{Path: "sources.a", Message: "set more than once"}},
 		},
 	}
 
@@ -183,7 +191,7 @@ func TestParsePluginSectionProblems(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := Parse(t.Context(), []byte(tt.yaml), LoadOptions{})
+			_, err := Parse(t.Context(), []byte(tt.yaml), testOptions())
 			require.Equal(t, tt.want, err)
 		})
 	}
@@ -217,7 +225,7 @@ func TestSectionDecode(t *testing.T) {
 			yaml: "{provider: p, model: m, thinkng: {mode: off}}",
 			want: fakeConnectorConfig{Settings: model.Settings{Model: "m"}},
 			wantErr: Errors{{
-				Path:    "model.connectors.claude.thinkng",
+				Path:    "connectors.claude.thinkng",
 				Message: `unknown key (did you mean "thinking"?)`,
 			}},
 		},
@@ -227,12 +235,12 @@ func TestSectionDecode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			cfg, err := Parse(t.Context(), []byte("model: {connectors: {claude: "+tt.yaml+"}}"), LoadOptions{})
-			require.NoError(t, err)
+			var m Model
+			require.Empty(t, decodeString(t, "connectors: {claude: "+tt.yaml+"}", &m))
 
 			var got fakeConnectorConfig
 
-			err = cfg.Model.Connectors["claude"].Decode(&got)
+			err := m.Connectors["claude"].Decode(&got)
 			require.Equal(t, tt.wantErr, err)
 			require.Equal(t, tt.want, got)
 		})
@@ -267,10 +275,10 @@ func TestLoad(t *testing.T) {
 
 	dir := t.TempDir()
 	valid := filepath.Join(dir, "valid.yaml")
-	require.NoError(t, os.WriteFile(valid, []byte("routes: [{name: default}]\n"), 0o600))
+	require.NoError(t, os.WriteFile(valid, []byte(minimalYAML(t)), 0o600))
 
 	invalid := filepath.Join(dir, "invalid.yaml")
-	require.NoError(t, os.WriteFile(invalid, []byte("servr: {}\n"), 0o600))
+	require.NoError(t, os.WriteFile(invalid, []byte(minimalYAML(t)+"servr: {}\n"), 0o600))
 
 	tests := []struct {
 		name       string
@@ -292,7 +300,7 @@ func TestLoad(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			cfg, err := Load(t.Context(), tt.path, LoadOptions{})
+			cfg, err := Load(t.Context(), tt.path, testOptions())
 			if tt.wantErr != "" {
 				require.EqualError(t, err, tt.wantErr)
 				require.Nil(t, cfg)
