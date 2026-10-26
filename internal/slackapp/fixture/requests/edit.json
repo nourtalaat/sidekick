@@ -1,0 +1,28 @@
+{
+  "token": "unused-verification-token",
+  "team_id": "T01TEAM",
+  "api_app_id": "A01SIDEKICK",
+  "type": "event_callback",
+  "event_id": "Ev07EDIT",
+  "event_time": 1761472800,
+  "authorizations": [
+    {
+      "team_id": "T01TEAM",
+      "user_id": "U01SIDEKICK",
+      "is_bot": true
+    }
+  ],
+  "event": {
+    "type": "message",
+    "subtype": "message_changed",
+    "channel": "C01OPS",
+    "hidden": true,
+    "message": {
+      "type": "message",
+      "user": "U02ALICE",
+      "text": "edited",
+      "ts": "1761472960.000500"
+    },
+    "ts": "1761472980.000700"
+  }
+}
