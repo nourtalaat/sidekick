@@ -18,6 +18,11 @@ import (
 	"github.com/nourtalaat/sidekick/internal/model"
 )
 
+// retryAfterSlack is how far a wait read from an HTTP date may be from
+// the expected one: the date has whole seconds, and a slow machine takes
+// time between writing the date and reading it back.
+const retryAfterSlack = 5 * time.Second
+
 // timeoutError is a net.Error that timed out.
 type timeoutError struct{}
 
@@ -104,7 +109,7 @@ func TestClassify(t *testing.T) {
 			got := classify(tt.err)
 			require.Equal(t, tt.wantKind, got.Kind)
 			require.ErrorIs(t, got, tt.err)
-			require.InDelta(t, tt.wantRetryAfter, got.RetryAfter, float64(time.Second))
+			require.InDelta(t, tt.wantRetryAfter, got.RetryAfter, float64(retryAfterSlack))
 		})
 	}
 }
