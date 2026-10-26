@@ -1,0 +1,40 @@
+# The config the sender adapter tests load: one endpoint per sender, and a
+# second Grafana endpoint that checks Grafana's own signature. The secrets
+# under fixture/secrets are test values only. The model connector is a
+# fake the tests register.
+database:
+  urlSecret: { name: db, key: url }
+
+secrets:
+  dir: fixture/secrets
+
+model:
+  connectors:
+    fake: { provider: fake }
+  roles:
+    investigate: fake
+
+intake:
+  webhooks:
+    signoz:
+      adapter: signoz
+      auth: { bearer: { name: hooks, key: signoz } }
+    datadog:
+      adapter: datadog
+      auth: { bearer: { name: hooks, key: datadog } }
+    sentry:
+      adapter: sentry
+      auth: { hmac: { name: hooks, key: sentry } }
+    grafana:
+      adapter: grafana
+      auth: { bearer: { name: hooks, key: grafana } }
+    grafana-signed:
+      adapter: grafana
+      auth: { hmac: { name: hooks, key: grafana-signed } }
+      signature: { timestampHeader: X-Grafana-Alerting-Timestamp }
+
+routes:
+  - name: default
+
+redaction:
+  hashKeySecret: { name: redaction, key: hash-key }

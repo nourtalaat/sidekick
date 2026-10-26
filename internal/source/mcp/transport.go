@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"fmt"
-	"io"
 	"mime"
 	"net/http"
 	"os"
@@ -114,37 +113,10 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	if mediaType, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type")); mediaType != eventStreamType {
-		resp.Body = &limitedBody{ReadCloser: resp.Body, left: maxMessageSize}
+		resp.Body = httpclient.LimitBody(resp.Body, maxMessageSize, errMessageTooLarge)
 	}
 
 	return resp, nil
-}
-
-// limitedBody fails a read once more than its limit has been read.
-type limitedBody struct {
-	io.ReadCloser
-
-	left int64
-}
-
-// Read implements io.Reader.
-func (b *limitedBody) Read(p []byte) (int, error) {
-	if b.left < 0 {
-		return 0, errMessageTooLarge
-	}
-
-	if int64(len(p)) > b.left+1 {
-		p = p[:b.left+1]
-	}
-
-	n, err := b.ReadCloser.Read(p)
-	b.left -= int64(n)
-
-	if b.left < 0 {
-		return n, errMessageTooLarge
-	}
-
-	return n, err //nolint:wrapcheck // io.Reader callers compare err with io.EOF, so it must stay unwrapped.
 }
 
 // command builds the child process of a stdio source. It gets only PATH

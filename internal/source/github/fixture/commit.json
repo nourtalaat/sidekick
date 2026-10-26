@@ -1,0 +1,31 @@
+{
+  "sha": "abc1234def5678abc1234def5678abc1234def56",
+  "html_url": "https://github.com/acme/checkout/commit/abc1234def5678abc1234def5678abc1234def56",
+  "commit": {
+    "message": "Lower DB pool size to 5 to save connections\n\nThe pool was too large for the new database.",
+    "author": {"name": "Ada Lovelace", "email": "ada@example.com", "date": "2026-05-04T10:04:00Z"},
+    "committer": {"name": "GitHub", "email": "noreply@github.com", "date": "2026-05-04T10:05:00Z"}
+  },
+  "author": {"login": "ada"},
+  "committer": {"login": "web-flow"},
+  "parents": [{"sha": "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c"}],
+  "stats": {"additions": 1, "deletions": 1, "total": 2},
+  "files": [
+    {
+      "filename": "config/db.yaml",
+      "status": "modified",
+      "additions": 1,
+      "deletions": 1,
+      "changes": 2,
+      "patch": "@@ -1,3 +1,3 @@\n database:\n-  poolSize: 20\n+  poolSize: 5\n"
+    },
+    {
+      "filename": "docs/db.md",
+      "previous_filename": "docs/database.md",
+      "status": "renamed",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0
+    }
+  ]
+}
