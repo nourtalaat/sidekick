@@ -14,6 +14,9 @@ import (
 	"github.com/nourtalaat/sidekick/internal/source"
 )
 
+// defaultBaseURL is the REST API root of github.com.
+const defaultBaseURL = "https://api.github.com/"
+
 // repoPattern is the shape of a repository name, owner/name.
 var repoPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 
@@ -153,6 +156,20 @@ func (c *Config) allows(repo string) bool {
 	}
 
 	return false
+}
+
+// baseURL returns the configured REST API root, ending in a slash, or
+// defaultBaseURL.
+func (c *Config) baseURL() string {
+	if c.BaseURL == "" {
+		return defaultBaseURL
+	}
+
+	if strings.HasSuffix(c.BaseURL, "/") {
+		return c.BaseURL
+	}
+
+	return c.BaseURL + "/"
 }
 
 // validRepo reports whether s is a repository name, owner/name. Neither
