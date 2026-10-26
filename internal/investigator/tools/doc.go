@@ -8,5 +8,7 @@
 // JSON Schema check of the model's input. Results are redacted and wrapped
 // as untrusted data before the model sees them, failures come back as tool
 // errors the model can react to, and Run.Checked records what each source
-// returned (VR-6).
+// returned (VR-6). Guard.Do gives other guarded work, such as the HTTP
+// probes of watchers, the same timeout, concurrency limit, circuit breaker
+// and panic recovery, keyed by target.
 package tools

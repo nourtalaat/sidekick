@@ -664,6 +664,60 @@ telemetry:
   logLevel: info                                            # debug, info, warn or error
 ```
 
+### `watch`
+
+Watchers are periodic, read-only checks that tell when a service is back
+up after an alert. This section holds the rules for their HTTP checks. Only
+this file sets them; neither the model nor runtime rules can change them.
+
+```yaml
+watch:
+  http:
+    allowHosts: ["*.internal.example.com", "status.example.com"]
+    allowPrivate: ["10.20.0.0/16"]   # private ranges are blocked unless listed
+```
+
+`allowHosts` lists the hosts an HTTP check may reach: exact host names or
+IP addresses, or `*.` and a name, which matches every name below it
+(`*.internal.example.com` matches `api.internal.example.com` but not
+`internal.example.com` itself). Names match without regard to case. With no
+`allowHosts`, HTTP checks cannot reach anything.
+
+Even on an allowed host, an HTTP check cannot reach a private or special
+address unless `allowPrivate` lists it, as a range in CIDR form or as one
+address. The blocked ranges are:
+
+| IPv4 | IPv6 |
+|---|---|
+| `0.0.0.0/8`, `127.0.0.0/8` (loopback) | `::`, `::1` (loopback), `::/96` |
+| `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` (private) | `fc00::/7` (unique local) |
+| `100.64.0.0/10` (carrier-grade NAT) | `fe80::/10` (link-local), `fec0::/10` |
+| `169.254.0.0/16` (link-local, including the cloud metadata address `169.254.169.254`) | `ff00::/8` (multicast) |
+| `224.0.0.0/4` (multicast), `240.0.0.0/4` (reserved and broadcast) | `64:ff9b:1::/48`, `100::/64`, `2001::/23`, `2001:db8::/32`, `2002::/16` |
+| `192.0.0.0/24`, `192.0.2.0/24`, `192.88.99.0/24`, `198.18.0.0/15`, `198.51.100.0/24`, `203.0.113.0/24` | |
+
+An IPv4-mapped address (`::ffff:10.0.0.1`) or a NAT64 address
+(`64:ff9b::a00:1`) counts as the IPv4 address it carries.
+
+HTTP checks also follow these rules, which cannot be turned off:
+
+- Only `GET`, only `http` and `https`, with TLS certificates verified. No
+  cookies are kept or sent, and proxy settings from the environment are not
+  used.
+- The host is resolved before the request and every address it resolves
+  to is checked. The address the connection actually goes to is checked
+  again just before connecting, so a DNS answer that changes in between
+  cannot reach a blocked address.
+- Redirects are followed only to the same host, and at most 3. Any other
+  redirect is not followed; the redirect itself is the response.
+- At most 64 KiB of a response body is read. Bodies are redacted before any
+  part of them is stored.
+- At most 2 checks run at once against one host, in each replica.
+
+A refused request ends the check with an error and is counted in
+`sidekick_watch_http_blocked_total`, by reason: `host`, `private_ip` or
+`redirect`.
+
 ## Defaults
 
 | Setting | Default |
@@ -685,6 +739,8 @@ telemetry:
 | `report.minFalsePositiveConfidence` | `high` |
 | `redaction.builtIn` | every built-in rule except `ip_addresses` |
 | `telemetry.logLevel` | `info` |
+| `watch.http.allowHosts` | none: HTTP checks cannot reach any host |
+| `watch.http.allowPrivate` | none: every private and special range is blocked |
 
 ## What is checked
 
@@ -714,6 +770,9 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
 - Every `redaction.builtIn` entry is a built-in rule. Every custom
   redaction rule has a unique name of the right shape that is not a
   built-in rule's name, and a pattern that parses.
+- Every `watch.http.allowHosts` entry is a host name, an IP address, or
+  `*.` and a host name, and every `watch.http.allowPrivate` entry is a range
+  in CIDR form or an IP address.
 - `database.migrations`, `report.minFalsePositiveConfidence` and
   `telemetry.logLevel` are known values, URLs are absolute, and listen
   addresses have a port.

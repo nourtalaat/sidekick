@@ -13,6 +13,7 @@ const (
 	MetricCalls    = "sidekick_tool_calls_total"
 	MetricDuration = "sidekick_tool_call_duration_seconds"
 	MetricSourceUp = "sidekick_source_up"
+	MetricKeysFull = "sidekick_guard_keys_full_total"
 )
 
 // SpanName is the name of the span of one tool call.
@@ -61,6 +62,7 @@ type Metrics struct {
 	calls    *prometheus.CounterVec
 	duration *prometheus.HistogramVec
 	up       *upCollector
+	keysFull prometheus.Counter
 }
 
 // recordCall counts one source call and its duration.
@@ -71,6 +73,15 @@ func (m *Metrics) recordCall(sourceName, tool, outcome string, elapsed time.Dura
 
 	m.calls.WithLabelValues(sourceName, tool, outcome).Inc()
 	m.duration.WithLabelValues(sourceName).Observe(elapsed.Seconds())
+}
+
+// recordKeysFull counts a Do call refused because every key was in use.
+func (m *Metrics) recordKeysFull() {
+	if m == nil {
+		return
+	}
+
+	m.keysFull.Inc()
 }
 
 // watch makes MetricSourceUp report the sources of g.
@@ -145,9 +156,13 @@ func NewMetrics(reg prometheus.Registerer) (*Metrics, error) {
 			"Whether a source can take calls: 1 when it is connected and its circuit breaker is closed, 0 otherwise.",
 			[]string{labelSource}, nil,
 		)},
+		keysFull: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: MetricKeysFull,
+			Help: "Guarded calls that are not source tool calls, such as watcher HTTP probes, refused because the guard already held limits for its maximum number of targets, all in use.",
+		}),
 	}
 
-	for _, c := range []prometheus.Collector{m.calls, m.duration, m.up} {
+	for _, c := range []prometheus.Collector{m.calls, m.duration, m.up, m.keysFull} {
 		if err := reg.Register(c); err != nil {
 			return nil, fmt.Errorf("register tool metrics: %w", err)
 		}

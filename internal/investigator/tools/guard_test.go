@@ -76,6 +76,8 @@ func TestRunCall(t *testing.T) {
 				t.Helper()
 
 				require.NotContains(t, string(r.Structured), "ops@example.com")
+				require.True(t, strings.HasPrefix(r.Text, "login as [REDACTED:"), "Text is the redacted text without the untrusted data markers")
+				require.NotContains(t, r.Text, "hunter2")
 				require.Len(t, r.Evidence, 1)
 				require.NotContains(t, r.Evidence[0].Title, "ops@example.com")
 				require.Empty(t, r.Evidence[0].URL, "a link that redaction changed is dropped")
@@ -367,6 +369,52 @@ func TestGuardStart(t *testing.T) {
 
 			require.ElementsMatch(t, tt.wantTools, names)
 			require.Equal(t, tt.wantChecked, run.Checked())
+		})
+	}
+}
+
+func TestRunQualifiedName(t *testing.T) {
+	t.Parallel()
+
+	writer := source.Tool{Name: "delete_logs", ReadOnly: false}
+
+	tests := []struct {
+		name     string
+		settings source.Settings
+		source   string
+		tool     string
+		want     string
+		wantOK   bool
+	}{
+		{name: "an exposed tool", source: "signoz", tool: "search_logs", want: "signoz__search_logs", wantOK: true},
+		{
+			name:     "a renamed tool",
+			settings: source.Settings{Tools: source.ToolSettings{Rename: map[string]string{"search_logs": "logs"}}},
+			source:   "signoz", tool: "search_logs", want: "signoz__logs", wantOK: true,
+		},
+		{name: "a tool that writes is not exposed", source: "signoz", tool: "delete_logs"},
+		{
+			name:     "a denied tool is not exposed",
+			settings: source.Settings{Tools: source.ToolSettings{Filter: source.Filter{Deny: []string{"search_*"}}}},
+			source:   "signoz", tool: "search_logs",
+		},
+		{name: "another source", source: "loki", tool: "search_logs"},
+		{name: "an unknown tool", source: "signoz", tool: "missing"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctrl := gomock.NewController(t)
+			m := source.NewMockSource(ctrl)
+			m.EXPECT().Tools(gomock.Any()).Return([]source.Tool{searchTool, writer}, nil)
+
+			run := newGuard(t, Source{Name: "signoz", Source: m, Settings: tt.settings}).Start(t.Context(), "inv-1", nil)
+
+			got, ok := run.QualifiedName(tt.source, tt.tool)
+			require.Equal(t, tt.wantOK, ok)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
