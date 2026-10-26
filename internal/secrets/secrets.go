@@ -45,8 +45,8 @@ func (d Dir) Resolve(ctx context.Context, ref registry.SecretRef) ([]byte, error
 		return nil, fmt.Errorf("resolve secret %s/%s: %w", ref.Name, ref.Key, err)
 	}
 
-	if !plainElement(ref.Name) || !plainElement(ref.Key) {
-		return nil, fmt.Errorf("secret %q key %q: %w", ref.Name, ref.Key, ErrBadRef)
+	if err := CheckRef(ref); err != nil {
+		return nil, fmt.Errorf("secret %q key %q: %w: %w", ref.Name, ref.Key, ErrBadRef, err)
 	}
 
 	value, err := d.read(path.Join(ref.Name, ref.Key))
@@ -90,6 +90,25 @@ func NewDir(dir string) Dir {
 	}
 
 	return Dir{dir: dir}
+}
+
+// CheckRef reports whether ref can name a secret file: its name and key must
+// each be one plain path element. It joins one error per bad field, each
+// starting with the field's key, so config validation can point at it.
+// Resolve wraps these errors with ErrBadRef.
+func CheckRef(ref registry.SecretRef) error {
+	var errs []error
+
+	for _, f := range []struct{ key, value string }{{"name", ref.Name}, {"key", ref.Key}} {
+		switch {
+		case f.value == "":
+			errs = append(errs, fmt.Errorf("%s: required", f.key))
+		case !plainElement(f.value):
+			errs = append(errs, fmt.Errorf(`%s: %q must not be "." or ".." or contain "/" or "\"`, f.key, f.value))
+		}
+	}
+
+	return errors.Join(errs...)
 }
 
 // ResolveText resolves ref through s and removes trailing "\r" and "\n"

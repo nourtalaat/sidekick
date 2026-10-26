@@ -219,6 +219,37 @@ func TestDirResolveReadsRotatedSecret(t *testing.T) {
 	}
 }
 
+func TestCheckRef(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		ref     registry.SecretRef
+		wantErr string
+	}{
+		{name: "valid", ref: registry.SecretRef{Name: "sidekick-db", Key: "url"}},
+		{name: "key with a dot", ref: registry.SecretRef{Name: "github", Key: "private-key.pem"}},
+		{name: "both empty", ref: registry.SecretRef{}, wantErr: "name: required\nkey: required"},
+		{name: "name with a slash", ref: registry.SecretRef{Name: "a/b", Key: "k"}, wantErr: `name: "a/b" must not be "." or ".." or contain "/" or "\"`},
+		{name: "key is the parent directory", ref: registry.SecretRef{Name: "n", Key: ".."}, wantErr: `key: ".." must not be "." or ".." or contain "/" or "\"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := CheckRef(tt.ref)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+
+				return
+			}
+
+			require.EqualError(t, err, tt.wantErr)
+		})
+	}
+}
+
 func TestResolveText(t *testing.T) {
 	t.Parallel()
 
