@@ -1,8 +1,10 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +14,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/nourtalaat/sidekick/internal/registry"
+	"github.com/nourtalaat/sidekick/internal/strategy"
 )
 
 func TestValidateFixtures(t *testing.T) {
@@ -60,6 +63,8 @@ func TestValidateFixtures(t *testing.T) {
 		{file: "mode-approved", want: []string{`routes[0].mode: mode "approved" is not available yet: ` + readOnlyUntilM4}},
 		{file: "unknown-mode", want: []string{`routes[0].mode: unknown mode "readonly" (did you mean "read-only"?)`}},
 		{file: "actions-set", want: []string{"routes[0].actions: must be empty: " + readOnlyUntilM4}},
+		{file: "undefined-strategy", want: []string{`routes[0].strategy: strategy "generic-alrt" is not defined (did you mean "generic-alert"?)`}},
+		{file: "bad-strategy-file", want: []string{`strategies.dir: fixture/strategies-invalid/generic-alert.yaml: line 3: unknown key "frist"`}},
 		{file: "unknown-severity", want: []string{`routes[0].match.severity[0]: unknown severity "critcal" (did you mean "critical"?)`}},
 		// Budgets
 		{file: "route-tool-calls-above-ceiling", want: []string{"routes[0].budgets.maxToolCalls: 50 is above the global ceiling budgets.perInvestigation.maxToolCalls 40"}},
@@ -115,19 +120,83 @@ func TestValidateValidFixtures(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		file string
+		name string
+		data func(t *testing.T) []byte
 	}{
-		{file: "valid/minimal.yaml"},
-		{file: "valid/example.yaml"},
+		{name: "minimal", data: func(t *testing.T) []byte { t.Helper(); return readFixture(t, "valid/minimal.yaml") }},
+		{name: "example", data: exampleYAML},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.file, func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			cfg, err := Parse(t.Context(), readFixture(t, tt.file), testOptions())
+			cfg, err := Parse(t.Context(), tt.data(t), testOptions())
 			require.NoError(t, err)
 			require.NotNil(t, cfg)
+		})
+	}
+}
+
+func TestValidateStrategies(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		file    string
+		wantErr string
+		wantLog string
+		check   func(t *testing.T, cfg *Config)
+	}{
+		{
+			name: "a route without a strategy uses generic-alert",
+			file: "valid/minimal.yaml",
+			check: func(t *testing.T, cfg *Config) {
+				t.Helper()
+				require.Equal(t, DefaultStrategy, cfg.Routes[0].Strategy)
+
+				_, ok := cfg.StrategySet().Get(DefaultStrategy)
+				require.True(t, ok)
+			},
+		},
+		{
+			name:    "a strategies dir that cannot be read",
+			file:    "invalid/strategies-dir-not-dir.yaml",
+			wantErr: "strategies.dir: read strategies dir fixture/valid/minimal.yaml: list files: ",
+		},
+		{
+			name:    "a file strategy that overrides a built-in one is logged",
+			file:    "valid/override-strategy.yaml",
+			wantLog: `msg="file strategy overrides built-in strategy" strategy=generic-alert file=fixture/strategies-override/generic-alert.yaml`,
+			check: func(t *testing.T, cfg *Config) {
+				t.Helper()
+
+				st, ok := cfg.StrategySet().Get(DefaultStrategy)
+				require.True(t, ok)
+				require.Equal(t, strategy.File, st.Origin)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var logs bytes.Buffer
+
+			opts := testOptions()
+			opts.Logger = slog.New(slog.NewTextHandler(&logs, nil))
+
+			cfg, err := Parse(t.Context(), readFixture(t, tt.file), opts)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+
+				return
+			}
+
+			require.NoError(t, err)
+			require.Contains(t, logs.String(), tt.wantLog)
+			tt.check(t, cfg)
 		})
 	}
 }
