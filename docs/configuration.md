@@ -141,6 +141,60 @@ claude:
 - **Prompt caching** uses the 5-minute cache. Cache reads and writes are
   priced at their own rates.
 
+#### The `bedrock` provider
+
+The `bedrock` provider calls models on Amazon Bedrock through the Converse
+API.
+
+```yaml
+claude-on-aws:
+  provider: bedrock
+  model: global.anthropic.claude-opus-5-5   # required: a model ID or inference profile ID
+  region: us-east-1                         # required
+  endpoint: https://vpce-0abc.bedrock-runtime.us-east-1.vpce.amazonaws.com   # optional, for a VPC endpoint
+  maxTokens: 32000                          # default 64000 for known models, capped at the model's maximum
+  effort: high                              # low, medium, high, xhigh or max
+  thinking: { mode: adaptive }              # adaptive, or enabled with budgetTokens
+  timeout: 10m                              # per call, default 10m
+  retries: 3                                # retries of throttling, overloads and timeouts
+```
+
+- **Credentials** come from the default AWS credential chain: IRSA or EKS
+  Pod Identity on EKS, otherwise environment variables, the shared config
+  files or the instance role. There is no key in the config. The role
+  needs `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream`
+  on the model or inference profile. A Bedrock API key in
+  `AWS_BEARER_TOKEN_BEDROCK` is not used.
+- **Known models.** Sidekick knows the current Claude models on Bedrock,
+  under their Bedrock IDs (for example `anthropic.claude-opus-5-5`,
+  `anthropic.claude-opus-4-6-v1` or
+  `anthropic.claude-haiku-4-5-20251001-v1:0`), and under each geographic or
+  global inference profile ID (`us.`, `us-gov.`, `eu.`, `apac.`, `au.`,
+  `jp.`, `in.` or `global.` before the ID). Most current Claude models are
+  served only through an inference profile, so use one. For any other
+  model ID, an ARN or an application inference profile, describe the model
+  in a `capabilities` block, with the same keys as for the `anthropic`
+  provider. Thinking modes and effort levels can be declared only for
+  Anthropic models (IDs containing `anthropic.`); other model families,
+  such as Amazon Nova or Meta Llama, run with tools only.
+- **Effort and thinking** follow the Claude rules described for the
+  `anthropic` provider, and are sent in the Converse
+  `additionalModelRequestFields`.
+- **Temperature** is passed to the model as given. Claude rejects it while
+  it thinks.
+- **Tool choice.** Converse cannot turn tools off for one call, so tool
+  choice `none` is an error. While a Claude model thinks it cannot be made
+  to call a given tool; such a request is sent with tool choice `auto`.
+- **Prompt caching** uses Bedrock cache points with the 5-minute lifetime,
+  at most 4 per call, on models that support it.
+- **Prices.** The shipped price table has every known model under its bare
+  ID and each inference profile. A `global.` profile costs the same as the
+  Claude API; in-Region and geographic profiles cost 10% more. GovCloud
+  prices are not shipped; set them with `prices`.
+- **Long outputs.** A call is streamed when its output limit is above
+  21,333 tokens, as the default limit is, so long answers do not hit HTTP
+  timeouts.
+
 ### `sources`
 
 Sources give the investigation tools to call. Each one has a `type`, and the
