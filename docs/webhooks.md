@@ -151,9 +151,19 @@ a path finds more than one value, when a field finds an object or an
 array, and when the labels are not an object of such values. Other paths
 that find nothing leave their part of the event empty.
 
+### Monitoring tools
+
+These adapters read the webhooks of one monitoring tool each. They have
+no field mapping to set up; [Setting up senders](senders.md) shows how to
+point each tool at Sidekick and which fields become what.
+
+| Adapter | Sender |
+|---|---|
+| `signoz` | A SigNoz webhook notification channel. |
+
 ### Severities
 
-Both adapters map the sender's severity name, in any case, to one of four
+Every adapter maps the sender's severity name, in any case, to one of four
 levels:
 
 | Level | Names |

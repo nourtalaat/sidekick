@@ -1,0 +1,65 @@
+{
+  "receiver": "sidekick",
+  "status": "firing",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "Checkout p99 latency",
+        "ruleId": "01929c4e-5b7d-7a01-9f3e-2b6c8d0e4a11",
+        "ruleSource": "https://signoz.example.com/alerts/edit?ruleId=01929c4e-5b7d-7a01-9f3e-2b6c8d0e4a11",
+        "service.name": "checkout",
+        "deployment.environment": "prod",
+        "severity": "critical",
+        "threshold.name": "critical"
+      },
+      "annotations": {
+        "summary": "Checkout p99 latency is above 800ms",
+        "description": "The p99 latency of checkout is 1240ms, above the 800ms threshold.",
+        "value": "1240",
+        "threshold.value": "800",
+        "compare_op": "1",
+        "match_type": "1",
+        "related_logs": "https://signoz.example.com/logs/logs-explorer?compositeQuery=%7B%22service.name%22%3A%22checkout%22%7D",
+        "related_traces": "https://signoz.example.com/traces-explorer?compositeQuery=%7B%22service.name%22%3A%22checkout%22%7D"
+      },
+      "startsAt": "2026-10-26T09:12:30.490146+05:30",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "https://signoz.example.com/alerts/edit?ruleId=01929c4e-5b7d-7a01-9f3e-2b6c8d0e4a11",
+      "fingerprint": "ad592b0afcbe2e79"
+    },
+    {
+      "status": "resolved",
+      "labels": {
+        "alertname": "Checkout p99 latency",
+        "ruleId": "01929c4e-5b7d-7a01-9f3e-2b6c8d0e4a11",
+        "ruleSource": "https://signoz.example.com/alerts/edit?ruleId=01929c4e-5b7d-7a01-9f3e-2b6c8d0e4a11",
+        "service.name": "payments",
+        "deployment.environment": "prod",
+        "severity": "warning",
+        "threshold.name": "warning"
+      },
+      "annotations": {
+        "summary": "Checkout p99 latency is above 500ms",
+        "description": "The p99 latency of payments is back under the threshold."
+      },
+      "startsAt": "2026-10-26T08:40:00Z",
+      "endsAt": "2026-10-26T09:05:00Z",
+      "generatorURL": "",
+      "fingerprint": "5d1c9e02b7a3f468"
+    }
+  ],
+  "groupLabels": {
+    "alertname": "Checkout p99 latency"
+  },
+  "commonLabels": {
+    "alertname": "Checkout p99 latency",
+    "deployment.environment": "prod",
+    "ruleId": "01929c4e-5b7d-7a01-9f3e-2b6c8d0e4a11"
+  },
+  "commonAnnotations": {},
+  "externalURL": "https://signoz.example.com",
+  "version": "4",
+  "groupKey": "{}/{ruleId=\"01929c4e-5b7d-7a01-9f3e-2b6c8d0e4a11\"}:{alertname=\"Checkout p99 latency\"}",
+  "truncatedAlerts": 0
+}
