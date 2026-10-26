@@ -156,9 +156,12 @@ Rules:
   `main`; renumber yours to the next free number.
 
 The binary embeds the migrations. `sidekick migrate up` applies them and
-`sidekick migrate status` lists them; both take the database URL from
-`--database-url` or `SIDEKICK_DATABASE_URL`. Only one process migrates at a
-time: goose holds a Postgres advisory lock while it runs.
+`sidekick migrate status` lists them. Both read the config file given with
+`--config` (default `/etc/sidekick/sidekick.yaml`) and take the database URL
+from the secret that `database.urlSecret` names; there is no flag or
+environment variable for it, so the password never shows in the process
+list. Only one process migrates at a time: goose holds a Postgres advisory
+lock while it runs.
 
 ### Adding a query
 

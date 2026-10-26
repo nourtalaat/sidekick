@@ -283,6 +283,22 @@ func (c *Config) RoutesInOrder() []Route {
 	return routes
 }
 
+// DatabaseURL reads the Postgres URL from database.urlSecret through s, or
+// from the files under secrets.dir when s is nil. The URL holds the
+// password, so it is never written to the file or passed as a flag.
+func (c *Config) DatabaseURL(ctx context.Context, s registry.Secrets) (string, error) {
+	if s == nil {
+		s = secrets.NewDir(c.Secrets.Dir)
+	}
+
+	url, err := secrets.ResolveText(ctx, s, c.Database.URLSecret)
+	if err != nil {
+		return "", fmt.Errorf("read database.urlSecret: %w", err)
+	}
+
+	return url, nil
+}
+
 // PriceTable returns the price overrides in micro-dollars, by model ID.
 func (m Model) PriceTable() map[string]model.Price {
 	out := make(map[string]model.Price, len(m.Prices))
