@@ -8,7 +8,7 @@ import (
 
 // Settings are the shared settings every connector instance accepts (MC-5).
 // Each connector embeds Settings in its own config struct next to its
-// provider-specific fields.
+// provider-specific fields, which gives the config the ModelSettings method.
 type Settings struct {
 	Model       string        `yaml:"model"`
 	MaxTokens   int           `yaml:"maxTokens"`
@@ -17,6 +17,17 @@ type Settings struct {
 	Retries     int           `yaml:"retries"`
 	Thinking    Thinking      `yaml:"thinking"`
 	Effort      Effort        `yaml:"effort"`
+}
+
+// Configured is implemented by every config struct that embeds Settings.
+type Configured interface {
+	ModelSettings() Settings
+}
+
+// ModelSettings returns the shared settings. Configs that embed Settings get
+// it as a promoted method.
+func (s Settings) ModelSettings() Settings {
+	return s
 }
 
 // Validate checks the settings against what the configured model supports.

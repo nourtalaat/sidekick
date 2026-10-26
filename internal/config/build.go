@@ -23,6 +23,10 @@ type Instances struct {
 	// configs that embed source.Settings; other sources have the zero value,
 	// which means the defaults.
 	SourceSettings map[string]source.Settings
+	// ModelSettings are the shared settings of each built connector, such
+	// as its model ID, from configs that embed model.Settings; other
+	// connectors have the zero value.
+	ModelSettings map[string]model.Settings
 }
 
 // Build builds every configured plugin instance through the registries,
@@ -58,7 +62,8 @@ func Build(ctx context.Context, cfg *Config, regs Registries, deps registry.Deps
 		Outputs: buildAll(ctx, regs.Outputs, cfg.Outputs, deps, &errs),
 	}
 
-	in.SourceSettings = sourceSettings(ctx, regs.Sources, cfg.Sources, in.Sources, &errs)
+	in.SourceSettings = sharedSettings(ctx, regs.Sources, cfg.Sources, in.Sources, source.Configured.SourceSettings, &errs)
+	in.ModelSettings = sharedSettings(ctx, regs.Models, connectors, in.Models, model.Configured.ModelSettings, &errs)
 
 	checkBuiltRoles(&errs, "model.roles", cfg.Model.Roles, in.Models)
 
@@ -112,10 +117,11 @@ func buildAll[T any](ctx context.Context, reg *registry.Registry[T], sections ma
 	return out
 }
 
-// sourceSettings decodes the shared settings of each built source from its
-// section, without building it again.
-func sourceSettings(ctx context.Context, reg *registry.Registry[source.Source], sections map[string]Section, built map[string]source.Source, errs *errorList) map[string]source.Settings {
-	out := make(map[string]source.Settings, len(built))
+// sharedSettings decodes the shared settings of each built instance from
+// its section, without building it again. Configs that do not implement C
+// get the zero value of S.
+func sharedSettings[T, C, S any](ctx context.Context, reg *registry.Registry[T], sections map[string]Section, built map[string]T, get func(C) S, errs *errorList) map[string]S {
+	out := make(map[string]S, len(built))
 
 	for _, name := range sortedKeys(built) {
 		s := sections[name]
@@ -127,9 +133,9 @@ func sourceSettings(ctx context.Context, reg *registry.Registry[source.Source], 
 			continue
 		}
 
-		var settings source.Settings
-		if c, ok := decoded.(source.Configured); ok {
-			settings = c.SourceSettings()
+		var settings S
+		if c, ok := decoded.(C); ok {
+			settings = get(c)
 		}
 
 		out[name] = settings
