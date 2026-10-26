@@ -73,6 +73,7 @@ func TestValidateFixtures(t *testing.T) {
 		{file: "unknown-confidence", want: []string{`report.minFalsePositiveConfidence: unknown confidence "hgh" (did you mean "high"?)`}},
 		// Intake
 		{file: "webhook-two-auth", want: []string{"intake.webhooks.ci.auth: set exactly one of bearer and hmac, not both"}},
+		{file: "webhook-bad-name", want: []string{`intake.webhooks["alerts/prod"]: name "alerts/prod" ` + nameRule}},
 		{file: "webhook-tolerance", want: []string{"intake.webhooks.ci.auth.tolerance: must be positive"}},
 		{file: "webhook-no-auth", want: []string{"intake.webhooks.ci.auth: set bearer or hmac; every webhook endpoint must authenticate its deliveries"}},
 		// Other sections

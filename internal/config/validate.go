@@ -23,8 +23,10 @@ import (
 	"github.com/nourtalaat/sidekick/internal/secrets"
 )
 
-// namePattern is the rule for connector, source, output and route names.
-// Source names become part of tool names, so the length is limited.
+// namePattern is the rule for connector, source, output, webhook endpoint
+// and route names. Source names become part of tool names, and webhook
+// names part of the URL path /hooks/<name>, so they are limited to plain
+// characters and a short length.
 var namePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,23}$`)
 
 // nameRule explains namePattern in error messages.
@@ -201,6 +203,7 @@ func (v *validator) checkSources() {
 func (v *validator) checkWebhooks() {
 	for _, name := range sortedKeys(v.cfg.Intake.Webhooks) {
 		w := v.cfg.Intake.Webhooks[name]
+		v.checkName(w.Path(), name)
 		checkPlugin(v, v.regs.Intakes, "intake adapter", adapterKey, name, w.Section)
 
 		authPath := joinPath(w.Path(), "auth")
@@ -447,7 +450,8 @@ func (v *validator) reference(path, kind, name string, defined []string) bool {
 	return false
 }
 
-// checkName checks the name of a connector, source or output.
+// checkName checks the name of a connector, source, output or webhook
+// endpoint.
 func (v *validator) checkName(path, name string) {
 	if !namePattern.MatchString(name) {
 		v.errs.add(path, "name %q %s", name, nameRule)

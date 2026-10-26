@@ -233,9 +233,9 @@ telemetry:
 
 Besides unknown keys and values of the wrong type, Sidekick checks that:
 
-- Connector, source, output and route names are unique, start with a
-  lower-case letter, hold only lower-case letters, digits and `-`, and are at
-  most 24 characters long.
+- Connector, source, output, webhook endpoint and route names are unique,
+  start with a lower-case letter, hold only lower-case letters, digits and
+  `-`, and are at most 24 characters long.
 - Every `provider`, source `type`, `adapter` and output `type` is one this
   version of Sidekick has, and its section passes that plugin's own checks.
 - `model.roles.investigate` is set, every role names a defined connector,
