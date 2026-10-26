@@ -94,6 +94,23 @@
         ],
         "additionalProperties": false
       }
+    },
+    {
+      "name": "replication_lag",
+      "description": "Show the replication lag of the Postgres server of a database. On a primary, lists each connected replica from pg_stat_replication, with how far behind it is in bytes and in time. On a replica, shows when it last replayed a transaction, whether replay is paused, how much received WAL it has not replayed yet, and its connection to the primary.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "string",
+            "description": "The database to read, by the name Sidekick's settings give it."
+          }
+        },
+        "required": [
+          "database"
+        ],
+        "additionalProperties": false
+      }
     }
   ]
 }

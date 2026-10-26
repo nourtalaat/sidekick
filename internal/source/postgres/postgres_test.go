@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
@@ -176,6 +177,61 @@ func TestFailure(t *testing.T) {
 	}
 }
 
+func TestBuildReplication(t *testing.T) {
+	t.Parallel()
+
+	lag := int64(4096)
+	paused := true
+	streaming := "streaming"
+	replayedAt := time.Date(2026, 5, 4, 10, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name     string
+		state    serverState
+		standbys []standby
+		want     string
+		wantNone bool
+	}{
+		{name: "a primary without standbys has nothing to show", wantNone: true},
+		{
+			name:     "a primary with a standby",
+			standbys: []standby{{PID: 42, Application: "replica-1", State: &streaming, ReplayBehindBytes: &lag}},
+			want: `{"database":"orders","serverRole":"primary","standbys":[
+				{"pid":42,"application":"replica-1","state":"streaming","replayBehindBytes":4096}
+			]}`,
+		},
+		{
+			name: "a standby with paused replay",
+			state: serverState{
+				InRecovery: true, ReplayPaused: &paused, LastReplayAt: &replayedAt, ReplayBehindBytes: &lag, ReceiverStatus: &streaming,
+			},
+			want: `{"database":"orders","serverRole":"standby","standby":{
+				"replayPaused":true,"lastReplayAt":"2026-05-04T10:00:00Z","replayBehindBytes":4096,"receiverStatus":"streaming"
+			},"standbys":[],"note":` + mustJSON(t, replicationNote) + `}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			res, err := buildReplication(request{database: "orders"}, tt.state, tt.standbys, false)
+			require.NoError(t, err)
+
+			if tt.wantNone {
+				require.True(t, res.NoData)
+				require.Contains(t, res.Text, "no standby streams from it")
+
+				return
+			}
+
+			require.False(t, res.NoData)
+			require.JSONEq(t, tt.want, string(res.Structured))
+			require.Len(t, res.Evidence, 1)
+		})
+	}
+}
+
 func TestBuildLockWaits(t *testing.T) {
 	t.Parallel()
 
@@ -259,7 +315,7 @@ func TestThroughTheGuard(t *testing.T) {
 				names = append(names, spec.Name)
 			}
 
-			require.Equal(t, []string{"db__slow_queries", "db__running_queries", "db__lock_waits"}, names)
+			require.Equal(t, []string{"db__slow_queries", "db__running_queries", "db__lock_waits", "db__replication_lag"}, names)
 
 			res := run.Call(t.Context(), model.ToolCall{ID: "call-1", Name: "db__running_queries", Input: json.RawMessage(tt.input)})
 			require.True(t, res.ToolResult.IsError)
@@ -284,4 +340,14 @@ func newUnitSource(t *testing.T, cfg Config) *Source {
 	t.Cleanup(func() { require.NoError(t, built.Close()) })
 
 	return built
+}
+
+// mustJSON returns v as JSON.
+func mustJSON(t *testing.T, v any) string {
+	t.Helper()
+
+	data, err := json.Marshal(v)
+	require.NoError(t, err)
+
+	return string(data)
 }

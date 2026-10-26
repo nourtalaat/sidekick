@@ -253,6 +253,8 @@ func readerOf(tool string) (reader, error) {
 		return runningQueries, nil
 	case toolLockWaits:
 		return lockWaits, nil
+	case toolReplicationLag:
+		return replicationLag, nil
 	default:
 		return nil, fmt.Errorf("tool %q: %w", tool, errUnknownTool)
 	}

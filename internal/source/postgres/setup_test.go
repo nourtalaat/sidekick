@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/url"
 	"os"
@@ -21,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
+	tcexec "github.com/testcontainers/testcontainers-go/exec"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	"github.com/nourtalaat/sidekick/internal/ids"
@@ -44,6 +46,8 @@ const (
 	testPlainRole     = "sidekick_plain"
 	testPlainPassword = "plain"
 
+	standbyPort        = "5433/tcp"
+	standbyScript      = "/usr/local/bin/start-standby.sh"
 	testDatabasePrefix = "sk57_"
 
 	setupTimeout    = 3 * time.Minute
@@ -57,7 +61,8 @@ const (
 )
 
 // testServer is the Postgres container shared by every test in the test
-// binary. The first test that needs it starts it.
+// binary. The first test that needs it starts it, and the first test that
+// needs the standby starts that.
 type testServer struct {
 	once      sync.Once
 	err       error
@@ -65,6 +70,10 @@ type testServer struct {
 	host      string
 	port      string
 	admin     *pgxpool.Pool
+
+	standbyOnce sync.Once
+	standbyErr  error
+	standbyPort string
 }
 
 var server testServer
@@ -99,12 +108,19 @@ func (s *testServer) start() error {
 	ctx, cancel := context.WithTimeout(context.Background(), setupTimeout)
 	defer cancel()
 
+	script, err := filepath.Abs("fixture/start-standby.sh")
+	if err != nil {
+		return fmt.Errorf("find the standby script: %w", err)
+	}
+
 	container, err := tcpostgres.Run(ctx, testImage,
 		tcpostgres.WithUsername(testAdminUser),
 		tcpostgres.WithPassword(testAdminPassword),
 		tcpostgres.WithDatabase(testAdminDatabase),
 		tcpostgres.BasicWaitStrategies(),
 		testcontainers.WithCmdArgs("-c", "shared_preload_libraries=pg_stat_statements"),
+		testcontainers.WithExposedPorts(standbyPort),
+		testcontainers.WithFiles(testcontainers.ContainerFile{HostFilePath: script, ContainerFilePath: standbyScript, FileMode: 0o755}),
 	)
 	if err != nil {
 		return errors.Join(fmt.Errorf("start a Postgres container: %w", err), testcontainers.TerminateContainer(container))
@@ -136,6 +152,33 @@ func (s *testServer) start() error {
 			return fmt.Errorf("make the test roles: %w", err)
 		}
 	}
+
+	return nil
+}
+
+// startStandby starts the standby in the container and returns its mapped
+// port.
+func (s *testServer) startStandby() error {
+	ctx, cancel := context.WithTimeout(context.Background(), setupTimeout)
+	defer cancel()
+
+	code, out, err := s.container.Exec(ctx, []string{standbyScript, testAdminUser}, tcexec.WithUser("postgres"), tcexec.Multiplexed())
+	if err != nil {
+		return fmt.Errorf("run the standby script: %w", err)
+	}
+
+	if code != 0 {
+		output, readErr := io.ReadAll(out)
+
+		return errors.Join(fmt.Errorf("the standby script exited with %d: %s", code, output), readErr)
+	}
+
+	port, err := s.container.MappedPort(ctx, standbyPort)
+	if err != nil {
+		return fmt.Errorf("read the standby's port: %w", err)
+	}
+
+	s.standbyPort = port.Port()
 
 	return nil
 }
@@ -220,11 +263,26 @@ func setupWith(t *testing.T, seed string) testDB {
 	return testDB{name: name, admin: admin}
 }
 
+// startedStandby starts the standby the first time it is called and returns its
+// mapped port.
+func startedStandby(t *testing.T) string {
+	t.Helper()
+
+	server.standbyOnce.Do(func() {
+		server.standbyErr = server.startStandby()
+	})
+	require.NoError(t, server.standbyErr, "start the standby")
+
+	return server.standbyPort
+}
+
 // target is one database of a test source, with the role it connects as.
 type target struct {
 	name     string
 	user     string
 	password string
+	// port is the server's mapped port. Empty means the primary.
+	port string
 	// database is the database's name on the server.
 	database string
 }
@@ -238,8 +296,13 @@ func newSource(t *testing.T, cfg Config, targets ...target) (*Source, *bytes.Buf
 	dir := t.TempDir()
 
 	for _, tg := range targets {
+		port := tg.port
+		if port == "" {
+			port = server.port
+		}
+
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, tg.name), 0o700))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, tg.name, "url"), []byte(server.url(tg.user, tg.password, server.port, tg.database)+"\n"), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, tg.name, "url"), []byte(server.url(tg.user, tg.password, port, tg.database)+"\n"), 0o600))
 
 		cfg.Databases = append(cfg.Databases, Database{
 			Name:          tg.name,

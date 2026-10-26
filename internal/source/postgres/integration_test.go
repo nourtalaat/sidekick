@@ -252,6 +252,93 @@ func TestSlowQueries(t *testing.T) {
 	}
 }
 
+// TestReplicationLag runs against a real standby with its replay paused,
+// so both the primary and the standby report it behind.
+func TestReplicationLag(t *testing.T) {
+	t.Parallel()
+
+	db := setup(t)
+	port := startedStandby(t)
+
+	standbyAdmin, err := pgx.Connect(t.Context(), server.url(testAdminUser, testAdminPassword, port, testAdminDatabase))
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
+		defer cancel()
+
+		_, err := standbyAdmin.Exec(ctx, "SELECT pg_wal_replay_resume()")
+		require.NoError(t, err)
+		require.NoError(t, standbyAdmin.Close(ctx))
+	})
+
+	_, err = standbyAdmin.Exec(t.Context(), "SELECT pg_wal_replay_pause()")
+	require.NoError(t, err)
+
+	_, err = db.admin.Exec(t.Context(), "UPDATE accounts SET balance = balance + 1")
+	require.NoError(t, err)
+
+	deadline := time.Now().Add(waitTimeout)
+
+	for {
+		var behind bool
+		require.NoError(t, standbyAdmin.QueryRow(t.Context(),
+			"SELECT pg_wal_lsn_diff(pg_last_wal_receive_lsn(), pg_last_wal_replay_lsn()) > 0").Scan(&behind))
+
+		if behind {
+			break
+		}
+
+		require.True(t, time.Now().Before(deadline), "timed out waiting for the standby to fall behind")
+		time.Sleep(pollEvery)
+	}
+
+	tests := []struct {
+		name     string
+		target   target
+		wantRole string
+	}{
+		{name: "the primary lists the standby that is behind", target: monitor(db), wantRole: rolePrimary},
+		{
+			name:     "the standby reports its paused replay",
+			target:   target{name: "orders", user: testMonitorRole, password: testMonitorPassword, port: port, database: testAdminDatabase},
+			wantRole: roleStandby,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s, _ := newSource(t, Config{}, tt.target)
+
+			res, err := s.Call(t.Context(), source.Call{Tool: toolReplicationLag, Input: toolInput(t, map[string]any{"database": "orders"})})
+			require.NoError(t, err)
+			require.False(t, res.NoData)
+
+			var got replicationResult
+			require.NoError(t, json.Unmarshal(res.Structured, &got))
+			require.Equal(t, tt.wantRole, got.ServerRole)
+
+			if tt.wantRole == rolePrimary {
+				require.Nil(t, got.Standby)
+				require.Len(t, got.Standbys, 1)
+				require.Equal(t, "streaming", *got.Standbys[0].State)
+				require.Positive(t, *got.Standbys[0].ReplayBehindBytes)
+
+				return
+			}
+
+			require.Empty(t, got.Standbys)
+			require.NotNil(t, got.Standby)
+			require.True(t, *got.Standby.ReplayPaused)
+			require.Positive(t, *got.Standby.ReplayBehindBytes)
+			require.Equal(t, "streaming", *got.Standby.ReceiverStatus)
+			require.NotEmpty(t, got.Note)
+		})
+	}
+}
+
 // TestSafety checks the limits every query runs under, and the checks on
 // the role and the connection.
 func TestSafety(t *testing.T) {
@@ -470,6 +557,8 @@ func TestQueryPlans(t *testing.T) {
 		{name: "running_queries", sql: activitySQL, args: []any{true, maxQueryLen, 0.0, defaultLimit + 1}},
 		{name: "lock_waits: waiting sessions", sql: waitingSQL, args: []any{true, maxQueryLen, 0.0, defaultLimit + 1}},
 		{name: "lock_waits: blocking sessions", sql: blockersSQL, args: []any{true, maxQueryLen, []int32{1, 2, 3}, maxLimit + 1}},
+		{name: "replication_lag: the server", sql: serverSQL},
+		{name: "replication_lag: standbys", sql: standbysSQL, args: []any{maxLimit + 1}},
 	}
 
 	db := setup(t)

@@ -17,6 +17,7 @@ const (
 	toolSlowQueries    = "slow_queries"
 	toolRunningQueries = "running_queries"
 	toolLockWaits      = "lock_waits"
+	toolReplicationLag = "replication_lag"
 )
 
 // Limits on how many rows a tool returns.
@@ -103,6 +104,15 @@ func toolList(databases []string) []source.Tool {
 				"limit":     limitProperty(),
 			}),
 			ReadOnly: true,
+		},
+		{
+			Name: toolReplicationLag,
+			Description: "Show the replication lag of the Postgres server of a database. On a primary, lists each " +
+				"connected replica from pg_stat_replication, with how far behind it is in bytes and in time. On a " +
+				"replica, shows when it last replayed a transaction, whether replay is paused, how much received WAL " +
+				"it has not replayed yet, and its connection to the primary.",
+			InputSchema: schema(databases, map[string]*jsonschema.Schema{}),
+			ReadOnly:    true,
 		},
 	}
 }
