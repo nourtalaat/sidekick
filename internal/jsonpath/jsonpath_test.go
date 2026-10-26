@@ -137,6 +137,51 @@ func TestUnmarshalText(t *testing.T) {
 	}
 }
 
+func TestMarshalTextRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{name: "a path", path: `$.alerts[*].labels["app.kubernetes.io/name"]`, want: `{"path":"$.alerts[*].labels[\"app.kubernetes.io/name\"]"}`},
+		{name: "the zero path", want: `{"path":""}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var in struct {
+				Path Path `json:"path"`
+			}
+
+			if tt.path != "" {
+				p, err := Parse(tt.path)
+				require.NoError(t, err)
+
+				in.Path = p
+			}
+
+			data, err := json.Marshal(in)
+			require.NoError(t, err)
+			require.JSONEq(t, tt.want, string(data))
+
+			if tt.path == "" {
+				return
+			}
+
+			var out struct {
+				Path Path `json:"path"`
+			}
+
+			require.NoError(t, json.Unmarshal(data, &out))
+			require.Equal(t, in.Path, out.Path)
+		})
+	}
+}
+
 func TestZeroPathFindsNothing(t *testing.T) {
 	t.Parallel()
 

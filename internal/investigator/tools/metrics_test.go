@@ -220,6 +220,7 @@ func TestNilMetrics(t *testing.T) {
 			require.NotPanics(t, func() {
 				m.recordCall("signoz", "search_logs", outcomeOK, time.Second)
 				m.watch(nil)
+				m.recordKeysFull()
 			}, tt.name)
 		})
 	}
