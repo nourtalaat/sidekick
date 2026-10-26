@@ -269,33 +269,40 @@ func TestNew(t *testing.T) {
 	}
 }
 
-func TestLimitedBody(t *testing.T) {
+func TestLimitTransport(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name    string
-		body    string
-		limit   int64
+		size    int
 		wantErr error
 	}{
-		{name: "shorter than the limit", body: "abc", limit: 5},
-		{name: "exactly the limit", body: "abcde", limit: 5},
-		{name: "longer than the limit", body: "abcdef", limit: 5, wantErr: errResponseTooLarge},
+		{name: "at the limit", size: maxResponseSize},
+		{name: "over the limit", size: maxResponseSize + 1, wantErr: errResponseTooLarge},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			b := &limitedBody{ReadCloser: io.NopCloser(bytes.NewBufferString(tt.body)), left: tt.limit}
+			api := fakehttp.New(t)
+			api.Handle(http.MethodGet, "/big", fakehttp.Response{Body: bytes.Repeat([]byte("z"), tt.size)})
+			api.ExpectAllCalled()
 
-			var got bytes.Buffer
+			client := &http.Client{Transport: limitTransport{next: api.Client().Transport}}
 
-			_, err := got.ReadFrom(b)
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, api.URL()+"/big", nil)
+			require.NoError(t, err)
+
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+
+			got, err := io.ReadAll(resp.Body)
+			require.NoError(t, resp.Body.Close())
 			require.ErrorIs(t, err, tt.wantErr)
 
 			if tt.wantErr == nil {
-				require.Equal(t, tt.body, got.String())
+				require.Len(t, got, tt.size)
 			}
 		})
 	}

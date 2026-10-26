@@ -2,8 +2,9 @@ package github
 
 import (
 	"fmt"
-	"io"
 	"net/http"
+
+	"github.com/nourtalaat/sidekick/internal/httpclient"
 )
 
 // maxResponseSize bounds one response body. The largest answers are
@@ -28,34 +29,7 @@ func (t limitTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, fmt.Errorf("send request: %w", err)
 	}
 
-	resp.Body = &limitedBody{ReadCloser: resp.Body, left: maxResponseSize}
+	resp.Body = httpclient.LimitBody(resp.Body, maxResponseSize, errResponseTooLarge)
 
 	return resp, nil
-}
-
-// limitedBody fails a read once more than its limit has been read.
-type limitedBody struct {
-	io.ReadCloser
-
-	left int64
-}
-
-// Read implements io.Reader.
-func (b *limitedBody) Read(p []byte) (int, error) {
-	if b.left < 0 {
-		return 0, errResponseTooLarge
-	}
-
-	if int64(len(p)) > b.left+1 {
-		p = p[:b.left+1]
-	}
-
-	n, err := b.ReadCloser.Read(p)
-	b.left -= int64(n)
-
-	if b.left < 0 {
-		return n, errResponseTooLarge
-	}
-
-	return n, err //nolint:wrapcheck // io.Reader callers compare err with io.EOF, so it must stay unwrapped.
 }
