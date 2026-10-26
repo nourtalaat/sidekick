@@ -117,3 +117,26 @@ type PublishState struct {
 	Body            json.RawMessage
 	UpdatedAt       time.Time
 }
+
+type Step struct {
+	InvestigationID  uuid.UUID
+	Seq              int32
+	Run              int32
+	Kind             string
+	Parts            json.RawMessage
+	Source           *string
+	Tool             *string
+	ToolCallID       *string
+	Status           string
+	Error            *string
+	Evidence         []byte
+	Connector        *string
+	Model            *string
+	InputTokens      *int64
+	OutputTokens     *int64
+	CacheReadTokens  *int64
+	CacheWriteTokens *int64
+	CostMicros       *int64
+	StartedAt        time.Time
+	DurationMs       int32
+}

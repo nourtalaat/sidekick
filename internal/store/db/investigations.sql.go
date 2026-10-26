@@ -8,9 +8,260 @@ package db
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 )
+
+const advanceInvestigation = `-- name: AdvanceInvestigation :one
+UPDATE investigations
+SET next_seq = next_seq + 1,
+    input_tokens = input_tokens + $1,
+    output_tokens = output_tokens + $2,
+    cost_micros = cost_micros + $3,
+    tool_calls = tool_calls + $4,
+    first_finding_at = CASE WHEN $5::boolean THEN coalesce(first_finding_at, now()) ELSE first_finding_at END
+WHERE id = $6 AND fence = $7 AND status = 'running'
+RETURNING next_seq - 1 AS seq, first_finding_at
+`
+
+type AdvanceInvestigationParams struct {
+	InputTokens  int64
+	OutputTokens int64
+	CostMicros   int64
+	ToolCalls    int32
+	Finding      bool
+	ID           uuid.UUID
+	Fence        int64
+}
+
+type AdvanceInvestigationRow struct {
+	Seq            int32
+	FirstFindingAt *time.Time
+}
+
+// AdvanceInvestigation takes the next step seq of a running investigation
+// and adds the step's counters, when fence still owns the run. Run it in
+// the transaction that inserts the step. It returns no row when the fence
+// is stale, so a worker that lost its lease writes nothing.
+func (q *Queries) AdvanceInvestigation(ctx context.Context, arg AdvanceInvestigationParams) (AdvanceInvestigationRow, error) {
+	row := q.db.QueryRow(ctx, advanceInvestigation,
+		arg.InputTokens,
+		arg.OutputTokens,
+		arg.CostMicros,
+		arg.ToolCalls,
+		arg.Finding,
+		arg.ID,
+		arg.Fence,
+	)
+	var i AdvanceInvestigationRow
+	err := row.Scan(&i.Seq, &i.FirstFindingAt)
+	return i, err
+}
+
+const failInvestigation = `-- name: FailInvestigation :one
+UPDATE investigations
+SET status = 'failed', verdict = $1, confidence = $2, report = $3,
+    stop_reason = $4, finished_at = now()
+WHERE id = $5 AND status IN ('queued', 'running')
+RETURNING id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at
+`
+
+type FailInvestigationParams struct {
+	Verdict    *string
+	Confidence *string
+	Report     []byte
+	StopReason *string
+	ID         uuid.UUID
+}
+
+// FailInvestigation ends an investigation whose job is dead with the report
+// built from its saved steps. It returns no row for an investigation that
+// has ended already.
+func (q *Queries) FailInvestigation(ctx context.Context, arg FailInvestigationParams) (Investigation, error) {
+	row := q.db.QueryRow(ctx, failInvestigation,
+		arg.Verdict,
+		arg.Confidence,
+		arg.Report,
+		arg.StopReason,
+		arg.ID,
+	)
+	var i Investigation
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.Route,
+		&i.Strategy,
+		&i.StrategyVersion,
+		&i.Mode,
+		&i.Status,
+		&i.Run,
+		&i.NextSeq,
+		&i.Fence,
+		&i.Verdict,
+		&i.Confidence,
+		&i.Report,
+		&i.StopReason,
+		&i.Connectors,
+		&i.Budget,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.CostMicros,
+		&i.ToolCalls,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.FirstFindingAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
+const finishInvestigation = `-- name: FinishInvestigation :one
+UPDATE investigations
+SET status = $1, verdict = $2, confidence = $3, report = $4,
+    stop_reason = $5, finished_at = now()
+WHERE id = $6 AND fence = $7 AND status = 'running'
+RETURNING id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at
+`
+
+type FinishInvestigationParams struct {
+	Status     string
+	Verdict    *string
+	Confidence *string
+	Report     []byte
+	StopReason *string
+	ID         uuid.UUID
+	Fence      int64
+}
+
+// FinishInvestigation stores the report of a running investigation and
+// ends it, when fence still owns the run. It returns the investigation, or
+// no row when the fence is stale.
+func (q *Queries) FinishInvestigation(ctx context.Context, arg FinishInvestigationParams) (Investigation, error) {
+	row := q.db.QueryRow(ctx, finishInvestigation,
+		arg.Status,
+		arg.Verdict,
+		arg.Confidence,
+		arg.Report,
+		arg.StopReason,
+		arg.ID,
+		arg.Fence,
+	)
+	var i Investigation
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.Route,
+		&i.Strategy,
+		&i.StrategyVersion,
+		&i.Mode,
+		&i.Status,
+		&i.Run,
+		&i.NextSeq,
+		&i.Fence,
+		&i.Verdict,
+		&i.Confidence,
+		&i.Report,
+		&i.StopReason,
+		&i.Connectors,
+		&i.Budget,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.CostMicros,
+		&i.ToolCalls,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.FirstFindingAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
+const getFirstEvent = `-- name: GetFirstEvent :one
+SELECT events.id, events.intake, events.key, events.kind, events.sender_kind, events.sender_id, events.sender_name, events.trusted, events.alert_name, events.title, events.body, events.service, events.severity, events.labels, events.links, events.fingerprint, events.slack, events.raw, events.status, events.skip_reason, events.route, events.group_id, events.starts_at, events.ends_at, events.received_at, event_groups.event_count
+FROM event_groups
+JOIN events ON events.group_id = event_groups.id
+WHERE event_groups.id = $1
+ORDER BY events.received_at, events.id
+LIMIT 1
+`
+
+type GetFirstEventRow struct {
+	Event      Event
+	EventCount int32
+}
+
+// GetFirstEvent returns the event that opened a group, with the number of
+// events in the group.
+func (q *Queries) GetFirstEvent(ctx context.Context, groupID uuid.UUID) (GetFirstEventRow, error) {
+	row := q.db.QueryRow(ctx, getFirstEvent, groupID)
+	var i GetFirstEventRow
+	err := row.Scan(
+		&i.Event.ID,
+		&i.Event.Intake,
+		&i.Event.Key,
+		&i.Event.Kind,
+		&i.Event.SenderKind,
+		&i.Event.SenderID,
+		&i.Event.SenderName,
+		&i.Event.Trusted,
+		&i.Event.AlertName,
+		&i.Event.Title,
+		&i.Event.Body,
+		&i.Event.Service,
+		&i.Event.Severity,
+		&i.Event.Labels,
+		&i.Event.Links,
+		&i.Event.Fingerprint,
+		&i.Event.Slack,
+		&i.Event.Raw,
+		&i.Event.Status,
+		&i.Event.SkipReason,
+		&i.Event.Route,
+		&i.Event.GroupID,
+		&i.Event.StartsAt,
+		&i.Event.EndsAt,
+		&i.Event.ReceivedAt,
+		&i.EventCount,
+	)
+	return i, err
+}
+
+const getInvestigation = `-- name: GetInvestigation :one
+SELECT id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at FROM investigations WHERE id = $1
+`
+
+func (q *Queries) GetInvestigation(ctx context.Context, id uuid.UUID) (Investigation, error) {
+	row := q.db.QueryRow(ctx, getInvestigation, id)
+	var i Investigation
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.Route,
+		&i.Strategy,
+		&i.StrategyVersion,
+		&i.Mode,
+		&i.Status,
+		&i.Run,
+		&i.NextSeq,
+		&i.Fence,
+		&i.Verdict,
+		&i.Confidence,
+		&i.Report,
+		&i.StopReason,
+		&i.Connectors,
+		&i.Budget,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.CostMicros,
+		&i.ToolCalls,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.FirstFindingAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
 
 const getInvestigationWithEvent = `-- name: GetInvestigationWithEvent :one
 SELECT investigations.id, investigations.group_id, investigations.route, investigations.strategy, investigations.strategy_version, investigations.mode, investigations.status, investigations.run, investigations.next_seq, investigations.fence, investigations.verdict, investigations.confidence, investigations.report, investigations.stop_reason, investigations.connectors, investigations.budget, investigations.input_tokens, investigations.output_tokens, investigations.cost_micros, investigations.tool_calls, investigations.created_at, investigations.started_at, investigations.first_finding_at, investigations.finished_at, events.id, events.intake, events.key, events.kind, events.sender_kind, events.sender_id, events.sender_name, events.trusted, events.alert_name, events.title, events.body, events.service, events.severity, events.labels, events.links, events.fingerprint, events.slack, events.raw, events.status, events.skip_reason, events.route, events.group_id, events.starts_at, events.ends_at, events.received_at
@@ -120,4 +371,52 @@ func (q *Queries) InsertInvestigation(ctx context.Context, arg InsertInvestigati
 		arg.Budget,
 	)
 	return err
+}
+
+const startInvestigationRun = `-- name: StartInvestigationRun :one
+UPDATE investigations
+SET fence = $1, status = 'running', started_at = coalesce(started_at, now())
+WHERE id = $2 AND fence < $1 AND status IN ('queued', 'running', 'failed')
+RETURNING id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at
+`
+
+type StartInvestigationRunParams struct {
+	Fence int64
+	ID    uuid.UUID
+}
+
+// StartInvestigationRun gives the run of an investigation to the job claim
+// with the token fence, and sets it running. It returns no row when a newer
+// claim owns the run already, or when the investigation has ended; a failed
+// investigation runs again when an admin retries its dead job.
+func (q *Queries) StartInvestigationRun(ctx context.Context, arg StartInvestigationRunParams) (Investigation, error) {
+	row := q.db.QueryRow(ctx, startInvestigationRun, arg.Fence, arg.ID)
+	var i Investigation
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.Route,
+		&i.Strategy,
+		&i.StrategyVersion,
+		&i.Mode,
+		&i.Status,
+		&i.Run,
+		&i.NextSeq,
+		&i.Fence,
+		&i.Verdict,
+		&i.Confidence,
+		&i.Report,
+		&i.StopReason,
+		&i.Connectors,
+		&i.Budget,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.CostMicros,
+		&i.ToolCalls,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.FirstFindingAt,
+		&i.FinishedAt,
+	)
+	return i, err
 }
