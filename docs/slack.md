@@ -17,7 +17,8 @@ the thread and a link to the web UI come in later releases.
   verdict, the confidence, the reason, the likely cause and impact (for a
   false alarm, why it fired and how to stop it), up to 5 findings with
   links to their evidence, up to 3 proposed fixes, and which sources were
-  checked. The bar takes the verdict's color, and the verdict is always
+  checked. A finding with no evidence is marked as a hypothesis, and an
+  investigation that stopped at a limit says so. The bar takes the verdict's color, and the verdict is always
   shown with its emoji and label too, so the color is never the only sign:
 
   | Verdict | Emoji | Bar |

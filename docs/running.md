@@ -23,7 +23,8 @@ Helm chart mounts the file. At start-up Sidekick:
    [the `database` section](configuration.md#database)). When several
    replicas start at once, one migrates and the others wait for it.
 5. Builds the configured connectors, sources, webhook adapters and outputs.
-6. Starts the job queue.
+6. Starts the job queue, which routes events, runs
+   [investigations](investigations.md) and publishes them to the outputs.
 7. Starts serving HTTP on both listeners.
 
 `sidekick migrate up` and `sidekick migrate status` take the same
@@ -94,6 +95,18 @@ process (`process_*`) metrics, this release has:
 | `sidekick_jobs_dead_total` | counter | `kind` | Jobs that failed for the last time on this replica. |
 | `sidekick_events_received_total` | counter | `intake`, `result` | Webhook events by result: `accepted` and `duplicate` count events, `rejected` counts deliveries turned away. See [Monitoring intake](webhooks.md#monitoring-intake). |
 | `sidekick_events_rejected_total` | counter | `intake`, `reason` | Rejected webhook deliveries by reason: `unauthenticated`, `too_large` or `invalid_payload`. |
+| `sidekick_investigations_total` | counter | `route`, `verdict`, `stop_reason` | Investigations that ended, by verdict and [stop reason](investigations.md#how-an-investigation-ends). |
+| `sidekick_investigations_running` | gauge | `route` | Investigations running on this replica. Sum it across replicas. |
+| `sidekick_investigation_duration_seconds` | histogram | `route` | Time from the start of an investigation to its end. |
+| `sidekick_time_to_first_finding_seconds` | histogram | `route` | Time from the start of an investigation to its first recorded finding. |
+| `sidekick_budget_exhausted_total` | counter | `route`, `budget` | Investigations that ended at a limit: `tool_calls` or `wall_time`. |
+| `sidekick_model_calls_total` | counter | `connector`, `model`, `role`, `outcome` | Model calls, one per attempt, by outcome: `ok` or the error kind, such as `rate_limited`. |
+| `sidekick_model_call_duration_seconds` | histogram | `connector`, `model` | Duration of model calls. |
+| `sidekick_model_tokens_total` | counter | `connector`, `model`, `kind` | Tokens used, by kind: `input`, `output`, `cache_read` or `cache_write`. |
+| `sidekick_model_cost_usd_total` | counter | `connector`, `model`, `route` | Cost of model calls in US dollars, from the price table. |
+| `sidekick_tool_calls_total` | counter | `source`, `tool`, `outcome` | Source tool calls by outcome: `ok`, `no_data`, `error`, `timeout` or `unavailable`. |
+| `sidekick_tool_call_duration_seconds` | histogram | `source` | Duration of source tool calls. |
+| `sidekick_source_up` | gauge | `source` | 1 when a source is connected and its circuit breaker is closed, 0 otherwise. |
 | `sidekick_slack_api_errors_total` | counter | `method`, `error` | Failed Slack Web API calls by method, such as `chat.update`, and error: Slack's error code, such as `channel_not_found`, or `ratelimited`, `request_failed`, `http_status`, `bad_response` or `other`. See [Investigations in Slack](slack.md). |
 
 ## Logs
@@ -111,7 +124,10 @@ Sidekick works on something it traces also has `trace_id` and `span_id`, so
 you can go from a log line to its trace and back.
 
 Each routed event logs `event routed` with `event_id`, `route`, `group_id`
-and `investigation_id`. Event text is never logged.
+and `investigation_id`. Each run of an investigation logs `investigation
+run started`, with `from_seq`, the step it starts from, which is above 0
+when it resumes, and `investigation finished` with `status`, `verdict` and
+`stop_reason`. Event text, tool results and model output are never logged.
 
 ## Traces
 
@@ -132,6 +148,13 @@ still carry trace and span IDs.
 A webhook delivery starts a trace with an `intake.receive` span. Routing
 each of its events adds a `router.route` span to the same trace, with the
 attributes `sidekick.route` and `sidekick.group.id`, so you can follow an
-alert from the delivery to its investigation. Each publish job, which
-shows an investigation in one output, adds an `output.publish` span with
-the attributes `sidekick.sink` and `sidekick.phase`.
+alert from the delivery to its investigation. Each run of an investigation
+adds an `investigation.run` span, with the attributes
+`sidekick.investigation.id`, `sidekick.route`, `sidekick.strategy` and
+`sidekick.run`; inside it, each model call is a `model.generate` span with
+the OpenTelemetry GenAI attributes and `sidekick.cost_usd`, and each source
+call a `tool.call` span with `sidekick.source`, `sidekick.tool` and
+`sidekick.outcome`. Prompts, tool results and model output are never span
+attributes. Each publish job, which shows an investigation in one output,
+adds an `output.publish` span with the attributes `sidekick.sink` and
+`sidekick.phase`.
