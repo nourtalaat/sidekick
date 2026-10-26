@@ -8,7 +8,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// Metric names (RFC 18.1).
+// Metric names.
 const (
 	MetricCalls    = "sidekick_tool_calls_total"
 	MetricDuration = "sidekick_tool_call_duration_seconds"
@@ -22,8 +22,7 @@ const SpanName = "tool.call"
 // provider when setting Options.Tracer.
 const TracerName = "github.com/nourtalaat/sidekick/internal/investigator/tools"
 
-// Span attributes (RFC 18.2). Tool input and results never become
-// attributes.
+// Span attributes. Tool input and results never become attributes.
 const (
 	attrSource  = "sidekick.source"
 	attrTool    = "sidekick.tool"

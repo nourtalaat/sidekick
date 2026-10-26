@@ -47,9 +47,9 @@ type Dropped struct {
 	Detail string
 }
 
-// Expose decides which of a source's tools the model may see, in the order
-// RFC 4.3 gives: the deny globs, then the allow globs, then the read-only
-// rule, then tools.rename, then the qualified name, which must fit 64
+// Expose decides which of a source's tools the model may see, in this
+// order: the deny globs, then the allow globs, then the read-only rule,
+// then tools.rename, then the qualified name, which must fit 64
 // characters. Tools keep the source's order.
 func Expose(sourceName string, settings source.Settings, tools []source.Tool) ([]Exposed, []Dropped) {
 	var (

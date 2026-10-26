@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Circuit breaker settings (RFC 9.2).
+// Circuit breaker settings.
 const (
 	// breakerFailures is how many failures in a row open the circuit.
 	breakerFailures = 5
