@@ -59,6 +59,7 @@ type logLine struct {
 	Msg           string `json:"msg"`
 	Listen        string `json:"listen"`
 	MetricsListen string `json:"metrics_listen"`
+	Route         string `json:"route"`
 }
 
 // TestServeStopsOnSignal runs `sidekick serve` as its own process, waits
@@ -153,8 +154,8 @@ func TestServeWithSourceDown(t *testing.T) {
 }
 
 // TestServeWebhooks checks that `sidekick serve` serves the configured
-// webhook endpoints with the built-in adapters, stores what they accept
-// and counts it in the metrics.
+// webhook endpoints with the built-in adapters, stores what they accept,
+// counts it in the metrics and routes each stored event.
 func TestServeWebhooks(t *testing.T) {
 	t.Parallel()
 
@@ -164,6 +165,8 @@ func TestServeWebhooks(t *testing.T) {
 		token       string
 		wantStatus  int
 		wantMetrics []string
+		// wantRoute is the route the stored event goes to, if any.
+		wantRoute string
 	}{
 		{
 			name:        "an authenticated Alertmanager delivery is stored",
@@ -171,6 +174,7 @@ func TestServeWebhooks(t *testing.T) {
 			token:       "fake-value",
 			wantStatus:  http.StatusAccepted,
 			wantMetrics: []string{`sidekick_events_received_total{intake="alertmanager",result="accepted"} 1`},
+			wantRoute:   "default",
 		},
 		{
 			name:       "a wrong token is rejected",
@@ -211,6 +215,10 @@ func TestServeWebhooks(t *testing.T) {
 
 			for _, want := range tt.wantMetrics {
 				require.Contains(t, metrics, want)
+			}
+
+			if tt.wantRoute != "" {
+				require.Equal(t, tt.wantRoute, waitForLog(t, lines, "event routed").Route)
 			}
 
 			stopServe(t, cmd, lines, syscall.SIGTERM)

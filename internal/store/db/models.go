@@ -39,6 +39,47 @@ type Event struct {
 	ReceivedAt  time.Time
 }
 
+type EventGroup struct {
+	ID              uuid.UUID
+	Fingerprint     string
+	Route           string
+	Service         *string
+	Status          string
+	EventCount      int32
+	OpenedAt        time.Time
+	LastEventAt     time.Time
+	WindowUntil     *time.Time
+	ClosedReason    *string
+	InvestigationID *uuid.UUID
+}
+
+type Investigation struct {
+	ID              uuid.UUID
+	GroupID         uuid.UUID
+	Route           string
+	Strategy        *string
+	StrategyVersion *string
+	Mode            string
+	Status          string
+	Run             int32
+	NextSeq         int32
+	Fence           int64
+	Verdict         *string
+	Confidence      *string
+	Report          []byte
+	StopReason      *string
+	Connectors      json.RawMessage
+	Budget          json.RawMessage
+	InputTokens     int64
+	OutputTokens    int64
+	CostMicros      int64
+	ToolCalls       int32
+	CreatedAt       time.Time
+	StartedAt       *time.Time
+	FirstFindingAt  *time.Time
+	FinishedAt      *time.Time
+}
+
 type Job struct {
 	ID          int64
 	Kind        string

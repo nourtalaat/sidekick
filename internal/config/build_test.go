@@ -48,6 +48,7 @@ outputs:
 		wantIntakes  []string
 		wantOutputs  []string
 		wantSettings map[string]source.Settings
+		wantModelSet map[string]model.Settings
 		wantErr      []string
 	}{
 		{
@@ -61,6 +62,7 @@ outputs:
 				"k8s":    {},
 				"signoz": {Timeout: 5 * time.Second, Tools: source.ToolSettings{Filter: source.Filter{Allow: []string{"search_*"}}}},
 			},
+			wantModelSet: map[string]model.Settings{"claude": {Model: "claude-opus-5-5"}},
 		},
 		{
 			name: "built connector without tool calling on the investigate role",
@@ -75,7 +77,8 @@ outputs:
 			name: "built connector with tool calling",
 			yaml: "database: {urlSecret: {name: db, key: url}}\nroutes: [{name: default}]\n" +
 				replaceOnce(replaceOnce(lazyClaude, "investigate: claude", "investigate: lazy"), "model: local-model", "model: local-model, toolCalling: true"),
-			wantModels: []string{"claude", "lazy"},
+			wantModels:   []string{"claude", "lazy"},
+			wantModelSet: map[string]model.Settings{"claude": {Model: "claude-opus-5-5"}, "lazy": {Model: "local-model"}},
 		},
 		{
 			name: "constructor failure",
@@ -112,6 +115,10 @@ outputs:
 
 			if tt.wantSettings != nil {
 				require.Equal(t, tt.wantSettings, in.SourceSettings)
+			}
+
+			if tt.wantModelSet != nil {
+				require.Equal(t, tt.wantModelSet, in.ModelSettings)
 			}
 
 			require.NoError(t, in.Close())

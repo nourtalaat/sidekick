@@ -32,6 +32,12 @@ sends again stores nothing new: the answer is still `202`, with
 for now, resolved alerts are stored but not investigated. A path under
 `/hooks/` that names no configured endpoint gets `404`.
 
+Right after the answer, Sidekick sends each received event to the first
+[route](configuration.md#routes) that matches it and opens an
+investigation for it. For now every event gets an investigation of its
+own, even when the same alert fires again while an earlier one is still
+open.
+
 Every secret is read again on each delivery, so a rotated token or key is
 used without a restart. An endpoint whose secret file is empty refuses
 every delivery.
