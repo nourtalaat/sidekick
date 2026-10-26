@@ -1,0 +1,158 @@
+version: "2"
+
+run:
+  # Lint integration test files too.
+  build-tags:
+    - integration
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - depguard
+    - errorlint
+    - gocritic
+    - gosec
+    - misspell
+    - nilerr
+    - noctx
+    - paralleltest
+    - testifylint
+    - unconvert
+    - wrapcheck
+    - wsl_v5
+
+  settings:
+    depguard:
+      rules:
+        # Test libraries the project has standardized on.
+        tests:
+          list-mode: lax
+          files:
+            - $all
+          deny:
+            - pkg: github.com/stretchr/testify/assert
+              desc: use github.com/stretchr/testify/require
+            - pkg: github.com/golang/mock
+              desc: use go.uber.org/mock
+
+        # Plugin packages depend on each other in one direction only:
+        # event <- source <- report <- action <- output <- registry.
+        # model and intake depend only on event, or on nothing.
+        # The rules cover the top-level package only (not plugins in its
+        # subdirectories, which import registry to register themselves).
+        event:
+          list-mode: lax
+          files:
+            - "**/internal/event/*.go"
+            - "!$test"
+          deny:
+            - pkg: github.com/nourtalaat/sidekick/internal/source
+              desc: event is the base package and imports no other plugin package
+            - pkg: github.com/nourtalaat/sidekick/internal/report
+              desc: event is the base package and imports no other plugin package
+            - pkg: github.com/nourtalaat/sidekick/internal/action
+              desc: event is the base package and imports no other plugin package
+            - pkg: github.com/nourtalaat/sidekick/internal/output
+              desc: event is the base package and imports no other plugin package
+            - pkg: github.com/nourtalaat/sidekick/internal/registry
+              desc: event is the base package and imports no other plugin package
+            - pkg: github.com/nourtalaat/sidekick/internal/model
+              desc: event is the base package and imports no other plugin package
+            - pkg: github.com/nourtalaat/sidekick/internal/intake
+              desc: event is the base package and imports no other plugin package
+        source:
+          list-mode: lax
+          files:
+            - "**/internal/source/*.go"
+            - "!$test"
+          deny:
+            - pkg: github.com/nourtalaat/sidekick/internal/report
+              desc: source may import only event
+            - pkg: github.com/nourtalaat/sidekick/internal/action
+              desc: source may import only event
+            - pkg: github.com/nourtalaat/sidekick/internal/output
+              desc: source may import only event
+            - pkg: github.com/nourtalaat/sidekick/internal/registry
+              desc: source may import only event
+        report:
+          list-mode: lax
+          files:
+            - "**/internal/report/*.go"
+            - "!$test"
+          deny:
+            - pkg: github.com/nourtalaat/sidekick/internal/action
+              desc: report may import only event and source
+            - pkg: github.com/nourtalaat/sidekick/internal/output
+              desc: report may import only event and source
+            - pkg: github.com/nourtalaat/sidekick/internal/registry
+              desc: report may import only event and source
+        action:
+          list-mode: lax
+          files:
+            - "**/internal/action/*.go"
+            - "!$test"
+          deny:
+            - pkg: github.com/nourtalaat/sidekick/internal/output
+              desc: action may import only event, source and report
+            - pkg: github.com/nourtalaat/sidekick/internal/registry
+              desc: action may import only event, source and report
+        output:
+          list-mode: lax
+          files:
+            - "**/internal/output/*.go"
+            - "!$test"
+          deny:
+            - pkg: github.com/nourtalaat/sidekick/internal/registry
+              desc: output must not import registry; registry imports output
+        model:
+          list-mode: lax
+          files:
+            - "**/internal/model/*.go"
+            - "!$test"
+          deny:
+            - pkg: github.com/nourtalaat/sidekick/internal/source
+              desc: model may import only event
+            - pkg: github.com/nourtalaat/sidekick/internal/report
+              desc: model may import only event
+            - pkg: github.com/nourtalaat/sidekick/internal/action
+              desc: model may import only event
+            - pkg: github.com/nourtalaat/sidekick/internal/output
+              desc: model may import only event
+            - pkg: github.com/nourtalaat/sidekick/internal/registry
+              desc: model may import only event
+            - pkg: github.com/nourtalaat/sidekick/internal/intake
+              desc: model may import only event
+        intake:
+          list-mode: lax
+          files:
+            - "**/internal/intake/*.go"
+            - "!$test"
+          deny:
+            - pkg: github.com/nourtalaat/sidekick/internal/source
+              desc: intake may import only event
+            - pkg: github.com/nourtalaat/sidekick/internal/report
+              desc: intake may import only event
+            - pkg: github.com/nourtalaat/sidekick/internal/action
+              desc: intake may import only event
+            - pkg: github.com/nourtalaat/sidekick/internal/output
+              desc: intake may import only event
+            - pkg: github.com/nourtalaat/sidekick/internal/registry
+              desc: intake may import only event
+            - pkg: github.com/nourtalaat/sidekick/internal/model
+              desc: intake may import only event
+
+    # Only the "blank line after a block" rule, not the rest of wsl.
+    wsl_v5:
+      default: none
+      enable:
+        - after-block
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/nourtalaat/sidekick
