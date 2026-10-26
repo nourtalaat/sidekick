@@ -11,6 +11,10 @@ Sidekick receives alerts from webhooks or Slack, investigates them with the LLM 
 
 > **Status:** early design. There is no release yet. Installation instructions will appear here with the first release.
 
+## Documentation
+
+- [Configuration](docs/configuration.md): the `sidekick.yaml` sections, the checks Sidekick runs on them, and `sidekick config validate`.
+
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
