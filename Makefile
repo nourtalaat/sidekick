@@ -12,11 +12,13 @@ TOOLS_DIR := $(BIN_DIR)/tools
 GOLANGCI_LINT_VERSION := v2.12.2
 MOCKGEN_VERSION := v0.6.0
 GOVULNCHECK_VERSION := v1.9.0
+SQLC_VERSION := v1.31.1
 
 GOLANGCI_LINT := $(TOOLS_DIR)/golangci-lint-$(GOLANGCI_LINT_VERSION)/golangci-lint
 MOCKGEN_DIR := $(TOOLS_DIR)/mockgen-$(MOCKGEN_VERSION)
 MOCKGEN := $(MOCKGEN_DIR)/mockgen
 GOVULNCHECK := $(TOOLS_DIR)/govulncheck-$(GOVULNCHECK_VERSION)/govulncheck
+SQLC := $(TOOLS_DIR)/sqlc-$(SQLC_VERSION)/sqlc
 
 VERSION ?= $(shell git describe --tags --dirty 2>/dev/null || echo dev)
 COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
@@ -58,10 +60,19 @@ GENERATE_TARGETS += generate-mocks
 generate-mocks: $(MOCKGEN) ## Run the mockgen directives (go generate)
 	PATH="$(MOCKGEN_DIR):$$PATH" $(GO) generate ./...
 
+GENERATE_TARGETS += sqlc-generate
+.PHONY: sqlc-generate
+sqlc-generate: $(SQLC) ## Generate internal/store/db from the queries and migrations
+	$(SQLC) generate
+
 CI_TARGETS += verify-generated
 .PHONY: verify-generated
 verify-generated: ## Fail if `make generate` changes any file
 	MAKE="$(MAKE)" sh scripts/verify-generated.sh
+
+.PHONY: migrate-new
+migrate-new: ## Create the next goose migration: make migrate-new name=add_jobs
+	sh scripts/migrate-new.sh "$(name)"
 
 CI_TARGETS += build
 .PHONY: build
@@ -80,6 +91,9 @@ $(MOCKGEN):
 
 $(GOVULNCHECK):
 	GOBIN="$(dir $@)" $(GO) install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+
+$(SQLC):
+	GOBIN="$(dir $@)" $(GO) install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 
 .PHONY: generate
 generate: $(GENERATE_TARGETS) ## Run every code generator
