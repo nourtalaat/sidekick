@@ -1,0 +1,3 @@
+{"event":"messageStart","payload":{"role":"assistant"}}
+{"event":"contentBlockDelta","payload":{"contentBlockIndex":0,"delta":{"text":"Let me"}}}
+{"exception":"throttlingException","payload":{"message":"Too many tokens, please wait before trying again."}}

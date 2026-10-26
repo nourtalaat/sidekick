@@ -1,0 +1,2 @@
+{"event":"messageStart","payload":{"role":"assistant"}}
+{"exception":"modelStreamErrorException","payload":{"message":"The model stopped streaming unexpectedly.","originalStatusCode":500}}

@@ -1,0 +1,14 @@
+{
+  "output": {
+    "message": {
+      "role": "assistant",
+      "content": [
+        {"text": "I will search the logs."},
+        {"toolUse": {"toolUseId": "tooluse_02Search", "name": "search_logs", "input": {"service": "checkout", "limit": 20}}}
+      ]
+    }
+  },
+  "stopReason": "tool_use",
+  "usage": {"inputTokens": 900, "outputTokens": 61, "totalTokens": 6961, "cacheReadInputTokens": 6000, "cacheWriteInputTokens": 0},
+  "metrics": {"latencyMs": 1180}
+}

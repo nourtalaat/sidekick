@@ -1,0 +1,6 @@
+{"event":"messageStart","payload":{"role":"assistant"}}
+{"event":"contentBlockDelta","payload":{"contentBlockIndex":0,"delta":{"text":"The checkout service ran out "}}}
+{"event":"contentBlockDelta","payload":{"contentBlockIndex":0,"delta":{"text":"of database connections."}}}
+{"event":"contentBlockStop","payload":{"contentBlockIndex":0}}
+{"event":"messageStop","payload":{"stopReason":"end_turn"}}
+{"event":"metadata","payload":{"usage":{"inputTokens":412,"outputTokens":14,"totalTokens":426},"metrics":{"latencyMs":812}}}
