@@ -178,8 +178,8 @@ func (r *run) loop(ctx context.Context) error {
 // at the saved steps to decide what comes next, so a resumed run picks up
 // exactly where the last one stopped: it answers the calls of the last
 // model turn that have no result, ends the run if the steps say it is
-// over, reminds the model when it called no tool, and otherwise asks the
-// model for a turn. ctx ends when the worker must stop; runCtx also ends
+// over, reminds the model when it called no tool, and otherwise delivers
+// the inbox and asks the model for a turn. ctx ends when the worker must stop; runCtx also ends
 // when the wall time does.
 func (r *run) untilEnd(ctx, runCtx context.Context) (ending, error) {
 	for {
@@ -213,6 +213,10 @@ func (r *run) untilEnd(ctx, runCtx context.Context) (ending, error) {
 			}
 
 			continue
+		}
+
+		if err := r.deliverInbox(ctx); err != nil {
+			return ending{}, fmt.Errorf("inbox: %w", err)
 		}
 
 		end, err := r.modelTurn(ctx, runCtx)

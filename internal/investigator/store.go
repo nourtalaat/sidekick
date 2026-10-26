@@ -46,13 +46,16 @@ type newStep struct {
 	toolCalls int32
 	finding   bool
 
+	// inbox are the IDs of the inbox items an inbox step delivers.
+	inbox []int64
+
 	startedAt time.Time
 	duration  time.Duration
 }
 
 // save writes s as the next step, in one transaction with the fenced
-// advance of next_seq and, when the step adds a progress line, the new
-// publish state. It returns the saved step, or an error that wraps
+// advance of next_seq, the marking of the inbox items it delivers and,
+// when the step adds a progress line, the new publish state. It returns the saved step, or an error that wraps
 // queue.ErrLeaseLost when a newer claim owns the run.
 func (r *run) save(ctx context.Context, s newStep) (db.Step, error) {
 	params, err := r.stepParams(s)
@@ -96,6 +99,10 @@ func (r *run) save(ctx context.Context, s newStep) (db.Step, error) {
 
 		if err := queries.InsertStep(ctx, params); err != nil {
 			return fmt.Errorf("insert step %d: %w", step.Seq, err)
+		}
+
+		if err := markDelivered(ctx, queries, r.inv.ID, step.Seq, s.inbox); err != nil {
+			return fmt.Errorf("step %d: %w", step.Seq, err)
 		}
 
 		if s.kind != kindPrompt && !hasLine {
@@ -276,6 +283,27 @@ func publishFinal(ctx context.Context, tx pgx.Tx, inv db.Investigation, progress
 		Report:          rep,
 	}); err != nil {
 		return fmt.Errorf("publish the report: %w", err)
+	}
+
+	return nil
+}
+
+// markDelivered marks the inbox items with ids as delivered by the step
+// with seq. Each must still be waiting: the fence makes this worker the
+// only one that delivers, so an item delivered already means the run's
+// view is out of date, and the step is not saved.
+func markDelivered(ctx context.Context, queries *db.Queries, investigationID uuid.UUID, seq int32, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	marked, err := queries.MarkInboxDelivered(ctx, db.MarkInboxDeliveredParams{DeliveredSeq: &seq, InvestigationID: investigationID, Ids: ids})
+	if err != nil {
+		return fmt.Errorf("mark %d inbox items delivered: %w", len(ids), err)
+	}
+
+	if marked != int64(len(ids)) {
+		return fmt.Errorf("mark %d inbox items delivered: %d were still waiting", len(ids), marked)
 	}
 
 	return nil
