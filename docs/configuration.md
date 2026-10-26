@@ -158,6 +158,77 @@ sources:
       deny: ["*delete*", "*create*", "*update*"]
 ```
 
+Every source type takes these keys as well:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `tools.allow` | every tool | Globs (`path.Match` syntax) of the tool names the model may see. |
+| `tools.deny` | none | Globs of tool names the model never sees. Deny wins over allow. |
+| `tools.rename` | none | Maps a tool name to the name the model sees after the source prefix. |
+| `tools.trustAnnotations` | `true` | Whether the source's own read-only hints decide which tools write. Only some source types have such hints. |
+| `timeout` | `30s` | How long one tool call may take. |
+| `concurrency` | `4` | How many calls to the source may run at once on one replica. |
+
+The model sees a source tool as `<source>__<tool>`, for example
+`signoz__search_logs`. That name must fit 64 characters, the shortest limit
+of the supported model providers, and use only letters, digits, `_` and
+`-`. `sidekick config validate` checks the names in `tools.rename`. A tool
+whose name is too long and is not renamed is left out when the source
+lists its tools, and the reason is logged; rename it to bring it back.
+Tools the source marks as writing are never shown to the model, even when
+`tools.allow` names them.
+
+#### MCP sources (`type: mcp`)
+
+An MCP source connects to one [Model Context Protocol](https://modelcontextprotocol.io)
+server.
+
+| Key | Meaning |
+|---|---|
+| `transport` | `http` (streamable HTTP, the default), `sse` (the legacy transport, for older servers) or `stdio`. |
+| `url` | The server's endpoint. Required for `http` and `sse`. |
+| `headers` | Headers sent with every request, each either `{ value: <text> }` or `{ secret: { name, key }, prefix: <text> }`. Only for `http` and `sse`. |
+| `command` | The program and its arguments, for example `["/usr/local/bin/mcp-git", "--repository", "/work"]`. Required for `stdio`. |
+| `env` | Environment variables of the `stdio` process, in the same form as `headers`. The process gets these and `PATH`, nothing else from Sidekick's environment. |
+
+```yaml
+sources:
+  git:
+    type: mcp
+    transport: http
+    url: http://127.0.0.1:8101/mcp
+    tools: { allow: ["git_log", "git_show", "git_diff"] }
+    timeout: 20s
+```
+
+How it behaves:
+
+- **Start-up never waits for the server.** Sidekick connects in the
+  background, within 10 seconds per attempt, and retries with a growing
+  wait (up to a minute) until it works. A lost connection is retried the
+  same way. While a source is not connected, its tools are left out of new
+  investigations and the report lists it as unavailable. The
+  `sidekick_source_up` metric shows the state of each source.
+- **Tools** are listed when Sidekick connects, when the server says its
+  list changed, and every 10 minutes. An investigation keeps the list it
+  started with. A server may list at most 500 tools, and descriptions are
+  cut at 2,048 bytes.
+- **Writing tools.** With `tools.trustAnnotations: true`, the default, a
+  tool is left out when the server sends annotations for it that do not
+  say `readOnlyHint: true`, or that say `destructiveHint: true`. A tool
+  the server sends no annotations for is kept, so for such tools only
+  `tools.allow` and `tools.deny` decide: list in `tools.allow` exactly the
+  tools that only read. Each tool left out is logged at info level with
+  the reason. With `tools.trustAnnotations: false` the annotations are
+  ignored and only the globs decide.
+- **Results.** Text is joined, structured content is kept as JSON, links to
+  `http` and `https` resources become evidence links in the report, and
+  images and audio are dropped. Results over 256 KiB are cut. A tool that
+  reports an error passes its message to the model as a tool error.
+- `stdio` runs the server inside the Sidekick container, so it works only
+  with a server built into a custom Sidekick image. Run other stdio servers
+  in a sidecar that serves them over HTTP, and use `transport: http`.
+
 ### `intake.webhooks`
 
 Each webhook endpoint receives alerts at `/hooks/<name>`. It names an

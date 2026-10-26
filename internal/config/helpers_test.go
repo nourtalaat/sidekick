@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -92,11 +91,11 @@ type fakeHeader struct {
 }
 
 type fakeMCPConfig struct {
+	source.Settings `yaml:",inline"`
+
 	Transport string                `yaml:"transport"`
 	URL       string                `yaml:"url"`
 	Headers   map[string]fakeHeader `yaml:"headers"`
-	Tools     source.Filter         `yaml:"tools"`
-	Timeout   time.Duration         `yaml:"timeout"`
 }
 
 type fakeKubernetesConfig struct {

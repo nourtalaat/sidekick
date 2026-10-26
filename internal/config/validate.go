@@ -22,6 +22,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/secrets"
+	"github.com/nourtalaat/sidekick/internal/source"
 	"github.com/nourtalaat/sidekick/internal/strategy"
 	"github.com/nourtalaat/sidekick/strategies"
 )
@@ -228,10 +229,22 @@ func (v *validator) checkPrices() {
 	}
 }
 
+// checkSources checks each source section through its plugin, then the
+// shared source settings of configs that embed source.Settings, which need
+// the source name for the qualified tool names.
 func (v *validator) checkSources() {
 	for _, name := range sortedKeys(v.cfg.Sources) {
-		v.checkName(v.cfg.Sources[name].Path(), name)
-		checkPlugin(v, v.regs.Sources, "source type", typeKey, name, v.cfg.Sources[name])
+		s := v.cfg.Sources[name]
+		v.checkName(s.Path(), name)
+
+		decoded, ok := checkPlugin(v, v.regs.Sources, "source type", typeKey, name, s)
+		if !ok {
+			continue
+		}
+
+		if c, ok := decoded.(source.Configured); ok {
+			v.errs.addAll(fieldErrors(s.Path(), c.SourceSettings().Check(name)))
+		}
 	}
 }
 

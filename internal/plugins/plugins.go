@@ -6,4 +6,5 @@ package plugins
 
 import (
 	_ "github.com/nourtalaat/sidekick/internal/model/anthropic" // Model provider "anthropic".
+	_ "github.com/nourtalaat/sidekick/internal/source/mcp"      // Source type "mcp".
 )

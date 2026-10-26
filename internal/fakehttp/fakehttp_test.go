@@ -164,6 +164,27 @@ func TestHandleFunc(t *testing.T) {
 	}
 }
 
+func TestHandleFuncReadsBody(t *testing.T) {
+	t.Parallel()
+
+	s := fakehttp.New(t)
+	s.HandleFunc(http.MethodPost, "/echo", func(w http.ResponseWriter, req *http.Request) {
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+
+			return
+		}
+
+		_, _ = w.Write(body)
+	})
+
+	status, _, body := send(t, s.Client(), http.MethodPost, s.URL()+"/echo", `{"a":1}`)
+	require.Equal(t, http.StatusOK, status)
+	require.JSONEq(t, `{"a":1}`, body)
+	require.Equal(t, []byte(`{"a":1}`), s.Requests()[0].Body)
+}
+
 func TestExpectAllCalled(t *testing.T) {
 	t.Parallel()
 
