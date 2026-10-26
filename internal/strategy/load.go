@@ -105,7 +105,7 @@ func Load(builtIn fs.FS, dir string, logger *slog.Logger) (*Set, error) {
 
 	files, fileProblems, err := loadDir(dir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load file strategies: %w", err)
 	}
 
 	problems = append(problems, fileProblems...)

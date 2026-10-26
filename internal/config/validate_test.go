@@ -162,7 +162,7 @@ func TestValidateStrategies(t *testing.T) {
 		{
 			name:    "a strategies dir that cannot be read",
 			file:    "invalid/strategies-dir-not-dir.yaml",
-			wantErr: "strategies.dir: read strategies dir fixture/valid/minimal.yaml: list files: ",
+			wantErr: "strategies.dir: load file strategies: read strategies dir fixture/valid/minimal.yaml: list files: ",
 		},
 		{
 			name:    "a file strategy that overrides a built-in one is logged",

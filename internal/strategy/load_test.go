@@ -216,7 +216,7 @@ func TestLoadUnreadableDir(t *testing.T) {
 		{
 			name:    "the dir is a file",
 			dir:     filepath.Join("fixture", "valid", "latency-alert.yaml"),
-			wantErr: "read strategies dir " + filepath.Join("fixture", "valid", "latency-alert.yaml") + ": list files:",
+			wantErr: "load file strategies: read strategies dir " + filepath.Join("fixture", "valid", "latency-alert.yaml") + ": list files:",
 		},
 	}
 
