@@ -15,6 +15,7 @@ Sidekick receives alerts from webhooks or Slack, investigates them with the LLM 
 
 - [Installing Sidekick](docs/install.md): the Helm chart, the quick start, verifying the image, production settings, upgrades.
 - [Configuration](docs/configuration.md): the `sidekick.yaml` sections, the checks Sidekick runs on them, and `sidekick config validate`.
+- [GitHub source](docs/sources/github.md): the GitHub App permissions the GitHub source needs, and how to set the app up.
 - [Running Sidekick](docs/running.md): `sidekick serve`, `sidekick doctor`, start-up and shutdown, health and readiness probes, metrics, logs and traces.
 - [Sending alerts to Sidekick](docs/webhooks.md): webhook endpoints, the Alertmanager and generic adapters, how deliveries are authenticated, and `sidekick test-alert`.
 - [Setting up senders](docs/senders.md): pointing SigNoz, Datadog, Sentry and Grafana at Sidekick, and what each of their alerts becomes.

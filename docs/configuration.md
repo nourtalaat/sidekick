@@ -141,6 +141,104 @@ claude:
 - **Prompt caching** uses the 5-minute cache. Cache reads and writes are
   priced at their own rates.
 
+#### The `openai` provider
+
+One provider covers OpenAI's API and servers that speak it, such as Ollama,
+vLLM and the llama.cpp server.
+
+```yaml
+gpt:
+  provider: openai
+  model: gpt-6.1-sol                       # required
+  apiKeySecret: { name: sidekick-openai, key: apiKey }   # required without baseURL
+  effort: high                             # the model's own levels, see below
+  maxTokens: 32000                         # default: the model's own limit
+  timeout: 10m                             # per call, default 10m
+  retries: 3                               # retries of rate limits, overloads and timeouts
+
+local:
+  provider: openai
+  model: qwen3.8:27b                       # a preset, see below
+  baseURL: http://ollama:11434/v1          # an OpenAI-compatible server
+  server: ollama                           # ollama, vllm or llamacpp; inferred when left out
+  api: chat_completions                    # optional, see below
+```
+
+- **API.** Without `baseURL`, Sidekick calls the Responses API at
+  api.openai.com. With `baseURL`, it calls Chat Completions, which every
+  compatible server has. Set `api: responses` for a server or gateway that
+  has the Responses API, such as Ollama 0.13.3 or later or a proxy in front
+  of OpenAI. On api.openai.com, keep the Responses API: some GPT-6 models
+  call tools through Chat Completions only at effort `none`.
+- **Known models.** Sidekick knows GPT-6 Astra, GPT-6.1 Sol, GPT-6.1 Terra,
+  GPT-6 Sol, GPT-6 Luna, GPT-5.6 (Sol, Terra and Luna), GPT-5.5, GPT-5.4,
+  GPT-5.4 mini and GPT-5.4 nano, with their dated snapshots. They keep
+  their capabilities behind a `baseURL` too, for example an LLM gateway.
+  Any other model needs a `capabilities` block like the Anthropic one,
+  without `thinkingModes`. For a model on a compatible server, set
+  `toolChoice: true` only if the server honours a forced tool choice.
+- **Effort** takes each model's own levels. GPT-6 Astra and GPT-6.1 Sol
+  take `low` to `max`; the other GPT-6 and the GPT-5.6 models take `none`
+  to `max`; GPT-5.5 and GPT-5.4 take `none` to `xhigh`. No current model
+  takes `minimal`. On a compatible server, effort is sent as
+  `reasoning_effort` only to a model that lists effort levels.
+- **Thinking** is not accepted. OpenAI-style APIs control reasoning with
+  `effort`; `none` turns it off on the models that have it.
+- **Reasoning** is kept by Sidekick, not by OpenAI. Every call is sent with
+  `store: false` and carries the whole conversation, including the
+  encrypted reasoning of earlier turns, so it also works for organizations
+  with Zero Data Retention.
+- **Temperature** is sent as given. Some OpenAI reasoning models reject it.
+- **Prompt caching** is automatic, so cache marks are not needed. Cache
+  reads and writes are priced at their own rates, writes at the 30-minute
+  price.
+- **API key.** With `baseURL` the key is optional; leave `apiKeySecret` out
+  for a local server that needs none.
+
+##### Local models for free setups
+
+Sidekick ships the capabilities of two open-weight models, so they need no
+`capabilities` block:
+
+| Preset | Model ID on vLLM or llama.cpp | Ollama tags |
+|---|---|---|
+| Qwen3.8-27B | `Qwen/Qwen3.8-27B`, `Qwen/Qwen3.8-27B-FP8` | `qwen3.8`, `qwen3.8:latest`, `qwen3.8:27b` and its variants, such as `qwen3.8:27b-q4_K_M` |
+| Gemma 4 31B | `google/gemma-4-31B-it` | `gemma4:31b` and its variants, such as `gemma4:31b-it-qat` (`gemma4` alone is a smaller model) |
+
+Both call tools and have a 256K token context. Run them with a context of
+at least 65,536 tokens; an investigation does not fit in less. Qwen3.8 takes
+effort `low`, `medium` or `xhigh`.
+
+Whether a model may be forced to call a tool depends on the server:
+
+- **vLLM** (`server: vllm`) honours a forced tool choice. Start it with tool
+  calling on and a long enough context:
+
+  ```sh
+  vllm serve Qwen/Qwen3.8-27B --max-model-len 65536 \
+    --enable-auto-tool-choice --tool-call-parser qwen3_xml --reasoning-parser qwen3
+  vllm serve google/gemma-4-31B-it --max-model-len 65536 \
+    --enable-auto-tool-choice --tool-call-parser gemma4 --reasoning-parser gemma4
+  ```
+
+- **Ollama** (`server: ollama`) ignores `tool_choice`. Unless
+  `OLLAMA_CONTEXT_LENGTH` is set, it picks the context from the video
+  memory: 4K tokens below 24 GiB and 32K below 48 GiB, both too small. A
+  prompt that does not fit is cut rather than refused. Start it with
+  `OLLAMA_CONTEXT_LENGTH=65536 ollama serve`, and check the `CONTEXT`
+  column of `ollama ps`.
+- **llama.cpp server** (`server: llamacpp`) needs `--jinja` for tool
+  calling. Give the model a preset ID with `--alias`:
+  `llama-server --jinja -c 65536 --alias Qwen/Qwen3.8-27B -m <file>.gguf`.
+
+Without `server`, Sidekick assumes Ollama when the model is an Ollama tag
+(the `name:tag` form) or the address uses port 11434, and otherwise assumes
+a server that ignores a forced tool choice. That is safe: when the model
+ends a turn without calling a tool, the investigation reminds it to call
+`submit_verdict`.
+
+Local models have no price, so they count as free in the budgets.
+
 ### `sources`
 
 Sources give the investigation tools to call. Each one has a `type`, and the
@@ -238,6 +336,74 @@ How it behaves:
 - `stdio` runs the server inside the Sidekick container, so it works only
   with a server built into a custom Sidekick image. Run other stdio servers
   in a sidecar that serves them over HTTP, and use `transport: http`.
+
+#### GitHub sources (`type: github`)
+
+A GitHub source reads repositories through the GitHub REST API as a GitHub
+App installation, so investigations can check what changed. Its tools only
+read. [GitHub source](sources/github.md) lists the permissions the app
+needs and how to set it up.
+
+| Key | Meaning |
+|---|---|
+| `app.appID` | The GitHub App's ID. Required. |
+| `app.installationID` | The ID of the app's installation on the account that owns the repositories. Required. |
+| `app.privateKeySecret` | `{ name, key }` of the Secret that holds the app's private key, in PEM form. Required. |
+| `repos` | The repositories the tools may read, as `owner/name` globs (`path.Match` syntax), for example `acme/*`. Required; a call for any other repository fails. |
+| `serviceRepos` | Maps a service name to its repository, so a tool can be called with the service an alert names. Each repository must be one that `repos` allows. |
+| `baseURL` | The REST API root, for GitHub Enterprise Server, for example `https://github.example.com/api/v3/`. It must use `https`; plain `http` is accepted only for `localhost` and loopback addresses. Default: github.com. |
+
+```yaml
+sources:
+  github:
+    type: github
+    app:
+      appID: 123456
+      installationID: 7890123
+      privateKeySecret: { name: sidekick-github, key: private-key.pem }
+    repos: ["acme/*"]
+    serviceRepos:
+      checkout-api: acme/checkout
+```
+
+The tools, as the model sees them with the source name `github`:
+
+| Tool | Returns |
+|---|---|
+| `github__list_commits` | Commits since a time, newest first, optionally on a branch or touching a path. |
+| `github__get_commit` | One commit: message, author, parents, changed files with line counts, and patches. |
+| `github__list_pull_requests` | Pull requests opened or merged since a time. |
+| `github__list_releases` | Releases with their dates, and optionally the newest tags. |
+| `github__list_workflow_runs` | GitHub Actions runs, such as deploys, with status, conclusion and times. |
+| `github__get_file` | A file at a ref, or the entries of a directory. |
+| `github__compare` | The commits and changed files between two refs. |
+
+How it behaves:
+
+- **Start-up never waits for GitHub.** The first tool call makes the first
+  installation token. Tokens are replaced five minutes before they expire,
+  and once more when GitHub refuses one. The private key is read from its
+  Secret for each new token, so a rotated key needs no restart.
+- **Repository.** Every tool takes `repo` (`owner/name`) or `service` (a
+  name from `serviceRepos`). A repository that `repos` does not allow, an
+  unknown service, or a ref or path that does not look like one is a tool
+  error, and nothing is sent to GitHub.
+- **Results** are JSON, and link to the GitHub pages of the commits, pull
+  requests, releases, runs and files they name, which become evidence links
+  in the report. Lists return up to `limit` items (default 30, at most 100)
+  and read at most 10 pages. Commit messages in lists are cut at 1 KiB,
+  the patches of one commit at 64 KiB in all, and files at 256 KiB; binary
+  files and files over 1 MB are left out.
+- **No data.** A repository, ref or path GitHub does not have, an empty
+  repository, and an empty list are reported as no data. GitHub gives the
+  same "not found" for a repository the app is not installed on.
+- **Errors.** Other refusals, such as a ref GitHub cannot resolve or a
+  repository the app lacks a permission for, go to the model as tool
+  errors with GitHub's message. Server errors, rate limits and a token
+  GitHub refuses twice count as failures of the source.
+- **Timeout.** `timeout` may be at most `60s`, because the HTTP client
+  stops waiting for response headers after 60 seconds; `sidekick config
+  validate` rejects a longer one.
 
 ### `intake.webhooks`
 

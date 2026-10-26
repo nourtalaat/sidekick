@@ -1,0 +1,6 @@
+event: response.created
+data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01Cut","object":"response","created_at":1793000000,"status":"in_progress","model":"gpt-6-sol","output":[],"usage":null}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":1,"item_id":"msg_01Cut","output_index":0,"content_index":0,"delta":"The first"}
+

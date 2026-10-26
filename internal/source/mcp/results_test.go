@@ -9,6 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
 
@@ -118,7 +119,7 @@ func TestLimitedBody(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			body := &limitedBody{ReadCloser: io.NopCloser(strings.NewReader(strings.Repeat("z", tt.size))), left: maxMessageSize}
+			body := httpclient.LimitBody(io.NopCloser(strings.NewReader(strings.Repeat("z", tt.size))), maxMessageSize, errMessageTooLarge)
 
 			got, err := io.ReadAll(body)
 			if tt.wantErr != nil {

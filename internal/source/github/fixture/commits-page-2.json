@@ -1,0 +1,12 @@
+[
+  {
+    "sha": "9988776655443322110099887766554433221100",
+    "html_url": "https://github.com/acme/checkout/commit/9988776655443322110099887766554433221100",
+    "commit": {
+      "message": "Add a retry to the payment client",
+      "author": {"name": "Grace Hopper", "email": "grace@example.com", "date": "2026-05-04T09:10:00Z"},
+      "committer": {"name": "Grace Hopper", "email": "grace@example.com", "date": "2026-05-04T09:10:00Z"}
+    },
+    "author": {"login": "grace"}
+  }
+]

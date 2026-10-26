@@ -43,6 +43,20 @@ func TestTableCost(t *testing.T) {
 			wantOK: true,
 		},
 		{
+			name:   "OpenAI model with a short prompt",
+			model:  "gpt-6-sol",
+			usage:  model.Usage{InputTokens: 10_000, CacheReadTokens: 200_000, CacheWriteTokens: 62_000, OutputTokens: 5_000},
+			want:   10_000*2 + 200_000*0.20 + 62_000*2.50 + 5_000*10,
+			wantOK: true,
+		},
+		{
+			name:   "OpenAI model with a prompt above 272K tokens uses the long-context price",
+			model:  "gpt-6-sol",
+			usage:  model.Usage{InputTokens: 10_000, CacheReadTokens: 200_000, CacheWriteTokens: 62_001, OutputTokens: 5_000},
+			want:   10_000*4 + 200_000*0.40 + 62_001*5 + 5_000*15,
+			wantOK: true,
+		},
+		{
 			name:      "an override wins over the shipped price",
 			overrides: map[string]model.Price{"claude-opus-5-5": override},
 			model:     "claude-opus-5-5",
@@ -168,12 +182,13 @@ func TestDollars(t *testing.T) {
 }
 
 // requireSane checks that every field of a shipped price is set and that a
-// cache read costs less than input, which costs less than a cache write.
+// cache read costs less than input, which costs no more than a cache write.
+// Some OpenAI models charge nothing extra for cache writes.
 func requireSane(t *testing.T, p model.Price) {
 	t.Helper()
 
 	require.Positive(t, p.CacheReadPerMTok)
 	require.Less(t, p.CacheReadPerMTok, p.InputPerMTok)
-	require.Less(t, p.InputPerMTok, p.CacheWritePerMTok)
+	require.LessOrEqual(t, p.InputPerMTok, p.CacheWritePerMTok)
 	require.Less(t, p.InputPerMTok, p.OutputPerMTok)
 }
