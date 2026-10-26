@@ -542,6 +542,12 @@ outputs:
     apiKeySecret: { name: sidekick-linear, key: apiKey }
     workspace: acme
     teams: [OPS]
+  jira-comment:
+    type: jira.comment
+    url: https://acme.atlassian.net
+    email: sidekick@acme.example
+    apiTokenSecret: { name: sidekick-jira, key: apiToken }
+    projects: [OPS]
 ```
 
 The types:
@@ -549,9 +555,9 @@ The types:
 - `slack` posts one message per investigation and edits it as the
   investigation runs. [Investigations in Slack](slack.md) describes its
   keys, what it posts and how to set up the Slack app.
-- `linear.comment` posts the result as a comment on the Linear issue the
-  alert names. [Results on tickets](tickets.md) describes its keys and how
-  it finds the issue.
+- `linear.comment` and `jira.comment` post the result as a comment on the
+  Linear or Jira issue the alert names. [Results on tickets](tickets.md)
+  describes their keys and how they find the issue.
 
 ### `strategies`
 
