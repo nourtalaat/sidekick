@@ -19,6 +19,10 @@ type Instances struct {
 	Sources map[string]source.Source
 	Intakes map[string]intake.Adapter
 	Outputs map[string]output.Sink
+	// SourceSettings are the shared settings of each built source, from
+	// configs that embed source.Settings; other sources have the zero value,
+	// which means the defaults.
+	SourceSettings map[string]source.Settings
 }
 
 // Build builds every configured plugin instance through the registries,
@@ -53,6 +57,8 @@ func Build(ctx context.Context, cfg *Config, regs Registries, deps registry.Deps
 		Intakes: buildAll(ctx, regs.Intakes, webhooks, deps, &errs),
 		Outputs: buildAll(ctx, regs.Outputs, cfg.Outputs, deps, &errs),
 	}
+
+	in.SourceSettings = sourceSettings(ctx, regs.Sources, cfg.Sources, in.Sources, &errs)
 
 	checkBuiltRoles(&errs, "model.roles", cfg.Model.Roles, in.Models)
 
@@ -101,6 +107,32 @@ func buildAll[T any](ctx context.Context, reg *registry.Registry[T], sections ma
 		}
 
 		out[name] = v
+	}
+
+	return out
+}
+
+// sourceSettings decodes the shared settings of each built source from its
+// section, without building it again.
+func sourceSettings(ctx context.Context, reg *registry.Registry[source.Source], sections map[string]Section, built map[string]source.Source, errs *errorList) map[string]source.Settings {
+	out := make(map[string]source.Settings, len(built))
+
+	for _, name := range sortedKeys(built) {
+		s := sections[name]
+
+		decoded, err := reg.Check(ctx, s.Type, name, s)
+		if err != nil {
+			errs.addAll(pluginErrors(s.Path(), err))
+
+			continue
+		}
+
+		var settings source.Settings
+		if c, ok := decoded.(source.Configured); ok {
+			settings = c.SourceSettings()
+		}
+
+		out[name] = settings
 	}
 
 	return out

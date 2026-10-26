@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -30,7 +31,7 @@ func TestBuild(t *testing.T) {
 
 	everything := minimalYAML(t) + `
 sources:
-  signoz: { type: mcp, url: https://signoz-mcp.internal/mcp }
+  signoz: { type: mcp, url: https://signoz-mcp.internal/mcp, timeout: 5s, tools: { allow: ["search_*"] } }
   k8s: { type: kubernetes, namespaces: [prod] }
 intake:
   webhooks:
@@ -40,13 +41,14 @@ outputs:
 `
 
 	tests := []struct {
-		name        string
-		yaml        string
-		wantModels  []string
-		wantSources []string
-		wantIntakes []string
-		wantOutputs []string
-		wantErr     []string
+		name         string
+		yaml         string
+		wantModels   []string
+		wantSources  []string
+		wantIntakes  []string
+		wantOutputs  []string
+		wantSettings map[string]source.Settings
+		wantErr      []string
 	}{
 		{
 			name:        "every section is built",
@@ -55,6 +57,10 @@ outputs:
 			wantSources: []string{"k8s", "signoz"},
 			wantIntakes: []string{"alertmanager"},
 			wantOutputs: []string{"slack-thread"},
+			wantSettings: map[string]source.Settings{
+				"k8s":    {},
+				"signoz": {Timeout: 5 * time.Second, Tools: source.ToolSettings{Filter: source.Filter{Allow: []string{"search_*"}}}},
+			},
 		},
 		{
 			name: "built connector without tool calling on the investigate role",
@@ -103,6 +109,11 @@ outputs:
 			require.ElementsMatch(t, tt.wantSources, sortedKeys(in.Sources))
 			require.ElementsMatch(t, tt.wantIntakes, sortedKeys(in.Intakes))
 			require.ElementsMatch(t, tt.wantOutputs, sortedKeys(in.Outputs))
+
+			if tt.wantSettings != nil {
+				require.Equal(t, tt.wantSettings, in.SourceSettings)
+			}
+
 			require.NoError(t, in.Close())
 		})
 	}
