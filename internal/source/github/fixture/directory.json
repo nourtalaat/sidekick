@@ -1,0 +1,18 @@
+[
+  {
+    "type": "file",
+    "size": 24,
+    "name": "db.yaml",
+    "path": "config/db.yaml",
+    "sha": "3d21ec53a331a6f037a91c368710b99387d012c1",
+    "html_url": "https://github.com/acme/checkout/blob/main/config/db.yaml"
+  },
+  {
+    "type": "dir",
+    "size": 0,
+    "name": "env",
+    "path": "config/env",
+    "sha": "a84d88e7554fc1fa21bcbc4efae3c782a70d2b9d",
+    "html_url": "https://github.com/acme/checkout/tree/main/config/env"
+  }
+]

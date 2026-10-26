@@ -1,0 +1,269 @@
+{
+  "tools": [
+    {
+      "name": "list_commits",
+      "description": "List the commits to a GitHub repository since a time, newest first, optionally only those on a branch or that touch a path. Returns each commit's SHA, message, author, date and link.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 100. Default 30.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "path": {
+            "type": "string",
+            "description": "Only commits that touch this file or directory, for example deploy/values.yaml."
+          },
+          "ref": {
+            "type": "string",
+            "description": "The branch, tag or SHA to list from. Default: the default branch."
+          },
+          "repo": {
+            "type": "string",
+            "description": "The repository as owner/name, for example acme/checkout. Give repo or service, not both."
+          },
+          "service": {
+            "type": "string",
+            "description": "A service name, such as the service an alert names; Sidekick looks up its repository in its own settings. Give repo or service, not both."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only commits made at or after this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z.",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "description": "Only commits made before this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "since"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_commit",
+      "description": "Get one commit of a GitHub repository: its message, author, date, parents, the files it changed with line counts, and the patch of each file, cut when the commit is large.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "description": "The commit SHA, or a branch or tag to get its latest commit."
+          },
+          "repo": {
+            "type": "string",
+            "description": "The repository as owner/name, for example acme/checkout. Give repo or service, not both."
+          },
+          "service": {
+            "type": "string",
+            "description": "A service name, such as the service an alert names; Sidekick looks up its repository in its own settings. Give repo or service, not both."
+          }
+        },
+        "required": [
+          "ref"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_pull_requests",
+      "description": "List the pull requests of a GitHub repository that were opened or merged since a time, most recently updated first, with their state, branches, author, times, merge commit and link.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "base": {
+            "type": "string",
+            "description": "Only pull requests into this branch, for example main."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 100. Default 30.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "repo": {
+            "type": "string",
+            "description": "The repository as owner/name, for example acme/checkout. Give repo or service, not both."
+          },
+          "service": {
+            "type": "string",
+            "description": "A service name, such as the service an alert names; Sidekick looks up its repository in its own settings. Give repo or service, not both."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only pull requests opened or merged at or after this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "since"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_releases",
+      "description": "List the releases of a GitHub repository, newest first, with tag, name, dates and link. With includeTags, also list the newest tags and the commit each points at; tags have no dates.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "includeTags": {
+            "type": "boolean",
+            "description": "Also list the newest tags. Default false."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 100. Default 30.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "repo": {
+            "type": "string",
+            "description": "The repository as owner/name, for example acme/checkout. Give repo or service, not both."
+          },
+          "service": {
+            "type": "string",
+            "description": "A service name, such as the service an alert names; Sidekick looks up its repository in its own settings. Give repo or service, not both."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only releases made at or after this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_workflow_runs",
+      "description": "List the GitHub Actions workflow runs of a repository, newest first, for example deploys: workflow, status, conclusion, event, branch, commit, times and link.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": "string",
+            "description": "Only runs for this branch."
+          },
+          "event": {
+            "type": "string",
+            "description": "Only runs started by this event, such as push, workflow_dispatch or release."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 100. Default 30.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "repo": {
+            "type": "string",
+            "description": "The repository as owner/name, for example acme/checkout. Give repo or service, not both."
+          },
+          "service": {
+            "type": "string",
+            "description": "A service name, such as the service an alert names; Sidekick looks up its repository in its own settings. Give repo or service, not both."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only runs created at or after this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z.",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "description": "Only runs with this status or conclusion.",
+            "enum": [
+              "completed",
+              "action_required",
+              "cancelled",
+              "failure",
+              "neutral",
+              "skipped",
+              "stale",
+              "success",
+              "timed_out",
+              "in_progress",
+              "queued",
+              "requested",
+              "waiting",
+              "pending"
+            ]
+          },
+          "workflow": {
+            "type": "string",
+            "description": "Only runs of this workflow: its file name, such as deploy.yml, or its numeric ID."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_file",
+      "description": "Read a file of a GitHub repository at a ref, or list a directory. Files over 256 KiB are cut, and binary files are not shown.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "The file or directory, relative to the repository root, for example deploy/values.yaml."
+          },
+          "ref": {
+            "type": "string",
+            "description": "The branch, tag or commit SHA to read at. Default: the default branch."
+          },
+          "repo": {
+            "type": "string",
+            "description": "The repository as owner/name, for example acme/checkout. Give repo or service, not both."
+          },
+          "service": {
+            "type": "string",
+            "description": "A service name, such as the service an alert names; Sidekick looks up its repository in its own settings. Give repo or service, not both."
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "compare",
+      "description": "Compare two refs of a GitHub repository, base...head: how far head is ahead of and behind base, the newest commits between them, and the files changed with line counts.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "base": {
+            "type": "string",
+            "description": "The older branch, tag or SHA, for example the tag of the last good release."
+          },
+          "head": {
+            "type": "string",
+            "description": "The newer branch, tag or SHA."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 100. Default 30.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "repo": {
+            "type": "string",
+            "description": "The repository as owner/name, for example acme/checkout. Give repo or service, not both."
+          },
+          "service": {
+            "type": "string",
+            "description": "A service name, such as the service an alert names; Sidekick looks up its repository in its own settings. Give repo or service, not both."
+          }
+        },
+        "required": [
+          "base",
+          "head"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

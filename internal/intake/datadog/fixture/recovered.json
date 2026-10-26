@@ -1,0 +1,23 @@
+{
+  "id": "7802339120517790321",
+  "title": "[P2] [Recovered on {env:prod,service:checkout}] Checkout error rate is high",
+  "body": "The 5xx rate of checkout is back under 5%. @webhook-sidekick",
+  "date": "1793006430000",
+  "last_updated": "1793006430000",
+  "event_type": "query_alert_monitor",
+  "org": {"id": "11023", "name": "Example Corp"},
+  "alert_id": "48213977",
+  "alert_title": "[Recovered on {env:prod,service:checkout}] Checkout error rate is high",
+  "alert_transition": "Recovered",
+  "alert_type": "success",
+  "alert_priority": "P2",
+  "alert_status": "",
+  "alert_cycle_key": "7802335911728437215",
+  "alert_scope": "env:prod,service:checkout",
+  "alert_metric": "trace.http.request.errors",
+  "aggregate_key": "9bd4ac313a4d1e8fae2482df7b77628",
+  "hostname": "",
+  "tags": "env:prod, monitor, service:checkout, team:payments",
+  "link": "https://app.datadoghq.com/event/jump_to?event_id=7802339120517790321",
+  "snapshot": ""
+}
