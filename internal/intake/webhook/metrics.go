@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/nourtalaat/sidekick/internal/intake/ingest"
 )
 
 // The label names and values of the intake metrics.
@@ -91,14 +93,14 @@ func (m *Metrics) reject(intake, reason string) {
 }
 
 // stored counts the accepted and duplicate events of a delivery.
-func (m *Metrics) stored(intake string, stored []storedEvent) {
+func (m *Metrics) stored(intake string, stored []ingest.Stored) {
 	if m == nil {
 		return
 	}
 
 	for _, s := range stored {
 		result := resultAccepted
-		if s.duplicate {
+		if s.Duplicate {
 			result = resultDuplicate
 		}
 

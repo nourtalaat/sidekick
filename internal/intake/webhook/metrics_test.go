@@ -6,6 +6,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nourtalaat/sidekick/internal/intake/ingest"
 )
 
 func TestMetrics(t *testing.T) {
@@ -25,7 +27,7 @@ func TestMetrics(t *testing.T) {
 		{
 			name: "accepted and duplicate events count one each",
 			record: func(m *Metrics) {
-				m.stored("am", []storedEvent{{key: "a"}, {key: "b", duplicate: true}, {key: "c"}})
+				m.stored("am", []ingest.Stored{{Key: "a"}, {Key: "b", Duplicate: true}, {Key: "c"}})
 			},
 			want: map[string]float64{resultAccepted: 2, resultDuplicate: 1},
 		},
@@ -99,7 +101,7 @@ func TestNilMetricsRecordNothing(t *testing.T) {
 	}{
 		{name: "init", record: func(m *Metrics) { m.init("am") }},
 		{name: "reject", record: func(m *Metrics) { m.reject("am", reasonTooLarge) }},
-		{name: "stored", record: func(m *Metrics) { m.stored("am", []storedEvent{{key: "a"}}) }},
+		{name: "stored", record: func(m *Metrics) { m.stored("am", []ingest.Stored{{Key: "a"}}) }},
 	}
 
 	for _, tt := range tests {

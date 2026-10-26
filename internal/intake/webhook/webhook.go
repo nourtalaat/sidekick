@@ -2,10 +2,8 @@
 // deliver alerts. For each delivery it reads the body up to MaxBodyBytes,
 // authenticates it with the endpoint's bearer token or HMAC signature
 // before anything parses it, lets the endpoint's adapter turn it into
-// events, redacts them, and stores each one with a route_event job in one
-// transaction.
-//
-// The route_event job's payload is {"event_id": "<the event's ID>"}.
+// events, and stores them through package ingest, which redacts them and
+// writes each one with a route_event job in one transaction.
 package webhook
 
 import (
@@ -28,6 +26,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/intake"
+	"github.com/nourtalaat/sidekick/internal/intake/ingest"
 	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/secrets"
@@ -108,8 +107,7 @@ type Options struct {
 type Handler struct {
 	endpoints map[string]endpoint
 	secrets   registry.Secrets
-	redactor  *redact.Redactor
-	pool      *pgxpool.Pool
+	writer    *ingest.Writer
 	log       *slog.Logger
 	metrics   *Metrics
 	tracer    trace.Tracer
@@ -133,8 +131,7 @@ func New(opts Options) (*Handler, error) {
 	h := &Handler{
 		endpoints: make(map[string]endpoint, len(opts.Webhooks)),
 		secrets:   opts.Secrets,
-		redactor:  opts.Redactor,
-		pool:      opts.Pool,
+		writer:    ingest.NewWriter(opts.Pool, opts.Redactor),
 		log:       opts.Logger,
 		metrics:   opts.Metrics,
 		tracer:    tp.Tracer(tracerName),
@@ -217,7 +214,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stored, err := h.store(ctx, ep, req, events)
+	stored, err := h.writer.Store(ctx, ingest.Delivery{Intake: ep.name, Trusted: ep.cfg.Trusted, ReceivedAt: req.ReceivedAt, Events: events})
 	if err != nil {
 		d.fail(ctx, "webhook delivery not stored", err)
 
@@ -299,12 +296,12 @@ type reply struct {
 }
 
 // accept answers 202 with what happened to each event.
-func (d *reply) accept(ctx context.Context, stored []storedEvent) {
+func (d *reply) accept(ctx context.Context, stored []ingest.Stored) {
 	resp := newResponse(stored)
 
 	keys := make([]string, 0, len(stored))
 	for _, s := range stored {
-		keys = append(keys, s.key)
+		keys = append(keys, s.Key)
 	}
 
 	d.span.SetAttributes(attribute.StringSlice(attrEventKey, keys), attribute.Bool(attrDuplicate, resp.Duplicate))
@@ -350,18 +347,18 @@ type responseEntity struct {
 	Duplicate bool   `json:"duplicate"`
 }
 
-func newResponse(stored []storedEvent) response {
+func newResponse(stored []ingest.Stored) response {
 	resp := response{Duplicate: len(stored) > 0, Events: make([]responseEntity, 0, len(stored))}
 
 	for _, s := range stored {
-		if s.duplicate {
+		if s.Duplicate {
 			resp.Events = append(resp.Events, responseEntity{Duplicate: true})
 
 			continue
 		}
 
 		resp.Duplicate = false
-		resp.Events = append(resp.Events, responseEntity{ID: s.id.String(), Status: s.status})
+		resp.Events = append(resp.Events, responseEntity{ID: s.ID.String(), Status: s.Status})
 	}
 
 	return resp
