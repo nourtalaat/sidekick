@@ -70,10 +70,17 @@ type Guard struct {
 	metrics  *Metrics
 	tracer   trace.Tracer
 
+	// now is the clock of the breakers of Do keys.
+	now func() time.Time
+	// maxKeys bounds keys; it is maxKeys outside tests.
+	maxKeys int
+
 	mu sync.Mutex
 	// logged holds, per source, the dropped tools last logged, so a drop
 	// is logged when it changes rather than at every run.
 	logged map[string]string
+	// keys holds the limits of the keys of Do calls.
+	keys map[string]*keyed
 }
 
 // guarded is one source with its limits.
@@ -240,7 +247,10 @@ func New(sources []Source, opts Options) (*Guard, error) {
 		logger:   cmp.Or(opts.Logger, slog.Default()).With("component", "tools"),
 		metrics:  opts.Metrics,
 		tracer:   opts.Tracer,
+		now:      time.Now,
+		maxKeys:  maxKeys,
 		logged:   map[string]string{},
+		keys:     map[string]*keyed{},
 	}
 
 	if g.tracer == nil {

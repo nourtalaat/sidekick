@@ -91,6 +91,12 @@ func (p *Path) UnmarshalText(text []byte) error {
 	return nil
 }
 
+// MarshalText returns the path as it was written, so a Path stored as JSON
+// reads back the same.
+func (p Path) MarshalText() ([]byte, error) {
+	return []byte(p.text), nil
+}
+
 // Find returns the values the path selects in doc, a value decoded by
 // encoding/json into any (objects as map[string]any, arrays as []any). A
 // step that does not apply, such as a field of an array or an index past

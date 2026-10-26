@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -55,6 +56,7 @@ type Connector struct {
 	model   knownModel
 	client  anthropic.Client
 	secrets registry.Secrets
+	logger  *slog.Logger
 }
 
 var _ model.Connector = (*Connector)(nil)
@@ -167,12 +169,18 @@ func New(ctx context.Context, name string, cfg Config, deps registry.Deps) (mode
 		opts = append(opts, option.WithBaseURL(cfg.BaseURL))
 	}
 
+	logger := deps.Logger
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
+
 	return &Connector{
 		name:    name,
 		cfg:     cfg,
 		model:   m,
 		client:  anthropic.NewClient(opts...),
 		secrets: deps.Secrets,
+		logger:  logger,
 	}, nil
 }
 

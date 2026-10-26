@@ -107,6 +107,7 @@ process (`process_*`) metrics, this release has:
 | `sidekick_tool_calls_total` | counter | `source`, `tool`, `outcome` | Source tool calls by outcome: `ok`, `no_data`, `error`, `timeout` or `unavailable`. |
 | `sidekick_tool_call_duration_seconds` | histogram | `source` | Duration of source tool calls. |
 | `sidekick_source_up` | gauge | `source` | 1 when a source is connected and its circuit breaker is closed, 0 otherwise. |
+| `sidekick_guard_keys_full_total` | counter | none | Guarded calls that are not source tool calls, such as watcher HTTP checks, refused because the guard already held limits for 1024 targets, all in use. |
 | `sidekick_slack_api_errors_total` | counter | `method`, `error` | Failed Slack Web API calls by method, such as `chat.update`, and error: Slack's error code, such as `channel_not_found`, or `ratelimited`, `request_failed`, `http_status`, `bad_response` or `other`. See [Investigations in Slack](slack.md). |
 
 ## Logs

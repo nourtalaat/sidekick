@@ -112,6 +112,9 @@ back.
   `Provider` set to your provider name, and send its text, signature or
   opaque data back exactly as you got them. Drop `Reasoning` parts from any
   other provider, since a conversation can move between connectors.
+- **Forced tool choice.** A connector whose provider cannot force a tool
+  while the model thinks sends tool choice `auto` instead, so callers must
+  not depend on a tool being forced.
 - **Prompt caching.** `Text.Cache` and `ToolSpec.Cache` mark cache
   breakpoints. Map them to the provider's cache markers, or ignore them if
   the provider caches on its own.

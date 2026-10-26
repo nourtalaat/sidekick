@@ -24,6 +24,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/secrets"
 	"github.com/nourtalaat/sidekick/internal/source"
 	"github.com/nourtalaat/sidekick/internal/strategy"
+	"github.com/nourtalaat/sidekick/internal/watch/safehttp"
 	"github.com/nourtalaat/sidekick/strategies"
 )
 
@@ -99,6 +100,7 @@ func (v *validator) run() {
 	v.checkReport()
 	v.checkRedaction()
 	v.checkTelemetry()
+	v.checkWatch()
 	v.checkSecretRefs()
 
 	if v.opts.CheckSecrets {
@@ -466,6 +468,24 @@ func (v *validator) checkTelemetry() {
 
 	if !slices.Contains(knownLogLevels, t.LogLevel) {
 		v.errs.add("telemetry.logLevel", "unknown log level %q%s", t.LogLevel, didYouMean(string(t.LogLevel), asStrings(knownLogLevels)))
+	}
+}
+
+// checkWatch checks the host patterns and address ranges of watcher HTTP
+// checks.
+func (v *validator) checkWatch() {
+	h := v.cfg.Watch.HTTP
+
+	for i, pattern := range h.AllowHosts {
+		if err := safehttp.CheckHostPattern(pattern); err != nil {
+			v.errs.add(fmt.Sprintf("watch.http.allowHosts[%d]", i), "%v; expected a host name, an IP address, or \"*.\" and a host name", err)
+		}
+	}
+
+	for i, entry := range h.AllowPrivate {
+		if _, err := safehttp.ParsePrefix(entry); err != nil {
+			v.errs.add(fmt.Sprintf("watch.http.allowPrivate[%d]", i), "%v", err)
+		}
 	}
 }
 
