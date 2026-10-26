@@ -20,6 +20,7 @@ func newRootCmd(info buildinfo.Info) *cobra.Command {
 	root.AddCommand(newMigrateCmd(config.Registries{}))
 	root.AddCommand(newConfigCmd(config.Registries{}))
 	root.AddCommand(newServeCmd(config.Registries{}, info))
+	root.AddCommand(newDoctorCmd(config.Registries{}))
 
 	return root
 }

@@ -2,7 +2,8 @@
 
 This page describes `sidekick serve`: what it does when it starts and stops,
 the HTTP endpoints it serves for Kubernetes probes and Prometheus, and its
-logs and traces.
+logs and traces. It also describes `sidekick doctor`, which checks that
+Sidekick can reach everything its config names.
 
 ## Starting
 
@@ -30,6 +31,38 @@ Helm chart mounts the file. At start-up Sidekick:
 `sidekick migrate up` and `sidekick migrate status` take the same
 `--config` flag. They read only the database secret, so a migration Job does
 not need the other secrets mounted.
+
+## Checking an install with `sidekick doctor`
+
+```sh
+kubectl exec deploy/sidekick -c sidekick -- sidekick doctor
+```
+
+`sidekick doctor` reads the same config file as `serve` (`--config`,
+default `/etc/sidekick/sidekick.yaml`) and checks, in order:
+
+| Check | What it does |
+|---|---|
+| `database` | Reads `database.urlSecret`, connects, and compares the schema with the migrations this release needs. |
+| `slack` | Calls Slack's `auth.test` with the bot token from `slack.botTokenSecret`, once for each Slack API address the `slack` outputs use. Nothing is posted. |
+| `model <name>` | Builds each model connector and checks its API key with a call that costs nothing: for `anthropic`, listing one model. |
+| `prices` | Warns about each connector whose model has no price, so its calls would show no cost. Add a `model.prices` entry to fix it. |
+| `source <name>` | Builds each source, waits up to 15 seconds for it to connect and list its tools, and lists the tools the model will not see, with the reason. |
+
+It prints one line per check, with a fix below each problem, for example:
+
+```text
+ok    database: connected; the schema has every migration this release needs (7)
+FAIL  slack: Slack rejected the bot token: invalid_auth
+      fix: put the app's Bot User OAuth Token (xoxb-...), from the Slack app's OAuth & Permissions page, in the Secret sidekick-slack, key botToken, and reinstall the app if it was removed
+ok    model claude: the anthropic API accepted the key
+ok    prices: every configured model has a price
+skip  sources: no sources
+```
+
+Every check runs, even after one fails, so one run shows every problem.
+Secret values never appear in the output. The exit status is 1 when any
+check fails; warnings and skipped checks leave it at 0.
 
 ## Stopping
 
