@@ -45,7 +45,7 @@ Sidekick serves two listeners:
 
 | Listener | Setting | Default | Serves |
 |---|---|---|---|
-| Main | `server.listen` | `:8080` | Webhooks and the API, as later releases add them. Every other path answers 404. |
+| Main | `server.listen` | `:8080` | Webhooks at `POST /hooks/<name>` (see [Sending alerts to Sidekick](webhooks.md)), and the API as later releases add it. Every other path answers 404. |
 | Metrics | `server.metricsListen` | `:9090` | `/metrics`, `/healthz` and `/readyz`. |
 
 Keep the metrics listener off the public network.
@@ -92,6 +92,8 @@ process (`process_*`) metrics, this release has:
 | `sidekick_queue_jobs` | gauge | `kind`, `status` | Jobs in the queue that are pending, running or dead. Every replica reports the same numbers, so combine replicas with `max`. |
 | `sidekick_queue_wait_seconds` | histogram | `kind` | Time from a job being ready to being claimed. |
 | `sidekick_jobs_dead_total` | counter | `kind` | Jobs that failed for the last time on this replica. |
+| `sidekick_events_received_total` | counter | `intake`, `result` | Webhook events by result: `accepted` and `duplicate` count events, `rejected` counts deliveries turned away. See [Monitoring intake](webhooks.md#monitoring-intake). |
+| `sidekick_events_rejected_total` | counter | `intake`, `reason` | Rejected webhook deliveries by reason: `unauthenticated`, `too_large` or `invalid_payload`. |
 
 ## Logs
 
