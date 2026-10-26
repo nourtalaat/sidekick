@@ -122,6 +122,11 @@ func TestPriceCost(t *testing.T) {
 	t.Parallel()
 
 	sonnet := Price{InputPerMTok: 3_000_000, OutputPerMTok: 15_000_000, CacheReadPerMTok: 300_000, CacheWritePerMTok: 3_750_000}
+	tiered := Price{
+		InputPerMTok: 100_000, OutputPerMTok: 500_000, CacheReadPerMTok: 10_000, CacheWritePerMTok: 125_000,
+		TierAboveInputTokens: 100_000,
+		Above:                &Price{InputPerMTok: 500_000, OutputPerMTok: 2_500_000, CacheReadPerMTok: 50_000, CacheWritePerMTok: 625_000},
+	}
 
 	tests := []struct {
 		name  string
@@ -146,6 +151,30 @@ func TestPriceCost(t *testing.T) {
 			want:  1,
 		},
 		{name: "free model", price: Price{}, usage: Usage{InputTokens: 1_000_000, OutputTokens: 1_000_000}, want: 0},
+		{
+			name:  "a short prompt uses the base tier",
+			price: tiered,
+			usage: Usage{InputTokens: 50_000, OutputTokens: 1_000},
+			want:  5_000 + 500,
+		},
+		{
+			name:  "a prompt exactly at the threshold uses the base tier",
+			price: tiered,
+			usage: Usage{InputTokens: 40_000, CacheReadTokens: 50_000, CacheWriteTokens: 10_000, OutputTokens: 1_000},
+			want:  4_000 + 500 + 1_250 + 500,
+		},
+		{
+			name:  "one token over the threshold prices every token at the higher tier",
+			price: tiered,
+			usage: Usage{InputTokens: 40_001, CacheReadTokens: 50_000, CacheWriteTokens: 10_000, OutputTokens: 1_000},
+			want:  (40_001*500_000 + 50_000*50_000 + 10_000*625_000 + 1_000*2_500_000) / 1_000_000,
+		},
+		{
+			name:  "cache reads count toward the threshold",
+			price: tiered,
+			usage: Usage{InputTokens: 1_000, CacheReadTokens: 150_000},
+			want:  (1_000*500_000 + 150_000*50_000) / 1_000_000,
+		},
 	}
 
 	for _, tt := range tests {
