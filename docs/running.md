@@ -79,6 +79,10 @@ schema: ok
   schema: the database has migrations up to 1 but this release needs 2; database.migrations is manual, so run `sidekick migrate up`
   ```
 
+A message that would span several lines, such as a database error that lists
+each address Sidekick tried, is joined into one line with `; `, so each check
+always takes exactly one line.
+
 Sources such as MCP servers are never checked, so one that is down does not
 take Sidekick out of service; investigations report it instead.
 
