@@ -7,6 +7,7 @@
 package fakehttp
 
 import (
+	"bytes"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -138,7 +139,8 @@ func (s *Server) Handle(method, path string, responses ...Response) {
 }
 
 // HandleFunc answers every request to method and path with h. Use it when
-// canned responses are not enough. Call it from the test's own goroutine.
+// canned responses are not enough. h can read the request body, although
+// the server has already recorded it. Call it from the test's own goroutine.
 func (s *Server) HandleFunc(method, path string, h http.HandlerFunc) {
 	s.t.Helper()
 
@@ -199,6 +201,7 @@ func (s *Server) serveHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if handler != nil {
+		req.Body = io.NopCloser(bytes.NewReader(body))
 		handler(w, req)
 
 		return
