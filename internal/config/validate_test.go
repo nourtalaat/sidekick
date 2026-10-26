@@ -53,6 +53,7 @@ func TestValidateFixtures(t *testing.T) {
 		{file: "source-tool-name-too-long", want: []string{`sources.signoz.tools.rename.search_logs: tool "signoz__search_logs_in_every_index_of_every_cluster_in_the_whole_company" is longer than 64 characters: invalid name`}},
 		{file: "source-bad-tool-glob", want: []string{`sources.signoz.tools.deny[1]: invalid glob "*delete[": syntax error in pattern`}},
 		{file: "source-negative-limits", want: []string{"sources.signoz.concurrency: must not be negative", "sources.signoz.timeout: must not be negative"}},
+		{file: "source-mcp-timeout-above-limit", want: []string{"sources.signoz.timeout: 1m1s is above 1m0s, the longest the HTTP client waits for response headers with transport http"}},
 		// Secrets
 		{file: "secret-missing-key", want: []string{"database.urlSecret.key: required"}},
 		{file: "plugin-secret-shape", want: []string{`sources.signoz.headers.Authorization.secret.name: "../signoz" must not be "." or ".." or contain "/" or "\"`}},

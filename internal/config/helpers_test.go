@@ -16,6 +16,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/output"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/source"
+	"github.com/nourtalaat/sidekick/internal/source/mcp"
 )
 
 // baseYAML is a valid config without routes, for tests that write their own.
@@ -85,19 +86,6 @@ func (fakeConnector) Generate(context.Context, model.Request) (model.Response, e
 	return model.Response{}, errors.New("fake connector")
 }
 
-type fakeHeader struct {
-	Secret *registry.SecretRef `yaml:"secret"`
-	Prefix string              `yaml:"prefix"`
-}
-
-type fakeMCPConfig struct {
-	source.Settings `yaml:",inline"`
-
-	Transport string                `yaml:"transport"`
-	URL       string                `yaml:"url"`
-	Headers   map[string]fakeHeader `yaml:"headers"`
-}
-
 type fakeKubernetesConfig struct {
 	Namespaces []string `yaml:"namespaces"`
 }
@@ -148,7 +136,8 @@ func (fakeSink) Publish(context.Context, output.Update) (output.Ref, error) {
 }
 
 // testRegistries returns registries of their own with fake plugin types, so
-// tests never touch the global registries.
+// tests never touch the global registries. The mcp type checks its section
+// with the real mcp.Config but builds a fake source.
 func testRegistries() Registries {
 	regs := Registries{
 		Models:  registry.New[model.Connector]("model"),
@@ -172,7 +161,7 @@ func testRegistries() Registries {
 		return fakeConnector{caps: model.Capabilities{ToolCalling: cfg.ToolCalling}}, nil
 	}))
 
-	regs.Sources.Register("mcp", registry.Typed(func(context.Context, string, fakeMCPConfig, registry.Deps) (source.Source, error) {
+	regs.Sources.Register(mcp.Type, registry.Typed(func(context.Context, string, mcp.Config, registry.Deps) (source.Source, error) {
 		return fakeSource{}, nil
 	}))
 	regs.Sources.Register("kubernetes", registry.Typed(func(context.Context, string, fakeKubernetesConfig, registry.Deps) (source.Source, error) {

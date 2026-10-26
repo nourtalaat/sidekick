@@ -45,7 +45,11 @@ You do not write any of this in a source:
   out.
 - **Limits.** Each call gets the source's `timeout` (default 30 seconds),
   and at most `concurrency` calls (default 4) run at once on one replica.
-  A call that waits too long for a free slot times out too.
+  A call that waits too long for a free slot times out too. The HTTP
+  client in `deps.HTTP` stops waiting for response headers after
+  `httpclient.ResponseHeaderTimeout` (60 seconds), so a source that calls
+  over HTTP rejects a longer `timeout` in its `Validate`, as the MCP
+  source does.
 - **A circuit breaker.** After 5 failures in a row the source is skipped
   for 60 seconds and calls fail at once; then one trial call decides
   whether it is back.

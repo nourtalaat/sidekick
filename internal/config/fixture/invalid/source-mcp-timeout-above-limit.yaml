@@ -1,0 +1,19 @@
+# An MCP source over http with a timeout longer than the HTTP client waits
+# for response headers.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+sources:
+  signoz:
+    type: mcp
+    url: https://signoz-mcp.internal/mcp
+    timeout: 61s
+
+routes:
+  - name: default
