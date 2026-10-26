@@ -1,1 +1,1 @@
-{"error": "invalid payload: parse: data.event.event_id: required"}
+{"error": "invalid payload: parse: read the issue alert webhook: data.event.event_id: required"}

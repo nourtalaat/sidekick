@@ -174,24 +174,28 @@ func (Sentry) Parse(_ context.Context, req intake.Request) ([]event.Event, error
 	}
 
 	var (
-		ev  event.Event
-		ok  bool
-		err error
+		ev   event.Event
+		ok   bool
+		err  error
+		kind string
 	)
 
 	switch {
 	case p.Data.Event != nil:
+		kind = "issue alert"
 		ev, err = issueAlert(p)
 		ok = true
 	case p.Data.MetricAlert != nil:
+		kind = "metric alert"
 		ev, err = metricAlertEvent(p)
 		ok = true
 	case p.Data.Issue != nil:
+		kind = "issue"
 		ev, ok, err = issueChange(p)
 	}
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read the %s webhook: %w", kind, err)
 	}
 
 	if !ok {
@@ -241,9 +245,9 @@ func issueAlert(p payload) (event.Event, error) {
 		return event.Event{}, errNoEventID
 	}
 
-	at, err := parseTime("data.event.datetime", e.Datetime)
+	at, err := parseTime(e.Datetime)
 	if err != nil {
-		return event.Event{}, err
+		return event.Event{}, fmt.Errorf("data.event.datetime: %w", err)
 	}
 
 	labels := map[string]string{}
@@ -290,14 +294,14 @@ func metricAlertEvent(p payload) (event.Event, error) {
 		return event.Event{}, errBadAction
 	}
 
-	started, err := parseTime("data.metric_alert.date_started", m.DateStarted)
+	started, err := parseTime(m.DateStarted)
 	if err != nil {
-		return event.Event{}, err
+		return event.Event{}, fmt.Errorf("data.metric_alert.date_started: %w", err)
 	}
 
-	closed, err := parseTime("data.metric_alert.date_closed", m.DateClosed)
+	closed, err := parseTime(m.DateClosed)
 	if err != nil {
-		return event.Event{}, err
+		return event.Event{}, fmt.Errorf("data.metric_alert.date_closed: %w", err)
 	}
 
 	labels := map[string]string{}
@@ -343,14 +347,14 @@ func issueChange(p payload) (ev event.Event, ok bool, err error) {
 		return event.Event{}, false, errNoIssueID
 	}
 
-	firstSeen, err := parseTime("data.issue.firstSeen", is.FirstSeen)
+	firstSeen, err := parseTime(is.FirstSeen)
 	if err != nil {
-		return event.Event{}, false, err
+		return event.Event{}, false, fmt.Errorf("data.issue.firstSeen: %w", err)
 	}
 
-	lastSeen, err := parseTime("data.issue.lastSeen", is.LastSeen)
+	lastSeen, err := parseTime(is.LastSeen)
 	if err != nil {
-		return event.Event{}, false, err
+		return event.Event{}, false, fmt.Errorf("data.issue.lastSeen: %w", err)
 	}
 
 	labels := map[string]string{labelIssueID: is.ID}
@@ -375,15 +379,15 @@ func issueChange(p payload) (ev event.Event, ok bool, err error) {
 }
 
 // parseTime reads an RFC 3339 time and returns it in UTC. An empty string
-// is the zero time. The error names the member, never the value.
-func parseTime(member, s string) (time.Time, error) {
+// is the zero time. The error never holds the value.
+func parseTime(s string) (time.Time, error) {
 	if s == "" {
 		return time.Time{}, nil
 	}
 
 	t, err := time.Parse(time.RFC3339Nano, s)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("%s: %w", member, errBadTime)
+		return time.Time{}, errBadTime
 	}
 
 	return t.UTC(), nil

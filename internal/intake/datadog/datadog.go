@@ -62,7 +62,7 @@ var titlePrefix = regexp.MustCompile(`^(\[[^\]]*\]\s*)+`)
 var (
 	errNoID    = errors.New("id: required")
 	errNoTitle = errors.New("title or alert_title: required")
-	errBadDate = errors.New("date: must be a number of milliseconds since 1970")
+	errBadDate = errors.New("must be a number of milliseconds since 1970")
 	errNotText = errors.New("id, date, alert_id and org.id must each be a string or a number")
 )
 
@@ -157,7 +157,7 @@ func (Datadog) Parse(_ context.Context, req intake.Request) ([]event.Event, erro
 
 	at, err := parseMillis(string(p.Date))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("date: %w", err)
 	}
 
 	alertName := monitorName(cmp.Or(p.AlertTitle, title))

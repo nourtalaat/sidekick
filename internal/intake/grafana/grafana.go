@@ -292,14 +292,14 @@ func toEvent(p payload, raw json.RawMessage, receivedAt time.Time) (event.Event,
 		return event.Event{}, errUnknownStatus
 	}
 
-	startsAt, err := parseTime("startsAt", a.StartsAt)
+	startsAt, err := parseTime(a.StartsAt)
 	if err != nil {
-		return event.Event{}, err
+		return event.Event{}, fmt.Errorf("startsAt: %w", err)
 	}
 
-	endsAt, err := parseTime("endsAt", a.EndsAt)
+	endsAt, err := parseTime(a.EndsAt)
 	if err != nil {
-		return event.Event{}, err
+		return event.Event{}, fmt.Errorf("endsAt: %w", err)
 	}
 
 	labels := a.Labels
@@ -375,15 +375,15 @@ func rawWithAlert(top map[string]json.RawMessage, alert json.RawMessage) (json.R
 
 // parseTime reads an RFC 3339 time and returns it in UTC. An empty string
 // is the zero time, and so is Grafana's "0001-01-01T00:00:00Z" for an
-// alert that has not ended. The error names the member, never the value.
-func parseTime(member, s string) (time.Time, error) {
+// alert that has not ended. The error never holds the value.
+func parseTime(s string) (time.Time, error) {
 	if s == "" {
 		return time.Time{}, nil
 	}
 
 	t, err := time.Parse(time.RFC3339Nano, s)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("%s: %w", member, errBadTime)
+		return time.Time{}, errBadTime
 	}
 
 	return t.UTC(), nil
