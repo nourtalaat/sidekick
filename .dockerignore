@@ -1,0 +1,16 @@
+# Only what the build stage needs goes into the build context.
+.git/
+.github/
+.claude/
+.docs/
+bin/
+dist/
+charts/
+docs/
+assets/
+examples/
+*.test
+*.out
+.env
+.env.*
+*.local.yaml

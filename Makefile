@@ -28,6 +28,13 @@ VERSION ?= $(shell git describe --tags --dirty 2>/dev/null || echo dev)
 COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 LDFLAGS := -X $(MODULE)/internal/buildinfo.Version=$(VERSION) -X $(MODULE)/internal/buildinfo.Commit=$(COMMIT)
 
+IMAGE_REPOSITORY ?= ghcr.io/nourtalaat/sidekick
+IMAGE_TAG ?= $(VERSION)
+IMAGE ?= $(IMAGE_REPOSITORY):$(IMAGE_TAG)
+IMAGE_PLATFORMS ?= linux/amd64,linux/arm64
+CONTAINER_TOOL ?= $(if $(shell command -v docker 2>/dev/null),docker,podman)
+comma := ,
+
 CI_TARGETS :=
 GENERATE_TARGETS :=
 
@@ -90,6 +97,22 @@ CI_TARGETS += build
 .PHONY: build
 build: ## Build bin/sidekick with the version and commit set
 	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/sidekick ./cmd/sidekick
+
+# The image is built with Docker when it is installed, else with Podman. With
+# Podman the platforms go into one local manifest list named $(IMAGE); with
+# Docker, buildx keeps the result in its cache unless IMAGE_PLATFORMS names
+# one platform, which it loads into the local images.
+.PHONY: image
+image: ## Build the container image for linux/amd64 and linux/arm64 (IMAGE_PLATFORMS=linux/arm64 for one)
+ifeq ($(CONTAINER_TOOL),podman)
+	-podman manifest rm $(IMAGE) 2>/dev/null
+	podman build --platform $(IMAGE_PLATFORMS) --manifest $(IMAGE) \
+		--build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) .
+else
+	docker buildx build --platform $(IMAGE_PLATFORMS) -t $(IMAGE) \
+		$(if $(findstring $(comma),$(IMAGE_PLATFORMS)),,--load) \
+		--build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) .
+endif
 
 .PHONY: vulncheck
 vulncheck: $(GOVULNCHECK) ## Check dependencies and code for known vulnerabilities

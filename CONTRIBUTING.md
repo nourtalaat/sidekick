@@ -71,6 +71,7 @@ Run `make help` for the full list. The main ones:
 | `make verify-generated` | Runs `make generate` and fails if any file changed. |
 | `make build` | Builds `bin/sidekick` with the version and commit set. |
 | `make vulncheck` | govulncheck on the code and its dependencies. |
+| `make image` | Builds the container image for linux/amd64 and linux/arm64 with Docker, or Podman when Docker is missing. `IMAGE_PLATFORMS=linux/arm64` builds one platform. |
 
 To add a target to `make ci`, put `CI_TARGETS += <name>` above its rule. A new
 code generator adds itself to `make generate` the same way, with
