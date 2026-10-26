@@ -124,7 +124,7 @@ func (g *Generic) Parse(_ context.Context, req intake.Request) ([]event.Event, e
 	}
 
 	if err := errors.Join(p.errs...); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("map fields: %w", err)
 	}
 
 	if g.fields.Key.IsZero() {
