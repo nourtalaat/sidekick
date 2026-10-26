@@ -1,0 +1,54 @@
+{
+  "receiver": "sidekick",
+  "status": "resolved",
+  "orgId": 1,
+  "alerts": [
+    {
+      "status": "resolved",
+      "labels": {
+        "alertname": "Checkout error rate",
+        "grafana_folder": "Checkout",
+        "service": "checkout",
+        "severity": "critical"
+      },
+      "annotations": {
+        "description": "The 5xx rate of checkout is back under 5%.",
+        "summary": "Checkout error rate above 5%"
+      },
+      "startsAt": "2026-10-26T08:50:00Z",
+      "endsAt": "2026-10-26T09:10:00Z",
+      "generatorURL": "https://grafana.example.com/alerting/grafana/bdw2x8f1/view?orgId=1",
+      "fingerprint": "6f1d2a9b3c4e5f70",
+      "silenceURL": "https://grafana.example.com/alerting/silence/new?alertmanager=grafana&matchers=__alert_rule_uid__%3Dbdw2x8f1&orgId=1",
+      "dashboardURL": "https://grafana.example.com/d/checkout-overview?orgId=1",
+      "panelURL": "https://grafana.example.com/d/checkout-overview?orgId=1&viewPanel=4",
+      "imageURL": "https://grafana.example.com/public/img/attachments/9c1e2b.png",
+      "values": {
+        "A": 0.012,
+        "C": 0
+      },
+      "valueString": "[ var='A' labels={service=checkout} value=0.012 ], [ var='C' labels={service=checkout} value=0 ]"
+    }
+  ],
+  "groupLabels": {
+    "alertname": "Checkout error rate",
+    "grafana_folder": "Checkout"
+  },
+  "commonLabels": {
+    "alertname": "Checkout error rate",
+    "grafana_folder": "Checkout",
+    "service": "checkout",
+    "severity": "critical"
+  },
+  "commonAnnotations": {
+    "description": "The 5xx rate of checkout is back under 5%.",
+    "summary": "Checkout error rate above 5%"
+  },
+  "externalURL": "https://grafana.example.com/",
+  "version": "1",
+  "groupKey": "{}/{}:{alertname=\"Checkout error rate\", grafana_folder=\"Checkout\"}",
+  "truncatedAlerts": 0,
+  "title": "[RESOLVED] Checkout error rate Checkout (checkout critical)",
+  "state": "ok",
+  "message": "**Resolved**\n\nValue: A=0.012, C=0\nLabels:\n - alertname = Checkout error rate\n - grafana_folder = Checkout\n - service = checkout\n - severity = critical\n"
+}
