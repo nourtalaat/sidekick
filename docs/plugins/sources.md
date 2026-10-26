@@ -154,6 +154,10 @@ service allows it, and list them in the source's user docs (step 6).
 - Cover each tool's result, an empty result (`NoData`), a tool error, a
   timeout, an oversized result and a service that is down.
 - Table-test `Validate`.
+- Keep a snapshot of the tools for the benchmark in
+  `bench/tools/<type>.json`, in the shape of an MCP `tools/list` result,
+  `{"tools": [{"name", "description", "inputSchema"}]}`, with a golden
+  test that rewrites it when run with `-update`.
 - A test that runs the source through `tools.New` and `Run.Call`, as the
   example does, shows what the model will see.
 

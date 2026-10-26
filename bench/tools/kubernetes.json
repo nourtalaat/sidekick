@@ -1,0 +1,198 @@
+{
+  "tools": [
+    {
+      "name": "list_events",
+      "description": "List Kubernetes events, newest first, for a namespace or for one object, such as back-offs, failed scheduling, OOM kills, image pull errors and scaling.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "Only events about objects of this kind, for example Pod or Deployment."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most events to return. Default 50, at most 500.",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "name": {
+            "type": "string",
+            "description": "Only events about the object with this name."
+          },
+          "namespace": {
+            "type": "string",
+            "description": "The namespace. Empty means every namespace Sidekick may read."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only what happened after this: an RFC 3339 time, or a duration back from now such as 30m or 2h."
+          },
+          "type": {
+            "type": "string",
+            "description": "Only events of this type.",
+            "enum": [
+              "Normal",
+              "Warning"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_workload",
+      "description": "Get the status of a Deployment, StatefulSet or DaemonSet: replicas, conditions, container images, rollout strategy and any horizontal pod autoscaler that scales it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "The kind of workload.",
+            "enum": [
+              "Deployment",
+              "StatefulSet",
+              "DaemonSet"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "The name of the workload.",
+            "minLength": 1
+          },
+          "namespace": {
+            "type": "string",
+            "description": "The namespace of the workload.",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "namespace",
+          "kind",
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_pod_problems",
+      "description": "List pods that have problems: restarts, OOM kills, CrashLoopBackOff and other waiting reasons, pods that cannot be scheduled, failed or evicted pods, and containers that are not ready.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "labelSelector": {
+            "type": "string",
+            "description": "A label selector, for example app=checkout or tier in (web,api)."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most pods to return. Default 50, at most 200.",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "namespace": {
+            "type": "string",
+            "description": "The namespace. Empty means every namespace Sidekick may read."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_rollout_history",
+      "description": "Get the rollout history of a Deployment: its ReplicaSet revisions, newest first, with creation times, images and what changed from the revision before, to see recent changes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "The most revisions to return. Default 10, at most 50.",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "name": {
+            "type": "string",
+            "description": "The name of the Deployment.",
+            "minLength": 1
+          },
+          "namespace": {
+            "type": "string",
+            "description": "The namespace of the Deployment.",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "namespace",
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_pod_logs",
+      "description": "Get the last lines of the logs of one container of a pod, with timestamps.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "container": {
+            "type": "string",
+            "description": "The container. Required when the pod has more than one."
+          },
+          "namespace": {
+            "type": "string",
+            "description": "The namespace of the pod.",
+            "minLength": 1
+          },
+          "pod": {
+            "type": "string",
+            "description": "The name of the pod.",
+            "minLength": 1
+          },
+          "previous": {
+            "type": "boolean",
+            "description": "Return the logs of the container's previous run, for example before a crash."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only what happened after this: an RFC 3339 time, or a duration back from now such as 30m or 2h."
+          },
+          "tailLines": {
+            "type": "integer",
+            "description": "How many lines to return, from the end. Default 200, at most 2000.",
+            "minimum": 1,
+            "maximum": 2000
+          }
+        },
+        "required": [
+          "namespace",
+          "pod"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_nodes",
+      "description": "List nodes with their conditions (ready, memory, disk and PID pressure), cordons, taints, roles, kubelet versions and allocatable resources.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "The most nodes to return. Default 100, at most 500.",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "name": {
+            "type": "string",
+            "description": "Only the node with this name."
+          },
+          "problemsOnly": {
+            "type": "boolean",
+            "description": "Only nodes that are not ready, are under pressure or are cordoned."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}
