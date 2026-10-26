@@ -124,6 +124,38 @@ Work is tracked as issues with IDs of the form `SK-<n>`. The repository turns
   unexported method, such as `model.Part`) adds
   `-exclude_interfaces <Name>`, so the mock does not join the sealed set.
 
+## Third-party services in tests
+
+Tests never call a real third-party service. Mock it with
+`internal/fakehttp`, in unit and integration tests alike: each test or
+subtest starts its own server, so nothing is shared and tests stay
+parallel. Do not use gock or another library that keeps its mocks in one
+process-wide list; such mocks race as soon as tests run in parallel.
+
+```go
+api := fakehttp.New(t)
+api.Handle(http.MethodPost, "/v1/messages",
+	fakehttp.Response{Status: http.StatusTooManyRequests, Headers: map[string]string{"Retry-After": "1"}},
+	fakehttp.Response{BodyFile: "fixture/text.sse", Headers: map[string]string{"Content-Type": "text/event-stream"}},
+)
+api.ExpectAllCalled()
+
+client := NewClient(api.URL(), api.Client())
+```
+
+- `Handle` serves its responses once each, in order. `HandleFunc` takes a
+  handler function for anything canned responses cannot do. `Response`
+  also has `Body` and `Delay`, and `fakehttp.New(t, fakehttp.WithTLS())`
+  starts an HTTPS server.
+- A request that no route expects fails the test and gets a 501, so a
+  missing mock never passes silently. `ExpectAllCalled` also fails the test
+  when a response goes unused.
+- `Requests` returns every request received, with its method, path, query,
+  headers and body, for assertions on what the code sent.
+- Keep recorded responses in the package's `fixture/` directory; a
+  `BodyFile` path is relative to the package.
+- The tests of `internal/model/anthropic` show the pattern.
+
 ## Database
 
 Sidekick uses only Postgres, through pgx. The schema lives in goose
@@ -213,7 +245,9 @@ Work that does not finish inside a request runs as a job from
   and drops it when the test ends. Tests can therefore call `t.Parallel()`.
   `storetest.LoadFixture(t, pool, "fixture/<file>.sql")` runs a seed file.
 - Mock only third-party services (model providers, Slack, GitHub and so on),
-  with `gock`. Everything inside Sidekick runs for real.
+  with `internal/fakehttp`, as in
+  [Third-party services in tests](#third-party-services-in-tests).
+  Everything inside Sidekick runs for real.
 - Each package with integration tests has:
   - a `fixture/` directory with database seed data, request and expected
     response JSON, mocked third-party responses, and config such as feature

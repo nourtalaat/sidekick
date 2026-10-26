@@ -5,7 +5,6 @@ go 1.26.0
 require (
 	github.com/anthropics/anthropic-sdk-go/v2 v2.3.0
 	github.com/google/uuid v1.6.0
-	github.com/h2non/gock v1.2.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/prometheus/client_golang v1.25.0
@@ -44,7 +43,6 @@ require (
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
-	github.com/h2non/parth v0.0.0-20190131123155-b4df798d6542 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
