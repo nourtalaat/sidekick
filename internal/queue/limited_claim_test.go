@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/nourtalaat/sidekick/internal/store/db"
 	"github.com/nourtalaat/sidekick/internal/store/storetest"
 )
 
@@ -142,6 +143,82 @@ func TestClaimLimitedRespectsLimits(t *testing.T) {
 			require.Equal(t, tt.claimKind, job.Kind)
 			require.Equal(t, StatusRunning, job.Status)
 			require.Equal(t, *tt.wantRoute, deref(job.Route))
+		})
+	}
+}
+
+// TestClaimLimitedSeesTheClaimBeforeIt holds the claim lock in one
+// transaction that has claimed a job, starts a second claim that waits for
+// the lock, then commits the first. The second claim must count the first
+// claim's job as running: it takes its snapshot after it gets the lock,
+// because the lock is taken in a statement of its own.
+func TestClaimLimitedSeesTheClaimBeforeIt(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		global      int
+		wantClaimed bool
+	}{
+		{name: "the first claim fills the global limit", global: 1},
+		{name: "room is left after the first claim", global: 2, wantClaimed: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			pool := setup(t)
+			base := time.Now().Add(-time.Hour)
+			firstID := mustEnqueue(t, pool, NewJob{Kind: KindInvestigate, RunAt: base})
+			secondID := mustEnqueue(t, pool, NewJob{Kind: KindInvestigate, RunAt: base.Add(time.Second)})
+
+			params, err := Limits{Global: tt.global}.params()
+			require.NoError(t, err)
+
+			tx, err := pool.Begin(t.Context())
+			require.NoError(t, err)
+
+			t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) })
+
+			queries := db.New(tx)
+			require.NoError(t, queries.LockLimitedClaims(t.Context(), limitedClaimLockKey))
+
+			first, err := queries.ClaimLimitedJob(t.Context(), db.ClaimLimitedJobParams{
+				Worker:       testWorker,
+				LeaseSeconds: testLease.Seconds(),
+				LimitedKinds: limitedKinds,
+				Routes:       params.routes,
+				RouteLimits:  params.routeLimits,
+				Kind:         KindInvestigate,
+				GlobalLimit:  params.global,
+			})
+			require.NoError(t, err)
+			require.Equal(t, firstID, first.ID)
+
+			type claimResult struct {
+				job     db.Job
+				claimed bool
+				err     error
+			}
+
+			results := make(chan claimResult, 1)
+
+			go func() {
+				job, claimed, err := claimLimited(t.Context(), pool, testWorker, KindInvestigate, testLease, params)
+				results <- claimResult{job: job, claimed: claimed, err: err}
+			}()
+
+			eventually(t, func() bool { return waitsForAdvisoryLock(t, pool) })
+			require.NoError(t, tx.Commit(t.Context()))
+
+			second := <-results
+			require.NoError(t, second.err)
+			require.Equal(t, tt.wantClaimed, second.claimed)
+
+			if tt.wantClaimed {
+				require.Equal(t, secondID, second.job.ID)
+			}
 		})
 	}
 }
@@ -412,4 +489,21 @@ func deref(s *string) string {
 	}
 
 	return *s
+}
+
+// waitsForAdvisoryLock reports whether a session on pool's database is
+// waiting for an advisory lock.
+func waitsForAdvisoryLock(t *testing.T, pool *pgxpool.Pool) bool {
+	t.Helper()
+
+	var waiting bool
+
+	err := pool.QueryRow(t.Context(), `
+		SELECT EXISTS (
+			SELECT 1 FROM pg_locks l JOIN pg_database d ON d.oid = l.database
+			WHERE l.locktype = 'advisory' AND NOT l.granted AND d.datname = current_database()
+		)`).Scan(&waiting)
+	require.NoError(t, err)
+
+	return waiting
 }
