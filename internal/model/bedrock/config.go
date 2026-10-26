@@ -3,12 +3,12 @@ package bedrock
 import (
 	"errors"
 	"fmt"
-	"net/netip"
 	"net/url"
 	"regexp"
 	"slices"
 	"strings"
 
+	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/model"
 )
 
@@ -221,22 +221,11 @@ func checkEndpoint(raw string) error {
 	switch {
 	case u.Host == "" || (u.Scheme != "https" && u.Scheme != "http"):
 		return fmt.Errorf("endpoint: %q must be an absolute https URL", raw)
-	case u.Scheme == "http" && !isLoopback(u.Hostname()):
+	case u.Scheme == "http" && !httpclient.IsLoopbackHost(u.Hostname()):
 		return fmt.Errorf("endpoint: %q must use https; plain http is allowed only for localhost, 127.0.0.0/8 or ::1", raw)
 	}
 
 	return nil
-}
-
-// isLoopback reports whether host is localhost or a loopback IP address.
-func isLoopback(host string) bool {
-	if strings.EqualFold(host, "localhost") {
-		return true
-	}
-
-	ip, err := netip.ParseAddr(host)
-
-	return err == nil && ip.IsLoopback()
 }
 
 // isAnthropic reports whether a model ID, inference profile ID or ARN
