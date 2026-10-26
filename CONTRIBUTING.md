@@ -263,6 +263,10 @@ Work that does not finish inside a request runs as a job from
 
   The tests of `internal/store/storetest` are a small example of this layout
   to copy.
+- The Postgres source's tests (`internal/source/postgres`) always start a
+  container of their own, even when `SIDEKICK_TEST_DATABASE_URL` is set,
+  because they need `pg_stat_statements` loaded at start-up and a standby
+  server, so they need Docker or Podman.
 
 ## Go style
 

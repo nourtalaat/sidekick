@@ -482,6 +482,64 @@ How it behaves:
   stops waiting for response headers after 60 seconds; `sidekick config
   validate` rejects a longer one.
 
+#### Postgres sources (`type: postgres`)
+
+A Postgres source reads the statistics views of Postgres databases your
+services use, not Sidekick's own: slow statements, running queries, lock
+waits and replication lag. Its tools only read, and run fixed SQL in
+read-only transactions. [Postgres source](sources/postgres.md) lists the
+role it needs, the TLS rules for its URL, and how to turn on
+`pg_stat_statements`.
+
+| Key | Meaning |
+|---|---|
+| `databases` | The databases the tools may read. Required, at least one. The model picks one by `name` on each call. |
+| `databases[].name` | What the model calls the database, for example `orders`: a lower-case letter, then lower-case letters, digits, `_` and `-`, at most 63 in all. Each name is used once. |
+| `databases[].urlSecret` | `{ name, key }` of the Secret that holds the database's `postgres://` URL, with the role and its password. Required. |
+| `databases[].allowInsecure` | Accept a URL that does not verify the server's TLS certificate, and log a warning each time Sidekick connects with it. Default `false`, so the URL must set `sslmode=verify-full` or `verify-ca` unless every host is local. |
+| `omitQueryText` | Leave the text of queries out of every result. Default `false`. |
+| `statementTimeout` | How long one query may run, set as `statement_timeout` on each transaction. Default `10s`; it must be shorter than `timeout`. |
+
+```yaml
+sources:
+  db:
+    type: postgres
+    databases:
+      - name: orders
+        urlSecret: { name: sidekick-orders-db, key: url }
+      - name: orders-replica
+        urlSecret: { name: sidekick-orders-replica-db, key: url }
+    omitQueryText: false
+```
+
+The tools, as the model sees them with the source name `db`:
+
+| Tool | Returns |
+|---|---|
+| `db__slow_queries` | The statements with the highest mean or total execution time, from `pg_stat_statements`. |
+| `db__running_queries` | Sessions running a query or holding a transaction open, longest first, with wait events and blockers. |
+| `db__lock_waits` | Sessions waiting for a lock, the sessions blocking them, and the heads of the blocking chains. |
+| `db__replication_lag` | On a primary, each standby's lag in bytes and time; on a standby, its own replay delay. |
+
+How it behaves:
+
+- **Start-up never waits for a database.** The first call for a database
+  reads its URL Secret and connects. The Secret is read on every call, and
+  new connections are made when the URL changed, so a rotated password
+  needs no restart.
+- **Safety.** Each call runs in a `READ ONLY` transaction with
+  `statement_timeout` set to `statementTimeout` and `lock_timeout` set to
+  1 second. Sidekick refuses to connect as a superuser, and warns when the
+  role is not a member of `pg_monitor`.
+- **Results** are JSON. Each tool returns up to `limit` rows (default 20,
+  at most 100), and the text of each query is cut at 2 KiB. A view with
+  nothing to show, or a database without `pg_stat_statements` for
+  `slow_queries`, is reported as no data.
+- **Errors.** An error Postgres reports for a query, such as a timeout or
+  a missing privilege, goes to the model as a tool error with its message.
+  A database that cannot be reached, a refused login and a refused URL
+  count as failures of the source.
+
 ### `intake.webhooks`
 
 Each webhook endpoint receives alerts at `/hooks/<name>`. It names an
