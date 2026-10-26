@@ -1,0 +1,381 @@
+package investigator
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	"github.com/nourtalaat/sidekick/internal/model"
+	"github.com/nourtalaat/sidekick/internal/store"
+	"github.com/nourtalaat/sidekick/internal/store/db"
+)
+
+// The values of steps.kind.
+const (
+	// kindPrompt is the first step: the system text, the tools and the
+	// first user message.
+	kindPrompt = "prompt"
+	// kindModelTurn is one answer of the model.
+	kindModelTurn = "model_turn"
+	// kindToolResult answers one tool call of the model turn before it.
+	kindToolResult = "tool_result"
+	// kindNote is text Sidekick adds to the conversation, such as a
+	// reminder to submit a verdict.
+	kindNote = "note"
+)
+
+// The values of steps.status.
+const (
+	statusOK          = "ok"
+	statusNoData      = "no_data"
+	statusError       = "error"
+	statusTimeout     = "timeout"
+	statusUnavailable = "unavailable"
+	// statusRejected is a call that Sidekick refused without running it:
+	// input that does not match the tool's schema, an unknown tool, or a
+	// report or finding that did not pass its checks.
+	statusRejected = "rejected"
+	// statusOverBudget is a source call that was not run because the
+	// investigation had used all of its tool calls.
+	statusOverBudget = "over_budget"
+)
+
+// Part types in steps.parts.
+const (
+	partText       = "text"
+	partToolCall   = "tool_call"
+	partToolResult = "tool_result"
+	partReasoning  = "reasoning"
+)
+
+var (
+	errUnknownPart = errors.New("unknown part type")
+	errNoPrompt    = errors.New("the first step is not the prompt")
+)
+
+// storedPart is one model.Part as steps.parts holds it.
+type storedPart struct {
+	Type      string          `json:"type"`
+	Text      string          `json:"text,omitempty"`
+	Cache     bool            `json:"cache,omitempty"`
+	ID        string          `json:"id,omitempty"`
+	Name      string          `json:"name,omitempty"`
+	Input     json.RawMessage `json:"input,omitempty"`
+	CallID    string          `json:"call_id,omitempty"`
+	Content   string          `json:"content,omitempty"`
+	IsError   bool            `json:"is_error,omitempty"`
+	Provider  string          `json:"provider,omitempty"`
+	Signature string          `json:"signature,omitempty"`
+	Redacted  []byte          `json:"redacted,omitempty"`
+}
+
+// storedPrompt is the parts of a prompt step: what every request of the
+// run starts with. Keeping it in the step keeps the start of the
+// conversation the same on every resume, even when the config changes.
+type storedPrompt struct {
+	System []storedPart `json:"system"`
+	Tools  []storedTool `json:"tools"`
+	Parts  []storedPart `json:"parts"`
+}
+
+// storedTool is one model.ToolSpec of a prompt.
+type storedTool struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	InputSchema json.RawMessage `json:"input_schema,omitempty"`
+	Cache       bool            `json:"cache,omitempty"`
+}
+
+// history is the saved steps of an investigation and what they add up to:
+// the conversation to send the model, and indexes of the tool calls and
+// their results. Only the goroutine that runs the loop uses it.
+type history struct {
+	steps []db.Step
+	// req holds the system text, the tools and the messages so far.
+	req model.Request
+	// calls are the tool calls of every model turn, by ID.
+	calls map[string]model.ToolCall
+	// results are the tool result steps, by the ID of the call they answer.
+	results map[string]db.Step
+	// lastTurn is the index in steps of the last model turn, or -1, and
+	// turnMessage the index of its message in req.Messages.
+	lastTurn    int
+	turnMessage int
+}
+
+// add appends a saved step and adds it to the conversation.
+func (h *history) add(s db.Step) error {
+	switch s.Kind {
+	case kindPrompt:
+		if len(h.steps) > 0 {
+			return fmt.Errorf("step %d: a prompt after the first step", s.Seq)
+		}
+
+		var p storedPrompt
+		if err := json.Unmarshal(s.Parts, &p); err != nil {
+			return fmt.Errorf("decode prompt step %d: %w", s.Seq, err)
+		}
+
+		req, err := p.request()
+		if err != nil {
+			return fmt.Errorf("decode prompt step %d: %w", s.Seq, err)
+		}
+
+		h.req = req
+	default:
+		if len(h.steps) == 0 {
+			return errNoPrompt
+		}
+
+		parts, err := decodeParts(s.Parts)
+		if err != nil {
+			return fmt.Errorf("decode step %d: %w", s.Seq, err)
+		}
+
+		h.addParts(s, parts)
+	}
+
+	h.steps = append(h.steps, s)
+
+	return nil
+}
+
+// addParts adds the parts of a step after the prompt to the conversation
+// and the indexes. A model turn is an assistant message; tool results and
+// notes join the user message after it.
+func (h *history) addParts(s db.Step, parts []model.Part) {
+	if s.Kind == kindModelTurn {
+		h.req.Messages = append(h.req.Messages, model.Message{Role: model.Assistant, Parts: parts})
+		h.lastTurn = len(h.steps)
+		h.turnMessage = len(h.req.Messages) - 1
+
+		for _, p := range parts {
+			if call, ok := p.(model.ToolCall); ok {
+				h.calls[call.ID] = call
+			}
+		}
+
+		return
+	}
+
+	if s.Kind == kindToolResult && s.ToolCallID != nil {
+		h.results[*s.ToolCallID] = s
+	}
+
+	last := len(h.req.Messages) - 1
+	if last >= 0 && h.req.Messages[last].Role == model.User {
+		h.req.Messages[last].Parts = append(h.req.Messages[last].Parts, parts...)
+
+		return
+	}
+
+	h.req.Messages = append(h.req.Messages, model.Message{Role: model.User, Parts: parts})
+}
+
+// request returns the conversation to send the model next. The caller
+// adds the metadata; the slices are copies.
+func (h *history) request() model.Request {
+	req := h.req
+	req.Messages = make([]model.Message, len(h.req.Messages))
+
+	for i, m := range h.req.Messages {
+		req.Messages[i] = model.Message{Role: m.Role, Parts: append([]model.Part(nil), m.Parts...)}
+	}
+
+	return req
+}
+
+// unanswered returns the tool calls of the last model turn that have no
+// result yet, in call order. After a resume these are the calls that were
+// in flight when the last worker stopped.
+func (h *history) unanswered() []model.ToolCall {
+	var out []model.ToolCall
+
+	for _, call := range h.turnCalls() {
+		if _, ok := h.results[call.ID]; !ok {
+			out = append(out, call)
+		}
+	}
+
+	return out
+}
+
+// turnCalls returns the tool calls of the last model turn, in order.
+func (h *history) turnCalls() []model.ToolCall {
+	if h.lastTurn < 0 {
+		return nil
+	}
+
+	var out []model.ToolCall
+
+	for _, p := range h.req.Messages[h.turnMessage].Parts {
+		if call, ok := p.(model.ToolCall); ok {
+			out = append(out, call)
+		}
+	}
+
+	return out
+}
+
+// needsReminder reports whether the last step is a model turn that called
+// no tool, so the model ended its turn without a verdict.
+func (h *history) needsReminder() bool {
+	return h.lastTurn >= 0 && h.lastTurn == len(h.steps)-1 && len(h.turnCalls()) == 0
+}
+
+// count returns the number of steps for which match is true.
+func (h *history) count(match func(db.Step) bool) int {
+	n := 0
+
+	for _, s := range h.steps {
+		if match(s) {
+			n++
+		}
+	}
+
+	return n
+}
+
+// newHistory returns the history of the saved steps, in seq order.
+func newHistory(steps []db.Step) (*history, error) {
+	h := &history{calls: map[string]model.ToolCall{}, results: map[string]db.Step{}, lastTurn: -1}
+
+	for _, s := range steps {
+		if int(s.Seq) != len(h.steps) {
+			return nil, fmt.Errorf("step %d is missing", len(h.steps))
+		}
+
+		if err := h.add(s); err != nil {
+			return nil, fmt.Errorf("add step %d: %w", s.Seq, err)
+		}
+	}
+
+	return h, nil
+}
+
+// request returns the prompt as the start of a model request.
+func (p storedPrompt) request() (model.Request, error) {
+	system, err := decodeStoredParts(p.System)
+	if err != nil {
+		return model.Request{}, fmt.Errorf("system: %w", err)
+	}
+
+	parts, err := decodeStoredParts(p.Parts)
+	if err != nil {
+		return model.Request{}, fmt.Errorf("first message: %w", err)
+	}
+
+	req := model.Request{Messages: []model.Message{{Role: model.User, Parts: parts}}}
+
+	for _, part := range system {
+		text, ok := part.(model.Text)
+		if !ok {
+			return model.Request{}, errors.New("system: a part that is not text")
+		}
+
+		req.System = append(req.System, text)
+	}
+
+	for _, t := range p.Tools {
+		req.Tools = append(req.Tools, model.ToolSpec{Name: t.Name, Description: t.Description, InputSchema: t.InputSchema, Cache: t.Cache})
+	}
+
+	return req, nil
+}
+
+// encodePrompt returns the parts of the prompt step of req.
+func encodePrompt(req model.Request) (json.RawMessage, error) {
+	p := storedPrompt{Tools: []storedTool{}}
+
+	for _, t := range req.System {
+		p.System = append(p.System, storedPart{Type: partText, Text: t.Text, Cache: t.Cache})
+	}
+
+	for _, t := range req.Tools {
+		p.Tools = append(p.Tools, storedTool{Name: t.Name, Description: t.Description, InputSchema: validJSON(t.InputSchema), Cache: t.Cache})
+	}
+
+	if len(req.Messages) > 0 {
+		p.Parts = storedParts(req.Messages[0].Parts)
+	}
+
+	raw, err := json.Marshal(p)
+	if err != nil {
+		return nil, fmt.Errorf("encode the prompt: %w", err)
+	}
+
+	return store.JSON(raw), nil
+}
+
+// encodeParts returns parts as steps.parts holds them.
+func encodeParts(parts []model.Part) (json.RawMessage, error) {
+	raw, err := json.Marshal(storedParts(parts))
+	if err != nil {
+		return nil, fmt.Errorf("encode the parts: %w", err)
+	}
+
+	return store.JSON(raw), nil
+}
+
+// storedParts converts parts for storage.
+func storedParts(parts []model.Part) []storedPart {
+	out := make([]storedPart, 0, len(parts))
+
+	for _, part := range parts {
+		switch p := part.(type) {
+		case model.Text:
+			out = append(out, storedPart{Type: partText, Text: p.Text, Cache: p.Cache})
+		case model.ToolCall:
+			out = append(out, storedPart{Type: partToolCall, ID: p.ID, Name: p.Name, Input: validJSON(p.Input)})
+		case model.ToolResult:
+			out = append(out, storedPart{Type: partToolResult, CallID: p.CallID, Content: p.Content, IsError: p.IsError})
+		case model.Reasoning:
+			out = append(out, storedPart{Type: partReasoning, Provider: p.Provider, ID: p.ID, Text: p.Text, Signature: p.Signature, Redacted: p.Redacted})
+		}
+	}
+
+	return out
+}
+
+// decodeParts reads steps.parts.
+func decodeParts(raw json.RawMessage) ([]model.Part, error) {
+	var stored []storedPart
+	if err := json.Unmarshal(raw, &stored); err != nil {
+		return nil, fmt.Errorf("decode parts: %w", err)
+	}
+
+	return decodeStoredParts(stored)
+}
+
+// decodeStoredParts converts stored parts back to model parts.
+func decodeStoredParts(stored []storedPart) ([]model.Part, error) {
+	parts := make([]model.Part, 0, len(stored))
+
+	for _, p := range stored {
+		switch p.Type {
+		case partText:
+			parts = append(parts, model.Text{Text: p.Text, Cache: p.Cache})
+		case partToolCall:
+			parts = append(parts, model.ToolCall{ID: p.ID, Name: p.Name, Input: p.Input})
+		case partToolResult:
+			parts = append(parts, model.ToolResult{CallID: p.CallID, Content: p.Content, IsError: p.IsError})
+		case partReasoning:
+			parts = append(parts, model.Reasoning{Provider: p.Provider, ID: p.ID, Text: p.Text, Signature: p.Signature, Redacted: p.Redacted})
+		default:
+			return nil, fmt.Errorf("%w %q", errUnknownPart, p.Type)
+		}
+	}
+
+	return parts, nil
+}
+
+// validJSON returns raw, or the empty object when raw is not valid JSON,
+// which a jsonb column could not hold. A model can send a tool call whose
+// input does not parse; the guard has answered it with an error already.
+func validJSON(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 || json.Valid(raw) {
+		return raw
+	}
+
+	return json.RawMessage(`{}`)
+}
