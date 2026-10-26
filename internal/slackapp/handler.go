@@ -198,8 +198,12 @@ func (h *Handler) handleMessage(ctx context.Context, env envelope, m message) er
 	text := m.flatText()
 
 	l, err := h.firstListener(ctx, m, text)
-	if err != nil || l == nil {
-		return err
+	if err != nil {
+		return fmt.Errorf("channel message: %w", err)
+	}
+
+	if l == nil {
+		return nil
 	}
 
 	ev := buildEvent(env.EventID, env.TeamID, m, text, l, env.Event)
