@@ -180,6 +180,29 @@ time: goose holds a Postgres advisory lock while it runs.
 4. Put the query's `EXPLAIN ANALYZE` output, against realistic data, in the
    pull request description.
 
+## Background jobs
+
+Work that does not finish inside a request runs as a job from
+`internal/queue`, backed by the `jobs` table.
+
+- Add a job with `queue.Enqueue(ctx, tx, queue.NewJob{...})`. Pass the
+  transaction that writes the row the job is about, so the row and the job
+  commit together. With a `UniqueKey` that a pending or running job already
+  has, `Enqueue` returns `queue.ErrDuplicate` and the transaction stays
+  usable.
+- Handle a kind by registering a `queue.Handler` on the `queue.Runner`. Mark
+  a kind `Long` in its `KindOptions` when a run can take more than a few
+  minutes, so its lease is renewed while it runs.
+- A handler can run more than once for the same job, after a crash or a
+  lost lease, so make it safe to repeat. Fence your own writes with
+  `job.ClaimToken`: a worker that lost its lease then stops writing.
+- Return an error to retry the job with backoff. Wrap `queue.ErrGiveUp`
+  into the error when a retry cannot help, for example a payload that does
+  not decode, so the job becomes dead at once.
+- Return soon after the handler's context ends. At shutdown, the context
+  ends 30 seconds after `SIGTERM`; a handler that then returns an error has
+  its job put back in the queue with its attempts unchanged.
+
 ## Integration tests
 
 - Every HTTP endpoint gets an integration test.
