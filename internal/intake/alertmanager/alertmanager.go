@@ -54,6 +54,7 @@ var (
 	errNoFingerprint  = errors.New("fingerprint: required")
 	errUnknownStatus  = errors.New(`status: must be "firing" or "resolved"`)
 	errUnknownVersion = errors.New(`version: only version "4" is supported`)
+	errBadTime        = errors.New("must be an RFC 3339 time")
 )
 
 func init() {
@@ -88,8 +89,8 @@ type alert struct {
 	Status       string            `json:"status"`
 	Labels       map[string]string `json:"labels"`
 	Annotations  map[string]string `json:"annotations"`
-	StartsAt     time.Time         `json:"startsAt"`
-	EndsAt       time.Time         `json:"endsAt"`
+	StartsAt     string            `json:"startsAt"`
+	EndsAt       string            `json:"endsAt"`
 	GeneratorURL string            `json:"generatorURL"`
 	Fingerprint  string            `json:"fingerprint"`
 }
@@ -158,6 +159,16 @@ func toEvent(p payload, raw json.RawMessage, receivedAt time.Time) (event.Event,
 		return event.Event{}, errUnknownStatus
 	}
 
+	startsAt, err := parseTime(a.StartsAt)
+	if err != nil {
+		return event.Event{}, fmt.Errorf("startsAt: %w", err)
+	}
+
+	endsAt, err := parseTime(a.EndsAt)
+	if err != nil {
+		return event.Event{}, fmt.Errorf("endsAt: %w", err)
+	}
+
 	labels := a.Labels
 	if labels == nil {
 		labels = map[string]string{}
@@ -166,7 +177,7 @@ func toEvent(p payload, raw json.RawMessage, receivedAt time.Time) (event.Event,
 	alertName := labels[labelAlertName]
 
 	return event.Event{
-		Key:         key(p.GroupKey, a),
+		Key:         key(p.GroupKey, a, startsAt),
 		Kind:        kind,
 		Sender:      event.Sender{Kind: event.SenderSystem, ID: p.ExternalURL, Name: p.Receiver},
 		AlertName:   alertName,
@@ -176,18 +187,18 @@ func toEvent(p payload, raw json.RawMessage, receivedAt time.Time) (event.Event,
 		Severity:    intake.ParseSeverity(labels[labelSeverity]),
 		Labels:      labels,
 		Fingerprint: event.Fingerprint(Adapter, alertName, labels, slices.Collect(maps.Keys(labels))),
-		StartsAt:    a.StartsAt,
-		EndsAt:      a.EndsAt,
+		StartsAt:    startsAt,
+		EndsAt:      endsAt,
 		ReceivedAt:  receivedAt,
 		Links:       links(a),
 	}, nil
 }
 
 // key hashes what identifies one notification of one alert.
-func key(groupKey string, a alert) string {
+func key(groupKey string, a alert, startsAt time.Time) string {
 	h := sha256.New()
 
-	for _, part := range []string{groupKey, a.Fingerprint, a.Status, a.StartsAt.UTC().Format(time.RFC3339Nano)} {
+	for _, part := range []string{groupKey, a.Fingerprint, a.Status, startsAt.UTC().Format(time.RFC3339Nano)} {
 		h.Write([]byte(part))
 		h.Write([]byte{0})
 	}
@@ -208,6 +219,22 @@ func links(a alert) []event.Link {
 	}
 
 	return out
+}
+
+// parseTime reads an RFC 3339 time and returns it in UTC. An empty string
+// is the zero time, and so is Alertmanager's "0001-01-01T00:00:00Z" for an
+// alert that has not ended. The error never holds the value.
+func parseTime(s string) (time.Time, error) {
+	if s == "" {
+		return time.Time{}, nil
+	}
+
+	t, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		return time.Time{}, errBadTime
+	}
+
+	return t.UTC(), nil
 }
 
 // rawWithAlert returns the payload's top-level members with alerts holding
