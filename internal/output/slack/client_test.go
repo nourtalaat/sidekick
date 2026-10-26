@@ -19,7 +19,7 @@ import (
 // testToken is the bot token the client tests send.
 const testToken = "test-bot-token" //nolint:gosec // A fake value that only the fake server sees.
 
-var errNoToken = errors.New("no token")
+var errTokenUnreadable = errors.New("the token cannot be read")
 
 func TestClientCall(t *testing.T) {
 	t.Parallel()
@@ -92,7 +92,7 @@ func TestClientCall(t *testing.T) {
 			wantErr:    errAny,
 			wantErrors: map[string]float64{errorBadResponse: 1},
 		},
-		{name: "no token", token: errNoToken, wantErr: errNoToken},
+		{name: "no token", token: errTokenUnreadable, wantErr: errTokenUnreadable},
 	}
 
 	for _, tt := range tests {
