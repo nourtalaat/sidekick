@@ -44,6 +44,15 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"event_groups_open_fingerprint"},
 		},
 		{
+			name: "LockEventGroup",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.LockEventGroup(ctx, busy)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"event_groups_pkey"},
+		},
+		{
 			name: "OpenEventGroup",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.OpenEventGroup(ctx, db.OpenEventGroupParams{

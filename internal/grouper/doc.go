@@ -12,10 +12,13 @@
 //
 // A joined event counts toward the group's event count, moves the end of
 // its window forward, goes to the investigation's inbox, and refreshes what
-// the outputs show, so the message has the new count. A group whose window
-// ended without anyone closing it yet, and that runs no watcher, is closed
-// as window_ended when the next event arrives, and that event opens a new
-// group.
+// the outputs show, so the message has the new count.
+//
+// Every open group has a close_group job for the end of its window, which
+// the Closer runs: when no event has moved the window on and no watcher
+// runs, the group closes as window_ended, and the next event with its
+// fingerprint opens a new group. A group whose window ended before its job
+// ran is closed the same way when the next event arrives.
 //
 // The fingerprint of an alert under a route with fingerprint labels is made
 // from the intake, the alert name and the values of those labels, with a

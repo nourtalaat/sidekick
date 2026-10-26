@@ -70,6 +70,31 @@ func (q *Queries) JoinEventGroup(ctx context.Context, arg JoinEventGroupParams) 
 	return i, err
 }
 
+const lockEventGroup = `-- name: LockEventGroup :one
+SELECT id, fingerprint, route, service, status, event_count, opened_at, last_event_at, window_until, closed_reason, investigation_id FROM event_groups WHERE id = $1 FOR UPDATE
+`
+
+// LockEventGroup returns the group with id and locks it until the
+// transaction ends.
+func (q *Queries) LockEventGroup(ctx context.Context, id uuid.UUID) (EventGroup, error) {
+	row := q.db.QueryRow(ctx, lockEventGroup, id)
+	var i EventGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Fingerprint,
+		&i.Route,
+		&i.Service,
+		&i.Status,
+		&i.EventCount,
+		&i.OpenedAt,
+		&i.LastEventAt,
+		&i.WindowUntil,
+		&i.ClosedReason,
+		&i.InvestigationID,
+	)
+	return i, err
+}
+
 const lockOpenEventGroup = `-- name: LockOpenEventGroup :one
 SELECT id, fingerprint, route, service, status, event_count, opened_at, last_event_at, window_until, closed_reason, investigation_id FROM event_groups
 WHERE fingerprint = $1 AND status = 'open'

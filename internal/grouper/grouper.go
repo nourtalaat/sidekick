@@ -33,6 +33,9 @@ const (
 	attrGroupID = "sidekick.group.id"
 )
 
+// statusOpen is the event_groups.status of an open group.
+const statusOpen = "open"
+
 // The values of event_groups.closed_reason.
 const (
 	// ClosedResolved is a group whose alerts have all recovered.
@@ -166,12 +169,12 @@ func (g *Grouper) tryGroup(ctx context.Context, tx pgx.Tx, ev db.Event, rt Route
 
 		return res, true, nil
 	default:
-		if err := g.close(ctx, queries, open.ID, ClosedWindowEnded); err != nil {
+		if err := closeGroup(ctx, g.log, queries, open.ID, ClosedWindowEnded); err != nil {
 			return Result{}, false, fmt.Errorf("close group %s: %w", open.ID, err)
 		}
 	}
 
-	return g.open(ctx, queries, ev, rt, fp)
+	return g.open(ctx, tx, ev, rt, fp)
 }
 
 // join adds ev to the open group grp, writes it to the inbox of the group's
@@ -190,6 +193,10 @@ func (g *Grouper) join(ctx context.Context, tx pgx.Tx, grp db.EventGroup, ev db.
 
 	if err := markGrouped(ctx, queries, ev.ID, grp.ID); err != nil {
 		return Result{}, fmt.Errorf("record the group: %w", err)
+	}
+
+	if err := enqueueClose(ctx, tx, grp.ID, *joined.WindowUntil); err != nil {
+		return Result{}, fmt.Errorf("plan the end of the window: %w", err)
 	}
 
 	res := Result{GroupID: grp.ID}
@@ -213,7 +220,8 @@ func (g *Grouper) join(ctx context.Context, tx pgx.Tx, grp db.EventGroup, ev db.
 
 // open opens a group for ev with fingerprint fp. It reports false, and
 // opens nothing, when a group with fp is open already.
-func (g *Grouper) open(ctx context.Context, queries *db.Queries, ev db.Event, rt Route, fp string) (Result, bool, error) {
+func (g *Grouper) open(ctx context.Context, tx pgx.Tx, ev db.Event, rt Route, fp string) (Result, bool, error) {
+	queries := db.New(tx)
 	res := Result{GroupID: ids.New(), InvestigationID: ids.New(), Opened: true}
 
 	_, err := queries.OpenEventGroup(ctx, db.OpenEventGroupParams{
@@ -237,20 +245,13 @@ func (g *Grouper) open(ctx context.Context, queries *db.Queries, ev db.Event, rt
 		return Result{}, false, fmt.Errorf("record the group: %w", err)
 	}
 
+	if err := enqueueClose(ctx, tx, res.GroupID, ev.ReceivedAt.Add(rt.Window)); err != nil {
+		return Result{}, false, fmt.Errorf("plan the end of the window: %w", err)
+	}
+
 	g.log.DebugContext(ctx, "event opened a group", "event_id", ev.ID.String(), "group_id", res.GroupID.String())
 
 	return res, true, nil
-}
-
-// close closes the open group with id for reason.
-func (g *Grouper) close(ctx context.Context, queries *db.Queries, id uuid.UUID, reason string) error {
-	if _, err := queries.CloseEventGroup(ctx, db.CloseEventGroupParams{ClosedReason: reason, ID: id}); err != nil {
-		return fmt.Errorf("close the group: %w", err)
-	}
-
-	g.log.InfoContext(ctx, "group closed", "group_id", id.String(), "reason", reason)
-
-	return nil
 }
 
 // joinable reports whether ev joins the open group grp: it arrived before

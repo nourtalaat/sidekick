@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -262,8 +263,8 @@ func TestAlertmanagerAlertsWithOneFingerprint(t *testing.T) {
 	require.NoError(t, h.pool.QueryRow(t.Context(), "SELECT count(DISTINCT fingerprint) FROM events").Scan(&distinct))
 	require.Equal(t, fixtureFingerprints+30, distinct, "each alert keeps its own stored fingerprint")
 
-	_, err := h.pool.Exec(t.Context(), "UPDATE event_groups SET window_until = now() - interval '1 second'")
-	require.NoError(t, err)
+	h.closeGroups(t, time.Now().Add(config.DefaultGroupingWindow+time.Minute))
+	require.Equal(t, ptr(grouper.ClosedWindowEnded), h.groups(t)[0].ClosedReason, "the close_group job ends the window")
 
 	h.deliver(t, "fixture/alertmanager/firing-one-more.json")
 	h.routeAll(t)

@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -20,6 +21,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/nourtalaat/sidekick/internal/grouper"
 	"github.com/nourtalaat/sidekick/internal/intake/webhook"
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/redact"
@@ -139,6 +141,29 @@ func (h *harness) routeAll(t *testing.T) {
 		require.NoError(t, h.router.Handle(t.Context(), jobs[0]))
 
 		_, err = db.New(h.pool).CompleteJob(t.Context(), db.CompleteJobParams{ID: jobs[0].ID, ClaimToken: *jobs[0].ClaimToken})
+		require.NoError(t, err)
+	}
+}
+
+// closeGroups runs every pending close_group job at once, with a Closer
+// whose clock says now.
+func (h *harness) closeGroups(t *testing.T, now time.Time) {
+	t.Helper()
+
+	_, err := h.pool.Exec(t.Context(), "UPDATE jobs SET run_at = now() WHERE kind = 'close_group' AND status = 'pending'")
+	require.NoError(t, err)
+
+	closer := grouper.NewCloser(grouper.CloserOptions{Pool: h.pool, Now: func() time.Time { return now }})
+
+	jobs, err := db.New(h.pool).ClaimJobs(t.Context(), db.ClaimJobsParams{
+		Worker: "test-worker", LeaseSeconds: 60, Kinds: []string{queue.KindCloseGroup}, Batch: 100,
+	})
+	require.NoError(t, err)
+
+	for _, job := range jobs {
+		require.NoError(t, closer.Handle(t.Context(), job))
+
+		_, err = db.New(h.pool).CompleteJob(t.Context(), db.CompleteJobParams{ID: job.ID, ClaimToken: *job.ClaimToken})
 		require.NoError(t, err)
 	}
 }

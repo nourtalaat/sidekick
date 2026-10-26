@@ -37,3 +37,8 @@ RETURNING *;
 UPDATE event_groups
 SET status = 'closed', closed_reason = @closed_reason::text
 WHERE id = @id AND status = 'open';
+
+-- name: LockEventGroup :one
+-- LockEventGroup returns the group with id and locks it until the
+-- transaction ends.
+SELECT * FROM event_groups WHERE id = @id FOR UPDATE;
