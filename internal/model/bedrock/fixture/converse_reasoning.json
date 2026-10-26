@@ -1,0 +1,15 @@
+{
+  "output": {
+    "message": {
+      "role": "assistant",
+      "content": [
+        {"reasoningContent": {"reasoningText": {"text": "Deploy 812 went out at 13:58, four minutes before the errors.", "signature": "EpYBCkYIBRgCIkDjb252ZXJzZS1zaWduYXR1cmU="}}},
+        {"reasoningContent": {"redactedContent": "RW13S0FoZ0JFZ3kzdmEzcHppeA=="}},
+        {"text": "Deploy 812 is the likely cause."}
+      ]
+    }
+  },
+  "stopReason": "end_turn",
+  "usage": {"inputTokens": 1500, "outputTokens": 340, "totalTokens": 1840},
+  "metrics": {"latencyMs": 4210}
+}

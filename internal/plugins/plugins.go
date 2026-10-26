@@ -12,6 +12,7 @@ import (
 	_ "github.com/nourtalaat/sidekick/internal/intake/sentry"       // Intake adapter "sentry".
 	_ "github.com/nourtalaat/sidekick/internal/intake/signoz"       // Intake adapter "signoz".
 	_ "github.com/nourtalaat/sidekick/internal/model/anthropic"     // Model provider "anthropic".
+	_ "github.com/nourtalaat/sidekick/internal/model/bedrock"       // Model provider "bedrock".
 	_ "github.com/nourtalaat/sidekick/internal/model/openai"        // Model provider "openai".
 	_ "github.com/nourtalaat/sidekick/internal/output/slack"        // Output type "slack".
 	_ "github.com/nourtalaat/sidekick/internal/source/github"       // Source type "github".

@@ -34,6 +34,9 @@ const (
 type knownModel struct {
 	caps model.Capabilities
 	off  offRule
+	// thinksByDefault is true for a model that thinks when the thinking
+	// parameter is left out.
+	thinksByDefault bool
 }
 
 // Effort level sets.
@@ -110,6 +113,7 @@ func modelWith(toolChoice bool, thinking []model.ThinkingMode, effort []model.Ef
 			ContextTokens:    contextMillion,
 			MaxOutputTokens:  output128K,
 		},
-		off: off,
+		off:             off,
+		thinksByDefault: off != offOmit,
 	}
 }

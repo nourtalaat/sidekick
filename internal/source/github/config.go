@@ -3,7 +3,6 @@ package github
 import (
 	"errors"
 	"fmt"
-	"net"
 	"net/url"
 	"path"
 	"regexp"
@@ -102,7 +101,7 @@ func (c *Config) checkBaseURL() error {
 	switch {
 	case err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http"):
 		return fmt.Errorf("baseURL: %q must be an absolute https URL", c.BaseURL)
-	case u.Scheme == "http" && !loopback(u.Hostname()):
+	case u.Scheme == "http" && !httpclient.IsLoopbackHost(u.Hostname()):
 		return fmt.Errorf("baseURL: %q must use https; plain http is only allowed for localhost", c.BaseURL)
 	default:
 		return nil
@@ -204,16 +203,4 @@ func validRepo(s string) bool {
 // dots reports whether s is "." or "..".
 func dots(s string) bool {
 	return s == "." || s == ".."
-}
-
-// loopback reports whether host is localhost or a loopback IP address,
-// such as 127.0.0.1 or ::1.
-func loopback(host string) bool {
-	if strings.EqualFold(host, "localhost") {
-		return true
-	}
-
-	ip := net.ParseIP(host)
-
-	return ip != nil && ip.IsLoopback()
 }

@@ -1,0 +1,8 @@
+{"event":"messageStart","payload":{"role":"assistant"}}
+{"event":"contentBlockDelta","payload":{"contentBlockIndex":0,"delta":{"reasoningContent":{"signature":"ErUBCkYIBRgCIkB0bWl0dGVkLXRoaW5raW5nLXNpZ25hdHVyZQ=="}}}}
+{"event":"contentBlockStop","payload":{"contentBlockIndex":0}}
+{"event":"contentBlockStart","payload":{"contentBlockIndex":1,"start":{"toolUse":{"toolUseId":"tooluse_01Pods","name":"k8s__list_pods"}}}}
+{"event":"contentBlockDelta","payload":{"contentBlockIndex":1,"delta":{"toolUse":{"input":"{\"namespace\": \"shop\"}"}}}}
+{"event":"contentBlockStop","payload":{"contentBlockIndex":1}}
+{"event":"messageStop","payload":{"stopReason":"tool_use"}}
+{"event":"metadata","payload":{"usage":{"inputTokens":300,"outputTokens":95,"totalTokens":395},"metrics":{"latencyMs":1900}}}

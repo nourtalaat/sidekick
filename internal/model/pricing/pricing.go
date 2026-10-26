@@ -77,6 +77,7 @@ func Shipped() Table {
 // config.Model.PriceTable as overrides.
 func New(overrides map[string]model.Price) Table {
 	prices := maps.Clone(shipped)
+	maps.Copy(prices, bedrockShipped)
 	maps.Copy(prices, overrides)
 
 	return Table{prices: prices}
