@@ -3,10 +3,12 @@ package mcp
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/registry"
+	"github.com/nourtalaat/sidekick/internal/source"
 )
 
 func TestConfigValidate(t *testing.T) {
@@ -39,6 +41,18 @@ func TestConfigValidate(t *testing.T) {
 				Command:   []string{"/usr/local/bin/mcp-git", "--repository", "/work"},
 				Env:       map[string]Value{"GIT_TOKEN": {Secret: token}, "LOG_LEVEL": {Value: "info"}},
 			},
+		},
+		{name: "http at the timeout limit", cfg: Config{URL: "https://mcp.example.com/mcp", Settings: source.Settings{Timeout: 60 * time.Second}}},
+		{name: "stdio with a long timeout", cfg: Config{Transport: TransportStdio, Command: []string{"x"}, Settings: source.Settings{Timeout: 5 * time.Minute}}},
+		{
+			name: "http above the timeout limit",
+			cfg:  Config{URL: "https://mcp.example.com/mcp", Settings: source.Settings{Timeout: 61 * time.Second}},
+			want: []string{"timeout: 1m1s is above 1m0s, the longest the HTTP client waits for response headers with transport http"},
+		},
+		{
+			name: "sse above the timeout limit",
+			cfg:  Config{Transport: TransportSSE, URL: "https://mcp.example.com/sse", Settings: source.Settings{Timeout: 61 * time.Second}},
+			want: []string{"timeout: 1m1s is above 1m0s, the longest the HTTP client waits for response headers with transport sse"},
 		},
 		{name: "http without url", cfg: Config{}, want: []string{"url: required with transport http"}},
 		{name: "sse without url", cfg: Config{Transport: TransportSSE}, want: []string{"url: required with transport sse"}},

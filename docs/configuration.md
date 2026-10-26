@@ -221,6 +221,10 @@ How it behaves:
   tools that only read. Each tool left out is logged at info level with
   the reason. With `tools.trustAnnotations: false` the annotations are
   ignored and only the globs decide.
+- **Timeout.** With `http` and `sse`, `timeout` may be at most `60s`,
+  because the HTTP client stops waiting for response headers after 60
+  seconds; `sidekick config validate` rejects a longer one. `stdio` takes
+  any timeout.
 - **Results.** Text is joined, structured content is kept as JSON, links to
   `http` and `https` resources become evidence links in the report, and
   images and audio are dropped. Results over 256 KiB are cut. A tool that

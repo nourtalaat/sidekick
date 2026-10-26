@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
@@ -64,9 +65,9 @@ type Value struct {
 }
 
 // Validate checks the section without secrets or network calls: http and
-// sse need an absolute http or https url, stdio needs a command, and each
-// header and environment value is set exactly one way. Each error starts
-// with the key of its field.
+// sse need an absolute http or https url and a timeout the HTTP client can
+// honour, stdio needs a command, and each header and environment value is
+// set exactly one way. Each error starts with the key of its field.
 func (c *Config) Validate() error {
 	var errs []error
 
@@ -102,6 +103,11 @@ func (c *Config) checkHTTP() []error {
 		errs = append(errs, fmt.Errorf("url: %w", err))
 	case (u.Scheme != "http" && u.Scheme != "https") || u.Host == "":
 		errs = append(errs, fmt.Errorf("url: %q must be an absolute http or https URL", c.URL))
+	}
+
+	if c.Timeout > httpclient.ResponseHeaderTimeout {
+		errs = append(errs, fmt.Errorf("timeout: %s is above %s, the longest the HTTP client waits for response headers with transport %s",
+			c.Timeout, httpclient.ResponseHeaderTimeout, c.transport()))
 	}
 
 	if len(c.Command) > 0 {
