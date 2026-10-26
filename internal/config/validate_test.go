@@ -116,6 +116,7 @@ func TestValidateValidFixtures(t *testing.T) {
 		file string
 	}{
 		{file: "valid/minimal.yaml"},
+		{file: "valid/example.yaml"},
 	}
 
 	for _, tt := range tests {

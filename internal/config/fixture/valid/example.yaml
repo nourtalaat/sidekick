@@ -1,0 +1,121 @@
+# A full config with every M0 section. Secrets are referenced by Secret name
+# and key, never written here.
+server:
+  publicURL: https://sidekick.example.com
+  listen: ":8080"
+  metricsListen: ":9090"
+
+database:
+  urlSecret: { name: sidekick-db, key: url }
+  maxConns: 20
+
+secrets:
+  dir: /var/run/secrets/sidekick
+
+model:
+  connectors:
+    claude:
+      provider: anthropic
+      model: claude-opus-5-5
+      maxTokens: 16000
+      thinking: { mode: adaptive }
+      effort: high
+      timeout: 120s
+      retries: 3
+      apiKeySecret: { name: sidekick-anthropic, key: apiKey }
+    cheap:
+      provider: bedrock
+      region: us-east-1
+      model: example-bedrock-model
+      maxTokens: 4000
+      effort: low
+    local:
+      provider: openai
+      baseURL: http://vllm.ml.svc:8000/v1
+      api: chat_completions
+      model: qwen3-32b
+      capabilities:
+        toolCalling: true
+        toolChoice: false
+        contextTokens: 32768
+  roles:
+    triage: cheap
+    investigate: claude
+    judge: claude
+    summarize: cheap
+  prices:
+    claude-opus-5-5: { inputPerMTok: 5, outputPerMTok: 25, cacheReadPerMTok: 0.5 }
+
+sources:
+  signoz:
+    type: mcp
+    transport: http
+    url: https://signoz-mcp.internal/mcp
+    headers:
+      Authorization: { secret: { name: signoz-mcp, key: token }, prefix: "Bearer " }
+    tools:
+      allow: ["signoz_search_logs", "signoz_query_metrics", "signoz_search_traces", "signoz_get_alert*"]
+      deny: ["*delete*", "*create*", "*update*"]
+    timeout: 30s
+
+intake:
+  webhooks:
+    alertmanager:
+      adapter: alertmanager
+      auth: { bearer: { name: sidekick-hooks, key: alertmanager } }
+      trusted: true
+    generic-ci:
+      adapter: generic
+      auth: { hmac: { name: sidekick-hooks, key: ci }, tolerance: 5m }
+      fields:
+        title: $.alert.title
+        text: $.alert.description
+        service: $.labels.service
+        severity: $.alert.level
+        key: $.alert.id
+
+slack:
+  botTokenSecret: { name: sidekick-slack, key: botToken }
+
+outputs:
+  slack-thread: { type: slack, channel: "#alerts" }
+
+strategies:
+  dir: /etc/sidekick/strategies
+
+routes:
+  - name: payments-latency
+    priority: 10
+    match:
+      intake: [alertmanager]
+      labels: { team: payments }
+      service: "checkout-*"
+      severity: [warning, critical]
+      text: "(?i)latency|p99"
+    strategy: latency-alert
+    roles: { investigate: claude }
+    sources: [signoz]
+    mode: read-only
+    outputs: [slack-thread]
+    budgets: { maxToolCalls: 30 }
+  - name: default
+    strategy: generic-alert
+    mode: read-only
+    outputs: [slack-thread]
+
+budgets:
+  perInvestigation: { maxToolCalls: 40, maxWallTime: 10m }
+
+report:
+  minFalsePositiveConfidence: high
+
+redaction:
+  builtIn: [cloud_keys, vcs_tokens, slack_tokens, jwt, private_keys, password_pairs, emails, card_numbers]
+  custom:
+    - name: customer_id
+      pattern: "cus_[A-Za-z0-9]{14}"
+  hashKeySecret: { name: sidekick-redaction, key: key }
+
+telemetry:
+  otlpEndpoint: http://otel-collector.observability:4317
+  logLevel: info
