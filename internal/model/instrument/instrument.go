@@ -21,8 +21,9 @@ import (
 // SpanName is the name of the span of one model call.
 const SpanName = "model.generate"
 
-// tracerName names the tracer of this package.
-const tracerName = "github.com/nourtalaat/sidekick/internal/model/instrument"
+// TracerName names the tracer of this package. Pass it to the tracer
+// provider when setting Options.Tracer.
+const TracerName = "github.com/nourtalaat/sidekick/internal/model/instrument"
 
 // outcomeOK is the outcome label of a successful call. Failed calls use
 // their model.ErrorKind, or outcomeError for errors that are not a
@@ -222,7 +223,7 @@ func (m *Metrics) recordUsage(connector, modelID, route string, usage model.Usag
 // with model.Generate, so each attempt is a span and a count of its own.
 func Wrap(c model.Connector, opts Options) model.Connector {
 	if opts.Tracer == nil {
-		opts.Tracer = otel.Tracer(tracerName)
+		opts.Tracer = otel.Tracer(TracerName)
 	}
 
 	return &connector{next: c, opts: opts}

@@ -44,6 +44,7 @@ func TestRenderGolden(t *testing.T) {
 		{name: "failed-without-report", view: mainView(testUpdate(output.PhaseFinal, nil))},
 		{name: "false-alarm-fields", view: mainView(testUpdate(output.PhaseFinal, falseAlarm()))},
 		{name: "untrusted-text", view: mainView(untrustedUpdate())},
+		{name: "no-verdict", view: mainView(testUpdate(output.PhaseFinal, noVerdict()))},
 	}
 
 	for _, v := range []report.Verdict{report.TruePositive, report.FalsePositive, report.Inconclusive, report.Duplicate, report.KnownIssue, report.Flapping} {
@@ -316,6 +317,25 @@ func verdictReport(v report.Verdict) *report.Report {
 			{Source: "github", Status: report.CheckUnavailable},
 		},
 		StopReason: report.StopSubmitted,
+	}
+}
+
+// noVerdict returns the inconclusive report of a run whose model gave no
+// report that passed its checks, built from its recorded findings.
+func noVerdict() *report.Report {
+	return &report.Report{
+		Verdict:    report.Inconclusive,
+		Confidence: report.Low,
+		Reason:     "The model's report did not pass its checks 3 times, so this report holds only what the investigation recorded.",
+		Findings: []report.Finding{
+			{ID: "f1", Claim: "Disk use on db-1 rose from 70% to 93% since 09:00.", Evidence: []source.Evidence{
+				{Kind: source.EvidenceOther, Title: "signoz search_logs", ToolCallID: "toolu_01"},
+			}},
+			{ID: "f2", Claim: "A backup job may have filled the disk."},
+		},
+		Checked:    []report.Check{{Source: "signoz", Status: report.CheckOK, ToolCalls: 2}},
+		StopReason: report.StopNoVerdict,
+		StopDetail: "invalid report: true_positive needs cause, impact and at least one fix",
 	}
 }
 

@@ -1,10 +1,3 @@
-// Package investigator holds what the router and the investigator share
-// about an investigation: the payload of the investigate job, its unique
-// key, and the shape of the settings stored with each investigation.
-//
-// The router creates each investigation in the queued status, with its
-// event group, and enqueues one investigate job for it in the same
-// transaction.
 package investigator
 
 import (
@@ -17,9 +10,22 @@ import (
 	"github.com/nourtalaat/sidekick/internal/model"
 )
 
-// StatusQueued is the status of an investigation that waits for its
-// investigate job to start.
-const StatusQueued = "queued"
+// The values of investigations.status.
+const (
+	// StatusQueued is an investigation that waits for its investigate job
+	// to start. The router creates every investigation in it.
+	StatusQueued = "queued"
+	// StatusRunning is an investigation whose run has started. It stays
+	// running while its job is retried or resumed on another worker.
+	StatusRunning = "running"
+	// StatusFinal is an investigation that ended with a report, whatever
+	// its verdict and stop reason.
+	StatusFinal = "final"
+	// StatusFailed is an investigation that could not finish: the model
+	// refused the request, or its job became dead. Its report is built from
+	// the saved steps, with stop reason error.
+	StatusFailed = "failed"
+)
 
 // uniqueKeyPrefix starts the unique key of an investigate job.
 const uniqueKeyPrefix = "investigate:"

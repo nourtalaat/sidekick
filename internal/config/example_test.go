@@ -91,6 +91,8 @@ func TestExampleConfig(t *testing.T) {
 				require.Equal(t, "default", routes[1].Name)
 				require.Equal(t, action.ReadOnly, routes[1].Mode)
 				require.Equal(t, Limits{MaxToolCalls: 40, MaxWallTime: 10 * time.Minute}, routes[1].Budgets)
+				require.Equal(t, 8, cfg.Budgets.Concurrency)
+				require.Equal(t, map[string]int{"payments-latency": 3}, cfg.RouteConcurrency())
 			},
 		},
 	}

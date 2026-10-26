@@ -154,9 +154,9 @@ func (a *App) RegisterRoutes(register func(mux *http.ServeMux)) error {
 }
 
 // RegisterJob sets the handler for jobs of kind. Run starts the job queue
-// only when at least one handler is registered. Call it before Run.
-// Investigation kinds (queue.KindInvestigate, queue.KindFollowUp) need
-// queue limits, which the App does not set yet.
+// only when at least one handler is registered. Call it before Run. Claims
+// of the investigation kinds (queue.KindInvestigate, queue.KindFollowUp)
+// are held by budgets.concurrency and each route's concurrency.
 func (a *App) RegisterJob(kind string, handler queue.Handler, opts queue.KindOptions) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -318,6 +318,7 @@ func (a *App) start(ctx context.Context, regs config.Registries) error {
 	}
 
 	runner, err := queue.NewRunner(a.pool, queue.Options{
+		Limits:          queue.Limits{Global: a.cfg.Budgets.Concurrency, Routes: a.cfg.RouteConcurrency()},
 		ShutdownTimeout: jobShutdownGrace,
 		Metrics:         metrics,
 		Logger:          a.telemetry.Logger(),

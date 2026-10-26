@@ -116,6 +116,10 @@ const (
 	StopCancelled StopReason = "cancelled"
 	StopTriage    StopReason = "triage"
 	StopError     StopReason = "error"
+	// StopNoVerdict: the model did not give a report that passes its checks,
+	// or stopped calling tools without one. The verdict is inconclusive and
+	// StopDetail says why.
+	StopNoVerdict StopReason = "no_verdict"
 )
 
 // Report is the investigation result.

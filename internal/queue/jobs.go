@@ -34,7 +34,7 @@ func claim(ctx context.Context, q db.DBTX, worker, kind string, lease time.Durat
 // complete marks a claimed job done. It returns ErrLeaseLost when the job no
 // longer belongs to the job's claim token.
 func complete(ctx context.Context, q db.DBTX, job db.Job) error {
-	rows, err := db.New(q).CompleteJob(ctx, db.CompleteJobParams{ID: job.ID, ClaimToken: claimToken(job)})
+	rows, err := db.New(q).CompleteJob(ctx, db.CompleteJobParams{ID: job.ID, ClaimToken: ClaimToken(job)})
 	if err != nil {
 		return fmt.Errorf("complete job %d: %w", job.ID, err)
 	}
@@ -56,7 +56,7 @@ func fail(ctx context.Context, q db.DBTX, job db.Job, cause error, giveUp bool, 
 		GiveUp:         giveUp,
 		BackoffSeconds: backoff.Seconds(),
 		ID:             job.ID,
-		ClaimToken:     claimToken(job),
+		ClaimToken:     ClaimToken(job),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return db.Job{}, ErrLeaseLost
@@ -73,7 +73,7 @@ func fail(ctx context.Context, q db.DBTX, job db.Job, cause error, giveUp bool, 
 // unchanged. It returns ErrLeaseLost when the job no longer belongs to the
 // job's claim token.
 func handBack(ctx context.Context, q db.DBTX, job db.Job) error {
-	rows, err := db.New(q).HandBackJob(ctx, db.HandBackJobParams{ID: job.ID, ClaimToken: claimToken(job)})
+	rows, err := db.New(q).HandBackJob(ctx, db.HandBackJobParams{ID: job.ID, ClaimToken: ClaimToken(job)})
 	if err != nil {
 		return fmt.Errorf("hand back job %d: %w", job.ID, err)
 	}
@@ -83,16 +83,6 @@ func handBack(ctx context.Context, q db.DBTX, job db.Job) error {
 	}
 
 	return nil
-}
-
-// claimToken returns the token of a claimed job. Claims always set it; a
-// job that was never claimed gets 0, which matches no row.
-func claimToken(job db.Job) int64 {
-	if job.ClaimToken == nil {
-		return 0
-	}
-
-	return *job.ClaimToken
 }
 
 // errorText returns the message of err as text Postgres accepts: valid

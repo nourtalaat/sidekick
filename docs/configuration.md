@@ -363,6 +363,7 @@ routes:
     sources: [signoz]
     outputs: [slack-thread]
     budgets: { maxToolCalls: 30 }      # at or below the global budgets
+    concurrency: 3                     # at most 3 of its investigations at once
   - name: default
     strategy: generic-alert
     outputs: [slack-thread]
@@ -378,11 +379,15 @@ whole text unless the pattern turns on multi-line mode with `(?m)`.
 not `eu-checkout-api`. A label in `labels` must be present with exactly
 that value.
 
-Each routed event opens an investigation with the route's strategy, the
-connector and model for each role (the route's `roles` over
-`model.roles`), and its budgets. Where the strategy sets a budget too, the
-lower of the two applies. These settings are fixed when the investigation
-is created, so a config change does not alter one that has started.
+Each routed event opens an [investigation](investigations.md) with the
+route's strategy, the connector and model for each role (the route's
+`roles` over `model.roles`), and its budgets. Where the strategy sets a
+budget too, the lower of the two applies. These settings are fixed when
+the investigation is created, so a config change does not alter one that
+has started. An investigation whose route, connector or strategy is no
+longer in the config when it starts or resumes ends as "Could not
+finish". `sources` limits the tools the investigation may call to those
+sources; without it, every source's tools are offered.
 
 For now every route is `mode: read-only`, which is also the default, and
 `actions` must be empty. Modes that let Sidekick take actions come in a
@@ -396,7 +401,19 @@ and the ceilings route budgets must stay within.
 ```yaml
 budgets:
   perInvestigation: { maxToolCalls: 40, maxWallTime: 10m }
+  concurrency: 8
 ```
+
+`maxToolCalls` counts calls to source tools, and `maxWallTime` counts from
+when the investigation first started, including time lost to a restart. An
+investigation that reaches either ends as "Not sure yet" with what it
+found; see [Limits](investigations.md#limits).
+
+`concurrency` is how many investigations run at once, counted across every
+replica. A route's own `concurrency` caps that route's share of them and
+must be at or below the global value; a route without one is held only by
+the global limit. An investigation over a limit waits in the queue until
+one ends.
 
 ### `report`
 
@@ -485,6 +502,8 @@ telemetry:
 | `routes[].budgets` | the values in `budgets.perInvestigation` |
 | `budgets.perInvestigation.maxToolCalls` | `40` |
 | `budgets.perInvestigation.maxWallTime` | `10m` |
+| `budgets.concurrency` | `8` |
+| `routes[].concurrency` | none: only `budgets.concurrency` applies |
 | `report.minFalsePositiveConfidence` | `high` |
 | `redaction.builtIn` | every built-in rule except `ip_addresses` |
 | `telemetry.logLevel` | `info` |
@@ -511,8 +530,9 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   expression matches parse.
 - Every strategy file in `strategies.dir` is valid, and no two of them have
   the same name.
-- Every route is `read-only` with no `actions`, and its budgets are at or
-  below the global ones.
+- Every route is `read-only` with no `actions`, and its budgets and
+  `concurrency` are at or below the global ones. `budgets.concurrency` is
+  at least 1.
 - Every `redaction.builtIn` entry is a built-in rule. Every custom
   redaction rule has a unique name of the right shape that is not a
   built-in rule's name, and a pattern that parses.

@@ -67,6 +67,8 @@ func TestParseDefaults(t *testing.T) {
 				require.Equal(t, MigrationsStartup, cfg.Database.Migrations)
 				require.Equal(t, secrets.DefaultDir, cfg.Secrets.Dir)
 				require.Equal(t, Limits{MaxToolCalls: 40, MaxWallTime: 10 * time.Minute}, cfg.Budgets.PerInvestigation)
+				require.Equal(t, DefaultConcurrency, cfg.Budgets.Concurrency)
+				require.Empty(t, cfg.RouteConcurrency())
 				require.Equal(t, LogLevelInfo, cfg.Telemetry.LogLevel)
 				require.Nil(t, cfg.Slack)
 				require.Equal(t, []Route{{
@@ -82,9 +84,9 @@ func TestParseDefaults(t *testing.T) {
 			name: "set values win over defaults",
 			yaml: baseYAML + `
 server: {listen: ":1"}
-budgets: {perInvestigation: {maxToolCalls: 10}}
+budgets: {perInvestigation: {maxToolCalls: 10}, concurrency: 4}
 routes:
-  - {name: a, priority: 0, budgets: {maxWallTime: 1m}}
+  - {name: a, priority: 0, budgets: {maxWallTime: 1m}, concurrency: 2}
   - {name: default}
 `,
 			check: func(t *testing.T, cfg *Config) {
@@ -93,6 +95,8 @@ routes:
 				require.Equal(t, Limits{MaxToolCalls: 10, MaxWallTime: 10 * time.Minute}, cfg.Budgets.PerInvestigation)
 				require.Equal(t, 0, cfg.Routes[0].Priority)
 				require.Equal(t, Limits{MaxToolCalls: 10, MaxWallTime: time.Minute}, cfg.Routes[0].Budgets)
+				require.Equal(t, 4, cfg.Budgets.Concurrency)
+				require.Equal(t, map[string]int{"a": 2}, cfg.RouteConcurrency())
 			},
 		},
 		{

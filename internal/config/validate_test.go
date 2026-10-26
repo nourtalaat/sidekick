@@ -78,6 +78,11 @@ func TestValidateFixtures(t *testing.T) {
 			"routes[0].budgets.maxWallTime: must not be negative",
 		}},
 		{file: "global-budget-zero", want: []string{"budgets.perInvestigation.maxToolCalls: must be positive"}},
+		{file: "route-concurrency-above-global", want: []string{
+			"routes[0].concurrency: 12 is above the global limit budgets.concurrency 8",
+			"routes[1].concurrency: must not be negative",
+		}},
+		{file: "global-concurrency-zero", want: []string{"budgets.concurrency: must be positive"}},
 		// Report
 		{file: "unknown-confidence", want: []string{`report.minFalsePositiveConfidence: unknown confidence "hgh" (did you mean "high"?)`}},
 		// Intake

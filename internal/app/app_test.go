@@ -224,6 +224,16 @@ func TestRegistered(t *testing.T) {
 			},
 		},
 		{
+			name: "investigation kinds register with the configured concurrency limits",
+			check: func(t *testing.T) {
+				t.Helper()
+
+				startApp(t, storetest.NewURL(t), config.MigrationsStartup, func(a *App) {
+					require.NoError(t, a.RegisterJob(queue.KindInvestigate, queue.HandlerFunc(func(context.Context, db.Job) error { return nil }), queue.KindOptions{Long: true}))
+				})
+			},
+		},
+		{
 			name: "nothing can be registered once running",
 			check: func(t *testing.T) {
 				t.Helper()

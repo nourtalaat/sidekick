@@ -1,4 +1,4 @@
-package publish
+package store
 
 import (
 	"encoding/json"
@@ -14,10 +14,10 @@ type storedLink struct {
 	URL   string `json:"url"`
 }
 
-// eventOf returns a stored event as sinks get it. Every text in it was
-// redacted when it was stored. The raw payload is left out, since no sink
-// shows it.
-func eventOf(row db.Event) (event.Event, error) {
+// EventOf returns a stored event as the rest of Sidekick uses it. Every
+// text in it was redacted when it was stored. The raw payload is left out,
+// since nothing reads it back.
+func EventOf(row db.Event) (event.Event, error) {
 	ev := event.Event{
 		Key:         row.Key,
 		Intake:      row.Intake,

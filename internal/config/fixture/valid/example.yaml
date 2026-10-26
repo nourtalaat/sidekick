@@ -99,6 +99,7 @@ routes:
     mode: read-only
     outputs: [slack-thread]
     budgets: { maxToolCalls: 30 }
+    concurrency: 3
   - name: default
     strategy: generic-alert
     mode: read-only
@@ -106,6 +107,7 @@ routes:
 
 budgets:
   perInvestigation: { maxToolCalls: 40, maxWallTime: 10m }
+  concurrency: 8
 
 report:
   minFalsePositiveConfidence: high

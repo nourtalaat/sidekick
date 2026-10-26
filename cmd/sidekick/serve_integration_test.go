@@ -4,16 +4,20 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/app"
@@ -21,23 +25,12 @@ import (
 	"github.com/nourtalaat/sidekick/internal/store/storetest"
 )
 
-// serveStartTimeout bounds how long the test waits for serve to start.
+// serveStartTimeout bounds how long the test waits for serve to start, and
+// for an investigation to end.
 const serveStartTimeout = time.Minute
 
-// serveConfig is validConfig listening on ports the system picks.
-const serveConfig = validConfig + `
-server: { listen: "127.0.0.1:0", metricsListen: "127.0.0.1:0" }
-`
-
-// webhookConfig is serveConfig with an Alertmanager webhook endpoint whose
-// bearer token is the fake secret value.
-const webhookConfig = serveConfig + `
-intake:
-  webhooks:
-    alertmanager:
-      adapter: alertmanager
-      auth: { bearer: { name: hooks, key: alertmanager } }
-`
+// messagesPath is the path of the Anthropic Messages API.
+const messagesPath = "/v1/messages"
 
 // alertmanagerDelivery is an Alertmanager webhook payload with one alert.
 const alertmanagerDelivery = `{
@@ -60,6 +53,8 @@ type logLine struct {
 	Listen        string `json:"listen"`
 	MetricsListen string `json:"metrics_listen"`
 	Route         string `json:"route"`
+	Verdict       string `json:"verdict"`
+	StopReason    string `json:"stop_reason"`
 }
 
 // TestServeStopsOnSignal runs `sidekick serve` as its own process, waits
@@ -80,7 +75,7 @@ func TestServeStopsOnSignal(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			cmd, lines, started := startServe(t, writeConfig(t, serveConfig, storetest.NewURL(t)))
+			cmd, lines, started := startServe(t, writeConfig(t, serveConfig(fakeAnthropic(t).URL()), storetest.NewURL(t)))
 
 			resp, err := http.Get("http://" + started.MetricsListen + "/healthz") //nolint:noctx // A plain request to a local server.
 			require.NoError(t, err)
@@ -97,7 +92,8 @@ func TestServeStopsOnSignal(t *testing.T) {
 
 // TestServeWithSourceDown starts `sidekick serve` with an MCP source whose
 // server is down, and checks that serve starts and is ready anyway while
-// the source keeps trying to connect in the background.
+// the source keeps trying to connect in the background, and that
+// sidekick_source_up says the source is down.
 func TestServeWithSourceDown(t *testing.T) {
 	t.Parallel()
 
@@ -138,7 +134,7 @@ func TestServeWithSourceDown(t *testing.T) {
 				mcpServer.HandleFunc(method, "/mcp", tt.handler(release))
 			}
 
-			config := serveConfig + "sources:\n  signoz: { type: mcp, url: \"" + mcpServer.URL() + "/mcp\" }\n"
+			config := serveConfig(fakeAnthropic(t).URL()) + "sources:\n  signoz: { type: mcp, url: \"" + mcpServer.URL() + "/mcp\" }\n"
 			cmd, lines, started := startServe(t, writeConfig(t, config, storetest.NewURL(t)))
 			metrics := "http://" + started.MetricsListen
 
@@ -148,6 +144,9 @@ func TestServeWithSourceDown(t *testing.T) {
 			require.Eventually(t, func() bool { return len(mcpServer.Requests()) > 0 }, serveStartTimeout, 10*time.Millisecond,
 				"serve tries to connect in the background")
 
+			_, body := getURL(t, metrics+"/metrics")
+			require.Contains(t, body, `sidekick_source_up{source="signoz"} 0`)
+
 			stopServe(t, cmd, lines, syscall.SIGTERM)
 		})
 	}
@@ -155,7 +154,7 @@ func TestServeWithSourceDown(t *testing.T) {
 
 // TestServeWebhooks checks that `sidekick serve` serves the configured
 // webhook endpoints with the built-in adapters, stores what they accept,
-// counts it in the metrics and routes each stored event.
+// counts it in the metrics, and routes and investigates each stored event.
 func TestServeWebhooks(t *testing.T) {
 	t.Parallel()
 
@@ -165,7 +164,8 @@ func TestServeWebhooks(t *testing.T) {
 		token       string
 		wantStatus  int
 		wantMetrics []string
-		// wantRoute is the route the stored event goes to, if any.
+		// wantRoute is the route the stored event goes to, if any; its
+		// investigation gets the recorded inconclusive verdict.
 		wantRoute string
 	}{
 		{
@@ -199,16 +199,16 @@ func TestServeWebhooks(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			cmd, lines, started := startServe(t, writeConfig(t, webhookConfig, storetest.NewURL(t), "hooks/alertmanager"))
+			var answers []string
+			if tt.wantRoute != "" {
+				answers = []string{"fixture/anthropic-inconclusive.sse"}
+			}
 
-			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://"+started.Listen+"/hooks/"+tt.endpoint, strings.NewReader(alertmanagerDelivery))
-			require.NoError(t, err)
-			req.Header.Set("Authorization", "Bearer "+tt.token)
+			anthropic := fakeAnthropic(t, answers...)
 
-			resp, err := http.DefaultClient.Do(req)
-			require.NoError(t, err)
-			require.NoError(t, resp.Body.Close())
-			require.Equal(t, tt.wantStatus, resp.StatusCode)
+			cmd, lines, started := startServe(t, writeConfig(t, webhookConfig(anthropic.URL()), storetest.NewURL(t), "hooks/alertmanager"))
+
+			postAlert(t, started, tt.endpoint, tt.token, tt.wantStatus)
 
 			status, metrics := getURL(t, "http://"+started.MetricsListen+"/metrics")
 			require.Equal(t, http.StatusOK, status)
@@ -219,6 +219,7 @@ func TestServeWebhooks(t *testing.T) {
 
 			if tt.wantRoute != "" {
 				require.Equal(t, tt.wantRoute, waitForLog(t, lines, "event routed").Route)
+				require.Equal(t, "inconclusive", waitForLog(t, lines, "investigation finished").Verdict)
 			}
 
 			stopServe(t, cmd, lines, syscall.SIGTERM)
@@ -226,48 +227,268 @@ func TestServeWebhooks(t *testing.T) {
 	}
 }
 
-// TestServePostsToSlack delivers an alert to a running serve process whose
-// default route has a Slack output, and checks that the fake Slack gets
-// the "Looking into it" message in the output's channel.
-func TestServePostsToSlack(t *testing.T) {
+// TestServeEndToEnd runs `sidekick serve` with an Alertmanager webhook, an
+// MCP source, the Anthropic connector and a Slack output, each third party
+// faked with fakehttp, and follows one alert from the webhook to the
+// verdict in Slack: the router opens the investigation and posts "Looking
+// into it", the model calls the source and submits a verdict, and the
+// Slack message ends with it.
+func TestServeEndToEnd(t *testing.T) {
 	t.Parallel()
 
-	api := fakehttp.New(t)
-	api.Handle(http.MethodPost, "/api/chat.postMessage", fakehttp.Response{BodyFile: "fixture/slack-posted.json"})
-	api.ExpectAllCalled()
+	anthropic := fakeAnthropic(t, "fixture/anthropic-search.sse", "fixture/anthropic-verdict.sse")
+	signoz := fakeMCP(t)
+	slackAPI := newFakeSlack(t)
 
-	content := strings.Replace(webhookConfig, "  - name: default\n", "  - name: default\n    outputs: [slack-thread]\n", 1) + `
+	content := strings.Replace(webhookConfig(anthropic.URL()), "  - name: default\n", "  - name: default\n    outputs: [slack-thread]\n", 1) + `
 slack:
   botTokenSecret: { name: slack, key: botToken }
 outputs:
-  slack-thread: { type: slack, channel: "#alerts", apiURL: "` + api.URL() + `/api/" }
+  slack-thread: { type: slack, channel: "#alerts", apiURL: "` + slackAPI.api.URL() + `/api/" }
+sources:
+  signoz: { type: mcp, url: "` + signoz.URL() + `/mcp" }
 `
 
 	cmd, lines, started := startServe(t, writeConfig(t, content, storetest.NewURL(t), "hooks/alertmanager", "slack/botToken"))
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://"+started.Listen+"/hooks/alertmanager", strings.NewReader(alertmanagerDelivery))
+	postAlert(t, started, "alertmanager", "fake-value", http.StatusAccepted)
+
+	finished := waitForLog(t, lines, "investigation finished")
+	require.Equal(t, "true_positive", finished.Verdict)
+	require.Equal(t, "submitted", finished.StopReason)
+
+	const verdictText = "Real issue (high confidence): Disk almost full"
+
+	require.Eventually(t, func() bool { return slackAPI.has("chat.update", verdictText) }, serveStartTimeout, 50*time.Millisecond,
+		"the Slack message ends with the verdict")
+
+	posts := slackAPI.callsTo("chat.postMessage")
+	require.Equal(t, "Looking into it: Disk almost full", posts[0].Text)
+	require.Equal(t, "#alerts", posts[0].Channel)
+
+	require.Eventually(t, func() bool { return slackAPI.has("chat.postMessage", verdictText) }, serveStartTimeout, 50*time.Millisecond,
+		"a thread reply announces the verdict")
+
+	sent := anthropic.Requests()
+	require.Len(t, sent, 2)
+	require.Equal(t, "<untrusted_data source=\"signoz\" tool=\"signoz__search_logs\" call=\"toolu_01Search\">\n"+
+		"db-1 disk use: 80% at 09:00, 97% at 10:00\n</untrusted_data>", lastToolResult(t, sent[1].Body),
+		"the source's result goes back to the model redacted and wrapped as untrusted data")
+
+	_, metrics := getURL(t, "http://"+started.MetricsListen+"/metrics")
+	for _, want := range []string{
+		`sidekick_source_up{source="signoz"} 1`,
+		`sidekick_tool_calls_total{outcome="ok",source="signoz",tool="search_logs"} 1`,
+		`sidekick_tool_call_duration_seconds_count{source="signoz"} 1`,
+		`sidekick_model_calls_total{connector="claude",model="claude-opus-5-5",outcome="ok",role="investigate"} 2`,
+		`sidekick_investigations_total{route="default",stop_reason="submitted",verdict="true_positive"} 1`,
+	} {
+		require.Contains(t, metrics, want)
+	}
+
+	stopServe(t, cmd, lines, syscall.SIGTERM)
+}
+
+// serveConfig is validConfig listening on ports the system picks, with the
+// claude connector sending its requests to anthropicURL.
+func serveConfig(anthropicURL string) string {
+	return strings.Replace(validConfig, "apiKeySecret: { name: anthropic, key: apiKey } }",
+		`apiKeySecret: { name: anthropic, key: apiKey }, baseURL: "`+anthropicURL+`" }`, 1) + `
+server: { listen: "127.0.0.1:0", metricsListen: "127.0.0.1:0" }
+`
+}
+
+// webhookConfig is serveConfig with an Alertmanager webhook endpoint whose
+// bearer token is the fake secret value.
+func webhookConfig(anthropicURL string) string {
+	return serveConfig(anthropicURL) + `
+intake:
+  webhooks:
+    alertmanager:
+      adapter: alertmanager
+      auth: { bearer: { name: hooks, key: alertmanager } }
+`
+}
+
+// fakeAnthropic returns a fake Anthropic API that answers Messages calls
+// with the recorded responses in files, in order. Any other call, or a
+// response left unused, fails the test.
+func fakeAnthropic(t *testing.T, files ...string) *fakehttp.Server {
+	t.Helper()
+
+	api := fakehttp.New(t)
+
+	responses := make([]fakehttp.Response, 0, len(files))
+	for _, f := range files {
+		responses = append(responses, fakehttp.Response{BodyFile: f, Headers: map[string]string{"Content-Type": "text/event-stream"}})
+	}
+
+	if len(responses) > 0 {
+		api.Handle(http.MethodPost, messagesPath, responses...)
+		api.ExpectAllCalled()
+	}
+
+	return api
+}
+
+// fakeMCP returns a fake MCP server with one read-only tool, search_logs,
+// served over streamable HTTP at /mcp.
+func fakeMCP(t *testing.T) *fakehttp.Server {
+	t.Helper()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "signoz", Version: "1"}, nil)
+	server.AddTool(&mcp.Tool{
+		Name:        "search_logs",
+		Description: "Search the logs.",
+		InputSchema: json.RawMessage(`{"type": "object", "properties": {"query": {"type": "string"}}}`),
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+	}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "db-1 disk use: 80% at 09:00, 97% at 10:00"}}}, nil
+	})
+
+	api := fakehttp.New(t)
+	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
+
+	for _, method := range []string{http.MethodPost, http.MethodGet, http.MethodDelete} {
+		api.HandleFunc(method, "/mcp", h.ServeHTTP)
+	}
+
+	return api
+}
+
+// slackCall is one call the fake Slack got.
+type slackCall struct {
+	Method   string
+	Channel  string `json:"channel"`
+	TS       string `json:"ts"`
+	ThreadTS string `json:"thread_ts"`
+	Text     string `json:"text"`
+}
+
+// fakeSlack is the Slack Web API for one test: each post gets the next
+// timestamp, and every call is recorded.
+type fakeSlack struct {
+	api *fakehttp.Server
+
+	mu    sync.Mutex
+	calls []slackCall
+}
+
+func newFakeSlack(t *testing.T) *fakeSlack {
+	t.Helper()
+
+	f := &fakeSlack{api: fakehttp.New(t)}
+
+	f.api.HandleFunc(http.MethodPost, "/api/chat.postMessage", func(w http.ResponseWriter, r *http.Request) {
+		f.record(t, "chat.postMessage", r)
+		answerSlack(w, `{"ok":true,"channel":"C123","ts":"1793023321.%06d"}`, len(f.callsTo("chat.postMessage")))
+	})
+
+	f.api.HandleFunc(http.MethodPost, "/api/chat.update", func(w http.ResponseWriter, r *http.Request) {
+		call := f.record(t, "chat.update", r)
+		answerSlack(w, `{"ok":true,"channel":"%s","ts":"%s"}`, call.Channel, call.TS)
+	})
+
+	f.api.HandleFunc(http.MethodGet, "/api/chat.getPermalink", func(w http.ResponseWriter, r *http.Request) {
+		answerSlack(w, `{"ok":true,"permalink":"https://example.slack.com/archives/%s/p%s"}`, r.URL.Query().Get("channel"), r.URL.Query().Get("message_ts"))
+	})
+
+	return f
+}
+
+// record decodes and keeps one call.
+func (f *fakeSlack) record(t *testing.T, method string, r *http.Request) slackCall {
+	t.Helper()
+
+	call := slackCall{Method: method}
+	if err := json.NewDecoder(r.Body).Decode(&call); err != nil {
+		t.Errorf("decode the %s body: %v", method, err)
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.calls = append(f.calls, call)
+
+	return call
+}
+
+// callsTo returns the calls to method, in order.
+func (f *fakeSlack) callsTo(method string) []slackCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	var out []slackCall
+
+	for _, c := range f.calls {
+		if c.Method == method {
+			out = append(out, c)
+		}
+	}
+
+	return out
+}
+
+// has reports whether a call to method had the text.
+func (f *fakeSlack) has(method, text string) bool {
+	for _, c := range f.callsTo(method) {
+		if c.Text == text {
+			return true
+		}
+	}
+
+	return false
+}
+
+// answerSlack writes a Slack API answer.
+func answerSlack(w http.ResponseWriter, format string, args ...any) {
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = fmt.Fprintf(w, format, args...) //nolint:gosec // A fake API answering the code under test, not a browser.
+}
+
+// lastToolResult returns the text of the last tool result in a Messages
+// API request body.
+func lastToolResult(t *testing.T, body []byte) string {
+	t.Helper()
+
+	var req struct {
+		Messages []struct {
+			Content []struct {
+				Type    string `json:"type"`
+				Content []struct {
+					Text string `json:"text"`
+				} `json:"content"`
+			} `json:"content"`
+		} `json:"messages"`
+	}
+	require.NoError(t, json.Unmarshal(body, &req))
+
+	var text string
+
+	for _, m := range req.Messages {
+		for _, c := range m.Content {
+			if c.Type == "tool_result" && len(c.Content) > 0 {
+				text = c.Content[0].Text
+			}
+		}
+	}
+
+	return text
+}
+
+// postAlert delivers alertmanagerDelivery to the endpoint with the bearer
+// token, and checks the status.
+func postAlert(t *testing.T, started logLine, endpoint, token string, wantStatus int) {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://"+started.Listen+"/hooks/"+endpoint, strings.NewReader(alertmanagerDelivery))
 	require.NoError(t, err)
-	req.Header.Set("Authorization", "Bearer fake-value")
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	require.Equal(t, http.StatusAccepted, resp.StatusCode)
-
-	require.Eventually(t, func() bool { return len(api.Requests()) == 1 }, serveStartTimeout, 50*time.Millisecond)
-
-	var sent struct {
-		Channel string `json:"channel"`
-		Text    string `json:"text"`
-	}
-
-	posted := api.Requests()[0]
-	require.NoError(t, json.Unmarshal(posted.Body, &sent))
-	require.Equal(t, "#alerts", sent.Channel)
-	require.Equal(t, "Looking into it: Disk almost full", sent.Text)
-	require.Equal(t, "Bearer fake-value", posted.Header.Get("Authorization"))
-
-	stopServe(t, cmd, lines, syscall.SIGTERM)
+	require.Equal(t, wantStatus, resp.StatusCode)
 }
 
 // startServe runs `sidekick serve` with the config at configPath as its

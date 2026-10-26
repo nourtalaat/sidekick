@@ -19,6 +19,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/ids"
 	"github.com/nourtalaat/sidekick/internal/intake"
 	"github.com/nourtalaat/sidekick/internal/queue"
+	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
@@ -149,7 +150,7 @@ func (h *Handler) row(ep endpoint, req intake.Request, ev event.Event) (db.Inser
 		Severity:    optional(string(cmp.Or(ev.Severity, event.SeverityUnknown))),
 		Labels:      labels,
 		Links:       links,
-		Fingerprint: dbText(h.redactor.Text(fingerprint).Text),
+		Fingerprint: store.Text(h.redactor.Text(fingerprint).Text),
 		Raw:         h.redactedJSON(ev.Raw),
 		Status:      statusReceived,
 		StartsAt:    optionalTime(ev.StartsAt),
@@ -176,7 +177,7 @@ func (h *Handler) row(ep endpoint, req intake.Request, ev event.Event) (db.Inser
 
 // storedKey returns key as it is stored.
 func (h *Handler) storedKey(key string) string {
-	if len(key) <= maxKeyBytes && validText(key) && h.redactor.Text(key).Counts == nil {
+	if len(key) <= maxKeyBytes && store.ValidText(key) && h.redactor.Text(key).Counts == nil {
 		return key
 	}
 
@@ -192,7 +193,7 @@ func (h *Handler) redactedText(s string) *string {
 		return nil
 	}
 
-	return optional(dbText(h.redactor.Text(s).Text))
+	return optional(store.Text(h.redactor.Text(s).Text))
 }
 
 // redactedLabels redacts the labels, names and values both, as a JSON
@@ -218,11 +219,11 @@ func (h *Handler) redactedLinks(links []event.Link) ([]byte, error) {
 	kept := make([]storedLink, 0, len(links))
 
 	for _, l := range links {
-		if l.URL == "" || !validText(l.URL) || h.redactor.Text(l.URL).Text != l.URL {
+		if l.URL == "" || !store.ValidText(l.URL) || h.redactor.Text(l.URL).Text != l.URL {
 			continue
 		}
 
-		kept = append(kept, storedLink{Title: dbText(h.redactor.Text(l.Title).Text), URL: l.URL})
+		kept = append(kept, storedLink{Title: store.Text(h.redactor.Text(l.Title).Text), URL: l.URL})
 	}
 
 	if len(kept) == 0 {
@@ -246,7 +247,7 @@ func (h *Handler) redactedJSON(raw []byte) []byte {
 
 	out, _ := h.redactor.JSON(raw)
 
-	return dbJSON(out)
+	return store.JSON(out)
 }
 
 // enqueueRoute adds the route_event job of the event with id.

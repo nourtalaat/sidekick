@@ -192,7 +192,7 @@ func RetryDead(ctx context.Context, q db.DBTX, id int64) error {
 // It returns ErrLeaseLost when the job no longer belongs to job's claim
 // token.
 func ReleaseUniqueKey(ctx context.Context, q db.DBTX, job db.Job) error {
-	rows, err := db.New(q).ReleaseUniqueKey(ctx, db.ReleaseUniqueKeyParams{ID: job.ID, ClaimToken: claimToken(job)})
+	rows, err := db.New(q).ReleaseUniqueKey(ctx, db.ReleaseUniqueKeyParams{ID: job.ID, ClaimToken: ClaimToken(job)})
 	if err != nil {
 		return fmt.Errorf("release the unique key of job %d: %w", job.ID, err)
 	}
@@ -202,6 +202,17 @@ func ReleaseUniqueKey(ctx context.Context, q db.DBTX, job db.Job) error {
 	}
 
 	return nil
+}
+
+// ClaimToken returns the claim token of a claimed job, the value a handler
+// fences its own writes with. Claims always set it; a job that was never
+// claimed gets 0, which matches no claim.
+func ClaimToken(job db.Job) int64 {
+	if job.ClaimToken == nil {
+		return 0
+	}
+
+	return *job.ClaimToken
 }
 
 // TraceContext returns ctx with the span that enqueued job as the remote

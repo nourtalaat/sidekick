@@ -1,0 +1,242 @@
+package investigator
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/nourtalaat/sidekick/internal/investigator/tools"
+	"github.com/nourtalaat/sidekick/internal/model"
+	"github.com/nourtalaat/sidekick/internal/model/pricing"
+	"github.com/nourtalaat/sidekick/internal/queue"
+	"github.com/nourtalaat/sidekick/internal/report"
+	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/strategy"
+)
+
+// SpanName is the name of the span of one run of an investigate job.
+const SpanName = "investigation.run"
+
+// tracerName names the tracer of this package.
+const tracerName = "github.com/nourtalaat/sidekick/internal/investigator"
+
+// Span attributes.
+const (
+	attrInvestigationID = "sidekick.investigation.id"
+	attrRoute           = "sidekick.route"
+	attrStrategy        = "sidekick.strategy"
+	attrRun             = "sidekick.run"
+)
+
+var (
+	errNoInvestigationID = errors.New("the payload has no investigation_id")
+	errNotFound          = errors.New("the investigation does not exist")
+)
+
+// Options set up a Handler. Pool and Guard are required.
+type Options struct {
+	// Pool is the database the investigations, steps, publish states and
+	// jobs are in.
+	Pool *pgxpool.Pool
+	// Guard runs the source tool calls.
+	Guard *tools.Guard
+	// Connectors are the model connectors by name, as investigations.
+	// connectors names them. Wrap each with instrument.Wrap first.
+	Connectors map[string]Connector
+	// Prices price each model step.
+	Prices pricing.Table
+	// Strategies are the strategies routes name.
+	Strategies *strategy.Set
+	// Routes are the settings of each route, by name.
+	Routes map[string]Route
+	// Rules are the checks a submitted report must pass.
+	Rules report.Rules
+	// Logger receives a line when a run starts and ends, with IDs, the
+	// route, the verdict and the stop reason only, never event text, tool
+	// results or model output. Nil logs nothing.
+	Logger *slog.Logger
+	// Metrics records the investigation metrics. Nil records none.
+	Metrics *Metrics
+	// TracerProvider makes the tracer of the investigation.run spans. Nil
+	// means the global tracer provider.
+	TracerProvider trace.TracerProvider
+}
+
+// Connector is one model connector with its retry setting.
+type Connector struct {
+	Connector model.Connector
+	// Retries is how many times a call that failed with a retryable error
+	// is repeated.
+	Retries int
+}
+
+// Route is what an investigation run needs to know about its route.
+type Route struct {
+	// Sources are the sources the investigation may use; nil means every
+	// source.
+	Sources []string
+}
+
+// Handler runs investigate jobs. Make it with New, register it for
+// queue.KindInvestigate, and set OnDead as the kind's OnDead hook.
+type Handler struct {
+	opts     Options
+	builtins builtins
+	log      *slog.Logger
+	tracer   trace.Tracer
+}
+
+var _ queue.Handler = (*Handler)(nil)
+
+// New returns a Handler.
+func New(opts Options) (*Handler, error) {
+	if opts.Pool == nil || opts.Guard == nil {
+		return nil, errors.New("new investigator: Pool and Guard are required")
+	}
+
+	submit, err := tools.ParseInputSchema(report.SubmitVerdictSchema)
+	if err != nil {
+		return nil, fmt.Errorf("new investigator: %s: %w", report.SubmitVerdictTool, err)
+	}
+
+	record, err := tools.ParseInputSchema(recordFindingSchema)
+	if err != nil {
+		return nil, fmt.Errorf("new investigator: %s: %w", RecordFindingTool, err)
+	}
+
+	tp := opts.TracerProvider
+	if tp == nil {
+		tp = otel.GetTracerProvider()
+	}
+
+	log := opts.Logger
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
+
+	return &Handler{
+		opts:     opts,
+		builtins: builtins{submitVerdict: submit, recordFinding: record},
+		log:      log,
+		tracer:   tp.Tracer(tracerName),
+	}, nil
+}
+
+// Handle runs one investigate job inside an investigation.run span, a
+// child of the span that enqueued the job. It takes over the run with the
+// job's claim token as the fence, then runs the agent loop from the last
+// saved step until the investigation ends.
+//
+// It returns nil when the investigation ended, or had ended already. A
+// payload that does not decode, an investigation that does not exist, or
+// a route, connector or strategy that is no longer configured gives up the
+// job, so OnDead marks the investigation failed. A worker that finds a
+// newer claim owning the run returns an error that wraps
+// queue.ErrLeaseLost. Other errors retry the job, which resumes from the
+// last saved step.
+func (h *Handler) Handle(ctx context.Context, job db.Job) (err error) {
+	ctx, span := h.tracer.Start(queue.TraceContext(ctx, job), SpanName)
+
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "the investigation run failed")
+		}
+
+		span.End()
+	}()
+
+	id, err := decodePayload(job.Payload)
+	if err != nil {
+		return fmt.Errorf("decode the investigate payload: %w: %w", queue.ErrGiveUp, err)
+	}
+
+	span.SetAttributes(attribute.String(attrInvestigationID, id.String()))
+
+	inv, started, err := h.start(ctx, id, queue.ClaimToken(job))
+	if err != nil {
+		return fmt.Errorf("take over the run: %w", err)
+	}
+
+	if !started {
+		return nil
+	}
+
+	span.SetAttributes(
+		attribute.String(attrRoute, inv.Route),
+		attribute.String(attrStrategy, deref(inv.Strategy)),
+		attribute.Int(attrRun, int(inv.Run)),
+	)
+
+	log := h.log.With("investigation_id", id.String(), "job_id", job.ID, "route", inv.Route)
+
+	done := h.opts.Metrics.running(inv.Route)
+	defer done()
+
+	r, err := h.newRun(ctx, inv, log)
+	if err != nil {
+		return fmt.Errorf("investigation %s: %w", id, err)
+	}
+
+	if err := r.loop(ctx); err != nil {
+		return fmt.Errorf("investigation %s: %w", id, err)
+	}
+
+	return nil
+}
+
+// start gives the run of the investigation to the claim with token. It
+// returns false, and no error, for an investigation that has ended.
+func (h *Handler) start(ctx context.Context, id uuid.UUID, token int64) (db.Investigation, bool, error) {
+	queries := db.New(h.opts.Pool)
+
+	inv, err := queries.StartInvestigationRun(ctx, db.StartInvestigationRunParams{ID: id, Fence: token})
+	if err == nil {
+		return inv, true, nil
+	}
+
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return db.Investigation{}, false, fmt.Errorf("start investigation %s: %w", id, err)
+	}
+
+	inv, err = queries.GetInvestigation(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return db.Investigation{}, false, fmt.Errorf("investigation %s: %w: %w", id, queue.ErrGiveUp, errNotFound)
+	}
+
+	if err != nil {
+		return db.Investigation{}, false, fmt.Errorf("load investigation %s: %w", id, err)
+	}
+
+	if inv.Fence >= token {
+		return db.Investigation{}, false, fmt.Errorf("investigation %s: a newer claim owns the run: %w", id, queue.ErrLeaseLost)
+	}
+
+	h.log.DebugContext(ctx, "investigation not run: it has ended", "investigation_id", id.String(), "status", inv.Status)
+
+	return db.Investigation{}, false, nil
+}
+
+// decodePayload returns the investigation ID of an investigate payload.
+func decodePayload(raw []byte) (uuid.UUID, error) {
+	var p Payload
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return uuid.Nil, fmt.Errorf("decode: %w", err)
+	}
+
+	if p.InvestigationID == uuid.Nil {
+		return uuid.Nil, errNoInvestigationID
+	}
+
+	return p.InvestigationID, nil
+}

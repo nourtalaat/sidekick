@@ -357,6 +357,7 @@ func (v *validator) checkRoute(path string, r Route) {
 	}
 
 	v.checkRouteBudgets(path+".budgets", r.Budgets)
+	v.checkRouteConcurrency(path+".concurrency", r.Concurrency)
 }
 
 func (v *validator) checkMatch(at string, m Match) {
@@ -401,10 +402,24 @@ func (v *validator) checkRouteBudgets(path string, b Limits) {
 	}
 }
 
+// checkRouteConcurrency checks that a route's concurrency limit is within
+// the global one. Zero means the route has no limit of its own.
+func (v *validator) checkRouteConcurrency(path string, n int) {
+	global := v.cfg.Budgets.Concurrency
+
+	switch {
+	case n < 0:
+		v.errs.add(path, "must not be negative")
+	case global > 0 && n > global:
+		v.errs.add(path, "%d is above the global limit budgets.concurrency %d", n, global)
+	}
+}
+
 func (v *validator) checkBudgets() {
 	b := v.cfg.Budgets.PerInvestigation
 	v.positive("budgets.perInvestigation.maxToolCalls", b.MaxToolCalls)
 	v.positiveDuration("budgets.perInvestigation.maxWallTime", b.MaxWallTime)
+	v.positive("budgets.concurrency", v.cfg.Budgets.Concurrency)
 }
 
 func (v *validator) checkReport() {
