@@ -16,6 +16,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -99,7 +100,14 @@ type jobQueue struct {
 // the plugin instances. On an error it closes what it had opened. A config
 // with problems gives an error that wraps config.Errors.
 func New(ctx context.Context, opts Options) (*App, error) {
-	cfg, err := config.Load(ctx, opts.ConfigPath, config.LoadOptions{Registries: opts.Registries, CheckSecrets: true})
+	if opts.LogOutput == nil {
+		opts.LogOutput = os.Stdout
+	}
+
+	// The log level is in the config, so loading it logs at info.
+	loadLog := telemetry.NewLogger(opts.LogOutput, slog.LevelInfo).With("component", "config")
+
+	cfg, err := config.Load(ctx, opts.ConfigPath, config.LoadOptions{Registries: opts.Registries, CheckSecrets: true, Logger: loadLog})
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}

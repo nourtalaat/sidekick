@@ -5,8 +5,10 @@ package app
 import (
 	"context"
 	"errors"
-	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -36,11 +38,13 @@ func TestNewStartUp(t *testing.T) {
 		// url returns the database URL the config names.
 		url  func(t testing.TB) string
 		mode config.MigrationMode
-		// config changes the written config before New reads it.
-		config      func(content string) string
+		// strategies points strategies.dir at fixture/strategies, whose
+		// generic-alert file replaces the built-in one.
+		strategies  bool
 		wantErr     string
 		wantErrors  bool
 		wantCurrent bool
+		wantLog     string
 	}{
 		{
 			name:        "startup mode migrates an empty database",
@@ -52,6 +56,14 @@ func TestNewStartUp(t *testing.T) {
 			name: "manual mode leaves an empty database alone",
 			url:  storetest.NewEmptyURL,
 			mode: config.MigrationsManual,
+		},
+		{
+			name:        "a file strategy that replaces a built-in one is logged",
+			url:         storetest.NewURL,
+			mode:        config.MigrationsStartup,
+			strategies:  true,
+			wantCurrent: true,
+			wantLog:     `"msg":"file strategy overrides built-in strategy","component":"config","strategy":"generic-alert"`,
 		},
 		{
 			name:       "config with problems",
@@ -77,7 +89,15 @@ func TestNewStartUp(t *testing.T) {
 			dbURL := tt.url(t)
 			configPath := writeConfig(t, dbURL, tt.mode)
 
-			a, err := New(t.Context(), Options{ConfigPath: configPath, Registries: fakeRegistries(), LogOutput: io.Discard})
+			if tt.strategies {
+				dir, err := filepath.Abs(filepath.Join("fixture", "strategies"))
+				require.NoError(t, err)
+				appendConfig(t, configPath, "strategies: { dir: "+strconv.Quote(dir)+" }\n")
+			}
+
+			logs := &syncBuffer{}
+
+			a, err := New(t.Context(), Options{ConfigPath: configPath, Registries: fakeRegistries(), LogOutput: logs})
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, strings.ReplaceAll(tt.wantErr, "CONFIG", configPath))
 
@@ -93,6 +113,10 @@ func TestNewStartUp(t *testing.T) {
 			current, target, err := store.SchemaVersion(t.Context(), a.Pool())
 			require.NoError(t, err)
 			require.Equal(t, tt.wantCurrent, current == target, "schema at %d of %d", current, target)
+
+			if tt.wantLog != "" {
+				require.Contains(t, logs.String(), tt.wantLog)
+			}
 		})
 	}
 }
@@ -261,4 +285,16 @@ func enqueue(t *testing.T, pool *pgxpool.Pool) int64 {
 	require.NoError(t, err)
 
 	return id
+}
+
+// appendConfig adds yaml to the end of the config file at path.
+func appendConfig(t *testing.T, path, yaml string) {
+	t.Helper()
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600) //nolint:gosec // The test wrote this file itself.
+	require.NoError(t, err)
+
+	_, err = f.WriteString(yaml)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
 }
