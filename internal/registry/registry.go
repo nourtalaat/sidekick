@@ -65,43 +65,81 @@ type Deps struct {
 // Factory builds one named instance of a plugin from its config section.
 type Factory[T any] func(ctx context.Context, name string, dec Decoder, deps Deps) (T, error)
 
+// Checker decodes one instance's config section and runs its Validate
+// method without building the instance, so config validation can check a
+// section without network calls or secret files. It returns the decoded
+// config, a pointer to the plugin's config struct, so the caller can inspect
+// it, for example for secret references or declared model capabilities.
+type Checker func(ctx context.Context, name string, dec Decoder) (any, error)
+
+// Plugin is what a plugin type registers: how to check a config section and
+// how to build an instance from it. Typed makes both from one constructor.
+// Check may be nil, in which case Registry.Check accepts every section.
+type Plugin[T any] struct {
+	Check Checker
+	Build Factory[T]
+}
+
 // ErrUnknownType is returned when config names a type nobody registered.
 var ErrUnknownType = errors.New("unknown type")
 
-// Registry holds the factories of one plugin kind.
+// Registry holds the plugin types of one plugin kind.
 type Registry[T any] struct {
-	kind      string
-	mu        sync.RWMutex
-	factories map[string]Factory[T]
+	kind    string
+	mu      sync.RWMutex
+	plugins map[string]Plugin[T]
 }
 
-// Register adds a factory. It panics on a duplicate type name, because that
-// is a programming error found at start-up.
-func (r *Registry[T]) Register(typeName string, f Factory[T]) {
+// Register adds a plugin type. It panics on a duplicate type name or a
+// plugin without a Build function, because both are programming errors found
+// at start-up.
+func (r *Registry[T]) Register(typeName string, p Plugin[T]) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, ok := r.factories[typeName]; ok {
+	if _, ok := r.plugins[typeName]; ok {
 		panic(fmt.Sprintf("registry: %s type %q registered twice", r.kind, typeName))
 	}
 
-	r.factories[typeName] = f
+	if p.Build == nil {
+		panic(fmt.Sprintf("registry: %s type %q has no Build function", r.kind, typeName))
+	}
+
+	r.plugins[typeName] = p
+}
+
+// Check decodes and validates the config section of the instance called
+// name, without building it. It returns the decoded config, or nil when the
+// plugin has no Check function.
+func (r *Registry[T]) Check(ctx context.Context, typeName, name string, dec Decoder) (any, error) {
+	p, err := r.plugin(typeName, name)
+	if err != nil {
+		return nil, err
+	}
+
+	if p.Check == nil {
+		return nil, nil
+	}
+
+	cfg, err := p.Check(ctx, name, dec)
+	if err != nil {
+		return nil, fmt.Errorf("check %s %q: %w", r.kind, name, err)
+	}
+
+	return cfg, nil
 }
 
 // Build creates the instance called name from its config section.
 func (r *Registry[T]) Build(ctx context.Context, typeName, name string, dec Decoder, deps Deps) (T, error) {
-	r.mu.RLock()
-	f, ok := r.factories[typeName]
-	r.mu.RUnlock()
+	var zero T
 
-	if !ok {
-		var zero T
-		return zero, fmt.Errorf("%s %q: type %q: %w", r.kind, name, typeName, ErrUnknownType)
+	p, err := r.plugin(typeName, name)
+	if err != nil {
+		return zero, err
 	}
 
-	v, err := f(ctx, name, dec, deps)
+	v, err := p.Build(ctx, name, dec, deps)
 	if err != nil {
-		var zero T
 		return zero, fmt.Errorf("build %s %q: %w", r.kind, name, err)
 	}
 
@@ -113,8 +151,8 @@ func (r *Registry[T]) Types() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	names := make([]string, 0, len(r.factories))
-	for n := range r.factories {
+	names := make([]string, 0, len(r.plugins))
+	for n := range r.plugins {
 		names = append(names, n)
 	}
 
@@ -123,33 +161,69 @@ func (r *Registry[T]) Types() []string {
 	return names
 }
 
-// New returns an empty registry for a plugin kind.
-func New[T any](kind string) *Registry[T] {
-	return &Registry[T]{kind: kind, factories: map[string]Factory[T]{}}
+// plugin returns the plugin registered as typeName, for the instance name.
+func (r *Registry[T]) plugin(typeName, name string) (Plugin[T], error) {
+	r.mu.RLock()
+	p, ok := r.plugins[typeName]
+	r.mu.RUnlock()
+
+	if !ok {
+		return Plugin[T]{}, fmt.Errorf("%s %q: type %q: %w", r.kind, name, typeName, ErrUnknownType)
+	}
+
+	return p, nil
 }
 
-// Typed adapts a constructor that takes a typed config struct C into a Factory.
-// It decodes the section, runs C's Validate method when it has one, and then
-// calls build. This is how each plugin decodes its own config section.
-func Typed[C any, T any](build func(ctx context.Context, name string, cfg C, deps Deps) (T, error)) Factory[T] {
-	return func(ctx context.Context, name string, dec Decoder, deps Deps) (T, error) {
-		var cfg C
-		var zero T
-		if err := dec.Decode(&cfg); err != nil {
-			return zero, fmt.Errorf("decode config: %w", err)
-		}
+// New returns an empty registry for a plugin kind.
+func New[T any](kind string) *Registry[T] {
+	return &Registry[T]{kind: kind, plugins: map[string]Plugin[T]{}}
+}
 
-		if v, ok := any(&cfg).(Validator); ok {
-			if err := v.Validate(); err != nil {
-				return zero, fmt.Errorf("validate config: %w", err)
+// Typed adapts a constructor that takes a typed config struct C into a
+// Plugin. Its Check and its Build both decode the section and run C's
+// Validate method when it has one; Build then calls build. This is how each
+// plugin decodes its own config section.
+func Typed[C any, T any](build func(ctx context.Context, name string, cfg C, deps Deps) (T, error)) Plugin[T] {
+	return Plugin[T]{
+		Check: func(_ context.Context, _ string, dec Decoder) (any, error) {
+			cfg, err := decodeChecked[C](dec)
+			if err != nil {
+				return nil, err
 			}
-		}
 
-		t, err := build(ctx, name, cfg, deps)
-		if err != nil {
-			return zero, fmt.Errorf("construct: %w", err)
-		}
+			return cfg, nil
+		},
+		Build: func(ctx context.Context, name string, dec Decoder, deps Deps) (T, error) {
+			var zero T
 
-		return t, nil
+			cfg, err := decodeChecked[C](dec)
+			if err != nil {
+				return zero, err
+			}
+
+			t, err := build(ctx, name, *cfg, deps)
+			if err != nil {
+				return zero, fmt.Errorf("construct: %w", err)
+			}
+
+			return t, nil
+		},
 	}
+}
+
+// decodeChecked decodes a section into a new C and runs C's Validate method
+// when it has one.
+func decodeChecked[C any](dec Decoder) (*C, error) {
+	var cfg C
+	if err := dec.Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("decode config: %w", err)
+	}
+
+	if v, ok := any(&cfg).(Validator); ok {
+		if err := v.Validate(); err != nil {
+			return nil, fmt.Errorf("validate config: %w", err)
+		}
+	}
+
+	return &cfg, nil
 }

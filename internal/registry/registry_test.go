@@ -50,9 +50,9 @@ func TestRegistryRegister(t *testing.T) {
 			t.Parallel()
 
 			r := New[widget]("widget")
-			r.Register(tt.first, constantFactory(widget{name: tt.first}))
+			r.Register(tt.first, constantPlugin(widget{name: tt.first}))
 
-			register := func() { r.Register(tt.second, constantFactory(widget{name: tt.second})) }
+			register := func() { r.Register(tt.second, constantPlugin(widget{name: tt.second})) }
 			if tt.wantPanic != "" {
 				require.PanicsWithValue(t, tt.wantPanic, register)
 
@@ -109,7 +109,7 @@ func TestRegistryBuild(t *testing.T) {
 
 			r := New[widget]("widget")
 			if tt.factory != nil {
-				r.Register("http", tt.factory)
+				r.Register("http", Plugin[widget]{Build: tt.factory})
 			}
 
 			got, err := r.Build(t.Context(), tt.typeName, "primary", NewMockDecoder(gomock.NewController(t)), Deps{})
@@ -152,14 +152,14 @@ func TestRegistryBuildPassesInputs(t *testing.T) {
 			ctx := context.WithValue(t.Context(), ctxKey{}, "marker")
 
 			r := New[widget]("widget")
-			r.Register("http", func(gotCtx context.Context, name string, gotDec Decoder, gotDeps Deps) (widget, error) {
+			r.Register("http", Plugin[widget]{Build: func(gotCtx context.Context, name string, gotDec Decoder, gotDeps Deps) (widget, error) {
 				require.Equal(t, "marker", gotCtx.Value(ctxKey{}))
 				require.Equal(t, "primary", name)
 				require.Same(t, dec, gotDec)
 				require.Equal(t, deps, gotDeps)
 
 				return widget{name: name}, nil
-			})
+			}})
 
 			got, err := r.Build(ctx, "http", "primary", dec, deps)
 			require.NoError(t, err)
@@ -186,7 +186,7 @@ func TestRegistryTypes(t *testing.T) {
 
 			r := New[widget]("widget")
 			for _, n := range tt.names {
-				r.Register(n, constantFactory(widget{name: n}))
+				r.Register(n, constantPlugin(widget{name: n}))
 			}
 
 			require.Equal(t, tt.want, r.Types())
@@ -289,7 +289,7 @@ func TestTypedValidatedConfig(t *testing.T) {
 				return widget{name: name, url: cfg.URL}, nil
 			})
 
-			got, err := factory(t.Context(), "primary", dec, Deps{})
+			got, err := factory.Build(t.Context(), "primary", dec, Deps{})
 			if tt.wantErrMatch != "" {
 				require.EqualError(t, err, tt.wantErrMatch)
 				require.Zero(t, got)
@@ -333,15 +333,178 @@ func TestTypedConfigWithoutValidate(t *testing.T) {
 				return cfg.Size, nil
 			})
 
-			got, err := factory(t.Context(), "primary", dec, Deps{})
+			got, err := factory.Build(t.Context(), "primary", dec, Deps{})
 			require.NoError(t, err)
 			require.Equal(t, tt.size, got)
 		})
 	}
 }
 
-func constantFactory(w widget) Factory[widget] {
-	return func(context.Context, string, Decoder, Deps) (widget, error) {
-		return w, nil
+func TestRegistryRegisterWithoutBuild(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		plugin Plugin[widget]
+	}{
+		{name: "empty plugin", plugin: Plugin[widget]{}},
+		{name: "check only", plugin: Plugin[widget]{Check: func(context.Context, string, Decoder) (any, error) { return nil, nil }}},
 	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := New[widget]("widget")
+			require.PanicsWithValue(t, `registry: widget type "http" has no Build function`, func() { r.Register("http", tt.plugin) })
+		})
+	}
+}
+
+func TestRegistryCheck(t *testing.T) {
+	t.Parallel()
+
+	errCheck := errors.New("url: required")
+
+	tests := []struct {
+		name         string
+		typeName     string
+		check        Checker
+		want         any
+		wantErr      error
+		wantErrMatch string
+	}{
+		{
+			name:     "check returns the decoded config",
+			typeName: "http",
+			check: func(_ context.Context, name string, _ Decoder) (any, error) {
+				return &widgetConfig{URL: name}, nil
+			},
+			want: &widgetConfig{URL: "primary"},
+		},
+		{
+			name:     "plugin without a check accepts the section",
+			typeName: "http",
+		},
+		{
+			name:         "unknown type",
+			typeName:     "smtp",
+			wantErr:      ErrUnknownType,
+			wantErrMatch: `widget "primary": type "smtp": unknown type`,
+		},
+		{
+			name:     "check fails",
+			typeName: "http",
+			check: func(context.Context, string, Decoder) (any, error) {
+				return nil, errCheck
+			},
+			wantErr:      errCheck,
+			wantErrMatch: `check widget "primary": url: required`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := New[widget]("widget")
+			r.Register("http", Plugin[widget]{
+				Check: tt.check,
+				Build: func(context.Context, string, Decoder, Deps) (widget, error) {
+					t.Fatal("Check must not build the instance")
+
+					return widget{}, nil
+				},
+			})
+
+			got, err := r.Check(t.Context(), tt.typeName, "primary", NewMockDecoder(gomock.NewController(t)))
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				require.EqualError(t, err, tt.wantErrMatch)
+				require.Nil(t, got)
+
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestTypedCheck(t *testing.T) {
+	t.Parallel()
+
+	errDecode := errors.New("line 3: cannot unmarshal")
+
+	tests := []struct {
+		name         string
+		setupMocks   func(dec *MockDecoder)
+		want         any
+		wantErr      error
+		wantErrMatch string
+	}{
+		{
+			name: "returns the decoded and valid config",
+			setupMocks: func(dec *MockDecoder) {
+				dec.EXPECT().Decode(gomock.AssignableToTypeOf(&widgetConfig{})).DoAndReturn(func(target any) error {
+					target.(*widgetConfig).URL = "https://example.com"
+
+					return nil
+				})
+			},
+			want: &widgetConfig{URL: "https://example.com"},
+		},
+		{
+			name: "decode failure",
+			setupMocks: func(dec *MockDecoder) {
+				dec.EXPECT().Decode(gomock.Any()).Return(errDecode)
+			},
+			wantErr:      errDecode,
+			wantErrMatch: "decode config: line 3: cannot unmarshal",
+		},
+		{
+			name: "Validate runs after decoding",
+			setupMocks: func(dec *MockDecoder) {
+				dec.EXPECT().Decode(gomock.Any()).Return(nil)
+			},
+			wantErrMatch: "validate config: url: required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dec := NewMockDecoder(gomock.NewController(t))
+			tt.setupMocks(dec)
+
+			plugin := Typed(func(context.Context, string, widgetConfig, Deps) (widget, error) {
+				t.Fatal("Check must not call the constructor")
+
+				return widget{}, nil
+			})
+
+			got, err := plugin.Check(t.Context(), "primary", dec)
+			if tt.wantErrMatch != "" {
+				require.EqualError(t, err, tt.wantErrMatch)
+				require.Nil(t, got)
+
+				if tt.wantErr != nil {
+					require.ErrorIs(t, err, tt.wantErr)
+				}
+
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func constantPlugin(w widget) Plugin[widget] {
+	return Plugin[widget]{Build: func(context.Context, string, Decoder, Deps) (widget, error) {
+		return w, nil
+	}}
 }
