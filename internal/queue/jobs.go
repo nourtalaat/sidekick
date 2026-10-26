@@ -16,16 +16,37 @@ import (
 // keeps in last_error.
 const maxErrorBytes = 4096
 
-// claim leases up to batch ready jobs of kind to worker for lease.
-func claim(ctx context.Context, q db.DBTX, worker, kind string, lease time.Duration, batch int32) ([]db.Job, error) {
-	jobs, err := db.New(q).ClaimJobs(ctx, db.ClaimJobsParams{
-		Worker:       worker,
-		LeaseSeconds: lease.Seconds(),
-		Kinds:        []string{kind},
-		Batch:        batch,
+// txBeginner starts a transaction: a pool, a connection, or a transaction,
+// which starts a savepoint.
+type txBeginner interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
+// claim leases up to batch ready jobs of kind to worker for lease. It runs
+// in a transaction of its own, so that a claim whose caller gives up before
+// the commit is rolled back. When the commit fails, claim returns the jobs
+// it leased with the error: the commit may have gone through, so the caller
+// hands them back with handBackLost.
+func claim(ctx context.Context, q txBeginner, worker, kind string, lease time.Duration, batch int32) ([]db.Job, error) {
+	var jobs []db.Job
+
+	err := pgx.BeginFunc(ctx, q, func(tx pgx.Tx) error {
+		var err error
+
+		jobs, err = db.New(tx).ClaimJobs(ctx, db.ClaimJobsParams{
+			Worker:       worker,
+			LeaseSeconds: lease.Seconds(),
+			Kinds:        []string{kind},
+			Batch:        batch,
+		})
+		if err != nil {
+			return fmt.Errorf("run the claim: %w", err)
+		}
+
+		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("claim %s jobs: %w", kind, err)
+		return jobs, fmt.Errorf("claim %s jobs: %w", kind, err)
 	}
 
 	return jobs, nil
