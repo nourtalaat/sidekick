@@ -129,9 +129,11 @@ type Client struct {
 // resolving or sending anything: a URL that CheckURL accepts, whose host
 // allowHosts allows. A refused URL returns a BlockedError.
 func (c *Client) Check(rawURL string) error {
-	_, err := c.checkURL(rawURL)
+	if _, err := c.checkURL(rawURL); err != nil {
+		return fmt.Errorf("check the URL: %w", err)
+	}
 
-	return err
+	return nil
 }
 
 // AllowsHost reports whether allowHosts allows host, a host name or IP
@@ -145,24 +147,20 @@ func (c *Client) AllowsHost(host string) bool {
 // BlockedError, and is counted in MetricBlocked; a redirect that is not
 // followed is counted there too, but is a Response. Cookie and Host
 // headers in header are dropped.
-func (c *Client) Get(ctx context.Context, rawURL string, header http.Header) (*Response, error) {
-	resp, err := c.get(ctx, rawURL, header)
-	if blocked, ok := errors.AsType[*BlockedError](err); ok {
-		c.metrics.recordBlocked(blocked.Reason)
-	}
+func (c *Client) Get(ctx context.Context, rawURL string, header http.Header) (_ *Response, err error) {
+	defer func() {
+		if blocked, ok := errors.AsType[*BlockedError](err); ok {
+			c.metrics.recordBlocked(blocked.Reason)
+		}
+	}()
 
-	return resp, err
-}
-
-// get is Get without the metric.
-func (c *Client) get(ctx context.Context, rawURL string, header http.Header) (*Response, error) {
 	u, err := c.checkURL(rawURL)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("check the URL: %w", err)
 	}
 
 	if _, err := c.lookup(ctx, u.Hostname()); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("check the addresses: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
@@ -211,7 +209,7 @@ func (c *Client) get(ctx context.Context, rawURL string, header http.Header) (*R
 func (c *Client) checkURL(rawURL string) (*url.URL, error) {
 	u, err := parseURL(rawURL)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse the URL: %w", err)
 	}
 
 	if !c.hosts.allows(u.Hostname()) {
@@ -345,9 +343,11 @@ func New(opts Options) (*Client, error) {
 // http or https URL with a host and without user info. A refused URL
 // returns a BlockedError.
 func CheckURL(rawURL string) error {
-	_, err := parseURL(rawURL)
+	if _, err := parseURL(rawURL); err != nil {
+		return fmt.Errorf("check the URL: %w", err)
+	}
 
-	return err
+	return nil
 }
 
 // redirectRefusal says why a redirect from the original URL to next, after

@@ -96,9 +96,29 @@ func (s *Scalar) UnmarshalJSON(data []byte) error {
 // operator, a value where the operator needs one, and a regular expression
 // that compiles.
 func (c Condition) Validate() error {
-	_, err := c.compile()
+	hasPath := !c.JSONPath.IsZero()
+	hasRegex := c.TextRegex != ""
 
-	return err
+	switch {
+	case hasPath && hasRegex:
+		return errors.New("set jsonPath or textRegex, not both")
+	case hasRegex && (c.Op != "" || c.Value != ""):
+		return errors.New("op and value go with jsonPath, not textRegex")
+	case hasRegex:
+		if _, err := regexp.Compile(c.TextRegex); err != nil {
+			return fmt.Errorf("textRegex: %w", err)
+		}
+
+		return nil
+	case hasPath:
+		if problem := c.comparisonProblem(); problem != "" {
+			return errors.New(problem)
+		}
+
+		return nil
+	default:
+		return errors.New("set jsonPath with op, or textRegex")
+	}
 }
 
 // compiled is a condition ready to evaluate.
@@ -109,25 +129,12 @@ type compiled struct {
 
 // compile checks the condition and compiles its regular expression.
 func (c Condition) compile() (compiled, error) {
-	hasPath := !c.JSONPath.IsZero()
-	hasRegex := c.TextRegex != ""
-
-	switch {
-	case hasPath && hasRegex:
-		return compiled{}, errors.New("set jsonPath or textRegex, not both")
-	case hasRegex:
-		return c.compileRegex()
-	case hasPath:
-		return compiled{cond: c}, c.checkComparison()
-	default:
-		return compiled{}, errors.New("set jsonPath with op, or textRegex")
+	if err := c.Validate(); err != nil {
+		return compiled{}, fmt.Errorf("invalid condition: %w", err)
 	}
-}
 
-// compileRegex compiles a textRegex condition.
-func (c Condition) compileRegex() (compiled, error) {
-	if c.Op != "" || c.Value != "" {
-		return compiled{}, errors.New("op and value go with jsonPath, not textRegex")
+	if c.TextRegex == "" {
+		return compiled{cond: c}, nil
 	}
 
 	re, err := regexp.Compile(c.TextRegex)
@@ -138,21 +145,22 @@ func (c Condition) compileRegex() (compiled, error) {
 	return compiled{cond: c, regex: re}, nil
 }
 
-// checkComparison checks the operator and value of a jsonPath condition.
-func (c Condition) checkComparison() error {
+// comparisonProblem says what is wrong with the operator and value of a
+// jsonPath condition, or returns "" when nothing is.
+func (c Condition) comparisonProblem() string {
 	switch {
 	case c.Negate:
-		return errors.New("negate goes with textRegex; use notEquals with jsonPath")
+		return "negate goes with textRegex; use notEquals with jsonPath"
 	case c.Op == "":
-		return errors.New("op: required with jsonPath")
+		return "op: required with jsonPath"
 	case !slices.Contains(Ops, c.Op):
-		return fmt.Errorf("op: unknown operator %q; expected one of %s", c.Op, joinOps())
+		return fmt.Sprintf("op: unknown operator %q; expected one of %s", c.Op, joinOps())
 	case c.Op == OpExists && c.Value != "":
-		return errors.New("value: exists takes no value")
+		return "value: exists takes no value"
 	case c.Value == "" && c.Op != OpExists && c.Op != OpEquals && c.Op != OpNotEquals:
-		return fmt.Errorf("value: required with %s", c.Op)
+		return fmt.Sprintf("value: required with %s", c.Op)
 	default:
-		return nil
+		return ""
 	}
 }
 

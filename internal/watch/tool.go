@@ -82,7 +82,7 @@ func (t ToolCheck) Validate() error {
 func (t ToolCheck) run(ctx context.Context, c *Checker, target Target) Outcome {
 	cond, err := t.Condition.compile()
 	if err != nil {
-		return errorOutcome("the condition is not valid: " + err.Error())
+		return errorOutcome(err.Error())
 	}
 
 	input, err := json.Marshal(t.Args)

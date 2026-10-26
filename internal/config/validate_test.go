@@ -114,8 +114,8 @@ func TestValidateFixtures(t *testing.T) {
 		{file: "negative-price", want: []string{"model.prices.claude-opus-5-5.inputPerMTok: must not be negative"}},
 		// Watchers
 		{file: "watch-http", want: []string{
-			`watch.http.allowHosts[1]: host pattern "https://status.example.com": label "https://status" holds ':'; only letters, digits, - and _ are allowed; expected a host name, an IP address, or "*." and a host name`,
-			`watch.http.allowHosts[2]: host pattern "*": label "*" holds '*'; only letters, digits, - and _ are allowed; expected a host name, an IP address, or "*." and a host name`,
+			`watch.http.allowHosts[1]: host pattern "https://status.example.com": label "https://status": holds ':'; only letters, digits, - and _ are allowed; expected a host name, an IP address, or "*." and a host name`,
+			`watch.http.allowHosts[2]: host pattern "*": label "*": holds '*'; only letters, digits, - and _ are allowed; expected a host name, an IP address, or "*." and a host name`,
 			`watch.http.allowPrivate[1]: "10.20.0.0/33" is not an address range such as 10.20.0.0/16 or an IP address`,
 			`watch.http.allowPrivate[2]: "internal.example.com" is not an address range such as 10.20.0.0/16 or an IP address`,
 		}},

@@ -3,7 +3,6 @@ package watch
 import (
 	"context"
 	"errors"
-	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -128,7 +127,7 @@ func (c *Checker) Validate(check Check) error {
 
 	if h, ok := check.(HTTPCheck); ok && h.URL != "" {
 		if err := c.opts.HTTP.Check(h.URL); err != nil && safehttp.CheckURL(h.URL) == nil {
-			hostErr = fmt.Errorf("url: %w", err)
+			hostErr = errors.New("url: " + refusal(err))
 		}
 	}
 

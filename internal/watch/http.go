@@ -80,7 +80,7 @@ func (h HTTPCheck) Validate() error {
 	if h.URL == "" {
 		errs = append(errs, errors.New("url: required"))
 	} else if err := safehttp.CheckURL(h.URL); err != nil {
-		errs = append(errs, fmt.Errorf("url: %w", err))
+		errs = append(errs, errors.New("url: "+refusal(err)))
 	}
 
 	for i, s := range h.Expect.Status {
@@ -228,6 +228,16 @@ func withExcerpt(summary, excerpt string) string {
 	}
 
 	return summary + ": " + excerpt
+}
+
+// refusal returns the message of a URL the safe client refuses, without
+// the client's own wrapping.
+func refusal(err error) string {
+	if blocked, ok := errors.AsType[*safehttp.BlockedError](err); ok {
+		return blocked.Message
+	}
+
+	return err.Error()
 }
 
 // describeGuardError describes a failed guarded call for a detail.

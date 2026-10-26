@@ -196,7 +196,7 @@ func checkHostName(name string) error {
 
 	for label := range strings.SplitSeq(name, ".") {
 		if err := checkLabel(label); err != nil {
-			return err
+			return fmt.Errorf("label %q: %w", label, err)
 		}
 	}
 
@@ -207,16 +207,16 @@ func checkHostName(name string) error {
 func checkLabel(label string) error {
 	switch {
 	case label == "":
-		return errors.New("empty label")
+		return errors.New("empty")
 	case len(label) > maxLabelLen:
-		return fmt.Errorf("label %q is longer than %d characters", label, maxLabelLen)
+		return fmt.Errorf("longer than %d characters", maxLabelLen)
 	case label[0] == '-' || label[len(label)-1] == '-':
-		return fmt.Errorf("label %q starts or ends with -", label)
+		return errors.New("starts or ends with -")
 	}
 
 	for _, c := range label {
 		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '-' && c != '_' {
-			return fmt.Errorf("label %q holds %q; only letters, digits, - and _ are allowed", label, c)
+			return fmt.Errorf("holds %q; only letters, digits, - and _ are allowed", c)
 		}
 	}
 
