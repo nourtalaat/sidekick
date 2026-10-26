@@ -314,8 +314,14 @@ func TestShutdown(t *testing.T) {
 	t.Parallel()
 
 	const (
-		shutdownTimeout = 200 * time.Millisecond
-		grace           = 200 * time.Millisecond
+		// runsOut is the shutdown timeout or grace of a case whose handlers
+		// outlast it. holds is one that every handler of the case returns
+		// within, so that the case does not depend on how fast the machine
+		// is: shutdown goes on as soon as the handlers return.
+		runsOut = 100 * time.Millisecond
+		holds   = waitTimeout
+		// handlerTime is how long a handler that finishes in time runs.
+		handlerTime = 50 * time.Millisecond
 		// startAttempts is the attempts each job has used before the test,
 		// to show that the hand-back leaves them alone.
 		startAttempts = 2
@@ -326,19 +332,23 @@ func TestShutdown(t *testing.T) {
 		name string
 		// handler runs until ctx ends or release is closed, whichever it
 		// heeds.
-		handler      func(ctx context.Context, release <-chan struct{}) error
-		wantStatus   string
-		wantAttempts int32
+		handler         func(ctx context.Context, release <-chan struct{}) error
+		shutdownTimeout time.Duration
+		grace           time.Duration
+		wantStatus      string
+		wantAttempts    int32
 	}{
 		{
 			name: "a handler that finishes in time completes",
 			handler: func(context.Context, <-chan struct{}) error {
-				time.Sleep(shutdownTimeout / 4)
+				time.Sleep(handlerTime)
 
 				return nil
 			},
-			wantStatus:   StatusDone,
-			wantAttempts: startAttempts,
+			shutdownTimeout: holds,
+			grace:           runsOut,
+			wantStatus:      StatusDone,
+			wantAttempts:    startAttempts,
 		},
 		{
 			name: "a handler that stops when cancelled is handed back",
@@ -347,8 +357,10 @@ func TestShutdown(t *testing.T) {
 
 				return ctx.Err()
 			},
-			wantStatus:   StatusPending,
-			wantAttempts: startAttempts,
+			shutdownTimeout: runsOut,
+			grace:           holds,
+			wantStatus:      StatusPending,
+			wantAttempts:    startAttempts,
 		},
 		{
 			name: "a handler that finishes on cancel still completes",
@@ -357,8 +369,10 @@ func TestShutdown(t *testing.T) {
 
 				return nil
 			},
-			wantStatus:   StatusDone,
-			wantAttempts: startAttempts,
+			shutdownTimeout: runsOut,
+			grace:           holds,
+			wantStatus:      StatusDone,
+			wantAttempts:    startAttempts,
 		},
 		{
 			name: "a handler that ignores the cancel is handed back by the runner",
@@ -367,8 +381,10 @@ func TestShutdown(t *testing.T) {
 
 				return nil
 			},
-			wantStatus:   StatusPending,
-			wantAttempts: startAttempts,
+			shutdownTimeout: runsOut,
+			grace:           runsOut,
+			wantStatus:      StatusPending,
+			wantAttempts:    startAttempts,
 		},
 	}
 
@@ -380,8 +396,8 @@ func TestShutdown(t *testing.T) {
 			release := make(chan struct{})
 			started := make(chan struct{}, jobs)
 
-			runner := newTestRunner(t, pool, Options{ShutdownTimeout: shutdownTimeout})
-			runner.handBackGrace = grace
+			runner := newTestRunner(t, pool, Options{ShutdownTimeout: tt.shutdownTimeout})
+			runner.handBackGrace = tt.grace
 			require.NoError(t, runner.Register(KindBenchGate, HandlerFunc(func(ctx context.Context, _ db.Job) error {
 				started <- struct{}{}
 
@@ -412,7 +428,9 @@ func TestShutdown(t *testing.T) {
 				if tt.wantStatus == StatusPending {
 					require.Nil(t, job.LockedBy)
 					require.Nil(t, job.LockedUntil)
-					require.InDelta(t, 0, secondsUntilRunAt(t, pool, id), clockSlack.Seconds(), "ready at once")
+					// run_at is the time of the hand-back, which is in the past by
+					// however long the shutdown and these checks took.
+					require.LessOrEqual(t, secondsUntilRunAt(t, pool, id), 0.0, "ready at once")
 				}
 			}
 		})
