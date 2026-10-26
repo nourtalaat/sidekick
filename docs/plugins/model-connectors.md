@@ -174,12 +174,13 @@ plugins into the binary.
 
 ## Step 8: tests
 
-- Test against recorded provider responses served with `gock`, never the
-  real API, and never with a real key. Cover at least a text turn, a tool
-  call, reasoning, a refusal, the output limit, a rate limit with
-  `retry-after`, an overload and a bad key.
-- Give each parallel test its own host name in the base URL, so `gock`
-  never hands one test the response meant for another.
+- Test against recorded provider responses served by `internal/fakehttp`,
+  never the real API, and never with a real key. Cover at least a text
+  turn, a tool call, reasoning, a refusal, the output limit, a rate limit
+  with `retry-after`, an overload and a bad key.
+- Start one `fakehttp` server per test or subtest and point the connector
+  at it through its base URL and the server's client, so parallel tests
+  share nothing.
 - Show with a two-turn test that reasoning from the first turn reaches the
   provider unchanged in the second.
 - Table-test `Validate` against the capabilities: unsupported effort levels
