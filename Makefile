@@ -63,6 +63,10 @@ CI_TARGETS += verify-generated
 verify-generated: ## Fail if `make generate` changes any file
 	MAKE="$(MAKE)" sh scripts/verify-generated.sh
 
+.PHONY: migrate-new
+migrate-new: ## Create the next goose migration: make migrate-new name=add_jobs
+	sh scripts/migrate-new.sh "$(name)"
+
 CI_TARGETS += build
 .PHONY: build
 build: ## Build bin/sidekick with the version and commit set
