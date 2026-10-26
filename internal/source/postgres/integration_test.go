@@ -179,6 +179,79 @@ func TestLockWaits(t *testing.T) {
 	}
 }
 
+func TestSlowQueries(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// noExtension leaves the seed out, and with it pg_stat_statements.
+		noExtension bool
+		cfg         Config
+		args        map[string]any
+		wantText    string
+		wantCut     bool
+	}{
+		{name: "the slowest statement first", args: map[string]any{"minMeanMs": 150}},
+		{name: "by total time", args: map[string]any{"orderBy": "total", "limit": 1}, wantCut: true},
+		{name: "omitQueryText leaves the text out", cfg: Config{OmitQueryText: true}, args: map[string]any{"minMeanMs": 150}},
+		{name: "a minimum no statement reaches", args: map[string]any{"minMeanMs": 60_000}, wantText: "No statement in database orders"},
+		{name: "a database without the extension", noExtension: true, wantText: "The pg_stat_statements extension is not installed in database orders"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			seed := "fixture/seed.sql"
+			if tt.noExtension {
+				seed = ""
+			}
+
+			db := setupWith(t, seed)
+
+			for range 2 {
+				_, err := db.admin.Exec(t.Context(), "SELECT pg_sleep(0.2)")
+				require.NoError(t, err)
+			}
+
+			s, _ := newSource(t, tt.cfg, monitor(db))
+
+			args := map[string]any{"database": "orders"}
+			for k, v := range tt.args {
+				args[k] = v
+			}
+
+			res, err := s.Call(t.Context(), source.Call{Tool: toolSlowQueries, Input: toolInput(t, args)})
+			require.NoError(t, err)
+
+			if tt.wantText != "" {
+				require.True(t, res.NoData)
+				require.Contains(t, res.Text, tt.wantText)
+
+				return
+			}
+
+			var got statementsResult
+			require.NoError(t, json.Unmarshal(res.Structured, &got))
+			require.NotEmpty(t, got.Statements)
+			require.Equal(t, tt.wantCut, res.Truncated)
+
+			first := got.Statements[0]
+			require.Equal(t, testAdminUser, first.Role)
+			require.EqualValues(t, 2, first.Calls)
+			require.GreaterOrEqual(t, first.MeanMs, 190.0)
+			require.NotNil(t, first.QueryID)
+
+			if tt.cfg.OmitQueryText {
+				require.True(t, got.QueryTextOmitted)
+				require.Nil(t, first.Query)
+			} else {
+				require.Equal(t, "SELECT pg_sleep($1)", *first.Query)
+			}
+		})
+	}
+}
+
 // TestSafety checks the limits every query runs under, and the checks on
 // the role and the connection.
 func TestSafety(t *testing.T) {
@@ -383,6 +456,8 @@ func TestThroughTheGuardIntegration(t *testing.T) {
 func TestQueryPlans(t *testing.T) {
 	t.Parallel()
 
+	view := pgx.Identifier{"public", "pg_stat_statements"}.Sanitize()
+
 	tests := []struct {
 		name string
 		sql  string
@@ -390,6 +465,8 @@ func TestQueryPlans(t *testing.T) {
 	}{
 		{name: "the role check", sql: roleSQL},
 		{name: "the timeouts", sql: timeoutsSQL, args: []any{"10000", "1000"}},
+		{name: "the pg_stat_statements schema", sql: extensionSchemaSQL},
+		{name: "slow_queries", sql: fmt.Sprintf(statementsSQL, view), args: []any{true, maxQueryLen, 0.0, orderMean, defaultLimit + 1}},
 		{name: "running_queries", sql: activitySQL, args: []any{true, maxQueryLen, 0.0, defaultLimit + 1}},
 		{name: "lock_waits: waiting sessions", sql: waitingSQL, args: []any{true, maxQueryLen, 0.0, defaultLimit + 1}},
 		{name: "lock_waits: blocking sessions", sql: blockersSQL, args: []any{true, maxQueryLen, []int32{1, 2, 3}, maxLimit + 1}},

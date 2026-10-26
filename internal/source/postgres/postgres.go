@@ -247,6 +247,8 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (source
 // readerOf returns the reader of a tool.
 func readerOf(tool string) (reader, error) {
 	switch tool {
+	case toolSlowQueries:
+		return slowQueries, nil
 	case toolRunningQueries:
 		return runningQueries, nil
 	case toolLockWaits:

@@ -259,7 +259,7 @@ func TestThroughTheGuard(t *testing.T) {
 				names = append(names, spec.Name)
 			}
 
-			require.Equal(t, []string{"db__running_queries", "db__lock_waits"}, names)
+			require.Equal(t, []string{"db__slow_queries", "db__running_queries", "db__lock_waits"}, names)
 
 			res := run.Call(t.Context(), model.ToolCall{ID: "call-1", Name: "db__running_queries", Input: json.RawMessage(tt.input)})
 			require.True(t, res.ToolResult.IsError)

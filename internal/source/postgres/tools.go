@@ -14,6 +14,7 @@ import (
 // Tool names, as the source names them. The model sees them with the
 // source prefix, for example db__slow_queries.
 const (
+	toolSlowQueries    = "slow_queries"
 	toolRunningQueries = "running_queries"
 	toolLockWaits      = "lock_waits"
 )
@@ -30,13 +31,21 @@ const (
 	maxDurationMs = 24 * 60 * 60 * 1000
 )
 
+// Orders of slow_queries.
+const (
+	orderMean  = "mean"
+	orderTotal = "total"
+)
+
 // input is the input of every tool. Each tool reads the fields its schema
 // has.
 type input struct {
 	Database      string `json:"database"`
 	Limit         int    `json:"limit"`
+	MinMeanMs     int64  `json:"minMeanMs"`
 	MinDurationMs int64  `json:"minDurationMs"`
 	MinWaitMs     int64  `json:"minWaitMs"`
+	OrderBy       string `json:"orderBy"`
 }
 
 // limit returns the limit the call gives, or defaultLimit, within 1 and
@@ -54,6 +63,23 @@ func (in input) limit() int {
 // Every tool only reads.
 func toolList(databases []string) []source.Tool {
 	return []source.Tool{
+		{
+			Name: toolSlowQueries,
+			Description: "List the statements that took the most execution time in a Postgres database, from " +
+				"pg_stat_statements: calls, mean, max and total time in milliseconds, rows, cache hits and reads, and " +
+				"the statement's text. Counts are totals since the statistics were last reset. Needs the " +
+				"pg_stat_statements extension; when it is missing, use running_queries for what runs now.",
+			InputSchema: schema(databases, map[string]*jsonschema.Schema{
+				"minMeanMs": durationProperty("Only statements whose mean execution time is at least this many milliseconds. Default 0."),
+				"orderBy": {
+					Type:        "string",
+					Description: "Order by the mean time of one call (mean) or the total time of all calls (total). Default mean.",
+					Enum:        []any{orderMean, orderTotal},
+				},
+				"limit": limitProperty(),
+			}),
+			ReadOnly: true,
+		},
 		{
 			Name: toolRunningQueries,
 			Description: "List the sessions of a Postgres database that are running a query or holding a " +
