@@ -15,12 +15,14 @@ func TestBudgetReached(t *testing.T) {
 	started := time.Date(2026, 10, 26, 14, 0, 0, 0, time.UTC)
 
 	tests := []struct {
-		name     string
-		budget   Budget
-		inv      db.Investigation
-		elapsed  time.Duration
-		want     string
-		wantHard bool
+		name    string
+		budget  Budget
+		inv     db.Investigation
+		elapsed time.Duration
+		// dailyCapped says a daily cap is reached.
+		dailyCapped bool
+		want        string
+		wantHard    bool
 	}{
 		{name: "nothing used", budget: Budget{MaxToolCalls: 40, MaxCostMicros: 1_000_000, MaxWallTime: 10 * time.Minute}},
 		{name: "no limits", inv: db.Investigation{ToolCalls: 1000, CostMicros: 1 << 40}, elapsed: 24 * time.Hour},
@@ -72,6 +74,20 @@ func TestBudgetReached(t *testing.T) {
 			want:    budgetWallTime,
 		},
 		{
+			name:        "a daily cap",
+			budget:      Budget{MaxToolCalls: 40},
+			dailyCapped: true,
+			want:        budgetDailyCap,
+		},
+		{
+			name:        "a used up cost before a daily cap",
+			budget:      Budget{MaxCostMicros: 1_000_000},
+			inv:         db.Investigation{CostMicros: 1_000_000},
+			dailyCapped: true,
+			want:        budgetCost,
+			wantHard:    true,
+		},
+		{
 			name:    "just before the soft limit of a short wall time",
 			budget:  Budget{MaxWallTime: 2 * time.Minute},
 			elapsed: 107 * time.Second,
@@ -90,7 +106,7 @@ func TestBudgetReached(t *testing.T) {
 
 			r := &run{budget: tt.budget, inv: inv, hist: hist}
 
-			got, hard := r.budgetReached(started.Add(tt.elapsed))
+			got, hard := r.budgetReached(started.Add(tt.elapsed), tt.dailyCapped)
 			require.Equal(t, tt.want, got)
 			require.Equal(t, tt.wantHard, hard)
 		})

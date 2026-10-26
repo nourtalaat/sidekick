@@ -6,6 +6,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
@@ -16,6 +17,7 @@ const (
 	MetricDuration        = "sidekick_investigation_duration_seconds"
 	MetricFirstFinding    = "sidekick_time_to_first_finding_seconds"
 	MetricBudgetExhausted = "sidekick_budget_exhausted_total"
+	MetricEventsSkipped   = "sidekick_events_skipped_total"
 )
 
 // Metric labels.
@@ -24,6 +26,7 @@ const (
 	labelVerdict    = "verdict"
 	labelStopReason = "stop_reason"
 	labelBudget     = "budget"
+	labelReason     = "reason"
 )
 
 // Duration buckets: an investigation takes from a few seconds to its wall
@@ -42,6 +45,19 @@ type Metrics struct {
 	duration        *prometheus.HistogramVec
 	firstFindings   *prometheus.HistogramVec
 	budgetExhausted *prometheus.CounterVec
+	skippedEvents   *prometheus.CounterVec
+	// reg is where NewMetrics registered them, for the collectors New adds.
+	reg prometheus.Registerer
+}
+
+// skipped counts the event of an investigation that is not run, for
+// reason.
+func (m *Metrics) skipped(route, reason string) {
+	if m == nil {
+		return
+	}
+
+	m.skippedEvents.WithLabelValues(route, reason).Inc()
 }
 
 // running counts one run of the route as running, until the returned
@@ -84,11 +100,25 @@ func (m *Metrics) finished(inv db.Investigation, end ending) {
 	}
 }
 
+// register adds c to the registry of m.
+func (m *Metrics) register(c prometheus.Collector) error {
+	if m == nil {
+		return nil
+	}
+
+	if err := m.reg.Register(c); err != nil {
+		return fmt.Errorf("register investigation metrics: %w", err)
+	}
+
+	return nil
+}
+
 // NewMetrics makes the investigation metrics and registers them with reg.
 func NewMetrics(reg prometheus.Registerer) (*Metrics, error) {
 	buckets := prometheus.ExponentialBuckets(durationFirstBucket, durationFactor, durationBuckets)
 
 	m := &Metrics{
+		reg: reg,
 		investigations: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: MetricInvestigations,
 			Help: "Investigations that ended, by route, verdict and stop reason.",
@@ -109,7 +139,7 @@ func NewMetrics(reg prometheus.Registerer) (*Metrics, error) {
 		}, []string{labelRoute}),
 		budgetExhausted: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: MetricBudgetExhausted,
-			Help: "Investigations that ended because a budget ran out, by route and budget: tokens, tool_calls, wall_time or cost.",
+			Help: "Investigations that ended because a budget ran out, by route and budget: tokens, tool_calls, wall_time, cost or daily_cap.",
 		}, []string{labelRoute, labelBudget}),
 	}
 
@@ -119,5 +149,28 @@ func NewMetrics(reg prometheus.Registerer) (*Metrics, error) {
 		}
 	}
 
+	skipped, err := NewSkippedEvents(reg)
+	if err != nil {
+		return nil, fmt.Errorf("register investigation metrics: %w", err)
+	}
+
+	m.skippedEvents = skipped
+
 	return m, nil
+}
+
+// NewSkippedEvents returns sidekick_events_skipped_total registered with
+// reg, or the one registered there already, so the router, which skips
+// events over a rate limit, and the investigator, which skips them at a
+// daily cap, count in the same metric.
+func NewSkippedEvents(reg prometheus.Registerer) (*prometheus.CounterVec, error) {
+	c, err := registry.RegisterOrExisting(reg, prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: MetricEventsSkipped,
+		Help: "Events that are not investigated, by route and reason: rate_limit or daily_cap.",
+	}, []string{labelRoute, labelReason}))
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", MetricEventsSkipped, err)
+	}
+
+	return c, nil
 }

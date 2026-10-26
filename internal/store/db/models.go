@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Event struct {
@@ -121,6 +122,16 @@ type PublishState struct {
 	Phase           string
 	Body            json.RawMessage
 	UpdatedAt       time.Time
+}
+
+type SpendDaily struct {
+	Day          pgtype.Date
+	Route        string
+	Connector    string
+	Model        string
+	CostMicros   int64
+	InputTokens  int64
+	OutputTokens int64
 }
 
 type Step struct {

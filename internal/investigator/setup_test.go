@@ -70,11 +70,14 @@ type options struct {
 	// startedAgo, when set, makes the investigation look as if its first
 	// run started that long ago.
 	startedAgo time.Duration
-	// stoppedTime starts the investigation at stoppedAt and stops the
-	// handler's clock there, so the final turn for the wall time never
-	// starts, and the wall time is counted only from the start of the
-	// agent loop, after the prompt is saved.
+	// stoppedTime stops the handler's clock at stoppedAt, when the run
+	// starts, so the final turn for the wall time never starts, and the
+	// wall time is counted only from the start of the agent loop, after
+	// the prompt is saved.
 	stoppedTime bool
+	// route is the payments route's settings, and daily the daily caps.
+	route Route
+	daily DailyCaps
 }
 
 // harness is a Handler with a scripted connector and a fake signoz source
@@ -116,11 +119,10 @@ func setup(t *testing.T, o options) *harness {
 
 	h := &harness{pool: pool, conn: conn, spans: tracetest.NewSpanRecorder(), registry: prometheus.NewRegistry()}
 	h.handler = newHandler(t, pool, conn, fakeSignoz(t), h.spans, h.registry)
+	h.handler.opts.Routes["payments"] = o.route
+	h.handler.opts.Daily = o.daily
 
 	if o.stoppedTime {
-		_, err = pool.Exec(t.Context(), "UPDATE investigations SET started_at = $1 WHERE id = $2", stoppedAt, testInvestigation)
-		require.NoError(t, err)
-
 		h.handler.now = func() time.Time { return stoppedAt }
 	}
 

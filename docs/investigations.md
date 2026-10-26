@@ -67,7 +67,7 @@ either.
 |---|---|---|
 | `submitted` | The model submitted a report that passed its checks. | The model's |
 | `no_verdict` | The report failed its checks 3 times, or the model ended its turn without calling a tool 3 times (after 2 reminders). | Not sure yet |
-| `budget` | A budget ran out: tokens, tool calls, time or cost. | Not sure yet |
+| `budget` | A budget ran out: tokens, tool calls, time or cost, or a daily cap was reached. | Not sure yet |
 | `error` | The model refused the request for good, for example because it was too long, or the job failed on every attempt. | Could not finish |
 
 The first three end in status `final`; `error` ends in status `failed`.
@@ -106,6 +106,12 @@ cost are used up before the last turn could start. Either way
 `sidekick_budget_exhausted_total` counts it, with the budget as its
 `budget` label.
 
+A [daily cap](configuration.md#daily-caps) is checked before an
+investigation starts and before each model call. Before it starts, a cap
+that is reached holds it until the next day or ends it at once, as
+`onDailyCap` says; once it runs, a cap that is reached gives the model
+its last turn as above, with `daily_cap` as the budget.
+
 `budgets.concurrency` and each route's `concurrency` limit how many
 investigations run at once across all replicas; the others wait in the
 queue.
@@ -131,3 +137,11 @@ Each model answer is saved with its tokens and its cost, from the price
 table (see [the `model` section](configuration.md#model)), and the
 investigation keeps the totals. A model without a price is saved without a
 cost.
+
+Each answer's cost and tokens are also added to the day's spend of its
+route, connector and model, in the same database write as the answer, so
+the [daily caps](configuration.md#daily-caps) always see what was spent.
+The day starts at midnight in `budgets.daily.timeZone`. The gauge
+`sidekick_daily_spend_usd`, with a `route` label, shows what each route
+has spent today, read from the database at each scrape, so every replica
+shows the same total.

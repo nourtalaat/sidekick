@@ -99,7 +99,9 @@ process (`process_*`) metrics, this release has:
 | `sidekick_investigations_running` | gauge | `route` | Investigations running on this replica. Sum it across replicas. |
 | `sidekick_investigation_duration_seconds` | histogram | `route` | Time from the start of an investigation to its end. |
 | `sidekick_time_to_first_finding_seconds` | histogram | `route` | Time from the start of an investigation to its first recorded finding. |
-| `sidekick_budget_exhausted_total` | counter | `route`, `budget` | Investigations that ended at a limit: `tool_calls` or `wall_time`. |
+| `sidekick_budget_exhausted_total` | counter | `route`, `budget` | Investigations that ended at a limit: `tokens`, `tool_calls`, `wall_time`, `cost` or `daily_cap`. See [Limits](investigations.md#limits). |
+| `sidekick_daily_spend_usd` | gauge | `route` | What each route has spent today on model calls, in US dollars. Read from the database at each scrape, so every replica reports the same numbers; combine replicas with `max`. |
+| `sidekick_events_skipped_total` | counter | `route`, `reason` | Events that are not investigated, by reason: `rate_limit` or `daily_cap`. See [Daily caps](configuration.md#daily-caps) and [Rate limits](configuration.md#rate-limits). |
 | `sidekick_model_calls_total` | counter | `connector`, `model`, `role`, `outcome` | Model calls, one per attempt, by outcome: `ok` or the error kind, such as `rate_limited`. |
 | `sidekick_model_call_duration_seconds` | histogram | `connector`, `model` | Duration of model calls. |
 | `sidekick_model_tokens_total` | counter | `connector`, `model`, `kind` | Tokens used, by kind: `input`, `output`, `cache_read` or `cache_write`. |

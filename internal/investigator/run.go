@@ -221,7 +221,12 @@ func (r *run) untilEnd(ctx, runCtx context.Context) (ending, error) {
 			continue
 		}
 
-		if budget, hard := r.budgetReached(r.h.now()); budget != "" {
+		dailyCapped, err := r.dailyCapped(ctx)
+		if err != nil {
+			return ending{}, fmt.Errorf("check the daily caps: %w", err)
+		}
+
+		if budget, hard := r.budgetReached(r.h.now(), dailyCapped); budget != "" {
 			if hard {
 				return r.overBudget(budget), nil
 			}

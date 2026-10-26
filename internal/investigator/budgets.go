@@ -50,14 +50,16 @@ var budgetNames = map[string]string{
 	budgetToolCalls: "tool calls",
 	budgetWallTime:  "time limit",
 	budgetCost:      "cost budget",
+	budgetDailyCap:  "daily spending cap",
 }
 
 // budgetReached returns the budget that stops the run before its next
 // model call, if one does, and whether it is used up, so the run ends
 // without a final turn. Tokens and cost are used up at their limit; a
-// budget at its soft limit gives the model a final turn first. Tool calls
-// and the wall time always allow the final turn, which needs neither.
-func (r *run) budgetReached(now time.Time) (budget string, hard bool) {
+// budget at its soft limit gives the model a final turn first. Tool calls,
+// the wall time and a daily cap that dailyCapped says is reached always
+// allow the final turn.
+func (r *run) budgetReached(now time.Time, dailyCapped bool) (budget string, hard bool) {
 	b := r.budget
 	tokens := r.hist.tokens()
 
@@ -74,6 +76,8 @@ func (r *run) budgetReached(now time.Time) (budget string, hard bool) {
 		return budgetToolCalls, false
 	case r.pastSoftDeadline(now):
 		return budgetWallTime, false
+	case dailyCapped:
+		return budgetDailyCap, false
 	default:
 		return "", false
 	}
@@ -89,6 +93,16 @@ func (r *run) pastSoftDeadline(now time.Time) bool {
 	margin := min(wallTimeMargin, r.budget.MaxWallTime*wallTimeMarginPercent/percent)
 
 	return now.After(r.inv.StartedAt.Add(r.budget.MaxWallTime - margin))
+}
+
+// dailyCapped reports whether a daily cap of the run's route is reached.
+func (r *run) dailyCapped(ctx context.Context) (bool, error) {
+	_, reached, err := r.h.dailyCap(ctx, r.inv.Route)
+	if err != nil {
+		return false, fmt.Errorf("route %s: %w", r.inv.Route, err)
+	}
+
+	return reached, nil
 }
 
 // startFinalTurn saves the note that starts the final turn for budget.
@@ -158,6 +172,8 @@ func (r *run) overBudget(budget string) ending {
 		reason = fmt.Sprintf("The investigation used its budget of %d tokens before it reached a verdict.", r.budget.MaxTokens)
 	case budgetCost:
 		reason = fmt.Sprintf("The investigation used its cost budget of %s before it reached a verdict.", usd(r.budget.MaxCostMicros))
+	case budgetDailyCap:
+		reason = "The daily spending cap was reached before the investigation reached a verdict."
 	}
 
 	return ending{report: r.hist.inconclusive(report.StopBudget, reason, r.limitText(budget)+" reached"), budget: budget}
@@ -175,6 +191,8 @@ func (r *run) limitText(budget string) string {
 		return fmt.Sprintf("maxWallTime %s", r.budget.MaxWallTime)
 	case budgetCost:
 		return "maxCostUSD " + dollars(r.budget.MaxCostMicros)
+	case budgetDailyCap:
+		return "daily cap"
 	default:
 		return budget
 	}
