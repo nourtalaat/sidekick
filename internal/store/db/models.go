@@ -26,6 +26,7 @@ type Event struct {
 	Service     *string
 	Severity    *string
 	Labels      json.RawMessage
+	Links       []byte
 	Fingerprint string
 	Slack       []byte
 	Raw         []byte
@@ -34,6 +35,7 @@ type Event struct {
 	Route       *string
 	GroupID     *uuid.UUID
 	StartsAt    *time.Time
+	EndsAt      *time.Time
 	ReceivedAt  time.Time
 }
 

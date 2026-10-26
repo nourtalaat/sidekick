@@ -14,7 +14,7 @@ import (
 )
 
 const getEvent = `-- name: GetEvent :one
-SELECT id, intake, key, kind, sender_kind, sender_id, sender_name, trusted, alert_name, title, body, service, severity, labels, fingerprint, slack, raw, status, skip_reason, route, group_id, starts_at, received_at FROM events WHERE id = $1
+SELECT id, intake, key, kind, sender_kind, sender_id, sender_name, trusted, alert_name, title, body, service, severity, labels, links, fingerprint, slack, raw, status, skip_reason, route, group_id, starts_at, ends_at, received_at FROM events WHERE id = $1
 `
 
 func (q *Queries) GetEvent(ctx context.Context, id uuid.UUID) (Event, error) {
@@ -35,6 +35,7 @@ func (q *Queries) GetEvent(ctx context.Context, id uuid.UUID) (Event, error) {
 		&i.Service,
 		&i.Severity,
 		&i.Labels,
+		&i.Links,
 		&i.Fingerprint,
 		&i.Slack,
 		&i.Raw,
@@ -43,6 +44,7 @@ func (q *Queries) GetEvent(ctx context.Context, id uuid.UUID) (Event, error) {
 		&i.Route,
 		&i.GroupID,
 		&i.StartsAt,
+		&i.EndsAt,
 		&i.ReceivedAt,
 	)
 	return i, err
@@ -51,8 +53,8 @@ func (q *Queries) GetEvent(ctx context.Context, id uuid.UUID) (Event, error) {
 const insertEvent = `-- name: InsertEvent :one
 INSERT INTO events (
   id, intake, key, kind, sender_kind, sender_id, sender_name, trusted,
-  alert_name, title, body, service, severity, labels, fingerprint, slack,
-  raw, status, skip_reason, starts_at, received_at
+  alert_name, title, body, service, severity, labels, links, fingerprint,
+  slack, raw, status, skip_reason, starts_at, ends_at, received_at
 )
 VALUES (
   $1,
@@ -75,7 +77,9 @@ VALUES (
   $18,
   $19,
   $20,
-  $21
+  $21,
+  $22,
+  $23
 )
 ON CONFLICT (intake, key) DO NOTHING
 RETURNING id
@@ -96,12 +100,14 @@ type InsertEventParams struct {
 	Service     *string
 	Severity    *string
 	Labels      json.RawMessage
+	Links       []byte
 	Fingerprint string
 	Slack       []byte
 	Raw         []byte
 	Status      string
 	SkipReason  *string
 	StartsAt    *time.Time
+	EndsAt      *time.Time
 	ReceivedAt  time.Time
 }
 
@@ -123,12 +129,14 @@ func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) (uuid.
 		arg.Service,
 		arg.Severity,
 		arg.Labels,
+		arg.Links,
 		arg.Fingerprint,
 		arg.Slack,
 		arg.Raw,
 		arg.Status,
 		arg.SkipReason,
 		arg.StartsAt,
+		arg.EndsAt,
 		arg.ReceivedAt,
 	)
 	var id uuid.UUID

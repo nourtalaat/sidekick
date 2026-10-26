@@ -127,6 +127,17 @@ func TestHooks(t *testing.T) {
 				require.NoError(t, json.Unmarshal(events[2].Raw, &raw))
 				require.Len(t, raw["alerts"], 1)
 
+				generator := "http://prometheus.example.com/graph?g0.expr=job%3Acheckout_errors%3Arate5m+%3E+0.05"
+				require.JSONEq(t, `[{"title": "Source", "url": "`+generator+`"}, {"title": "Runbook", "url": "https://runbooks.example.com/high-error-rate"}]`, string(events[0].Links))
+				require.Nil(t, events[0].EndsAt, "a firing alert has no end time")
+				require.Nil(t, events[1].Links, "an alert without links stores NULL")
+
+				resolved, err := db.New(h.pool).GetEvent(t.Context(), events[2].ID)
+				require.NoError(t, err)
+				require.JSONEq(t, `[{"title": "Source", "url": "`+generator+`"}]`, string(resolved.Links))
+				require.NotNil(t, resolved.EndsAt)
+				require.Equal(t, time.Date(2026, 10, 26, 9, 10, 0, 0, time.UTC), resolved.EndsAt.UTC())
+
 				require.Equal(t, []jobRow{routeJob(events[0]), routeJob(events[1])}, h.jobs(t), "the resolved alert gets no route_event job")
 			},
 		},

@@ -22,6 +22,8 @@ CREATE TABLE events (
   service     text,
   severity    text,
   labels      jsonb NOT NULL DEFAULT '{}',
+  -- [{"title": ..., "url": ...}], the links the sender attached.
+  links       jsonb,
   fingerprint text NOT NULL,
   -- team, channel, ts, thread_ts and user of a Slack message.
   slack       jsonb,
@@ -32,6 +34,7 @@ CREATE TABLE events (
   route       text,
   group_id    uuid,
   starts_at   timestamptz,
+  ends_at     timestamptz,
   received_at timestamptz NOT NULL,
   UNIQUE (intake, key)
 );

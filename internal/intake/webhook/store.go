@@ -46,6 +46,12 @@ type routeEventPayload struct {
 	EventID uuid.UUID `json:"event_id"`
 }
 
+// storedLink is one entry of events.links.
+type storedLink struct {
+	Title string `json:"title"`
+	URL   string `json:"url"`
+}
+
 // storedEvent is what happened to one event of a delivery.
 type storedEvent struct {
 	id        uuid.UUID
@@ -107,14 +113,19 @@ func (h *Handler) store(ctx context.Context, ep endpoint, req intake.Request, ev
 }
 
 // row builds the events row for ev. Every text from the payload is
-// redacted. The key is kept as it is unless the redactor finds something
+// redacted, and a link whose URL redaction would change is dropped. The key is kept as it is unless the redactor finds something
 // in it, it is too long, or it is not valid text; then it is stored as its
 // SHA-256, which still makes a repeated delivery map to the same row.
 // Trust comes from the endpoint's config.
 func (h *Handler) row(ep endpoint, req intake.Request, ev event.Event) (db.InsertEventParams, error) {
 	labels, err := h.redactedLabels(ev.Labels)
 	if err != nil {
-		return db.InsertEventParams{}, err
+		return db.InsertEventParams{}, fmt.Errorf("redact labels: %w", err)
+	}
+
+	links, err := h.redactedLinks(ev.Links)
+	if err != nil {
+		return db.InsertEventParams{}, fmt.Errorf("redact links: %w", err)
 	}
 
 	fingerprint := ev.Fingerprint
@@ -137,10 +148,12 @@ func (h *Handler) row(ep endpoint, req intake.Request, ev event.Event) (db.Inser
 		Service:     h.redactedText(ev.Service),
 		Severity:    optional(string(cmp.Or(ev.Severity, event.SeverityUnknown))),
 		Labels:      labels,
+		Links:       links,
 		Fingerprint: dbText(h.redactor.Text(fingerprint).Text),
 		Raw:         h.redactedJSON(ev.Raw),
 		Status:      statusReceived,
 		StartsAt:    optionalTime(ev.StartsAt),
+		EndsAt:      optionalTime(ev.EndsAt),
 		ReceivedAt:  req.ReceivedAt,
 	}
 
@@ -195,6 +208,33 @@ func (h *Handler) redactedLabels(labels map[string]string) (json.RawMessage, err
 	}
 
 	return h.redactedJSON(raw), nil
+}
+
+// redactedLinks returns the links as a JSON array of title and URL, with
+// each title redacted. A link whose URL the redactor would change, or that
+// a text column cannot hold, is dropped, because a URL with a placeholder in
+// it is broken. No links give nil, for NULL.
+func (h *Handler) redactedLinks(links []event.Link) ([]byte, error) {
+	kept := make([]storedLink, 0, len(links))
+
+	for _, l := range links {
+		if l.URL == "" || !validText(l.URL) || h.redactor.Text(l.URL).Text != l.URL {
+			continue
+		}
+
+		kept = append(kept, storedLink{Title: dbText(h.redactor.Text(l.Title).Text), URL: l.URL})
+	}
+
+	if len(kept) == 0 {
+		return nil, nil
+	}
+
+	raw, err := json.Marshal(kept)
+	if err != nil {
+		return nil, fmt.Errorf("encode links: %w", err)
+	}
+
+	return raw, nil
 }
 
 // redactedJSON redacts raw and makes it fit a jsonb column. Empty input

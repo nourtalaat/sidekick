@@ -199,6 +199,63 @@ func TestStoredKey(t *testing.T) {
 	}
 }
 
+func TestRedactedLinks(t *testing.T) {
+	t.Parallel()
+
+	redactor, err := redact.New(redact.Options{HashKey: []byte("key"), Custom: []redact.Rule{{Name: "seeded", Pattern: "SEEDED-[0-9]+"}}})
+	require.NoError(t, err)
+
+	h := &Handler{redactor: redactor}
+
+	tests := []struct {
+		name  string
+		links []event.Link
+		want  string
+	}{
+		{name: "no links", want: ""},
+		{
+			name:  "links are kept with their titles",
+			links: []event.Link{{Title: "Runbook", URL: "https://runbooks.example.com/disk"}, {URL: "https://grafana.example.com/d/1"}},
+			want:  `[{"title": "Runbook", "url": "https://runbooks.example.com/disk"}, {"title": "", "url": "https://grafana.example.com/d/1"}]`,
+		},
+		{
+			name:  "a title is redacted",
+			links: []event.Link{{Title: "Dashboard SEEDED-1", URL: "https://grafana.example.com/d/1"}},
+			want:  `[{"title": "Dashboard ` + redactor.Text("SEEDED-1").Text + `", "url": "https://grafana.example.com/d/1"}]`,
+		},
+		{
+			name: "a link whose URL redaction changes is dropped",
+			links: []event.Link{
+				{Title: "Leaky", URL: "https://example.com/?token=SEEDED-2"},
+				{Title: "Kept", URL: "https://example.com/ok"},
+			},
+			want: `[{"title": "Kept", "url": "https://example.com/ok"}]`,
+		},
+		{
+			name:  "links without a usable URL are dropped",
+			links: []event.Link{{Title: "Empty"}, {Title: "NUL", URL: "https://example.com/\x00"}},
+			want:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := h.redactedLinks(tt.links)
+			require.NoError(t, err)
+
+			if tt.want == "" {
+				require.Nil(t, got)
+
+				return
+			}
+
+			require.JSONEq(t, tt.want, string(got))
+		})
+	}
+}
+
 func TestDBText(t *testing.T) {
 	t.Parallel()
 
