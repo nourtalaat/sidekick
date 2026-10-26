@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/http"
 
 	"github.com/spf13/cobra"
 
 	"github.com/nourtalaat/sidekick/internal/config"
+	"github.com/nourtalaat/sidekick/internal/httpclient"
 	_ "github.com/nourtalaat/sidekick/internal/plugins" // Registers the built-in plugin types.
 	"github.com/nourtalaat/sidekick/internal/registry"
 )
@@ -92,7 +92,7 @@ func validateConfig(cmd *cobra.Command, regs config.Registries, file string, che
 		return nil
 	}
 
-	deps := registry.Deps{HTTP: http.DefaultClient, Logger: slog.New(slog.DiscardHandler)}
+	deps := registry.Deps{HTTP: httpclient.New(), Logger: slog.New(slog.DiscardHandler)}
 
 	instances, err := config.Build(ctx, cfg, regs, deps)
 	if err != nil {

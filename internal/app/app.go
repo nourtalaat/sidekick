@@ -23,6 +23,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/buildinfo"
 	"github.com/nourtalaat/sidekick/internal/config"
+	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/store"
@@ -265,7 +266,7 @@ func (a *App) start(ctx context.Context, regs config.Registries) error {
 		return fmt.Errorf("migrate at start-up: %w", err)
 	}
 
-	deps := registry.Deps{HTTP: http.DefaultClient, Logger: a.telemetry.Logger()}
+	deps := registry.Deps{HTTP: httpclient.New(), Logger: a.telemetry.Logger()}
 
 	instances, err := config.Build(ctx, a.cfg, regs, deps)
 	if err != nil {
