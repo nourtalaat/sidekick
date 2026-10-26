@@ -160,6 +160,7 @@ point each tool at Sidekick and which fields become what.
 | Adapter | Sender |
 |---|---|
 | `signoz` | A SigNoz webhook notification channel. |
+| `datadog` | Datadog's webhooks integration, with the payload the setup page gives. |
 
 ### Severities
 
