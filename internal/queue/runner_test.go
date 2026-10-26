@@ -432,7 +432,7 @@ func TestLimitsHoldWithTwoRunners(t *testing.T) {
 	limits := Limits{Global: 3, Routes: map[string]int{"a": 1, "b": 2}}
 	routes := []string{"a", "b", "c"}
 	url := storetest.NewURL(t)
-	tracker := newConcurrencyTracker(len(routes) * jobsPerRoute)
+	tracker := newConcurrencyTracker(len(routes)*jobsPerRoute, limits.Global)
 
 	handler := HandlerFunc(func(_ context.Context, job db.Job) error {
 		route := deref(job.Route)
