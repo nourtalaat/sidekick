@@ -71,6 +71,10 @@ type Result struct {
 	// are empty for an unknown tool.
 	Source string
 	Tool   string
+	// Text is the redacted text of the result, without the untrusted data
+	// markers of ToolResult. It is still untrusted: never show it to the
+	// model, or log it, without wrapping it.
+	Text string
 	// Structured is the redacted structured content, if any.
 	Structured json.RawMessage
 	// Evidence are the source's links, redacted, with ToolCallID set.
@@ -85,6 +89,20 @@ type Result struct {
 // qualified names.
 func (r *Run) Tools() []model.ToolSpec {
 	return slices.Clone(r.specs)
+}
+
+// QualifiedName returns the name the run exposes the source's tool as,
+// with tools.rename applied, so a caller that knows the tool by the
+// source's own name can Call it. It reports false when the run does not
+// expose the tool.
+func (r *Run) QualifiedName(sourceName, tool string) (string, bool) {
+	for name, t := range r.tools {
+		if t.src.name == sourceName && t.exposed.Tool.Name == tool {
+			return name, true
+		}
+	}
+
+	return "", false
 }
 
 // Call runs one model tool call through the guard: it checks the input
@@ -346,6 +364,7 @@ func (g *Guard) redactResult(sourceName string, call model.ToolCall, res source.
 	structured, stats := g.redactor.JSON(res.Structured)
 
 	out := Result{
+		Text:       text.Text,
 		Structured: structured,
 		NoData:     res.NoData,
 		Truncated:  res.Truncated || text.Truncated || stats.Truncated,
