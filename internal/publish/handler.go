@@ -17,6 +17,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/output"
 	"github.com/nourtalaat/sidekick/internal/queue"
+	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
@@ -172,7 +173,7 @@ func (h *Handler) update(ctx context.Context, investigationID uuid.UUID, state d
 		return output.Update{}, fmt.Errorf("load the investigation and its event: %w", err)
 	}
 
-	ev, err := eventOf(loaded.Event)
+	ev, err := store.EventOf(loaded.Event)
 	if err != nil {
 		return output.Update{}, fmt.Errorf("read event %s: %w", loaded.Event.ID, err)
 	}
