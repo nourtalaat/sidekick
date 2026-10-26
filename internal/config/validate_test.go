@@ -104,6 +104,7 @@ func TestValidateFixtures(t *testing.T) {
 			`redaction.custom[1].name: rule name "Customer ID" must start with a lower-case letter and hold only lower-case letters, digits, "_" and "-", at most 32 characters`,
 		}},
 		{file: "slack-without-token", want: []string{"slack.botTokenSecret: required"}},
+		{file: "slack-output-without-slack", want: []string{"outputs.slack-thread: type slack needs slack.botTokenSecret"}},
 		{file: "negative-price", want: []string{"model.prices.claude-opus-5-5.inputPerMTok: must not be negative"}},
 		// Several problems, reported together and sorted by path.
 		{file: "three-errors", want: []string{

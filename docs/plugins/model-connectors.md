@@ -87,6 +87,9 @@ services:
 - `deps.HTTP` is the HTTP client to send requests with. Tests replace it to
   serve recorded responses.
 - `deps.Logger` is the structured logger.
+- `deps.Metrics` is where the connector registers its own Prometheus
+  metrics, through `registry.RegisterOrExisting`, so several instances of
+  the type share one collector. It is nil in tests that do not set it.
 
 If the provider's SDK retries on its own, turn that off (`retries` is
 handled for every connector at once, see step 5). Also make sure the SDK

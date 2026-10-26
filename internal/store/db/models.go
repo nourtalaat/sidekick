@@ -99,3 +99,21 @@ type Job struct {
 	CreatedAt   time.Time
 	FinishedAt  *time.Time
 }
+
+type OutputRef struct {
+	InvestigationID uuid.UUID
+	Sink            string
+	External        string
+	Ref             json.RawMessage
+	LastSeq         int64
+	PublishedAt     time.Time
+}
+
+type PublishState struct {
+	InvestigationID uuid.UUID
+	Sinks           []string
+	Seq             int64
+	Phase           string
+	Body            json.RawMessage
+	UpdatedAt       time.Time
+}

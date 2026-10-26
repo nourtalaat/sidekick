@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
 func TestEnqueueRejectsBadJobs(t *testing.T) {
@@ -61,6 +63,36 @@ func TestTraceparent(t *testing.T) {
 			t.Parallel()
 
 			require.Equal(t, tt.want, traceparent(tt.ctx))
+		})
+	}
+}
+
+func TestTraceContext(t *testing.T) {
+	t.Parallel()
+
+	enqueued := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    trace.TraceID{0x4b, 0xf9, 0x2f, 0x35, 0x77, 0xb3, 0x4d, 0xa6, 0xa3, 0xce, 0x92, 0x9d, 0x0e, 0x0e, 0x47, 0x36},
+		SpanID:     trace.SpanID{0x00, 0xf0, 0x67, 0xaa, 0x0b, 0xa9, 0x02, 0xb7},
+		TraceFlags: trace.FlagsSampled,
+		Remote:     true,
+	})
+
+	tests := []struct {
+		name        string
+		traceparent *string
+		want        trace.SpanContext
+	}{
+		{name: "a job without a traceparent", want: trace.SpanContext{}},
+		{name: "a job with a traceparent", traceparent: new("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"), want: enqueued},
+		{name: "a traceparent that does not parse", traceparent: new("not-a-traceparent"), want: trace.SpanContext{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := TraceContext(t.Context(), db.Job{Traceparent: tt.traceparent})
+			require.Equal(t, tt.want, trace.SpanContextFromContext(ctx))
 		})
 	}
 }

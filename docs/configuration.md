@@ -271,14 +271,23 @@ slack:
   botTokenSecret: { name: sidekick-slack, key: botToken }   # required when the section is set
 ```
 
+The bot token of the Slack app. Every `slack` output posts with it, so the
+section is required when an output has `type: slack`.
+
 ### `outputs`
 
-Outputs are where reports go. Each one has a `type`.
+Outputs are where investigations are shown. Each one has a `type`, and
+each route lists the outputs its investigations go to in `outputs`.
 
 ```yaml
 outputs:
-  slack-thread: { type: slack, channel: "#alerts" }
+  slack-thread: { type: slack, channel: "#alerts" }   # apiURL is optional
 ```
+
+This release has one type, `slack`, which posts one message per
+investigation and edits it as the investigation runs.
+[Investigations in Slack](slack.md) describes its keys, what it posts and
+how to set up the Slack app.
 
 ### `strategies`
 

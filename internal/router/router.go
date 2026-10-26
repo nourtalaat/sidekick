@@ -13,7 +13,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/nourtalaat/sidekick/internal/action"
@@ -22,6 +21,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/ids"
 	"github.com/nourtalaat/sidekick/internal/investigator"
 	"github.com/nourtalaat/sidekick/internal/model"
+	"github.com/nourtalaat/sidekick/internal/publish"
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
@@ -41,9 +41,6 @@ const (
 // statusReceived is the status of an event that intake stored and that is
 // waiting to be routed.
 const statusReceived = "received"
-
-// traceparentHeader is the W3C Trace Context field that jobs store.
-const traceparentHeader = "traceparent"
 
 var (
 	errNoEventID     = errors.New("the payload has no event_id")
@@ -116,8 +113,8 @@ func New(opts Options) (*Router, error) {
 // Handle routes the event of one route_event job inside a router.route
 // span, a child of the span that enqueued the job. In one transaction it
 // sets the event to routed with its route and a new group, opens that
-// group, creates a queued investigation for it and enqueues its
-// investigate job.
+// group, creates a queued investigation for it, enqueues its investigate
+// job and enqueues the first publish job for each output of the route.
 //
 // It is safe to run more than once: an event that is no longer received,
 // because it was routed already or intake skipped it, is left as it is,
@@ -125,7 +122,7 @@ func New(opts Options) (*Router, error) {
 // at the same time still open one group. A payload that does not decode,
 // or an event that does not exist, gives up the job.
 func (r *Router) Handle(ctx context.Context, job db.Job) (err error) {
-	ctx, span := r.tracer.Start(jobContext(ctx, job), SpanName)
+	ctx, span := r.tracer.Start(queue.TraceContext(ctx, job), SpanName)
 
 	defer func() {
 		if err != nil {
@@ -205,8 +202,9 @@ func (r *Router) match(ctx context.Context, id uuid.UUID) (ev db.Event, rt route
 }
 
 // open routes ev to rt in one transaction: it marks the event routed,
-// opens its group, creates the investigation and enqueues the investigate
-// job. It reports false, and writes nothing, when the event is no longer
+// opens its group, creates the investigation, enqueues the investigate
+// job and opens the route's outputs, so each shows "Looking into it" at
+// once. It reports false, and writes nothing, when the event is no longer
 // received.
 func (r *Router) open(ctx context.Context, ev db.Event, rt route) (o opened, routed bool, err error) {
 	o = opened{groupID: ids.New(), investigationID: ids.New()}
@@ -262,6 +260,10 @@ func (r *Router) open(ctx context.Context, ev db.Event, rt route) (o opened, rou
 		return opened{}, false, fmt.Errorf("investigation %s: %w", o.investigationID, err)
 	}
 
+	if err := publish.Open(ctx, tx, o.investigationID, rt.outputs); err != nil {
+		return opened{}, false, fmt.Errorf("investigation %s: open its outputs: %w", o.investigationID, err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return opened{}, false, fmt.Errorf("commit: %w", err)
 	}
@@ -288,16 +290,6 @@ func enqueueInvestigate(ctx context.Context, tx pgx.Tx, routeName string, o open
 	}
 
 	return nil
-}
-
-// jobContext returns ctx with the span that enqueued job as the remote
-// parent, when the job carries one.
-func jobContext(ctx context.Context, job db.Job) context.Context {
-	if job.Traceparent == nil {
-		return ctx
-	}
-
-	return propagation.TraceContext{}.Extract(ctx, propagation.MapCarrier{traceparentHeader: *job.Traceparent})
 }
 
 // decodePayload returns the event ID of a route_event payload.

@@ -9,6 +9,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/config"
 	_ "github.com/nourtalaat/sidekick/internal/intake/alertmanager" // Adapter "alertmanager".
 	"github.com/nourtalaat/sidekick/internal/model"
+	_ "github.com/nourtalaat/sidekick/internal/output/slack" // Output type "slack".
 	"github.com/nourtalaat/sidekick/internal/registry"
 )
 

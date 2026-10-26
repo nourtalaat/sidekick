@@ -1,0 +1,28 @@
+{
+  "text": "Looking into it: checkout-api p99 latency above 2s",
+  "attachments": [
+    {
+      "color": "#FF8848",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*Looking into it* checkout-api p99 latency above 2s",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "Received <!date^1793023320^{time}|14:02 UTC> · Updates as the investigation runs",
+              "verbatim": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

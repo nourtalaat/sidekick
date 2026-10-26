@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -577,6 +578,63 @@ func TestTypedStageErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRegisterOrExisting(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// registered is registered before the call, when set.
+		registered *prometheus.CounterVec
+		noRegistry bool
+		labels     []string
+		wantFirst  bool
+		wantErr    bool
+	}{
+		{name: "no registry", noRegistry: true, labels: []string{"kind"}},
+		{name: "first registration", labels: []string{"kind"}},
+		{name: "an equal collector is registered", registered: newWidgetCounter("kind"), labels: []string{"kind"}, wantFirst: true},
+		{name: "a different collector has the name", registered: newWidgetCounter("kind"), labels: []string{"other"}, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			reg := prometheus.NewRegistry()
+			if tt.registered != nil {
+				require.NoError(t, reg.Register(tt.registered))
+			}
+
+			var registerer prometheus.Registerer = reg
+			if tt.noRegistry {
+				registerer = nil
+			}
+
+			c := newWidgetCounter(tt.labels...)
+
+			got, err := RegisterOrExisting(registerer, c)
+			if tt.wantErr {
+				require.Error(t, err)
+
+				return
+			}
+
+			require.NoError(t, err)
+
+			if tt.wantFirst {
+				require.Same(t, tt.registered, got)
+			} else {
+				require.Same(t, c, got)
+			}
+		})
+	}
+}
+
+// newWidgetCounter returns an unregistered counter with labels.
+func newWidgetCounter(labels ...string) *prometheus.CounterVec {
+	return prometheus.NewCounterVec(prometheus.CounterOpts{Name: "sidekick_widget_errors_total", Help: "Widget errors."}, labels)
 }
 
 func constantPlugin(w widget) Plugin[widget] {

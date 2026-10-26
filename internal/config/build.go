@@ -35,12 +35,17 @@ type Instances struct {
 // constructors may read secrets and connect to services. Afterwards it
 // checks the roles against the capabilities the built connectors report,
 // for connectors whose config did not declare them. When deps.Secrets is nil
-// it reads the files under the config's secrets.dir. On problems it closes
-// what it built and returns Errors.
+// it reads the files under the config's secrets.dir. deps.SlackBotToken is
+// set from slack.botTokenSecret. On problems it closes what it built and
+// returns Errors.
 func Build(ctx context.Context, cfg *Config, regs Registries, deps registry.Deps) (*Instances, error) {
 	regs = regs.withDefaults()
 	if deps.Secrets == nil {
 		deps.Secrets = secrets.NewDir(cfg.Secrets.Dir)
+	}
+
+	if cfg.Slack != nil {
+		deps.SlackBotToken = cfg.Slack.BotTokenSecret
 	}
 
 	var errs errorList

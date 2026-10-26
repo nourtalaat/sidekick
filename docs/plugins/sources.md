@@ -90,8 +90,11 @@ func New(ctx context.Context, name string, cfg Config, deps registry.Deps) (sour
 ```
 
 `deps.Secrets` reads secret references, `deps.HTTP` is the HTTP client to
-send requests with, and `deps.Logger` is the structured logger. Register
-the type in the package's `init` function:
+send requests with, and `deps.Logger` is the structured logger.
+`deps.Metrics` is where the plugin registers its own Prometheus metrics,
+through `registry.RegisterOrExisting`, so several instances of the type
+share one collector; it is nil in tests that do not set it. Register the
+type in the package's `init` function:
 
 ```go
 func init() {

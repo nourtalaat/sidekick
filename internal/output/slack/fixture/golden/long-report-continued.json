@@ -1,0 +1,26 @@
+{
+  "text": "More of the report: checkout-api p99 latency above 2s",
+  "attachments": [
+    {
+      "color": "#C4261C",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*More findings*\n• Finding 6 <https://signoz.example.com/d/6|Chart>\n• Finding 7 <https://signoz.example.com/d/7|Chart>\n• Finding 8 <https://signoz.example.com/d/8|Chart>",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*More proposed fixes*\n4. Fix 4\n5. Fix 5",
+            "verbatim": true
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "text": "Real issue (high confidence): &lt;!channel&gt; checkout &amp; payments down",
+  "attachments": [
+    {
+      "color": "#C4261C",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": ":rotating_light: *Real issue* · High confidence\nAsk &lt;@U123&gt; or see &lt;https://evil.example|the fix&gt;.",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "section",
+          "fields": [
+            {
+              "type": "mrkdwn",
+              "text": "*Likely cause*\n&lt;!here&gt; deploy",
+              "verbatim": true
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Impact*\nAbout 4% of checkouts fail",
+              "verbatim": true
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*Findings*\n• Claim with &lt;b&gt; <https://x.example.com/a%7Cb|Fine>",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*Proposed fixes*\n1. &lt;tel:123|Call now&gt;",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "Checked signoz, kubernetes · github did not respond",
+              "verbatim": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

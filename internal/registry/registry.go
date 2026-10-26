@@ -14,6 +14,8 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/intake"
 	"github.com/nourtalaat/sidekick/internal/model"
@@ -60,6 +62,15 @@ type Deps struct {
 	Secrets Secrets
 	HTTP    *http.Client
 	Logger  *slog.Logger
+	// SlackBotToken is the bot token of the shared Slack app, from
+	// slack.botTokenSecret, for plugins that talk to Slack. It is the zero
+	// value when the config has no slack section. Read it through Secrets
+	// on each use, so a rotated token is used without a restart.
+	SlackBotToken SecretRef
+	// Metrics is where plugins register their Prometheus metrics, with
+	// RegisterOrExisting so that several instances of one plugin type share
+	// one collector. Nil means no metrics.
+	Metrics prometheus.Registerer
 }
 
 // Factory builds one named instance of a plugin from its config section.
@@ -238,6 +249,32 @@ func Typed[C any, T any](build func(ctx context.Context, name string, cfg C, dep
 			return t, nil
 		},
 	}
+}
+
+// RegisterOrExisting registers c with reg and returns it. When an equal
+// collector is registered already, for example by another instance of the
+// same plugin type, it returns that one instead, so every instance counts
+// into the same series. Metric names and labels must therefore be fixed in
+// code. A nil reg registers nothing and returns c.
+func RegisterOrExisting[T prometheus.Collector](reg prometheus.Registerer, c T) (T, error) {
+	if reg == nil {
+		return c, nil
+	}
+
+	err := reg.Register(c)
+	if err == nil {
+		return c, nil
+	}
+
+	if already, ok := errors.AsType[prometheus.AlreadyRegisteredError](err); ok {
+		if existing, ok := already.ExistingCollector.(T); ok {
+			return existing, nil
+		}
+	}
+
+	var zero T
+
+	return zero, fmt.Errorf("register metrics: %w", err)
 }
 
 // decodeChecked decodes a section into a new C and runs C's Validate method

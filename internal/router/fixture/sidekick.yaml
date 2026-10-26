@@ -21,6 +21,13 @@ intake:
       adapter: alertmanager
       auth: { bearer: { name: hooks, key: grafana } }
 
+slack:
+  botTokenSecret: { name: slack, key: botToken }
+
+outputs:
+  slack-thread: { type: slack, channel: "#alerts" }
+  callback: { type: slack, channel: "#sidekick-log" }
+
 strategies:
   dir: fixture/strategies
 
@@ -35,6 +42,7 @@ routes:
       text: "(?i)latency|p99"
     strategy: latency-alert
     roles: { investigate: big }
+    outputs: [slack-thread, callback]
     budgets: { maxToolCalls: 35, maxWallTime: 5m }
   - name: grafana
     priority: 50

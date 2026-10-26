@@ -1,0 +1,59 @@
+{
+  "text": "Duplicate (high confidence): checkout-api p99 latency above 2s",
+  "attachments": [
+    {
+      "color": "#2C57CD",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": ":link: *Duplicate* · High confidence\nDeploy 4f2c1a went out at 14:01. p99 latency rose from 400 ms to 2.6 s about 90 seconds later.",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "section",
+          "fields": [
+            {
+              "type": "mrkdwn",
+              "text": "*Likely cause*\nNew retry loop in the payment client",
+              "verbatim": true
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Impact*\nAbout 4% of checkouts fail",
+              "verbatim": true
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*Findings*\n• p99 rose at 14:02, 90 s after the deploy. <https://signoz.example.com/d/abc|SigNoz>\n• Timeouts to payments-gw in the logs from 14:02. <https://signoz.example.com/l/def?from=1&amp;to=2|Logs>\n• _Hypothesis, no evidence yet:_ The gateway itself is fine",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*Proposed fixes*\n1. Roll back 4f2c1a\n2. Cap retries at 2 in the payment client",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "Checked signoz, kubernetes · github did not respond",
+              "verbatim": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -106,6 +106,7 @@ model:
 routes: [{name: default}]
 sources:
   k8s: {type: kubernetes, namespaces: [prod]}
+slack: {botTokenSecret: {name: sidekick-slack, key: botToken}}
 outputs:
   slack-thread: {type: slack, channel: "#alerts"}
 intake:

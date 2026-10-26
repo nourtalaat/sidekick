@@ -1,0 +1,16 @@
+# A Slack output without the slack section, which holds its bot token.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+outputs:
+  slack-thread: { type: slack, channel: "#alerts" }
+
+routes:
+  - name: default
+    outputs: [slack-thread]

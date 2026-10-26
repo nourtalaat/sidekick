@@ -8,6 +8,9 @@ model:
   roles:
     investigate: claude
 
+slack:
+  botTokenSecret: { name: sidekick-slack, key: botToken }
+
 outputs:
   slack-thread: { type: slack }
 

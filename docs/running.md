@@ -94,6 +94,7 @@ process (`process_*`) metrics, this release has:
 | `sidekick_jobs_dead_total` | counter | `kind` | Jobs that failed for the last time on this replica. |
 | `sidekick_events_received_total` | counter | `intake`, `result` | Webhook events by result: `accepted` and `duplicate` count events, `rejected` counts deliveries turned away. See [Monitoring intake](webhooks.md#monitoring-intake). |
 | `sidekick_events_rejected_total` | counter | `intake`, `reason` | Rejected webhook deliveries by reason: `unauthenticated`, `too_large` or `invalid_payload`. |
+| `sidekick_slack_api_errors_total` | counter | `method`, `error` | Failed Slack Web API calls by method, such as `chat.update`, and error: Slack's error code, such as `channel_not_found`, or `ratelimited`, `request_failed`, `http_status`, `bad_response` or `other`. See [Investigations in Slack](slack.md). |
 
 ## Logs
 
@@ -131,4 +132,6 @@ still carry trace and span IDs.
 A webhook delivery starts a trace with an `intake.receive` span. Routing
 each of its events adds a `router.route` span to the same trace, with the
 attributes `sidekick.route` and `sidekick.group.id`, so you can follow an
-alert from the delivery to its investigation.
+alert from the delivery to its investigation. Each publish job, which
+shows an investigation in one output, adds an `output.publish` span with
+the attributes `sidekick.sink` and `sidekick.phase`.

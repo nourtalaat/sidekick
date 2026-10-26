@@ -1,0 +1,28 @@
+{
+  "text": "Known issue (high confidence): checkout-api p99 latency above 2s",
+  "attachments": [
+    {
+      "color": "#2C57CD",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": ":pushpin: *Known issue* · High confidence · <https://example.slack.com/archives/C123/p1793023321000200|See the full report>",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "checkout-api p99 latency above 2s",
+              "verbatim": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

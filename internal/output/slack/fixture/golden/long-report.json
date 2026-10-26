@@ -1,0 +1,59 @@
+{
+  "text": "Real issue (high confidence): checkout-api p99 latency above 2s",
+  "attachments": [
+    {
+      "color": "#C4261C",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": ":rotating_light: *Real issue* · High confidence\nDeploy 4f2c1a went out at 14:01. p99 latency rose from 400 ms to 2.6 s about 90 seconds later.",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "section",
+          "fields": [
+            {
+              "type": "mrkdwn",
+              "text": "*Likely cause*\nNew retry loop in the payment client",
+              "verbatim": true
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Impact*\nAbout 4% of checkouts fail",
+              "verbatim": true
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*Findings*\n• Finding 1 <https://signoz.example.com/d/1|Chart>\n• Finding 2 <https://signoz.example.com/d/2|Chart>\n• Finding 3 <https://signoz.example.com/d/3|Chart>\n• Finding 4 <https://signoz.example.com/d/4|Chart>\n• Finding 5 <https://signoz.example.com/d/5|Chart>",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*Proposed fixes*\n1. Fix 1\n2. Fix 2\n3. Fix 3",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "Checked signoz, kubernetes · github did not respond · Stopped at its budget",
+              "verbatim": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

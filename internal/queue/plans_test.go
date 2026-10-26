@@ -96,6 +96,15 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: "jobs_pkey",
 		},
 		{
+			name: "ReleaseUniqueKey",
+			run: func(ctx context.Context, q *db.Queries, rows planRows) error {
+				_, err := q.ReleaseUniqueKey(ctx, db.ReleaseUniqueKeyParams{ID: rows.claimed.ID, ClaimToken: claimToken(rows.claimed)})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "jobs_pkey",
+		},
+		{
 			name: "RenewLease",
 			run: func(ctx context.Context, q *db.Queries, rows planRows) error {
 				_, err := q.RenewLease(ctx, db.RenewLeaseParams{

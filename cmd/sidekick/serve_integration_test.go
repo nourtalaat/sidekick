@@ -226,6 +226,50 @@ func TestServeWebhooks(t *testing.T) {
 	}
 }
 
+// TestServePostsToSlack delivers an alert to a running serve process whose
+// default route has a Slack output, and checks that the fake Slack gets
+// the "Looking into it" message in the output's channel.
+func TestServePostsToSlack(t *testing.T) {
+	t.Parallel()
+
+	api := fakehttp.New(t)
+	api.Handle(http.MethodPost, "/api/chat.postMessage", fakehttp.Response{BodyFile: "fixture/slack-posted.json"})
+	api.ExpectAllCalled()
+
+	content := strings.Replace(webhookConfig, "  - name: default\n", "  - name: default\n    outputs: [slack-thread]\n", 1) + `
+slack:
+  botTokenSecret: { name: slack, key: botToken }
+outputs:
+  slack-thread: { type: slack, channel: "#alerts", apiURL: "` + api.URL() + `/api/" }
+`
+
+	cmd, lines, started := startServe(t, writeConfig(t, content, storetest.NewURL(t), "hooks/alertmanager", "slack/botToken"))
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://"+started.Listen+"/hooks/alertmanager", strings.NewReader(alertmanagerDelivery))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer fake-value")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Equal(t, http.StatusAccepted, resp.StatusCode)
+
+	require.Eventually(t, func() bool { return len(api.Requests()) == 1 }, serveStartTimeout, 50*time.Millisecond)
+
+	var sent struct {
+		Channel string `json:"channel"`
+		Text    string `json:"text"`
+	}
+
+	posted := api.Requests()[0]
+	require.NoError(t, json.Unmarshal(posted.Body, &sent))
+	require.Equal(t, "#alerts", sent.Channel)
+	require.Equal(t, "Looking into it: Disk almost full", sent.Text)
+	require.Equal(t, "Bearer fake-value", posted.Header.Get("Authorization"))
+
+	stopServe(t, cmd, lines, syscall.SIGTERM)
+}
+
 // startServe runs `sidekick serve` with the config at configPath as its
 // own process and waits until it serves. It returns the process, its log
 // lines and the start-up line.
