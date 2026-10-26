@@ -537,12 +537,21 @@ each route lists the outputs its investigations go to in `outputs`.
 ```yaml
 outputs:
   slack-thread: { type: slack, channel: "#alerts" }   # apiURL is optional
+  linear-comment:
+    type: linear.comment
+    apiKeySecret: { name: sidekick-linear, key: apiKey }
+    workspace: acme
+    teams: [OPS]
 ```
 
-This release has one type, `slack`, which posts one message per
-investigation and edits it as the investigation runs.
-[Investigations in Slack](slack.md) describes its keys, what it posts and
-how to set up the Slack app.
+The types:
+
+- `slack` posts one message per investigation and edits it as the
+  investigation runs. [Investigations in Slack](slack.md) describes its
+  keys, what it posts and how to set up the Slack app.
+- `linear.comment` posts the result as a comment on the Linear issue the
+  alert names. [Results on tickets](tickets.md) describes its keys and how
+  it finds the issue.
 
 ### `strategies`
 
