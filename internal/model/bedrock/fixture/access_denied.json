@@ -1,0 +1,1 @@
+{"message": "User: arn:aws:sts::123456789012:assumed-role/sidekick/pod is not authorized to perform: bedrock:InvokeModelWithResponseStream on resource: arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-opus-5-5"}

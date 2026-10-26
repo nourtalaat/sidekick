@@ -1,0 +1,9 @@
+{"event":"messageStart","payload":{"role":"assistant"}}
+{"event":"contentBlockDelta","payload":{"contentBlockIndex":0,"delta":{"text":"I will search the logs."}}}
+{"event":"contentBlockStop","payload":{"contentBlockIndex":0}}
+{"event":"contentBlockStart","payload":{"contentBlockIndex":1,"start":{"toolUse":{"toolUseId":"tooluse_01Search","name":"search_logs"}}}}
+{"event":"contentBlockDelta","payload":{"contentBlockIndex":1,"delta":{"toolUse":{"input":"{\"service\": \"checkout\","}}}}
+{"event":"contentBlockDelta","payload":{"contentBlockIndex":1,"delta":{"toolUse":{"input":" \"limit\": 20}"}}}}
+{"event":"contentBlockStop","payload":{"contentBlockIndex":1}}
+{"event":"messageStop","payload":{"stopReason":"tool_use"}}
+{"event":"metadata","payload":{"usage":{"inputTokens":900,"outputTokens":61,"totalTokens":3009,"cacheReadInputTokens":0,"cacheWriteInputTokens":2048},"metrics":{"latencyMs":1204}}}

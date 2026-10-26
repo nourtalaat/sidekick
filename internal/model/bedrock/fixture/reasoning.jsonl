@@ -1,0 +1,12 @@
+{"event":"messageStart","payload":{"role":"assistant"}}
+{"event":"contentBlockDelta","payload":{"contentBlockIndex":0,"delta":{"reasoningContent":{"text":"The error rate rose at 14:02. \"Pool exhausted\" appears in the logs.\n\t"}}}}
+{"event":"contentBlockDelta","payload":{"contentBlockIndex":0,"delta":{"reasoningContent":{"text":"Next: check the déploiement list, <deploys> & ✓ metrics."}}}}
+{"event":"contentBlockDelta","payload":{"contentBlockIndex":0,"delta":{"reasoningContent":{"signature":"EqQBCkgIARABGAIiQL+/7wSig9Fh2v1pXzQe+3k=="}}}}
+{"event":"contentBlockStop","payload":{"contentBlockIndex":0}}
+{"event":"contentBlockDelta","payload":{"contentBlockIndex":1,"delta":{"reasoningContent":{"redactedContent":"EmwKAhgBEgy3va3pzix/LafPsn4aDFIT2Xlxh0L5L8rLVyIwxtE3rAFBa8cr3qpP"}}}}
+{"event":"contentBlockStop","payload":{"contentBlockIndex":1}}
+{"event":"contentBlockStart","payload":{"contentBlockIndex":2,"start":{"toolUse":{"toolUseId":"tooluse_01Deploys","name":"list_deploys"}}}}
+{"event":"contentBlockDelta","payload":{"contentBlockIndex":2,"delta":{"toolUse":{"input":"{\"since\": \"13:30\"}"}}}}
+{"event":"contentBlockStop","payload":{"contentBlockIndex":2}}
+{"event":"messageStop","payload":{"stopReason":"tool_use"}}
+{"event":"metadata","payload":{"usage":{"inputTokens":120,"outputTokens":210,"totalTokens":5630,"cacheReadInputTokens":5000,"cacheWriteInputTokens":300},"metrics":{"latencyMs":3100}}}
