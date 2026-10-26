@@ -6,20 +6,12 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
-	"time"
 
 	anthropic "github.com/anthropics/anthropic-sdk-go/v2"
 	"github.com/anthropics/anthropic-sdk-go/v2/shared"
 
 	"github.com/nourtalaat/sidekick/internal/model"
-)
-
-// Response headers that say how long to wait before retrying.
-const (
-	retryAfterHeader   = "retry-after"
-	retryAfterMSHeader = "retry-after-ms"
 )
 
 // statusOverloaded is the status Anthropic returns when the API is
@@ -70,7 +62,7 @@ var kindsByStatus = map[int]model.ErrorKind{
 func classify(err error) *model.Error {
 	var apiErr *anthropic.Error
 	if errors.As(err, &apiErr) {
-		return &model.Error{Kind: apiKind(apiErr), RetryAfter: retryAfter(apiErr.Response), Err: err}
+		return &model.Error{Kind: apiKind(apiErr), RetryAfter: model.RetryAfter(apiErr.Response), Err: err}
 	}
 
 	var netErr net.Error
@@ -121,37 +113,4 @@ func isContextLength(body string) bool {
 	}
 
 	return false
-}
-
-// retryAfter reads how long the API asked to wait, in milliseconds or
-// seconds or as an HTTP date. It returns zero when it asked for nothing.
-func retryAfter(resp *http.Response) time.Duration {
-	if resp == nil {
-		return 0
-	}
-
-	if ms, err := strconv.ParseFloat(resp.Header.Get(retryAfterMSHeader), 64); err == nil && ms > 0 {
-		return time.Duration(ms * float64(time.Millisecond))
-	}
-
-	v := resp.Header.Get(retryAfterHeader)
-	if v == "" {
-		return 0
-	}
-
-	if secs, err := strconv.ParseFloat(v, 64); err == nil {
-		if secs <= 0 {
-			return 0
-		}
-
-		return time.Duration(secs * float64(time.Second))
-	}
-
-	if at, err := http.ParseTime(v); err == nil {
-		if d := time.Until(at); d > 0 {
-			return d
-		}
-	}
-
-	return 0
 }

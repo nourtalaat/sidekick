@@ -1,0 +1,15 @@
+event: response.created
+data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01Tool","object":"response","created_at":1793000000,"status":"in_progress","model":"gpt-6-sol","output":[],"usage":null}}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":1,"output_index":0,"item":{"id":"rs_01Deploys","type":"reasoning","summary":[{"type":"summary_text","text":"Check recent deploys first."},{"type":"summary_text","text":"Then the logs."}],"encrypted_content":"gAAAAABpZW5jcnlwdGVkLXJlYXNvbmluZy0wMQ=="}}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":2,"output_index":1,"item":{"id":"fc_01Deploys","type":"function_call","status":"completed","call_id":"call_01Deploys","name":"list_deploys","arguments":"{\"since\":\"13:30\"}"}}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":3,"output_index":2,"item":{"id":"fc_02Logs","type":"function_call","status":"completed","call_id":"call_02Logs","name":"search_logs","arguments":""}}
+
+event: response.completed
+data: {"type":"response.completed","sequence_number":4,"response":{"id":"resp_01Tool","object":"response","created_at":1793000000,"status":"completed","model":"gpt-6-sol","output":[{"id":"rs_01Deploys","type":"reasoning","summary":[{"type":"summary_text","text":"Check recent deploys first."},{"type":"summary_text","text":"Then the logs."}],"encrypted_content":"gAAAAABpZW5jcnlwdGVkLXJlYXNvbmluZy0wMQ=="},{"id":"fc_01Deploys","type":"function_call","status":"completed","call_id":"call_01Deploys","name":"list_deploys","arguments":"{\"since\":\"13:30\"}"},{"id":"fc_02Logs","type":"function_call","status":"completed","call_id":"call_02Logs","name":"search_logs","arguments":""}],"usage":{"input_tokens":5200,"input_tokens_details":{"cached_tokens":4096,"cache_write_tokens":1024},"output_tokens":210,"output_tokens_details":{"reasoning_tokens":150},"total_tokens":5410}}}
+
