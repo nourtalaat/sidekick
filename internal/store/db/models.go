@@ -100,6 +100,11 @@ type Job struct {
 	FinishedAt  *time.Time
 }
 
+type Notice struct {
+	Key    string
+	SentAt time.Time
+}
+
 type OutputRef struct {
 	InvestigationID uuid.UUID
 	Sink            string
