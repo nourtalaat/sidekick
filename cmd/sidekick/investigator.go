@@ -22,7 +22,10 @@ func registerInvestigator(a *app.App) error {
 		return fmt.Errorf("set up the tool guard: %w", err)
 	}
 
-	connectors, err := investigatorConnectors(a)
+	cfg := a.Config()
+	prices := pricing.New(cfg.Model.PriceTable())
+
+	connectors, err := investigatorConnectors(a, prices)
 	if err != nil {
 		return fmt.Errorf("set up the model connectors: %w", err)
 	}
@@ -31,8 +34,6 @@ func registerInvestigator(a *app.App) error {
 	if err != nil {
 		return fmt.Errorf("set up investigation metrics: %w", err)
 	}
-
-	cfg := a.Config()
 
 	routes := make(map[string]investigator.Route, len(cfg.Routes))
 	for _, r := range cfg.Routes {
@@ -43,7 +44,7 @@ func registerInvestigator(a *app.App) error {
 		Pool:           a.Pool(),
 		Guard:          guard,
 		Connectors:     connectors,
-		Prices:         pricing.New(cfg.Model.PriceTable()),
+		Prices:         prices,
 		Strategies:     cfg.StrategySet(),
 		Routes:         routes,
 		Rules:          cfg.Report.Rules(),
@@ -95,15 +96,15 @@ func newGuard(a *app.App) (*tools.Guard, error) {
 }
 
 // investigatorConnectors wraps every built model connector with the
-// model.generate span and the model metrics, priced with the price table.
-func investigatorConnectors(a *app.App) (map[string]investigator.Connector, error) {
+// model.generate span and the model metrics, priced with prices, the same
+// table the investigator prices its steps with.
+func investigatorConnectors(a *app.App, prices pricing.Table) (map[string]investigator.Connector, error) {
 	metrics, err := instrument.NewMetrics(a.Telemetry().Registry())
 	if err != nil {
 		return nil, fmt.Errorf("set up model metrics: %w", err)
 	}
 
 	cfg := a.Config()
-	prices := pricing.New(cfg.Model.PriceTable())
 	tracer := a.Telemetry().TracerProvider().Tracer(instrument.TracerName)
 
 	out := make(map[string]investigator.Connector, len(a.Instances().Models))
