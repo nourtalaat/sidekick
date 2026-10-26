@@ -548,6 +548,10 @@ outputs:
     email: sidekick@acme.example
     apiTokenSecret: { name: sidekick-jira, key: apiToken }
     projects: [OPS]
+  callback:
+    type: webhook
+    url: https://hooks.internal.example.com/sidekick
+    hmacSecret: { name: sidekick-hooks, key: callback }
 ```
 
 The types:
@@ -558,6 +562,10 @@ The types:
 - `linear.comment` and `jira.comment` post the result as a comment on the
   Linear or Jira issue the alert names. [Results on tickets](tickets.md)
   describes their keys and how they find the issue.
+- `webhook` posts the final result and watcher events as JSON to `url`,
+  signed with `hmacSecret` the way webhook intake checks deliveries.
+  [Webhook callbacks](webhook-callbacks.md) describes the body, the
+  headers and how to check them.
 
 ### `strategies`
 
