@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
@@ -313,8 +314,14 @@ func TestShutdown(t *testing.T) {
 	t.Parallel()
 
 	const (
-		shutdownTimeout = 200 * time.Millisecond
-		grace           = 200 * time.Millisecond
+		// runsOut is the shutdown timeout or grace of a case whose handlers
+		// outlast it. holds is one that every handler of the case returns
+		// within, so that the case does not depend on how fast the machine
+		// is: shutdown goes on as soon as the handlers return.
+		runsOut = 100 * time.Millisecond
+		holds   = waitTimeout
+		// handlerTime is how long a handler that finishes in time runs.
+		handlerTime = 50 * time.Millisecond
 		// startAttempts is the attempts each job has used before the test,
 		// to show that the hand-back leaves them alone.
 		startAttempts = 2
@@ -325,19 +332,23 @@ func TestShutdown(t *testing.T) {
 		name string
 		// handler runs until ctx ends or release is closed, whichever it
 		// heeds.
-		handler      func(ctx context.Context, release <-chan struct{}) error
-		wantStatus   string
-		wantAttempts int32
+		handler         func(ctx context.Context, release <-chan struct{}) error
+		shutdownTimeout time.Duration
+		grace           time.Duration
+		wantStatus      string
+		wantAttempts    int32
 	}{
 		{
 			name: "a handler that finishes in time completes",
 			handler: func(context.Context, <-chan struct{}) error {
-				time.Sleep(shutdownTimeout / 4)
+				time.Sleep(handlerTime)
 
 				return nil
 			},
-			wantStatus:   StatusDone,
-			wantAttempts: startAttempts,
+			shutdownTimeout: holds,
+			grace:           runsOut,
+			wantStatus:      StatusDone,
+			wantAttempts:    startAttempts,
 		},
 		{
 			name: "a handler that stops when cancelled is handed back",
@@ -346,8 +357,10 @@ func TestShutdown(t *testing.T) {
 
 				return ctx.Err()
 			},
-			wantStatus:   StatusPending,
-			wantAttempts: startAttempts,
+			shutdownTimeout: runsOut,
+			grace:           holds,
+			wantStatus:      StatusPending,
+			wantAttempts:    startAttempts,
 		},
 		{
 			name: "a handler that finishes on cancel still completes",
@@ -356,8 +369,10 @@ func TestShutdown(t *testing.T) {
 
 				return nil
 			},
-			wantStatus:   StatusDone,
-			wantAttempts: startAttempts,
+			shutdownTimeout: runsOut,
+			grace:           holds,
+			wantStatus:      StatusDone,
+			wantAttempts:    startAttempts,
 		},
 		{
 			name: "a handler that ignores the cancel is handed back by the runner",
@@ -366,8 +381,10 @@ func TestShutdown(t *testing.T) {
 
 				return nil
 			},
-			wantStatus:   StatusPending,
-			wantAttempts: startAttempts,
+			shutdownTimeout: runsOut,
+			grace:           runsOut,
+			wantStatus:      StatusPending,
+			wantAttempts:    startAttempts,
 		},
 	}
 
@@ -379,8 +396,8 @@ func TestShutdown(t *testing.T) {
 			release := make(chan struct{})
 			started := make(chan struct{}, jobs)
 
-			runner := newTestRunner(t, pool, Options{ShutdownTimeout: shutdownTimeout})
-			runner.handBackGrace = grace
+			runner := newTestRunner(t, pool, Options{ShutdownTimeout: tt.shutdownTimeout})
+			runner.handBackGrace = tt.grace
 			require.NoError(t, runner.Register(KindBenchGate, HandlerFunc(func(ctx context.Context, _ db.Job) error {
 				started <- struct{}{}
 
@@ -411,11 +428,89 @@ func TestShutdown(t *testing.T) {
 				if tt.wantStatus == StatusPending {
 					require.Nil(t, job.LockedBy)
 					require.Nil(t, job.LockedUntil)
-					require.InDelta(t, 0, secondsUntilRunAt(t, pool, id), clockSlack.Seconds(), "ready at once")
+					// run_at is the time of the hand-back, which is in the past by
+					// however long the shutdown and these checks took.
+					require.LessOrEqual(t, secondsUntilRunAt(t, pool, id), 0.0, "ready at once")
 				}
 			}
 		})
 	}
+}
+
+// TestShutdownWaitsForTheResultOfAReturnedHandler checks that shutdown
+// leaves a job whose handler has returned to the job's own goroutine, even
+// when writing the job's result goes on past the hand-back grace, as it can
+// on a busy machine or database. A hand-back that got in before that write
+// would put a finished job back in the queue to run again.
+func TestShutdownWaitsForTheResultOfAReturnedHandler(t *testing.T) {
+	t.Parallel()
+
+	const (
+		shutdownTimeout = 10 * time.Millisecond
+		grace           = 10 * time.Millisecond
+	)
+
+	pool := setup(t)
+	handedBack := &handBackRecorder{}
+	started := make(chan struct{}, 2)
+	// finish lets the handler of finishedID return; release lets the
+	// other handler, which ignores the cancel, return.
+	finish := make(chan struct{})
+	release := make(chan struct{})
+
+	finishedID := mustEnqueue(t, pool, NewJob{Kind: KindPublish})
+	stuckID := mustEnqueue(t, pool, NewJob{Kind: KindPublish})
+
+	// The reaper is kept out of the way of the row lock below.
+	runner := newTestRunner(t, pool, Options{
+		ShutdownTimeout: shutdownTimeout,
+		ReapInterval:    time.Hour,
+		Logger:          slog.New(handedBack),
+	})
+	runner.handBackGrace = grace
+	require.NoError(t, runner.Register(KindPublish, HandlerFunc(func(_ context.Context, job db.Job) error {
+		started <- struct{}{}
+
+		if job.ID == finishedID {
+			<-finish
+		} else {
+			<-release
+		}
+
+		return nil
+	}), KindOptions{Concurrency: 2}))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	ran := make(chan error, 1)
+
+	go func() { ran <- runner.Run(ctx) }()
+
+	for range 2 {
+		<-started
+	}
+
+	// Hold the finished job's row, so that writing its result waits.
+	tx, err := pool.Begin(t.Context())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	t.Cleanup(func() { close(release) })
+
+	_, err = tx.Exec(t.Context(), "SELECT 1 FROM jobs WHERE id = $1 FOR UPDATE", finishedID)
+	require.NoError(t, err)
+
+	close(finish)
+	eventually(t, func() bool { return lockWaiters(t, pool) > 0 })
+
+	cancel()
+	eventually(t, func() bool { return len(handedBack.jobIDs()) > 0 })
+	require.NoError(t, tx.Rollback(t.Context()))
+	require.NoError(t, <-ran)
+
+	require.Equal(t, []int64{stuckID}, handedBack.jobIDs(), "only the job whose handler still runs is handed back")
+	require.Equal(t, StatusDone, getJob(t, pool, finishedID).Status)
+	require.Equal(t, StatusPending, getJob(t, pool, stuckID).Status)
 }
 
 // TestLimitsHoldWithTwoRunners runs investigations on two Runners at once
@@ -595,6 +690,72 @@ func eventually(t *testing.T, done func() bool) {
 
 		time.Sleep(waitTick)
 	}
+}
+
+// lockWaiters returns how many sessions on the test's database wait for
+// a lock.
+func lockWaiters(t *testing.T, pool *pgxpool.Pool) int {
+	t.Helper()
+
+	var count int
+
+	err := pool.QueryRow(t.Context(),
+		"SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'").Scan(&count)
+	require.NoError(t, err)
+
+	return count
+}
+
+// handBackRecorder is a slog.Handler that keeps the IDs of the jobs that a
+// Runner logs as handed back by its shutdown. It passes every other record
+// on to the default logger, so that a failing test still shows them.
+type handBackRecorder struct {
+	mu  sync.Mutex
+	ids []int64
+}
+
+func (h *handBackRecorder) Enabled(context.Context, slog.Level) bool {
+	return true
+}
+
+func (h *handBackRecorder) Handle(ctx context.Context, record slog.Record) error {
+	if record.Message != "a handler did not return after shutdown, handing its job back" {
+		if err := slog.Default().Handler().Handle(ctx, record); err != nil {
+			return fmt.Errorf("pass the record on: %w", err)
+		}
+
+		return nil
+	}
+
+	record.Attrs(func(attr slog.Attr) bool {
+		if attr.Key != "job_id" {
+			return true
+		}
+
+		h.mu.Lock()
+		defer h.mu.Unlock()
+
+		h.ids = append(h.ids, attr.Value.Int64())
+
+		return false
+	})
+
+	return nil
+}
+
+func (h *handBackRecorder) WithAttrs([]slog.Attr) slog.Handler {
+	return h
+}
+
+func (h *handBackRecorder) WithGroup(string) slog.Handler {
+	return h
+}
+
+func (h *handBackRecorder) jobIDs() []int64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	return append([]int64(nil), h.ids...)
 }
 
 // runCounter counts how many times each job ran and which workers ran

@@ -122,6 +122,11 @@ redaction:
       pattern: "cus_[A-Za-z0-9]{14}"
   hashKeySecret: { name: sidekick-redaction, key: key }
 
+watch:
+  http:
+    allowHosts: ["*.internal.example.com", "status.example.com"]
+    allowPrivate: ["10.20.0.0/16"]
+
 telemetry:
   otlpEndpoint: http://otel-collector.observability:4317
   logLevel: info

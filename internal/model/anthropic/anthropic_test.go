@@ -276,10 +276,31 @@ func TestGenerateRequestBody(t *testing.T) {
 			},
 		},
 		{
-			name:  "forced tool choice",
-			model: "claude-opus-5",
+			name:  "forced tool choice on a model that does not think by default",
+			model: "claude-opus-4-8",
 			req:   model.Request{Messages: userText("hi").Messages, ToolChoice: model.ToolChoice{Mode: model.ToolChoiceRequired, Name: "submit_verdict"}},
 			want:  map[string]string{"tool_choice": `{"name":"submit_verdict","type":"tool"}`},
+		},
+		{
+			name:  "forced tool choice with thinking off",
+			model: "claude-opus-5",
+			edit:  func(c *Config) { c.Thinking = model.Thinking{Mode: model.ThinkingOff} },
+			req:   model.Request{Messages: userText("hi").Messages, ToolChoice: model.ToolChoice{Mode: model.ToolChoiceAny}},
+			want:  map[string]string{"tool_choice": `{"type":"any"}`, "thinking": `{"type":"disabled"}`},
+		},
+		{
+			name:  "forced tool choice becomes auto while thinking is on",
+			model: "claude-opus-4-8",
+			edit:  func(c *Config) { c.Thinking = model.Thinking{Mode: model.ThinkingAdaptive} },
+			req:   model.Request{Messages: userText("hi").Messages, ToolChoice: model.ToolChoice{Mode: model.ToolChoiceRequired, Name: "submit_verdict"}},
+			want:  map[string]string{"tool_choice": `{"type":"auto"}`, "thinking": `{"type":"adaptive"}`},
+		},
+		{
+			name:   "forced tool choice becomes auto on a model that thinks by default",
+			model:  "claude-opus-5",
+			req:    model.Request{Messages: userText("hi").Messages, ToolChoice: model.ToolChoice{Mode: model.ToolChoiceRequired, Name: "submit_verdict"}},
+			want:   map[string]string{"tool_choice": `{"type":"auto"}`},
+			absent: []string{"thinking"},
 		},
 		{
 			name:  "tool choice none",

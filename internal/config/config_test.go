@@ -33,7 +33,7 @@ func TestParseFileProblems(t *testing.T) {
 		{name: "two documents", yaml: "server: {}\n---\nserver: {}\n", want: "parse YAML: the file must hold one YAML document"},
 		{name: "top level is a list", yaml: "- a\n", want: "expected a mapping, got a list"},
 		{name: "unknown top-level key", yaml: minimal + "servr: {}\n", want: `servr: unknown key (did you mean "server"?)`},
-		{name: "a later section", yaml: minimal + "watch: {}\n", want: "watch: unknown key"},
+		{name: "a later section", yaml: minimal + "memory: {}\n", want: "memory: unknown key"},
 	}
 
 	for _, tt := range tests {

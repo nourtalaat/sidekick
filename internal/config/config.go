@@ -70,6 +70,7 @@ type Config struct {
 	Report     Report             `yaml:"report"`
 	Redaction  Redaction          `yaml:"redaction"`
 	Telemetry  Telemetry          `yaml:"telemetry"`
+	Watch      Watch              `yaml:"watch"`
 
 	// strategySet holds the built-in and file strategies, loaded by Parse.
 	strategySet *strategy.Set
@@ -248,6 +249,23 @@ type Redaction struct {
 type RedactionRule struct {
 	Name    string `yaml:"name"`
 	Pattern string `yaml:"pattern"`
+}
+
+// Watch holds the settings of watchers.
+type Watch struct {
+	HTTP WatchHTTP `yaml:"http"`
+}
+
+// WatchHTTP holds the rules of watcher HTTP checks. Only the config file
+// sets them.
+type WatchHTTP struct {
+	// AllowHosts are the hosts HTTP checks may reach: exact names or IP
+	// addresses, or "*." and a name for every name below it. Empty allows
+	// none.
+	AllowHosts []string `yaml:"allowHosts"`
+	// AllowPrivate are private or special address ranges HTTP checks may
+	// reach anyway, in CIDR form or as single addresses.
+	AllowPrivate []string `yaml:"allowPrivate"`
 }
 
 // Telemetry configures traces, metrics and logs.

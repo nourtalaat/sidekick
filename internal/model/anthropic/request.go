@@ -67,7 +67,7 @@ func (c *Connector) params(req model.Request) (anthropic.MessageNewParams, error
 		System:     textParams(req.System),
 		Messages:   messages,
 		Tools:      tools,
-		ToolChoice: toolChoiceParam(req.ToolChoice),
+		ToolChoice: toolChoiceParam(c.toolChoice(req.ToolChoice, thinking)),
 		Thinking:   c.thinkingParam(thinking),
 	}
 
@@ -94,11 +94,8 @@ func (c *Connector) checkRequest(req model.Request, thinking model.Thinking, eff
 
 	errs = append(errs, checkThinking(c.cfg.Model, c.model, thinking, effort, maxTokens)...)
 
-	switch req.ToolChoice.Mode {
-	case model.ToolChoiceAny, model.ToolChoiceRequired:
-		if !caps.ToolChoice {
-			errs = append(errs, errForcedToolChoice)
-		}
+	if forced(req.ToolChoice.Mode) && !caps.ToolChoice {
+		errs = append(errs, errForcedToolChoice)
 	}
 
 	if req.ToolChoice.Mode == model.ToolChoiceRequired && req.ToolChoice.Name == "" {
@@ -110,6 +107,32 @@ func (c *Connector) checkRequest(req model.Request, thinking model.Thinking, eff
 	}
 
 	return errors.Join(errs...)
+}
+
+// toolChoice returns the tool choice to send. The API cannot force a tool
+// while the model thinks, so a forced choice becomes auto then, and thinking
+// and the conversation stay as they are.
+func (c *Connector) toolChoice(tc model.ToolChoice, thinking model.Thinking) model.ToolChoice {
+	if !forced(tc.Mode) || !c.thinks(thinking) {
+		return tc
+	}
+
+	c.logger.Debug("sending tool choice auto: a tool cannot be forced while the model thinks",
+		"connector", c.name, "model", c.cfg.Model, "tool_choice", string(tc.Mode))
+
+	return model.ToolChoice{Mode: model.ToolChoiceAuto}
+}
+
+// thinks reports whether the model thinks in a call with thinking t.
+func (c *Connector) thinks(t model.Thinking) bool {
+	switch t.Mode {
+	case model.ThinkingAdaptive, model.ThinkingEnabled:
+		return true
+	case "":
+		return c.model.thinksByDefault
+	default:
+		return false
+	}
 }
 
 // thinkingParam maps the thinking setting. An unset mode leaves the
@@ -359,4 +382,9 @@ func countBreakpoints(req model.Request) int {
 	}
 
 	return n
+}
+
+// forced reports whether a tool choice mode makes the model call a tool.
+func forced(mode model.ToolChoiceMode) bool {
+	return mode == model.ToolChoiceAny || mode == model.ToolChoiceRequired
 }

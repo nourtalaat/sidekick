@@ -110,7 +110,21 @@ func TestParse(t *testing.T) {
 				Severity:    event.SeverityUnknown,
 				Labels:      map[string]string{},
 				Fingerprint: event.Fingerprint(Adapter, "", nil, nil),
-				StartsAt:    time.Date(2026, 10, 26, 9, 0, 0, 0, time.FixedZone("", 2*60*60)),
+				StartsAt:    time.Date(2026, 10, 26, 7, 0, 0, 0, time.UTC),
+				ReceivedAt:  receivedAt,
+			}},
+		},
+		{
+			name: "an alert that has not ended has the zero end time",
+			body: `{"version": "4", "groupKey": "g", "alerts": [{"status": "firing", "fingerprint": "f", "startsAt": "2026-10-26T09:00:00Z", "endsAt": "0001-01-01T00:00:00Z"}]}`,
+			want: []event.Event{{
+				Key:         wantKey("g", "f", "firing", "2026-10-26T09:00:00Z"),
+				Kind:        event.KindAlert,
+				Sender:      event.Sender{Kind: event.SenderSystem},
+				Severity:    event.SeverityUnknown,
+				Labels:      map[string]string{},
+				Fingerprint: event.Fingerprint(Adapter, "", nil, nil),
+				StartsAt:    time.Date(2026, 10, 26, 9, 0, 0, 0, time.UTC),
 				ReceivedAt:  receivedAt,
 			}},
 		},
@@ -127,7 +141,8 @@ func TestParse(t *testing.T) {
 		{name: "alert without fingerprint", body: `{"version": "4", "alerts": [{"status": "firing"}]}`, wantMsg: "alerts[0]: fingerprint: required"},
 		{name: "unknown status", body: `{"version": "4", "alerts": [{"status": "firing", "fingerprint": "a"}, {"status": "pending", "fingerprint": "b"}]}`, wantMsg: `alerts[1]: status: must be "firing" or "resolved"`},
 		{name: "label of the wrong type", body: `{"version": "4", "alerts": [{"status": "firing", "fingerprint": "a", "labels": {"x": 1}}]}`, wantMsg: "alerts[0]: decode alert"},
-		{name: "bad start time", body: `{"version": "4", "alerts": [{"status": "firing", "fingerprint": "a", "startsAt": "yesterday"}]}`, wantMsg: "alerts[0]: decode alert"},
+		{name: "bad start time", body: `{"version": "4", "alerts": [{"status": "firing", "fingerprint": "a", "startsAt": "yesterday"}]}`, wantMsg: "alerts[0]: startsAt: must be an RFC 3339 time"},
+		{name: "bad end time", body: `{"version": "4", "alerts": [{"status": "resolved", "fingerprint": "a", "endsAt": "yesterday"}]}`, wantMsg: "alerts[0]: endsAt: must be an RFC 3339 time"},
 	}
 
 	for _, tt := range tests {
@@ -140,6 +155,7 @@ func TestParse(t *testing.T) {
 			events, err := a.Parse(t.Context(), intake.Request{Endpoint: "alertmanager", Body: []byte(tt.body), ReceivedAt: receivedAt})
 			if tt.wantMsg != "" {
 				require.ErrorContains(t, err, tt.wantMsg)
+				require.NotContains(t, err.Error(), "yesterday", "errors never hold payload values")
 
 				return
 			}

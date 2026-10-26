@@ -1,0 +1,5 @@
+{"event":"messageStart","payload":{"role":"assistant"}}
+{"event":"contentBlockDelta","payload":{"contentBlockIndex":0,"delta":{"text":"The first cause is"}}}
+{"event":"contentBlockStop","payload":{"contentBlockIndex":0}}
+{"event":"messageStop","payload":{"stopReason":"max_tokens"}}
+{"event":"metadata","payload":{"usage":{"inputTokens":300,"outputTokens":5,"totalTokens":305},"metrics":{"latencyMs":200}}}

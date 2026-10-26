@@ -19,7 +19,6 @@ var errLeaseEnded = errors.New("the job's lease ran out")
 // ends when the Runner shuts down.
 func (r *Runner) runJob(workCtx context.Context, w *worker, job db.Job) {
 	defer func() {
-		r.active.remove(job.ID)
 		<-w.slots
 		signal(w.wake)
 	}()
@@ -36,8 +35,19 @@ func (r *Runner) runJob(workCtx context.Context, w *worker, job db.Job) {
 
 	stopHeartbeat := r.startHeartbeat(w, job, cancel)
 	err := callHandler(ctx, w.handler, job)
+	// Settle who writes the result before anything that can wait, such as
+	// a lease renewal in flight, so that shutdown never hands back a job
+	// whose handler has returned.
+	owned := r.active.handlerReturned(job.ID)
 
 	stopHeartbeat()
+
+	if !owned {
+		return
+	}
+
+	defer r.active.resultWritten()
+
 	r.finish(w, job, err, context.Cause(ctx))
 }
 

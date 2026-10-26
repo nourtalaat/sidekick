@@ -1,0 +1,3 @@
+{"event":"messageStart","payload":{"role":"assistant"}}
+{"event":"messageStop","payload":{"stopReason":"content_filtered"}}
+{"event":"metadata","payload":{"usage":{"inputTokens":80,"outputTokens":0,"totalTokens":80},"metrics":{"latencyMs":150}}}
