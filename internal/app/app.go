@@ -101,8 +101,9 @@ type jobQueue struct {
 // New runs the start-up steps before serving, in order: it loads the config
 // with every secret checked, sets up telemetry, opens the database pool,
 // migrates the database unless database.migrations is manual, builds the
-// redactor and builds the plugin instances. On an error it closes what it had opened. A config
-// with problems gives an error that wraps config.Errors.
+// redactor and builds the plugin instances. On an error it closes what it
+// had opened. A config with problems gives an error that wraps
+// config.Errors.
 func New(ctx context.Context, opts Options) (*App, error) {
 	if opts.LogOutput == nil {
 		opts.LogOutput = os.Stdout
