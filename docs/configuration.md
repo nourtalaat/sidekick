@@ -239,6 +239,29 @@ How it behaves:
   with a server built into a custom Sidekick image. Run other stdio servers
   in a sidecar that serves them over HTTP, and use `transport: http`.
 
+#### Kubernetes sources (`type: kubernetes`)
+
+A Kubernetes source reads one cluster with the pod's service account, or
+with a kubeconfig file from a Secret. Its tools read events, workload
+status, pods with problems, rollout history, nodes and, with `logs: true`,
+pod logs. [The Kubernetes source](sources/kubernetes.md) lists its keys and
+tools, and the RBAC it needs.
+
+| Key | Meaning |
+|---|---|
+| `namespaces` | The namespaces the tools may read. Empty means every namespace. |
+| `logs` | Turns on `get_pod_logs`. Off by default. |
+| `consoleURL` | A Go template for evidence links, with `.Kind`, `.Resource`, `.Namespace` and `.Name`. Without it, evidence is the matching `kubectl` command. |
+| `kubeconfigSecret` | `{ name, key }` of a kubeconfig file, for another cluster. |
+| `context` | The kubeconfig context. Only with `kubeconfigSecret`. |
+
+```yaml
+sources:
+  k8s:
+    type: kubernetes
+    namespaces: [prod, staging]
+```
+
 ### `intake.webhooks`
 
 Each webhook endpoint receives alerts at `/hooks/<name>`. It names an
