@@ -111,6 +111,15 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: "jobs_pkey",
 		},
 		{
+			name: "WaitForJobWriters",
+			run: func(ctx context.Context, q *db.Queries, rows planRows) error {
+				err := q.WaitForJobWriters(ctx, []int64{rows.claimed.ID})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "jobs_pkey",
+		},
+		{
 			name: "ReapExpiredLeases",
 			run: func(ctx context.Context, q *db.Queries, _ planRows) error {
 				_, err := q.ReapExpiredLeases(ctx)

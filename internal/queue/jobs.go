@@ -69,6 +69,49 @@ func fail(ctx context.Context, q db.DBTX, job db.Job, cause error, giveUp bool, 
 	return failed, nil
 }
 
+// handBackLost hands back jobs whose claim may have committed although its
+// result never reached the caller, for example when the commit's reply came
+// after the caller's timeout. It first waits for the claim's transaction to
+// end, so that it sees whether the claim committed. Each hand-back checks
+// the job's claim token, so a job whose claim did not commit, or that another
+// claim owns by now, is left alone. It returns the jobs it handed back.
+func handBackLost(ctx context.Context, q db.DBTX, jobs []db.Job) ([]db.Job, error) {
+	ids := make([]int64, len(jobs))
+	for i, job := range jobs {
+		ids[i] = job.ID
+	}
+
+	if err := db.New(q).WaitForJobWriters(ctx, ids); err != nil {
+		return nil, fmt.Errorf("wait for the claim to end: %w", err)
+	}
+
+	var (
+		handedBack []db.Job
+		errs       []error
+	)
+
+	for _, job := range jobs {
+		err := handBack(ctx, q, job)
+		if errors.Is(err, ErrLeaseLost) {
+			continue
+		}
+
+		if err != nil {
+			errs = append(errs, err)
+
+			continue
+		}
+
+		handedBack = append(handedBack, job)
+	}
+
+	if len(errs) > 0 {
+		return handedBack, fmt.Errorf("hand back lost claims: %w", errors.Join(errs...))
+	}
+
+	return handedBack, nil
+}
+
 // handBack returns a claimed job to pending at once, with its attempts
 // unchanged. It returns ErrLeaseLost when the job no longer belongs to the
 // job's claim token.
