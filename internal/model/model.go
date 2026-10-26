@@ -1,3 +1,5 @@
+//go:generate mockgen -source model.go -destination mocks_model.go -package model -exclude_interfaces Part -write_package_comment=false
+
 // Package model defines the provider-neutral interface to LLM providers.
 // Provider differences stay inside each connector package.
 package model

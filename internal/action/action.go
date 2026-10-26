@@ -1,3 +1,5 @@
+//go:generate mockgen -source action.go -destination mocks_action.go -package action -write_package_comment=false
+
 // Package action defines the changes Sidekick may make, and the rules for when.
 package action
 

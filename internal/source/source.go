@@ -1,3 +1,5 @@
+//go:generate mockgen -source source.go -destination mocks_source.go -package source -write_package_comment=false
+
 // Package source defines investigation sources: MCP servers, native
 // integrations, Sidekick's memory and the benchmark's mock source.
 package source

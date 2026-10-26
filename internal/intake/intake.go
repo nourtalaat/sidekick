@@ -1,3 +1,5 @@
+//go:generate mockgen -source intake.go -destination mocks_intake.go -package intake -write_package_comment=false
+
 // Package intake turns webhook deliveries into events.
 package intake
 

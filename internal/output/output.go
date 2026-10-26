@@ -1,3 +1,5 @@
+//go:generate mockgen -source output.go -destination mocks_output.go -package output -write_package_comment=false
+
 // Package output publishes investigation progress and results.
 package output
 
