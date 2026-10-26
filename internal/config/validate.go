@@ -36,6 +36,10 @@ var namePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,23}$`)
 // nameRule explains namePattern in error messages.
 const nameRule = `must start with a lower-case letter and hold only lower-case letters, digits and "-", at most 24 characters`
 
+// slackOutputType is the output type that posts with the bot token from
+// the slack section.
+const slackOutputType = "slack"
+
 // The values config accepts for enumerations, for checks and suggestions.
 var (
 	knownRoles      = []model.Role{model.RoleTriage, model.RoleInvestigate, model.RoleJudge, model.RoleSummarize}
@@ -277,8 +281,13 @@ func (v *validator) checkSlack() {
 
 func (v *validator) checkOutputs() {
 	for _, name := range sortedKeys(v.cfg.Outputs) {
-		v.checkName(v.cfg.Outputs[name].Path(), name)
-		checkPlugin(v, v.regs.Outputs, "output type", typeKey, name, v.cfg.Outputs[name])
+		s := v.cfg.Outputs[name]
+		v.checkName(s.Path(), name)
+		checkPlugin(v, v.regs.Outputs, "output type", typeKey, name, s)
+
+		if s.Type == slackOutputType && v.cfg.Slack == nil {
+			v.errs.add(s.Path(), "type slack needs slack.botTokenSecret")
+		}
 	}
 }
 

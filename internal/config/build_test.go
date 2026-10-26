@@ -11,6 +11,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/nourtalaat/sidekick/internal/model"
+	"github.com/nourtalaat/sidekick/internal/output"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/secrets"
 	"github.com/nourtalaat/sidekick/internal/source"
@@ -36,6 +37,8 @@ sources:
 intake:
   webhooks:
     alertmanager: { adapter: alertmanager, auth: { bearer: { name: hooks, key: am } } }
+slack:
+  botTokenSecret: { name: sidekick-slack, key: botToken }
 outputs:
   slack-thread: { type: slack, channel: "#alerts" }
 `
@@ -161,6 +164,50 @@ func TestBuildDeps(t *testing.T) {
 			require.NoError(t, err)
 
 			_, err = Build(t.Context(), cfg, regs, tt.deps)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestBuildSlackBotToken(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		yaml string
+		want registry.SecretRef
+	}{
+		{
+			name: "from the slack section",
+			yaml: "slack: {botTokenSecret: {name: sidekick-slack, key: botToken}}\n",
+			want: registry.SecretRef{Name: "sidekick-slack", Key: "botToken"},
+		},
+		{name: "zero without a slack section"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			regs := testRegistries()
+			regs.Outputs = registry.New[output.Sink]("output")
+
+			var got registry.SecretRef
+
+			regs.Outputs.Register("webhook", registry.Plugin[output.Sink]{
+				Build: func(_ context.Context, _ string, _ registry.Decoder, deps registry.Deps) (output.Sink, error) {
+					got = deps.SlackBotToken
+
+					return fakeSink{}, nil
+				},
+			})
+
+			yaml := minimalYAML(t) + tt.yaml + "outputs: {callback: {type: webhook}}\n"
+			cfg, err := Parse(t.Context(), []byte(yaml), LoadOptions{Registries: regs})
+			require.NoError(t, err)
+
+			_, err = Build(t.Context(), cfg, regs, registry.Deps{})
 			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
 		})

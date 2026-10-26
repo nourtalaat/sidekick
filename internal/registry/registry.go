@@ -60,6 +60,11 @@ type Deps struct {
 	Secrets Secrets
 	HTTP    *http.Client
 	Logger  *slog.Logger
+	// SlackBotToken is the bot token of the shared Slack app, from
+	// slack.botTokenSecret, for plugins that talk to Slack. It is the zero
+	// value when the config has no slack section. Read it through Secrets
+	// on each use, so a rotated token is used without a restart.
+	SlackBotToken SecretRef
 }
 
 // Factory builds one named instance of a plugin from its config section.
