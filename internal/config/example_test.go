@@ -24,6 +24,7 @@ var exampleSecrets = []registry.SecretRef{
 	{Name: "sidekick-hooks", Key: "alertmanager"},
 	{Name: "sidekick-hooks", Key: "ci"},
 	{Name: "sidekick-slack", Key: "botToken"},
+	{Name: "sidekick-slack", Key: "appToken"},
 	{Name: "sidekick-redaction", Key: "key"},
 }
 
@@ -64,6 +65,23 @@ func TestExampleConfig(t *testing.T) {
 				require.Equal(t, 5*time.Minute, cfg.Intake.Webhooks["generic-ci"].Auth.Tolerance)
 				require.True(t, cfg.Intake.Webhooks["alertmanager"].Trusted)
 				require.Equal(t, "slack", cfg.Outputs["slack-thread"].Type)
+			},
+		},
+		{
+			name: "the Slack app and its listeners",
+			check: func(t *testing.T, cfg *Config) {
+				t.Helper()
+				require.Equal(t, SlackModeSocket, cfg.Slack.Mode)
+				require.True(t, cfg.Slack.Connects())
+				require.Equal(t, []string{"B01SIGNOZ"}, cfg.Slack.TrustedBots)
+
+				alerts := cfg.Listeners["alerts"]
+				require.Equal(t, "#alerts", alerts.Channel)
+				require.Equal(t, ListenerSender{Kind: event.SenderBot, Names: []string{"SigNoz"}}, alerts.Match.Sender)
+				require.Len(t, alerts.Extract, 4)
+				require.Equal(t, "(?i)resolved|recovered", alerts.Recovery)
+				require.True(t, alerts.Trusted)
+				require.Equal(t, []string{"alertmanager", "alerts", SlackMentionIntake}, cfg.RoutesInOrder()[0].Match.Intake)
 			},
 		},
 		{
