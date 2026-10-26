@@ -135,10 +135,54 @@ outputs:
 
 ### `strategies`
 
+A strategy tells an investigation what to check first, the usual causes and
+the signs of a false positive for one kind of event. Each route names one.
+
 ```yaml
 strategies:
   dir: /etc/sidekick/strategies   # extra strategy files, read-only
 ```
+
+Sidekick ships with built-in strategies; this release has `generic-alert`,
+which fits any alert. `dir` adds your own: every `*.yaml` or `*.yml` file at
+the top of the directory is one strategy. Hidden files and other files are
+skipped. A `dir` that is not set, or does not exist, adds none; one that
+exists but cannot be read stops Sidekick from starting.
+
+- Sidekick only reads these files. To change a strategy, change its file,
+  for example through version control and a new deploy, and restart.
+- A file strategy with the name of a built-in one replaces it, and start-up
+  logs a line saying which one.
+- Each strategy's version is a hash of its file content, so every
+  investigation records the exact strategy text it used.
+
+A strategy file looks like this. Unknown keys are errors, as in
+`sidekick.yaml`.
+
+```yaml
+name: latency-alert                # required; lower-case letters, digits and "-"
+description: A latency monitor fired for an HTTP or RPC service.   # required
+match:                             # the events the strategy fits; used to pick
+  alertNames: ["*Latency*"]        # a strategy in a later release
+  textPattern: "(?i)latency|slow"  # a regular expression
+sources:
+  prefer: [signoz, k8s]            # sources to try first; unknown names are skipped
+first:                             # the checks to run first, in order
+  - Check what changed in the 2 hours before the alert started.
+  - Compare latency with request rate.
+commonCauses:
+  - A deploy that added a slow query.
+falsePositiveSigns:
+  - Very low request volume during the window.
+verdictHints:                      # also truePositive, inconclusive, duplicate,
+  falsePositive: Propose a minimum request rate condition.   # knownIssue, flapping
+budgets:                           # where the route sets one too, the lower
+  maxToolCalls: 30                 # of the two limits applies
+  maxWallTime: 5m
+```
+
+`watchers` and `watcherDefaults` are accepted and checked, but watchers are
+not started until a later release.
 
 ### `routes`
 
@@ -167,6 +211,8 @@ routes:
     strategy: generic-alert
     outputs: [slack-thread]
 ```
+
+A route without `strategy` uses the built-in `generic-alert` strategy.
 
 For now every route is `mode: read-only`, which is also the default, and
 `actions` must be empty. Modes that let Sidekick take actions come in a
@@ -263,6 +309,7 @@ telemetry:
 | `secrets.dir` | `/var/run/secrets/sidekick` |
 | `intake.webhooks.<name>.auth.tolerance` | `5m` |
 | `routes[].priority` | `100` |
+| `routes[].strategy` | `generic-alert` |
 | `routes[].mode` | `read-only` |
 | `routes[].budgets` | the values in `budgets.perInvestigation` |
 | `budgets.perInvestigation.maxToolCalls` | `40` |
@@ -287,8 +334,10 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   `/`. At start-up, every referenced secret file must exist and be readable.
 - Every webhook endpoint sets exactly one of `bearer` and `hmac`.
 - There is exactly one `default` route, and it has no `match`. Every source,
-  output and webhook a route names is defined. Glob and regular expression
-  matches parse.
+  output, webhook and strategy a route names is defined. Glob and regular
+  expression matches parse.
+- Every strategy file in `strategies.dir` is valid, and no two of them have
+  the same name.
 - Every route is `read-only` with no `actions`, and its budgets are at or
   below the global ones.
 - Every `redaction.builtIn` entry is a built-in rule. Every custom

@@ -22,6 +22,8 @@ import (
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/secrets"
+	"github.com/nourtalaat/sidekick/internal/strategy"
+	"github.com/nourtalaat/sidekick/strategies"
 )
 
 // namePattern is the rule for connector, source, output, webhook endpoint
@@ -46,37 +48,13 @@ var (
 // problems, or nil. Besides the config's own rules it runs each plugin
 // section's checks through the registries (strict decoding and the plugin's
 // Validate method) without building any instance, so it needs no secrets
-// and makes no network calls. With opts.CheckSecrets it also checks that
-// every referenced secret file exists and is readable.
+// and makes no network calls. It reads the strategy files in
+// strategies.dir, to check them and the strategy each route names. With
+// opts.CheckSecrets it also checks that every referenced secret file exists
+// and is readable.
 func Validate(ctx context.Context, cfg *Config, opts LoadOptions) error {
-	v := &validator{
-		ctx:  ctx,
-		cfg:  cfg,
-		regs: opts.Registries.withDefaults(),
-		caps: map[string]model.Capabilities{},
-		errs: &errorList{},
-	}
-
-	v.checkServer()
-	v.checkDatabase()
-	v.checkSecretsDir()
-	v.checkConnectors()
-	v.checkRoles("model.roles", cfg.Model.Roles, true)
-	v.checkPrices()
-	v.checkSources()
-	v.checkWebhooks()
-	v.checkSlack()
-	v.checkOutputs()
-	v.checkRoutes()
-	v.checkBudgets()
-	v.checkReport()
-	v.checkRedaction()
-	v.checkTelemetry()
-	v.checkSecretRefs()
-
-	if opts.CheckSecrets {
-		v.checkSecretFiles(cmp.Or[registry.Secrets](opts.Secrets, secrets.NewDir(cfg.Secrets.Dir)))
-	}
+	v := newValidator(ctx, cfg, opts)
+	v.run()
 
 	return v.errs.err()
 }
@@ -85,12 +63,63 @@ func Validate(ctx context.Context, cfg *Config, opts LoadOptions) error {
 type validator struct {
 	ctx  context.Context
 	cfg  *Config
+	opts LoadOptions
 	regs Registries
 	errs *errorList
 	// caps are the capabilities connector configs declare, by connector.
 	caps map[string]model.Capabilities
 	// refs are the secret references found in decoded plugin sections.
 	refs []found[registry.SecretRef]
+	// strategies are the built-in and file strategies, or nil when they
+	// could not be loaded.
+	strategies *strategy.Set
+}
+
+// run runs every check, recording the problems in v.errs.
+func (v *validator) run() {
+	v.checkServer()
+	v.checkDatabase()
+	v.checkSecretsDir()
+	v.checkConnectors()
+	v.checkRoles("model.roles", v.cfg.Model.Roles, true)
+	v.checkPrices()
+	v.checkSources()
+	v.checkWebhooks()
+	v.checkSlack()
+	v.checkOutputs()
+	v.loadStrategies()
+	v.checkRoutes()
+	v.checkBudgets()
+	v.checkReport()
+	v.checkRedaction()
+	v.checkTelemetry()
+	v.checkSecretRefs()
+
+	if v.opts.CheckSecrets {
+		v.checkSecretFiles(cmp.Or[registry.Secrets](v.opts.Secrets, secrets.NewDir(v.cfg.Secrets.Dir)))
+	}
+}
+
+// loadStrategies loads the built-in strategies and those in strategies.dir,
+// and records every problem in the files at strategies.dir.
+func (v *validator) loadStrategies() {
+	set, err := strategy.Load(strategies.FS, v.cfg.Strategies.Dir, v.opts.Logger)
+	if err == nil {
+		v.strategies = set
+
+		return
+	}
+
+	var problems strategy.Errors
+	if !errors.As(err, &problems) {
+		v.errs.add("strategies.dir", "%v", err)
+
+		return
+	}
+
+	for _, p := range problems {
+		v.errs.add("strategies.dir", "%s", p)
+	}
 }
 
 func (v *validator) checkServer() {
@@ -283,6 +312,10 @@ func (v *validator) checkRoute(path string, r Route) {
 	v.checkRoles(path+".roles", r.Roles, false)
 	v.references(path+".sources", "source", r.Sources, slices.Collect(maps.Keys(v.cfg.Sources)))
 	v.references(path+".outputs", "output", r.Outputs, slices.Collect(maps.Keys(v.cfg.Outputs)))
+
+	if v.strategies != nil {
+		v.reference(path+".strategy", "strategy", r.Strategy, v.strategies.Names())
+	}
 
 	switch {
 	case r.Mode == action.ReadOnly:
@@ -490,6 +523,18 @@ func (r Registries) withDefaults() Registries {
 		Sources: cmp.Or(r.Sources, registry.Sources),
 		Intakes: cmp.Or(r.Intakes, registry.Intakes),
 		Outputs: cmp.Or(r.Outputs, registry.Outputs),
+	}
+}
+
+// newValidator returns a validator for one check of cfg.
+func newValidator(ctx context.Context, cfg *Config, opts LoadOptions) *validator {
+	return &validator{
+		ctx:  ctx,
+		cfg:  cfg,
+		opts: opts,
+		regs: opts.Registries.withDefaults(),
+		caps: map[string]model.Capabilities{},
+		errs: &errorList{},
 	}
 }
 
