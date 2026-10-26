@@ -1,0 +1,4 @@
+name: generic-alert
+description: The team's own generic strategy.
+first:
+  - Check the team dashboard first.

@@ -1,0 +1,3 @@
+name: wrong-type
+description: A string where a list is expected.
+first: check things

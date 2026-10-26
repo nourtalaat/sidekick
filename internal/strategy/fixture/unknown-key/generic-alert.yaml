@@ -1,0 +1,4 @@
+name: generic-alert
+description: A strategy with a misspelled key.
+frist:
+  - Look at the logs.

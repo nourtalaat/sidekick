@@ -1,0 +1,19 @@
+name: generic-alert
+description: Any alert or event that no more specific strategy covers.
+first:
+  - Read the alert and find the affected service, the signal that fired and when it started.
+  - Check what changed shortly before the alert started, such as deploys, config changes and feature flags.
+  - Check whether the signal is still bad now, or whether it already recovered.
+  - Look at the service's errors, latency and traffic around the start time, and compare them with a normal period.
+commonCauses:
+  - A recent deploy or config change.
+  - A failing or slow dependency, such as a database or a third-party API.
+  - A sudden rise in traffic or load.
+  - Exhausted resources, such as memory, disk, CPU or connection pools.
+falsePositiveSigns:
+  - The signal recovered within one evaluation interval and has fired the same way before without a real problem.
+  - The alert fired on very little data, such as a few requests or a single host.
+  - The threshold sits inside the service's normal range.
+verdictHints:
+  falsePositive: Propose a concrete monitor change, such as a higher threshold, a longer duration or a filter.
+  inconclusive: Say which checks you could not run and what data would settle the question.
