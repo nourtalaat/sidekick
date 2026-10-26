@@ -191,6 +191,12 @@ server.
 | `command` | The program and its arguments, for example `["/usr/local/bin/mcp-git", "--repository", "/work"]`. Required for `stdio`. |
 | `env` | Environment variables of the `stdio` process, in the same form as `headers`. The process gets these and `PATH`, nothing else from Sidekick's environment. |
 
+MCP sources authenticate with tokens from Secrets, sent in `headers` (or
+`env` for `stdio`). They do not support OAuth yet, and an `oauth` key is
+rejected. [Authenticating MCP sources](sources/mcp-authentication.md)
+explains why, and has examples for SigNoz, Datadog, Sentry, Linear, GitHub
+and servers behind your own identity provider.
+
 ```yaml
 sources:
   git:
