@@ -1,0 +1,190 @@
+//go:build integration
+
+package queue
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/stretchr/testify/require"
+
+	"github.com/nourtalaat/sidekick/internal/store/db"
+)
+
+// errExplained stops a query after explainer has run its EXPLAIN ANALYZE.
+var errExplained = errors.New("explained")
+
+// planBatch is the claim batch size in the query plan tests.
+const planBatch = 8
+
+// TestQueryPlans runs EXPLAIN ANALYZE on each queue query over a busy queue
+// with more than 100,000 ready jobs, and checks that it uses the index it
+// is meant to. Run with -v to see the plans.
+func TestQueryPlans(t *testing.T) {
+	t.Parallel()
+
+	pool := setupBusyQueue(t)
+
+	tests := []struct {
+		name string
+		// run calls the query through q, which explains it instead of
+		// running it.
+		run       func(ctx context.Context, q *db.Queries, rows planRows) error
+		wantIndex string
+	}{
+		{
+			name: "ClaimJobs",
+			run: func(ctx context.Context, q *db.Queries, _ planRows) error {
+				_, err := q.ClaimJobs(ctx, db.ClaimJobsParams{
+					Worker: testWorker, LeaseSeconds: testLease.Seconds(), Kinds: []string{KindPublish}, Batch: planBatch,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "jobs_ready",
+		},
+		{
+			name: "CompleteJob",
+			run: func(ctx context.Context, q *db.Queries, rows planRows) error {
+				_, err := q.CompleteJob(ctx, db.CompleteJobParams{ID: rows.claimed.ID, ClaimToken: claimToken(rows.claimed)})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "jobs_pkey",
+		},
+		{
+			name: "FailJob",
+			run: func(ctx context.Context, q *db.Queries, rows planRows) error {
+				_, err := q.FailJob(ctx, db.FailJobParams{
+					LastError: "boom", BackoffSeconds: 5, ID: rows.claimed.ID, ClaimToken: claimToken(rows.claimed),
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "jobs_pkey",
+		},
+		{
+			name: "HandBackJob",
+			run: func(ctx context.Context, q *db.Queries, rows planRows) error {
+				_, err := q.HandBackJob(ctx, db.HandBackJobParams{ID: rows.claimed.ID, ClaimToken: claimToken(rows.claimed)})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "jobs_pkey",
+		},
+		{
+			name: "EnqueueJob",
+			run: func(ctx context.Context, q *db.Queries, _ planRows) error {
+				_, err := q.EnqueueJob(ctx, db.EnqueueJobParams{
+					Kind: KindInvestigate, Payload: []byte(`{}`), UniqueKey: new("investigate:plan"),
+					Priority: DefaultPriority, MaxAttempts: DefaultMaxAttempts,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "jobs_active_key",
+		},
+		{
+			name: "RetryDeadJob",
+			run: func(ctx context.Context, q *db.Queries, rows planRows) error {
+				_, err := q.RetryDeadJob(ctx, rows.deadID)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "jobs_pkey",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			tx, err := pool.Begin(t.Context())
+			require.NoError(t, err)
+
+			defer func() { _ = tx.Rollback(t.Context()) }()
+
+			rows := findPlanRows(t, tx)
+			explain := &explainer{tx: tx}
+
+			require.ErrorIs(t, tt.run(t.Context(), db.New(explain), rows), errExplained)
+			t.Logf("EXPLAIN ANALYZE of %s:\n%s", tt.name, explain.plan)
+			require.Contains(t, explain.plan, tt.wantIndex)
+		})
+	}
+}
+
+// planRows are rows of the busy queue that the queries in TestQueryPlans
+// work on.
+type planRows struct {
+	// claimed is a job that the subtest's transaction claimed.
+	claimed db.Job
+	deadID  int64
+}
+
+// explainer is a db.DBTX that runs EXPLAIN ANALYZE on each query instead of
+// the query itself, keeps the plan, and returns errExplained. EXPLAIN
+// ANALYZE runs the query, so it runs inside a transaction that the test
+// rolls back.
+type explainer struct {
+	tx   pgx.Tx
+	plan string
+}
+
+func (e *explainer) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, e.explain(ctx, sql, args)
+}
+
+func (e *explainer) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return nil, e.explain(ctx, sql, args)
+}
+
+func (e *explainer) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	return errorRow{err: e.explain(ctx, sql, args)}
+}
+
+func (e *explainer) explain(ctx context.Context, sql string, args []interface{}) error {
+	rows, err := e.tx.Query(ctx, "EXPLAIN (ANALYZE, BUFFERS) "+sql, args...)
+	if err != nil {
+		return fmt.Errorf("explain: %w", err)
+	}
+
+	lines, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return fmt.Errorf("read plan: %w", err)
+	}
+
+	e.plan = strings.Join(lines, "\n")
+
+	return errExplained
+}
+
+// errorRow is a pgx.Row whose Scan returns err.
+type errorRow struct {
+	err error
+}
+
+func (r errorRow) Scan(...interface{}) error {
+	return r.err
+}
+
+// findPlanRows claims a job in tx and finds a dead job of the busy queue.
+func findPlanRows(t *testing.T, tx pgx.Tx) planRows {
+	t.Helper()
+
+	jobs, err := claim(t.Context(), tx, testWorker, KindRouteEvent, testLease, 1)
+	require.NoError(t, err)
+	require.Len(t, jobs, 1)
+
+	var deadID int64
+
+	err = tx.QueryRow(t.Context(), "SELECT id FROM jobs WHERE status = 'dead' LIMIT 1").Scan(&deadID)
+	require.NoError(t, err)
+
+	return planRows{claimed: jobs[0], deadID: deadID}
+}
