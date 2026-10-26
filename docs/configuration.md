@@ -361,6 +361,20 @@ routes:
 
 A route without `strategy` uses the built-in `generic-alert` strategy.
 
+The match runs on the event as it is stored, after
+[redaction](#redaction). `text` is matched against the event's title and
+text, joined by a newline, so `^` and `$` mark the start and end of the
+whole text unless the pattern turns on multi-line mode with `(?m)`.
+`service` is matched as a whole, so `checkout-*` matches `checkout-api` but
+not `eu-checkout-api`. A label in `labels` must be present with exactly
+that value.
+
+Each routed event opens an investigation with the route's strategy, the
+connector and model for each role (the route's `roles` over
+`model.roles`), and its budgets. Where the strategy sets a budget too, the
+lower of the two applies. These settings are fixed when the investigation
+is created, so a config change does not alter one that has started.
+
 For now every route is `mode: read-only`, which is also the default, and
 `actions` must be empty. Modes that let Sidekick take actions come in a
 later release.

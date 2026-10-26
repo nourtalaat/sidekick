@@ -109,6 +109,9 @@ Sidekick that wrote it, such as `app` or `queue`. A line written while
 Sidekick works on something it traces also has `trace_id` and `span_id`, so
 you can go from a log line to its trace and back.
 
+Each routed event logs `event routed` with `event_id`, `route`, `group_id`
+and `investigation_id`. Event text is never logged.
+
 ## Traces
 
 Set `telemetry.otlpEndpoint` to send traces to an OpenTelemetry collector
@@ -124,3 +127,8 @@ TLS. Spans carry `service.name` `sidekick` and `service.version`. The
 standard `OTEL_RESOURCE_ATTRIBUTES` variable adds or overrides resource
 attributes. Without an endpoint, no trace leaves the process, but log lines
 still carry trace and span IDs.
+
+A webhook delivery starts a trace with an `intake.receive` span. Routing
+each of its events adds a `router.route` span to the same trace, with the
+attributes `sidekick.route` and `sidekick.group.id`, so you can follow an
+alert from the delivery to its investigation.
