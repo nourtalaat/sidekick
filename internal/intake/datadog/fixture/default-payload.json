@@ -1,0 +1,12 @@
+{
+  "body": "%%%\nDisk usage on db-1 is above 90%.\n%%%",
+  "last_updated": "1793004750000",
+  "event_type": "metric_alert_monitor",
+  "title": "[Warn on {host:db-1}] Disk almost full",
+  "date": "1793004750000",
+  "org": {
+    "id": "11023",
+    "name": "Example Corp"
+  },
+  "id": "7802335911728437300"
+}

@@ -1,0 +1,23 @@
+{
+  "id": "7802335911728437215",
+  "title": "[P2] [Triggered on {env:prod,service:checkout}] Checkout error rate is high",
+  "body": "The 5xx rate of checkout is above 5% over the last 5 minutes. @webhook-sidekick",
+  "date": "1793004750123",
+  "last_updated": "1793004750123",
+  "event_type": "query_alert_monitor",
+  "org": {"id": "11023", "name": "Example Corp"},
+  "alert_id": "48213977",
+  "alert_title": "[Triggered on {env:prod,service:checkout}] Checkout error rate is high",
+  "alert_transition": "Triggered",
+  "alert_type": "error",
+  "alert_priority": "P2",
+  "alert_status": "sum(last_5m):sum:trace.http.request.errors{env:prod,service:checkout}.as_count() / sum:trace.http.request.hits{env:prod,service:checkout}.as_count() > 0.05",
+  "alert_cycle_key": "7802335911728437215",
+  "alert_scope": "env:prod,service:checkout",
+  "alert_metric": "trace.http.request.errors",
+  "aggregate_key": "9bd4ac313a4d1e8fae2482df7b77628",
+  "hostname": "",
+  "tags": "env:prod, monitor, service:checkout, team:payments",
+  "link": "https://app.datadoghq.com/event/jump_to?event_id=7802335911728437215",
+  "snapshot": "https://p.datadoghq.com/snapshot/view/dd-snapshots-prod/org_11023/2026-10-26/3e1f0c2b9a.png"
+}

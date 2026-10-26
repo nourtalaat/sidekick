@@ -23,7 +23,11 @@ the deliveries of a made-up uptime checker that posts one JSON object when
 a check goes down or comes back up, and signs the body in its own way. The
 example is built and tested in CI, but nothing imports it, so it is not
 part of the `sidekick` binary. The adapters in `internal/intake/generic` and
-`internal/intake/alertmanager` are the real ones.
+`internal/intake/alertmanager` are the real ones, and so are the sender
+adapters next to them: `internal/intake/sentry` checks a signature of its
+own, and `internal/intake/grafana` does so only when its config asks for
+it. Their integration tests, in `internal/intake/adapterstest`, send
+recorded payloads through the real webhook handler.
 
 ## The interface
 
