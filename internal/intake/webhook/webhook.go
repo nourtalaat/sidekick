@@ -57,6 +57,11 @@ const MaxBodyBytes = 1 << 20
 // pathName is the wildcard in Pattern that holds the endpoint name.
 const pathName = "name"
 
+// unknownIntake is the intake label of deliveries to an endpoint that is
+// not configured, so a sender cannot add label values. Endpoint names
+// cannot start with "_", so it never mixes with a real one.
+const unknownIntake = "_unknown"
+
 // The messages of error responses. They never name configured endpoints
 // or say which check failed.
 const (
@@ -96,7 +101,7 @@ type Options struct {
 	// Logger receives one line per delivery. Payloads are never logged.
 	Logger *slog.Logger
 	// Metrics counts deliveries and events. Nil counts nothing.
-	Metrics *Metrics
+	Metrics *ingest.Metrics
 	// TracerProvider makes the tracer of the intake.receive spans. Nil
 	// means the global tracer provider.
 	TracerProvider trace.TracerProvider
@@ -109,7 +114,7 @@ type Handler struct {
 	secrets   registry.Secrets
 	writer    *ingest.Writer
 	log       *slog.Logger
-	metrics   *Metrics
+	metrics   *ingest.Metrics
 	tracer    trace.Tracer
 }
 
@@ -148,7 +153,7 @@ func New(opts Options) (*Handler, error) {
 		}
 
 		h.endpoints[name] = endpoint{name: name, cfg: cfg, adapter: adapter}
-		h.metrics.init(name)
+		h.metrics.Init(name)
 	}
 
 	return h, nil
@@ -175,7 +180,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	d := &reply{h: h, w: w, span: span, intake: intakeLabel, log: h.log.With("intake", intakeLabel)}
 
 	if !known {
-		d.reject(ctx, reasonUnauthenticated, http.StatusNotFound, msgNotFound, "webhook delivery for an unknown endpoint", nil)
+		d.reject(ctx, ingest.ReasonUnauthenticated, http.StatusNotFound, msgNotFound, "webhook delivery for an unknown endpoint", nil)
 
 		return
 	}
@@ -183,12 +188,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxBodyBytes))
 	if err != nil {
 		if _, tooLarge := errors.AsType[*http.MaxBytesError](err); tooLarge {
-			d.reject(ctx, reasonTooLarge, http.StatusRequestEntityTooLarge, msgTooLarge, "webhook delivery rejected: the body is too large", nil)
+			d.reject(ctx, ingest.ReasonTooLarge, http.StatusRequestEntityTooLarge, msgTooLarge, "webhook delivery rejected: the body is too large", nil)
 
 			return
 		}
 
-		d.reject(ctx, reasonInvalidPayload, http.StatusBadRequest, msgUnreadable, "webhook delivery rejected: the body could not be read", err)
+		d.reject(ctx, ingest.ReasonInvalidPayload, http.StatusBadRequest, msgUnreadable, "webhook delivery rejected: the body could not be read", err)
 
 		return
 	}
@@ -202,14 +207,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		d.reject(ctx, reasonUnauthenticated, http.StatusUnauthorized, msgUnauthenticated, "webhook delivery rejected: authentication failed", err)
+		d.reject(ctx, ingest.ReasonUnauthenticated, http.StatusUnauthorized, msgUnauthenticated, "webhook delivery rejected: authentication failed", err)
 
 		return
 	}
 
 	events, err := parse(ctx, ep, req)
 	if err != nil {
-		d.reject(ctx, reasonInvalidPayload, http.StatusBadRequest, msgInvalidPayload+err.Error(), "webhook delivery rejected: the payload is not valid", err)
+		d.reject(ctx, ingest.ReasonInvalidPayload, http.StatusBadRequest, msgInvalidPayload+err.Error(), "webhook delivery rejected: the payload is not valid", err)
 
 		return
 	}
@@ -305,7 +310,7 @@ func (d *reply) accept(ctx context.Context, stored []ingest.Stored) {
 	}
 
 	d.span.SetAttributes(attribute.StringSlice(attrEventKey, keys), attribute.Bool(attrDuplicate, resp.Duplicate))
-	d.h.metrics.stored(d.intake, stored)
+	d.h.metrics.Stored(d.intake, stored)
 	d.log.InfoContext(ctx, "webhook delivery accepted", "events", len(stored), "duplicate", resp.Duplicate)
 	d.h.writeJSON(ctx, d.w, http.StatusAccepted, resp)
 }
@@ -314,7 +319,7 @@ func (d *reply) accept(ctx context.Context, stored []ingest.Stored) {
 // says why in the log; it never holds payload values.
 func (d *reply) reject(ctx context.Context, reason string, status int, msg, logMsg string, err error) {
 	d.span.SetAttributes(attribute.String(attrRejected, reason))
-	d.h.metrics.reject(d.intake, reason)
+	d.h.metrics.Reject(d.intake, reason)
 
 	if err != nil {
 		d.log.InfoContext(ctx, logMsg, "error", err.Error())

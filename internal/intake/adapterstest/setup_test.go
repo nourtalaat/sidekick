@@ -28,6 +28,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/intake"
 	_ "github.com/nourtalaat/sidekick/internal/intake/datadog" // Adapter "datadog".
 	_ "github.com/nourtalaat/sidekick/internal/intake/grafana" // Adapter "grafana".
+	"github.com/nourtalaat/sidekick/internal/intake/ingest"
 	"github.com/nourtalaat/sidekick/internal/intake/sentry"
 	_ "github.com/nourtalaat/sidekick/internal/intake/signoz" // Adapter "signoz".
 	"github.com/nourtalaat/sidekick/internal/intake/webhook"
@@ -99,7 +100,7 @@ func setup(t *testing.T) *harness {
 	redactor, err := redact.New(redactOpts)
 	require.NoError(t, err)
 
-	metrics, err := webhook.NewMetrics(prometheus.NewRegistry())
+	metrics, err := ingest.NewMetrics(prometheus.NewRegistry())
 	require.NoError(t, err)
 
 	pool := storetest.New(t)
