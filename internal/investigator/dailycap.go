@@ -66,8 +66,12 @@ func (h *Handler) holdForDailyCap(ctx context.Context, job db.Job, id uuid.UUID)
 	}
 
 	c, reached, err := h.dailyCap(ctx, inv.Route)
-	if err != nil || !reached {
-		return false, nil, err
+	if err != nil {
+		return false, nil, fmt.Errorf("investigation %s: %w", id, err)
+	}
+
+	if !reached {
+		return false, nil, nil
 	}
 
 	if c.skip {
@@ -176,7 +180,7 @@ func (h *Handler) skipForDailyCap(ctx context.Context, inv db.Investigation, c c
 		}
 
 		if err := publishFinal(ctx, tx, finished, nil, &end.report); err != nil {
-			return err
+			return fmt.Errorf("publish the skipped investigation: %w", err)
 		}
 
 		return h.noticeDailyCap(ctx, tx, c)
