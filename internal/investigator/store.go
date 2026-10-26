@@ -41,6 +41,9 @@ type newStep struct {
 	usage            *model.Usage
 	cost             *int64
 
+	// budget names the budget of the note that starts the final turn.
+	budget string
+
 	// toolCalls counts toward the tool call limit; finding marks an
 	// accepted record_finding.
 	toolCalls int32
@@ -173,6 +176,7 @@ func (r *run) stepParams(s newStep) (db.InsertStepParams, error) {
 		CostMicros:      s.cost,
 		StartedAt:       s.startedAt,
 		DurationMs:      int32(min(s.duration.Milliseconds(), maxDurationMS)), //nolint:gosec // Capped at maxDurationMS.
+		Budget:          optional(s.budget),
 	}
 
 	if len(s.evidence) > 0 {

@@ -109,7 +109,7 @@ func NewMetrics(reg prometheus.Registerer) (*Metrics, error) {
 		}, []string{labelRoute}),
 		budgetExhausted: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: MetricBudgetExhausted,
-			Help: "Investigations that ended because a budget ran out, by route and budget: tool_calls or wall_time.",
+			Help: "Investigations that ended because a budget ran out, by route and budget: tokens, tool_calls, wall_time or cost.",
 		}, []string{labelRoute, labelBudget}),
 	}
 

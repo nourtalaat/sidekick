@@ -139,4 +139,5 @@ type Step struct {
 	CostMicros       *int64
 	StartedAt        time.Time
 	DurationMs       int32
+	Budget           *string
 }

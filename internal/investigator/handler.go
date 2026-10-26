@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -94,6 +95,8 @@ type Handler struct {
 	builtins builtins
 	log      *slog.Logger
 	tracer   trace.Tracer
+	// now is the clock of the soft limits. Tests replace it.
+	now func() time.Time
 }
 
 var _ queue.Handler = (*Handler)(nil)
@@ -129,6 +132,7 @@ func New(opts Options) (*Handler, error) {
 		builtins: builtins{submitVerdict: submit, recordFinding: record},
 		log:      log,
 		tracer:   tp.Tracer(tracerName),
+		now:      time.Now,
 	}, nil
 }
 
