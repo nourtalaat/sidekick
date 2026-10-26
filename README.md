@@ -16,6 +16,7 @@ Sidekick receives alerts from webhooks or Slack, investigates them with the LLM 
 - [Configuration](docs/configuration.md): the `sidekick.yaml` sections, the checks Sidekick runs on them, and `sidekick config validate`.
 - [Running Sidekick](docs/running.md): `sidekick serve`, start-up and shutdown, health and readiness probes, metrics, logs and traces.
 - [Sending alerts to Sidekick](docs/webhooks.md): webhook endpoints, the Alertmanager and generic adapters, and how deliveries are authenticated.
+- [Setting up senders](docs/senders.md): pointing SigNoz, Datadog, Sentry and Grafana at Sidekick, and what each of their alerts becomes.
 - [How investigations run](docs/investigations.md): the agent loop, the report checks, how an investigation ends, its limits, and what happens on a restart.
 - [Investigations in Slack](docs/slack.md): the Slack output, what it posts while an investigation runs and when it finishes, and how to set up the Slack app.
 

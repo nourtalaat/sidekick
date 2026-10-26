@@ -8,6 +8,7 @@ import (
 	_ "github.com/nourtalaat/sidekick/internal/intake/alertmanager" // Intake adapter "alertmanager".
 	_ "github.com/nourtalaat/sidekick/internal/intake/datadog"      // Intake adapter "datadog".
 	_ "github.com/nourtalaat/sidekick/internal/intake/generic"      // Intake adapter "generic".
+	_ "github.com/nourtalaat/sidekick/internal/intake/grafana"      // Intake adapter "grafana".
 	_ "github.com/nourtalaat/sidekick/internal/intake/sentry"       // Intake adapter "sentry".
 	_ "github.com/nourtalaat/sidekick/internal/intake/signoz"       // Intake adapter "signoz".
 	_ "github.com/nourtalaat/sidekick/internal/model/anthropic"     // Model provider "anthropic".

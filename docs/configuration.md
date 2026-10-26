@@ -270,6 +270,12 @@ parse is reported when the file loads.
 [Sending alerts to Sidekick](webhooks.md) describes both adapters, how
 senders sign or authenticate deliveries, and what Sidekick answers.
 
+The adapters `signoz`, `datadog`, `sentry` and `grafana` read the
+webhooks of those tools. Only `grafana` has a setting, an optional
+`signature` section for Grafana's own HMAC signature. `sentry` checks
+Sentry's signature with the secret in `auth.hmac`. [Setting up
+senders](senders.md) shows how to set up each one.
+
 ### `slack`
 
 ```yaml

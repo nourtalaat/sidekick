@@ -165,6 +165,7 @@ point each tool at Sidekick and which fields become what.
 | `signoz` | A SigNoz webhook notification channel. |
 | `datadog` | Datadog's webhooks integration, with the payload the setup page gives. |
 | `sentry` | The webhooks of a Sentry internal integration, signed with its client secret. |
+| `grafana` | A Grafana Alerting webhook contact point, with a bearer token or Grafana's own signature. |
 
 ### Severities
 

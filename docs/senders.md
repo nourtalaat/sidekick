@@ -174,3 +174,71 @@ the issue's ID; a metric alert's incidents are grouped by the alert rule.
 Sentry's signature covers the body only, not the time it was sent, so it
 cannot stop a captured delivery from being sent again. Such a repeat has
 the same key, so it stores nothing new.
+
+## Grafana
+
+Grafana Alerting sends alerts through a **Webhook** contact point. The
+adapter reads its default payload (version 1) and stores one event per
+alert in the delivery, and a resolved event when an alert resolves.
+
+Grafana can authenticate with a bearer token, which every Grafana version
+with Grafana Alerting can send:
+
+```yaml
+intake:
+  webhooks:
+    grafana:
+      adapter: grafana
+      auth: { bearer: { name: sidekick-hooks, key: grafana } }
+```
+
+Or, in versions that have the **HMAC Signature** settings, it can sign
+each delivery. Add a `signature` section; the adapter then checks
+Grafana's signature, with the secret that `auth.hmac` names, instead of a
+bearer token:
+
+```yaml
+intake:
+  webhooks:
+    grafana:
+      adapter: grafana
+      auth: { hmac: { name: sidekick-hooks, key: grafana } }
+      signature:
+        timestampHeader: X-Grafana-Alerting-Timestamp
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `signature.header` | `X-Grafana-Alerting-Signature` | The header that holds the signature, as set in Grafana. |
+| `signature.timestampHeader` | none | The header that holds the time of sending, as set in Grafana. |
+| `signature.tolerance` | `5m` | How far that time may be from the time the delivery arrives. |
+
+Set a timestamp header wherever your Grafana version allows it. Without
+one, Grafana signs only the body, so the signature cannot stop a captured
+delivery from being sent again later; the repeat still has the same key
+and stores nothing new, but it is accepted.
+
+In Grafana, open **Alerting**, then **Contact points**, and add one:
+
+1. Set the integration to **Webhook** and the URL to
+   `https://sidekick.example.com/hooks/grafana`.
+2. Under **Optional Webhook settings**, either put the token from the
+   secret in the credentials of the **Authorization Header** (the scheme
+   stays `Bearer`), or fill in **HMAC Signature** with the secret and the
+   same header names as the `signature` section.
+3. Leave **Custom Payload** empty: the adapter reads only the default
+   payload. **Title** and **Message** are ignored.
+4. Leave **Disable resolved message** off, and press **Test**.
+5. Point a notification policy at the contact point.
+
+| Event field | Comes from |
+|---|---|
+| Title | The `summary` annotation, or the alert name. |
+| Text | The `description` annotation. |
+| Service | The `service` label. |
+| Severity | The `severity` label. |
+| Labels | Every label of the alert. |
+| Links | The alert rule (`generatorURL`), a `runbook_url` annotation, and the dashboard, panel and image of the alert, when it has them. |
+
+Grafana repeats a notification while an alert keeps firing; the repeats
+have the same key, so they store nothing new.
