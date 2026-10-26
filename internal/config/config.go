@@ -322,12 +322,12 @@ func Load(ctx context.Context, path string, opts LoadOptions) (*Config, error) {
 }
 
 // Parse decodes and checks a config file's content. On problems in the
-// content the error is Errors, which lists every problem with its field
-// path.
+// content the error wraps Errors, which lists every problem with its field
+// path; get it with errors.As.
 func Parse(ctx context.Context, data []byte, opts LoadOptions) (*Config, error) {
 	doc, err := parseDocument(data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse YAML: %w", err)
 	}
 
 	var errs errorList

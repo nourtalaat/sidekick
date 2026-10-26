@@ -27,10 +27,10 @@ func TestParseFileProblems(t *testing.T) {
 		yaml string
 		want string
 	}{
-		{name: "empty file", yaml: "", want: "the file is empty"},
-		{name: "comments only", yaml: "# nothing here\n", want: "the file is empty"},
-		{name: "invalid YAML", yaml: "server: [\n", want: "invalid YAML: line 1: did not find expected node content"},
-		{name: "two documents", yaml: "server: {}\n---\nserver: {}\n", want: "the file must hold one YAML document"},
+		{name: "empty file", yaml: "", want: "parse YAML: the file is empty"},
+		{name: "comments only", yaml: "# nothing here\n", want: "parse YAML: the file is empty"},
+		{name: "invalid YAML", yaml: "server: [\n", want: "parse YAML: invalid YAML: line 1: did not find expected node content"},
+		{name: "two documents", yaml: "server: {}\n---\nserver: {}\n", want: "parse YAML: the file must hold one YAML document"},
 		{name: "top level is a list", yaml: "- a\n", want: "expected a mapping, got a list"},
 		{name: "unknown top-level key", yaml: minimal + "servr: {}\n", want: `servr: unknown key (did you mean "server"?)`},
 		{name: "a later section", yaml: minimal + "watch: {}\n", want: "watch: unknown key"},

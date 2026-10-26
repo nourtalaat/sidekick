@@ -536,6 +536,8 @@ func pluginErrors(path string, err error) Errors {
 		}
 	}
 
+	msg = strings.TrimPrefix(msg, "check typed config: ")
+	msg = strings.TrimPrefix(msg, "build from typed config: ")
 	msg = strings.TrimPrefix(msg, "validate config: ")
 	msg = strings.TrimPrefix(msg, "decode config: ")
 

@@ -90,7 +90,7 @@ func TestRegistryBuild(t *testing.T) {
 			name:         "unknown type",
 			typeName:     "smtp",
 			wantErr:      ErrUnknownType,
-			wantErrMatch: `widget "primary": type "smtp": unknown type`,
+			wantErrMatch: `build widget "primary": type "smtp": unknown type`,
 		},
 		{
 			name:     "factory fails",
@@ -214,7 +214,7 @@ func TestPluginRegistries(t *testing.T) {
 
 			err := tt.build(t.Context())
 			require.ErrorIs(t, err, ErrUnknownType)
-			require.EqualError(t, err, tt.kind+` "x": type "none": unknown type`)
+			require.EqualError(t, err, `build `+tt.kind+` "x": type "none": unknown type`)
 		})
 	}
 }
@@ -250,14 +250,14 @@ func TestTypedValidatedConfig(t *testing.T) {
 				dec.EXPECT().Decode(gomock.Any()).Return(errDecode)
 			},
 			wantErr:      errDecode,
-			wantErrMatch: "decode config: line 3: cannot unmarshal",
+			wantErrMatch: "build from typed config: decode config: line 3: cannot unmarshal",
 		},
 		{
 			name: "Validate runs after decoding",
 			setupMocks: func(dec *MockDecoder) {
 				dec.EXPECT().Decode(gomock.Any()).Return(nil)
 			},
-			wantErrMatch: "validate config: url: required",
+			wantErrMatch: "build from typed config: validate config: url: required",
 		},
 		{
 			name: "constructor failure",
@@ -390,7 +390,7 @@ func TestRegistryCheck(t *testing.T) {
 			name:         "unknown type",
 			typeName:     "smtp",
 			wantErr:      ErrUnknownType,
-			wantErrMatch: `widget "primary": type "smtp": unknown type`,
+			wantErrMatch: `check widget "primary": type "smtp": unknown type`,
 		},
 		{
 			name:     "check fails",
@@ -461,14 +461,14 @@ func TestTypedCheck(t *testing.T) {
 				dec.EXPECT().Decode(gomock.Any()).Return(errDecode)
 			},
 			wantErr:      errDecode,
-			wantErrMatch: "decode config: line 3: cannot unmarshal",
+			wantErrMatch: "check typed config: decode config: line 3: cannot unmarshal",
 		},
 		{
 			name: "Validate runs after decoding",
 			setupMocks: func(dec *MockDecoder) {
 				dec.EXPECT().Decode(gomock.Any()).Return(nil)
 			},
-			wantErrMatch: "validate config: url: required",
+			wantErrMatch: "check typed config: validate config: url: required",
 		},
 	}
 

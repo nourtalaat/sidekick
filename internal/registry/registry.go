@@ -112,9 +112,9 @@ func (r *Registry[T]) Register(typeName string, p Plugin[T]) {
 // name, without building it. It returns the decoded config, or nil when the
 // plugin has no Check function.
 func (r *Registry[T]) Check(ctx context.Context, typeName, name string, dec Decoder) (any, error) {
-	p, err := r.plugin(typeName, name)
+	p, err := r.plugin(typeName)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("check %s %q: %w", r.kind, name, err)
 	}
 
 	if p.Check == nil {
@@ -133,9 +133,9 @@ func (r *Registry[T]) Check(ctx context.Context, typeName, name string, dec Deco
 func (r *Registry[T]) Build(ctx context.Context, typeName, name string, dec Decoder, deps Deps) (T, error) {
 	var zero T
 
-	p, err := r.plugin(typeName, name)
+	p, err := r.plugin(typeName)
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("build %s %q: %w", r.kind, name, err)
 	}
 
 	v, err := p.Build(ctx, name, dec, deps)
@@ -161,14 +161,14 @@ func (r *Registry[T]) Types() []string {
 	return names
 }
 
-// plugin returns the plugin registered as typeName, for the instance name.
-func (r *Registry[T]) plugin(typeName, name string) (Plugin[T], error) {
+// plugin returns the plugin registered as typeName.
+func (r *Registry[T]) plugin(typeName string) (Plugin[T], error) {
 	r.mu.RLock()
 	p, ok := r.plugins[typeName]
 	r.mu.RUnlock()
 
 	if !ok {
-		return Plugin[T]{}, fmt.Errorf("%s %q: type %q: %w", r.kind, name, typeName, ErrUnknownType)
+		return Plugin[T]{}, fmt.Errorf("type %q: %w", typeName, ErrUnknownType)
 	}
 
 	return p, nil
@@ -188,7 +188,7 @@ func Typed[C any, T any](build func(ctx context.Context, name string, cfg C, dep
 		Check: func(_ context.Context, _ string, dec Decoder) (any, error) {
 			cfg, err := decodeChecked[C](dec)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("check typed config: %w", err)
 			}
 
 			return cfg, nil
@@ -198,7 +198,7 @@ func Typed[C any, T any](build func(ctx context.Context, name string, cfg C, dep
 
 			cfg, err := decodeChecked[C](dec)
 			if err != nil {
-				return zero, err
+				return zero, fmt.Errorf("build from typed config: %w", err)
 			}
 
 			t, err := build(ctx, name, *cfg, deps)
