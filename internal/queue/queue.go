@@ -204,6 +204,18 @@ func ReleaseUniqueKey(ctx context.Context, q db.DBTX, job db.Job) error {
 	return nil
 }
 
+// TraceContext returns ctx with the span that enqueued job as the remote
+// parent, when the job carries the traceparent Enqueue stored, so the
+// handler's span joins the trace of the request that queued the job. A job
+// without one returns ctx unchanged.
+func TraceContext(ctx context.Context, job db.Job) context.Context {
+	if job.Traceparent == nil {
+		return ctx
+	}
+
+	return propagation.TraceContext{}.Extract(ctx, propagation.MapCarrier{traceparentHeader: *job.Traceparent})
+}
+
 // traceparent returns the W3C traceparent of the span in ctx, or "" when ctx
 // holds no valid span.
 func traceparent(ctx context.Context) string {

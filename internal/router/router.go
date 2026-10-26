@@ -13,7 +13,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/nourtalaat/sidekick/internal/action"
@@ -42,9 +41,6 @@ const (
 // statusReceived is the status of an event that intake stored and that is
 // waiting to be routed.
 const statusReceived = "received"
-
-// traceparentHeader is the W3C Trace Context field that jobs store.
-const traceparentHeader = "traceparent"
 
 var (
 	errNoEventID     = errors.New("the payload has no event_id")
@@ -126,7 +122,7 @@ func New(opts Options) (*Router, error) {
 // at the same time still open one group. A payload that does not decode,
 // or an event that does not exist, gives up the job.
 func (r *Router) Handle(ctx context.Context, job db.Job) (err error) {
-	ctx, span := r.tracer.Start(jobContext(ctx, job), SpanName)
+	ctx, span := r.tracer.Start(queue.TraceContext(ctx, job), SpanName)
 
 	defer func() {
 		if err != nil {
@@ -294,16 +290,6 @@ func enqueueInvestigate(ctx context.Context, tx pgx.Tx, routeName string, o open
 	}
 
 	return nil
-}
-
-// jobContext returns ctx with the span that enqueued job as the remote
-// parent, when the job carries one.
-func jobContext(ctx context.Context, job db.Job) context.Context {
-	if job.Traceparent == nil {
-		return ctx
-	}
-
-	return propagation.TraceContext{}.Extract(ctx, propagation.MapCarrier{traceparentHeader: *job.Traceparent})
 }
 
 // decodePayload returns the event ID of a route_event payload.

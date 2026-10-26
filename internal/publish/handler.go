@@ -13,7 +13,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/nourtalaat/sidekick/internal/output"
@@ -32,9 +31,6 @@ const (
 	attrSink  = "sidekick.sink"
 	attrPhase = "sidekick.phase"
 )
-
-// traceparentHeader is the W3C Trace Context field that jobs store.
-const traceparentHeader = "traceparent"
 
 var (
 	errNoInvestigation = errors.New("the payload has no investigation_id")
@@ -93,7 +89,7 @@ func New(opts Options) *Handler {
 // sink that is no longer configured, or an investigation without a publish
 // state gives up the job.
 func (h *Handler) Handle(ctx context.Context, job db.Job) (err error) {
-	ctx, span := h.tracer.Start(jobContext(ctx, job), SpanName)
+	ctx, span := h.tracer.Start(queue.TraceContext(ctx, job), SpanName)
 
 	defer func() {
 		if err != nil {
@@ -267,16 +263,6 @@ func (h *Handler) finish(ctx context.Context, job db.Job, p Payload, seq int64, 
 	}
 
 	return nil
-}
-
-// jobContext returns ctx with the span that enqueued job as the remote
-// parent, when the job carries one.
-func jobContext(ctx context.Context, job db.Job) context.Context {
-	if job.Traceparent == nil {
-		return ctx
-	}
-
-	return propagation.TraceContext{}.Extract(ctx, propagation.MapCarrier{traceparentHeader: *job.Traceparent})
 }
 
 // decodePayload reads a publish payload.

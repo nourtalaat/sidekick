@@ -5,7 +5,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/event"
@@ -47,36 +46,6 @@ func TestDecodePayload(t *testing.T) {
 
 			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestJobContext(t *testing.T) {
-	t.Parallel()
-
-	traceparent := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-
-	tests := []struct {
-		name        string
-		traceparent *string
-		wantValid   bool
-	}{
-		{name: "a job with a traceparent", traceparent: &traceparent, wantValid: true},
-		{name: "a job without one", traceparent: nil, wantValid: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			sc := trace.SpanContextFromContext(jobContext(t.Context(), db.Job{Traceparent: tt.traceparent}))
-			require.Equal(t, tt.wantValid, sc.IsValid())
-
-			if tt.wantValid {
-				require.True(t, sc.IsRemote())
-				require.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", sc.TraceID().String())
-				require.Equal(t, "00f067aa0ba902b7", sc.SpanID().String())
-			}
 		})
 	}
 }
