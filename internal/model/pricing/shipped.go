@@ -2,8 +2,10 @@ package pricing
 
 import "github.com/nourtalaat/sidekick/internal/model"
 
-// CheckedOn is the date the shipped prices were last checked against
-// https://platform.claude.com/docs/en/about-claude/pricing.
+// CheckedOn is the date the shipped prices were last checked: the Claude API
+// prices against https://platform.claude.com/docs/en/about-claude/pricing,
+// and the Amazon Bedrock prices in bedrock.go against the AWS Price List
+// API.
 const CheckedOn = "2026-10-26"
 
 // usd is one US dollar in micro-dollars, so prices below read as they do on
@@ -23,8 +25,9 @@ const roundHalf = 0.5
 // the Claude API (first-party) prices at
 // https://platform.claude.com/docs/en/about-claude/pricing, in US dollars
 // per million tokens. Cache writes use the 5-minute price, the cache
-// lifetime the Anthropic connector asks for. Prices on Amazon Bedrock and
-// Google Cloud differ; set them with model.prices in config.
+// lifetime the Anthropic connector asks for. Amazon Bedrock model IDs have
+// their own prices in bedrockShipped. Prices on Google Cloud differ; set
+// them with model.prices in config.
 var shipped = map[string]model.Price{
 	"claude-fable-5-1":  perMTok(10, 50, 0.25, 12.50),
 	"claude-mythos-5-1": perMTok(10, 50, 0.25, 12.50),
