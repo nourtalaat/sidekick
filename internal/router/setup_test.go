@@ -1,0 +1,151 @@
+//go:build integration
+
+package router
+
+import (
+	"context"
+	"encoding/json"
+	"log/slog"
+	"os"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/nourtalaat/sidekick/internal/queue"
+	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/store/storetest"
+)
+
+// The IDs of the events in fixture/events.sql.
+var (
+	paymentsEvent = uuid.MustParse("0192d3a4-0000-7000-8000-000000000001")
+	diskEvent     = uuid.MustParse("0192d3a4-0000-7000-8000-000000000002")
+	diskAgain     = uuid.MustParse("0192d3a4-0000-7000-8000-000000000003")
+	resolvedEvent = uuid.MustParse("0192d3a4-0000-7000-8000-000000000004")
+	otherEvent    = uuid.MustParse("0192d3a4-0000-7000-8000-000000000005")
+)
+
+// TestMain runs the tests, then lets storetest stop the Postgres container
+// it may have started.
+func TestMain(m *testing.M) {
+	os.Exit(storetest.Main(m))
+}
+
+// harness is a Router with the routes of fixture/sidekick.yaml on a
+// database of its own, seeded with fixture/events.sql.
+type harness struct {
+	pool   *pgxpool.Pool
+	router *Router
+	spans  *tracetest.SpanRecorder
+	// intake makes the spans that enqueue route_event jobs, as the
+	// intake.receive span does.
+	intake trace.Tracer
+}
+
+// investigateJob is an investigate job as the tests check it.
+type investigateJob struct {
+	Route       *string
+	UniqueKey   *string
+	Payload     json.RawMessage
+	Traceparent *string
+}
+
+func setup(t *testing.T) *harness {
+	t.Helper()
+
+	cfg, settings := loadConfig(t)
+
+	pool := storetest.New(t)
+	storetest.LoadFixture(t, pool, "fixture/events.sql")
+
+	spans := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans))
+
+	r, err := New(Options{
+		Config:         cfg,
+		ModelSettings:  settings,
+		Pool:           pool,
+		Logger:         slog.New(slog.DiscardHandler),
+		TracerProvider: tp,
+	})
+	require.NoError(t, err)
+
+	return &harness{pool: pool, router: r, spans: spans, intake: tp.Tracer("intake")}
+}
+
+// routeJob enqueues the route_event job of the event with id inside an
+// intake span, as intake does, and returns the job as a worker claims it.
+func (h *harness) routeJob(t *testing.T, id uuid.UUID) db.Job {
+	t.Helper()
+
+	ctx, span := h.intake.Start(t.Context(), "intake.receive")
+	defer span.End()
+
+	payload, err := json.Marshal(routeEventPayload{EventID: id})
+	require.NoError(t, err)
+
+	return h.enqueue(t, ctx, payload)
+}
+
+// enqueue adds a route_event job with payload and returns it.
+func (h *harness) enqueue(t *testing.T, ctx context.Context, payload []byte) db.Job {
+	t.Helper()
+
+	jobID, err := queue.Enqueue(ctx, h.pool, queue.NewJob{Kind: queue.KindRouteEvent, Payload: payload})
+	require.NoError(t, err)
+
+	job, err := db.New(h.pool).GetJob(t.Context(), jobID)
+	require.NoError(t, err)
+
+	return job
+}
+
+// event returns the stored event with id.
+func (h *harness) event(t *testing.T, id uuid.UUID) db.Event {
+	t.Helper()
+
+	ev, err := db.New(h.pool).GetEvent(t.Context(), id)
+	require.NoError(t, err)
+
+	return ev
+}
+
+// groups returns every event group, oldest first.
+func (h *harness) groups(t *testing.T) []db.EventGroup {
+	t.Helper()
+
+	return collect[db.EventGroup](t, h.pool, "SELECT * FROM event_groups ORDER BY id")
+}
+
+// investigations returns every investigation, oldest first.
+func (h *harness) investigations(t *testing.T) []db.Investigation {
+	t.Helper()
+
+	return collect[db.Investigation](t, h.pool, "SELECT * FROM investigations ORDER BY id")
+}
+
+// investigateJobs returns every investigate job, oldest first.
+func (h *harness) investigateJobs(t *testing.T) []investigateJob {
+	t.Helper()
+
+	return collect[investigateJob](t, h.pool, "SELECT route, unique_key, payload, traceparent FROM jobs WHERE kind = 'investigate' ORDER BY id")
+}
+
+// collect runs query and returns its rows as T, column by column.
+func collect[T any](t *testing.T, pool *pgxpool.Pool, query string) []T {
+	t.Helper()
+
+	rows, err := pool.Query(t.Context(), query)
+	require.NoError(t, err)
+
+	out, err := pgx.CollectRows(rows, pgx.RowToStructByPos[T])
+	require.NoError(t, err)
+
+	return out
+}
