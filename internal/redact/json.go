@@ -157,18 +157,20 @@ func (w *jsonWalker) token(tok json.Token) error {
 
 // member redacts the string value of an object member: with the text
 // rules, then, if they found nothing, with the rules that look at the key.
+// A key rule's span that lies inside a placeholder already in the value is
+// left alone, so redacting twice changes nothing.
 func (w *jsonWalker) member(key, value string) string {
 	out := w.r.redact(value, w.counts)
 	w.counts = out.counts
 
-	if out.changed {
+	if out.matched {
 		return out.text
 	}
 
 	for i, rl := range w.r.rules {
 		for _, m := range rl.members {
 			start, end, ok := m.match(key, value)
-			if !ok {
+			if !ok || insideAny(start, end, out.protected) {
 				continue
 			}
 

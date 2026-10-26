@@ -154,6 +154,7 @@ func TestJSONTwice(t *testing.T) {
 		in   string
 	}{
 		{name: "secret key", in: `{"password":"hunter2","Authorization":"Bearer abc"}`},
+		{name: "placeholders under secret keys", in: `{"password":"[REDACTED:password_pairs:abcdef]","Authorization":"Bearer [REDACTED:bearer_tokens:abcdef]"}`},
 		{name: "mixed", in: `{"a@example.com":["b@example.com","token ` + fakeGitHubToken + `"]}`},
 	}
 
@@ -166,6 +167,39 @@ func TestJSONTwice(t *testing.T) {
 			twice, stats := r.JSON(once)
 
 			require.Equal(t, string(once), string(twice))
+			require.Nil(t, stats.Counts)
+		})
+	}
+}
+
+func TestJSONFakePlaceholder(t *testing.T) {
+	t.Parallel()
+
+	const fake = "[REDACTED:x:000000]"
+
+	tests := []struct {
+		name   string
+		in     string
+		secret string
+	}{
+		{name: "secret key", in: `{"password": "` + fake + `hunter2"}`, secret: "hunter2"},
+		{name: "authorization header", in: `{"Authorization": "Bearer ` + fake + `abc"}`, secret: "abc"},
+		{name: "text value", in: `["password=` + fake + `hunter2"]`, secret: "hunter2"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := newTestRedactor(t, Options{})
+			once, stats := r.JSON(json.RawMessage(tt.in))
+
+			require.True(t, json.Valid(once))
+			require.NotContains(t, string(once), tt.secret)
+			require.NotEmpty(t, stats.Counts)
+
+			twice, stats := r.JSON(once)
+			require.Equal(t, string(once), string(twice), "redacting the result again changes nothing")
 			require.Nil(t, stats.Counts)
 		})
 	}

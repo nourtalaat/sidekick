@@ -314,6 +314,8 @@ func TestTextTwice(t *testing.T) {
 		{name: "password pair", in: "password=hunter2"},
 		{name: "mixed", in: "Authorization: Bearer abc123 from alice@example.com with " + fakeGitHubToken},
 		{name: "placeholder as a value", in: "password=[REDACTED:password_pairs:abcdef]&next=1"},
+		{name: "quoted placeholder as a value", in: `password="[REDACTED:password_pairs:abcdef]" url=postgres://app:[REDACTED:password_pairs:abcdef]@db`},
+		{name: "placeholders after a bearer", in: "Authorization: Bearer [REDACTED:bearer_tokens:abcdef] then bearer [REDACTED:jwt:abcdef]"},
 	}
 
 	for _, tt := range tests {
@@ -325,6 +327,48 @@ func TestTextTwice(t *testing.T) {
 			twice := r.Text(once.Text)
 
 			require.Equal(t, once.Text, twice.Text)
+			require.Nil(t, twice.Counts)
+		})
+	}
+}
+
+func TestTextFakePlaceholder(t *testing.T) {
+	t.Parallel()
+
+	const fake = "[REDACTED:x:000000]"
+
+	tests := []struct {
+		name   string
+		opts   Options
+		in     string
+		secret string
+	}{
+		{name: "quoted password", in: `password="` + fake + `hunter2"`, secret: "hunter2"},
+		{name: "unquoted password", in: "password=" + fake + "hunter2", secret: "hunter2"},
+		{name: "bearer token", in: "Authorization: Bearer " + fake + "tok123", secret: "tok123"},
+		{name: "bearer token without a digit", in: "sent bearer " + fake + "abc", secret: "abc"},
+		{name: "aws secret access key", in: "aws_secret_access_key=" + fake + fakeAWSSecret, secret: fakeAWSSecret[:10]},
+		{name: "url password", in: "postgres://app" + ":" + fake + "pa55word@db/app", secret: "pa55word"},
+		{
+			name:   "custom rule",
+			opts:   Options{Custom: []Rule{{Name: "customer_id", Pattern: "cus_[A-Za-z0-9]{14}"}}},
+			in:     fake + "cus_0123456789abcd",
+			secret: "cus_0123456789abcd",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := newTestRedactor(t, tt.opts)
+			once := r.Text(tt.in)
+
+			require.NotContains(t, once.Text, tt.secret)
+			require.NotEmpty(t, once.Counts)
+
+			twice := r.Text(once.Text)
+			require.Equal(t, once.Text, twice.Text, "redacting the result again changes nothing")
 			require.Nil(t, twice.Counts)
 		})
 	}

@@ -39,13 +39,19 @@ const (
 	hashChars = 6
 	// hashKeySize is the size of the random key used when none is set.
 	hashKeySize = 32
+	// maskByte stands in for the bytes of a placeholder in the second scan
+	// that matches, so a value that goes on past a placeholder is still
+	// found.
+	maskByte = 'x'
 	// maxPlaceholderLen is the longest placeholder: the frame, the longest
 	// rule name and the hash.
 	maxPlaceholderLen = len("[REDACTED:") + MaxRuleNameLen + len(":") + hashChars + len("]")
 )
 
-// placeholderPattern finds placeholders already in a text. They are left as
-// they are, so redacting a text twice changes nothing.
+// placeholderPattern finds placeholders already in a text. A match that lies
+// inside one is dropped, so redacting a text twice changes nothing. A match
+// that reaches past one is redacted whole, placeholder included, because the
+// text that wrote it may have put it there to hide a secret behind it.
 var placeholderPattern = regexp.MustCompile(`\[REDACTED:[a-z][a-z0-9_-]{0,31}:[0-9a-f]{6}\]`)
 
 // processKey is the random hash key shared by every Redactor in this
@@ -132,8 +138,10 @@ func (r *Redactor) Text(s string) Result {
 type redacted struct {
 	text   string
 	counts map[string]int
-	// changed is set when a rule matched or s held a placeholder already.
-	changed bool
+	// matched is set when a rule matched.
+	matched bool
+	// protected are the spans of the placeholders s already held.
+	protected [][]int
 }
 
 // redact replaces every match in s with its placeholder and adds the
@@ -143,7 +151,7 @@ func (r *Redactor) redact(s string, counts map[string]int) redacted {
 	matches := r.matches(s, protected)
 
 	if len(matches) == 0 {
-		return redacted{text: s, counts: counts, changed: len(protected) > 0}
+		return redacted{text: s, counts: counts, protected: protected}
 	}
 
 	if counts == nil {
@@ -165,16 +173,46 @@ func (r *Redactor) redact(s string, counts map[string]int) redacted {
 
 	b.WriteString(s[last:])
 
-	return redacted{text: b.String(), counts: counts, changed: true}
+	return redacted{text: b.String(), counts: counts, matched: true, protected: protected}
 }
 
 // matches returns the spans to replace in s, sorted and without overlaps.
-// A span that overlaps a placeholder already in s is dropped. Of two spans
-// that overlap, the one that starts first wins; at the same start, the
-// rule that comes first, then the longer span.
+// A span that lies inside a placeholder already in s is dropped. Of two
+// spans that overlap, the one that starts first wins; at the same start,
+// the rule that comes first, then the longer span.
+//
+// When s holds placeholders, the rules also run on a copy of s with each
+// placeholder masked, so a value that goes on past a placeholder, such as
+// password=[REDACTED:x:000000]hunter2, is found as one span. The first scan
+// still runs on s itself, because masking changes where word boundaries
+// fall.
 func (r *Redactor) matches(s string, protected [][]int) []match {
-	var all []match
+	all := r.appendMatches(nil, s)
+	if len(protected) > 0 {
+		all = r.appendMatches(all, mask(s, protected))
+	}
 
+	slices.SortFunc(all, func(a, b match) int {
+		return cmp.Or(cmp.Compare(a.start, b.start), cmp.Compare(a.rule, b.rule), cmp.Compare(b.end, a.end))
+	})
+
+	kept := all[:0]
+	end := 0
+
+	for _, m := range all {
+		if m.start < end || insideAny(m.start, m.end, protected) {
+			continue
+		}
+
+		kept = append(kept, m)
+		end = m.end
+	}
+
+	return kept
+}
+
+// appendMatches adds the matches of every rule in s to all.
+func (r *Redactor) appendMatches(all []match, s string) []match {
 	lower := ""
 
 	for i, rl := range r.rules {
@@ -193,23 +231,7 @@ func (r *Redactor) matches(s string, protected [][]int) []match {
 		}
 	}
 
-	slices.SortFunc(all, func(a, b match) int {
-		return cmp.Or(cmp.Compare(a.start, b.start), cmp.Compare(a.rule, b.rule), cmp.Compare(b.end, a.end))
-	})
-
-	kept := all[:0]
-	end := 0
-
-	for _, m := range all {
-		if m.start < end || overlapsAny(m, protected) {
-			continue
-		}
-
-		kept = append(kept, m)
-		end = m.end
-	}
-
-	return kept
+	return all
 }
 
 // placeholder returns the placeholder for value matched by rule i.
@@ -361,13 +383,26 @@ func containsAny(s string, subs []string) bool {
 	return false
 }
 
-// overlapsAny reports whether m overlaps one of the sorted spans.
-func overlapsAny(m match, spans [][]int) bool {
-	i, _ := slices.BinarySearchFunc(spans, m.start, func(span []int, start int) int {
+// insideAny reports whether start to end lies inside one of the sorted
+// spans, which do not overlap.
+func insideAny(start, end int, spans [][]int) bool {
+	i, _ := slices.BinarySearchFunc(spans, start, func(span []int, start int) int {
 		return cmp.Compare(span[1], start+1)
 	})
 
-	return i < len(spans) && spans[i][0] < m.end
+	return i < len(spans) && spans[i][0] <= start && end <= spans[i][1]
+}
+
+// mask returns s with the bytes of each span replaced by maskByte.
+func mask(s string, spans [][]int) string {
+	b := []byte(s)
+	for _, span := range spans {
+		for i := span[0]; i < span[1]; i++ {
+			b[i] = maskByte
+		}
+	}
+
+	return string(b)
 }
 
 // cutText cuts s to at most limit bytes, at a rune boundary and not inside
