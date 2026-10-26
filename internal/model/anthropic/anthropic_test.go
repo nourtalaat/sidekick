@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -153,13 +152,13 @@ func TestGenerate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			host := hostFor(t.Name())
-			reqs := serve(t, host, tt.response)
-			c := newTestConnector(t, host, tt.model, tt.edit)
+			api := serve(t, tt.response)
+			c := newTestConnector(t, api, tt.model, tt.edit)
 
 			resp, err := c.Generate(t.Context(), userText("Why did checkout fail?"))
-			require.Len(t, reqs.bodies, 1)
-			require.Contains(t, reqs.auth[0], testAPIKey)
+			sent := api.Requests()
+			require.Len(t, sent, 1)
+			require.Contains(t, sentKey(sent[0]), testAPIKey)
 
 			if tt.wantKind != "" {
 				var merr *model.Error
@@ -312,14 +311,13 @@ func TestGenerateRequestBody(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			host := hostFor(t.Name())
-			reqs := serve(t, host, recorded{status: http.StatusOK, file: "text.sse"})
-			c := newTestConnector(t, host, tt.model, tt.edit)
+			api := serve(t, recorded{status: http.StatusOK, file: "text.sse"})
+			c := newTestConnector(t, api, tt.model, tt.edit)
 
 			_, err := c.Generate(t.Context(), tt.req)
 			require.NoError(t, err)
 
-			body := reqs.body(t, 0)
+			body := requestBody(t, api, 0)
 			for key, want := range tt.want {
 				require.Contains(t, body, key)
 				require.JSONEq(t, want, string(body[key]), "key %s", key)
@@ -415,9 +413,8 @@ func TestGenerateRejectsBeforeSending(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			host := hostFor(t.Name())
-			reqs := serve(t, host)
-			c := newTestConnector(t, host, tt.model, nil)
+			api := serve(t)
+			c := newTestConnector(t, api, tt.model, nil)
 
 			_, err := c.Generate(t.Context(), tt.req)
 
@@ -425,7 +422,7 @@ func TestGenerateRejectsBeforeSending(t *testing.T) {
 			require.ErrorAs(t, err, &merr)
 			require.Equal(t, model.ErrInvalid, merr.Kind)
 			require.False(t, merr.Retryable())
-			require.Empty(t, reqs.bodies, "the request was sent")
+			require.Empty(t, api.Requests(), "the request was sent")
 
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
@@ -443,12 +440,11 @@ func TestGenerateRejectsBeforeSending(t *testing.T) {
 func TestReasoningIsSentBackUnchanged(t *testing.T) {
 	t.Parallel()
 
-	host := hostFor(t.Name())
-	reqs := serve(t, host,
+	api := serve(t,
 		recorded{status: http.StatusOK, file: "thinking.sse"},
 		recorded{status: http.StatusOK, file: "text.sse"},
 	)
-	c := newTestConnector(t, host, "claude-haiku-4-5", func(c *Config) {
+	c := newTestConnector(t, api, "claude-haiku-4-5", func(c *Config) {
 		c.Thinking = model.Thinking{Mode: model.ThinkingEnabled, BudgetTokens: 2048}
 		c.MaxTokens = 8000
 	})
@@ -469,7 +465,7 @@ func TestReasoningIsSentBackUnchanged(t *testing.T) {
 		Role    string            `json:"role"`
 		Content []json.RawMessage `json:"content"`
 	}
-	require.NoError(t, json.Unmarshal(reqs.body(t, 1)["messages"], &messages))
+	require.NoError(t, json.Unmarshal(requestBody(t, api, 1)["messages"], &messages))
 	require.Len(t, messages, 3)
 	require.Equal(t, "assistant", messages[1].Role)
 	require.Len(t, messages[1].Content, 3)
@@ -624,21 +620,4 @@ func TestRegistered(t *testing.T) {
 			require.NoError(t, model.CheckRole(model.RoleInvestigate, declarer.Capabilities()))
 		})
 	}
-}
-
-// hostFor returns a host name of its own for a test, so gock never serves
-// one parallel test the responses of another.
-func hostFor(name string) string {
-	host := strings.Map(func(r rune) rune {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			return r
-		case r >= 'A' && r <= 'Z':
-			return r - 'A' + 'a'
-		default:
-			return '-'
-		}
-	}, name)
-
-	return host + ".anthropic.test"
 }
