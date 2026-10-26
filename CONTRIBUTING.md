@@ -116,8 +116,13 @@ Work is tracked as issues with IDs of the form `SK-<n>`. The repository turns
   result:
 
   ```go
-  //go:generate mockgen -source <file>.go -destination mocks_<file>.go -package <pkg>
+  //go:generate mockgen -source <file>.go -destination mocks_<file>.go -package <pkg> -write_package_comment=false
   ```
+
+  `-write_package_comment=false` keeps the mock file from adding a second
+  package doc comment. A file that also holds a sealed interface (one with an
+  unexported method, such as `model.Part`) adds
+  `-exclude_interfaces <Name>`, so the mock does not join the sealed set.
 
 ## Database
 
