@@ -18,9 +18,10 @@ You need:
     `postgres://sidekick:sidekick@localhost:5432/sidekick_test?sslmode=disable`.
     The user must be allowed to create databases.
 
-The Makefile installs its own pinned copies of golangci-lint, mockgen, sqlc
-and govulncheck under `bin/tools`, so you do not need to install them
-yourself.
+The Makefile installs its own pinned copies of golangci-lint, mockgen, sqlc,
+govulncheck and Helm under `bin/tools`, so you do not need to install them
+yourself. Helm is downloaded from get.helm.sh and checked against the
+checksum pinned in the Makefile.
 
 ### Postgres for integration tests with Podman
 
@@ -71,6 +72,9 @@ Run `make help` for the full list. The main ones:
 | `make verify-generated` | Runs `make generate` and fails if any file changed. |
 | `make build` | Builds `bin/sidekick` with the version and commit set. |
 | `make vulncheck` | govulncheck on the code and its dependencies. |
+| `make helm-lint` | `helm lint --strict` of the chart, which checks `values.schema.json`, with the quick-start values and each file in `charts/sidekick/ci/`. |
+| `make helm-test` | Compares `helm template` of the quick-start values with `charts/testdata/quickstart.golden.yaml`, and runs `sidekick config validate` on the `sidekick.yaml` each example values file renders. |
+| `make helm-golden` | Rewrites the golden file after a chart change you intend. |
 | `make image` | Builds the container image for linux/amd64 and linux/arm64 with Docker, or Podman when Docker is missing. `IMAGE_PLATFORMS=linux/arm64` builds one platform. |
 
 To add a target to `make ci`, put `CI_TARGETS += <name>` above its rule. A new
