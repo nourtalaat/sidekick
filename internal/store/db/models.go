@@ -116,6 +116,7 @@ type PublishState struct {
 	Phase           string
 	Body            json.RawMessage
 	UpdatedAt       time.Time
+	UpdateSeq       *int64
 }
 
 type Step struct {
