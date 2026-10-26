@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -175,6 +176,56 @@ func TestFailure(t *testing.T) {
 	}
 }
 
+func TestBuildLockWaits(t *testing.T) {
+	t.Parallel()
+
+	long := "UPDATE accounts SET balance = balance - 1 WHERE id = 1 AND note = '" + strings.Repeat("x", maxQueryLen) + "'"
+
+	tests := []struct {
+		name      string
+		waiting   []lockWait
+		blockers  []blocker
+		wantRoots []int32
+		wantPIDs  []int32
+		wantNote  bool
+	}{
+		{
+			name:      "a chain of two: the root blocks a session that blocks another",
+			waiting:   []lockWait{{PID: 3, BlockedBy: []int32{2}}, {PID: 2, BlockedBy: []int32{1}, Query: &long}},
+			blockers:  []blocker{{PID: 1}, {PID: 2, Waiting: true}},
+			wantRoots: []int32{1},
+			wantPIDs:  []int32{1, 2},
+		},
+		{
+			name:      "two sessions behind one blocker, and a prepared transaction",
+			waiting:   []lockWait{{PID: 5, BlockedBy: []int32{4, 0}}, {PID: 6, BlockedBy: []int32{4}}},
+			blockers:  []blocker{{PID: 4}},
+			wantRoots: []int32{4},
+			wantPIDs:  []int32{0, 4},
+			wantNote:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			pids := blockingPIDs(tt.waiting)
+			require.Equal(t, tt.wantPIDs, pids)
+
+			res := buildLockWaits(request{database: "orders", queryText: true}, tt.waiting, tt.blockers, pids[0] == preparedPID)
+			require.Equal(t, tt.wantRoots, res.RootBlockers)
+			require.Equal(t, tt.wantNote, res.Note != "")
+
+			for _, w := range res.Waiting {
+				if w.Query != nil {
+					require.LessOrEqual(t, len(*w.Query), maxQueryLen)
+				}
+			}
+		})
+	}
+}
+
 // TestThroughTheGuard shows what the model sees: every tool with the
 // source prefix, and a database the config does not list refused by the
 // schema before the source sees the call.
@@ -208,7 +259,7 @@ func TestThroughTheGuard(t *testing.T) {
 				names = append(names, spec.Name)
 			}
 
-			require.Equal(t, []string{"db__running_queries"}, names)
+			require.Equal(t, []string{"db__running_queries", "db__lock_waits"}, names)
 
 			res := run.Call(t.Context(), model.ToolCall{ID: "call-1", Name: "db__running_queries", Input: json.RawMessage(tt.input)})
 			require.True(t, res.ToolResult.IsError)

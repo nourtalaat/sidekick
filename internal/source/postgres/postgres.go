@@ -249,6 +249,8 @@ func readerOf(tool string) (reader, error) {
 	switch tool {
 	case toolRunningQueries:
 		return runningQueries, nil
+	case toolLockWaits:
+		return lockWaits, nil
 	default:
 		return nil, fmt.Errorf("tool %q: %w", tool, errUnknownTool)
 	}

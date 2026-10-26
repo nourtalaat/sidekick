@@ -15,6 +15,7 @@ import (
 // source prefix, for example db__slow_queries.
 const (
 	toolRunningQueries = "running_queries"
+	toolLockWaits      = "lock_waits"
 )
 
 // Limits on how many rows a tool returns.
@@ -35,6 +36,7 @@ type input struct {
 	Database      string `json:"database"`
 	Limit         int    `json:"limit"`
 	MinDurationMs int64  `json:"minDurationMs"`
+	MinWaitMs     int64  `json:"minWaitMs"`
 }
 
 // limit returns the limit the call gives, or defaultLimit, within 1 and
@@ -61,6 +63,18 @@ func toolList(databases []string) []source.Tool {
 			InputSchema: schema(databases, map[string]*jsonschema.Schema{
 				"minDurationMs": durationProperty("Only sessions whose query or open transaction has run at least this many milliseconds. Default 0."),
 				"limit":         limitProperty(),
+			}),
+			ReadOnly: true,
+		},
+		{
+			Name: toolLockWaits,
+			Description: "List the sessions of a Postgres database that are waiting for a lock, longest waiting " +
+				"first, from pg_locks and pg_stat_activity: the lock, how long each has waited, and the sessions " +
+				"blocking it. Also lists every blocking session, and the ones at the head of each blocking chain, " +
+				"which block others without waiting themselves.",
+			InputSchema: schema(databases, map[string]*jsonschema.Schema{
+				"minWaitMs": durationProperty("Only sessions that have waited at least this many milliseconds. Default 0."),
+				"limit":     limitProperty(),
 			}),
 			ReadOnly: true,
 		},

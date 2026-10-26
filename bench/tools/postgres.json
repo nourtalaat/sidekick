@@ -28,6 +28,35 @@
         ],
         "additionalProperties": false
       }
+    },
+    {
+      "name": "lock_waits",
+      "description": "List the sessions of a Postgres database that are waiting for a lock, longest waiting first, from pg_locks and pg_stat_activity: the lock, how long each has waited, and the sessions blocking it. Also lists every blocking session, and the ones at the head of each blocking chain, which block others without waiting themselves.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "string",
+            "description": "The database to read, by the name Sidekick's settings give it."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most rows to return, 1 to 100. Default 20.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "minWaitMs": {
+            "type": "integer",
+            "description": "Only sessions that have waited at least this many milliseconds. Default 0.",
+            "minimum": 0,
+            "maximum": 86400000
+          }
+        },
+        "required": [
+          "database"
+        ],
+        "additionalProperties": false
+      }
     }
   ]
 }

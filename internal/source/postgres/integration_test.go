@@ -94,6 +94,91 @@ func TestRunningQueries(t *testing.T) {
 	}
 }
 
+func TestLockWaits(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// chain adds a third session that waits for a table lock the first
+		// two hold.
+		chain bool
+		none  bool
+	}{
+		{name: "an update waits for the row another transaction updated"},
+		{name: "a chain: a table lock waits behind both", chain: true},
+		{name: "no session waits, so no data", none: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			db := setup(t)
+			s, _ := newSource(t, Config{}, monitor(db))
+
+			if tt.none {
+				res, err := s.Call(t.Context(), source.Call{Tool: toolLockWaits, Input: toolInput(t, map[string]any{"database": "orders"})})
+				require.NoError(t, err)
+				require.True(t, res.NoData)
+
+				return
+			}
+
+			holder, holderPID := holdSession(t, db)
+			_, err := holder.Exec(t.Context(), "BEGIN; UPDATE accounts SET balance = balance + 1 WHERE id = 1")
+			require.NoError(t, err)
+
+			waiter, waiterPID := holdSession(t, db)
+			background(t, waiter, "UPDATE accounts SET balance = balance - 1 WHERE id = 1")
+			waitFor(t, db, "the update to wait", "SELECT cardinality(pg_blocking_pids($1)) > 0", waiterPID)
+
+			want := map[int32][]int32{waiterPID: {holderPID}}
+
+			if tt.chain {
+				third, thirdPID := holdSession(t, db)
+				background(t, third, "BEGIN; LOCK TABLE accounts IN ACCESS EXCLUSIVE MODE")
+				waitFor(t, db, "the table lock to wait", "SELECT cardinality(pg_blocking_pids($1)) = 2", thirdPID)
+
+				want[thirdPID] = []int32{holderPID, waiterPID}
+			}
+
+			res, err := s.Call(t.Context(), source.Call{Tool: toolLockWaits, Input: toolInput(t, map[string]any{"database": "orders"})})
+			require.NoError(t, err)
+			require.False(t, res.NoData)
+
+			var got lockWaitsResult
+			require.NoError(t, json.Unmarshal(res.Structured, &got))
+			require.Len(t, got.Waiting, len(want))
+
+			for _, w := range got.Waiting {
+				require.ElementsMatch(t, want[w.PID], w.BlockedBy, "pid %d", w.PID)
+				require.NotNil(t, w.Query)
+				require.NotNil(t, w.WaitMs)
+
+				if w.PID == waiterPID {
+					require.Equal(t, "transactionid", w.LockType)
+					require.Equal(t, "ShareLock", w.Mode)
+				} else {
+					require.Equal(t, "relation", w.LockType)
+					require.Equal(t, "AccessExclusiveLock", w.Mode)
+					require.Equal(t, "accounts", *w.Relation)
+				}
+			}
+
+			require.Equal(t, []int32{holderPID}, got.RootBlockers)
+
+			for _, b := range got.Blockers {
+				if b.PID == holderPID {
+					require.Equal(t, "idle in transaction", *b.State)
+					require.False(t, b.Waiting)
+				} else {
+					require.True(t, b.Waiting)
+				}
+			}
+		})
+	}
+}
+
 // TestSafety checks the limits every query runs under, and the checks on
 // the role and the connection.
 func TestSafety(t *testing.T) {
@@ -306,6 +391,8 @@ func TestQueryPlans(t *testing.T) {
 		{name: "the role check", sql: roleSQL},
 		{name: "the timeouts", sql: timeoutsSQL, args: []any{"10000", "1000"}},
 		{name: "running_queries", sql: activitySQL, args: []any{true, maxQueryLen, 0.0, defaultLimit + 1}},
+		{name: "lock_waits: waiting sessions", sql: waitingSQL, args: []any{true, maxQueryLen, 0.0, defaultLimit + 1}},
+		{name: "lock_waits: blocking sessions", sql: blockersSQL, args: []any{true, maxQueryLen, []int32{1, 2, 3}, maxLimit + 1}},
 	}
 
 	db := setup(t)
