@@ -85,11 +85,61 @@ model:
     investigate: claude      # required, and the model must be able to call tools
     summarize: claude
   prices:
-    claude-opus-5-5: { inputPerMTok: 5, outputPerMTok: 25, cacheReadPerMTok: 0.5 }
+    claude-opus-5-5: { inputPerMTok: 4, outputPerMTok: 20, cacheReadPerMTok: 0.2, cacheWritePerMTok: 5 }   # replaces the shipped price
 ```
 
 Each provider accepts the shared settings above plus its own. A setting the
 model does not support, such as an effort level it lacks, is an error.
+
+Sidekick ships a price table for the models it knows, used for the cost of
+every step and for the budgets. An entry under `prices` replaces the shipped
+price of that model entirely, so set every field. A model with no price
+counts as free in the budgets, so add a price for any model the table lacks.
+
+#### The `anthropic` provider
+
+```yaml
+claude:
+  provider: anthropic
+  model: claude-opus-5-5                  # required
+  apiKeySecret: { name: sidekick-anthropic, key: apiKey }   # required
+  baseURL: https://llm-proxy.internal     # optional, for a proxy
+  maxTokens: 32000                        # default 64000, capped at the model's maximum
+  effort: high                            # low, medium, high, xhigh or max
+  thinking: { mode: adaptive }            # adaptive, or enabled with budgetTokens
+  timeout: 10m                            # per call, default 10m
+  retries: 3                              # retries of rate limits, overloads and timeouts
+```
+
+- **Known models.** Sidekick knows the current Claude models (Fable, Mythos,
+  Opus, Sonnet and Haiku) and what each one supports. For any other model ID,
+  describe the model in a `capabilities` block, or the config is rejected:
+
+  ```yaml
+  capabilities:
+    toolCalling: true          # needed for the investigate role
+    toolChoice: true           # the model accepts a forced tool choice
+    thinkingModes: [adaptive]  # adaptive and/or enabled
+    effortLevels: [low, medium, high]
+    structuredOutput: true
+    promptCaching: true
+    contextTokens: 1000000
+    maxOutputTokens: 128000
+  ```
+
+- **Effort** is `low`, `medium`, `high`, `xhigh` or `max`, where the model
+  supports it. `none` and `minimal` are OpenAI levels and are rejected.
+  Leaving it out keeps the model's own default.
+- **Thinking.** Leaving `thinking` out keeps the model's default. `adaptive`
+  lets the model decide how much to think. `enabled` with `budgetTokens`
+  (at least 1024, and less than `maxTokens`) works only on the models that
+  still take a fixed budget, such as Claude Haiku 4.5. Some models always
+  think, for example Claude Opus 5.5; for them `mode: off` is an error, and
+  `effort` is the way to make them think less.
+- **Temperature** is not accepted. The Anthropic API version Sidekick uses
+  rejects `temperature`, `top_p` and `top_k` on every model.
+- **Prompt caching** uses the 5-minute cache. Cache reads and writes are
+  priced at their own rates.
 
 ### `sources`
 

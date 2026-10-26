@@ -40,12 +40,12 @@ routes:
 
 var errFakeBuild = errors.New("dial failed")
 
-// init runs main instead of the tests when runMainEnv is set. It is an init
-// function rather than TestMain because the integration tests have their own
+// init runs main instead of the tests when runMainEnv is set, with the
+// built-in plugins, as the released binary does. It is an init function
+// rather than TestMain because the integration tests have their own
 // TestMain.
 func init() {
 	if os.Getenv(runMainEnv) == "1" {
-		registerFakes(registry.Models)
 		main()
 		os.Exit(0)
 	}
