@@ -41,7 +41,9 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
+          # The newest 1.26 patch release. go.mod names 1.26.0, the oldest
+          # Go that builds Sidekick, and go-version-file would install that.
+          go-version: "1.26"
           check-latest: true
 
       - name: Cache tools
@@ -63,7 +65,9 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
+          # The newest 1.26 patch release. go.mod names 1.26.0, the oldest
+          # Go that builds Sidekick, and go-version-file would install that.
+          go-version: "1.26"
           check-latest: true
 
       - name: Cache tools
