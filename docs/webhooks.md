@@ -45,6 +45,9 @@ every delivery.
 ## Authentication
 
 Every endpoint sets exactly one of `bearer` and `hmac` under `auth`.
+Adapters for senders that sign deliveries their own way, such as
+`sentry`, check that signature instead, with the secret `auth` names; see
+[Setting up senders](senders.md).
 
 ### Bearer token
 
@@ -161,6 +164,7 @@ point each tool at Sidekick and which fields become what.
 |---|---|
 | `signoz` | A SigNoz webhook notification channel. |
 | `datadog` | Datadog's webhooks integration, with the payload the setup page gives. |
+| `sentry` | The webhooks of a Sentry internal integration, signed with its client secret. |
 
 ### Severities
 

@@ -117,3 +117,60 @@ A delivery Datadog sends again has the same `id`, so it stores nothing
 new. A renotification, while a monitor stays in alert, has a new `id` and
 is a new event. Events of the same monitor (`alert_id`) and scope
 (`alert_scope`) are grouped as one alert.
+
+## Sentry
+
+Sentry sends webhooks from an **internal integration**, and signs each
+one with the integration's client secret. The adapter checks that
+signature instead of a bearer token or Sidekick's own HMAC scheme, with
+the secret that `auth.hmac` names.
+
+```yaml
+intake:
+  webhooks:
+    sentry:
+      adapter: sentry
+      auth: { hmac: { name: sidekick-hooks, key: sentry } }
+```
+
+In Sentry, open **Settings**, then **Developer Settings**, and create an
+internal integration:
+
+1. Set the **Webhook URL** to `https://sidekick.example.com/hooks/sentry`.
+2. Turn on **Alert Rule Action**, so alert rules can notify it.
+3. Under **Permissions**, give **Issue & Event** read access, and under
+   **Webhooks** check **issue** if issues that are created or resolved
+   should reach Sidekick without an alert rule.
+4. Save, and put the **Client Secret** in the secret.
+5. In the issue alert and metric alert rules that should reach Sidekick,
+   add the action that sends a notification through the integration.
+
+The adapter turns these webhooks into events:
+
+| Webhook | Event | Key |
+|---|---|---|
+| Issue alert (`triggered`) | An alert. | The event ID and the rule's name. |
+| Metric alert `critical` or `warning` | An alert. | The incident's ID and the action. |
+| Metric alert `resolved` | A resolved event. | The incident's ID and the action. |
+| Issue `created` or `unresolved` | An alert. | The issue's ID, the action and when it was last seen. |
+| Issue `resolved` | A resolved event. | The issue's ID, the action and when it was last seen. |
+
+Other webhooks, such as an issue that is assigned or archived, or an
+installation or comment, store nothing and get `202`.
+
+| Event field | Issue alert | Metric alert | Issue |
+|---|---|---|---|
+| Alert name | The rule's name. | The alert rule's name. | The short ID, such as `PYTHON-Y`. |
+| Title | The event's title. | `description_title`, or the rule's name. | The issue's title. |
+| Text | The culprit. | `description_text`. | The culprit. |
+| Service | The `service` tag. | The project, when the rule has one. | The project. |
+| Severity | The event's level. | `critical` or `warning`. | The issue's level. |
+| Labels | The event's tags, `issue_id` and `project_id`. | `alert_rule_id`, `project` and `environment`. | `issue_id`, `project` and `project_id`. |
+| Link | The event. | The alert. | The issue. |
+
+An issue alert and the webhooks of its issue are grouped as one alert, by
+the issue's ID; a metric alert's incidents are grouped by the alert rule.
+
+Sentry's signature covers the body only, not the time it was sent, so it
+cannot stop a captured delivery from being sent again. Such a repeat has
+the same key, so it stores nothing new.
