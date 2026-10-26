@@ -99,7 +99,7 @@ type WatcherState struct {
 	LastResult string    `json:"lastResult,omitempty"`
 	StartedAt  time.Time `json:"startedAt"`
 	EndedAt    time.Time `json:"endedAt,omitzero"`
-	// StopReason is set for WatcherStopped: group_resolved or responder.
+	// StopReason is set for WatcherStopped: group_resolved, responder or config_changed.
 	StopReason string `json:"stopReason,omitempty"`
 }
 

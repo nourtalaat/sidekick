@@ -152,7 +152,7 @@ type Rules struct {
 // ErrInvalid wraps every validation failure; the message goes back to the model.
 var ErrInvalid = errors.New("invalid report")
 
-// Validate checks the report against VR-1 to VR-5 and the configured rules.
+// Validate checks the report against VR-1 to VR-7 and the configured rules.
 func (r Report) Validate(rules Rules) error {
 	var errs []error
 	switch r.Verdict {
