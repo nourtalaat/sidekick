@@ -1,0 +1,33 @@
+{
+  "tools": [
+    {
+      "name": "running_queries",
+      "description": "List the sessions of a Postgres database that are running a query or holding a transaction open, longest running first, from pg_stat_activity: user, application, client address, state, wait event, how long the query and the transaction have run, the sessions blocking it, and the query's text.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "string",
+            "description": "The database to read, by the name Sidekick's settings give it."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most rows to return, 1 to 100. Default 20.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "minDurationMs": {
+            "type": "integer",
+            "description": "Only sessions whose query or open transaction has run at least this many milliseconds. Default 0.",
+            "minimum": 0,
+            "maximum": 86400000
+          }
+        },
+        "required": [
+          "database"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}
