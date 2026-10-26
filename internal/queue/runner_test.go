@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
@@ -418,6 +419,82 @@ func TestShutdown(t *testing.T) {
 	}
 }
 
+// TestShutdownWaitsForTheResultOfAReturnedHandler checks that shutdown
+// leaves a job whose handler has returned to the job's own goroutine, even
+// when writing the job's result goes on past the hand-back grace, as it can
+// on a busy machine or database. A hand-back that got in before that write
+// would put a finished job back in the queue to run again.
+func TestShutdownWaitsForTheResultOfAReturnedHandler(t *testing.T) {
+	t.Parallel()
+
+	const (
+		shutdownTimeout = 10 * time.Millisecond
+		grace           = 10 * time.Millisecond
+	)
+
+	pool := setup(t)
+	handedBack := &handBackRecorder{}
+	started := make(chan struct{}, 2)
+	// finish lets the handler of finishedID return; release lets the
+	// other handler, which ignores the cancel, return.
+	finish := make(chan struct{})
+	release := make(chan struct{})
+
+	finishedID := mustEnqueue(t, pool, NewJob{Kind: KindPublish})
+	stuckID := mustEnqueue(t, pool, NewJob{Kind: KindPublish})
+
+	// The reaper is kept out of the way of the row lock below.
+	runner := newTestRunner(t, pool, Options{
+		ShutdownTimeout: shutdownTimeout,
+		ReapInterval:    time.Hour,
+		Logger:          slog.New(handedBack),
+	})
+	runner.handBackGrace = grace
+	require.NoError(t, runner.Register(KindPublish, HandlerFunc(func(_ context.Context, job db.Job) error {
+		started <- struct{}{}
+
+		if job.ID == finishedID {
+			<-finish
+		} else {
+			<-release
+		}
+
+		return nil
+	}), KindOptions{Concurrency: 2}))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	ran := make(chan error, 1)
+
+	go func() { ran <- runner.Run(ctx) }()
+
+	for range 2 {
+		<-started
+	}
+
+	// Hold the finished job's row, so that writing its result waits.
+	tx, err := pool.Begin(t.Context())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	t.Cleanup(func() { close(release) })
+
+	_, err = tx.Exec(t.Context(), "SELECT 1 FROM jobs WHERE id = $1 FOR UPDATE", finishedID)
+	require.NoError(t, err)
+
+	close(finish)
+	eventually(t, func() bool { return lockWaiters(t, pool) > 0 })
+
+	cancel()
+	eventually(t, func() bool { return len(handedBack.jobIDs()) > 0 })
+	require.NoError(t, tx.Rollback(t.Context()))
+	require.NoError(t, <-ran)
+
+	require.Equal(t, []int64{stuckID}, handedBack.jobIDs(), "only the job whose handler still runs is handed back")
+	require.Equal(t, StatusDone, getJob(t, pool, finishedID).Status)
+	require.Equal(t, StatusPending, getJob(t, pool, stuckID).Status)
+}
+
 // TestLimitsHoldWithTwoRunners runs investigations on two Runners at once
 // and checks the per-route and global limits.
 func TestLimitsHoldWithTwoRunners(t *testing.T) {
@@ -595,6 +672,72 @@ func eventually(t *testing.T, done func() bool) {
 
 		time.Sleep(waitTick)
 	}
+}
+
+// lockWaiters returns how many sessions on the test's database wait for
+// a lock.
+func lockWaiters(t *testing.T, pool *pgxpool.Pool) int {
+	t.Helper()
+
+	var count int
+
+	err := pool.QueryRow(t.Context(),
+		"SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'").Scan(&count)
+	require.NoError(t, err)
+
+	return count
+}
+
+// handBackRecorder is a slog.Handler that keeps the IDs of the jobs that a
+// Runner logs as handed back by its shutdown. It passes every other record
+// on to the default logger, so that a failing test still shows them.
+type handBackRecorder struct {
+	mu  sync.Mutex
+	ids []int64
+}
+
+func (h *handBackRecorder) Enabled(context.Context, slog.Level) bool {
+	return true
+}
+
+func (h *handBackRecorder) Handle(ctx context.Context, record slog.Record) error {
+	if record.Message != "a handler did not return after shutdown, handing its job back" {
+		if err := slog.Default().Handler().Handle(ctx, record); err != nil {
+			return fmt.Errorf("pass the record on: %w", err)
+		}
+
+		return nil
+	}
+
+	record.Attrs(func(attr slog.Attr) bool {
+		if attr.Key != "job_id" {
+			return true
+		}
+
+		h.mu.Lock()
+		defer h.mu.Unlock()
+
+		h.ids = append(h.ids, attr.Value.Int64())
+
+		return false
+	})
+
+	return nil
+}
+
+func (h *handBackRecorder) WithAttrs([]slog.Attr) slog.Handler {
+	return h
+}
+
+func (h *handBackRecorder) WithGroup(string) slog.Handler {
+	return h
+}
+
+func (h *handBackRecorder) jobIDs() []int64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	return append([]int64(nil), h.ids...)
 }
 
 // runCounter counts how many times each job ran and which workers ran
