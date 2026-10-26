@@ -4,87 +4,40 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
-
-func TestDatabaseURL(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		args    []string
-		env     map[string]string
-		want    string
-		wantErr error
-	}{
-		{
-			name:    "neither flag nor environment",
-			wantErr: errNoDatabaseURL,
-		},
-		{
-			name: "flag",
-			args: []string{"--database-url", "postgres://flag/sidekick"},
-			want: "postgres://flag/sidekick",
-		},
-		{
-			name: "environment",
-			env:  map[string]string{databaseURLEnv: "postgres://env/sidekick"},
-			want: "postgres://env/sidekick",
-		},
-		{
-			name: "flag wins over environment",
-			args: []string{"--database-url", "postgres://flag/sidekick"},
-			env:  map[string]string{databaseURLEnv: "postgres://env/sidekick"},
-			want: "postgres://flag/sidekick",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			getenv := func(key string) string { return tt.env[key] }
-
-			up, _, err := newMigrateCmd(getenv).Find([]string{"up"})
-			require.NoError(t, err)
-			require.NoError(t, up.ParseFlags(tt.args))
-
-			got, err := databaseURL(up, getenv)
-			if tt.wantErr != nil {
-				require.ErrorIs(t, err, tt.wantErr)
-
-				return
-			}
-
-			require.NoError(t, err)
-			require.Equal(t, tt.want, got)
-		})
-	}
-}
 
 func TestMigrateCommandErrors(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name    string
-		args    []string
+		name string
+		args []string
+		// dbURL is the database URL in the config's secret; empty leaves the
+		// secret file out.
+		dbURL   string
 		wantErr string
 	}{
 		{
-			name:    "up without a database URL",
+			name:    "default config path",
 			args:    []string{"migrate", "up"},
-			wantErr: "migrate up: find the database URL: pass --database-url or set SIDEKICK_DATABASE_URL",
+			wantErr: "migrate up: load config: read config: open " + defaultConfigPath + ": no such file or directory",
 		},
 		{
-			name:    "status without a database URL",
-			args:    []string{"migrate", "status"},
-			wantErr: "migrate status: find the database URL: pass --database-url or set SIDEKICK_DATABASE_URL",
+			name:    "status without the database URL secret",
+			args:    []string{"migrate", "status", "-c", "CONFIG"},
+			wantErr: "migrate status: find the database URL: read database.urlSecret: resolve text secret: read secret sidekick-db/url",
 		},
 		{
 			name:    "database URL that cannot be parsed",
-			args:    []string{"migrate", "up", "--database-url", "postgres://localhost:notaport/sidekick"},
+			args:    []string{"migrate", "up", "--config", "CONFIG"},
+			dbURL:   "postgres://localhost:notaport/sidekick",
 			wantErr: "parse database URL",
+		},
+		{
+			name:    "config with problems",
+			args:    []string{"migrate", "up", "-c", "INVALID"},
+			wantErr: `servr: unknown key (did you mean "server"?)`,
 		},
 		{
 			name:    "extra arguments",
@@ -97,21 +50,25 @@ func TestMigrateCommandErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			root := newTestRootCmd(func(string) string { return "" })
+			paths := map[string]string{
+				"CONFIG":  writeConfig(t, validConfig, tt.dbURL),
+				"INVALID": writeConfig(t, validConfig+"servr: {}\n", tt.dbURL),
+			}
+
+			args := make([]string, len(tt.args))
+			for i, a := range tt.args {
+				args[i] = a
+				if p, ok := paths[a]; ok {
+					args[i] = p
+				}
+			}
+
+			root := newTestRootCmd(newMigrateCmd(fakeRegistries()))
 			root.SetOut(&bytes.Buffer{})
 			root.SetErr(&bytes.Buffer{})
-			root.SetArgs(tt.args)
+			root.SetArgs(args)
 
 			require.ErrorContains(t, root.Execute(), tt.wantErr)
 		})
 	}
-}
-
-// newTestRootCmd builds a root command holding only `migrate`, which reads
-// the environment through getenv instead of os.Getenv.
-func newTestRootCmd(getenv func(string) string) *cobra.Command {
-	root := &cobra.Command{Use: "sidekick", SilenceUsage: true}
-	root.AddCommand(newMigrateCmd(getenv))
-
-	return root
 }

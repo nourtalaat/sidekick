@@ -17,6 +17,7 @@ import (
 	anthropic "github.com/anthropics/anthropic-sdk-go/v2"
 	"github.com/anthropics/anthropic-sdk-go/v2/option"
 
+	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/secrets"
@@ -152,7 +153,7 @@ func New(ctx context.Context, name string, cfg Config, deps registry.Deps) (mode
 
 	httpClient := deps.HTTP
 	if httpClient == nil {
-		httpClient = &http.Client{}
+		httpClient = httpclient.New()
 	}
 
 	opts := []option.RequestOption{

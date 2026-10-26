@@ -51,18 +51,17 @@ func TestMigrateCommands(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			env := map[string]string{databaseURLEnv: storetest.NewEmptyURL(t)}
-			getenv := func(key string) string { return env[key] }
+			configPath := writeConfig(t, validConfig, storetest.NewEmptyURL(t))
 
 			var out bytes.Buffer
 
 			for _, args := range tt.runs {
 				out.Reset()
 
-				root := newTestRootCmd(getenv)
+				root := newTestRootCmd(newMigrateCmd(fakeRegistries()))
 				root.SetOut(&out)
 				root.SetErr(&bytes.Buffer{})
-				root.SetArgs(args)
+				root.SetArgs(append(args, "--config", configPath))
 				require.NoError(t, root.Execute(), "sidekick %v", args)
 			}
 

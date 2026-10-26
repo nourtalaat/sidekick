@@ -64,6 +64,7 @@ func TestParseDefaults(t *testing.T) {
 				t.Helper()
 				require.Equal(t, Server{Listen: ":8080", MetricsListen: ":9090"}, cfg.Server)
 				require.Equal(t, DefaultMaxConns, cfg.Database.MaxConns)
+				require.Equal(t, MigrationsStartup, cfg.Database.Migrations)
 				require.Equal(t, secrets.DefaultDir, cfg.Secrets.Dir)
 				require.Equal(t, Limits{MaxToolCalls: 40, MaxWallTime: 10 * time.Minute}, cfg.Budgets.PerInvestigation)
 				require.Equal(t, LogLevelInfo, cfg.Telemetry.LogLevel)
@@ -317,6 +318,53 @@ func TestLoad(t *testing.T) {
 
 			require.NoError(t, err)
 			require.Equal(t, "default", cfg.Routes[0].Name)
+		})
+	}
+}
+
+func TestDatabaseURL(t *testing.T) {
+	t.Parallel()
+
+	ref := registry.SecretRef{Name: "sidekick-db", Key: "url"}
+
+	tests := []struct {
+		name    string
+		content string
+		wantURL string
+		wantErr string
+	}{
+		{
+			name:    "trailing newline removed",
+			content: "postgres://db/sidekick\n",
+			wantURL: "postgres://db/sidekick",
+		},
+		{
+			name:    "missing file",
+			wantErr: "read database.urlSecret: resolve text secret: read secret sidekick-db/url: open file: openat sidekick-db/url: no such file or directory",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			if tt.content != "" {
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, ref.Name), 0o700))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, ref.Name, ref.Key), []byte(tt.content), 0o600))
+			}
+
+			cfg := &Config{Database: Database{URLSecret: ref}, Secrets: Secrets{Dir: dir}}
+
+			got, err := cfg.DatabaseURL(t.Context(), nil)
+			if tt.wantErr != "" {
+				require.EqualError(t, err, tt.wantErr)
+
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tt.wantURL, got)
 		})
 	}
 }

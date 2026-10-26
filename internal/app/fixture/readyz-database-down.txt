@@ -1,0 +1,3 @@
+config: ok
+database: unreachable: DETAILS
+schema: not checked, because the database is unreachable

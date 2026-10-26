@@ -34,6 +34,7 @@ const (
 	DefaultListen        = ":8080"
 	DefaultMetricsListen = ":9090"
 	DefaultMaxConns      = 20
+	DefaultMigrations    = MigrationsStartup
 	DefaultHMACTolerance = 5 * time.Minute
 	DefaultRoutePriority = 100
 	DefaultMaxToolCalls  = 40
@@ -90,7 +91,23 @@ type Database struct {
 	URLSecret registry.SecretRef `yaml:"urlSecret"`
 	// MaxConns is the size of the connection pool.
 	MaxConns int `yaml:"maxConns"`
+	// Migrations says when the schema is migrated.
+	Migrations MigrationMode `yaml:"migrations"`
 }
+
+// MigrationMode says when the database schema is migrated.
+type MigrationMode string
+
+// Migration modes. The Helm chart's job mode, which migrates in a
+// pre-upgrade hook Job, runs Sidekick itself in manual mode.
+const (
+	// MigrationsStartup migrates at start-up. When several replicas start
+	// at once, one migrates and the others wait for it.
+	MigrationsStartup MigrationMode = "startup"
+	// MigrationsManual never migrates; an operator runs `sidekick migrate
+	// up`. Until the schema is current, the replica is not ready.
+	MigrationsManual MigrationMode = "manual"
+)
 
 // Secrets says where secret files are mounted.
 type Secrets struct {
@@ -279,6 +296,22 @@ func (c *Config) RoutesInOrder() []Route {
 	return routes
 }
 
+// DatabaseURL reads the Postgres URL from database.urlSecret through s, or
+// from the files under secrets.dir when s is nil. The URL holds the
+// password, so it is never written to the file or passed as a flag.
+func (c *Config) DatabaseURL(ctx context.Context, s registry.Secrets) (string, error) {
+	if s == nil {
+		s = secrets.NewDir(c.Secrets.Dir)
+	}
+
+	url, err := secrets.ResolveText(ctx, s, c.Database.URLSecret)
+	if err != nil {
+		return "", fmt.Errorf("read database.urlSecret: %w", err)
+	}
+
+	return url, nil
+}
+
 // StrategySet returns the strategies routes can use: the built-in ones and
 // those from strategies.dir. It is set on configs returned by Load and
 // Parse, and nil on others.
@@ -412,6 +445,7 @@ func (s *Server) setDefaults() {
 
 func (d *Database) setDefaults() {
 	d.MaxConns = DefaultMaxConns
+	d.Migrations = DefaultMigrations
 }
 
 func (s *Secrets) setDefaults() {

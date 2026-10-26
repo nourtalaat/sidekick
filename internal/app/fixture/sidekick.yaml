@@ -1,0 +1,25 @@
+# The config the app tests start Sidekick with. The tests replace
+# SECRETS_DIR and MIGRATIONS, and listen on ports the system picks.
+server:
+  listen: "127.0.0.1:0"
+  metricsListen: "127.0.0.1:0"
+
+database:
+  urlSecret: { name: sidekick-db, key: url }
+  maxConns: 4
+  migrations: MIGRATIONS
+
+secrets:
+  dir: SECRETS_DIR
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5, apiKeySecret: { name: anthropic, key: apiKey } }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default
+
+telemetry:
+  logLevel: debug

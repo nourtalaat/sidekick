@@ -113,6 +113,37 @@ func TestMigrationStatus(t *testing.T) {
 	}
 }
 
+func TestSchemaVersion(t *testing.T) {
+	t.Parallel()
+
+	versions := migrationVersions(t, migrations.FS)
+	latest := versions[len(versions)-1]
+
+	tests := []struct {
+		name        string
+		url         func(t testing.TB) string
+		wantCurrent int64
+	}{
+		{name: "new database", url: storetest.NewEmptyURL, wantCurrent: 0},
+		{name: "migrated database", url: storetest.NewURL, wantCurrent: latest},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			pool, err := store.Open(t.Context(), tt.url(t), replicaMaxConns)
+			require.NoError(t, err)
+			t.Cleanup(pool.Close)
+
+			current, target, err := store.SchemaVersion(t.Context(), pool)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantCurrent, current)
+			require.Equal(t, latest, target)
+		})
+	}
+}
+
 func TestOpenSetsThePoolSize(t *testing.T) {
 	t.Parallel()
 

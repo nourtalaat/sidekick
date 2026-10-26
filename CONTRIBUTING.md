@@ -188,9 +188,13 @@ Rules:
   `main`; renumber yours to the next free number.
 
 The binary embeds the migrations. `sidekick migrate up` applies them and
-`sidekick migrate status` lists them; both take the database URL from
-`--database-url` or `SIDEKICK_DATABASE_URL`. Only one process migrates at a
-time: goose holds a Postgres advisory lock while it runs.
+`sidekick migrate status` lists them. Both read the config file given with
+`--config` (default `/etc/sidekick/sidekick.yaml`) and take the database URL
+from the secret that `database.urlSecret` names; there is no flag or
+environment variable for it, so the password never shows in the process
+list. Only one process migrates at a time: goose holds a Postgres advisory
+lock while it runs. `sidekick serve` also migrates at start-up, unless
+`database.migrations` is `manual`.
 
 ### Adding a query
 
@@ -298,3 +302,26 @@ then `output`, then `registry`. `model` and `intake` import only `event`, or
 nothing. Plugins in subpackages (for example `internal/model/anthropic`)
 import `registry` and register themselves in `init`. The linter (`depguard`)
 rejects imports that go the other way.
+
+## Adding HTTP routes and job handlers
+
+`internal/app` starts and stops everything; `cmd/sidekick/serve.go` makes
+the app with `app.New`, and a feature adds itself before `Run`:
+
+```go
+if err := a.RegisterRoutes(func(mux *http.ServeMux) {
+	mux.Handle("POST /hooks/{name}", hooks)
+}); err != nil {
+	return fmt.Errorf("register webhook routes: %w", err)
+}
+
+if err := a.RegisterJob(queue.KindRouteEvent, router, queue.KindOptions{}); err != nil {
+	return fmt.Errorf("register the router: %w", err)
+}
+```
+
+Routes go on the main listener (`server.listen`); the metrics listener is
+reserved for `/metrics`, `/healthz` and `/readyz`. The job queue runs only
+when at least one handler is registered. Get the config, logger, metrics
+registry, tracer provider, database pool and plugin instances from the
+app's accessors rather than from globals.

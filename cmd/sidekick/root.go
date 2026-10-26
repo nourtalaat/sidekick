@@ -1,8 +1,6 @@
 package main
 
 import (
-	"os"
-
 	"github.com/spf13/cobra"
 
 	"github.com/nourtalaat/sidekick/internal/buildinfo"
@@ -19,8 +17,9 @@ func newRootCmd(info buildinfo.Info) *cobra.Command {
 	}
 
 	root.AddCommand(newVersionCmd(info))
-	root.AddCommand(newMigrateCmd(os.Getenv))
+	root.AddCommand(newMigrateCmd(config.Registries{}))
 	root.AddCommand(newConfigCmd(config.Registries{}))
+	root.AddCommand(newServeCmd(config.Registries{}, info))
 
 	return root
 }

@@ -53,6 +53,28 @@ func MigrationStatus(ctx context.Context, pool *pgxpool.Pool) (statuses []*goose
 	return statuses, nil
 }
 
+// SchemaVersion returns the version of the newest migration the database
+// has and of the newest one this binary embeds. The database's schema is
+// current when current is at least target. It does not take the migration
+// lock, so it neither waits for nor holds up a replica that is migrating.
+func SchemaVersion(ctx context.Context, pool *pgxpool.Pool) (current, target int64, err error) {
+	provider, err := newProvider(pool, migrations.FS)
+	if err != nil {
+		return 0, 0, fmt.Errorf("read schema version: %w", err)
+	}
+
+	defer func() {
+		err = closeProvider(provider, err)
+	}()
+
+	current, target, err = provider.GetVersions(ctx)
+	if err != nil {
+		return 0, 0, fmt.Errorf("read schema version: %w", err)
+	}
+
+	return current, target, nil
+}
+
 // migrate applies the migrations in fsys. Tests call it with their own
 // migrations.
 func migrate(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS) (err error) {
