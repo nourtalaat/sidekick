@@ -168,19 +168,8 @@ func (v *validator) checkRoles(path string, roles map[model.Role]string, global 
 		}
 
 		if caps, ok := v.caps[connector]; ok {
-			v.checkRoleCaps(rolePath, role, connector, caps)
+			checkRoleCaps(v.errs, rolePath, role, connector, caps)
 		}
-	}
-}
-
-// checkRoleCaps checks that a connector with caps can fill role.
-func (v *validator) checkRoleCaps(path string, role model.Role, connector string, caps model.Capabilities) {
-	err := model.CheckRole(role, caps)
-	switch {
-	case errors.Is(err, model.ErrNoToolCalling):
-		v.errs.add(path, "connector %q cannot call tools, which the %s role needs", connector, role)
-	case err != nil:
-		v.errs.add(path, "connector %q cannot fill this role: %v", connector, err)
 	}
 }
 
@@ -515,6 +504,17 @@ func checkPlugin[T any](v *validator, reg *registry.Registry[T], kind, typeName,
 	v.refs = append(v.refs, findAll[registry.SecretRef](decoded, s.Path())...)
 
 	return decoded, true
+}
+
+// checkRoleCaps checks that a connector with caps can fill role.
+func checkRoleCaps(errs *errorList, path string, role model.Role, connector string, caps model.Capabilities) {
+	if err := model.CheckRole(role, caps); err != nil {
+		if errors.Is(err, model.ErrNoToolCalling) {
+			errs.add(path, "connector %q cannot call tools, which the %s role needs", connector, role)
+		} else {
+			errs.add(path, "connector %q cannot fill this role: %v", connector, err)
+		}
+	}
 }
 
 // pluginErrors turns an error from a plugin's check or build into Errors.
