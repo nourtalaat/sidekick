@@ -528,6 +528,8 @@ func (r *Runner) claim(ctx context.Context, w *worker, limit int) ([]db.Job, err
 // shutdown waits for running jobs after the loops have stopped, first
 // letting handlers finish, then cancelling them so they hand their jobs
 // back, and at last handing back the jobs of handlers that did not return.
+// A handler that did return writes its job's result itself, even when that
+// write is still going on after the grace, and shutdown waits for it.
 func (r *Runner) shutdown(jobs *sync.WaitGroup, stopWork context.CancelCauseFunc) {
 	if waitFor(jobs, r.opts.ShutdownTimeout) {
 		return
@@ -540,17 +542,24 @@ func (r *Runner) shutdown(jobs *sync.WaitGroup, stopWork context.CancelCauseFunc
 		return
 	}
 
-	for _, job := range r.active.list() {
+	for _, job := range r.active.takeAll() {
 		r.log.Warn("a handler did not return after shutdown, handing its job back", jobAttrs(job)...)
 		r.handBack(job)
 	}
+
+	r.active.waitResults()
 }
 
-// activeJobs holds the jobs that this Runner is running, by ID. The job
-// goroutines and the shutdown share it.
+// activeJobs holds the jobs whose handlers are running, by ID. The job
+// goroutines and the shutdown share it, and it decides which of them writes
+// a job's result: the job's goroutine when the handler returns first, or the
+// shutdown when it takes the job while the handler still runs.
 type activeJobs struct {
 	mu   sync.Mutex
 	jobs map[int64]db.Job
+	// results counts the job goroutines whose handler has returned and
+	// that have not yet written the job's result.
+	results sync.WaitGroup
 }
 
 func (a *activeJobs) add(job db.Job) {
@@ -564,14 +573,31 @@ func (a *activeJobs) add(job db.Job) {
 	a.jobs[job.ID] = job
 }
 
-func (a *activeJobs) remove(id int64) {
+// handlerReturned removes the job of a handler that has returned, and
+// reports whether the caller is to write the job's result. It is false when
+// the shutdown has already taken the job to hand it back. After true, the
+// caller calls resultWritten once the write is done.
+func (a *activeJobs) handlerReturned(id int64) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	if _, ok := a.jobs[id]; !ok {
+		return false
+	}
+
 	delete(a.jobs, id)
+	a.results.Add(1)
+
+	return true
 }
 
-func (a *activeJobs) list() []db.Job {
+func (a *activeJobs) resultWritten() {
+	a.results.Done()
+}
+
+// takeAll removes and returns the jobs whose handlers are still running, so
+// that their goroutines leave the jobs alone when the handlers return.
+func (a *activeJobs) takeAll() []db.Job {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -580,7 +606,16 @@ func (a *activeJobs) list() []db.Job {
 		jobs = append(jobs, job)
 	}
 
+	clear(a.jobs)
+
 	return jobs
+}
+
+// waitResults waits for the results that job goroutines are still writing.
+// Call it only after takeAll: from then on no goroutine can start a write,
+// so none is missed.
+func (a *activeJobs) waitResults() {
+	a.results.Wait()
 }
 
 // kindDefaults checks opts and fills in the defaults.
