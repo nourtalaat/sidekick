@@ -19,7 +19,7 @@ Public brand assets for Sidekick. The design guide lives outside this repo for n
 | `favicon/apple-touch-icon.png` | 180 px home screen icon for iOS. Square corners; iOS rounds them. |
 | `favicon/icon-512.png` | 512 px icon for web app manifests. |
 | `slack/sidekick-slack-avatar.png` | 512 px app avatar to upload in the Slack app settings. |
-| `slack/sidekick-eyes.gif` | Optional animated custom emoji of the investigating eyes, 128 px, about 73 KB. Upload as `:sidekick-eyes:` and set `slack.emoji.watching` to use it. |
+| `slack/sidekick-eyes.gif` | Optional animated custom emoji of the investigating eyes, 128 px, about 73 KB. Upload as `:sidekick-eyes:`; Sidekick can react with it while it investigates. |
 | `slack/sidekick-eyes.png` | Still version of the same emoji. |
 | `social/sidekick-social-preview.png` | 1280 by 640 GitHub social preview. Upload it in the repository settings. |
 | `social/sidekick-social-preview.svg` | Source for the social preview. |
