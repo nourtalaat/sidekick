@@ -303,7 +303,7 @@ func (a *App) start(ctx context.Context, regs config.Registries) error {
 		return fmt.Errorf("build the redactor: %w", err)
 	}
 
-	deps := registry.Deps{Secrets: a.secrets, HTTP: httpclient.New(), Logger: a.telemetry.Logger()}
+	deps := registry.Deps{Secrets: a.secrets, HTTP: httpclient.New(), Logger: a.telemetry.Logger(), Metrics: a.telemetry.Registry()}
 
 	instances, err := config.Build(ctx, a.cfg, regs, deps)
 	if err != nil {

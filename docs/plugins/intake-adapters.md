@@ -66,6 +66,9 @@ func New(ctx context.Context, name string, cfg Config, deps registry.Deps) (inta
 
 It gets the config already decoded and validated. `deps.Secrets` reads
 secret references and `deps.Logger` is the structured logger.
+`deps.Metrics` is where the adapter registers its own Prometheus metrics,
+through `registry.RegisterOrExisting`, so several instances of the type
+share one collector; it is nil in tests that do not set it.
 
 ## Step 2: parsing the payload
 
