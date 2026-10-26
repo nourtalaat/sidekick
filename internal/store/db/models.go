@@ -7,7 +7,37 @@ package db
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/google/uuid"
 )
+
+type Event struct {
+	ID          uuid.UUID
+	Intake      string
+	Key         string
+	Kind        string
+	SenderKind  *string
+	SenderID    *string
+	SenderName  *string
+	Trusted     bool
+	AlertName   *string
+	Title       *string
+	Body        *string
+	Service     *string
+	Severity    *string
+	Labels      json.RawMessage
+	Links       []byte
+	Fingerprint string
+	Slack       []byte
+	Raw         []byte
+	Status      string
+	SkipReason  *string
+	Route       *string
+	GroupID     *uuid.UUID
+	StartsAt    *time.Time
+	EndsAt      *time.Time
+	ReceivedAt  time.Time
+}
 
 type Job struct {
 	ID          int64

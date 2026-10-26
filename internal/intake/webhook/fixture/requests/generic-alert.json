@@ -1,0 +1,12 @@
+{
+  "alert": {
+    "id": "build-4711",
+    "title": "Nightly build failed",
+    "description": "The integration stage failed on main.",
+    "level": "warning"
+  },
+  "labels": {
+    "service": "checkout",
+    "env": "prod"
+  }
+}

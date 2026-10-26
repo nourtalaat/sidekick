@@ -257,6 +257,13 @@ intake:
 
 `tolerance` is how far the signed timestamp may be from the time of arrival.
 
+The adapters are `alertmanager`, which has no settings, and `generic`,
+whose `fields` are JSON paths into the payload for `title` (required),
+`text`, `service`, `severity`, `key` and `labels`. A path that does not
+parse is reported when the file loads.
+[Sending alerts to Sidekick](webhooks.md) describes both adapters, how
+senders sign or authenticate deliveries, and what Sidekick answers.
+
 ### `slack`
 
 ```yaml
@@ -473,7 +480,9 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   tools.
 - Every secret reference has a `name` and a `key`, each a plain name without
   `/`. At start-up, every referenced secret file must exist and be readable.
-- Every webhook endpoint sets exactly one of `bearer` and `hmac`.
+- Every webhook endpoint sets exactly one of `bearer` and `hmac`. Every
+  `generic` endpoint sets `fields.title`, and each of its field paths
+  parses.
 - There is exactly one `default` route, and it has no `match`. Every source,
   output, webhook and strategy a route names is defined. Glob and regular
   expression matches parse.

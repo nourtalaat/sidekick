@@ -1,0 +1,46 @@
+# The config the webhook tests load. The secrets under fixture/secrets are
+# test values only. The model connector is a fake the tests register.
+database:
+  urlSecret: { name: db, key: url }
+
+secrets:
+  dir: fixture/secrets
+
+model:
+  connectors:
+    fake: { provider: fake }
+  roles:
+    investigate: fake
+
+intake:
+  webhooks:
+    alertmanager:
+      adapter: alertmanager
+      auth: { bearer: { name: hooks, key: alertmanager } }
+      trusted: true
+    ci:
+      adapter: generic
+      auth: { hmac: { name: hooks, key: ci }, tolerance: 5m }
+      fields:
+        title: $.alert.title
+        text: $.alert.description
+        service: $.labels.service
+        severity: $.alert.level
+        key: $.alert.id
+        labels: $.labels
+    empty-secret:
+      adapter: generic
+      auth: { bearer: { name: hooks, key: empty } }
+      fields: { title: $.alert.title }
+    missing-secret:
+      adapter: generic
+      auth: { bearer: { name: hooks, key: missing } }
+      fields: { title: $.alert.title }
+
+routes:
+  - name: default
+
+redaction:
+  hashKeySecret: { name: redaction, key: hash-key }
+  custom:
+    - { name: seeded, pattern: "SEEDED-[A-Z0-9]{8}" }

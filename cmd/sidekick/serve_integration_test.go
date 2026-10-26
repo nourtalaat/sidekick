@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -28,9 +29,35 @@ const serveConfig = validConfig + `
 server: { listen: "127.0.0.1:0", metricsListen: "127.0.0.1:0" }
 `
 
+// webhookConfig is serveConfig with an Alertmanager webhook endpoint whose
+// bearer token is the fake secret value.
+const webhookConfig = serveConfig + `
+intake:
+  webhooks:
+    alertmanager:
+      adapter: alertmanager
+      auth: { bearer: { name: hooks, key: alertmanager } }
+`
+
+// alertmanagerDelivery is an Alertmanager webhook payload with one alert.
+const alertmanagerDelivery = `{
+  "version": "4",
+  "groupKey": "{}:{alertname=\"DiskFull\"}",
+  "status": "firing",
+  "receiver": "sidekick",
+  "alerts": [{
+    "status": "firing",
+    "labels": {"alertname": "DiskFull", "severity": "warning"},
+    "annotations": {"summary": "Disk almost full"},
+    "startsAt": "2026-10-26T09:00:00Z",
+    "fingerprint": "0a1b2c3d4e5f6071"
+  }]
+}`
+
 // logLine holds the fields of a log line that the test reads.
 type logLine struct {
 	Msg           string `json:"msg"`
+	Listen        string `json:"listen"`
 	MetricsListen string `json:"metrics_listen"`
 }
 
@@ -52,19 +79,7 @@ func TestServeStopsOnSignal(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			configPath := writeConfig(t, serveConfig, storetest.NewURL(t))
-
-			//nolint:gosec // Runs this test binary again, with fixed arguments.
-			cmd := exec.CommandContext(t.Context(), os.Args[0], "serve", "--config", configPath)
-			cmd.Env = append(os.Environ(), runMainEnv+"=1")
-			cmd.Stderr = os.Stderr
-
-			stdout, err := cmd.StdoutPipe()
-			require.NoError(t, err)
-			require.NoError(t, cmd.Start())
-
-			lines := readLogLines(stdout)
-			started := waitForLog(t, lines, "sidekick started")
+			cmd, lines, started := startServe(t, writeConfig(t, serveConfig, storetest.NewURL(t)))
 
 			resp, err := http.Get("http://" + started.MetricsListen + "/healthz") //nolint:noctx // A plain request to a local server.
 			require.NoError(t, err)
@@ -73,14 +88,7 @@ func TestServeStopsOnSignal(t *testing.T) {
 
 			signalled := time.Now()
 
-			require.NoError(t, cmd.Process.Signal(tt.signal))
-			waitForLog(t, lines, "sidekick stopped")
-
-			// Wait must come after every read from stdout.
-			for range lines {
-			}
-
-			require.NoError(t, cmd.Wait(), "serve exits with status 0")
+			stopServe(t, cmd, lines, tt.signal)
 			require.Less(t, time.Since(signalled), app.ShutdownGrace)
 		})
 	}
@@ -130,19 +138,7 @@ func TestServeWithSourceDown(t *testing.T) {
 			}
 
 			config := serveConfig + "sources:\n  signoz: { type: mcp, url: \"" + mcpServer.URL() + "/mcp\" }\n"
-			configPath := writeConfig(t, config, storetest.NewURL(t))
-
-			//nolint:gosec // Runs this test binary again, with fixed arguments.
-			cmd := exec.CommandContext(t.Context(), os.Args[0], "serve", "--config", configPath)
-			cmd.Env = append(os.Environ(), runMainEnv+"=1")
-			cmd.Stderr = os.Stderr
-
-			stdout, err := cmd.StdoutPipe()
-			require.NoError(t, err)
-			require.NoError(t, cmd.Start())
-
-			lines := readLogLines(stdout)
-			started := waitForLog(t, lines, "sidekick started")
+			cmd, lines, started := startServe(t, writeConfig(t, config, storetest.NewURL(t)))
 			metrics := "http://" + started.MetricsListen
 
 			status, _ := getURL(t, metrics+"/readyz")
@@ -151,15 +147,110 @@ func TestServeWithSourceDown(t *testing.T) {
 			require.Eventually(t, func() bool { return len(mcpServer.Requests()) > 0 }, serveStartTimeout, 10*time.Millisecond,
 				"serve tries to connect in the background")
 
-			require.NoError(t, cmd.Process.Signal(syscall.SIGTERM))
-			waitForLog(t, lines, "sidekick stopped")
-
-			for range lines {
-			}
-
-			require.NoError(t, cmd.Wait(), "serve exits with status 0")
+			stopServe(t, cmd, lines, syscall.SIGTERM)
 		})
 	}
+}
+
+// TestServeWebhooks checks that `sidekick serve` serves the configured
+// webhook endpoints with the built-in adapters, stores what they accept
+// and counts it in the metrics.
+func TestServeWebhooks(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		endpoint    string
+		token       string
+		wantStatus  int
+		wantMetrics []string
+	}{
+		{
+			name:        "an authenticated Alertmanager delivery is stored",
+			endpoint:    "alertmanager",
+			token:       "fake-value",
+			wantStatus:  http.StatusAccepted,
+			wantMetrics: []string{`sidekick_events_received_total{intake="alertmanager",result="accepted"} 1`},
+		},
+		{
+			name:       "a wrong token is rejected",
+			endpoint:   "alertmanager",
+			token:      "wrong",
+			wantStatus: http.StatusUnauthorized,
+			wantMetrics: []string{
+				`sidekick_events_received_total{intake="alertmanager",result="rejected"} 1`,
+				`sidekick_events_rejected_total{intake="alertmanager",reason="unauthenticated"} 1`,
+			},
+		},
+		{
+			name:        "an endpoint that is not configured is not found",
+			endpoint:    "other",
+			token:       "fake-value",
+			wantStatus:  http.StatusNotFound,
+			wantMetrics: []string{`sidekick_events_rejected_total{intake="_unknown",reason="unauthenticated"} 1`},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cmd, lines, started := startServe(t, writeConfig(t, webhookConfig, storetest.NewURL(t), "hooks/alertmanager"))
+
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://"+started.Listen+"/hooks/"+tt.endpoint, strings.NewReader(alertmanagerDelivery))
+			require.NoError(t, err)
+			req.Header.Set("Authorization", "Bearer "+tt.token)
+
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+			require.Equal(t, tt.wantStatus, resp.StatusCode)
+
+			status, metrics := getURL(t, "http://"+started.MetricsListen+"/metrics")
+			require.Equal(t, http.StatusOK, status)
+
+			for _, want := range tt.wantMetrics {
+				require.Contains(t, metrics, want)
+			}
+
+			stopServe(t, cmd, lines, syscall.SIGTERM)
+		})
+	}
+}
+
+// startServe runs `sidekick serve` with the config at configPath as its
+// own process and waits until it serves. It returns the process, its log
+// lines and the start-up line.
+func startServe(t *testing.T, configPath string) (*exec.Cmd, <-chan logLine, logLine) {
+	t.Helper()
+
+	//nolint:gosec // Runs this test binary again, with fixed arguments.
+	cmd := exec.CommandContext(t.Context(), os.Args[0], "serve", "--config", configPath)
+	cmd.Env = append(os.Environ(), runMainEnv+"=1")
+	cmd.Stderr = os.Stderr
+
+	stdout, err := cmd.StdoutPipe()
+	require.NoError(t, err)
+	require.NoError(t, cmd.Start())
+
+	lines := readLogLines(stdout)
+
+	return cmd, lines, waitForLog(t, lines, "sidekick started")
+}
+
+// stopServe sends sig to the serve process and checks that it stops
+// cleanly.
+func stopServe(t *testing.T, cmd *exec.Cmd, lines <-chan logLine, sig os.Signal) {
+	t.Helper()
+
+	require.NoError(t, cmd.Process.Signal(sig))
+	waitForLog(t, lines, "sidekick stopped")
+
+	// Wait must come after every read from stdout.
+	for range lines {
+	}
+
+	require.NoError(t, cmd.Wait(), "serve exits with status 0")
 }
 
 // getURL sends a GET request to url and returns the status and the body.

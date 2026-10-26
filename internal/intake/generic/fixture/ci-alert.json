@@ -1,0 +1,20 @@
+{
+  "alert": {
+    "id": "build-4711",
+    "title": "Nightly build failed",
+    "description": "The integration stage failed on main after 3 retries.",
+    "level": "Error",
+    "attempts": 3,
+    "flaky": false
+  },
+  "labels": {
+    "service": "checkout",
+    "env": "prod",
+    "pipeline": "nightly",
+    "runner": null
+  },
+  "steps": [
+    {"name": "unit", "status": "passed"},
+    {"name": "integration", "status": "failed"}
+  ]
+}

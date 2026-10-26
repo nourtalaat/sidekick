@@ -26,7 +26,9 @@ import (
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/queue"
+	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/registry"
+	"github.com/nourtalaat/sidekick/internal/secrets"
 	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/telemetry"
 )
@@ -67,6 +69,8 @@ type App struct {
 	telemetry *telemetry.Telemetry
 	log       *slog.Logger
 	pool      *pgxpool.Pool
+	secrets   registry.Secrets
+	redactor  *redact.Redactor
 	instances *config.Instances
 	runner    *queue.Runner
 	mux       *http.ServeMux
@@ -96,9 +100,10 @@ type jobQueue struct {
 
 // New runs the start-up steps before serving, in order: it loads the config
 // with every secret checked, sets up telemetry, opens the database pool,
-// migrates the database unless database.migrations is manual, and builds
-// the plugin instances. On an error it closes what it had opened. A config
-// with problems gives an error that wraps config.Errors.
+// migrates the database unless database.migrations is manual, builds the
+// redactor and builds the plugin instances. On an error it closes what it
+// had opened. A config with problems gives an error that wraps
+// config.Errors.
 func New(ctx context.Context, opts Options) (*App, error) {
 	if opts.LogOutput == nil {
 		opts.LogOutput = os.Stdout
@@ -191,6 +196,19 @@ func (a *App) Pool() *pgxpool.Pool {
 	return a.pool
 }
 
+// Secrets returns the resolver of secret references, the same one plugins
+// get in registry.Deps. It reads the secret files on every call, so a
+// rotated secret is used without a restart.
+func (a *App) Secrets() registry.Secrets {
+	return a.secrets
+}
+
+// Redactor returns the redactor built from the redaction section of the
+// config. It is safe for concurrent use.
+func (a *App) Redactor() *redact.Redactor {
+	return a.redactor
+}
+
 // Instances returns the plugin instances built from the config.
 func (a *App) Instances() *config.Instances {
 	return a.instances
@@ -268,8 +286,11 @@ func (a *App) Close() error {
 	return a.closeErr
 }
 
-// start opens the database, migrates it and builds the plugin instances.
+// start opens the database, migrates it, and builds the redactor and the
+// plugin instances.
 func (a *App) start(ctx context.Context, regs config.Registries) error {
+	a.secrets = secrets.NewDir(a.cfg.Secrets.Dir)
+
 	if err := a.openStore(ctx); err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
@@ -278,7 +299,11 @@ func (a *App) start(ctx context.Context, regs config.Registries) error {
 		return fmt.Errorf("migrate at start-up: %w", err)
 	}
 
-	deps := registry.Deps{HTTP: httpclient.New(), Logger: a.telemetry.Logger()}
+	if err := a.buildRedactor(ctx); err != nil {
+		return fmt.Errorf("build the redactor: %w", err)
+	}
+
+	deps := registry.Deps{Secrets: a.secrets, HTTP: httpclient.New(), Logger: a.telemetry.Logger()}
 
 	instances, err := config.Build(ctx, a.cfg, regs, deps)
 	if err != nil {
@@ -339,6 +364,24 @@ func (a *App) migrate(ctx context.Context) error {
 	if err := store.Migrate(ctx, a.pool); err != nil {
 		return fmt.Errorf("apply migrations: %w", err)
 	}
+
+	return nil
+}
+
+func (a *App) buildRedactor(ctx context.Context) error {
+	opts, err := a.cfg.Redaction.RedactOptions(ctx, a.secrets)
+	if err != nil {
+		return fmt.Errorf("read the redaction settings: %w", err)
+	}
+
+	opts.Logger = a.telemetry.Logger().With("component", "redact")
+
+	r, err := redact.New(opts)
+	if err != nil {
+		return fmt.Errorf("compile the redaction rules: %w", err)
+	}
+
+	a.redactor = r
 
 	return nil
 }

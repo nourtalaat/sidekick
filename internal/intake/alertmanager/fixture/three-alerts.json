@@ -1,0 +1,76 @@
+{
+  "receiver": "sidekick",
+  "status": "firing",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "HighErrorRate",
+        "env": "prod",
+        "instance": "checkout-0:8080",
+        "job": "checkout",
+        "service": "checkout",
+        "severity": "critical"
+      },
+      "annotations": {
+        "description": "5xx rate is 7.2% over the last 5 minutes.",
+        "runbook_url": "https://runbooks.example.com/high-error-rate",
+        "summary": "Checkout error rate above 5%"
+      },
+      "startsAt": "2026-10-26T09:12:30.123Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://prometheus.example.com/graph?g0.expr=job%3Acheckout_errors%3Arate5m+%3E+0.05",
+      "fingerprint": "3f2a9c1e5b7d8a01"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "HighErrorRate",
+        "env": "prod",
+        "instance": "checkout-1:8080",
+        "job": "checkout",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "description": "5xx rate is 5.4% over the last 5 minutes."
+      },
+      "startsAt": "2026-10-26T09:13:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "8b6e0d4c2a1f9e37"
+    },
+    {
+      "status": "resolved",
+      "labels": {
+        "alertname": "HighErrorRate",
+        "env": "prod",
+        "instance": "checkout-2:8080",
+        "job": "checkout",
+        "service": "checkout",
+        "severity": "critical"
+      },
+      "annotations": {
+        "summary": "Checkout error rate above 5%"
+      },
+      "startsAt": "2026-10-26T08:50:00Z",
+      "endsAt": "2026-10-26T09:10:00Z",
+      "generatorURL": "http://prometheus.example.com/graph?g0.expr=job%3Acheckout_errors%3Arate5m+%3E+0.05",
+      "fingerprint": "c47d1a2b9e0f3365"
+    }
+  ],
+  "groupLabels": {
+    "alertname": "HighErrorRate"
+  },
+  "commonLabels": {
+    "alertname": "HighErrorRate",
+    "env": "prod",
+    "job": "checkout",
+    "service": "checkout"
+  },
+  "commonAnnotations": {},
+  "externalURL": "http://alertmanager.example.com:9093",
+  "version": "4",
+  "groupKey": "{}:{alertname=\"HighErrorRate\"}",
+  "truncatedAlerts": 0
+}
