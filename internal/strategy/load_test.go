@@ -168,6 +168,8 @@ func TestLoadErrors(t *testing.T) {
 			want: Errors{
 				{File: filepath.Join("fixture", "invalid", "bad-name.yaml"), Message: `name: "Bad_Name" ` + nameRule},
 				{File: filepath.Join("fixture", "invalid", "bad-values.yaml"), Message: "match.textPattern: invalid regular expression: error parsing regexp: missing closing ): `(unclosed`"},
+				{File: filepath.Join("fixture", "invalid", "bad-values.yaml"), Message: "budgets.maxTokens: must not be negative"},
+				{File: filepath.Join("fixture", "invalid", "bad-values.yaml"), Message: "budgets.maxCostUSD: must be a dollar amount that is not negative"},
 				{File: filepath.Join("fixture", "invalid", "bad-values.yaml"), Message: "budgets.maxToolCalls: must not be negative"},
 				{File: filepath.Join("fixture", "invalid", "bad-values.yaml"), Message: `watchers[0].check.type: expected one of [http tool alert], got "ping"`},
 				{File: filepath.Join("fixture", "invalid", "two-documents.yaml"), Message: "the file must hold one YAML document"},

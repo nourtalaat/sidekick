@@ -173,13 +173,17 @@ type Route struct {
 	Actions []string `yaml:"actions"`
 	// Outputs lists where reports go (OUT-5).
 	Outputs []string `yaml:"outputs"`
-	// Budgets limit one investigation. After Load, unset limits hold the
-	// global values from budgets.perInvestigation.
-	Budgets Limits `yaml:"budgets"`
+	// Budgets limit one investigation and the route's daily spending.
+	// After Load, unset limits hold the global values from
+	// budgets.perInvestigation.
+	Budgets RouteBudgets `yaml:"budgets"`
 	// Concurrency is the most investigations of this route that run at
 	// once across every replica. Zero means only budgets.concurrency holds
 	// them.
 	Concurrency int `yaml:"concurrency"`
+	// RateLimit limits how many of the route's events are routed in a
+	// window. Nil means only budgets.rateLimit holds them.
+	RateLimit *RateLimit `yaml:"rateLimit"`
 }
 
 // Match selects events for a route. Every field that is set must match.
@@ -200,15 +204,27 @@ type Match struct {
 // routes and the ceilings route budgets must stay within (CFG-1).
 type Budgets struct {
 	PerInvestigation Limits `yaml:"perInvestigation"`
+	// Daily is the global daily spending cap and the time zone of every
+	// daily cap.
+	Daily DailyBudget `yaml:"daily"`
 	// Concurrency is the most investigations that run at once across every
 	// replica.
 	Concurrency int `yaml:"concurrency"`
+	// RateLimit limits how many events are routed in a window, across
+	// every route. Nil means no global limit.
+	RateLimit *RateLimit `yaml:"rateLimit"`
 }
 
-// Limits bound one investigation. M0 limits tool calls and wall time.
+// Limits bound one investigation.
 type Limits struct {
+	// MaxTokens counts the input tokens, including those read from or
+	// written to the prompt cache, and the output tokens of the whole run.
+	MaxTokens    int           `yaml:"maxTokens"`
 	MaxToolCalls int           `yaml:"maxToolCalls"`
 	MaxWallTime  time.Duration `yaml:"maxWallTime"`
+	// MaxCostUSD is the most the run's model calls may cost, priced with
+	// the price table.
+	MaxCostUSD float64 `yaml:"maxCostUSD"`
 }
 
 // Report holds the rules applied to submitted verdicts.
@@ -447,16 +463,8 @@ func (c *Config) setDefaults() {
 
 // resolveBudgets fills each route's unset limits with the global ones.
 func (c *Config) resolveBudgets() {
-	global := c.Budgets.PerInvestigation
 	for i := range c.Routes {
-		b := &c.Routes[i].Budgets
-		if b.MaxToolCalls == 0 {
-			b.MaxToolCalls = global.MaxToolCalls
-		}
-
-		if b.MaxWallTime == 0 {
-			b.MaxWallTime = global.MaxWallTime
-		}
+		resolveRouteBudgets(&c.Routes[i].Budgets, c.Budgets)
 	}
 }
 
@@ -481,7 +489,13 @@ func (r *Route) setDefaults() {
 }
 
 func (b *Budgets) setDefaults() {
-	b.PerInvestigation = Limits{MaxToolCalls: DefaultMaxToolCalls, MaxWallTime: DefaultMaxWallTime}
+	b.PerInvestigation = Limits{
+		MaxTokens:    DefaultMaxTokens,
+		MaxToolCalls: DefaultMaxToolCalls,
+		MaxWallTime:  DefaultMaxWallTime,
+		MaxCostUSD:   DefaultMaxCostUSD,
+	}
+	b.Daily.setDefaults()
 	b.Concurrency = DefaultConcurrency
 }
 

@@ -37,6 +37,12 @@ func TestStoredJSON(t *testing.T) {
 		},
 		{
 			name:    "budget",
+			value:   Budget{MaxTokens: 400_000, MaxToolCalls: 30, MaxWallTime: 90 * time.Second, MaxCostMicros: 750_000},
+			want:    `{"max_tokens": 400000, "max_tool_calls": 30, "max_wall_time_ms": 90000, "max_cost_micros": 750000}`,
+			decoded: &Budget{},
+		},
+		{
+			name:    "budget stored before token and cost limits",
 			value:   Budget{MaxToolCalls: 30, MaxWallTime: 90 * time.Second},
 			want:    `{"max_tool_calls": 30, "max_wall_time_ms": 90000}`,
 			decoded: &Budget{},

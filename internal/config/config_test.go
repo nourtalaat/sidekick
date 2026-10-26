@@ -66,7 +66,9 @@ func TestParseDefaults(t *testing.T) {
 				require.Equal(t, DefaultMaxConns, cfg.Database.MaxConns)
 				require.Equal(t, MigrationsStartup, cfg.Database.Migrations)
 				require.Equal(t, secrets.DefaultDir, cfg.Secrets.Dir)
-				require.Equal(t, Limits{MaxToolCalls: 40, MaxWallTime: 10 * time.Minute}, cfg.Budgets.PerInvestigation)
+				require.Equal(t, Limits{MaxTokens: 400_000, MaxToolCalls: 40, MaxWallTime: 10 * time.Minute, MaxCostUSD: 1}, cfg.Budgets.PerInvestigation)
+				require.Equal(t, DailyBudget{TimeZone: "UTC", OnDailyCap: OnDailyCapWait}, cfg.Budgets.Daily)
+				require.Nil(t, cfg.Budgets.RateLimit)
 				require.Equal(t, DefaultConcurrency, cfg.Budgets.Concurrency)
 				require.Empty(t, cfg.RouteConcurrency())
 				require.Equal(t, LogLevelInfo, cfg.Telemetry.LogLevel)
@@ -76,7 +78,7 @@ func TestParseDefaults(t *testing.T) {
 					Priority: DefaultRoutePriority,
 					Strategy: DefaultStrategy,
 					Mode:     action.ReadOnly,
-					Budgets:  Limits{MaxToolCalls: 40, MaxWallTime: 10 * time.Minute},
+					Budgets:  RouteBudgets{Limits: Limits{MaxTokens: 400_000, MaxToolCalls: 40, MaxWallTime: 10 * time.Minute, MaxCostUSD: 1}, Daily: RouteDaily{OnDailyCap: OnDailyCapWait}},
 				}}, cfg.Routes)
 			},
 		},
@@ -92,9 +94,9 @@ routes:
 			check: func(t *testing.T, cfg *Config) {
 				t.Helper()
 				require.Equal(t, Server{Listen: ":1", MetricsListen: ":9090"}, cfg.Server)
-				require.Equal(t, Limits{MaxToolCalls: 10, MaxWallTime: 10 * time.Minute}, cfg.Budgets.PerInvestigation)
+				require.Equal(t, Limits{MaxTokens: 400_000, MaxToolCalls: 10, MaxWallTime: 10 * time.Minute, MaxCostUSD: 1}, cfg.Budgets.PerInvestigation)
 				require.Equal(t, 0, cfg.Routes[0].Priority)
-				require.Equal(t, Limits{MaxToolCalls: 10, MaxWallTime: time.Minute}, cfg.Routes[0].Budgets)
+				require.Equal(t, RouteBudgets{Limits: Limits{MaxTokens: 400_000, MaxToolCalls: 10, MaxWallTime: time.Minute, MaxCostUSD: 1}, Daily: RouteDaily{OnDailyCap: OnDailyCapWait}}, cfg.Routes[0].Budgets)
 				require.Equal(t, 4, cfg.Budgets.Concurrency)
 				require.Equal(t, map[string]int{"a": 2}, cfg.RouteConcurrency())
 			},
