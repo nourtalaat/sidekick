@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/store/db"
@@ -470,6 +472,40 @@ func TestLimitsHoldWithTwoRunners(t *testing.T) {
 	require.Positive(t, globalPeak)
 	require.LessOrEqual(t, peaks["a"], limits.Routes["a"])
 	require.LessOrEqual(t, peaks["b"], limits.Routes["b"])
+}
+
+// TestRunnerMetrics checks the queue metrics that a Runner records.
+func TestRunnerMetrics(t *testing.T) {
+	t.Parallel()
+
+	const metricsInterval = 50 * time.Millisecond
+
+	pool := setup(t)
+	metrics, err := NewMetrics(prometheus.NewRegistry())
+	require.NoError(t, err)
+
+	runner := newTestRunner(t, pool, Options{Metrics: metrics, MetricsInterval: metricsInterval})
+	require.NoError(t, runner.Register(KindPublish, HandlerFunc(func(context.Context, db.Job) error {
+		return fmt.Errorf("channel archived: %w", ErrGiveUp)
+	}), KindOptions{}))
+
+	// No Runner handles rollup jobs, so this one stays pending.
+	mustEnqueue(t, pool, NewJob{Kind: KindRollup})
+	id := mustEnqueue(t, pool, NewJob{Kind: KindPublish})
+
+	stop := startRunners(t, runner)
+	waitForStatus(t, pool, id, StatusDead)
+
+	eventually(t, func() bool {
+		return testutil.ToFloat64(metrics.jobs.WithLabelValues(KindPublish, StatusDead)) == 1
+	})
+	stop()
+
+	require.InDelta(t, 1, testutil.ToFloat64(metrics.jobs.WithLabelValues(KindRollup, StatusPending)), 0)
+	require.InDelta(t, 1, testutil.ToFloat64(metrics.dead.WithLabelValues(KindPublish)), 0)
+
+	count, _ := histogramOf(t, metrics.wait, KindPublish)
+	require.Equal(t, uint64(1), count)
 }
 
 // newTestRunner returns a Runner with short intervals and no backoff.

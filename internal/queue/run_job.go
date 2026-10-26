@@ -150,9 +150,11 @@ func (r *Runner) handBack(job db.Job) {
 	r.logWriteError("handing back", job, handBack(ctx, r.pool, job))
 }
 
-// jobDied runs w's OnDead hook for a job that just became dead. w is nil
-// when this Runner has no handler for the job's kind.
+// jobDied counts a job that just became dead and runs w's OnDead hook. w is
+// nil when this Runner has no handler for the job's kind.
 func (r *Runner) jobDied(w *worker, job db.Job) {
+	r.opts.Metrics.jobDied(job.Kind)
+
 	if w == nil {
 		r.log.Warn("a job of a kind this replica does not run became dead, so its OnDead hook did not run", jobAttrs(job)...)
 

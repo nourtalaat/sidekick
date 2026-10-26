@@ -124,7 +124,7 @@ func TestNewRunner(t *testing.T) {
 			opts: Options{WorkerID: "replica-1"},
 			want: Options{
 				WorkerID: "replica-1", PollInterval: DefaultPollInterval, ReapInterval: DefaultReapInterval,
-				ShutdownTimeout: DefaultShutdownTimeout,
+				ShutdownTimeout: DefaultShutdownTimeout, MetricsInterval: DefaultMetricsInterval,
 			},
 		},
 		{name: "bad limits", opts: Options{Limits: Limits{Routes: map[string]int{"a": 1}}}, wantErr: "global limit is 0"},

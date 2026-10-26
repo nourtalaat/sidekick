@@ -21,6 +21,7 @@ const (
 	DefaultPollInterval      = time.Second
 	DefaultReapInterval      = 15 * time.Second
 	DefaultShutdownTimeout   = 30 * time.Second
+	DefaultMetricsInterval   = 15 * time.Second
 	DefaultLongLease         = 60 * time.Second
 	DefaultHeartbeatInterval = 20 * time.Second
 	DefaultShortLease        = 5 * time.Minute
@@ -118,6 +119,12 @@ type Options struct {
 	// context ends, before their jobs are handed back. The default is
 	// DefaultShutdownTimeout.
 	ShutdownTimeout time.Duration
+	// Metrics, when set, receive the queue metrics. Make them with
+	// NewMetrics.
+	Metrics *Metrics
+	// MetricsInterval is how often the Runner reads the job counts for
+	// sidekick_queue_jobs. The default is DefaultMetricsInterval.
+	MetricsInterval time.Duration
 	// Logger receives the Runner's logs. The default is slog.Default().
 	Logger *slog.Logger
 }
@@ -166,8 +173,9 @@ func NewRunner(pool *pgxpool.Pool, opts Options) (*Runner, error) {
 	opts.PollInterval = orDefault(opts.PollInterval, DefaultPollInterval)
 	opts.ReapInterval = orDefault(opts.ReapInterval, DefaultReapInterval)
 	opts.ShutdownTimeout = orDefault(opts.ShutdownTimeout, DefaultShutdownTimeout)
+	opts.MetricsInterval = orDefault(opts.MetricsInterval, DefaultMetricsInterval)
 
-	if opts.PollInterval < 0 || opts.ReapInterval < 0 || opts.ShutdownTimeout < 0 {
+	if opts.PollInterval < 0 || opts.ReapInterval < 0 || opts.ShutdownTimeout < 0 || opts.MetricsInterval < 0 {
 		return nil, errors.New("new runner: intervals and timeouts must not be negative")
 	}
 
@@ -262,6 +270,10 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	loops.Go(func() { r.listen(ctx, workers) })
 	loops.Go(func() { r.reapEvery(ctx) })
+
+	if r.opts.Metrics != nil {
+		loops.Go(func() { r.countEvery(ctx) })
+	}
 
 	for _, w := range workers {
 		loops.Go(func() { r.dispatch(ctx, workCtx, w, &jobs) })
@@ -386,6 +398,39 @@ func (r *Runner) reapOnce(ctx context.Context) {
 	}
 }
 
+// countEvery sets sidekick_queue_jobs from the database every
+// Options.MetricsInterval until ctx ends.
+func (r *Runner) countEvery(ctx context.Context) {
+	ticker := time.NewTicker(r.opts.MetricsInterval)
+	defer ticker.Stop()
+
+	for {
+		r.countJobs(ctx)
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func (r *Runner) countJobs(ctx context.Context) {
+	countCtx, cancel := context.WithTimeout(ctx, dbTimeout)
+	defer cancel()
+
+	counts, err := db.New(r.pool).CountJobs(countCtx)
+	if err != nil {
+		if ctx.Err() == nil {
+			r.log.Warn("counting jobs for the metrics failed", "error", err)
+		}
+
+		return
+	}
+
+	r.opts.Metrics.setCounts(counts)
+}
+
 // workerFor returns the worker of kind, or nil when this Runner has no
 // handler for it.
 func (r *Runner) workerFor(kind string) *worker {
@@ -436,6 +481,7 @@ func (r *Runner) claimReady(ctx, workCtx context.Context, w *worker, jobs *sync.
 			w.slots <- struct{}{}
 
 			r.active.add(job)
+			r.opts.Metrics.observeWait(job, w.opts.Lease)
 			jobs.Go(func() { r.runJob(workCtx, w, job) })
 		}
 

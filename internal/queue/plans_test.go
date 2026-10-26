@@ -116,6 +116,16 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: "jobs_leases",
 		},
 		{
+			name: "CountJobs",
+			run: func(ctx context.Context, q *db.Queries, _ planRows) error {
+				_, err := q.CountJobs(ctx)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			// It reads every job that is not done, which takes a scan.
+			wantIndex: "Seq Scan on jobs",
+		},
+		{
 			name: "EnqueueJob",
 			run: func(ctx context.Context, q *db.Queries, _ planRows) error {
 				_, err := q.EnqueueJob(ctx, db.EnqueueJobParams{
