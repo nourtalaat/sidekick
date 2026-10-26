@@ -182,6 +182,28 @@ func RetryDead(ctx context.Context, q db.DBTX, id int64) error {
 	return nil
 }
 
+// ReleaseUniqueKey clears the unique key of job, which the caller is
+// running, so that Enqueue can add a new job with the same key before this
+// one finishes. The job stays running and is completed as usual when its
+// handler returns. A handler calls it once it will do no more work that
+// the key guards, usually in the transaction that records the last of that
+// work, so that a job enqueued after the commit does not miss anything.
+//
+// It returns ErrLeaseLost when the job no longer belongs to job's claim
+// token.
+func ReleaseUniqueKey(ctx context.Context, q db.DBTX, job db.Job) error {
+	rows, err := db.New(q).ReleaseUniqueKey(ctx, db.ReleaseUniqueKeyParams{ID: job.ID, ClaimToken: claimToken(job)})
+	if err != nil {
+		return fmt.Errorf("release the unique key of job %d: %w", job.ID, err)
+	}
+
+	if rows == 0 {
+		return ErrLeaseLost
+	}
+
+	return nil
+}
+
 // traceparent returns the W3C traceparent of the span in ctx, or "" when ctx
 // holds no valid span.
 func traceparent(ctx context.Context) string {

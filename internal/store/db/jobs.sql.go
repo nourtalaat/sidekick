@@ -441,6 +441,28 @@ func (q *Queries) ReapExpiredLeases(ctx context.Context) ([]Job, error) {
 	return items, nil
 }
 
+const releaseUniqueKey = `-- name: ReleaseUniqueKey :execrows
+UPDATE jobs
+SET unique_key = NULL
+WHERE id = $1 AND claim_token = $2::bigint AND status = 'running'
+`
+
+type ReleaseUniqueKeyParams struct {
+	ID         int64
+	ClaimToken int64
+}
+
+// ReleaseUniqueKey clears the unique key of a running job that the token
+// still owns, so a new job with the same key can be enqueued while this one
+// finishes.
+func (q *Queries) ReleaseUniqueKey(ctx context.Context, arg ReleaseUniqueKeyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseUniqueKey, arg.ID, arg.ClaimToken)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const renewLease = `-- name: RenewLease :execrows
 UPDATE jobs
 SET locked_until = now() + make_interval(secs => $1::float8)

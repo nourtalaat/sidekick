@@ -148,3 +148,11 @@ SELECT kind, status, count(*) AS jobs
 FROM jobs
 WHERE status IN ('pending', 'running', 'dead')
 GROUP BY kind, status;
+
+-- name: ReleaseUniqueKey :execrows
+-- ReleaseUniqueKey clears the unique key of a running job that the token
+-- still owns, so a new job with the same key can be enqueued while this one
+-- finishes.
+UPDATE jobs
+SET unique_key = NULL
+WHERE id = @id AND claim_token = @claim_token::bigint AND status = 'running';

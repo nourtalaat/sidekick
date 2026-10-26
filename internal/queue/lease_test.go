@@ -71,6 +71,7 @@ func TestLostLeaseIsTakenOver(t *testing.T) {
 			return err
 		}},
 		{name: "hand back", write: handBack},
+		{name: "release the unique key", write: ReleaseUniqueKey},
 	}
 
 	for _, tt := range tests {
