@@ -151,7 +151,7 @@ claude-on-aws:
   provider: bedrock
   model: global.anthropic.claude-opus-5-5   # required: a model ID or inference profile ID
   region: us-east-1                         # required
-  endpoint: https://vpce-0abc.bedrock-runtime.us-east-1.vpce.amazonaws.com   # optional, for a VPC endpoint
+  endpoint: https://vpce-0abc.bedrock-runtime.us-east-1.vpce.amazonaws.com   # optional, for a VPC endpoint; https, or http only to localhost
   maxTokens: 32000                          # default 64000 for known models, capped at the model's maximum
   effort: high                              # low, medium, high, xhigh or max
   thinking: { mode: adaptive }              # adaptive, or enabled with budgetTokens

@@ -48,8 +48,20 @@ func TestValidate(t *testing.T) {
 			cfg:  Config{Settings: model.Settings{Model: "anthropic.claude-opus-4-8", Temperature: &temperature}, Region: "us-east-1"},
 		},
 		{
-			name: "an endpoint",
+			name: "an https endpoint",
 			cfg:  Config{Settings: model.Settings{Model: "anthropic.claude-opus-4-8"}, Region: "us-east-1", Endpoint: "https://vpce-0abc.bedrock-runtime.us-east-1.vpce.amazonaws.com"},
+		},
+		{
+			name: "plain http to localhost",
+			cfg:  Config{Settings: model.Settings{Model: "anthropic.claude-opus-4-8"}, Region: "us-east-1", Endpoint: "http://localhost:4566"},
+		},
+		{
+			name: "plain http to a 127.0.0.0/8 address",
+			cfg:  Config{Settings: model.Settings{Model: "anthropic.claude-opus-4-8"}, Region: "us-east-1", Endpoint: "http://127.0.0.2:8080"},
+		},
+		{
+			name: "plain http to ::1",
+			cfg:  Config{Settings: model.Settings{Model: "anthropic.claude-opus-4-8"}, Region: "us-east-1", Endpoint: "http://[::1]:8080"},
 		},
 		{
 			name: "another model family with a capabilities block",
@@ -80,7 +92,27 @@ func TestValidate(t *testing.T) {
 		{
 			name:    "endpoint must be an absolute URL",
 			cfg:     Config{Settings: model.Settings{Model: "anthropic.claude-opus-4-8"}, Region: "us-east-1", Endpoint: "bedrock.internal"},
-			wantErr: []string{"endpoint: \"bedrock.internal\" must be an absolute http or https URL"},
+			wantErr: []string{"endpoint: \"bedrock.internal\" must be an absolute https URL"},
+		},
+		{
+			name:    "plain http to another host is rejected",
+			cfg:     Config{Settings: model.Settings{Model: "anthropic.claude-opus-4-8"}, Region: "us-east-1", Endpoint: "http://bedrock-proxy.internal:8080"},
+			wantErr: []string{"endpoint: \"http://bedrock-proxy.internal:8080\" must use https; plain http is allowed only for localhost, 127.0.0.0/8 or ::1"},
+		},
+		{
+			name:    "plain http to a private address is rejected",
+			cfg:     Config{Settings: model.Settings{Model: "anthropic.claude-opus-4-8"}, Region: "us-east-1", Endpoint: "http://10.0.3.7"},
+			wantErr: []string{"must use https"},
+		},
+		{
+			name:    "a hostname that only starts like localhost is not loopback",
+			cfg:     Config{Settings: model.Settings{Model: "anthropic.claude-opus-4-8"}, Region: "us-east-1", Endpoint: "http://localhost.example.com"},
+			wantErr: []string{"must use https"},
+		},
+		{
+			name:    "another scheme is rejected",
+			cfg:     Config{Settings: model.Settings{Model: "anthropic.claude-opus-4-8"}, Region: "us-east-1", Endpoint: "ftp://bedrock.internal"},
+			wantErr: []string{"must be an absolute https URL"},
 		},
 		{
 			name:    "model is required",

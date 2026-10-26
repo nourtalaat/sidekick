@@ -3,6 +3,7 @@ package bedrock
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"slices"
@@ -208,18 +209,34 @@ func checkThinking(modelID string, m knownModel, t model.Thinking, effort model.
 	return errs
 }
 
-// checkEndpoint checks that raw is an absolute http or https URL.
+// checkEndpoint checks that raw is an absolute https URL. Requests carry
+// alert text and tool output, so plain http is allowed only to a loopback
+// host, such as a local proxy.
 func checkEndpoint(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return fmt.Errorf("endpoint: %w", err)
 	}
 
-	if (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
-		return fmt.Errorf("endpoint: %q must be an absolute http or https URL", raw)
+	switch {
+	case u.Host == "" || (u.Scheme != "https" && u.Scheme != "http"):
+		return fmt.Errorf("endpoint: %q must be an absolute https URL", raw)
+	case u.Scheme == "http" && !isLoopback(u.Hostname()):
+		return fmt.Errorf("endpoint: %q must use https; plain http is allowed only for localhost, 127.0.0.0/8 or ::1", raw)
 	}
 
 	return nil
+}
+
+// isLoopback reports whether host is localhost or a loopback IP address.
+func isLoopback(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+
+	ip, err := netip.ParseAddr(host)
+
+	return err == nil && ip.IsLoopback()
 }
 
 // isAnthropic reports whether a model ID, inference profile ID or ARN
