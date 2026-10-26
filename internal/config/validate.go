@@ -18,6 +18,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/model"
+	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/secrets"
@@ -392,6 +393,14 @@ func (v *validator) checkReport() {
 }
 
 func (v *validator) checkRedaction() {
+	builtIn := redact.BuiltInRuleNames()
+
+	for i, name := range v.cfg.Redaction.BuiltIn {
+		if !slices.Contains(builtIn, name) {
+			v.errs.add(fmt.Sprintf("redaction.builtIn[%d]", i), "unknown built-in rule %q%s", name, didYouMean(name, builtIn))
+		}
+	}
+
 	seen := map[string]bool{}
 
 	for i, rule := range v.cfg.Redaction.Custom {
@@ -402,6 +411,10 @@ func (v *validator) checkRedaction() {
 			v.errs.add(p+".name", "required")
 		case seen[rule.Name]:
 			v.errs.add(p+".name", "rule %q is defined more than once", rule.Name)
+		default:
+			if err := redact.CheckRuleName(rule.Name); err != nil {
+				v.errs.add(p+".name", "%v", err)
+			}
 		}
 
 		seen[rule.Name] = true

@@ -306,6 +306,10 @@ more often.
 
 ### `redaction`
 
+Redaction removes secrets and personal data from event text, raw webhook
+payloads and tool results before Sidekick stores them or sends them to a
+model.
+
 ```yaml
 redaction:
   builtIn: [cloud_keys, vcs_tokens, slack_tokens, jwt, private_keys, emails]
@@ -314,6 +318,43 @@ redaction:
       pattern: "cus_[A-Za-z0-9]{14}"   # a regular expression
   hashKeySecret: { name: sidekick-redaction, key: key }
 ```
+
+`builtIn` lists the built-in rules to use. Leave it out to use every rule
+that is on by default; set it to `[]` to turn every built-in rule off.
+
+| Rule | Finds | On by default |
+|---|---|---|
+| `cloud_keys` | AWS access key IDs and secret access keys, Google API keys, and the key ID in a GCP service account key file | yes |
+| `vcs_tokens` | GitHub and GitLab tokens | yes |
+| `slack_tokens` | Slack tokens and incoming webhook URLs | yes |
+| `jwt` | JSON Web Tokens | yes |
+| `private_keys` | PEM private key blocks, including the one in a GCP service account key file, and blocks whose end was cut off | yes |
+| `bearer_tokens` | the credential in an `Authorization` header (`Bearer`, `Basic` or `Token`), and `Bearer <token>` elsewhere | yes |
+| `password_pairs` | the value in pairs such as `password=...` or `client_secret: ...`, where the key ends in `password`, `secret`, `token`, `api_key`, `access_key`, `private_key` or `credentials`, and the password in URLs such as `postgres://user:password@host` | yes |
+| `emails` | email addresses | yes |
+| `card_numbers` | card numbers of 13 to 19 digits, with or without spaces or hyphens, that pass the Luhn check | yes |
+| `ip_addresses` | IPv4 and IPv6 addresses | no, because they are often useful evidence |
+
+`custom` adds rules of your own. Each has a `name` and a `pattern`, a
+regular expression in [Go's syntax](https://pkg.go.dev/regexp/syntax), and
+the whole match is redacted. A name starts with a lower-case letter, holds
+only lower-case letters, digits, `_` and `-`, is at most 32 characters long,
+and is not the name of a built-in rule.
+
+Each match is replaced with `[REDACTED:<rule>:<hash>]`, for example
+`[REDACTED:emails:3f9a1c]`. The hash is the first 6 hex characters of an
+HMAC-SHA256 of the value, keyed with the secret that `hashKeySecret` points
+to, so the same value always gets the same placeholder and a model can still
+tell that two log lines mention the same address. Use a long random key, for
+example from `openssl rand -base64 32`; the file's bytes are used exactly
+as they are, and an empty file stops Sidekick from starting. Without `hashKeySecret`, Sidekick
+makes a random key at start-up and logs a warning, and placeholders change
+after every restart.
+
+In a JSON payload, every string is redacted, object keys included, and the
+result is still valid JSON. A string value under a key that names a secret,
+such as `password` or `Authorization`, is redacted as a whole. Text and tool
+results longer than 256 KiB are cut and marked as truncated.
 
 ### `telemetry`
 
@@ -340,6 +381,7 @@ telemetry:
 | `budgets.perInvestigation.maxToolCalls` | `40` |
 | `budgets.perInvestigation.maxWallTime` | `10m` |
 | `report.minFalsePositiveConfidence` | `high` |
+| `redaction.builtIn` | every built-in rule except `ip_addresses` |
 | `telemetry.logLevel` | `info` |
 
 ## What is checked
@@ -364,8 +406,12 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   the same name.
 - Every route is `read-only` with no `actions`, and its budgets are at or
   below the global ones.
+- Every `redaction.builtIn` entry is a built-in rule. Every custom
+  redaction rule has a unique name of the right shape that is not a
+  built-in rule's name, and a pattern that parses.
 - `database.migrations`, `report.minFalsePositiveConfidence` and
-  `telemetry.logLevel` are known values, URLs are absolute, and listen addresses have a port.
+  `telemetry.logLevel` are known values, URLs are absolute, and listen
+  addresses have a port.
 
 ## Checking a file with `sidekick config validate`
 

@@ -93,6 +93,12 @@ func TestValidateFixtures(t *testing.T) {
 			`redaction.custom[2].name: rule "customer_id" is defined more than once`,
 			"redaction.custom[2].pattern: required",
 		}},
+		{file: "redaction-built-in-names", want: []string{
+			`redaction.builtIn[0]: unknown built-in rule "emals" (did you mean "emails"?)`,
+			`redaction.builtIn[2]: unknown built-in rule "ipaddresses" (did you mean "ip_addresses"?)`,
+			`redaction.custom[0].name: rule name "emails" is the name of a built-in rule`,
+			`redaction.custom[1].name: rule name "Customer ID" must start with a lower-case letter and hold only lower-case letters, digits, "_" and "-", at most 32 characters`,
+		}},
 		{file: "slack-without-token", want: []string{"slack.botTokenSecret: required"}},
 		{file: "negative-price", want: []string{"model.prices.claude-opus-5-5.inputPerMTok: must not be negative"}},
 		// Several problems, reported together and sorted by path.
