@@ -106,7 +106,7 @@ func TestGenerate(t *testing.T) {
 		{
 			name:           "rate limited with retry-after",
 			model:          "claude-opus-5-5",
-			response:       recorded{status: http.StatusTooManyRequests, file: "rate_limit.json", headers: map[string]string{retryAfterHeader: "30"}},
+			response:       recorded{status: http.StatusTooManyRequests, file: "rate_limit.json", headers: map[string]string{model.RetryAfterHeader: "30"}},
 			wantKind:       model.ErrRateLimited,
 			wantRetryAfter: 30 * time.Second,
 		},

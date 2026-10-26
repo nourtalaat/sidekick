@@ -2,10 +2,10 @@ package pricing
 
 import "github.com/nourtalaat/sidekick/internal/model"
 
-// CheckedOn is the date the shipped prices were last checked: the Claude API
-// prices against https://platform.claude.com/docs/en/about-claude/pricing,
-// and the Amazon Bedrock prices in bedrock.go against the AWS Price List
-// API.
+// CheckedOn is the date the shipped prices were last checked against
+// https://platform.claude.com/docs/en/about-claude/pricing and the
+// providers' pricing pages named next to their prices, and the Amazon
+// Bedrock prices in bedrock.go against the AWS Price List API.
 const CheckedOn = "2026-10-26"
 
 // usd is one US dollar in micro-dollars, so prices below read as they do on
