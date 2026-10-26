@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/source"
@@ -15,6 +16,8 @@ func TestConfigValidate(t *testing.T) {
 	t.Parallel()
 
 	token := &registry.SecretRef{Name: "signoz-mcp", Key: "token"}
+	oauthWant := "oauth: MCP sources do not support OAuth yet; " +
+		"put a token in a Secret and send it with headers (or env for stdio), see docs/sources/mcp-authentication.md"
 
 	tests := []struct {
 		name string
@@ -95,6 +98,16 @@ func TestConfigValidate(t *testing.T) {
 				"headers.Prefix.prefix: only with secret; put the whole text in value",
 				"headers.mcp-session-id: the MCP transport sets this header itself",
 			},
+		},
+		{
+			name: "http with oauth",
+			cfg:  Config{URL: "https://mcp.example.com/mcp", OAuth: yaml.Node{Kind: yaml.MappingNode}},
+			want: []string{oauthWant},
+		},
+		{
+			name: "stdio with oauth and no command",
+			cfg:  Config{Transport: TransportStdio, OAuth: yaml.Node{Kind: yaml.ScalarNode, Value: "true"}},
+			want: []string{oauthWant, "command: required with transport stdio"},
 		},
 		{
 			name: "bad env",
