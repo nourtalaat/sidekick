@@ -148,7 +148,11 @@ func TestClaimLimitedRespectsLimits(t *testing.T) {
 
 // TestLimitsHoldUnderConcurrentClaims runs several claimers on each of two
 // replicas against one database and checks that the per-route and global
-// limits are never passed.
+// limits are never passed, and that the global limit is reached.
+//
+// The first jobs keep running until the global limit is reached, so that
+// reaching it does not depend on claims being fast next to jobTime: on a
+// slow database link, three claims in a row take longer than one job.
 func TestLimitsHoldUnderConcurrentClaims(t *testing.T) {
 	t.Parallel()
 
@@ -157,6 +161,7 @@ func TestLimitsHoldUnderConcurrentClaims(t *testing.T) {
 		jobsPerRoute       = 12
 		jobTime            = 20 * time.Millisecond
 		idleWait           = 5 * time.Millisecond
+		fillTimeout        = 10 * time.Second
 		testTimeout        = 30 * time.Second
 	)
 
@@ -183,8 +188,11 @@ func TestLimitsHoldUnderConcurrentClaims(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	defer cancel()
 
-	tracker := newConcurrencyTracker(len(routes) * jobsPerRoute)
+	tracker := newConcurrencyTracker(len(routes)*jobsPerRoute, limits.Global)
 	group, ctx := errgroup.WithContext(ctx)
+
+	fillCtx, cancelFill := context.WithTimeout(ctx, fillTimeout)
+	defer cancelFill()
 
 	for r, pool := range replicas {
 		for c := range claimersPerReplica {
@@ -199,7 +207,7 @@ func TestLimitsHoldUnderConcurrentClaims(t *testing.T) {
 				for !tracker.allDone() {
 					job, claimed, err := claimLimited(ctx, pool, worker, kind, testLease, params)
 					if err != nil {
-						return err
+						return fmt.Errorf("%s: %w", worker, err)
 					}
 
 					if !claimed {
@@ -210,11 +218,20 @@ func TestLimitsHoldUnderConcurrentClaims(t *testing.T) {
 
 					route := deref(job.Route)
 					tracker.start(route)
+
+					if err := tracker.observeStored(ctx, pool); err != nil {
+						return fmt.Errorf("%s: %w", worker, err)
+					}
+
+					if err := tracker.waitUntilFull(fillCtx); err != nil {
+						return fmt.Errorf("%s: %w", worker, err)
+					}
+
 					time.Sleep(jobTime)
 					tracker.stop(route)
 
 					if err := complete(ctx, pool, job); err != nil {
-						return err
+						return fmt.Errorf("%s: %w", worker, err)
 					}
 				}
 
@@ -230,21 +247,41 @@ func TestLimitsHoldUnderConcurrentClaims(t *testing.T) {
 	require.LessOrEqual(t, peaks["a"], limits.Routes["a"])
 	require.LessOrEqual(t, peaks["b"], limits.Routes["b"])
 	require.Positive(t, peaks["c"])
+
+	storedPeaks, storedGlobalPeak := tracker.storedPeaks()
+	require.LessOrEqual(t, storedGlobalPeak, limits.Global, "the database never holds more running jobs than the global limit")
+	require.LessOrEqual(t, storedPeaks["a"], limits.Routes["a"])
+	require.LessOrEqual(t, storedPeaks["b"], limits.Routes["b"])
 }
 
 // concurrencyTracker counts jobs running at once, per route and in all, and
-// keeps the highest counts seen. Claimers on several goroutines share it.
+// keeps the highest counts seen, both as the claimers count them and as the
+// database stores them. Claimers on several goroutines share it.
 type concurrencyTracker struct {
-	mu         sync.Mutex
-	running    map[string]int
-	peak       map[string]int
-	total      int
-	totalPeak  int
-	done, want int
+	mu              sync.Mutex
+	running         map[string]int
+	peak            map[string]int
+	total           int
+	totalPeak       int
+	storedPeak      map[string]int
+	storedTotalPeak int
+	done, want      int
+	// full is closed once fullAt jobs have run at once.
+	full   chan struct{}
+	fullAt int
 }
 
-func newConcurrencyTracker(want int) *concurrencyTracker {
-	return &concurrencyTracker{running: map[string]int{}, peak: map[string]int{}, want: want}
+// newConcurrencyTracker returns a tracker that is done after want jobs and
+// full once fullAt of them have run at once.
+func newConcurrencyTracker(want, fullAt int) *concurrencyTracker {
+	return &concurrencyTracker{
+		running:    map[string]int{},
+		peak:       map[string]int{},
+		storedPeak: map[string]int{},
+		want:       want,
+		full:       make(chan struct{}),
+		fullAt:     fullAt,
+	}
 }
 
 func (c *concurrencyTracker) start(route string) {
@@ -254,7 +291,52 @@ func (c *concurrencyTracker) start(route string) {
 	c.running[route]++
 	c.total++
 	c.peak[route] = max(c.peak[route], c.running[route])
+
+	if c.totalPeak < c.fullAt && c.total >= c.fullAt {
+		close(c.full)
+	}
+
 	c.totalPeak = max(c.totalPeak, c.total)
+}
+
+// observeStored reads the running investigation jobs from the database and
+// keeps the highest counts seen. It can see an overrun that the claimers'
+// own counts miss, because the database counts a job from its claim to its
+// completion, which is longer than the claimer counts it.
+func (c *concurrencyTracker) observeStored(ctx context.Context, pool *pgxpool.Pool) error {
+	counts, total, err := runningLimitedJobs(ctx, pool)
+	if err != nil {
+		return fmt.Errorf("count running jobs: %w", err)
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for route, count := range counts {
+		c.storedPeak[route] = max(c.storedPeak[route], count)
+	}
+
+	c.storedTotalPeak = max(c.storedTotalPeak, total)
+
+	return nil
+}
+
+// waitUntilFull blocks until fullAt jobs have run at once, or ctx ends.
+func (c *concurrencyTracker) waitUntilFull(ctx context.Context) error {
+	// Once full is closed, a job must not fail because ctx has also ended,
+	// so look at full on its own first.
+	select {
+	case <-c.full:
+		return nil
+	default:
+	}
+
+	select {
+	case <-c.full:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("wait for %d jobs running at once: %w", c.fullAt, context.Cause(ctx))
+	}
 }
 
 func (c *concurrencyTracker) stop(route string) {
@@ -278,6 +360,50 @@ func (c *concurrencyTracker) peaks() (map[string]int, int) {
 	defer c.mu.Unlock()
 
 	return c.peak, c.totalPeak
+}
+
+func (c *concurrencyTracker) storedPeaks() (map[string]int, int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.storedPeak, c.storedTotalPeak
+}
+
+// runningLimitedJobs counts the running jobs of limitedKinds per route, and
+// in all, in one snapshot.
+func runningLimitedJobs(ctx context.Context, pool *pgxpool.Pool) (map[string]int, int, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT COALESCE(route, ''), count(*)::int FROM jobs
+		WHERE status = 'running' AND kind = ANY ($1::text[])
+		GROUP BY route`, limitedKinds)
+	if err != nil {
+		return nil, 0, fmt.Errorf("query running jobs: %w", err)
+	}
+
+	defer rows.Close()
+
+	counts := map[string]int{}
+	total := 0
+
+	for rows.Next() {
+		var (
+			route string
+			count int
+		)
+
+		if err := rows.Scan(&route, &count); err != nil {
+			return nil, 0, fmt.Errorf("scan running jobs: %w", err)
+		}
+
+		counts[route] = count
+		total += count
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("read running jobs: %w", err)
+	}
+
+	return counts, total, nil
 }
 
 func deref(s *string) string {
