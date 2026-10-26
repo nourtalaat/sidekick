@@ -128,8 +128,32 @@ func TestReportValidate(t *testing.T) {
 			rules:  minMedium,
 		},
 		{
-			name:   "false positive with low confidence and no minimum set",
+			name:     "empty rules require high confidence",
+			report:   with(falsePositive, func(r *Report) { r.Confidence = Medium }),
+			rules:    Rules{},
+			wantErrs: []string{"false_positive needs confidence high or higher"},
+		},
+		{
+			name:     "empty rules reject low confidence",
+			report:   with(falsePositive, func(r *Report) { r.Confidence = Low }),
+			rules:    Rules{},
+			wantErrs: []string{"false_positive needs confidence high or higher"},
+		},
+		{
+			name:   "empty rules accept high confidence",
+			report: falsePositive,
+			rules:  Rules{},
+		},
+		{
+			name:     "an unknown minimum means high",
+			report:   with(falsePositive, func(r *Report) { r.Confidence = Medium }),
+			rules:    Rules{MinFalsePositiveConfidence: "certain"},
+			wantErrs: []string{"false_positive needs confidence high or higher"},
+		},
+		{
+			name:   "an explicit low minimum allows low confidence",
 			report: with(falsePositive, func(r *Report) { r.Confidence = Low }),
+			rules:  Rules{MinFalsePositiveConfidence: Low},
 		},
 		{
 			name: "true positive with low confidence ignores the false positive minimum",

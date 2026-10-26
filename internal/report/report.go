@@ -135,9 +135,17 @@ type Report struct {
 	StopDetail string     `json:"stopDetail,omitempty"`
 }
 
+// DefaultMinFalsePositiveConfidence is the lowest confidence a false_positive
+// verdict may have when the rules do not set one.
+const DefaultMinFalsePositiveConfidence = High
+
 // Rules are the checks applied to a submitted verdict. They come from config.
+// The zero value is the safe one: it requires DefaultMinFalsePositiveConfidence.
 type Rules struct {
-	// MinFalsePositiveConfidence guards against hiding real incidents (PRD risk 1).
+	// MinFalsePositiveConfidence guards against hiding real incidents (PRD
+	// risk 1, VR-7). Empty or unknown values mean
+	// DefaultMinFalsePositiveConfidence; lowering the bar takes an explicit
+	// Low or Medium.
 	MinFalsePositiveConfidence Confidence
 }
 
@@ -157,8 +165,8 @@ func (r Report) Validate(rules Rules) error {
 			errs = append(errs, errors.New("false_positive needs falsePositive.whyFired and at least one prevention"))
 		}
 
-		if r.Confidence.Rank() < rules.MinFalsePositiveConfidence.Rank() {
-			errs = append(errs, fmt.Errorf("false_positive needs confidence %s or higher; gather more evidence or use inconclusive", rules.MinFalsePositiveConfidence))
+		if minimum := rules.minFalsePositiveConfidence(); r.Confidence.Rank() < minimum.Rank() {
+			errs = append(errs, fmt.Errorf("false_positive needs confidence %s or higher; gather more evidence or use inconclusive", minimum))
 		}
 	case Inconclusive, Duplicate, KnownIssue, Flapping:
 	default:
@@ -178,4 +186,14 @@ func (r Report) Validate(rules Rules) error {
 	}
 
 	return nil
+}
+
+// minFalsePositiveConfidence returns the configured minimum, or the default
+// when the configured value is empty or not a known level.
+func (r Rules) minFalsePositiveConfidence() Confidence {
+	if r.MinFalsePositiveConfidence.Rank() == 0 {
+		return DefaultMinFalsePositiveConfidence
+	}
+
+	return r.MinFalsePositiveConfidence
 }
