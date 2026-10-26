@@ -144,6 +144,57 @@ func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) (uuid.
 	return id, err
 }
 
+const listEventsByID = `-- name: ListEventsByID :many
+SELECT id, intake, key, kind, sender_kind, sender_id, sender_name, trusted, alert_name, title, body, service, severity, labels, links, fingerprint, slack, raw, status, skip_reason, route, group_id, starts_at, ends_at, received_at FROM events WHERE id = ANY ($1::uuid[]) ORDER BY received_at, id
+`
+
+// ListEventsByID returns the events with ids, in the order they arrived.
+func (q *Queries) ListEventsByID(ctx context.Context, ids []uuid.UUID) ([]Event, error) {
+	rows, err := q.db.Query(ctx, listEventsByID, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Event
+	for rows.Next() {
+		var i Event
+		if err := rows.Scan(
+			&i.ID,
+			&i.Intake,
+			&i.Key,
+			&i.Kind,
+			&i.SenderKind,
+			&i.SenderID,
+			&i.SenderName,
+			&i.Trusted,
+			&i.AlertName,
+			&i.Title,
+			&i.Body,
+			&i.Service,
+			&i.Severity,
+			&i.Labels,
+			&i.Links,
+			&i.Fingerprint,
+			&i.Slack,
+			&i.Raw,
+			&i.Status,
+			&i.SkipReason,
+			&i.Route,
+			&i.GroupID,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.ReceivedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markEventRouted = `-- name: MarkEventRouted :execrows
 UPDATE events
 SET status = 'routed', route = $1, group_id = $2

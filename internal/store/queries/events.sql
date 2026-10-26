@@ -37,6 +37,10 @@ RETURNING id;
 -- name: GetEvent :one
 SELECT * FROM events WHERE id = @id;
 
+-- name: ListEventsByID :many
+-- ListEventsByID returns the events with ids, in the order they arrived.
+SELECT * FROM events WHERE id = ANY (@ids::uuid[]) ORDER BY received_at, id;
+
 -- name: MarkEventRouted :execrows
 -- MarkEventRouted records the route and group of a received event and sets
 -- it to routed. An event that is no longer received is left as it is, and

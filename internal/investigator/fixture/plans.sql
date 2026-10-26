@@ -32,4 +32,16 @@ SELECT md5('inv' || i)::uuid, s, 1, 'tool_result',
        '2026-10-26 00:00:02+00'::timestamptz + i * interval '1 minute', 120
 FROM generate_series(1, 20000) AS i, generate_series(0, 24) AS s;
 
+-- Five delivered inbox items per investigation (100,000), and two more
+-- waiting for every tenth one, which is running.
+INSERT INTO investigation_inbox (investigation_id, kind, body, created_at, delivered_seq)
+SELECT md5('inv' || i)::uuid, 'new_event', json_build_object('event_id', md5('evt' || i)::uuid),
+       '2026-10-26 00:00:03+00'::timestamptz + i * interval '1 minute', n
+FROM generate_series(1, 20000) AS i, generate_series(1, 5) AS n;
+
+INSERT INTO investigation_inbox (investigation_id, kind, body, created_at)
+SELECT md5('inv' || i)::uuid, 'new_event', json_build_object('event_id', md5('evt' || i)::uuid),
+       '2026-10-26 00:00:04+00'::timestamptz + i * interval '1 minute'
+FROM generate_series(10, 20000, 10) AS i, generate_series(1, 2) AS n;
+
 ANALYZE;
