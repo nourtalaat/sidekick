@@ -143,3 +143,26 @@ func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) (uuid.
 	err := row.Scan(&id)
 	return id, err
 }
+
+const markEventRouted = `-- name: MarkEventRouted :execrows
+UPDATE events
+SET status = 'routed', route = $1, group_id = $2
+WHERE id = $3 AND status = 'received'
+`
+
+type MarkEventRoutedParams struct {
+	Route   *string
+	GroupID *uuid.UUID
+	ID      uuid.UUID
+}
+
+// MarkEventRouted records the route and group of a received event and sets
+// it to routed. An event that is no longer received is left as it is, and
+// no row is counted, so routing the same event twice changes nothing.
+func (q *Queries) MarkEventRouted(ctx context.Context, arg MarkEventRoutedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markEventRouted, arg.Route, arg.GroupID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}

@@ -36,3 +36,11 @@ RETURNING id;
 
 -- name: GetEvent :one
 SELECT * FROM events WHERE id = @id;
+
+-- name: MarkEventRouted :execrows
+-- MarkEventRouted records the route and group of a received event and sets
+-- it to routed. An event that is no longer received is left as it is, and
+-- no row is counted, so routing the same event twice changes nothing.
+UPDATE events
+SET status = 'routed', route = @route, group_id = @group_id
+WHERE id = @id AND status = 'received';
