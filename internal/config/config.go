@@ -39,6 +39,7 @@ const (
 	DefaultRoutePriority = 100
 	DefaultMaxToolCalls  = 40
 	DefaultMaxWallTime   = 10 * time.Minute
+	DefaultConcurrency   = 8
 	DefaultLogLevel      = LogLevelInfo
 	// DefaultStrategy is the strategy of a route that names none.
 	DefaultStrategy = strategy.GenericAlert
@@ -175,6 +176,10 @@ type Route struct {
 	// Budgets limit one investigation. After Load, unset limits hold the
 	// global values from budgets.perInvestigation.
 	Budgets Limits `yaml:"budgets"`
+	// Concurrency is the most investigations of this route that run at
+	// once across every replica. Zero means only budgets.concurrency holds
+	// them.
+	Concurrency int `yaml:"concurrency"`
 }
 
 // Match selects events for a route. Every field that is set must match.
@@ -195,6 +200,9 @@ type Match struct {
 // routes and the ceilings route budgets must stay within (CFG-1).
 type Budgets struct {
 	PerInvestigation Limits `yaml:"perInvestigation"`
+	// Concurrency is the most investigations that run at once across every
+	// replica.
+	Concurrency int `yaml:"concurrency"`
 }
 
 // Limits bound one investigation. M0 limits tool calls and wall time.
@@ -339,6 +347,20 @@ func (p Price) ModelPrice() model.Price {
 	}
 }
 
+// RouteConcurrency returns the concurrency limit of each route that sets
+// one, by route name.
+func (c *Config) RouteConcurrency() map[string]int {
+	out := map[string]int{}
+
+	for _, r := range c.Routes {
+		if r.Concurrency > 0 {
+			out[r.Name] = r.Concurrency
+		}
+	}
+
+	return out
+}
+
 // Rules returns the verdict rules for report.Report.Validate.
 func (r Report) Rules() report.Rules {
 	return report.Rules{MinFalsePositiveConfidence: r.MinFalsePositiveConfidence}
@@ -460,6 +482,7 @@ func (r *Route) setDefaults() {
 
 func (b *Budgets) setDefaults() {
 	b.PerInvestigation = Limits{MaxToolCalls: DefaultMaxToolCalls, MaxWallTime: DefaultMaxWallTime}
+	b.Concurrency = DefaultConcurrency
 }
 
 func (t *Telemetry) setDefaults() {
