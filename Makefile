@@ -69,6 +69,14 @@ GENERATE_TARGETS += sqlc-generate
 sqlc-generate: $(SQLC) ## Generate internal/store/db from the queries and migrations
 	$(SQLC) generate
 
+# NOTICE lists the modules linked into the binary, so a dependency change
+# that does not regenerate it fails verify-generated.
+GENERATE_TARGETS += notice
+.PHONY: notice
+notice: ## Write NOTICE, the third-party notices that ship with the binary and image
+	sh scripts/notice.sh > NOTICE.tmp
+	mv NOTICE.tmp NOTICE
+
 CI_TARGETS += verify-generated
 .PHONY: verify-generated
 verify-generated: ## Fail if `make generate` changes any file

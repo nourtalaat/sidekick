@@ -63,9 +63,10 @@ Run `make help` for the full list. The main ones:
 | `make fmt` | Formats the Go code (gofmt and goimports). |
 | `make test` | Unit tests with the race detector. |
 | `make test-integration` | Unit and integration tests (build tag `integration`) against Postgres. |
-| `make generate` | Every code generator: `generate-mocks` and `sqlc-generate`. |
+| `make generate` | Every code generator: `generate-mocks`, `sqlc-generate` and `notice`. |
 | `make generate-mocks` | Runs the `mockgen` directives through `go generate`. |
 | `make sqlc-generate` | Generates `internal/store/db` from the queries and migrations. |
+| `make notice` | Writes `NOTICE`, the licenses of every module linked into the binary. Run it after changing dependencies. |
 | `make migrate-new name=...` | Creates the next migration file in `internal/store/migrations`. |
 | `make verify-generated` | Runs `make generate` and fails if any file changed. |
 | `make build` | Builds `bin/sidekick` with the version and commit set. |
