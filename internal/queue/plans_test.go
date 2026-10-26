@@ -64,7 +64,7 @@ func TestQueryPlans(t *testing.T) {
 		{
 			name: "CompleteJob",
 			run: func(ctx context.Context, q *db.Queries, rows planRows) error {
-				_, err := q.CompleteJob(ctx, db.CompleteJobParams{ID: rows.claimed.ID, ClaimToken: claimToken(rows.claimed)})
+				_, err := q.CompleteJob(ctx, db.CompleteJobParams{ID: rows.claimed.ID, ClaimToken: ClaimToken(rows.claimed)})
 
 				return fmt.Errorf("run query: %w", err)
 			},
@@ -74,7 +74,7 @@ func TestQueryPlans(t *testing.T) {
 			name: "FailJob",
 			run: func(ctx context.Context, q *db.Queries, rows planRows) error {
 				_, err := q.FailJob(ctx, db.FailJobParams{
-					LastError: "boom", BackoffSeconds: 5, ID: rows.claimed.ID, ClaimToken: claimToken(rows.claimed),
+					LastError: "boom", BackoffSeconds: 5, ID: rows.claimed.ID, ClaimToken: ClaimToken(rows.claimed),
 				})
 
 				return fmt.Errorf("run query: %w", err)
@@ -84,7 +84,7 @@ func TestQueryPlans(t *testing.T) {
 		{
 			name: "HandBackJob",
 			run: func(ctx context.Context, q *db.Queries, rows planRows) error {
-				_, err := q.HandBackJob(ctx, db.HandBackJobParams{ID: rows.claimed.ID, ClaimToken: claimToken(rows.claimed)})
+				_, err := q.HandBackJob(ctx, db.HandBackJobParams{ID: rows.claimed.ID, ClaimToken: ClaimToken(rows.claimed)})
 
 				return fmt.Errorf("run query: %w", err)
 			},
@@ -93,7 +93,7 @@ func TestQueryPlans(t *testing.T) {
 		{
 			name: "ReleaseUniqueKey",
 			run: func(ctx context.Context, q *db.Queries, rows planRows) error {
-				_, err := q.ReleaseUniqueKey(ctx, db.ReleaseUniqueKeyParams{ID: rows.claimed.ID, ClaimToken: claimToken(rows.claimed)})
+				_, err := q.ReleaseUniqueKey(ctx, db.ReleaseUniqueKeyParams{ID: rows.claimed.ID, ClaimToken: ClaimToken(rows.claimed)})
 
 				return fmt.Errorf("run query: %w", err)
 			},
@@ -103,7 +103,7 @@ func TestQueryPlans(t *testing.T) {
 			name: "RenewLease",
 			run: func(ctx context.Context, q *db.Queries, rows planRows) error {
 				_, err := q.RenewLease(ctx, db.RenewLeaseParams{
-					LeaseSeconds: testLease.Seconds(), ID: rows.claimed.ID, ClaimToken: claimToken(rows.claimed),
+					LeaseSeconds: testLease.Seconds(), ID: rows.claimed.ID, ClaimToken: ClaimToken(rows.claimed),
 				})
 
 				return fmt.Errorf("run query: %w", err)

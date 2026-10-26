@@ -25,7 +25,7 @@ func renew(ctx context.Context, q db.DBTX, job db.Job, lease time.Duration) erro
 	rows, err := db.New(q).RenewLease(ctx, db.RenewLeaseParams{
 		LeaseSeconds: lease.Seconds(),
 		ID:           job.ID,
-		ClaimToken:   claimToken(job),
+		ClaimToken:   ClaimToken(job),
 	})
 	if err != nil {
 		return fmt.Errorf("renew lease of job %d: %w", job.ID, err)

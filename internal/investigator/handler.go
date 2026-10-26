@@ -163,7 +163,7 @@ func (h *Handler) Handle(ctx context.Context, job db.Job) (err error) {
 
 	span.SetAttributes(attribute.String(attrInvestigationID, id.String()))
 
-	inv, started, err := h.start(ctx, id, claimToken(job))
+	inv, started, err := h.start(ctx, id, queue.ClaimToken(job))
 	if err != nil {
 		return fmt.Errorf("take over the run: %w", err)
 	}
@@ -239,14 +239,4 @@ func decodePayload(raw []byte) (uuid.UUID, error) {
 	}
 
 	return p.InvestigationID, nil
-}
-
-// claimToken returns the claim token of a claimed job. The runner always
-// sets it; 0 matches no fence.
-func claimToken(job db.Job) int64 {
-	if job.ClaimToken == nil {
-		return 0
-	}
-
-	return *job.ClaimToken
 }
