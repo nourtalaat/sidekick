@@ -1,6 +1,7 @@
 // Package router runs route_event jobs: it matches each stored event to the
 // first route that fits it and opens an event group and a queued
-// investigation for it, with the investigate job, in one transaction.
+// investigation for it, with the investigate job and the first publish job
+// of each of the route's outputs, in one transaction.
 //
 // Routes are tried by priority, lower first, then by name, and the default
 // route, which matches every event, is always last. A route matches when

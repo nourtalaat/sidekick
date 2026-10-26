@@ -22,6 +22,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/ids"
 	"github.com/nourtalaat/sidekick/internal/investigator"
 	"github.com/nourtalaat/sidekick/internal/model"
+	"github.com/nourtalaat/sidekick/internal/publish"
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
@@ -116,8 +117,8 @@ func New(opts Options) (*Router, error) {
 // Handle routes the event of one route_event job inside a router.route
 // span, a child of the span that enqueued the job. In one transaction it
 // sets the event to routed with its route and a new group, opens that
-// group, creates a queued investigation for it and enqueues its
-// investigate job.
+// group, creates a queued investigation for it, enqueues its investigate
+// job and enqueues the first publish job for each output of the route.
 //
 // It is safe to run more than once: an event that is no longer received,
 // because it was routed already or intake skipped it, is left as it is,
@@ -205,8 +206,9 @@ func (r *Router) match(ctx context.Context, id uuid.UUID) (ev db.Event, rt route
 }
 
 // open routes ev to rt in one transaction: it marks the event routed,
-// opens its group, creates the investigation and enqueues the investigate
-// job. It reports false, and writes nothing, when the event is no longer
+// opens its group, creates the investigation, enqueues the investigate
+// job and opens the route's outputs, so each shows "Looking into it" at
+// once. It reports false, and writes nothing, when the event is no longer
 // received.
 func (r *Router) open(ctx context.Context, ev db.Event, rt route) (o opened, routed bool, err error) {
 	o = opened{groupID: ids.New(), investigationID: ids.New()}
@@ -260,6 +262,10 @@ func (r *Router) open(ctx context.Context, ev db.Event, rt route) (o opened, rou
 
 	if err := enqueueInvestigate(ctx, tx, rt.name, o); err != nil {
 		return opened{}, false, fmt.Errorf("investigation %s: %w", o.investigationID, err)
+	}
+
+	if err := publish.Open(ctx, tx, o.investigationID, rt.outputs); err != nil {
+		return opened{}, false, fmt.Errorf("investigation %s: open its outputs: %w", o.investigationID, err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

@@ -29,6 +29,8 @@ type route struct {
 	// connectors and budget are the JSON stored with each investigation.
 	connectors []byte
 	budget     []byte
+	// outputs are the sinks the investigation's updates go to.
+	outputs []string
 }
 
 // newRoutes prepares the routes of cfg in the order they are tried.
@@ -103,6 +105,7 @@ func newRoute(rc config.Route, globalRoles map[model.Role]string, strategies *st
 		strategyVersion: st.Version,
 		connectors:      connectorsJSON,
 		budget:          budgetJSON,
+		outputs:         rc.Outputs,
 	}, nil
 }
 
