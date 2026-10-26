@@ -1,0 +1,7 @@
+{
+  "duplicate": false,
+  "events": [
+    {"id": "ID", "status": "received", "duplicate": false},
+    {"id": "ID", "status": "received", "duplicate": false}
+  ]
+}
