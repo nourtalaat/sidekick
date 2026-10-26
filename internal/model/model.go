@@ -101,6 +101,16 @@ func (c Capabilities) SupportsEffort(level Effort) bool {
 	return slices.Contains(c.EffortLevels, level)
 }
 
+// CapabilityDeclarer is implemented by a connector's config struct when it
+// knows the model's capabilities before the connector is built, from the
+// connector's table of known models or a capabilities block in config.
+// Config validation then checks the shared settings and the investigate role
+// without building the connector, so `sidekick config validate` catches
+// those mistakes without secrets or network calls.
+type CapabilityDeclarer interface {
+	Capabilities() Capabilities
+}
+
 // MessageRole is who sent a message in the conversation.
 type MessageRole string
 

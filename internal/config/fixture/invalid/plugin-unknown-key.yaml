@@ -1,0 +1,12 @@
+# An unknown key inside a plugin section.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5, thinkng: { mode: adaptive } }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default

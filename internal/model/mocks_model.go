@@ -120,3 +120,41 @@ func (mr *MockEmbedderMockRecorder) Embed(ctx, texts any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Embed", reflect.TypeOf((*MockEmbedder)(nil).Embed), ctx, texts)
 }
+
+// MockCapabilityDeclarer is a mock of CapabilityDeclarer interface.
+type MockCapabilityDeclarer struct {
+	ctrl     *gomock.Controller
+	recorder *MockCapabilityDeclarerMockRecorder
+	isgomock struct{}
+}
+
+// MockCapabilityDeclarerMockRecorder is the mock recorder for MockCapabilityDeclarer.
+type MockCapabilityDeclarerMockRecorder struct {
+	mock *MockCapabilityDeclarer
+}
+
+// NewMockCapabilityDeclarer creates a new mock instance.
+func NewMockCapabilityDeclarer(ctrl *gomock.Controller) *MockCapabilityDeclarer {
+	mock := &MockCapabilityDeclarer{ctrl: ctrl}
+	mock.recorder = &MockCapabilityDeclarerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockCapabilityDeclarer) EXPECT() *MockCapabilityDeclarerMockRecorder {
+	return m.recorder
+}
+
+// Capabilities mocks base method.
+func (m *MockCapabilityDeclarer) Capabilities() Capabilities {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Capabilities")
+	ret0, _ := ret[0].(Capabilities)
+	return ret0
+}
+
+// Capabilities indicates an expected call of Capabilities.
+func (mr *MockCapabilityDeclarerMockRecorder) Capabilities() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Capabilities", reflect.TypeOf((*MockCapabilityDeclarer)(nil).Capabilities))
+}

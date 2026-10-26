@@ -1,0 +1,14 @@
+# A route service match that is not a glob.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: checkout
+    match: { service: "checkout-[" }
+  - name: default

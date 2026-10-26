@@ -1,0 +1,12 @@
+# A role that names a connector that does not exist.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claud
+
+routes:
+  - name: default

@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/nourtalaat/sidekick/internal/buildinfo"
+	"github.com/nourtalaat/sidekick/internal/config"
 )
 
 // newRootCmd builds the sidekick command tree. Each subcommand lives in its
@@ -19,6 +20,7 @@ func newRootCmd(info buildinfo.Info) *cobra.Command {
 
 	root.AddCommand(newVersionCmd(info))
 	root.AddCommand(newMigrateCmd(os.Getenv))
+	root.AddCommand(newConfigCmd(config.Registries{}))
 
 	return root
 }
