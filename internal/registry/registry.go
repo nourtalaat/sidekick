@@ -83,6 +83,35 @@ type Plugin[T any] struct {
 // ErrUnknownType is returned when config names a type nobody registered.
 var ErrUnknownType = errors.New("unknown type")
 
+// Stage is the step of checking or building a plugin instance that failed.
+type Stage string
+
+// Stages of the functions Typed makes.
+const (
+	StageDecode    Stage = "decode config"
+	StageValidate  Stage = "validate config"
+	StageConstruct Stage = "construct"
+)
+
+// StageError is returned, wrapped, by the Check and Build functions Typed
+// makes. It says which stage failed, so config validation can place the
+// error without reading its text: decode and validate errors name the
+// plugin's fields, and construct errors come from the constructor.
+type StageError struct {
+	Stage Stage
+	Err   error
+}
+
+// Error returns the stage and the error, for example "validate config: url: required".
+func (e *StageError) Error() string {
+	return string(e.Stage) + ": " + e.Err.Error()
+}
+
+// Unwrap returns the error of the stage.
+func (e *StageError) Unwrap() error {
+	return e.Err
+}
+
 // Registry holds the plugin types of one plugin kind.
 type Registry[T any] struct {
 	kind    string
@@ -203,7 +232,7 @@ func Typed[C any, T any](build func(ctx context.Context, name string, cfg C, dep
 
 			t, err := build(ctx, name, *cfg, deps)
 			if err != nil {
-				return zero, fmt.Errorf("construct: %w", err)
+				return zero, &StageError{Stage: StageConstruct, Err: err}
 			}
 
 			return t, nil
@@ -212,16 +241,16 @@ func Typed[C any, T any](build func(ctx context.Context, name string, cfg C, dep
 }
 
 // decodeChecked decodes a section into a new C and runs C's Validate method
-// when it has one.
+// when it has one. Failures are StageErrors.
 func decodeChecked[C any](dec Decoder) (*C, error) {
 	var cfg C
 	if err := dec.Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("decode config: %w", err)
+		return nil, &StageError{Stage: StageDecode, Err: err}
 	}
 
 	if v, ok := any(&cfg).(Validator); ok {
 		if err := v.Validate(); err != nil {
-			return nil, fmt.Errorf("validate config: %w", err)
+			return nil, &StageError{Stage: StageValidate, Err: err}
 		}
 	}
 

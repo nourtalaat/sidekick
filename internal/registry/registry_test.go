@@ -503,6 +503,82 @@ func TestTypedCheck(t *testing.T) {
 	}
 }
 
+func TestTypedStageErrors(t *testing.T) {
+	t.Parallel()
+
+	errDecode := errors.New("bad yaml")
+	errBuild := errors.New("dial failed")
+
+	tests := []struct {
+		name       string
+		build      bool
+		setupMocks func(dec *MockDecoder)
+		wantStage  Stage
+		wantCause  error
+	}{
+		{
+			name:       "check decode failure",
+			setupMocks: func(dec *MockDecoder) { dec.EXPECT().Decode(gomock.Any()).Return(errDecode) },
+			wantStage:  StageDecode,
+			wantCause:  errDecode,
+		},
+		{
+			name:       "check validate failure",
+			setupMocks: func(dec *MockDecoder) { dec.EXPECT().Decode(gomock.Any()).Return(nil) },
+			wantStage:  StageValidate,
+		},
+		{
+			name:       "build decode failure",
+			build:      true,
+			setupMocks: func(dec *MockDecoder) { dec.EXPECT().Decode(gomock.Any()).Return(errDecode) },
+			wantStage:  StageDecode,
+			wantCause:  errDecode,
+		},
+		{
+			name:  "build constructor failure",
+			build: true,
+			setupMocks: func(dec *MockDecoder) {
+				dec.EXPECT().Decode(gomock.Any()).DoAndReturn(func(target any) error {
+					target.(*widgetConfig).URL = "https://example.com"
+
+					return nil
+				})
+			},
+			wantStage: StageConstruct,
+			wantCause: errBuild,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dec := NewMockDecoder(gomock.NewController(t))
+			tt.setupMocks(dec)
+
+			r := New[widget]("widget")
+			r.Register("http", Typed(func(context.Context, string, widgetConfig, Deps) (widget, error) {
+				return widget{}, errBuild
+			}))
+
+			var err error
+			if tt.build {
+				_, err = r.Build(t.Context(), "http", "primary", dec, Deps{})
+			} else {
+				_, err = r.Check(t.Context(), "http", "primary", dec)
+			}
+
+			var stageErr *StageError
+			require.ErrorAs(t, err, &stageErr)
+			require.Equal(t, tt.wantStage, stageErr.Stage)
+
+			if tt.wantCause != nil {
+				require.ErrorIs(t, err, tt.wantCause)
+			}
+		})
+	}
+}
+
 func constantPlugin(w widget) Plugin[widget] {
 	return Plugin[widget]{Build: func(context.Context, string, Decoder, Deps) (widget, error) {
 		return w, nil

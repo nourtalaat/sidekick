@@ -518,34 +518,27 @@ func checkRoleCaps(errs *errorList, path string, role model.Role, connector stri
 }
 
 // pluginErrors turns an error from a plugin's check or build into Errors.
-// Errors from strict decoding already carry their paths. Other errors are
-// split into lines, and a line that starts with a field's key path and a
-// colon, as Validate methods write them, is placed at that field.
+// Errors from strict decoding already carry their paths. Errors from the
+// decode and validate stages are split into lines, and a line that starts
+// with a field's key path and a colon, as Validate methods write them, is
+// placed at that field. Constructor errors and anything else stay at the
+// section's path.
 func pluginErrors(path string, err error) Errors {
 	var errs Errors
 	if errors.As(err, &errs) {
 		return errs
 	}
 
-	msg := err.Error()
-	for _, prefix := range []string{"check ", "build "} {
-		if rest, ok := strings.CutPrefix(msg, prefix); ok {
-			if _, after, found := strings.Cut(rest, ": "); found {
-				msg = after
-			}
-		}
+	var stageErr *registry.StageError
+	if !errors.As(err, &stageErr) {
+		return Errors{{Path: path, Message: err.Error()}}
 	}
 
-	msg = strings.TrimPrefix(msg, "check typed config: ")
-	msg = strings.TrimPrefix(msg, "build from typed config: ")
-	msg = strings.TrimPrefix(msg, "validate config: ")
-	msg = strings.TrimPrefix(msg, "decode config: ")
-
-	if rest, ok := strings.CutPrefix(msg, "construct: "); ok {
-		return Errors{{Path: path, Message: "cannot build: " + rest}}
+	if stageErr.Stage == registry.StageConstruct {
+		return Errors{{Path: path, Message: "cannot build: " + stageErr.Err.Error()}}
 	}
 
-	return fieldErrors(path, errors.New(msg))
+	return fieldErrors(path, stageErr.Err)
 }
 
 // fieldPrefix matches a line that starts with a field's key path, such as

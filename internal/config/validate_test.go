@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -278,12 +279,18 @@ func TestPluginErrors(t *testing.T) {
 	}{
 		{
 			name: "decode errors keep their paths",
-			err:  errors.Join(errors.New("check x"), Errors{{Path: "sources.x.a", Message: "unknown key"}}),
+			err: fmt.Errorf("check source %q: %w", "x", &registry.StageError{
+				Stage: registry.StageDecode,
+				Err:   Errors{{Path: "sources.x.a", Message: "unknown key"}},
+			}),
 			want: Errors{{Path: "sources.x.a", Message: "unknown key"}},
 		},
 		{
 			name: "validate errors move to their fields",
-			err:  errors.New("check source \"x\": validate config: url: required\ntools.allow[0]: bad\nno field here"),
+			err: fmt.Errorf("check source %q: %w", "x", &registry.StageError{
+				Stage: registry.StageValidate,
+				Err:   errors.Join(errors.New("url: required"), errors.New("tools.allow[0]: bad"), errors.New("no field here")),
+			}),
 			want: Errors{
 				{Path: "sources.x.url", Message: "required"},
 				{Path: "sources.x.tools.allow[0]", Message: "bad"},
@@ -292,18 +299,18 @@ func TestPluginErrors(t *testing.T) {
 		},
 		{
 			name: "field given as an index",
-			err:  errors.New(`check source "x": validate config: ["a.b"]: bad`),
+			err:  &registry.StageError{Stage: registry.StageValidate, Err: errors.New(`["a.b"]: bad`)},
 			want: Errors{{Path: `sources.x["a.b"]`, Message: "bad"}},
 		},
 		{
-			name: "constructor failure",
-			err:  errors.New(`build source "x": construct: dial failed: connection refused`),
-			want: Errors{{Path: "sources.x", Message: "cannot build: dial failed: connection refused"}},
+			name: "constructor failure that looks like a field",
+			err:  fmt.Errorf("build source %q: %w", "x", &registry.StageError{Stage: registry.StageConstruct, Err: errors.New("dial: connection refused")}),
+			want: Errors{{Path: "sources.x", Message: "cannot build: dial: connection refused"}},
 		},
 		{
-			name: "other error",
-			err:  errors.New("something broke"),
-			want: Errors{{Path: "sources.x", Message: "something broke"}},
+			name: "error without a stage keeps its whole text",
+			err:  fmt.Errorf("build source %q: %w", "x", registry.ErrUnknownType),
+			want: Errors{{Path: "sources.x", Message: `build source "x": unknown type`}},
 		},
 	}
 
