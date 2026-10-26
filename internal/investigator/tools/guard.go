@@ -213,7 +213,7 @@ func (g *Guard) classify(name, tool string, err error) outcome {
 
 // redactMessage redacts an error message and cuts it to maxMessageLen.
 func (g *Guard) redactMessage(msg string) string {
-	return cutString(g.redactor.Text(msg).Text, maxMessageLen)
+	return source.CutText(g.redactor.Text(msg).Text, maxMessageLen)
 }
 
 // listTools lists the source's tools, recovering from a panic.

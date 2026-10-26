@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"go.opentelemetry.io/otel/attribute"
@@ -129,7 +128,7 @@ func (r *Run) call(ctx context.Context, call model.ToolCall) Result {
 			Kind:    KindInvalidInput,
 			Source:  t.src.name,
 			Tool:    t.exposed.Tool.Name,
-			Message: cutString(err.Error(), maxMessageLen),
+			Message: source.CutText(err.Error(), maxMessageLen),
 		})
 	}
 
@@ -434,17 +433,4 @@ func recoverInto(err *error) {
 // rank orders check statuses, best first.
 func rank(s report.CheckStatus) int {
 	return slices.Index([]report.CheckStatus{report.CheckOK, report.CheckNoData, report.CheckFailed, report.CheckUnavailable}, s)
-}
-
-// cutString cuts s to at most n bytes without splitting a character.
-func cutString(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-
-	for n > 0 && !utf8.RuneStart(s[n]) {
-		n--
-	}
-
-	return s[:n]
 }

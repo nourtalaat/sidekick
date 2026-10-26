@@ -382,7 +382,7 @@ func convertTool(t *mcp.Tool, trust bool) (source.Tool, error) {
 
 	return source.Tool{
 		Name:        t.Name,
-		Description: cutString(t.Description, maxDescriptionLen),
+		Description: source.CutText(t.Description, maxDescriptionLen),
 		InputSchema: schema,
 		ReadOnly:    !trust || readOnly(t.Annotations),
 	}, nil

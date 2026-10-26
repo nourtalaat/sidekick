@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -88,11 +87,11 @@ func linkEvidence(l *mcp.ResourceLink) (source.Evidence, bool) {
 func linkTitle(l *mcp.ResourceLink) string {
 	for _, s := range []string{l.Title, l.Name} {
 		if s != "" {
-			return cutString(s, maxDescriptionLen)
+			return source.CutText(s, maxDescriptionLen)
 		}
 	}
 
-	return cutString(l.URI, maxDescriptionLen)
+	return source.CutText(l.URI, maxDescriptionLen)
 }
 
 // cut cuts s to maxResultSize and reports whether it did.
@@ -101,18 +100,5 @@ func cut(s string) (string, bool) {
 		return s, false
 	}
 
-	return cutString(s, maxResultSize), true
-}
-
-// cutString cuts s to at most n bytes without splitting a character.
-func cutString(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-
-	for n > 0 && !utf8.RuneStart(s[n]) {
-		n--
-	}
-
-	return s[:n]
+	return source.CutText(s, maxResultSize), true
 }
