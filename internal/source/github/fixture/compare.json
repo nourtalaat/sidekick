@@ -1,0 +1,38 @@
+{
+  "html_url": "https://github.com/acme/checkout/compare/v1.3.2...v1.4.0",
+  "status": "ahead",
+  "ahead_by": 2,
+  "behind_by": 0,
+  "total_commits": 2,
+  "commits": [
+    {
+      "sha": "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c",
+      "html_url": "https://github.com/acme/checkout/commit/0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c",
+      "commit": {
+        "message": "Bump the image tag",
+        "author": {"name": "Deploy Bot", "email": "bot@example.com", "date": "2026-05-04T09:30:00Z"},
+        "committer": {"name": "Deploy Bot", "email": "bot@example.com", "date": "2026-05-04T09:30:00Z"}
+      }
+    },
+    {
+      "sha": "abc1234def5678abc1234def5678abc1234def56",
+      "html_url": "https://github.com/acme/checkout/commit/abc1234def5678abc1234def5678abc1234def56",
+      "commit": {
+        "message": "Lower DB pool size to 5 to save connections",
+        "author": {"name": "Ada Lovelace", "email": "ada@example.com", "date": "2026-05-04T10:04:00Z"},
+        "committer": {"name": "GitHub", "email": "noreply@github.com", "date": "2026-05-04T10:05:00Z"}
+      },
+      "author": {"login": "ada"}
+    }
+  ],
+  "files": [
+    {
+      "filename": "config/db.yaml",
+      "status": "modified",
+      "additions": 1,
+      "deletions": 1,
+      "changes": 2,
+      "patch": "@@ -1,3 +1,3 @@\n database:\n-  poolSize: 20\n+  poolSize: 5\n"
+    }
+  ]
+}

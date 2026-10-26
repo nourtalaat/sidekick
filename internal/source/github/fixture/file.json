@@ -1,0 +1,10 @@
+{
+  "type": "file",
+  "encoding": "base64",
+  "size": 24,
+  "name": "db.yaml",
+  "path": "config/db.yaml",
+  "content": "ZGF0YWJh\nc2U6CiAgcG9vbFNpemU6IDUK\n",
+  "sha": "3d21ec53a331a6f037a91c368710b99387d012c1",
+  "html_url": "https://github.com/acme/checkout/blob/main/config/db.yaml"
+}
