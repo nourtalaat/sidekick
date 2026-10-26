@@ -20,6 +20,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/event"
@@ -31,6 +35,22 @@ import (
 
 // Pattern is the route the handler serves, for http.ServeMux.
 const Pattern = "POST /hooks/{name}"
+
+// SpanName is the name of the span of one delivery.
+const SpanName = "intake.receive"
+
+// tracerName names the tracer of this package.
+const tracerName = "github.com/nourtalaat/sidekick/internal/intake/webhook"
+
+// Span attributes. sidekick.event.key lists the stored keys of the
+// delivery's events, which are redacted or hashed like the keys in the
+// events table.
+const (
+	attrIntake    = "sidekick.intake"
+	attrEventKey  = "sidekick.event.key"
+	attrDuplicate = "sidekick.duplicate"
+	attrRejected  = "sidekick.rejected"
+)
 
 // MaxBodyBytes is the largest body a delivery may have: 1 MiB.
 const MaxBodyBytes = 1 << 20
@@ -59,7 +79,8 @@ var (
 // knownKinds are the event kinds an adapter may return.
 var knownKinds = []event.Kind{event.KindAlert, event.KindResolved, event.KindMessage, event.KindMention}
 
-// Options set up a Handler. Every field is required.
+// Options set up a Handler. Every field is required, except Metrics and
+// TracerProvider.
 type Options struct {
 	// Webhooks are the configured endpoints, by name.
 	Webhooks map[string]config.Webhook
@@ -75,6 +96,11 @@ type Options struct {
 	Pool *pgxpool.Pool
 	// Logger receives one line per delivery. Payloads are never logged.
 	Logger *slog.Logger
+	// Metrics counts deliveries and events. Nil counts nothing.
+	Metrics *Metrics
+	// TracerProvider makes the tracer of the intake.receive spans. Nil
+	// means the global tracer provider.
+	TracerProvider trace.TracerProvider
 }
 
 // Handler serves webhook deliveries. Make it with New and register it at
@@ -85,6 +111,8 @@ type Handler struct {
 	redactor  *redact.Redactor
 	pool      *pgxpool.Pool
 	log       *slog.Logger
+	metrics   *Metrics
+	tracer    trace.Tracer
 }
 
 // endpoint is one configured webhook endpoint with its adapter.
@@ -97,12 +125,19 @@ type endpoint struct {
 // New builds a Handler for the configured endpoints. Every endpoint must
 // have an adapter.
 func New(opts Options) (*Handler, error) {
+	tp := opts.TracerProvider
+	if tp == nil {
+		tp = otel.GetTracerProvider()
+	}
+
 	h := &Handler{
 		endpoints: make(map[string]endpoint, len(opts.Webhooks)),
 		secrets:   opts.Secrets,
 		redactor:  opts.Redactor,
 		pool:      opts.Pool,
 		log:       opts.Logger,
+		metrics:   opts.Metrics,
+		tracer:    tp.Tracer(tracerName),
 	}
 
 	for name, cfg := range opts.Webhooks {
@@ -116,39 +151,47 @@ func New(opts Options) (*Handler, error) {
 		}
 
 		h.endpoints[name] = endpoint{name: name, cfg: cfg, adapter: adapter}
+		h.metrics.init(name)
 	}
 
 	return h, nil
 }
 
-// ServeHTTP handles one delivery. It answers 202 with what was stored, 404
-// for an endpoint that is not configured, 413 for a body over
-// MaxBodyBytes, 401 when authentication fails, 400 when the adapter cannot
-// parse the payload, and 500 when the delivery could not be stored.
+// ServeHTTP handles one delivery inside an intake.receive span. It answers
+// 202 with what was stored, 404 for an endpoint that is not configured, 413
+// for a body over MaxBodyBytes, 401 when authentication fails, 400 when the
+// adapter cannot parse the payload, and 500 when the delivery could not be
+// stored.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	ep, known := h.endpoints[r.PathValue(pathName)]
 
-	ep, ok := h.endpoints[r.PathValue(pathName)]
-	if !ok {
-		h.log.InfoContext(ctx, "webhook delivery for an unknown endpoint")
-		h.writeError(ctx, w, http.StatusNotFound, msgNotFound)
+	intakeLabel := unknownIntake
+	if known {
+		intakeLabel = ep.name
+	}
+
+	ctx, span := h.tracer.Start(r.Context(), SpanName,
+		trace.WithSpanKind(trace.SpanKindServer),
+		trace.WithAttributes(attribute.String(attrIntake, intakeLabel)))
+	defer span.End()
+
+	d := &reply{h: h, w: w, span: span, intake: intakeLabel, log: h.log.With("intake", intakeLabel)}
+
+	if !known {
+		d.reject(ctx, reasonUnauthenticated, http.StatusNotFound, msgNotFound, "webhook delivery for an unknown endpoint", nil)
 
 		return
 	}
 
-	log := h.log.With("intake", ep.name)
-
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxBodyBytes))
 	if err != nil {
 		if _, tooLarge := errors.AsType[*http.MaxBytesError](err); tooLarge {
-			log.InfoContext(ctx, "webhook delivery rejected: the body is too large")
-			h.writeError(ctx, w, http.StatusRequestEntityTooLarge, msgTooLarge)
+			d.reject(ctx, reasonTooLarge, http.StatusRequestEntityTooLarge, msgTooLarge, "webhook delivery rejected: the body is too large", nil)
 
 			return
 		}
 
-		log.InfoContext(ctx, "webhook delivery rejected: the body could not be read", "error", err.Error())
-		h.writeError(ctx, w, http.StatusBadRequest, msgUnreadable)
+		d.reject(ctx, reasonInvalidPayload, http.StatusBadRequest, msgUnreadable, "webhook delivery rejected: the body could not be read", err)
 
 		return
 	}
@@ -157,37 +200,31 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.authenticate(ctx, ep, req); err != nil {
 		if !errors.Is(err, intake.ErrUnauthenticated) {
-			log.ErrorContext(ctx, "webhook delivery not authenticated: the secret could not be read", "error", err.Error())
-			h.writeError(ctx, w, http.StatusInternalServerError, msgInternal)
+			d.fail(ctx, "webhook delivery not authenticated: the secret could not be read", err)
 
 			return
 		}
 
-		log.InfoContext(ctx, "webhook delivery rejected: authentication failed", "error", err.Error())
-		h.writeError(ctx, w, http.StatusUnauthorized, msgUnauthenticated)
+		d.reject(ctx, reasonUnauthenticated, http.StatusUnauthorized, msgUnauthenticated, "webhook delivery rejected: authentication failed", err)
 
 		return
 	}
 
 	events, err := parse(ctx, ep, req)
 	if err != nil {
-		log.InfoContext(ctx, "webhook delivery rejected: the payload is not valid", "error", err.Error())
-		h.writeError(ctx, w, http.StatusBadRequest, msgInvalidPayload+err.Error())
+		d.reject(ctx, reasonInvalidPayload, http.StatusBadRequest, msgInvalidPayload+err.Error(), "webhook delivery rejected: the payload is not valid", err)
 
 		return
 	}
 
 	stored, err := h.store(ctx, ep, req, events)
 	if err != nil {
-		log.ErrorContext(ctx, "webhook delivery not stored", "error", err.Error())
-		h.writeError(ctx, w, http.StatusInternalServerError, msgInternal)
+		d.fail(ctx, "webhook delivery not stored", err)
 
 		return
 	}
 
-	resp := newResponse(stored)
-	log.InfoContext(ctx, "webhook delivery accepted", "events", len(stored), "duplicate", resp.Duplicate)
-	h.writeJSON(ctx, w, http.StatusAccepted, resp)
+	d.accept(ctx, stored)
 }
 
 // authenticate resolves the endpoint's secret and checks the delivery with
@@ -249,6 +286,53 @@ func parse(ctx context.Context, ep endpoint, req intake.Request) ([]event.Event,
 	}
 
 	return events, nil
+}
+
+// reply answers one delivery and records how it ended in the span, the
+// metrics and the log.
+type reply struct {
+	h      *Handler
+	w      http.ResponseWriter
+	span   trace.Span
+	intake string
+	log    *slog.Logger
+}
+
+// accept answers 202 with what happened to each event.
+func (d *reply) accept(ctx context.Context, stored []storedEvent) {
+	resp := newResponse(stored)
+
+	keys := make([]string, 0, len(stored))
+	for _, s := range stored {
+		keys = append(keys, s.key)
+	}
+
+	d.span.SetAttributes(attribute.StringSlice(attrEventKey, keys), attribute.Bool(attrDuplicate, resp.Duplicate))
+	d.h.metrics.stored(d.intake, stored)
+	d.log.InfoContext(ctx, "webhook delivery accepted", "events", len(stored), "duplicate", resp.Duplicate)
+	d.h.writeJSON(ctx, d.w, http.StatusAccepted, resp)
+}
+
+// reject answers a delivery that is turned away for reason. err, when set,
+// says why in the log; it never holds payload values.
+func (d *reply) reject(ctx context.Context, reason string, status int, msg, logMsg string, err error) {
+	d.span.SetAttributes(attribute.String(attrRejected, reason))
+	d.h.metrics.reject(d.intake, reason)
+
+	if err != nil {
+		d.log.InfoContext(ctx, logMsg, "error", err.Error())
+	} else {
+		d.log.InfoContext(ctx, logMsg)
+	}
+
+	d.h.writeError(ctx, d.w, status, msg)
+}
+
+// fail answers 500 for a delivery that failed because of Sidekick itself.
+func (d *reply) fail(ctx context.Context, logMsg string, err error) {
+	d.span.SetStatus(codes.Error, logMsg)
+	d.log.ErrorContext(ctx, logMsg, "error", err.Error())
+	d.h.writeError(ctx, d.w, http.StatusInternalServerError, msgInternal)
 }
 
 // response is the body of a 202 answer.

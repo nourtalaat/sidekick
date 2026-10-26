@@ -18,7 +18,12 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/intake"
@@ -47,8 +52,11 @@ func TestMain(m *testing.M) {
 // harness is a webhook handler on a database of its own, served over HTTP
 // with the config in fixture/sidekick.yaml.
 type harness struct {
-	url  string
-	pool *pgxpool.Pool
+	url     string
+	pool    *pgxpool.Pool
+	handler *Handler
+	metrics *Metrics
+	spans   *tracetest.SpanRecorder
 }
 
 // delivery is one request to send to the handler.
@@ -95,13 +103,20 @@ func setup(t *testing.T, seeds ...string) *harness {
 		storetest.LoadFixture(t, pool, seed)
 	}
 
+	metrics, err := NewMetrics(prometheus.NewRegistry())
+	require.NoError(t, err)
+
+	spans := tracetest.NewSpanRecorder()
+
 	h, err := New(Options{
-		Webhooks: cfg.Intake.Webhooks,
-		Adapters: adapters,
-		Secrets:  resolver,
-		Redactor: redactor,
-		Pool:     pool,
-		Logger:   slog.New(slog.DiscardHandler),
+		Webhooks:       cfg.Intake.Webhooks,
+		Adapters:       adapters,
+		Secrets:        resolver,
+		Redactor:       redactor,
+		Pool:           pool,
+		Logger:         slog.New(slog.DiscardHandler),
+		Metrics:        metrics,
+		TracerProvider: sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans)),
 	})
 	require.NoError(t, err)
 
@@ -111,7 +126,7 @@ func setup(t *testing.T, seeds ...string) *harness {
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
-	return &harness{url: server.URL, pool: pool}
+	return &harness{url: server.URL, pool: pool, handler: h, metrics: metrics, spans: spans}
 }
 
 // send posts d and returns the status and the body of the answer.
@@ -134,6 +149,56 @@ func (h *harness) send(t *testing.T, d delivery) (int, []byte) {
 	require.NoError(t, err)
 
 	return resp.StatusCode, body
+}
+
+// requireTelemetry checks the metrics of the intake d was sent to, and the
+// span of the last delivery: wantResults counts sidekick_events_received_total
+// by result, and wantReason is the reason of a rejection, or "".
+func (h *harness) requireTelemetry(t *testing.T, d delivery, wantResults map[string]int, wantReason string) {
+	t.Helper()
+
+	label := unknownIntake
+	if _, ok := h.handler.endpoints[d.endpoint]; ok {
+		label = d.endpoint
+	}
+
+	for _, result := range []string{resultAccepted, resultDuplicate, resultRejected} {
+		got := testutil.ToFloat64(h.metrics.received.WithLabelValues(label, result))
+		require.InDelta(t, float64(wantResults[result]), got, 0, "sidekick_events_received_total{intake=%q,result=%q}", label, result)
+	}
+
+	for _, reason := range []string{reasonUnauthenticated, reasonTooLarge, reasonInvalidPayload} {
+		want := 0.0
+		if reason == wantReason {
+			want = 1
+		}
+
+		got := testutil.ToFloat64(h.metrics.rejected.WithLabelValues(label, reason))
+		require.InDelta(t, want, got, 0, "sidekick_events_rejected_total{intake=%q,reason=%q}", label, reason)
+	}
+
+	ended := h.spans.Ended()
+	require.NotEmpty(t, ended)
+
+	span := ended[len(ended)-1]
+	require.Equal(t, SpanName, span.Name())
+
+	attrs := map[string]attribute.Value{}
+	for _, kv := range span.Attributes() {
+		attrs[string(kv.Key)] = kv.Value
+	}
+
+	require.Equal(t, label, attrs[attrIntake].AsString())
+
+	if wantReason != "" {
+		require.Equal(t, wantReason, attrs[attrRejected].AsString())
+	}
+
+	if wantResults[resultAccepted]+wantResults[resultDuplicate] > 0 {
+		require.NotEmpty(t, attrs[attrEventKey].AsStringSlice())
+		require.Equal(t, attribute.BOOL, attrs[attrDuplicate].Type())
+		require.Equal(t, wantResults[resultDuplicate] > 0, attrs[attrDuplicate].AsBool(), "in these cases a delivery with duplicates holds only duplicates")
+	}
 }
 
 // events returns every stored event, oldest first.

@@ -31,10 +31,15 @@ func TestHooks(t *testing.T) {
 		send         delivery
 		wantStatus   int
 		wantResponse string
-		check        func(t *testing.T, h *harness)
+		// wantResults counts sidekick_events_received_total by result
+		// after every delivery of the case.
+		wantResults map[string]int
+		wantReason  string
+		check       func(t *testing.T, h *harness)
 	}{
 		{
 			name:         "valid HMAC signature",
+			wantResults:  map[string]int{resultAccepted: 1},
 			send:         signed("ci", testHMACKey, now, generic),
 			wantStatus:   http.StatusAccepted,
 			wantResponse: "accepted-one.json",
@@ -60,10 +65,18 @@ func TestHooks(t *testing.T) {
 				require.Len(t, ev.Fingerprint, 32)
 
 				require.Equal(t, []jobRow{routeJob(ev)}, h.jobs(t))
+
+				var traceparent string
+				require.NoError(t, h.pool.QueryRow(t.Context(), "SELECT traceparent FROM jobs").Scan(&traceparent))
+
+				spans := h.spans.Ended()
+				require.Contains(t, traceparent, spans[len(spans)-1].SpanContext().TraceID().String(), "the job links to the intake.receive span")
 			},
 		},
 		{
 			name:         "wrong HMAC signature",
+			wantResults:  map[string]int{resultRejected: 1},
+			wantReason:   reasonUnauthenticated,
 			send:         signed("ci", "not-the-key", now, generic),
 			wantStatus:   http.StatusUnauthorized,
 			wantResponse: "unauthenticated.json",
@@ -71,6 +84,8 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "HMAC timestamp outside the tolerance",
+			wantResults:  map[string]int{resultRejected: 1},
+			wantReason:   reasonUnauthenticated,
 			send:         signed("ci", testHMACKey, now.Add(-6*time.Minute), generic),
 			wantStatus:   http.StatusUnauthorized,
 			wantResponse: "unauthenticated.json",
@@ -78,6 +93,8 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "HMAC signature of another body",
+			wantResults:  map[string]int{resultRejected: 1},
+			wantReason:   reasonUnauthenticated,
 			send:         delivery{endpoint: "ci", header: signed("ci", testHMACKey, now, []byte(`{}`)).header, body: generic},
 			wantStatus:   http.StatusUnauthorized,
 			wantResponse: "unauthenticated.json",
@@ -85,6 +102,7 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "valid bearer token with several alerts and one resolved",
+			wantResults:  map[string]int{resultAccepted: 3},
 			send:         bearer("alertmanager", testBearerToken, alertmanager),
 			wantStatus:   http.StatusAccepted,
 			wantResponse: "accepted-alertmanager.json",
@@ -114,6 +132,8 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "wrong bearer token",
+			wantResults:  map[string]int{resultRejected: 1},
+			wantReason:   reasonUnauthenticated,
 			send:         bearer("alertmanager", testBearerToken+"x", alertmanager),
 			wantStatus:   http.StatusUnauthorized,
 			wantResponse: "unauthenticated.json",
@@ -121,6 +141,8 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "no credentials",
+			wantResults:  map[string]int{resultRejected: 1},
+			wantReason:   reasonUnauthenticated,
 			send:         delivery{endpoint: "alertmanager", body: alertmanager},
 			wantStatus:   http.StatusUnauthorized,
 			wantResponse: "unauthenticated.json",
@@ -128,6 +150,8 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "an empty secret accepts nothing",
+			wantResults:  map[string]int{resultRejected: 1},
+			wantReason:   reasonUnauthenticated,
 			send:         bearer("empty-secret", "", generic),
 			wantStatus:   http.StatusUnauthorized,
 			wantResponse: "unauthenticated.json",
@@ -135,6 +159,7 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "a secret that cannot be read",
+			wantResults:  map[string]int{},
 			send:         bearer("missing-secret", "anything", generic),
 			wantStatus:   http.StatusInternalServerError,
 			wantResponse: "internal-error.json",
@@ -142,6 +167,8 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "unknown endpoint",
+			wantResults:  map[string]int{resultRejected: 1},
+			wantReason:   reasonUnauthenticated,
 			send:         bearer("nope", testBearerToken, alertmanager),
 			wantStatus:   http.StatusNotFound,
 			wantResponse: "not-found.json",
@@ -149,6 +176,8 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "body over the limit",
+			wantResults:  map[string]int{resultRejected: 1},
+			wantReason:   reasonTooLarge,
 			send:         bearer("alertmanager", testBearerToken, oversized()),
 			wantStatus:   http.StatusRequestEntityTooLarge,
 			wantResponse: "too-large.json",
@@ -156,6 +185,8 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "payload the adapter rejects",
+			wantResults:  map[string]int{resultRejected: 1},
+			wantReason:   reasonInvalidPayload,
 			send:         signed("ci", testHMACKey, now, readFixture(t, "requests/generic-missing-title.json")),
 			wantStatus:   http.StatusBadRequest,
 			wantResponse: "invalid-payload.json",
@@ -163,6 +194,7 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "a repeated delivery is a duplicate",
+			wantResults:  map[string]int{resultAccepted: 3, resultDuplicate: 3},
 			before:       []delivery{bearer("alertmanager", testBearerToken, alertmanager)},
 			send:         bearer("alertmanager", testBearerToken, alertmanager),
 			wantStatus:   http.StatusAccepted,
@@ -176,6 +208,7 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "an event stored before is a duplicate",
+			wantResults:  map[string]int{resultDuplicate: 1},
 			seeds:        []string{"fixture/existing-ci-event.sql"},
 			send:         signed("ci", testHMACKey, now, generic),
 			wantStatus:   http.StatusAccepted,
@@ -191,6 +224,7 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "seeded secrets never reach the events table",
+			wantResults:  map[string]int{resultAccepted: 1},
 			send:         signed("ci", testHMACKey, now, readFixture(t, "requests/generic-with-secrets.json")),
 			wantStatus:   http.StatusAccepted,
 			wantResponse: "accepted-one.json",
@@ -233,6 +267,7 @@ func TestHooks(t *testing.T) {
 			status, body := h.send(t, tt.send)
 			require.Equal(t, tt.wantStatus, status, "body: %s", body)
 			requireResponse(t, tt.wantResponse, body)
+			h.requireTelemetry(t, tt.send, tt.wantResults, tt.wantReason)
 			tt.check(t, h)
 		})
 	}

@@ -49,6 +49,7 @@ type routeEventPayload struct {
 // storedEvent is what happened to one event of a delivery.
 type storedEvent struct {
 	id        uuid.UUID
+	key       string
 	status    string
 	duplicate bool
 }
@@ -80,7 +81,7 @@ func (h *Handler) store(ctx context.Context, ep endpoint, req intake.Request, ev
 
 		id, err := queries.InsertEvent(ctx, params)
 		if errors.Is(err, pgx.ErrNoRows) {
-			stored = append(stored, storedEvent{duplicate: true})
+			stored = append(stored, storedEvent{key: params.Key, duplicate: true})
 
 			continue
 		}
@@ -95,7 +96,7 @@ func (h *Handler) store(ctx context.Context, ep endpoint, req intake.Request, ev
 			}
 		}
 
-		stored = append(stored, storedEvent{id: id, status: params.Status})
+		stored = append(stored, storedEvent{id: id, key: params.Key, status: params.Status})
 	}
 
 	if err := tx.Commit(ctx); err != nil {
