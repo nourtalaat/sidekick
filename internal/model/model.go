@@ -243,6 +243,12 @@ func (u Usage) Add(o Usage) Usage {
 	}
 }
 
+// PromptTokens returns the length of the prompt: input tokens plus the
+// tokens read from and written to the prompt cache.
+func (u Usage) PromptTokens() int64 {
+	return u.InputTokens + u.CacheReadTokens + u.CacheWriteTokens
+}
+
 // Response is the result of one model turn.
 type Response struct {
 	Message    Message
@@ -298,15 +304,31 @@ func (e *Error) Retryable() bool {
 const tokensPerPrice = 1_000_000
 
 // Price is the cost per million tokens in micro-dollars (1 USD = 1,000,000).
+//
+// Some models cost more per token when the prompt is long. For them, Above
+// holds the price of a call whose prompt is longer than TierAboveInputTokens
+// tokens. Each call is priced on its own, at one price for all its tokens.
 type Price struct {
 	InputPerMTok      int64
 	OutputPerMTok     int64
 	CacheReadPerMTok  int64
 	CacheWritePerMTok int64
+
+	// TierAboveInputTokens is the prompt length, in tokens, above which Above
+	// applies. The prompt length counts input, cache read and cache write
+	// tokens (Usage.PromptTokens), which is how Anthropic bills its tiers.
+	TierAboveInputTokens int64
+	// Above is the price of a call with a longer prompt. Nil means one price
+	// for every prompt length.
+	Above *Price
 }
 
 // Cost returns the cost of usage in micro-dollars. Reasoning tokens are billed as output.
 func (p Price) Cost(u Usage) int64 {
+	if p.Above != nil && u.PromptTokens() > p.TierAboveInputTokens {
+		return p.Above.Cost(u)
+	}
+
 	total := u.InputTokens*p.InputPerMTok +
 		u.OutputTokens*p.OutputPerMTok +
 		u.CacheReadTokens*p.CacheReadPerMTok +
