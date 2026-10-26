@@ -235,7 +235,8 @@ Each match is replaced with `[REDACTED:<rule>:<hash>]`, for example
 HMAC-SHA256 of the value, keyed with the secret that `hashKeySecret` points
 to, so the same value always gets the same placeholder and a model can still
 tell that two log lines mention the same address. Use a long random key, for
-example from `openssl rand -base64 32`. Without `hashKeySecret`, Sidekick
+example from `openssl rand -base64 32`; the file's bytes are used exactly
+as they are, and an empty file stops Sidekick from starting. Without `hashKeySecret`, Sidekick
 makes a random key at start-up and logs a warning, and placeholders change
 after every restart.
 
