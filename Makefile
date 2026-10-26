@@ -20,6 +20,10 @@ MOCKGEN := $(MOCKGEN_DIR)/mockgen
 GOVULNCHECK := $(TOOLS_DIR)/govulncheck-$(GOVULNCHECK_VERSION)/govulncheck
 SQLC := $(TOOLS_DIR)/sqlc-$(SQLC_VERSION)/sqlc
 
+# golangci-lint keeps one cache per user by default, so worktrees that lint
+# at the same time can get each other's results. Each checkout gets its own.
+GOLANGCI_LINT_CACHE := $(BIN_DIR)/cache/golangci-lint
+
 VERSION ?= $(shell git describe --tags --dirty 2>/dev/null || echo dev)
 COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 LDFLAGS := -X $(MODULE)/internal/buildinfo.Version=$(VERSION) -X $(MODULE)/internal/buildinfo.Commit=$(COMMIT)
@@ -36,12 +40,12 @@ help: ## List the targets
 CI_TARGETS += lint
 .PHONY: lint
 lint: $(GOLANGCI_LINT) ## Run golangci-lint and check that go.mod and go.sum are tidy
-	$(GOLANGCI_LINT) run
+	GOLANGCI_LINT_CACHE="$(GOLANGCI_LINT_CACHE)" $(GOLANGCI_LINT) run
 	$(GO) mod tidy -diff
 
 .PHONY: fmt
 fmt: $(GOLANGCI_LINT) ## Format the Go code
-	$(GOLANGCI_LINT) fmt
+	GOLANGCI_LINT_CACHE="$(GOLANGCI_LINT_CACHE)" $(GOLANGCI_LINT) fmt
 
 CI_TARGETS += test
 .PHONY: test
