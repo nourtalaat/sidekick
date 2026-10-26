@@ -1,10 +1,11 @@
 <p align="center">
-  <img src="assets/sidekick-icon.png" alt="Sidekick" width="160">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo/sidekick-lockup-dark.svg">
+    <img src="assets/logo/sidekick-lockup-light.svg" alt="Sidekick" width="360">
+  </picture>
 </p>
 
-<h1 align="center">Sidekick</h1>
-
-<p align="center">An on-call sidekick that investigates your alerts.</p>
+<p align="center">The 3 a.m. page, already looked into.</p>
 
 Sidekick receives alerts from webhooks or Slack, investigates them with the LLM of your choice and your observability, cloud, code and ticketing tools, and tells you whether each alert is a real issue or a false positive. For real issues it finds the likely cause and proposes fixes; for false positives it proposes how to stop the alert from firing again.
 
