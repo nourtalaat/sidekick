@@ -3,6 +3,7 @@ package github
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"path"
 	"regexp"
@@ -53,7 +54,7 @@ type App struct {
 }
 
 // Validate checks the section without secrets or network calls: the app
-// is fully named, the base URL is an absolute http or https URL, every
+// is fully named, the base URL is an absolute https URL, every
 // repos entry is an owner/name glob, every serviceRepos repository is one
 // that repos allows, and the timeout fits the HTTP client. Each error
 // starts with the key of its field.
@@ -72,10 +73,8 @@ func (c *Config) Validate() error {
 		errs = append(errs, errors.New("app.privateKeySecret: required"))
 	}
 
-	if c.BaseURL != "" {
-		if u, err := url.Parse(c.BaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-			errs = append(errs, fmt.Errorf("baseURL: %q must be an absolute http or https URL", c.BaseURL))
-		}
+	if err := c.checkBaseURL(); err != nil {
+		errs = append(errs, err)
 	}
 
 	if c.Timeout > httpclient.ResponseHeaderTimeout {
@@ -87,6 +86,27 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.checkServiceRepos()...)
 
 	return errors.Join(errs...)
+}
+
+// checkBaseURL checks that the base URL, when set, is an absolute https
+// URL, so the installation token never crosses the network unencrypted.
+// Plain http is allowed only for a loopback host, such as a local test
+// server.
+func (c *Config) checkBaseURL() error {
+	if c.BaseURL == "" {
+		return nil
+	}
+
+	u, err := url.Parse(c.BaseURL)
+
+	switch {
+	case err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http"):
+		return fmt.Errorf("baseURL: %q must be an absolute https URL", c.BaseURL)
+	case u.Scheme == "http" && !loopback(u.Hostname()):
+		return fmt.Errorf("baseURL: %q must use https; plain http is only allowed for localhost", c.BaseURL)
+	default:
+		return nil
+	}
 }
 
 // checkRepos checks that repos has at least one entry and that each is a
@@ -184,4 +204,16 @@ func validRepo(s string) bool {
 // dots reports whether s is "." or "..".
 func dots(s string) bool {
 	return s == "." || s == ".."
+}
+
+// loopback reports whether host is localhost or a loopback IP address,
+// such as 127.0.0.1 or ::1.
+func loopback(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+
+	ip := net.ParseIP(host)
+
+	return ip != nil && ip.IsLoopback()
 }

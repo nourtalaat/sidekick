@@ -49,8 +49,26 @@ func TestConfigValidate(t *testing.T) {
 		{
 			name: "a base URL that is not absolute",
 			cfg:  Config{App: app, Repos: []string{"acme/x"}, BaseURL: "github.example.com/api/v3"},
-			want: []string{`baseURL: "github.example.com/api/v3" must be an absolute http or https URL`},
+			want: []string{`baseURL: "github.example.com/api/v3" must be an absolute https URL`},
 		},
+		{
+			name: "a base URL with another scheme",
+			cfg:  Config{App: app, Repos: []string{"acme/x"}, BaseURL: "ftp://github.example.com/"},
+			want: []string{`baseURL: "ftp://github.example.com/" must be an absolute https URL`},
+		},
+		{
+			name: "a plain http base URL on the network",
+			cfg:  Config{App: app, Repos: []string{"acme/x"}, BaseURL: "http://github.example.com/api/v3/"},
+			want: []string{`baseURL: "http://github.example.com/api/v3/" must use https; plain http is only allowed for localhost`},
+		},
+		{
+			name: "a plain http base URL on an address that only looks local",
+			cfg:  Config{App: app, Repos: []string{"acme/x"}, BaseURL: "http://localhost.example.com/"},
+			want: []string{`baseURL: "http://localhost.example.com/" must use https; plain http is only allowed for localhost`},
+		},
+		{name: "plain http on localhost", cfg: Config{App: app, Repos: []string{"acme/x"}, BaseURL: "http://localhost:8080/"}},
+		{name: "plain http on 127.0.0.0/8", cfg: Config{App: app, Repos: []string{"acme/x"}, BaseURL: "http://127.0.0.2:8080/"}},
+		{name: "plain http on ::1", cfg: Config{App: app, Repos: []string{"acme/x"}, BaseURL: "http://[::1]:8080/"}},
 		{
 			name: "a timeout above the HTTP client's limit",
 			cfg:  Config{App: app, Repos: []string{"acme/x"}, Settings: source.Settings{Timeout: 61 * time.Second}},

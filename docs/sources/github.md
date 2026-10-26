@@ -81,7 +81,9 @@ makes a token, so it needs no restart.
 ## GitHub Enterprise Server
 
 Set `baseURL` to your server's REST API root, for example
-`https://github.example.com/api/v3/`. Everything else is the same.
+`https://github.example.com/api/v3/`. It must use `https`, so the
+installation token is never sent unencrypted; plain `http` is accepted
+only for `localhost` and loopback addresses. Everything else is the same.
 
 ## When something is wrong
 

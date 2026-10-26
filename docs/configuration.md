@@ -253,7 +253,7 @@ needs and how to set it up.
 | `app.privateKeySecret` | `{ name, key }` of the Secret that holds the app's private key, in PEM form. Required. |
 | `repos` | The repositories the tools may read, as `owner/name` globs (`path.Match` syntax), for example `acme/*`. Required; a call for any other repository fails. |
 | `serviceRepos` | Maps a service name to its repository, so a tool can be called with the service an alert names. Each repository must be one that `repos` allows. |
-| `baseURL` | The REST API root, for GitHub Enterprise Server, for example `https://github.example.com/api/v3/`. Default: github.com. |
+| `baseURL` | The REST API root, for GitHub Enterprise Server, for example `https://github.example.com/api/v3/`. It must use `https`; plain `http` is accepted only for `localhost` and loopback addresses. Default: github.com. |
 
 ```yaml
 sources:
