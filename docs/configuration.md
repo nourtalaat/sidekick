@@ -158,6 +158,26 @@ sources:
       deny: ["*delete*", "*create*", "*update*"]
 ```
 
+Every source type takes these keys as well:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `tools.allow` | every tool | Globs (`path.Match` syntax) of the tool names the model may see. |
+| `tools.deny` | none | Globs of tool names the model never sees. Deny wins over allow. |
+| `tools.rename` | none | Maps a tool name to the name the model sees after the source prefix. |
+| `tools.trustAnnotations` | `true` | Whether the source's own read-only hints decide which tools write. Only some source types have such hints. |
+| `timeout` | `30s` | How long one tool call may take. |
+| `concurrency` | `4` | How many calls to the source may run at once on one replica. |
+
+The model sees a source tool as `<source>__<tool>`, for example
+`signoz__search_logs`. That name must fit 64 characters, the shortest limit
+of the supported model providers, and use only letters, digits, `_` and
+`-`. `sidekick config validate` checks the names in `tools.rename`. A tool
+whose name is too long and is not renamed is left out when the source
+lists its tools, and the reason is logged; rename it to bring it back.
+Tools the source marks as writing are never shown to the model, even when
+`tools.allow` names them.
+
 ### `intake.webhooks`
 
 Each webhook endpoint receives alerts at `/hooks/<name>`. It names an

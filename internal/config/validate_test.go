@@ -50,6 +50,9 @@ func TestValidateFixtures(t *testing.T) {
 		{file: "route-role-no-tool-calling", want: []string{`routes[0].roles.investigate: connector "local" cannot call tools, which the investigate role needs`}},
 		// Sources
 		{file: "unknown-source-type", want: []string{`sources.k8s.type: source type "kubernets" is not registered (did you mean "kubernetes"?)`}},
+		{file: "source-tool-name-too-long", want: []string{`sources.signoz.tools.rename.search_logs: tool "signoz__search_logs_in_every_index_of_every_cluster_in_the_whole_company" is longer than 64 characters: invalid name`}},
+		{file: "source-bad-tool-glob", want: []string{`sources.signoz.tools.deny[1]: invalid glob "*delete[": syntax error in pattern`}},
+		{file: "source-negative-limits", want: []string{"sources.signoz.concurrency: must not be negative", "sources.signoz.timeout: must not be negative"}},
 		// Secrets
 		{file: "secret-missing-key", want: []string{"database.urlSecret.key: required"}},
 		{file: "plugin-secret-shape", want: []string{`sources.signoz.headers.Authorization.secret.name: "../signoz" must not be "." or ".." or contain "/" or "\"`}},
