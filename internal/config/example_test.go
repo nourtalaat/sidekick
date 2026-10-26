@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/report"
+	"github.com/nourtalaat/sidekick/internal/strategy"
 )
 
 // exampleSecrets are the secret references in fixture/valid/example.yaml.
@@ -24,6 +26,10 @@ var exampleSecrets = []registry.SecretRef{
 	{Name: "sidekick-slack", Key: "botToken"},
 	{Name: "sidekick-redaction", Key: "key"},
 }
+
+// exampleStrategiesDir holds the file strategy the example config names.
+// The example points at /etc/sidekick/strategies, as a deployment would.
+var exampleStrategiesDir = filepath.Join("fixture", "strategies")
 
 func TestExampleConfig(t *testing.T) {
 	t.Parallel()
@@ -43,7 +49,7 @@ func TestExampleConfig(t *testing.T) {
 				require.Equal(t, map[string]model.Price{"claude-opus-5-5": {InputPerMTok: 5_000_000, OutputPerMTok: 25_000_000, CacheReadPerMTok: 500_000}}, cfg.Model.PriceTable())
 				require.Equal(t, Limits{MaxToolCalls: 40, MaxWallTime: 10 * time.Minute}, cfg.Budgets.PerInvestigation)
 				require.Equal(t, report.Rules{MinFalsePositiveConfidence: report.High}, cfg.Report.Rules())
-				require.Equal(t, "/etc/sidekick/strategies", cfg.Strategies.Dir)
+				require.Equal(t, exampleStrategiesDir, cfg.Strategies.Dir)
 				require.Equal(t, LogLevelInfo, cfg.Telemetry.LogLevel)
 				require.Equal(t, []RedactionRule{{Name: "customer_id", Pattern: "cus_[A-Za-z0-9]{14}"}}, cfg.Redaction.Custom)
 			},
@@ -58,6 +64,17 @@ func TestExampleConfig(t *testing.T) {
 				require.Equal(t, 5*time.Minute, cfg.Intake.Webhooks["generic-ci"].Auth.Tolerance)
 				require.True(t, cfg.Intake.Webhooks["alertmanager"].Trusted)
 				require.Equal(t, "slack", cfg.Outputs["slack-thread"].Type)
+			},
+		},
+		{
+			name: "built-in and file strategies",
+			check: func(t *testing.T, cfg *Config) {
+				t.Helper()
+				require.Equal(t, []string{"generic-alert", "latency-alert"}, cfg.StrategySet().Names())
+
+				st, ok := cfg.StrategySet().Get("latency-alert")
+				require.True(t, ok)
+				require.Equal(t, strategy.File, st.Origin)
 			},
 		},
 		{
@@ -82,7 +99,7 @@ func TestExampleConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			cfg, err := Parse(t.Context(), readFixture(t, "valid/example.yaml"), testOptions())
+			cfg, err := Parse(t.Context(), exampleYAML(t), testOptions())
 			require.NoError(t, err)
 			tt.check(t, cfg)
 		})
@@ -110,7 +127,7 @@ func TestExampleConfigWithSecrets(t *testing.T) {
 			t.Parallel()
 
 			dir := writeSecrets(t, tt.present...)
-			data := strings.Replace(string(readFixture(t, "valid/example.yaml")), "dir: /var/run/secrets/sidekick", "dir: "+dir, 1)
+			data := strings.Replace(string(exampleYAML(t)), "dir: /var/run/secrets/sidekick", "dir: "+dir, 1)
 
 			opts := testOptions()
 			opts.CheckSecrets = true
@@ -130,4 +147,15 @@ func TestExampleConfigWithSecrets(t *testing.T) {
 			require.NoError(t, in.Close())
 		})
 	}
+}
+
+// exampleYAML returns fixture/valid/example.yaml with strategies.dir set to
+// exampleStrategiesDir.
+func exampleYAML(t *testing.T) []byte {
+	t.Helper()
+
+	data := string(readFixture(t, "valid/example.yaml"))
+	require.Contains(t, data, "dir: /etc/sidekick/strategies")
+
+	return []byte(strings.Replace(data, "dir: /etc/sidekick/strategies", "dir: "+exampleStrategiesDir, 1))
 }

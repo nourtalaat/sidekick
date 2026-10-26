@@ -83,7 +83,13 @@ is readable, and builds every instance, which are the checks start-up runs.`,
 func validateConfig(cmd *cobra.Command, regs config.Registries, file string, checkSecrets bool) error {
 	ctx := cmd.Context()
 
-	cfg, err := config.Load(ctx, file, config.LoadOptions{Registries: regs, CheckSecrets: checkSecrets})
+	opts := config.LoadOptions{
+		Registries:   regs,
+		CheckSecrets: checkSecrets,
+		Logger:       slog.New(slog.NewTextHandler(cmd.ErrOrStderr(), nil)),
+	}
+
+	cfg, err := config.Load(ctx, file, opts)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}

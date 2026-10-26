@@ -26,6 +26,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/secrets"
 	"github.com/nourtalaat/sidekick/internal/source"
+	"github.com/nourtalaat/sidekick/internal/strategy"
 )
 
 // Defaults for settings that are not set in the file.
@@ -39,6 +40,8 @@ const (
 	DefaultMaxToolCalls  = 40
 	DefaultMaxWallTime   = 10 * time.Minute
 	DefaultLogLevel      = LogLevelInfo
+	// DefaultStrategy is the strategy of a route that names none.
+	DefaultStrategy = strategy.GenericAlert
 )
 
 // DefaultRouteName is the name of the route that takes every event no other
@@ -66,6 +69,9 @@ type Config struct {
 	Report     Report             `yaml:"report"`
 	Redaction  Redaction          `yaml:"redaction"`
 	Telemetry  Telemetry          `yaml:"telemetry"`
+
+	// strategySet holds the built-in and file strategies, loaded by Parse.
+	strategySet *strategy.Set
 }
 
 // Server holds the HTTP listen addresses.
@@ -139,6 +145,9 @@ type Slack struct {
 
 // Strategies says where file strategies are read from.
 type Strategies struct {
+	// Dir holds file strategies, one YAML file each. They are read, never
+	// written. Empty, or a directory that does not exist, means only the
+	// built-in strategies are used.
 	Dir string `yaml:"dir"`
 }
 
@@ -150,7 +159,8 @@ type Route struct {
 	Priority int `yaml:"priority"`
 	// Match selects events. The default route has none.
 	Match *Match `yaml:"match"`
-	// Strategy names the investigation strategy.
+	// Strategy names the investigation strategy, built-in or from
+	// strategies.dir. A route that names none uses DefaultStrategy.
 	Strategy string `yaml:"strategy"`
 	// Roles override model.roles for this route.
 	Roles map[model.Role]string `yaml:"roles"`
@@ -258,6 +268,9 @@ type LoadOptions struct {
 	// Secrets resolves references when CheckSecrets is set. Nil means the
 	// files under the config's secrets.dir.
 	Secrets registry.Secrets
+	// Logger gets a line for each file strategy that replaces a built-in
+	// one. Nil logs nothing.
+	Logger *slog.Logger
 }
 
 // RoutesInOrder returns the routes in the order they are matched: by
@@ -297,6 +310,13 @@ func (c *Config) DatabaseURL(ctx context.Context, s registry.Secrets) (string, e
 	}
 
 	return url, nil
+}
+
+// StrategySet returns the strategies routes can use: the built-in ones and
+// those from strategies.dir. It is set on configs returned by Load and
+// Parse, and nil on others.
+func (c *Config) StrategySet() *strategy.Set {
+	return c.strategySet
 }
 
 // PriceTable returns the price overrides in micro-dollars, by model ID.
@@ -371,8 +391,11 @@ func Parse(ctx context.Context, data []byte, opts LoadOptions) (*Config, error) 
 	d := decoder{errs: &errs}
 	d.decode(doc, reflect.ValueOf(cfg).Elem(), "")
 
+	v := newValidator(ctx, cfg, opts)
+	v.run()
+
 	var invalid Errors
-	if errors.As(Validate(ctx, cfg, opts), &invalid) {
+	if errors.As(v.errs.err(), &invalid) {
 		for _, e := range invalid {
 			if !d.underFailed(e.Path) {
 				errs.addAll(Errors{e})
@@ -385,6 +408,7 @@ func Parse(ctx context.Context, data []byte, opts LoadOptions) (*Config, error) 
 	}
 
 	cfg.resolveBudgets()
+	cfg.strategySet = v.strategies
 
 	return cfg, nil
 }
@@ -431,6 +455,7 @@ func (s *Secrets) setDefaults() {
 func (r *Route) setDefaults() {
 	r.Priority = DefaultRoutePriority
 	r.Mode = action.ReadOnly
+	r.Strategy = DefaultStrategy
 }
 
 func (b *Budgets) setDefaults() {

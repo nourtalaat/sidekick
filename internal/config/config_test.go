@@ -72,6 +72,7 @@ func TestParseDefaults(t *testing.T) {
 				require.Equal(t, []Route{{
 					Name:     "default",
 					Priority: DefaultRoutePriority,
+					Strategy: DefaultStrategy,
 					Mode:     action.ReadOnly,
 					Budgets:  Limits{MaxToolCalls: 40, MaxWallTime: 10 * time.Minute},
 				}}, cfg.Routes)

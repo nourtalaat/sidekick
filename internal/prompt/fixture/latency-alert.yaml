@@ -1,0 +1,17 @@
+name: latency-alert
+description: A latency monitor fired for an HTTP or RPC service.
+sources:
+  prefer: [signoz, github, k8s]
+first:
+  - Check what changed in the 2 hours before the alert started.
+  - Compare latency with request rate. A drop in traffic can raise percentiles without a real problem.
+commonCauses:
+  - A deploy that added a slow query.
+  - Connection pool exhaustion in a database or HTTP client.
+falsePositiveSigns:
+  - Very low request volume during the window.
+verdictHints:
+  truePositive: Name the slowest downstream call.
+  falsePositive: Propose a minimum request rate condition or a longer duration.
+budgets:
+  maxToolCalls: 30
