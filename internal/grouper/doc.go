@@ -20,6 +20,12 @@
 // fingerprint opens a new group. A group whose window ended before its job
 // ran is closed the same way when the next event arrives.
 //
+// A recovery event is not routed. Recover links it to the group of the
+// newest grouped event with its stored fingerprint, which names one alert,
+// and writes it to the investigation's inbox as evidence; it never stops
+// the investigation. When the newest event of every alert in an open group
+// is a recovery, a close_group job closes the group as resolved.
+//
 // The fingerprint of an alert under a route with fingerprint labels is made
 // from the intake, the alert name and the values of those labels, with a
 // missing label counted as empty. Without such labels, for an event that is

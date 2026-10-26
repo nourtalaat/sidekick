@@ -42,3 +42,15 @@ WHERE id = @id AND status = 'open';
 -- LockEventGroup returns the group with id and locks it until the
 -- transaction ends.
 SELECT * FROM event_groups WHERE id = @id FOR UPDATE;
+
+-- name: AllAlertsRecovered :one
+-- AllAlertsRecovered reports whether every alert in a group has recovered:
+-- the newest event of each alert, by its fingerprint, is a recovery. A
+-- group without alerts has not recovered.
+SELECT coalesce(bool_and(kind = 'resolved'), false)::boolean AS recovered
+FROM (
+  SELECT DISTINCT ON (fingerprint) kind
+  FROM events
+  WHERE group_id = @group_id::uuid AND kind IN ('alert', 'resolved')
+  ORDER BY fingerprint, received_at DESC, id DESC
+) AS newest;

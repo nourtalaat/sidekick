@@ -342,12 +342,6 @@ func TestEventsThatAreNotRouted(t *testing.T) {
 	}{
 		{name: "a resolved event that intake skipped", event: resolvedEvent, want: "skipped"},
 		{
-			name:    "a resolved event that is still received",
-			prepare: "UPDATE events SET status = 'received', skip_reason = NULL WHERE id = $1",
-			event:   resolvedEvent,
-			want:    "received",
-		},
-		{
 			name:    "an event routed before",
 			prepare: "UPDATE events SET status = 'routed', route = 'default' WHERE id = $1",
 			event:   paymentsEvent,

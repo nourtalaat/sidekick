@@ -195,7 +195,7 @@ func (g *Grouper) join(ctx context.Context, tx pgx.Tx, grp db.EventGroup, ev db.
 		return Result{}, fmt.Errorf("record the group: %w", err)
 	}
 
-	if err := enqueueClose(ctx, tx, grp.ID, *joined.WindowUntil); err != nil {
+	if err := enqueueClose(ctx, tx, grp.ID, *joined.WindowUntil, windowKey(grp.ID)); err != nil {
 		return Result{}, fmt.Errorf("plan the end of the window: %w", err)
 	}
 
@@ -245,7 +245,7 @@ func (g *Grouper) open(ctx context.Context, tx pgx.Tx, ev db.Event, rt Route, fp
 		return Result{}, false, fmt.Errorf("record the group: %w", err)
 	}
 
-	if err := enqueueClose(ctx, tx, res.GroupID, ev.ReceivedAt.Add(rt.Window)); err != nil {
+	if err := enqueueClose(ctx, tx, res.GroupID, ev.ReceivedAt.Add(rt.Window), windowKey(res.GroupID)); err != nil {
 		return Result{}, false, fmt.Errorf("plan the end of the window: %w", err)
 	}
 

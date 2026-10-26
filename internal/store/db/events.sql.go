@@ -13,6 +13,23 @@ import (
 	"github.com/google/uuid"
 )
 
+const findGroupOfAlert = `-- name: FindGroupOfAlert :one
+SELECT group_id::uuid AS group_id FROM events
+WHERE fingerprint = $1 AND group_id IS NOT NULL
+ORDER BY received_at DESC
+LIMIT 1
+`
+
+// FindGroupOfAlert returns the group of the newest grouped event with a
+// fingerprint, which names one alert: the group a recovery of that alert
+// belongs to. It returns no row when no event of the alert is grouped.
+func (q *Queries) FindGroupOfAlert(ctx context.Context, fingerprint string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, findGroupOfAlert, fingerprint)
+	var group_id uuid.UUID
+	err := row.Scan(&group_id)
+	return group_id, err
+}
+
 const getEvent = `-- name: GetEvent :one
 SELECT id, intake, key, kind, sender_kind, sender_id, sender_name, trusted, alert_name, title, body, service, severity, labels, links, fingerprint, slack, raw, status, skip_reason, route, group_id, starts_at, ends_at, received_at FROM events WHERE id = $1
 `
@@ -233,6 +250,27 @@ type MarkEventRoutedParams struct {
 // is counted, so routing the same event twice changes nothing.
 func (q *Queries) MarkEventRouted(ctx context.Context, arg MarkEventRoutedParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markEventRouted, arg.Route, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markEventSkipped = `-- name: MarkEventSkipped :execrows
+UPDATE events
+SET status = 'skipped', skip_reason = $1::text
+WHERE id = $2 AND status = 'received'
+`
+
+type MarkEventSkippedParams struct {
+	SkipReason string
+	ID         uuid.UUID
+}
+
+// MarkEventSkipped sets a received event to skipped with a reason. An event
+// in any other status is left as it is, and no row is counted.
+func (q *Queries) MarkEventSkipped(ctx context.Context, arg MarkEventSkippedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markEventSkipped, arg.SkipReason, arg.ID)
 	if err != nil {
 		return 0, err
 	}

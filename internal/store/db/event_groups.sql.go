@@ -12,6 +12,26 @@ import (
 	"github.com/google/uuid"
 )
 
+const allAlertsRecovered = `-- name: AllAlertsRecovered :one
+SELECT coalesce(bool_and(kind = 'resolved'), false)::boolean AS recovered
+FROM (
+  SELECT DISTINCT ON (fingerprint) kind
+  FROM events
+  WHERE group_id = $1::uuid AND kind IN ('alert', 'resolved')
+  ORDER BY fingerprint, received_at DESC, id DESC
+) AS newest
+`
+
+// AllAlertsRecovered reports whether every alert in a group has recovered:
+// the newest event of each alert, by its fingerprint, is a recovery. A
+// group without alerts has not recovered.
+func (q *Queries) AllAlertsRecovered(ctx context.Context, groupID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, allAlertsRecovered, groupID)
+	var recovered bool
+	err := row.Scan(&recovered)
+	return recovered, err
+}
+
 const closeEventGroup = `-- name: CloseEventGroup :execrows
 UPDATE event_groups
 SET status = 'closed', closed_reason = $1::text

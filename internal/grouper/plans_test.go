@@ -82,6 +82,33 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"event_groups_pkey"},
 		},
 		{
+			name: "FindGroupOfAlert",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.FindGroupOfAlert(ctx, "alert-25000-1")
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"events_fingerprint"},
+		},
+		{
+			name: "AllAlertsRecovered",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.AllAlertsRecovered(ctx, busy)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"events_group"},
+		},
+		{
+			name: "MarkEventSkipped",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.MarkEventSkipped(ctx, db.MarkEventSkippedParams{SkipReason: skipReasonNoGroup, ID: busyEvent})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"events_pkey"},
+		},
+		{
 			name: "MarkEventRouted",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.MarkEventRouted(ctx, db.MarkEventRoutedParams{ID: busyEvent, Route: new("default")})

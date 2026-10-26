@@ -76,7 +76,7 @@ func TestCloseGroup(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			require.NoError(t, enqueueClose(t.Context(), h.pool, diskGroup, seededWindowEnd))
+			require.NoError(t, enqueueClose(t.Context(), h.pool, diskGroup, seededWindowEnd, windowKey(diskGroup)))
 
 			job := h.claimClose(t)
 			closer := NewCloser(CloserOptions{Pool: h.pool, Now: func() time.Time { return tt.now }})

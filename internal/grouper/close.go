@@ -16,8 +16,13 @@ import (
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
-// closeKeyPrefix starts the unique key of a group's close_group job.
+// closeKeyPrefix starts the unique keys of a group's close_group jobs.
 const closeKeyPrefix = "close_group:"
+
+// resolvedKeySuffix ends the unique key of the close_group job that a
+// recovery enqueues, so it does not wait behind the job for the end of the
+// window.
+const resolvedKeySuffix = ":resolved"
 
 var (
 	errNoGroupID     = errors.New("the payload has no group_id")
@@ -66,8 +71,11 @@ func NewCloser(opts CloserOptions) *Closer {
 }
 
 // Handle runs one close_group job. The job is enqueued for the time a
-// group's window ends; it locks the group and decides how it ends:
+// group's window ends, and at once when a recovery may have resolved the
+// group; it locks the group and decides how it ends:
 //
+//   - When every alert in the group has recovered, the group closes as
+//     resolved.
 //   - When the window has ended and no watcher runs, the group closes as
 //     window_ended.
 //   - When the window has ended but a watcher runs, the group stays open;
@@ -111,12 +119,26 @@ func (c *Closer) decide(ctx context.Context, tx pgx.Tx, job db.Job, id uuid.UUID
 		return nil
 	}
 
+	recovered, err := queries.AllAlertsRecovered(ctx, grp.ID)
+	if err != nil {
+		return fmt.Errorf("check the alerts: %w", err)
+	}
+
+	if recovered {
+		// TODO: [SK-31] Stop the group's running watchers with group_resolved.
+		if err := closeGroup(ctx, c.log, queries, grp.ID, ClosedResolved); err != nil {
+			return fmt.Errorf("resolve: %w", err)
+		}
+
+		return nil
+	}
+
 	if grp.WindowUntil != nil && grp.WindowUntil.After(c.now()) {
 		if err := queue.ReleaseUniqueKey(ctx, tx, job); err != nil {
 			return fmt.Errorf("give up the unique key: %w", err)
 		}
 
-		if err := enqueueClose(ctx, tx, grp.ID, *grp.WindowUntil); err != nil {
+		if err := enqueueClose(ctx, tx, grp.ID, *grp.WindowUntil, windowKey(grp.ID)); err != nil {
 			return fmt.Errorf("wait for the new end of the window: %w", err)
 		}
 
@@ -134,10 +156,11 @@ func (c *Closer) decide(ctx context.Context, tx pgx.Tx, job db.Job, id uuid.UUID
 	return nil
 }
 
-// enqueueClose adds the close_group job of the group with id, to run at
-// runAt. A job that is already pending or running for the group counts as
-// added; it enqueues itself again when the window has moved on.
-func enqueueClose(ctx context.Context, q db.DBTX, id uuid.UUID, runAt time.Time) error {
+// enqueueClose adds a close_group job of the group with id, with key, to
+// run at runAt, or at once for the zero time. A job that is already
+// pending or running with key counts as added; the one for the window
+// enqueues itself again when the window has moved on.
+func enqueueClose(ctx context.Context, q db.DBTX, id uuid.UUID, runAt time.Time, key string) error {
 	payload, err := json.Marshal(closePayload{GroupID: id})
 	if err != nil {
 		return fmt.Errorf("encode the close_group payload: %w", err)
@@ -146,7 +169,7 @@ func enqueueClose(ctx context.Context, q db.DBTX, id uuid.UUID, runAt time.Time)
 	_, err = queue.Enqueue(ctx, q, queue.NewJob{
 		Kind:      queue.KindCloseGroup,
 		Payload:   payload,
-		UniqueKey: closeKeyPrefix + id.String(),
+		UniqueKey: key,
 		RunAt:     runAt,
 	})
 	if err != nil && !errors.Is(err, queue.ErrDuplicate) {
@@ -165,6 +188,18 @@ func closeGroup(ctx context.Context, log *slog.Logger, queries *db.Queries, id u
 	log.InfoContext(ctx, "group closed", "group_id", id.String(), "reason", reason)
 
 	return nil
+}
+
+// windowKey returns the unique key of the close_group job for the end of
+// the window of the group with id.
+func windowKey(id uuid.UUID) string {
+	return closeKeyPrefix + id.String()
+}
+
+// resolvedKey returns the unique key of the close_group job that a
+// recovery in the group with id enqueues.
+func resolvedKey(id uuid.UUID) string {
+	return closeKeyPrefix + id.String() + resolvedKeySuffix
 }
 
 // decodeClosePayload returns the group ID of a close_group payload.

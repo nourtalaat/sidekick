@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/grouper"
 	"github.com/nourtalaat/sidekick/internal/intake/webhook"
 	"github.com/nourtalaat/sidekick/internal/queue"
@@ -52,6 +53,7 @@ func TestMain(m *testing.M) {
 // database of its own, seeded with fixture/events.sql, and the webhook
 // handler of the config's endpoints in front of it.
 type harness struct {
+	cfg    *config.Config
 	pool   *pgxpool.Pool
 	router *Router
 	hooks  *webhook.Handler
@@ -102,7 +104,7 @@ func setup(t *testing.T) *harness {
 	})
 	require.NoError(t, err)
 
-	return &harness{pool: pool, router: r, hooks: hooks, spans: spans, intake: tp.Tracer("intake")}
+	return &harness{cfg: cfg, pool: pool, router: r, hooks: hooks, spans: spans, intake: tp.Tracer("intake")}
 }
 
 // deliver posts the Alertmanager payload in file to the alertmanager

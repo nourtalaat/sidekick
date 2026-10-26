@@ -56,3 +56,19 @@ WHERE id = @id AND status = 'received';
 UPDATE events
 SET status = 'grouped', group_id = @group_id
 WHERE id = @id AND status IN ('received', 'routed');
+
+-- name: MarkEventSkipped :execrows
+-- MarkEventSkipped sets a received event to skipped with a reason. An event
+-- in any other status is left as it is, and no row is counted.
+UPDATE events
+SET status = 'skipped', skip_reason = @skip_reason::text
+WHERE id = @id AND status = 'received';
+
+-- name: FindGroupOfAlert :one
+-- FindGroupOfAlert returns the group of the newest grouped event with a
+-- fingerprint, which names one alert: the group a recovery of that alert
+-- belongs to. It returns no row when no event of the alert is grouped.
+SELECT group_id::uuid AS group_id FROM events
+WHERE fingerprint = @fingerprint AND group_id IS NOT NULL
+ORDER BY received_at DESC
+LIMIT 1;

@@ -117,13 +117,14 @@ func New(opts Options) (*Router, error) {
 // which joins it to the open group with its fingerprint or opens a new
 // one. For a new group it creates a queued investigation, enqueues its
 // investigate job and enqueues the first publish job for each output of
-// the route.
+// the route. A recovery event is not routed: the grouper links it to the
+// group its alert is in.
 //
 // It is safe to run more than once: an event that is no longer received,
 // because it was routed already or intake skipped it, is left as it is,
-// and the change to routed only applies to a received event, so two runs
-// at the same time still group it once. A payload that does not decode,
-// or an event that does not exist, gives up the job.
+// and the change to routed or grouped only applies to a received event,
+// so two runs at the same time still group it once. A payload that does
+// not decode, or an event that does not exist, gives up the job.
 func (r *Router) Handle(ctx context.Context, job db.Job) (err error) {
 	ctx, span := r.tracer.Start(queue.TraceContext(ctx, job), SpanName)
 
@@ -143,15 +144,28 @@ func (r *Router) Handle(ctx context.Context, job db.Job) (err error) {
 
 	log := r.log.With("event_id", eventID.String(), "job_id", job.ID)
 
-	ev, rt, waiting, err := r.match(ctx, eventID)
+	ev, err := r.load(ctx, eventID)
 	if err != nil {
 		return fmt.Errorf("event %s: %w", eventID, err)
 	}
 
-	if !waiting {
+	switch {
+	case ev.Status != statusReceived:
 		log.DebugContext(ctx, "event not routed: it is not waiting to be routed", "status", ev.Status)
 
 		return nil
+	case ev.Kind == string(event.KindResolved):
+		return r.handleRecovery(ctx, span, log, ev)
+	default:
+		return r.handleEvent(ctx, span, log, ev)
+	}
+}
+
+// handleEvent picks the route of ev and routes it.
+func (r *Router) handleEvent(ctx context.Context, span trace.Span, log *slog.Logger, ev db.Event) error {
+	rt, err := r.match(ev)
+	if err != nil {
+		return fmt.Errorf("event %s: %w", ev.ID, err)
 	}
 
 	span.SetAttributes(attribute.String(attrRoute, rt.name))
@@ -159,7 +173,7 @@ func (r *Router) Handle(ctx context.Context, job db.Job) (err error) {
 
 	res, routed, err := r.route(ctx, ev, rt)
 	if err != nil {
-		return fmt.Errorf("route event %s: %w", eventID, err)
+		return fmt.Errorf("route event %s: %w", ev.ID, err)
 	}
 
 	if !routed {
@@ -175,34 +189,69 @@ func (r *Router) Handle(ctx context.Context, job db.Job) (err error) {
 	return nil
 }
 
-// match loads the event with id and picks its route. It reports false for
-// an event that is not waiting to be routed. Errors that wrap
-// queue.ErrGiveUp mean a retry cannot help.
-func (r *Router) match(ctx context.Context, id uuid.UUID) (ev db.Event, rt route, waiting bool, err error) {
-	ev, err = db.New(r.pool).GetEvent(ctx, id)
+// handleRecovery links the recovery event ev to the group its alert is in,
+// in one transaction.
+func (r *Router) handleRecovery(ctx context.Context, span trace.Span, log *slog.Logger, ev db.Event) error {
+	var (
+		res    grouper.Result
+		linked bool
+	)
+
+	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		var err error
+
+		res, linked, err = r.grouper.Recover(ctx, tx, ev)
+		if err != nil {
+			return fmt.Errorf("recover: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("link recovery event %s: %w", ev.ID, err)
+	}
+
+	if !linked {
+		log.InfoContext(ctx, "recovery event not linked: no group has its alert, or another run linked it first")
+
+		return nil
+	}
+
+	span.SetAttributes(attribute.String(attrGroupID, res.GroupID.String()))
+	log.InfoContext(ctx, "recovery event linked", "group_id", res.GroupID.String(), "investigation_id", res.InvestigationID.String())
+
+	return nil
+}
+
+// load returns the event with id. An event that does not exist gives an
+// error that wraps queue.ErrGiveUp.
+func (r *Router) load(ctx context.Context, id uuid.UUID) (db.Event, error) {
+	ev, err := db.New(r.pool).GetEvent(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return db.Event{}, route{}, false, fmt.Errorf("%w: %w", queue.ErrGiveUp, errEventNotFound)
+		return db.Event{}, fmt.Errorf("%w: %w", queue.ErrGiveUp, errEventNotFound)
 	}
 
 	if err != nil {
-		return db.Event{}, route{}, false, fmt.Errorf("load the event: %w", err)
+		return db.Event{}, fmt.Errorf("load the event: %w", err)
 	}
 
-	if ev.Status != statusReceived || ev.Kind == string(event.KindResolved) {
-		return ev, route{}, false, nil
-	}
+	return ev, nil
+}
 
+// match picks the route of ev. Errors wrap queue.ErrGiveUp, since a retry
+// cannot help.
+func (r *Router) match(ev db.Event) (route, error) {
 	c, err := candidateOf(ev)
 	if err != nil {
-		return db.Event{}, route{}, false, fmt.Errorf("%w: %w", queue.ErrGiveUp, err)
+		return route{}, fmt.Errorf("%w: %w", queue.ErrGiveUp, err)
 	}
 
 	rt, ok := pick(r.routes, c)
 	if !ok {
-		return db.Event{}, route{}, false, fmt.Errorf("%w: %w", queue.ErrGiveUp, errNoRoute)
+		return route{}, fmt.Errorf("%w: %w", queue.ErrGiveUp, errNoRoute)
 	}
 
-	return ev, rt, true, nil
+	return rt, nil
 }
 
 // route routes ev to rt in one transaction: it marks the event routed,
