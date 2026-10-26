@@ -33,6 +33,10 @@ func TestQueryPlans(t *testing.T) {
 	var busy, group uuid.UUID
 	require.NoError(t, pool.QueryRow(t.Context(), "SELECT md5('inv' || 10000)::uuid, md5('grp' || 10000)::uuid").Scan(&busy, &group))
 
+	// busyEvent is the event of busy's group.
+	var busyEvent uuid.UUID
+	require.NoError(t, pool.QueryRow(t.Context(), "SELECT md5('evt' || 10000)::uuid").Scan(&busyEvent))
+
 	report := json.RawMessage(`{"verdict": "inconclusive"}`)
 
 	tests := []struct {
@@ -40,6 +44,42 @@ func TestQueryPlans(t *testing.T) {
 		run       func(ctx context.Context, q *db.Queries) error
 		wantIndex []string
 	}{
+		{
+			name: "InsertInboxItem",
+			run: func(ctx context.Context, q *db.Queries) error {
+				err := q.InsertInboxItem(ctx, db.InsertInboxItemParams{InvestigationID: busy, Kind: InboxNewEvent, Body: json.RawMessage(`{}`)})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"Insert on investigation_inbox"},
+		},
+		{
+			name: "ListWaitingInbox",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListWaitingInbox(ctx, busy)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"investigation_inbox_waiting"},
+		},
+		{
+			name: "MarkInboxDelivered",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.MarkInboxDelivered(ctx, db.MarkInboxDeliveredParams{DeliveredSeq: new(int32(25)), InvestigationID: busy, Ids: []int64{100001, 100002}})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"investigation_inbox_waiting"},
+		},
+		{
+			name: "ListEventsByID",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListEventsByID(ctx, []uuid.UUID{busyEvent, group})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"events_pkey"},
+		},
 		{
 			name: "GetInvestigation",
 			run: func(ctx context.Context, q *db.Queries) error {

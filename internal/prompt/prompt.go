@@ -18,7 +18,7 @@ import (
 // and the layout of the other parts. Each investigation records it, so
 // results always refer to an exact prompt. Change it whenever the prompt
 // changes; a test fails until system.tmpl and this version agree.
-const Version = "1"
+const Version = "2"
 
 //go:embed system.tmpl
 var systemTemplate string
@@ -48,7 +48,7 @@ type Group struct {
 	// First is the event that opened the group.
 	First event.Event
 	// Count is the number of events in the group. Values below 1 count as
-	// 1. Until grouping arrives, every group holds one event.
+	// 1. Events that join later reach the model through Inbox.
 	Count int
 }
 

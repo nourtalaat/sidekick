@@ -23,14 +23,8 @@ import (
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
-// The values of events.status that intake writes.
-const (
-	statusReceived = "received"
-	statusSkipped  = "skipped"
-)
-
-// skipReasonResolved is why resolved events are not routed yet.
-const skipReasonResolved = "resolved events are linked in M1"
+// statusReceived is the events.status that intake writes.
+const statusReceived = "received"
 
 // maxKeyBytes is the longest key stored as it is. Longer keys are stored
 // as their hash, so the unique index on (intake, key) stays small.
@@ -62,9 +56,8 @@ type storedEvent struct {
 }
 
 // store writes the events in one transaction. Each event that is new gets
-// a route_event job in the same transaction, unless it is resolved, which
-// is stored as skipped. An event whose key the intake already has is left
-// as it is and reported as a duplicate.
+// a route_event job in the same transaction. An event whose key the intake
+// already has is left as it is and reported as a duplicate.
 func (h *Handler) store(ctx context.Context, ep endpoint, req intake.Request, events []event.Event) (stored []storedEvent, err error) {
 	tx, err := h.pool.Begin(ctx)
 	if err != nil {
@@ -97,10 +90,8 @@ func (h *Handler) store(ctx context.Context, ep endpoint, req intake.Request, ev
 			return nil, fmt.Errorf("insert event %d: %w", i, err)
 		}
 
-		if params.Status == statusReceived {
-			if err := enqueueRoute(ctx, tx, id); err != nil {
-				return nil, fmt.Errorf("event %d: %w", i, err)
-			}
+		if err := enqueueRoute(ctx, tx, id); err != nil {
+			return nil, fmt.Errorf("event %d: %w", i, err)
 		}
 
 		stored = append(stored, storedEvent{id: id, key: params.Key, status: params.Status})
@@ -165,11 +156,6 @@ func (h *Handler) row(ep endpoint, req intake.Request, ev event.Event) (db.Inser
 		}
 
 		p.Slack = h.redactedJSON(slack)
-	}
-
-	if ev.Kind == event.KindResolved {
-		p.Status = statusSkipped
-		p.SkipReason = optional(skipReasonResolved)
 	}
 
 	return p, nil

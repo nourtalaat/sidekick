@@ -57,6 +57,15 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"publish_states_pkey"},
 		},
 		{
+			name: "RefreshPublishState",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.RefreshPublishState(ctx, busy)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"publish_states_pkey"},
+		},
+		{
 			name: "GetPublishState",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.GetPublishState(ctx, db.GetPublishStateParams{InvestigationID: busy, Sink: slackSink})

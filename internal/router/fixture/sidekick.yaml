@@ -44,6 +44,12 @@ routes:
     roles: { investigate: big }
     outputs: [slack-thread, callback]
     budgets: { maxToolCalls: 35, maxWallTime: 5m }
+  - name: crashloop
+    priority: 20
+    match:
+      labels: { alertname: KubePodCrashLooping }
+    outputs: [slack-thread]
+    grouping: { window: 30m, fingerprintLabels: [service, env] }
   - name: grafana
     priority: 50
     match:
