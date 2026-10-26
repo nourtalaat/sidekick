@@ -211,6 +211,13 @@ type Request struct {
 	Metadata map[string]string
 }
 
+// Request metadata keys that Sidekick sets on every call, so telemetry can
+// label a call with the role it serves and the route of its investigation.
+const (
+	MetadataRole  = "sidekick.role"
+	MetadataRoute = "sidekick.route"
+)
+
 // StopReason says why the model stopped.
 type StopReason string
 
