@@ -16,11 +16,12 @@ import (
 
 // writeConfig writes content, with SECRETS_DIR replaced, to a sidekick.yaml
 // of its own and returns its path. The secrets directory holds the database
-// URL dbURL, unless it is empty, and a fake Anthropic API key.
-func writeConfig(t *testing.T, content, dbURL string) string {
+// URL dbURL, unless it is empty, a fake Anthropic API key, and a fake value
+// for each of the extra secret paths, such as "hooks/alertmanager".
+func writeConfig(t *testing.T, content, dbURL string, extra ...string) string {
 	t.Helper()
 
-	secretsDir := writeSecrets(t, []string{"anthropic/apiKey"})
+	secretsDir := writeSecrets(t, append([]string{"anthropic/apiKey"}, extra...))
 	if dbURL != "" {
 		require.NoError(t, os.MkdirAll(filepath.Join(secretsDir, "sidekick-db"), 0o700))
 		require.NoError(t, os.WriteFile(filepath.Join(secretsDir, "sidekick-db", "url"), []byte(dbURL+"\n"), 0o600))

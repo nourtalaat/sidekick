@@ -26,8 +26,9 @@ func newServeCmd(regs config.Registries, info buildinfo.Info) *cobra.Command {
 		Short: "Run Sidekick until it receives SIGTERM or SIGINT",
 		Long: `Run Sidekick. It loads the config file and checks every secret it
 references, migrates the database unless database.migrations is manual,
-then serves HTTP on server.listen, and /metrics, /healthz and /readyz on
-server.metricsListen. Logs go to standard output as JSON.
+then serves webhooks at /hooks/<name> on server.listen, and /metrics,
+/healthz and /readyz on server.metricsListen. Logs go to standard output
+as JSON.
 
 On SIGTERM or SIGINT it stops taking requests, hands back jobs it cannot
 finish, and exits within ` + app.ShutdownGrace.String() + `. A second signal exits at once.`,
@@ -66,6 +67,10 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 		}
 
 		return errInvalidConfig
+	}
+
+	if err := registerWebhooks(a); err != nil {
+		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
 	if err := a.Run(ctx); err != nil {
