@@ -33,6 +33,7 @@ const (
 	DefaultListen        = ":8080"
 	DefaultMetricsListen = ":9090"
 	DefaultMaxConns      = 20
+	DefaultMigrations    = MigrationsStartup
 	DefaultHMACTolerance = 5 * time.Minute
 	DefaultRoutePriority = 100
 	DefaultMaxToolCalls  = 40
@@ -84,7 +85,23 @@ type Database struct {
 	URLSecret registry.SecretRef `yaml:"urlSecret"`
 	// MaxConns is the size of the connection pool.
 	MaxConns int `yaml:"maxConns"`
+	// Migrations says when the schema is migrated.
+	Migrations MigrationMode `yaml:"migrations"`
 }
+
+// MigrationMode says when the database schema is migrated.
+type MigrationMode string
+
+// Migration modes. The Helm chart's job mode, which migrates in a
+// pre-upgrade hook Job, runs Sidekick itself in manual mode.
+const (
+	// MigrationsStartup migrates at start-up. When several replicas start
+	// at once, one migrates and the others wait for it.
+	MigrationsStartup MigrationMode = "startup"
+	// MigrationsManual never migrates; an operator runs `sidekick migrate
+	// up`. Until the schema is current, the replica is not ready.
+	MigrationsManual MigrationMode = "manual"
+)
 
 // Secrets says where secret files are mounted.
 type Secrets struct {
@@ -388,6 +405,7 @@ func (s *Server) setDefaults() {
 
 func (d *Database) setDefaults() {
 	d.MaxConns = DefaultMaxConns
+	d.Migrations = DefaultMigrations
 }
 
 func (s *Secrets) setDefaults() {

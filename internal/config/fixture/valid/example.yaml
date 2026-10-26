@@ -8,6 +8,7 @@ server:
 database:
   urlSecret: { name: sidekick-db, key: url }
   maxConns: 20
+  migrations: manual
 
 secrets:
   dir: /var/run/secrets/sidekick

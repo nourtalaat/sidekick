@@ -37,7 +37,22 @@ server:
 database:
   urlSecret: { name: sidekick-db, key: url }   # required: the Postgres URL
   maxConns: 20                                # size of the connection pool
+  migrations: startup                         # startup or manual
 ```
+
+`migrations` says when the database schema is migrated:
+
+- `startup` (the default): each replica migrates when it starts. When
+  several start at once, one migrates while the others wait for it, so no
+  extra step is needed for an upgrade.
+- `manual`: Sidekick never migrates. Run `sidekick migrate up` yourself
+  before the new release starts serving. Until the schema is current, the
+  replica stays up but `/readyz` fails with a message that says so, and the
+  replica gets no traffic. Use this where production migrations are run by
+  hand.
+
+The Helm chart will also offer a `job` mode, which migrates in a Job before
+each upgrade and runs Sidekick in `manual` mode.
 
 ### `secrets`
 
@@ -219,6 +234,7 @@ telemetry:
 | `server.listen` | `:8080` |
 | `server.metricsListen` | `:9090` |
 | `database.maxConns` | `20` |
+| `database.migrations` | `startup` |
 | `secrets.dir` | `/var/run/secrets/sidekick` |
 | `intake.webhooks.<name>.auth.tolerance` | `5m` |
 | `routes[].priority` | `100` |
@@ -249,8 +265,8 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   matches parse.
 - Every route is `read-only` with no `actions`, and its budgets are at or
   below the global ones.
-- `report.minFalsePositiveConfidence` and `telemetry.logLevel` are known
-  values, URLs are absolute, and listen addresses have a port.
+- `database.migrations`, `report.minFalsePositiveConfidence` and
+  `telemetry.logLevel` are known values, URLs are absolute, and listen addresses have a port.
 
 ## Checking a file with `sidekick config validate`
 

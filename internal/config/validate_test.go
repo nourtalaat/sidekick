@@ -79,6 +79,7 @@ func TestValidateFixtures(t *testing.T) {
 		// Other sections
 		{file: "bad-listen", want: []string{`server.listen: expected host:port such as ":8080", got "8080"`}},
 		{file: "bad-public-url", want: []string{`server.publicURL: expected an absolute http or https URL, got "sidekick.example.com"`}},
+		{file: "bad-migrations", want: []string{`database.migrations: expected startup or manual, got "manul" (did you mean "manual"?)`}},
 		{file: "bad-log-level", want: []string{`telemetry.logLevel: unknown log level "debg" (did you mean "debug"?)`}},
 		{file: "bad-otlp-endpoint", want: []string{`telemetry.otlpEndpoint: expected an absolute URL such as http://otel-collector:4317, got "otel-collector:4317"`}},
 		{file: "bad-redaction-pattern", want: []string{"redaction.custom[0].pattern: invalid regular expression: error parsing regexp: missing closing ]: `[A-Za-z0-9{14}`"}},

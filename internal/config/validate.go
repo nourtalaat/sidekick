@@ -38,6 +38,7 @@ var (
 	knownModes      = []action.Mode{action.ReadOnly, action.Approved, action.ReadWrite}
 	knownSeverities = []event.Severity{event.SeverityUnknown, event.SeverityInfo, event.SeverityWarning, event.SeverityCritical}
 	knownLogLevels  = []LogLevel{LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError}
+	knownMigrations = []MigrationMode{MigrationsStartup, MigrationsManual}
 	knownConfidence = []report.Confidence{report.Low, report.Medium, report.High}
 )
 
@@ -114,6 +115,10 @@ func (v *validator) checkDatabase() {
 	}
 
 	v.positive("database.maxConns", v.cfg.Database.MaxConns)
+
+	if m := v.cfg.Database.Migrations; !slices.Contains(knownMigrations, m) {
+		v.errs.add("database.migrations", "expected startup or manual, got %q%s", m, didYouMean(string(m), asStrings(knownMigrations)))
+	}
 }
 
 func (v *validator) checkSecretsDir() {

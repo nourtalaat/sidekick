@@ -38,6 +38,7 @@ func TestExampleConfig(t *testing.T) {
 				t.Helper()
 				require.Equal(t, Server{PublicURL: "https://sidekick.example.com", Listen: ":8080", MetricsListen: ":9090"}, cfg.Server)
 				require.Equal(t, 20, cfg.Database.MaxConns)
+				require.Equal(t, MigrationsManual, cfg.Database.Migrations)
 				require.Equal(t, "claude", cfg.Model.Roles[model.RoleInvestigate])
 				require.Equal(t, map[string]model.Price{"claude-opus-5-5": {InputPerMTok: 5_000_000, OutputPerMTok: 25_000_000, CacheReadPerMTok: 500_000}}, cfg.Model.PriceTable())
 				require.Equal(t, Limits{MaxToolCalls: 40, MaxWallTime: 10 * time.Minute}, cfg.Budgets.PerInvestigation)

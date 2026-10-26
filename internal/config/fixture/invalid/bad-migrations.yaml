@@ -1,0 +1,13 @@
+# A migration mode that does not exist.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+  migrations: manul
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default

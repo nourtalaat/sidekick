@@ -64,6 +64,7 @@ func TestParseDefaults(t *testing.T) {
 				t.Helper()
 				require.Equal(t, Server{Listen: ":8080", MetricsListen: ":9090"}, cfg.Server)
 				require.Equal(t, DefaultMaxConns, cfg.Database.MaxConns)
+				require.Equal(t, MigrationsStartup, cfg.Database.Migrations)
 				require.Equal(t, secrets.DefaultDir, cfg.Secrets.Dir)
 				require.Equal(t, Limits{MaxToolCalls: 40, MaxWallTime: 10 * time.Minute}, cfg.Budgets.PerInvestigation)
 				require.Equal(t, LogLevelInfo, cfg.Telemetry.LogLevel)
