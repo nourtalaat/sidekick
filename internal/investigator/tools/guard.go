@@ -12,6 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/source"
@@ -48,6 +51,12 @@ type Options struct {
 	// Logger gets the tools each source leaves out, and panics in sources.
 	// Nil means slog.Default().
 	Logger *slog.Logger
+	// Metrics records the tool call metrics and sidekick_source_up. Nil
+	// records none.
+	Metrics *Metrics
+	// Tracer starts the tool.call spans. Nil uses the global tracer
+	// provider.
+	Tracer trace.Tracer
 }
 
 // Guard runs source tool calls for investigations with failure isolation
@@ -58,6 +67,8 @@ type Guard struct {
 	sources  map[string]*guarded
 	redactor *redact.Redactor
 	logger   *slog.Logger
+	metrics  *Metrics
+	tracer   trace.Tracer
 
 	mu sync.Mutex
 	// logged holds, per source, the dropped tools last logged, so a drop
@@ -227,7 +238,13 @@ func New(sources []Source, opts Options) (*Guard, error) {
 		sources:  map[string]*guarded{},
 		redactor: opts.Redactor,
 		logger:   cmp.Or(opts.Logger, slog.Default()).With("component", "tools"),
+		metrics:  opts.Metrics,
+		tracer:   opts.Tracer,
 		logged:   map[string]string{},
+	}
+
+	if g.tracer == nil {
+		g.tracer = otel.Tracer(TracerName)
 	}
 
 	for _, s := range sources {
@@ -247,6 +264,8 @@ func New(sources []Source, opts Options) (*Guard, error) {
 			breaker:  &breaker{now: time.Now},
 		}
 	}
+
+	g.metrics.watch(g)
 
 	return g, nil
 }

@@ -79,3 +79,11 @@ func (b *breaker) done(r callResult, trial bool) {
 	case callNeutral:
 	}
 }
+
+// open reports whether the circuit is open, for the source_up metric.
+func (b *breaker) open() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return b.failures >= breakerFailures
+}

@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,6 +14,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/prompt"
@@ -89,8 +93,31 @@ func (r *Run) Tools() []model.ToolSpec {
 // concurrency limit, and calls the source within its timeout, unless the
 // source's circuit is open. Failures are never Go errors: they come back
 // as a Result whose ToolResult has IsError set and whose Err says why, so
-// the model can try something else.
+// the model can try something else. Each call is a tool.call span.
 func (r *Run) Call(ctx context.Context, call model.ToolCall) Result {
+	ctx, span := r.guard.tracer.Start(ctx, SpanName, trace.WithSpanKind(trace.SpanKindClient))
+	defer span.End()
+
+	res := r.call(ctx, call)
+
+	tool := cmp.Or(res.Tool, call.Name)
+	outcome := outcomeOf(res.Err, res.NoData)
+
+	span.SetAttributes(
+		attribute.String(attrSource, res.Source),
+		attribute.String(attrTool, tool),
+		attribute.String(attrOutcome, outcome),
+	)
+
+	if res.Err != nil {
+		span.SetStatus(codes.Error, outcome)
+	}
+
+	return res
+}
+
+// call is Call without the span.
+func (r *Run) call(ctx context.Context, call model.ToolCall) Result {
 	t, ok := r.tools[call.Name]
 	if !ok {
 		return r.failed(call, &ToolError{Kind: KindUnknownTool, Message: fmt.Sprintf("this investigation has no tool named %q", call.Name)})
@@ -218,6 +245,16 @@ func (r *Run) check(name string) *check {
 // call runs one source call within the source's limits and classifies how
 // it ended.
 func (g *Guard) call(ctx context.Context, s *guarded, call source.Call) outcome {
+	start := time.Now()
+	o := g.callGuarded(ctx, s, call)
+	g.metrics.recordCall(s.name, call.Tool, outcomeOf(o.err, o.result.NoData), time.Since(start))
+
+	return o
+}
+
+// callGuarded runs the call unless the source's circuit is open, and
+// tells the breaker how it went.
+func (g *Guard) callGuarded(ctx context.Context, s *guarded, call source.Call) outcome {
 	ok, trial := s.breaker.allow()
 	if !ok {
 		return outcome{err: &ToolError{
