@@ -13,7 +13,10 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/trace"
 
+	"github.com/nourtalaat/sidekick/internal/config"
+	"github.com/nourtalaat/sidekick/internal/grouper"
 	"github.com/nourtalaat/sidekick/internal/investigator"
+	"github.com/nourtalaat/sidekick/internal/output"
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
@@ -89,11 +92,12 @@ func TestRouteEvent(t *testing.T) {
 			require.Equal(t, "open", group.Status)
 			require.Equal(t, int32(1), group.EventCount)
 			require.Equal(t, before.ReceivedAt, group.LastEventAt)
-			require.Nil(t, group.WindowUntil)
+			require.NotNil(t, group.WindowUntil)
+			require.True(t, before.ReceivedAt.Add(config.DefaultGroupingWindow).Equal(*group.WindowUntil), "the window ends 30 minutes after the event")
 			require.Nil(t, group.ClosedReason)
 
 			after := h.event(t, tt.event)
-			require.Equal(t, "routed", after.Status)
+			require.Equal(t, "grouped", after.Status)
 			require.Equal(t, &tt.wantRoute, after.Route)
 			require.Equal(t, &group.ID, after.GroupID)
 
@@ -149,7 +153,7 @@ func TestRouteEventSettings(t *testing.T) {
 	require.Equal(t, 30, budget.MaxToolCalls)
 }
 
-func TestSameFingerprintOpensTwoGroups(t *testing.T) {
+func TestSameFingerprintJoinsTheOpenGroup(t *testing.T) {
 	t.Parallel()
 
 	h := setup(t)
@@ -159,17 +163,170 @@ func TestSameFingerprintOpensTwoGroups(t *testing.T) {
 	}
 
 	groups := h.groups(t)
-	require.Len(t, groups, 2)
+	require.Len(t, groups, 1)
 
-	for _, g := range groups {
-		require.Equal(t, "fp-disk", g.Fingerprint)
-		require.Equal(t, "open", g.Status)
+	group := groups[0]
+	require.Equal(t, "fp-disk", group.Fingerprint)
+	require.Equal(t, "open", group.Status)
+	require.Equal(t, int32(2), group.EventCount)
+
+	again := h.event(t, diskAgain)
+	require.Equal(t, again.ReceivedAt, group.LastEventAt)
+	require.True(t, again.ReceivedAt.Add(config.DefaultGroupingWindow).Equal(*group.WindowUntil), "the window moves to 30 minutes after the newest event")
+
+	require.Equal(t, &group.ID, h.event(t, diskEvent).GroupID)
+	require.Equal(t, &group.ID, again.GroupID)
+	require.Equal(t, "grouped", again.Status)
+	require.Len(t, h.investigations(t), 1)
+	require.Len(t, h.investigateJobs(t), 1)
+
+	inbox := h.inbox(t)
+	require.Len(t, inbox, 1, "the joined event goes to the inbox")
+	require.Equal(t, *group.InvestigationID, inbox[0].InvestigationID)
+	require.Equal(t, "new_event", inbox[0].Kind)
+	require.JSONEq(t, `{"event_id": "`+diskAgain.String()+`"}`, string(inbox[0].Body))
+	require.Nil(t, inbox[0].DeliveredSeq)
+
+	states := collect[db.PublishState](t, h.pool, "SELECT * FROM publish_states")
+	require.Len(t, states, 1)
+	require.Equal(t, int64(1), states[0].Seq, "the join refreshes the outputs")
+	require.Equal(t, string(output.PhaseQueued), states[0].Phase)
+}
+
+func TestAnEventAfterTheWindowOpensANewGroup(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// prepare runs after the first event is grouped.
+		prepare string
+	}{
+		{
+			name:    "a group whose window ended",
+			prepare: "UPDATE events SET received_at = received_at + interval '1 hour' WHERE id = '" + diskAgain.String() + "'",
+		},
+		{
+			name: "a group opened before groups had a window",
+			prepare: "UPDATE event_groups SET window_until = NULL; " +
+				"UPDATE events SET received_at = received_at + interval '31 minutes' WHERE id = '" + diskAgain.String() + "'",
+		},
 	}
 
-	require.NotEqual(t, groups[0].ID, groups[1].ID)
-	require.NotEqual(t, *h.event(t, diskEvent).GroupID, *h.event(t, diskAgain).GroupID)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := setup(t)
+			require.NoError(t, h.router.Handle(t.Context(), h.routeJob(t, diskEvent)))
+
+			_, err := h.pool.Exec(t.Context(), tt.prepare)
+			require.NoError(t, err)
+
+			require.NoError(t, h.router.Handle(t.Context(), h.routeJob(t, diskAgain)))
+
+			groups := h.groups(t)
+			require.Len(t, groups, 2)
+
+			first, second := groups[0], groups[1]
+			require.Equal(t, &first.ID, h.event(t, diskEvent).GroupID)
+			require.Equal(t, "closed", first.Status)
+			require.Equal(t, ptr(grouper.ClosedWindowEnded), first.ClosedReason)
+			require.Equal(t, &second.ID, h.event(t, diskAgain).GroupID)
+			require.Equal(t, "open", second.Status)
+			require.Equal(t, int32(1), second.EventCount)
+			require.Len(t, h.investigations(t), 2)
+			require.Empty(t, h.inbox(t))
+		})
+	}
+}
+
+// TestAlertmanagerAlertsWithOneFingerprint delivers 30 Alertmanager alerts
+// that differ only in their pod, which the crashloop route leaves out of
+// the fingerprint, then one more after the group's window ended.
+func TestAlertmanagerAlertsWithOneFingerprint(t *testing.T) {
+	t.Parallel()
+
+	h := setup(t)
+	h.deliver(t, "fixture/alertmanager/firing-30.json")
+	h.routeAll(t)
+
+	groups := h.groups(t)
+	require.Len(t, groups, 1)
+	require.Equal(t, "crashloop", groups[0].Route)
+	require.Equal(t, int32(30), groups[0].EventCount)
+	require.Len(t, h.investigations(t), 1)
+	require.Len(t, h.investigateJobs(t), 1)
+	require.Len(t, h.inbox(t), 29, "every event after the first goes to the inbox")
+
+	var distinct int
+	require.NoError(t, h.pool.QueryRow(t.Context(), "SELECT count(DISTINCT fingerprint) FROM events").Scan(&distinct))
+	require.Equal(t, fixtureFingerprints+30, distinct, "each alert keeps its own stored fingerprint")
+
+	_, err := h.pool.Exec(t.Context(), "UPDATE event_groups SET window_until = now() - interval '1 second'")
+	require.NoError(t, err)
+
+	h.deliver(t, "fixture/alertmanager/firing-one-more.json")
+	h.routeAll(t)
+
+	groups = h.groups(t)
+	require.Len(t, groups, 2)
+	require.Equal(t, "closed", groups[0].Status)
+	require.Equal(t, "open", groups[1].Status)
+	require.Equal(t, groups[0].Fingerprint, groups[1].Fingerprint)
+	require.Equal(t, int32(1), groups[1].EventCount)
 	require.Len(t, h.investigations(t), 2)
-	require.Len(t, h.investigateJobs(t), 2)
+}
+
+// TestTwoReplicasGroupAtOnce routes events with one fingerprint from
+// several goroutines at once, each with its own connection, as replicas
+// do, and checks that they end in one open group.
+func TestTwoReplicasGroupAtOnce(t *testing.T) {
+	t.Parallel()
+
+	const events = 8
+
+	h := setup(t)
+
+	_, err := h.pool.Exec(t.Context(), `
+		INSERT INTO events (id, intake, key, kind, trusted, alert_name, labels, fingerprint, status, received_at)
+		SELECT md5('race' || i)::uuid, 'grafana', 'race-' || i, 'alert', false, 'DiskFull', '{}', 'fp-race', 'received', now()
+		FROM generate_series(1, $1::int) AS i`, events)
+	require.NoError(t, err)
+
+	ids := collect[struct{ ID uuid.UUID }](t, h.pool, "SELECT id FROM events WHERE fingerprint = 'fp-race'")
+	require.Len(t, ids, events)
+
+	jobs := make([]db.Job, len(ids))
+	for i, id := range ids {
+		jobs[i] = h.routeJob(t, id.ID)
+	}
+
+	start := make(chan struct{})
+	errs := make([]error, len(jobs))
+
+	var wg sync.WaitGroup
+
+	for i, job := range jobs {
+		wg.Go(func() {
+			<-start
+
+			errs[i] = h.router.Handle(t.Context(), job)
+		})
+	}
+
+	close(start)
+	wg.Wait()
+
+	for _, err := range errs {
+		require.NoError(t, err)
+	}
+
+	groups := collect[db.EventGroup](t, h.pool, "SELECT * FROM event_groups WHERE fingerprint = 'fp-race'")
+	require.Len(t, groups, 1)
+	require.Equal(t, "open", groups[0].Status)
+	require.Equal(t, int32(events), groups[0].EventCount)
+	require.Len(t, h.investigations(t), 1)
+	require.Len(t, h.inbox(t), events-1)
 }
 
 func TestEventsThatAreNotRouted(t *testing.T) {
@@ -305,6 +462,21 @@ func TestRouteSpan(t *testing.T) {
 		attribute.String(attrRoute, "payments-latency"),
 		attribute.String(attrGroupID, group.ID.String()),
 	}, route.Attributes())
+
+	var grouping trace.ReadOnlySpan
+
+	for _, s := range ended {
+		if s.Name() == grouper.SpanName {
+			grouping = s
+		}
+	}
+
+	require.NotNil(t, grouping)
+	require.Equal(t, route.SpanContext().SpanID(), grouping.Parent().SpanID(), "grouper.group is a child of router.route")
+	require.ElementsMatch(t, []attribute.KeyValue{
+		attribute.String(attrRoute, "payments-latency"),
+		attribute.String(attrGroupID, group.ID.String()),
+	}, grouping.Attributes())
 
 	jobs := h.investigateJobs(t)
 	require.Len(t, jobs, 1)

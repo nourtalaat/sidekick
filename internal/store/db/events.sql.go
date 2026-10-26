@@ -195,23 +195,44 @@ func (q *Queries) ListEventsByID(ctx context.Context, ids []uuid.UUID) ([]Event,
 	return items, nil
 }
 
-const markEventRouted = `-- name: MarkEventRouted :execrows
+const markEventGrouped = `-- name: MarkEventGrouped :execrows
 UPDATE events
-SET status = 'routed', route = $1, group_id = $2
-WHERE id = $3 AND status = 'received'
+SET status = 'grouped', group_id = $1
+WHERE id = $2 AND status IN ('received', 'routed')
 `
 
-type MarkEventRoutedParams struct {
-	Route   *string
+type MarkEventGroupedParams struct {
 	GroupID *uuid.UUID
 	ID      uuid.UUID
 }
 
-// MarkEventRouted records the route and group of a received event and sets
-// it to routed. An event that is no longer received is left as it is, and
-// no row is counted, so routing the same event twice changes nothing.
+// MarkEventGrouped records the group of a routed event, or of a received
+// recovery event, and sets it to grouped. An event in any other status is
+// left as it is, and no row is counted.
+func (q *Queries) MarkEventGrouped(ctx context.Context, arg MarkEventGroupedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markEventGrouped, arg.GroupID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markEventRouted = `-- name: MarkEventRouted :execrows
+UPDATE events
+SET status = 'routed', route = $1
+WHERE id = $2 AND status = 'received'
+`
+
+type MarkEventRoutedParams struct {
+	Route *string
+	ID    uuid.UUID
+}
+
+// MarkEventRouted records the route of a received event and sets it to
+// routed. An event that is no longer received is left as it is, and no row
+// is counted, so routing the same event twice changes nothing.
 func (q *Queries) MarkEventRouted(ctx context.Context, arg MarkEventRoutedParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markEventRouted, arg.Route, arg.GroupID, arg.ID)
+	result, err := q.db.Exec(ctx, markEventRouted, arg.Route, arg.ID)
 	if err != nil {
 		return 0, err
 	}

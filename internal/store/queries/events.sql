@@ -42,9 +42,17 @@ SELECT * FROM events WHERE id = @id;
 SELECT * FROM events WHERE id = ANY (@ids::uuid[]) ORDER BY received_at, id;
 
 -- name: MarkEventRouted :execrows
--- MarkEventRouted records the route and group of a received event and sets
--- it to routed. An event that is no longer received is left as it is, and
--- no row is counted, so routing the same event twice changes nothing.
+-- MarkEventRouted records the route of a received event and sets it to
+-- routed. An event that is no longer received is left as it is, and no row
+-- is counted, so routing the same event twice changes nothing.
 UPDATE events
-SET status = 'routed', route = @route, group_id = @group_id
+SET status = 'routed', route = @route
 WHERE id = @id AND status = 'received';
+
+-- name: MarkEventGrouped :execrows
+-- MarkEventGrouped records the group of a routed event, or of a received
+-- recovery event, and sets it to grouped. An event in any other status is
+-- left as it is, and no row is counted.
+UPDATE events
+SET status = 'grouped', group_id = @group_id
+WHERE id = @id AND status IN ('received', 'routed');

@@ -3,9 +3,12 @@
 package router
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 
@@ -17,7 +20,9 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/nourtalaat/sidekick/internal/intake/webhook"
 	"github.com/nourtalaat/sidekick/internal/queue"
+	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 	"github.com/nourtalaat/sidekick/internal/store/storetest"
 )
@@ -31,6 +36,10 @@ var (
 	otherEvent    = uuid.MustParse("0192d3a4-0000-7000-8000-000000000005")
 )
 
+// fixtureFingerprints is how many fingerprints the events in
+// fixture/events.sql have.
+const fixtureFingerprints = 3
+
 // TestMain runs the tests, then lets storetest stop the Postgres container
 // it may have started.
 func TestMain(m *testing.M) {
@@ -38,10 +47,12 @@ func TestMain(m *testing.M) {
 }
 
 // harness is a Router with the routes of fixture/sidekick.yaml on a
-// database of its own, seeded with fixture/events.sql.
+// database of its own, seeded with fixture/events.sql, and the webhook
+// handler of the config's endpoints in front of it.
 type harness struct {
 	pool   *pgxpool.Pool
 	router *Router
+	hooks  *webhook.Handler
 	spans  *tracetest.SpanRecorder
 	// intake makes the spans that enqueue route_event jobs, as the
 	// intake.receive span does.
@@ -59,7 +70,7 @@ type investigateJob struct {
 func setup(t *testing.T) *harness {
 	t.Helper()
 
-	cfg, settings := loadConfig(t)
+	cfg, instances := loadConfig(t)
 
 	pool := storetest.New(t)
 	storetest.LoadFixture(t, pool, "fixture/events.sql")
@@ -69,14 +80,74 @@ func setup(t *testing.T) *harness {
 
 	r, err := New(Options{
 		Config:         cfg,
-		ModelSettings:  settings,
+		ModelSettings:  instances.ModelSettings,
 		Pool:           pool,
 		Logger:         slog.New(slog.DiscardHandler),
 		TracerProvider: tp,
 	})
 	require.NoError(t, err)
 
-	return &harness{pool: pool, router: r, spans: spans, intake: tp.Tracer("intake")}
+	redactor, err := redact.New(redact.Options{HashKey: []byte("test key")})
+	require.NoError(t, err)
+
+	hooks, err := webhook.New(webhook.Options{
+		Webhooks: cfg.Intake.Webhooks,
+		Adapters: instances.Intakes,
+		Secrets:  fakeSecrets{},
+		Redactor: redactor,
+		Pool:     pool,
+		Logger:   slog.New(slog.DiscardHandler),
+	})
+	require.NoError(t, err)
+
+	return &harness{pool: pool, router: r, hooks: hooks, spans: spans, intake: tp.Tracer("intake")}
+}
+
+// deliver posts the Alertmanager payload in file to the alertmanager
+// endpoint, as Alertmanager does.
+func (h *harness) deliver(t *testing.T, file string) {
+	t.Helper()
+
+	body, err := os.ReadFile(file) //nolint:gosec // A fixture path chosen by the test.
+	require.NoError(t, err)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/hooks/alertmanager", bytes.NewReader(body))
+	req.SetPathValue("name", "alertmanager")
+	req.Header.Set("Authorization", "Bearer fake-value")
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := httptest.NewRecorder()
+	h.hooks.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
+}
+
+// routeAll claims every ready route_event job and runs it, as the workers
+// do, until none is left.
+func (h *harness) routeAll(t *testing.T) {
+	t.Helper()
+
+	for {
+		jobs, err := db.New(h.pool).ClaimJobs(t.Context(), db.ClaimJobsParams{
+			Worker: "test-worker", LeaseSeconds: 60, Kinds: []string{queue.KindRouteEvent}, Batch: 1,
+		})
+		require.NoError(t, err)
+
+		if len(jobs) == 0 {
+			return
+		}
+
+		require.NoError(t, h.router.Handle(t.Context(), jobs[0]))
+
+		_, err = db.New(h.pool).CompleteJob(t.Context(), db.CompleteJobParams{ID: jobs[0].ID, ClaimToken: *jobs[0].ClaimToken})
+		require.NoError(t, err)
+	}
+}
+
+// inbox returns the inbox items of every investigation, oldest first.
+func (h *harness) inbox(t *testing.T) []db.InvestigationInbox {
+	t.Helper()
+
+	return collect[db.InvestigationInbox](t, h.pool, "SELECT * FROM investigation_inbox ORDER BY id")
 }
 
 // routeJob enqueues the route_event job of the event with id inside an

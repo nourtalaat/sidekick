@@ -1,0 +1,558 @@
+{
+  "version": "4",
+  "groupKey": "{}:{alertname=\"KubePodCrashLooping\"}",
+  "status": "firing",
+  "receiver": "sidekick",
+  "groupLabels": {
+    "alertname": "KubePodCrashLooping"
+  },
+  "commonLabels": {
+    "alertname": "KubePodCrashLooping",
+    "service": "checkout",
+    "env": "prod"
+  },
+  "commonAnnotations": {},
+  "externalURL": "http://alertmanager.example.com",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-0",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-0 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee00"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-1",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-1 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee01"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-2",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-2 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee02"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-3",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-3 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee03"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-4",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-4 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee04"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-5",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-5 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee05"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-6",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-6 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee06"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-7",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-7 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee07"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-8",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-8 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee08"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-9",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-9 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee09"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-10",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-10 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee0a"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-11",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-11 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee0b"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-12",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-12 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee0c"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-13",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-13 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee0d"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-14",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-14 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee0e"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-15",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-15 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee0f"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-16",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-16 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee10"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-17",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-17 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee11"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-18",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-18 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee12"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-19",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-19 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee13"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-20",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-20 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee14"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-21",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-21 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee15"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-22",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-22 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee16"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-23",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-23 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee17"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-24",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-24 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee18"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-25",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-25 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee19"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-26",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-26 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee1a"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-27",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-27 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee1b"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-28",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-28 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee1c"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-29",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-29 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee1d"
+    }
+  ]
+}
