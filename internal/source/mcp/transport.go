@@ -37,7 +37,7 @@ func newTransportFunc(cfg Config, deps registry.Deps) func(context.Context) (mcp
 		return func(ctx context.Context) (mcp.Transport, error) {
 			cmd, err := command(ctx, cfg, deps.Secrets)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("build stdio command: %w", err)
 			}
 
 			return &mcp.CommandTransport{Command: cmd}, nil

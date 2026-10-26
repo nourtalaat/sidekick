@@ -205,7 +205,7 @@ func (s *Source) connect(ctx context.Context) (*mcp.ClientSession, context.Cance
 	if err != nil {
 		cancel()
 
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("open session: %w", err)
 	}
 
 	s.mu.Lock()
