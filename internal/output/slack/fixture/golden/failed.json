@@ -1,0 +1,28 @@
+{
+  "text": "Could not finish: checkout-api p99 latency above 2s",
+  "attachments": [
+    {
+      "color": "#B08400",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": ":warning: *Could not finish*\nThe model returned an error after 3 tries.",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "Checked signoz",
+              "verbatim": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

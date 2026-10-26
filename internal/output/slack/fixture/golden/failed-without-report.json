@@ -1,0 +1,18 @@
+{
+  "text": "Could not finish: checkout-api p99 latency above 2s",
+  "attachments": [
+    {
+      "color": "#B08400",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": ":warning: *Could not finish*\nThe investigation stopped with an error.",
+            "verbatim": true
+          }
+        }
+      ]
+    }
+  ]
+}

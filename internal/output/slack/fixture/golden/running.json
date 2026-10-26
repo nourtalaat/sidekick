@@ -1,0 +1,36 @@
+{
+  "text": "Investigating: checkout-api p99 latency above 2s",
+  "attachments": [
+    {
+      "color": "#FF8848",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*Investigating* checkout-api p99 latency above 2s",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": ":white_check_mark: Step 1 done\n:white_check_mark: Step 2 done\n:white_check_mark: Step 3 done",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "Received <!date^1793023320^{time}|14:02 UTC> · 3 events · Updates as the investigation runs",
+              "verbatim": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

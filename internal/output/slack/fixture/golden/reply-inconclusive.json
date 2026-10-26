@@ -1,0 +1,28 @@
+{
+  "text": "Not sure yet: checkout-api p99 latency above 2s",
+  "attachments": [
+    {
+      "color": "#7C85A3",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": ":grey_question: *Not sure yet* · <https://example.slack.com/archives/C123/p1793023321000200|See the full report>",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "checkout-api p99 latency above 2s",
+              "verbatim": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
