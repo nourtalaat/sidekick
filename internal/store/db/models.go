@@ -3,3 +3,28 @@
 //   sqlc v1.31.1
 
 package db
+
+import (
+	"encoding/json"
+	"time"
+)
+
+type Job struct {
+	ID          int64
+	Kind        string
+	Route       *string
+	Payload     json.RawMessage
+	UniqueKey   *string
+	Status      string
+	Priority    int16
+	RunAt       time.Time
+	Attempts    int32
+	MaxAttempts int32
+	ClaimToken  *int64
+	LockedBy    *string
+	LockedUntil *time.Time
+	LastError   *string
+	Traceparent *string
+	CreatedAt   time.Time
+	FinishedAt  *time.Time
+}
