@@ -91,6 +91,8 @@ func TestParse(t *testing.T) {
 		{name: "another version", body: `{"version": "3", "alerts": []}`, wantMsg: `read the SigNoz payload: version: only version "4" is supported`},
 		{name: "alert without fingerprint", body: `{"version": "4", "alerts": [{"status": "firing"}]}`, wantMsg: "read the SigNoz payload: alerts[0]: fingerprint: required"},
 		{name: "annotation of the wrong type", body: `{"version": "4", "alerts": [{"status": "firing", "fingerprint": "a", "annotations": {"related_logs": 1}}]}`, wantMsg: "alerts[0]: decode alert"},
+		{name: "bad start time", body: `{"version": "4", "alerts": [{"status": "firing", "fingerprint": "a", "startsAt": "yesterday"}]}`, wantMsg: "read the SigNoz payload: alerts[0]: startsAt: must be an RFC 3339 time"},
+		{name: "bad end time", body: `{"version": "4", "alerts": [{"status": "resolved", "fingerprint": "a", "endsAt": "yesterday"}]}`, wantMsg: "read the SigNoz payload: alerts[0]: endsAt: must be an RFC 3339 time"},
 	}
 
 	for _, tt := range tests {
@@ -105,6 +107,7 @@ func TestParse(t *testing.T) {
 			events, err := a.Parse(t.Context(), req)
 			if tt.wantMsg != "" {
 				require.ErrorContains(t, err, tt.wantMsg)
+				require.NotContains(t, err.Error(), "yesterday", "errors never hold payload values")
 
 				return
 			}
