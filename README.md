@@ -15,6 +15,7 @@ Sidekick receives alerts from webhooks or Slack, investigates them with the LLM 
 
 - [Configuration](docs/configuration.md): the `sidekick.yaml` sections, the checks Sidekick runs on them, and `sidekick config validate`.
 - [GitHub source](docs/sources/github.md): the GitHub App permissions the GitHub source needs, and how to set the app up.
+- [Kubernetes source](docs/sources/kubernetes.md): the keys and tools of the Kubernetes source, and the read-only RBAC it needs.
 - [Running Sidekick](docs/running.md): `sidekick serve`, start-up and shutdown, health and readiness probes, metrics, logs and traces.
 - [Sending alerts to Sidekick](docs/webhooks.md): webhook endpoints, the Alertmanager and generic adapters, and how deliveries are authenticated.
 - [Setting up senders](docs/senders.md): pointing SigNoz, Datadog, Sentry and Grafana at Sidekick, and what each of their alerts becomes.
