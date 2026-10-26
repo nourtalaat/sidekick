@@ -132,6 +132,8 @@ func (r *Redactor) Text(s string) Result {
 type redacted struct {
 	text   string
 	counts map[string]int
+	// changed is set when a rule matched or s held a placeholder already.
+	changed bool
 }
 
 // redact replaces every match in s with its placeholder and adds the
@@ -141,7 +143,7 @@ func (r *Redactor) redact(s string, counts map[string]int) redacted {
 	matches := r.matches(s, protected)
 
 	if len(matches) == 0 {
-		return redacted{text: s, counts: counts}
+		return redacted{text: s, counts: counts, changed: len(protected) > 0}
 	}
 
 	if counts == nil {
@@ -163,7 +165,7 @@ func (r *Redactor) redact(s string, counts map[string]int) redacted {
 
 	b.WriteString(s[last:])
 
-	return redacted{text: b.String(), counts: counts}
+	return redacted{text: b.String(), counts: counts, changed: true}
 }
 
 // matches returns the spans to replace in s, sorted and without overlaps.

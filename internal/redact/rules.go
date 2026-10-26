@@ -61,6 +61,9 @@ var builtIns = []rule{
 			// in the same file is a PEM block, which private_keys finds.
 			{re: regexp.MustCompile(`"private_key_id"[ \t]*:[ \t]*"([0-9a-f]{40})"`), group: true, hints: []string{"private_key_id"}},
 		},
+		members: []memberPattern{
+			{key: regexp.MustCompile(`^private_key_id$`), value: regexp.MustCompile(`^[0-9a-f]{40}$`)},
+		},
 	},
 	{
 		name: VCSTokens,
@@ -108,6 +111,9 @@ var builtIns = []rule{
 			// is long, so prose such as "the bearer of" is kept.
 			{re: regexp.MustCompile(`(?i)\bbearer[ \t]+([A-Za-z0-9._~+/-]*[0-9][A-Za-z0-9._~+/-]*=*|[A-Za-z0-9._~+/-]{16,}=*)`), group: true, hints: []string{"bearer"}},
 		},
+		members: []memberPattern{
+			{key: regexp.MustCompile(`(?i)^(?:proxy-)?authorization$`), value: regexp.MustCompile(`(?i)^(?:bearer|basic|token)[ \t]+(\S+)$`)},
+		},
 	},
 	{
 		name: PasswordPairs,
@@ -116,6 +122,9 @@ var builtIns = []rule{
 			{re: regexp.MustCompile(`(?i)` + secretKeyWords + `["']?[ \t]*[:=][ \t]*(?:"([^"\r\n]+)"|'([^'\r\n]+)'|([^\s"'` + "`" + `,;&)}\]]+))`), group: true, hints: secretKeyHints},
 			// The password in a URL such as postgres://user:password@host.
 			{re: regexp.MustCompile(`\b[A-Za-z][A-Za-z0-9+.-]*://[^\s:/?#@]+:([^\s/?#@]+)@`), group: true, hints: []string{"://"}},
+		},
+		members: []memberPattern{
+			{key: regexp.MustCompile(`(?i)^[\w.-]*` + secretKeyWords + `$`)},
 		},
 	},
 	{
@@ -151,6 +160,9 @@ type rule struct {
 	name string
 	// patterns find the rule's matches in text.
 	patterns []pattern
+	// members find matches in JSON object members by their key, for string
+	// values the patterns find nothing in.
+	members []memberPattern
 	// offDefault keeps a built-in rule out of DefaultRuleNames.
 	offDefault bool
 }
@@ -167,6 +179,15 @@ type pattern struct {
 	// matches holds at least one. Text without any of them is not scanned,
 	// which keeps redaction of ordinary text fast.
 	hints []string
+}
+
+// memberPattern matches a JSON object member whose key says its string
+// value is secret.
+type memberPattern struct {
+	key *regexp.Regexp
+	// value, when set, must match the value. Its first capture group, if it
+	// has one, is the part redacted; otherwise the whole value is.
+	value *regexp.Regexp
 }
 
 // BuiltInRuleNames returns the names of every built-in rule, in priority
@@ -207,6 +228,29 @@ func CheckRuleName(name string) error {
 	}
 
 	return nil
+}
+
+// match returns the span of value that m redacts in an object member
+// with the given key.
+func (m memberPattern) match(key, value string) (start, end int, ok bool) {
+	if value == "" || !m.key.MatchString(key) {
+		return 0, 0, false
+	}
+
+	if m.value == nil {
+		return 0, len(value), true
+	}
+
+	loc := m.value.FindStringSubmatchIndex(value)
+	if loc == nil {
+		return 0, 0, false
+	}
+
+	if start, end := firstGroup(loc); start >= 0 {
+		return start, end, true
+	}
+
+	return loc[0], loc[1], true
 }
 
 // luhn reports whether the digits in s pass the Luhn check and there are
