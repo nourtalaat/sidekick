@@ -8,14 +8,49 @@ code that review checks.
 
 You need:
 
-- Go 1.26 or newer.
+- Go 1.26 or newer, and a C compiler (sqlc is built with cgo).
 - GNU Make and Git.
-- Postgres 16 for integration tests, given as a database URL in
-  `SIDEKICK_TEST_DATABASE_URL`, for example
-  `postgres://sidekick:sidekick@localhost:5432/sidekick_test?sslmode=disable`.
+- For integration tests, one of:
+  - Docker or Podman, so the tests can start Postgres in a container
+    themselves; or
+  - a Postgres 15 or newer server (CI uses 16), given as a database URL in
+    `SIDEKICK_TEST_DATABASE_URL`, for example
+    `postgres://sidekick:sidekick@localhost:5432/sidekick_test?sslmode=disable`.
+    The user must be allowed to create databases.
 
-The Makefile installs its own pinned copies of golangci-lint, mockgen and
-govulncheck under `bin/tools`, so you do not need to install them yourself.
+The Makefile installs its own pinned copies of golangci-lint, mockgen, sqlc
+and govulncheck under `bin/tools`, so you do not need to install them
+yourself.
+
+### Postgres for integration tests with Podman
+
+With Docker running, `make test-integration` needs no setup. With Podman,
+point the tests at the Podman machine's API socket and turn off Ryuk, the
+clean-up container of testcontainers-go, which does not work on Podman's
+default network:
+
+```sh
+export DOCKER_HOST="unix://$(podman machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}')"
+export TESTCONTAINERS_RYUK_DISABLED=true
+```
+
+Without Ryuk, each test binary still stops its own container when it ends.
+A test run that is killed part way can leave one running; `podman ps` lists
+it and `podman stop <id>` stops it.
+
+Each package starts its own container, which takes a few seconds. To skip
+that, run one Postgres yourself and point the tests at it:
+
+```sh
+podman run -d --name sidekick-test-postgres -p 5432:5432 \
+  -e POSTGRES_USER=sidekick -e POSTGRES_PASSWORD=sidekick \
+  -e POSTGRES_DB=sidekick_test postgres:16
+export SIDEKICK_TEST_DATABASE_URL='postgres://sidekick:sidekick@localhost:5432/sidekick_test?sslmode=disable'
+```
+
+The tests keep a template database named `sidekick_template_<hash>` on that
+server and make a new one whenever the migrations change. Old ones are safe
+to drop.
 
 ## Make targets
 
@@ -28,8 +63,10 @@ Run `make help` for the full list. The main ones:
 | `make fmt` | Formats the Go code (gofmt and goimports). |
 | `make test` | Unit tests with the race detector. |
 | `make test-integration` | Unit and integration tests (build tag `integration`) against Postgres. |
-| `make generate` | Every code generator, for now `generate-mocks`. |
+| `make generate` | Every code generator: `generate-mocks` and `sqlc-generate`. |
 | `make generate-mocks` | Runs the `mockgen` directives through `go generate`. |
+| `make sqlc-generate` | Generates `internal/store/db` from the queries and migrations. |
+| `make migrate-new name=...` | Creates the next migration file in `internal/store/migrations`. |
 | `make verify-generated` | Runs `make generate` and fails if any file changed. |
 | `make build` | Builds `bin/sidekick` with the version and commit set. |
 | `make vulncheck` | govulncheck on the code and its dependencies. |
@@ -82,11 +119,71 @@ Work is tracked as issues with IDs of the form `SK-<n>`. The repository turns
   //go:generate mockgen -source <file>.go -destination mocks_<file>.go -package <pkg>
   ```
 
+## Database
+
+Sidekick uses only Postgres, through pgx. The schema lives in goose
+migrations, queries are `.sql` files that sqlc turns into Go, and IDs are
+UUIDv7 values from `internal/ids` (`ids.New()`).
+
+### Adding a migration
+
+1. Run `make migrate-new name=add_jobs`. It creates
+   `internal/store/migrations/<next number>_add_jobs.sql`.
+2. Write the change under `-- +goose Up`, and the way to undo it under
+   `-- +goose Down`. Wrap a statement that holds semicolons of its own, such
+   as a function body, in `-- +goose StatementBegin` and
+   `-- +goose StatementEnd`.
+3. Run `make sqlc-generate`, because sqlc reads the migrations as the
+   schema, and commit the migration with the generated code.
+
+Rules:
+
+- A migration only adds things: tables, nullable columns, indexes. Code in
+  one release must work with the schema of the release before it, so a
+  rolling update is safe. Dropping a table or column ships in a later,
+  separate change once nothing uses it.
+- Create indexes on existing tables with `CREATE INDEX CONCURRENTLY`, in a
+  migration that starts with `-- +goose NO TRANSACTION`.
+- Until the first tagged release, v0.1.0, existing migration files may be
+  edited. From v0.1.0 on, migrations are only added, never edited.
+- Migration numbers run 1, 2, 3 with no gaps. If your branch and `main`
+  both add the same number, the migrations unit test fails after you merge
+  `main`; renumber yours to the next free number.
+
+The binary embeds the migrations. `sidekick migrate up` applies them and
+`sidekick migrate status` lists them; both take the database URL from
+`--database-url` or `SIDEKICK_DATABASE_URL`. Only one process migrates at a
+time: goose holds a Postgres advisory lock while it runs.
+
+### Adding a query
+
+1. Put the query in a `.sql` file in `internal/store/queries`, one file per
+   table or topic, with a name and a result kind above it:
+
+   ```sql
+   -- name: GetJob :one
+   SELECT * FROM jobs WHERE id = $1;
+   ```
+
+   Use `:one` for one row, `:many` for several, and `:exec` when nothing
+   comes back. Name parameters with `@name` or `sqlc.arg(name)` when `$1`
+   would be unclear.
+2. Run `make sqlc-generate` and commit the changes in `internal/store/db`.
+   `make verify-generated` (part of `make ci`) fails if you forget.
+3. Call it through `db.New(pool)`, and use the generated row and parameter
+   types directly rather than copying them into types of your own.
+4. Put the query's `EXPLAIN ANALYZE` output, against realistic data, in the
+   pull request description.
+
 ## Integration tests
 
 - Every HTTP endpoint gets an integration test.
 - Integration tests run against a real Postgres. Put them in files with the
   `//go:build integration` constraint; `make test-integration` runs them.
+- Get a database from `internal/store/storetest`: `storetest.New(t)` returns
+  a pool on a new database of the test's own, with every migration applied,
+  and drops it when the test ends. Tests can therefore call `t.Parallel()`.
+  `storetest.LoadFixture(t, pool, "fixture/<file>.sql")` runs a seed file.
 - Mock only third-party services (model providers, Slack, GitHub and so on),
   with `gock`. Everything inside Sidekick runs for real.
 - Each package with integration tests has:
@@ -94,8 +191,12 @@ Work is tracked as issues with IDs of the form `SK-<n>`. The repository turns
     response JSON, mocked third-party responses, and config such as feature
     flag state;
   - a `setup_test.go` that seeds the database and wires up the services and
-    handlers;
+    handlers, with a `TestMain` that calls `storetest.Main`, so the test
+    binary stops any Postgres container it started;
   - the test files themselves.
+
+  The tests of `internal/store/storetest` are a small example of this layout
+  to copy.
 
 ## Go style
 
