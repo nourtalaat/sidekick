@@ -9,10 +9,11 @@
 
 Sidekick receives alerts from webhooks or Slack, investigates them with the LLM of your choice and your observability, cloud, code and ticketing tools, and tells you whether each alert is a real issue or a false positive. For real issues it finds the likely cause and proposes fixes; for false positives it proposes how to stop the alert from firing again.
 
-> **Status:** early design. There is no release yet. Installation instructions will appear here with the first release.
+> **Status:** early. v0.1.0 is the first release: webhook alerts, investigations with Claude and MCP sources, and the verdict in a Slack thread. [Installing Sidekick](docs/install.md) has the quick start.
 
 ## Documentation
 
+- [Installing Sidekick](docs/install.md): the Helm chart, the quick start, verifying the image, production settings, upgrades.
 - [Configuration](docs/configuration.md): the `sidekick.yaml` sections, the checks Sidekick runs on them, and `sidekick config validate`.
 - [Running Sidekick](docs/running.md): `sidekick serve`, `sidekick doctor`, start-up and shutdown, health and readiness probes, metrics, logs and traces.
 - [Sending alerts to Sidekick](docs/webhooks.md): webhook endpoints, the Alertmanager and generic adapters, how deliveries are authenticated, and `sidekick test-alert`.
