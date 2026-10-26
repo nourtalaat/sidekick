@@ -1,0 +1,298 @@
+package publish
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/nourtalaat/sidekick/internal/output"
+	"github.com/nourtalaat/sidekick/internal/queue"
+	"github.com/nourtalaat/sidekick/internal/store/db"
+)
+
+// SpanName is the name of the span of one publish job.
+const SpanName = "output.publish"
+
+// tracerName names the tracer of this package.
+const tracerName = "github.com/nourtalaat/sidekick/internal/publish"
+
+// Span attributes.
+const (
+	attrSink  = "sidekick.sink"
+	attrPhase = "sidekick.phase"
+)
+
+// traceparentHeader is the W3C Trace Context field that jobs store.
+const traceparentHeader = "traceparent"
+
+var (
+	errNoInvestigation = errors.New("the payload has no investigation_id")
+	errUnknownSink     = errors.New("no output with this name is configured")
+	errNoState         = errors.New("the investigation has no publish state")
+)
+
+// Options set up a Handler. Pool is required.
+type Options struct {
+	// Pool is the database the investigations, publish states, output refs
+	// and jobs are in.
+	Pool *pgxpool.Pool
+	// Sinks are the built outputs, by name.
+	Sinks map[string]output.Sink
+	// Logger receives a line per publish, with IDs only. Nil logs nothing.
+	Logger *slog.Logger
+	// TracerProvider makes the tracer of the output.publish spans. Nil
+	// means the global tracer provider.
+	TracerProvider trace.TracerProvider
+}
+
+// Handler runs publish jobs. Make it with New and register it for
+// queue.KindPublish.
+type Handler struct {
+	pool   *pgxpool.Pool
+	sinks  map[string]output.Sink
+	log    *slog.Logger
+	tracer trace.Tracer
+}
+
+var _ queue.Handler = (*Handler)(nil)
+
+// New returns a Handler for the sinks in opts.
+func New(opts Options) *Handler {
+	tp := opts.TracerProvider
+	if tp == nil {
+		tp = otel.GetTracerProvider()
+	}
+
+	log := opts.Logger
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
+
+	return &Handler{pool: opts.Pool, sinks: opts.Sinks, log: log, tracer: tp.Tracer(tracerName)}
+}
+
+// Handle shows the newest state of one investigation in one sink, inside
+// an output.publish span that is a child of the span that enqueued the
+// job. It publishes when the state is newer than what the sink shows and
+// the sink accepts its phase, then finishes the run as the package doc
+// describes.
+//
+// A failed publish returns the error, so the job is retried with backoff
+// and keeps its unique key meanwhile. A payload that does not decode, a
+// sink that is no longer configured, or an investigation without a publish
+// state gives up the job.
+func (h *Handler) Handle(ctx context.Context, job db.Job) (err error) {
+	ctx, span := h.tracer.Start(jobContext(ctx, job), SpanName)
+
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "publish failed")
+		}
+
+		span.End()
+	}()
+
+	p, err := decodePayload(job.Payload)
+	if err != nil {
+		return fmt.Errorf("decode the publish payload: %w: %w", queue.ErrGiveUp, err)
+	}
+
+	span.SetAttributes(attribute.String(attrSink, p.Sink))
+
+	sink, ok := h.sinks[p.Sink]
+	if !ok {
+		return fmt.Errorf("sink %q: %w: %w", p.Sink, queue.ErrGiveUp, errUnknownSink)
+	}
+
+	state, err := db.New(h.pool).GetPublishState(ctx, db.GetPublishStateParams{InvestigationID: p.InvestigationID, Sink: p.Sink})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("investigation %s: %w: %w", p.InvestigationID, queue.ErrGiveUp, errNoState)
+	}
+
+	if err != nil {
+		return fmt.Errorf("load the publish state of %s: %w", p.InvestigationID, err)
+	}
+
+	span.SetAttributes(attribute.String(attrPhase, state.Phase))
+
+	log := h.log.With("investigation_id", p.InvestigationID.String(), "sink", p.Sink, "job_id", job.ID, "phase", state.Phase, "seq", state.Seq)
+
+	ref, err := h.publish(ctx, p, sink, state)
+	if err != nil {
+		return fmt.Errorf("publish investigation %s to %s: %w", p.InvestigationID, p.Sink, err)
+	}
+
+	if ref != nil {
+		log.DebugContext(ctx, "published", "external", ref.External)
+	}
+
+	if err := h.finish(ctx, job, p, state.Seq, ref); err != nil {
+		return fmt.Errorf("finish publishing investigation %s to %s: %w", p.InvestigationID, p.Sink, err)
+	}
+
+	return nil
+}
+
+// publish sends state to sink and returns the ref the sink returned. It
+// returns nil, and sends nothing, when the sink shows this state already or
+// does not accept its phase.
+func (h *Handler) publish(ctx context.Context, p Payload, sink output.Sink, state db.GetPublishStateRow) (*output.Ref, error) {
+	phase := output.Phase(state.Phase)
+
+	if (state.PreviousSeq != nil && state.Seq <= *state.PreviousSeq) || !sink.Accepts(phase) {
+		return nil, nil
+	}
+
+	u, err := h.update(ctx, p.InvestigationID, state)
+	if err != nil {
+		return nil, fmt.Errorf("build the update: %w", err)
+	}
+
+	ref, err := sink.Publish(ctx, u)
+	if err != nil {
+		return nil, fmt.Errorf("sink: %w", err)
+	}
+
+	return &ref, nil
+}
+
+// update builds what the sink gets: the state, the event that opened the
+// investigation's group, and the ref of what the sink published before.
+func (h *Handler) update(ctx context.Context, investigationID uuid.UUID, state db.GetPublishStateRow) (output.Update, error) {
+	loaded, err := db.New(h.pool).GetInvestigationWithEvent(ctx, investigationID)
+	if err != nil {
+		return output.Update{}, fmt.Errorf("load the investigation and its event: %w", err)
+	}
+
+	ev, err := eventOf(loaded.Event)
+	if err != nil {
+		return output.Update{}, fmt.Errorf("read event %s: %w", loaded.Event.ID, err)
+	}
+
+	var stored body
+	if err := json.Unmarshal(state.Body, &stored); err != nil {
+		return output.Update{}, fmt.Errorf("decode the publish state: %w", err)
+	}
+
+	u := output.Update{
+		InvestigationID: investigationID.String(),
+		Event:           ev,
+		Events:          int(state.EventCount),
+		Phase:           output.Phase(state.Phase),
+		Report:          stored.Report,
+		Seq:             state.Seq,
+	}
+
+	for _, line := range stored.Progress {
+		u.Progress = append(u.Progress, output.Progress(line))
+	}
+
+	if state.PreviousRef != nil {
+		var prev output.Ref
+		if err := json.Unmarshal(state.PreviousRef, &prev); err != nil {
+			return output.Update{}, fmt.Errorf("decode the previous ref: %w", err)
+		}
+
+		u.Previous = &prev
+	}
+
+	return u, nil
+}
+
+// finish ends the run in one transaction: it locks the state row, stores
+// ref as showing seq when it is set, gives up the job's unique key, and
+// enqueues a new job when the state is newer than seq, because an update
+// written during the run found the key taken. Taking the state row before
+// the job row matches Enqueue.
+func (h *Handler) finish(ctx context.Context, job db.Job, p Payload, seq int64, ref *output.Ref) (err error) {
+	tx, err := h.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+
+	defer func() {
+		if rbErr := tx.Rollback(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
+			err = errors.Join(err, fmt.Errorf("roll back: %w", rbErr))
+		}
+	}()
+
+	queries := db.New(tx)
+
+	newest, err := queries.LockPublishSeq(ctx, p.InvestigationID)
+	if err != nil {
+		return fmt.Errorf("lock the publish state: %w", err)
+	}
+
+	if ref != nil {
+		raw, err := json.Marshal(ref)
+		if err != nil {
+			return fmt.Errorf("encode the ref: %w", err)
+		}
+
+		if err := queries.SaveOutputRef(ctx, db.SaveOutputRefParams{
+			InvestigationID: p.InvestigationID,
+			Sink:            p.Sink,
+			External:        ref.External,
+			Ref:             raw,
+			LastSeq:         seq,
+		}); err != nil {
+			return fmt.Errorf("store the ref: %w", err)
+		}
+	}
+
+	if err := queue.ReleaseUniqueKey(ctx, tx, job); err != nil {
+		return fmt.Errorf("give up the unique key: %w", err)
+	}
+
+	if newest > seq {
+		if err := enqueueJob(ctx, tx, p); err != nil {
+			return fmt.Errorf("enqueue the next publish: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+
+	return nil
+}
+
+// jobContext returns ctx with the span that enqueued job as the remote
+// parent, when the job carries one.
+func jobContext(ctx context.Context, job db.Job) context.Context {
+	if job.Traceparent == nil {
+		return ctx
+	}
+
+	return propagation.TraceContext{}.Extract(ctx, propagation.MapCarrier{traceparentHeader: *job.Traceparent})
+}
+
+// decodePayload reads a publish payload.
+func decodePayload(raw []byte) (Payload, error) {
+	var p Payload
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return Payload{}, fmt.Errorf("decode: %w", err)
+	}
+
+	if p.InvestigationID == uuid.Nil {
+		return Payload{}, errNoInvestigation
+	}
+
+	if p.Sink == "" {
+		return Payload{}, errUnknownSink
+	}
+
+	return p, nil
+}
