@@ -168,6 +168,34 @@ func (c *Config) MinContextTokens() int {
 	return p.minContextTokens
 }
 
+// api returns the API the connector calls.
+func (c *Config) api() API {
+	switch {
+	case c.API != "":
+		return c.API
+	case c.BaseURL != "":
+		return APIChatCompletions
+	default:
+		return APIResponses
+	}
+}
+
+// maxTokens returns the output limit of a call: the request's, else the
+// config's, capped at the model's maximum. Zero leaves the limit out, so
+// the model's or server's own applies.
+func (c *Config) maxTokens(requested int, caps model.Capabilities) int {
+	n := requested
+	if n <= 0 {
+		n = c.MaxTokens
+	}
+
+	if caps.MaxOutputTokens > 0 && n > caps.MaxOutputTokens {
+		return caps.MaxOutputTokens
+	}
+
+	return max(n, 0)
+}
+
 // checkEndpoint checks the API, server, base URL and key settings.
 func (c *Config) checkEndpoint() []error {
 	var errs []error
