@@ -1,0 +1,14 @@
+# A misspelled severity.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: critical
+    match: { severity: [critcal] }
+  - name: default

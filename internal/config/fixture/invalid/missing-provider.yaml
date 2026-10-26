@@ -1,0 +1,12 @@
+# A connector without a provider.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default

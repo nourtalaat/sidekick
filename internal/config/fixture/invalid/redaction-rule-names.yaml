@@ -1,0 +1,19 @@
+# Custom redaction rules without a name, twice the same name, and without a pattern.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default
+
+redaction:
+  custom:
+    - pattern: "cus_[A-Za-z0-9]{14}"
+    - name: customer_id
+      pattern: "cus_[A-Za-z0-9]{14}"
+    - name: customer_id

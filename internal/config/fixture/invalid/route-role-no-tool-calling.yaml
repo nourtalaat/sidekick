@@ -1,0 +1,18 @@
+# A route that overrides investigate with a model without tool calling.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+    local:
+      provider: openai
+      model: qwen3-32b
+      capabilities: { toolCalling: false }
+  roles:
+    investigate: claude
+    summarize: local
+
+routes:
+  - name: default
+    roles: { investigate: local }

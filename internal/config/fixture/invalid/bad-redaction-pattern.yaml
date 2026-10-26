@@ -1,0 +1,17 @@
+# A custom redaction rule that is not a regular expression.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default
+
+redaction:
+  custom:
+    - name: customer_id
+      pattern: "cus_[A-Za-z0-9{14}"

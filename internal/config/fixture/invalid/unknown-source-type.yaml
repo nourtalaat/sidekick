@@ -1,0 +1,15 @@
+# A misspelled source type.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+sources:
+  k8s: { type: kubernets }
+
+routes:
+  - name: default
