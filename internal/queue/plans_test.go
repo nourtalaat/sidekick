@@ -78,6 +78,26 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: "jobs_pkey",
 		},
 		{
+			name: "RenewLease",
+			run: func(ctx context.Context, q *db.Queries, rows planRows) error {
+				_, err := q.RenewLease(ctx, db.RenewLeaseParams{
+					LeaseSeconds: testLease.Seconds(), ID: rows.claimed.ID, ClaimToken: claimToken(rows.claimed),
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "jobs_pkey",
+		},
+		{
+			name: "ReapExpiredLeases",
+			run: func(ctx context.Context, q *db.Queries, _ planRows) error {
+				_, err := q.ReapExpiredLeases(ctx)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "jobs_leases",
+		},
+		{
 			name: "EnqueueJob",
 			run: func(ctx context.Context, q *db.Queries, _ planRows) error {
 				_, err := q.EnqueueJob(ctx, db.EnqueueJobParams{
