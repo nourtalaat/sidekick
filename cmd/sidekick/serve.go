@@ -28,8 +28,9 @@ func newServeCmd(regs config.Registries, info buildinfo.Info) *cobra.Command {
 references, migrates the database unless database.migrations is manual,
 then serves webhooks at /hooks/<name> on server.listen, and /metrics,
 /healthz and /readyz on server.metricsListen. Each new event is routed
-to the first route that matches it, which opens an investigation for it.
-Logs go to standard output as JSON.
+to the first route that matches it, which opens an investigation for it
+and shows it in the route's outputs, such as a Slack thread. Logs go to
+standard output as JSON.
 
 On SIGTERM or SIGINT it stops taking requests, hands back jobs it cannot
 finish, and exits within ` + app.ShutdownGrace.String() + `. A second signal exits at once.`,
@@ -75,6 +76,10 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 	}
 
 	if err := registerRouter(a); err != nil {
+		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
+	}
+
+	if err := registerPublisher(a); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
