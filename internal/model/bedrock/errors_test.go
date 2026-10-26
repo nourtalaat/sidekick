@@ -119,7 +119,7 @@ func TestClassify(t *testing.T) {
 func responseError(status int, retryAfterValue string, err error) error {
 	resp := &http.Response{StatusCode: status, Header: http.Header{}}
 	if retryAfterValue != "" {
-		resp.Header.Set(retryAfterHeader, retryAfterValue)
+		resp.Header.Set(model.RetryAfterHeader, retryAfterValue)
 	}
 
 	return &awshttp.ResponseError{ResponseError: &smithyhttp.ResponseError{Response: &smithyhttp.Response{Response: resp}, Err: err}}

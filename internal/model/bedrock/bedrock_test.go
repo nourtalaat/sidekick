@@ -165,7 +165,7 @@ func TestGenerate(t *testing.T) {
 			name:  "throttled with retry-after",
 			model: opus55Geo,
 			response: recorded{op: opStream, status: http.StatusTooManyRequests, file: "throttling.json", headers: map[string]string{
-				headerErrorType: "ThrottlingException", retryAfterHeader: "12",
+				headerErrorType: "ThrottlingException", model.RetryAfterHeader: "12",
 			}},
 			wantKind:       model.ErrRateLimited,
 			wantRetryAfter: 12 * time.Second,

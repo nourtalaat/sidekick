@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -14,10 +13,6 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/model"
 )
-
-// retryAfterHeader is the response header that says how long to wait
-// before retrying, in seconds or as an HTTP date.
-const retryAfterHeader = "Retry-After"
 
 // codeValidation is the error code of a request Bedrock cannot take.
 const codeValidation = "ValidationException"
@@ -128,32 +123,14 @@ func statusOf(err error) int {
 	return 0
 }
 
-// retryAfter reads how long the API asked to wait, in seconds or as an HTTP
-// date. It returns zero when it asked for nothing.
+// retryAfter reads how long the API asked to wait, from the response of a
+// failed call. It returns zero when there was no response or it asked for
+// nothing.
 func retryAfter(err error) time.Duration {
 	var respErr *awshttp.ResponseError
 	if !errors.As(err, &respErr) || respErr.Response == nil {
 		return 0
 	}
 
-	v := respErr.Response.Header.Get(retryAfterHeader)
-	if v == "" {
-		return 0
-	}
-
-	if secs, perr := strconv.ParseFloat(v, 64); perr == nil {
-		if secs <= 0 {
-			return 0
-		}
-
-		return time.Duration(secs * float64(time.Second))
-	}
-
-	if at, perr := http.ParseTime(v); perr == nil {
-		if d := time.Until(at); d > 0 {
-			return d
-		}
-	}
-
-	return 0
+	return model.RetryAfter(respErr.Response.Response)
 }
