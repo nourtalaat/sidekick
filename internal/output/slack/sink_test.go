@@ -390,8 +390,8 @@ func TestPublishFailures(t *testing.T) {
 		prev    bool
 		wantErr string
 	}{
-		{name: "the post fails", path: pathPost, phase: output.PhaseQueued, wantErr: "post the message: post message: chat.postMessage: channel_not_found"},
-		{name: "the edit fails", path: pathUpdate, phase: output.PhaseRunning, prev: true, wantErr: "edit the message: update message: chat.update: channel_not_found"},
+		{name: "the post fails", path: pathPost, phase: output.PhaseQueued, wantErr: "post the message: post message: call chat.postMessage: Slack answered channel_not_found"},
+		{name: "the edit fails", path: pathUpdate, phase: output.PhaseRunning, prev: true, wantErr: "edit the message: update message: call chat.update: Slack answered channel_not_found"},
 	}
 
 	for _, tt := range tests {

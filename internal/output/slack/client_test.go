@@ -122,6 +122,10 @@ func TestClientCall(t *testing.T) {
 
 			require.Equal(t, len(tt.wantErrors), testutil.CollectAndCount(m.errors))
 
+			if err != nil {
+				require.ErrorContains(t, err, "post message: call "+methodPostMessage, "every error names the method")
+			}
+
 			switch {
 			case tt.wantCode != "":
 				var apiErr *apiError

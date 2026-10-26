@@ -69,9 +69,9 @@ type apiError struct {
 	Code   string
 }
 
-// Error names the method and Slack's error code.
+// Error gives Slack's error code; the caller names the method.
 func (e *apiError) Error() string {
-	return e.Method + ": " + e.Code
+	return "Slack answered " + e.Code
 }
 
 // client calls the Slack Web API with the bot token. It waits for the
@@ -175,17 +175,21 @@ func (c *client) call(ctx context.Context, method, channel string, build request
 
 		body, retryAfter, err := c.send(ctx, method, build)
 		if err == nil {
-			return c.decode(method, body, out)
+			if err := c.decode(method, body, out); err != nil {
+				return fmt.Errorf("call %s: %w", method, err)
+			}
+
+			return nil
 		}
 
 		if !errors.Is(err, errRateLimited) {
-			return err
+			return fmt.Errorf("call %s: %w", method, err)
 		}
 
 		c.metrics.apiError(method, errorRateLimited)
 
 		if attempt >= maxRateLimitRetries || retryAfter > maxRetryAfter {
-			return fmt.Errorf("%s after %d tries: %w", method, attempt+1, err)
+			return fmt.Errorf("call %s, %d tries: %w", method, attempt+1, err)
 		}
 
 		if err := c.wait(ctx, retryAfter); err != nil {
@@ -204,7 +208,7 @@ func (c *client) send(ctx context.Context, method string, build requestBuilder) 
 
 	req, err := build(ctx, c.apiURL+method)
 	if err != nil {
-		return nil, 0, fmt.Errorf("build the %s request: %w", method, err)
+		return nil, 0, fmt.Errorf("build the request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -213,7 +217,7 @@ func (c *client) send(ctx context.Context, method string, build requestBuilder) 
 	if err != nil {
 		c.metrics.apiError(method, errorRequestFailed)
 
-		return nil, 0, fmt.Errorf("send %s: %w", method, err)
+		return nil, 0, fmt.Errorf("send the request: %w", err)
 	}
 
 	defer func() {
@@ -228,14 +232,14 @@ func (c *client) send(ctx context.Context, method string, build requestBuilder) 
 	if resp.StatusCode != http.StatusOK {
 		c.metrics.apiError(method, errorHTTPStatus)
 
-		return nil, 0, fmt.Errorf("%s: HTTP status %d", method, resp.StatusCode)
+		return nil, 0, fmt.Errorf("HTTP status %d", resp.StatusCode)
 	}
 
 	body, err = io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		c.metrics.apiError(method, errorRequestFailed)
 
-		return nil, 0, fmt.Errorf("read the %s response: %w", method, err)
+		return nil, 0, fmt.Errorf("read the response: %w", err)
 	}
 
 	return body, 0, nil
@@ -248,7 +252,7 @@ func (c *client) decode(method string, body []byte, out any) error {
 	if err := json.Unmarshal(body, &env); err != nil {
 		c.metrics.apiError(method, errorBadResponse)
 
-		return fmt.Errorf("decode the %s response: %w", method, err)
+		return fmt.Errorf("decode the response: %w", err)
 	}
 
 	if !env.OK {
@@ -265,7 +269,7 @@ func (c *client) decode(method string, body []byte, out any) error {
 	if err := json.Unmarshal(body, out); err != nil {
 		c.metrics.apiError(method, errorBadResponse)
 
-		return fmt.Errorf("decode the %s response: %w", method, err)
+		return fmt.Errorf("decode the response: %w", err)
 	}
 
 	return nil
