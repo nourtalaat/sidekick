@@ -20,7 +20,12 @@ import (
 var errExplained = errors.New("explained")
 
 // planBatch is the claim batch size in the query plan tests.
-const planBatch = 8
+const (
+	planBatch = 8
+	// planGlobalLimit is above the 500 investigations running in the busy
+	// queue, so the limited claim can take one.
+	planGlobalLimit = 1000
+)
 
 // TestQueryPlans runs EXPLAIN ANALYZE on each queue query over a busy queue
 // with more than 100,000 ready jobs, and checks that it uses the index it
@@ -42,6 +47,19 @@ func TestQueryPlans(t *testing.T) {
 			run: func(ctx context.Context, q *db.Queries, _ planRows) error {
 				_, err := q.ClaimJobs(ctx, db.ClaimJobsParams{
 					Worker: testWorker, LeaseSeconds: testLease.Seconds(), Kinds: []string{KindPublish}, Batch: planBatch,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "jobs_ready",
+		},
+		{
+			name: "ClaimLimitedJob",
+			run: func(ctx context.Context, q *db.Queries, _ planRows) error {
+				_, err := q.ClaimLimitedJob(ctx, db.ClaimLimitedJobParams{
+					Worker: testWorker, LeaseSeconds: testLease.Seconds(), LimitedKinds: limitedKinds,
+					Routes: []string{"route-0", "route-1"}, RouteLimits: []int32{50, 100},
+					Kind: KindInvestigate, GlobalLimit: planGlobalLimit,
 				})
 
 				return fmt.Errorf("run query: %w", err)
