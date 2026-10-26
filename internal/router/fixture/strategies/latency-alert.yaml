@@ -1,0 +1,7 @@
+name: latency-alert
+description: A latency monitor fired for an HTTP or RPC service.
+first:
+  - Compare latency with request rate.
+budgets:
+  maxToolCalls: 30
+  maxWallTime: 8m

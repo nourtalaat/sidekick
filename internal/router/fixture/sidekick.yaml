@@ -1,0 +1,52 @@
+# The config the router tests load. The model connectors use a fake
+# provider the tests register.
+database:
+  urlSecret: { name: db, key: url }
+
+model:
+  connectors:
+    fake: { provider: fake, model: fake-model }
+    big: { provider: fake, model: big-model }
+  roles:
+    investigate: fake
+    summarize: fake
+
+intake:
+  webhooks:
+    alertmanager:
+      adapter: alertmanager
+      auth: { bearer: { name: hooks, key: alertmanager } }
+      trusted: true
+    grafana:
+      adapter: alertmanager
+      auth: { bearer: { name: hooks, key: grafana } }
+
+strategies:
+  dir: fixture/strategies
+
+routes:
+  - name: payments-latency
+    priority: 10
+    match:
+      intake: [alertmanager]
+      labels: { team: payments }
+      service: "checkout-*"
+      severity: [warning, critical]
+      text: "(?i)latency|p99"
+    strategy: latency-alert
+    roles: { investigate: big }
+    budgets: { maxToolCalls: 35, maxWallTime: 5m }
+  - name: grafana
+    priority: 50
+    match:
+      intake: [grafana]
+  - name: critical
+    match:
+      severity: [critical]
+  - name: billing
+    match:
+      labels: { team: billing }
+  - name: default
+
+budgets:
+  perInvestigation: { maxToolCalls: 40, maxWallTime: 10m }
