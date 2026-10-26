@@ -1,0 +1,37 @@
+name: latency-alert
+description: A latency monitor fired for an HTTP or RPC service.
+match:
+  alertNames: ["*Latency*", "*p99*"]
+  textPattern: "(?i)latency|slow"
+sources:
+  prefer: [signoz, k8s]
+first:
+  - Check what changed in the 2 hours before the alert started.
+  - Compare latency with request rate.
+commonCauses:
+  - A deploy that added a slow query.
+falsePositiveSigns:
+  - Very low request volume during the window.
+verdictHints:
+  falsePositive: Propose a minimum request rate condition.
+budgets:
+  maxToolCalls: 30
+  maxWallTime: 5m
+watcherDefaults:
+  interval: 20s
+watchers:
+  - name: checkout-health
+    match: { alertName: ["*Down*"] }
+    check:
+      type: http
+      url: https://checkout.internal.example.com/healthz
+      expect: { status: [200], bodyRegex: '"status":\s*"ok"' }
+    interval: 15s
+    passesToRecover: 3
+  - name: error-rate
+    check:
+      type: tool
+      source: signoz
+      tool: query_metrics
+      args: { query: "error_rate", window: 5m }
+      condition: { jsonPath: "$.series[0].last", op: lt, value: 0.01 }

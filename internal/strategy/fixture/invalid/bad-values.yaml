@@ -1,0 +1,9 @@
+name: bad-values
+description: An invalid pattern, budget and watcher.
+match:
+  textPattern: "(unclosed"
+budgets:
+  maxToolCalls: -1
+watchers:
+  - name: probe
+    check: { type: ping }
