@@ -141,6 +141,104 @@ claude:
 - **Prompt caching** uses the 5-minute cache. Cache reads and writes are
   priced at their own rates.
 
+#### The `openai` provider
+
+One provider covers OpenAI's API and servers that speak it, such as Ollama,
+vLLM and the llama.cpp server.
+
+```yaml
+gpt:
+  provider: openai
+  model: gpt-6.1-sol                       # required
+  apiKeySecret: { name: sidekick-openai, key: apiKey }   # required without baseURL
+  effort: high                             # the model's own levels, see below
+  maxTokens: 32000                         # default: the model's own limit
+  timeout: 10m                             # per call, default 10m
+  retries: 3                               # retries of rate limits, overloads and timeouts
+
+local:
+  provider: openai
+  model: qwen3.8:27b                       # a preset, see below
+  baseURL: http://ollama:11434/v1          # an OpenAI-compatible server
+  server: ollama                           # ollama, vllm or llamacpp; inferred when left out
+  api: chat_completions                    # optional, see below
+```
+
+- **API.** Without `baseURL`, Sidekick calls the Responses API at
+  api.openai.com. With `baseURL`, it calls Chat Completions, which every
+  compatible server has. Set `api: responses` for a server or gateway that
+  has the Responses API, such as Ollama 0.13.3 or later or a proxy in front
+  of OpenAI. On api.openai.com, keep the Responses API: some GPT-6 models
+  call tools through Chat Completions only at effort `none`.
+- **Known models.** Sidekick knows GPT-6 Astra, GPT-6.1 Sol, GPT-6.1 Terra,
+  GPT-6 Sol, GPT-6 Luna, GPT-5.6 (Sol, Terra and Luna), GPT-5.5, GPT-5.4,
+  GPT-5.4 mini and GPT-5.4 nano, with their dated snapshots. They keep
+  their capabilities behind a `baseURL` too, for example an LLM gateway.
+  Any other model needs a `capabilities` block like the Anthropic one,
+  without `thinkingModes`. For a model on a compatible server, set
+  `toolChoice: true` only if the server honours a forced tool choice.
+- **Effort** takes each model's own levels. GPT-6 Astra and GPT-6.1 Sol
+  take `low` to `max`; the other GPT-6 and the GPT-5.6 models take `none`
+  to `max`; GPT-5.5 and GPT-5.4 take `none` to `xhigh`. No current model
+  takes `minimal`. On a compatible server, effort is sent as
+  `reasoning_effort` only to a model that lists effort levels.
+- **Thinking** is not accepted. OpenAI-style APIs control reasoning with
+  `effort`; `none` turns it off on the models that have it.
+- **Reasoning** is kept by Sidekick, not by OpenAI. Every call is sent with
+  `store: false` and carries the whole conversation, including the
+  encrypted reasoning of earlier turns, so it also works for organizations
+  with Zero Data Retention.
+- **Temperature** is sent as given. Some OpenAI reasoning models reject it.
+- **Prompt caching** is automatic, so cache marks are not needed. Cache
+  reads and writes are priced at their own rates, writes at the 30-minute
+  price.
+- **API key.** With `baseURL` the key is optional; leave `apiKeySecret` out
+  for a local server that needs none.
+
+##### Local models for free setups
+
+Sidekick ships the capabilities of two open-weight models, so they need no
+`capabilities` block:
+
+| Preset | Model ID on vLLM or llama.cpp | Ollama tags |
+|---|---|---|
+| Qwen3.8-27B | `Qwen/Qwen3.8-27B`, `Qwen/Qwen3.8-27B-FP8` | `qwen3.8`, `qwen3.8:latest`, `qwen3.8:27b` and its variants, such as `qwen3.8:27b-q4_K_M` |
+| Gemma 4 31B | `google/gemma-4-31B-it` | `gemma4:31b` and its variants, such as `gemma4:31b-it-qat` (`gemma4` alone is a smaller model) |
+
+Both call tools and have a 256K token context. Run them with a context of
+at least 65,536 tokens; an investigation does not fit in less. Qwen3.8 takes
+effort `low`, `medium` or `xhigh`.
+
+Whether a model may be forced to call a tool depends on the server:
+
+- **vLLM** (`server: vllm`) honours a forced tool choice. Start it with tool
+  calling on and a long enough context:
+
+  ```sh
+  vllm serve Qwen/Qwen3.8-27B --max-model-len 65536 \
+    --enable-auto-tool-choice --tool-call-parser qwen3_xml --reasoning-parser qwen3
+  vllm serve google/gemma-4-31B-it --max-model-len 65536 \
+    --enable-auto-tool-choice --tool-call-parser gemma4 --reasoning-parser gemma4
+  ```
+
+- **Ollama** (`server: ollama`) ignores `tool_choice`. Unless
+  `OLLAMA_CONTEXT_LENGTH` is set, it picks the context from the video
+  memory: 4K tokens below 24 GiB and 32K below 48 GiB, both too small. A
+  prompt that does not fit is cut rather than refused. Start it with
+  `OLLAMA_CONTEXT_LENGTH=65536 ollama serve`, and check the `CONTEXT`
+  column of `ollama ps`.
+- **llama.cpp server** (`server: llamacpp`) needs `--jinja` for tool
+  calling. Give the model a preset ID with `--alias`:
+  `llama-server --jinja -c 65536 --alias Qwen/Qwen3.8-27B -m <file>.gguf`.
+
+Without `server`, Sidekick assumes Ollama when the model is an Ollama tag
+(the `name:tag` form) or the address uses port 11434, and otherwise assumes
+a server that ignores a forced tool choice. That is safe: when the model
+ends a turn without calling a tool, the investigation reminds it to call
+`submit_verdict`.
+
+Local models have no price, so they count as free in the budgets.
+
 ### `sources`
 
 Sources give the investigation tools to call. Each one has a `type`, and the

@@ -1,0 +1,8 @@
+data: {"id":"chatcmpl-01","object":"chat.completion.chunk","created":1793000000,"model":"qwen3.8:27b","choices":[{"index":0,"delta":{"role":"assistant","content":"The first cause is"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-01","object":"chat.completion.chunk","created":1793000000,"model":"qwen3.8:27b","choices":[{"index":0,"delta":{},"finish_reason":"length"}]}
+
+data: {"id":"chatcmpl-01","object":"chat.completion.chunk","created":1793000000,"model":"qwen3.8:27b","choices":[],"usage":{"prompt_tokens":300,"completion_tokens":5,"total_tokens":305}}
+
+data: [DONE]
+

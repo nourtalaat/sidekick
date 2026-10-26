@@ -10,6 +10,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
+	github.com/openai/openai-go/v3 v3.82.0
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
@@ -42,6 +43,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/coder/websocket v1.8.15 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
@@ -111,7 +113,7 @@ require (
 	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
-	github.com/tidwall/gjson v1.18.0 // indirect
+	github.com/tidwall/gjson v1.19.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect

@@ -3,7 +3,8 @@ package pricing
 import "github.com/nourtalaat/sidekick/internal/model"
 
 // CheckedOn is the date the shipped prices were last checked against
-// https://platform.claude.com/docs/en/about-claude/pricing.
+// https://platform.claude.com/docs/en/about-claude/pricing and the
+// providers' pricing pages named next to their prices.
 const CheckedOn = "2026-10-26"
 
 // usd is one US dollar in micro-dollars, so prices below read as they do on
