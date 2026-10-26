@@ -18,7 +18,8 @@ const (
 	idleTimeout       = 2 * time.Minute
 )
 
-// serve starts the main and the metrics listener and closes a.started.
+// serve starts the main and the metrics listener and records their
+// addresses.
 // failed receives the error of a listener that stops on its own. The
 // servers are returned in the order they are shut down: the main listener
 // first, so the metrics listener answers probes until the end.
@@ -54,7 +55,6 @@ func (a *App) serve(ctx context.Context) (servers []*http.Server, failed <-chan 
 	}
 
 	a.listenAddr, a.metricsAddr = listeners[0].Addr(), listeners[1].Addr()
-	close(a.started)
 
 	return servers, errs, nil
 }

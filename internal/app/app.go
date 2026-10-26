@@ -196,7 +196,7 @@ func (a *App) Instances() *config.Instances {
 	return a.instances
 }
 
-// Started is closed once both listeners serve.
+// Started is closed once both listeners serve and the start is logged.
 func (a *App) Started() <-chan struct{} {
 	return a.started
 }
@@ -233,6 +233,10 @@ func (a *App) Run(ctx context.Context) error {
 	a.log.InfoContext(ctx, "sidekick started",
 		"listen", a.listenAddr.String(), "metrics_listen", a.metricsAddr.String(),
 		"migrations", string(a.cfg.Database.Migrations), "job_kinds", a.jobKinds)
+
+	// Closed after the start line is logged, so whoever waits on Started
+	// also sees that line.
+	close(a.started)
 
 	var runErr error
 
