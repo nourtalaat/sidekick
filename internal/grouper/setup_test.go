@@ -55,6 +55,33 @@ func setup(t *testing.T) *harness {
 	}
 }
 
+// The rows of fixture/related.sql.
+var (
+	dbGroup             = uuid.MustParse("0192d3a4-0000-7000-8000-0000000001b1")
+	dbInvestigation     = uuid.MustParse("0192d3a4-0000-7000-8000-0000000001c1")
+	dbConnectionsRouted = uuid.MustParse("0192d3a4-0000-7000-8000-000000000102")
+	checkoutRouted      = uuid.MustParse("0192d3a4-0000-7000-8000-000000000103")
+	searchRouted        = uuid.MustParse("0192d3a4-0000-7000-8000-000000000104")
+	noServiceRouted     = uuid.MustParse("0192d3a4-0000-7000-8000-000000000105")
+)
+
+// setupRelated returns a Grouper with catalog on a database of its own,
+// seeded with fixture/related.sql.
+func setupRelated(t *testing.T, catalog *Catalog) *harness {
+	t.Helper()
+
+	pool := storetest.New(t)
+	storetest.LoadFixture(t, pool, "fixture/related.sql")
+
+	spans := tracetest.NewSpanRecorder()
+
+	return &harness{
+		pool:    pool,
+		grouper: New(Options{TracerProvider: sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans)), Catalog: catalog}),
+		spans:   spans,
+	}
+}
+
 // group runs Group for the event with id in its own transaction.
 func (h *harness) group(t *testing.T, id uuid.UUID, rt Route) (Result, error) {
 	t.Helper()

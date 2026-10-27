@@ -113,6 +113,10 @@ func TestValidateFixtures(t *testing.T) {
 			`routes[0].grouping.fingerprintLabels[2]: label "service" is listed twice`,
 			"routes[0].grouping.window: must be positive",
 		}},
+		{file: "route-related-window-invalid", want: []string{
+			"routes[0].grouping.relatedWindow: must not be negative",
+			"routes[1].grouping.relatedWindow: 45m0s is longer than the grouping window 30m0s",
+		}},
 		{file: "global-concurrency-zero", want: []string{"budgets.concurrency: must be positive"}},
 		// Report
 		{file: "unknown-confidence", want: []string{`report.minFalsePositiveConfidence: unknown confidence "hgh" (did you mean "high"?)`}},
