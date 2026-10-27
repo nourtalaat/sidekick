@@ -99,7 +99,7 @@ func TestRenewKeepsTheLease(t *testing.T) {
 	require.NoError(t, renew(t.Context(), pool, jobs[0], testLease))
 	time.Sleep(2 * shortLease)
 
-	reaped, locked, err := reap(t.Context(), pool)
+	reaped, locked, err := reap(t.Context(), pool, reaperLockKey)
 	require.NoError(t, err)
 	require.True(t, locked)
 	require.Empty(t, reaped)
@@ -166,7 +166,7 @@ func TestReapRunsOnOneReplicaAtATime(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, locked)
 
-	reaped, locked, err := reap(t.Context(), other)
+	reaped, locked, err := reap(t.Context(), other, reaperLockKey)
 	require.NoError(t, err)
 	require.False(t, locked, "another replica holds the reaper lock")
 	require.Empty(t, reaped)
@@ -175,15 +175,62 @@ func TestReapRunsOnOneReplicaAtATime(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, unlocked)
 
-	reaped, locked, err = reap(t.Context(), other)
+	reaped, locked, err = reap(t.Context(), other, reaperLockKey)
 	require.NoError(t, err)
 	require.True(t, locked)
 	require.Len(t, reaped, 1)
 
-	reaped, locked, err = reap(t.Context(), holder)
+	reaped, locked, err = reap(t.Context(), holder, reaperLockKey)
 	require.NoError(t, err)
 	require.True(t, locked, "reap released the lock")
 	require.Empty(t, reaped)
+}
+
+func TestReapLockIsKeyedBySchema(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// held is the schema whose reaper lock another session holds.
+		held string
+		// reaper is the schema of the reaper that tries the lock.
+		reaper     string
+		wantLocked bool
+	}{
+		{name: "the same schema waits", held: "", reaper: "", wantLocked: false},
+		{name: "a bench schema does not wait for the default one", held: "", reaper: "sidekick_bench_a", wantLocked: true},
+		{name: "the default schema does not wait for a bench one", held: "sidekick_bench_a", reaper: "", wantLocked: true},
+		{name: "two bench schemas do not wait for each other", held: "sidekick_bench_a", reaper: "sidekick_bench_b", wantLocked: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			url := storetest.NewURL(t)
+			holder, other := openReplica(t, url), openReplica(t, url)
+
+			conn, err := holder.Acquire(t.Context())
+			require.NoError(t, err)
+
+			defer conn.Release()
+
+			queries := db.New(conn)
+			heldKey := store.SchemaLockKey(reaperLockKey, tt.held)
+
+			locked, err := queries.TryLockReaper(t.Context(), heldKey)
+			require.NoError(t, err)
+			require.True(t, locked)
+
+			_, locked, err = reap(t.Context(), other, store.SchemaLockKey(reaperLockKey, tt.reaper))
+			require.NoError(t, err)
+			require.Equal(t, tt.wantLocked, locked)
+
+			unlocked, err := queries.UnlockReaper(t.Context(), heldKey)
+			require.NoError(t, err)
+			require.True(t, unlocked)
+		})
+	}
 }
 
 // openReplica opens a pool of its own on the database at url, as one
@@ -206,7 +253,7 @@ func waitForReap(t *testing.T, pool *pgxpool.Pool) []db.Job {
 	deadline := time.Now().Add(reapWait)
 
 	for time.Now().Before(deadline) {
-		reaped, locked, err := reap(t.Context(), pool)
+		reaped, locked, err := reap(t.Context(), pool, reaperLockKey)
 		require.NoError(t, err)
 		require.True(t, locked)
 

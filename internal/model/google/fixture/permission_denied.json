@@ -1,0 +1,15 @@
+{
+  "error": {
+    "code": 403,
+    "message": "Permission 'aiplatform.endpoints.predict' denied on resource '//aiplatform.googleapis.com/projects/sidekick-test/locations/global/publishers/google/models/gemini-3.8-flash' (or it may not exist).",
+    "status": "PERMISSION_DENIED",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "IAM_PERMISSION_DENIED",
+        "domain": "aiplatform.googleapis.com",
+        "metadata": {"permission": "aiplatform.endpoints.predict", "resource": "projects/sidekick-test/locations/global/publishers/google/models/gemini-3.8-flash"}
+      }
+    ]
+  }
+}

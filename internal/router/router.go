@@ -71,6 +71,10 @@ type Options struct {
 	// TracerProvider makes the tracer of the router.route and
 	// grouper.group spans. Nil means the global tracer provider.
 	TracerProvider trace.TracerProvider
+	// WatchPolicy replaces the watcher policy of Config, which holds the
+	// watchers each route's groups start. The benchmark gives an empty
+	// one, so its runs start no watchers. Nil means Config.WatchPolicy().
+	WatchPolicy *watch.Policy
 }
 
 // Router handles route_event jobs. Make it with New and register it for
@@ -102,6 +106,9 @@ type routeEventPayload struct {
 // New prepares the routes of opts.Config.
 func New(opts Options) (*Router, error) {
 	policy := opts.Config.WatchPolicy()
+	if opts.WatchPolicy != nil {
+		policy = *opts.WatchPolicy
+	}
 
 	routes, err := newRoutes(opts.Config, opts.ModelSettings, policy)
 	if err != nil {
