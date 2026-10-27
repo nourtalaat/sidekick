@@ -301,9 +301,12 @@ func TestSocketTakesOverAFreedSlot(t *testing.T) {
 			free: func(t *testing.T, h *harness, r *replica) {
 				t.Helper()
 
+				// Every test database is on the same server, so the lock is
+				// looked up in this test's database only.
 				_, err := h.pool.Exec(t.Context(), `
 					SELECT pg_terminate_backend(pid) FROM pg_locks
-					WHERE locktype = 'advisory' AND classid = $1 AND objid = $2`, slotLockClass, r.slot())
+					WHERE locktype = 'advisory' AND classid = $1 AND objid = $2
+						AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`, slotLockClass, r.slot())
 				require.NoError(t, err)
 			},
 		},
