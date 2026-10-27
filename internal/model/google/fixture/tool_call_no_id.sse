@@ -1,0 +1,2 @@
+data: {"candidates": [{"content": {"parts": [{"functionCall": {"name": "list_deploys","args": {"service": "checkout"}}}],"role": "model"},"finishReason": "STOP","index": 0}],"usageMetadata": {"promptTokenCount": 900,"candidatesTokenCount": 15,"totalTokenCount": 915},"modelVersion": "gemini-2.5-flash","responseId": "kXJbaZ_tF4uK1dkP3pOcuQg"}
+
