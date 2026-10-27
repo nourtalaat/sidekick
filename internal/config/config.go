@@ -27,6 +27,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/secrets"
 	"github.com/nourtalaat/sidekick/internal/source"
 	"github.com/nourtalaat/sidekick/internal/strategy"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // Defaults for settings that are not set in the file.
@@ -191,6 +192,34 @@ type Route struct {
 	// Grouping decides which of the route's events join one group and one
 	// investigation (RT-3).
 	Grouping Grouping `yaml:"grouping"`
+	// WatcherDefaults are the defaults of the route's watchers, including
+	// those the model starts. Zero values come from watch.defaults.
+	WatcherDefaults strategy.WatcherSettings `yaml:"watcherDefaults"`
+	// Watchers start when a group of the route opens for a matching event.
+	Watchers []strategy.Watcher `yaml:"watchers"`
+	// WatcherLimits limit what start_watcher may use on this route, and
+	// bound the settings of every watcher of the route.
+	WatcherLimits WatcherLimits `yaml:"watcherLimits"`
+}
+
+// WatcherLimits are what start_watcher may use on a route, and the route's
+// bounds of watcher settings, inside the global ones.
+type WatcherLimits struct {
+	// AllowModel set to false turns start_watcher off for the route. Unset
+	// follows watch.allowModel.
+	AllowModel *bool `yaml:"allowModel"`
+	// Types are the check types start_watcher may use. Empty allows every
+	// type.
+	Types []watch.Type `yaml:"types"`
+	// Tools are the qualified names of the tools tool checks may call,
+	// such as signoz__query_metrics. Empty allows none.
+	Tools []string `yaml:"tools"`
+	// Hosts are the host patterns HTTP checks may reach, each inside
+	// watch.http.allowHosts. Empty means watch.http.allowHosts.
+	Hosts       []string      `yaml:"hosts"`
+	MinInterval time.Duration `yaml:"minInterval"`
+	MaxInterval time.Duration `yaml:"maxInterval"`
+	MaxTimeout  time.Duration `yaml:"maxTimeout"`
 }
 
 // Grouping decides which events join an open group.
@@ -276,7 +305,22 @@ type RedactionRule struct {
 
 // Watch holds the settings of watchers.
 type Watch struct {
-	HTTP WatchHTTP `yaml:"http"`
+	// AllowModel offers investigations the start_watcher tool. It is off
+	// unless set; routes can still turn it off.
+	AllowModel bool `yaml:"allowModel"`
+	// MaxPerGroup is the most watchers one group may have.
+	MaxPerGroup int `yaml:"maxPerGroup"`
+	// MaxTotal is the most watchers that run at once in the deployment.
+	MaxTotal int `yaml:"maxTotal"`
+	// Defaults are used when no route, strategy or watcher sets a value.
+	// After Load, the values the file leaves out hold the built-in
+	// defaults.
+	Defaults strategy.WatcherSettings `yaml:"defaults"`
+	// MinInterval, MaxInterval and MaxTimeout are the global bounds.
+	MinInterval time.Duration `yaml:"minInterval"`
+	MaxInterval time.Duration `yaml:"maxInterval"`
+	MaxTimeout  time.Duration `yaml:"maxTimeout"`
+	HTTP        WatchHTTP     `yaml:"http"`
 }
 
 // WatchHTTP holds the rules of watcher HTTP checks. Only the config file
@@ -497,6 +541,7 @@ func Parse(ctx context.Context, data []byte, opts LoadOptions) (*Config, error) 
 	}
 
 	cfg.resolveBudgets()
+	cfg.Watch.Defaults = watch.Complete(cfg.Watch.Defaults)
 	cfg.strategySet = v.strategies
 
 	return cfg, nil
@@ -510,6 +555,7 @@ func (c *Config) setDefaults() {
 	c.Secrets.setDefaults()
 	c.Budgets.setDefaults()
 	c.Telemetry.setDefaults()
+	c.Watch.setDefaults()
 }
 
 // resolveBudgets fills each route's unset limits with the global ones.
@@ -553,6 +599,14 @@ func (b *Budgets) setDefaults() {
 
 func (t *Telemetry) setDefaults() {
 	t.LogLevel = DefaultLogLevel
+}
+
+func (w *Watch) setDefaults() {
+	w.MaxPerGroup = watch.DefaultMaxPerGroup
+	w.MaxTotal = watch.DefaultMaxTotal
+	w.MinInterval = watch.DefaultMinInterval
+	w.MaxInterval = watch.DefaultMaxInterval
+	w.MaxTimeout = watch.DefaultMaxTimeout
 }
 
 // parseDocument parses data as exactly one YAML document.

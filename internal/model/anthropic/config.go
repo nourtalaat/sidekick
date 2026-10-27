@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"slices"
 
+	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/registry"
 )
@@ -186,15 +187,20 @@ func checkThinking(modelID string, m knownModel, t model.Thinking, effort model.
 	return errs
 }
 
-// checkBaseURL checks that raw is an absolute http or https URL.
+// checkBaseURL checks that raw is an absolute https URL. Every call
+// carries the API key, so plain http is allowed only to a loopback host,
+// such as a local proxy.
 func checkBaseURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return fmt.Errorf("baseURL: %w", err)
 	}
 
-	if (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
-		return fmt.Errorf("baseURL: %q must be an absolute http or https URL", raw)
+	switch {
+	case (u.Scheme != "https" && u.Scheme != "http") || u.Host == "":
+		return fmt.Errorf("baseURL: %q must be an absolute https URL", raw)
+	case u.Scheme == "http" && !httpclient.IsLoopbackHost(u.Hostname()):
+		return fmt.Errorf("baseURL: %q must use https, since every call carries the API key; plain http is allowed only for localhost, 127.0.0.0/8 or ::1", raw)
 	}
 
 	return nil

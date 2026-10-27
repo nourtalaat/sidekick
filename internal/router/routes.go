@@ -13,6 +13,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/investigator"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/strategy"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // errNoStrategies means the config was not loaded with its strategies.
@@ -36,12 +37,15 @@ type route struct {
 	rateLimit *config.RateLimit
 	// grouping decides which group the route's events join.
 	grouping grouper.Route
+	// watchers are the route's and its strategy's watchers, which start
+	// when a group of the route opens.
+	watchers []watch.Definition
 }
 
 // newRoutes prepares the routes of cfg in the order they are tried.
 // modelSettings are the shared settings of each built connector, for the
-// model IDs.
-func newRoutes(cfg *config.Config, modelSettings map[string]model.Settings) ([]route, error) {
+// model IDs, and policy holds the watchers of each route.
+func newRoutes(cfg *config.Config, modelSettings map[string]model.Settings, policy watch.Policy) ([]route, error) {
 	strategies := cfg.StrategySet()
 	if strategies == nil {
 		return nil, errNoStrategies
@@ -55,6 +59,8 @@ func newRoutes(cfg *config.Config, modelSettings map[string]model.Settings) ([]r
 		if err != nil {
 			return nil, fmt.Errorf("route %q: %w", rc.Name, err)
 		}
+
+		r.watchers = policy.Routes[rc.Name].Definitions
 
 		routes = append(routes, r)
 	}

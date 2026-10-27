@@ -14,6 +14,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // closeKeyPrefix starts the unique keys of a group's close_group jobs.
@@ -75,11 +76,13 @@ func NewCloser(opts CloserOptions) *Closer {
 // group; it locks the group and decides how it ends:
 //
 //   - When every alert in the group has recovered, the group closes as
-//     resolved.
+//     resolved, and its running watchers end: alert watchers recover,
+//     the others stop with group_resolved.
 //   - When the window has ended and no watcher runs, the group closes as
 //     window_ended.
-//   - When the window has ended but a watcher runs, the group stays open;
-//     the watcher's end enqueues the job again.
+//   - When the window has ended but a watcher runs, the group stays open,
+//     and the job gives up its unique key, so the end of the last watcher
+//     can enqueue it again.
 //   - When an event moved the window on since, the job enqueues itself
 //     again for the new end.
 //
@@ -125,7 +128,10 @@ func (c *Closer) decide(ctx context.Context, tx pgx.Tx, job db.Job, id uuid.UUID
 	}
 
 	if recovered {
-		// TODO: [SK-31] Stop the group's running watchers with group_resolved.
+		if _, err := watch.EndGroupResolved(ctx, tx, grp.ID, c.now(), c.log); err != nil {
+			return fmt.Errorf("end the watchers: %w", err)
+		}
+
 		if err := closeGroup(ctx, c.log, queries, grp.ID, ClosedResolved); err != nil {
 			return fmt.Errorf("resolve: %w", err)
 		}
@@ -145,12 +151,36 @@ func (c *Closer) decide(ctx context.Context, tx pgx.Tx, job db.Job, id uuid.UUID
 		return nil
 	}
 
-	if watchersRunning(grp) {
+	watching, err := watch.HasRunning(ctx, tx, grp.ID, c.now())
+	if err != nil {
+		return fmt.Errorf("check the watchers: %w", err)
+	}
+
+	if watching {
+		// The last watcher to end enqueues the job again, with the same
+		// key, which must be free by then.
+		if err := queue.ReleaseUniqueKey(ctx, tx, job); err != nil {
+			return fmt.Errorf("give up the unique key: %w", err)
+		}
+
 		return nil
 	}
 
 	if err := closeGroup(ctx, c.log, queries, grp.ID, ClosedWindowEnded); err != nil {
 		return fmt.Errorf("end the window: %w", err)
+	}
+
+	return nil
+}
+
+// EnqueueClose adds a close_group job for the group with id, to run at
+// once, in q. A watcher that reached a final state calls it, so a group
+// kept open only for its watchers closes when the last one ends. A job
+// that is pending or running for the group already counts as added; it
+// locks the group, so it sees the watcher's change once q commits.
+func EnqueueClose(ctx context.Context, q db.DBTX, id uuid.UUID) error {
+	if err := enqueueClose(ctx, q, id, time.Time{}, windowKey(id)); err != nil {
+		return fmt.Errorf("group %s: %w", id, err)
 	}
 
 	return nil

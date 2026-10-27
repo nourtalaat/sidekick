@@ -19,6 +19,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/publish"
 	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // SpanName is the name of the span of grouping one event.
@@ -166,28 +167,24 @@ func (g *Grouper) Group(ctx context.Context, tx pgx.Tx, ev db.Event, rt Route) (
 // group, or opens one. It reports false when another transaction opened a
 // group for fp first, so the caller tries again and joins that one.
 func (g *Grouper) tryGroup(ctx context.Context, tx pgx.Tx, ev db.Event, rt Route, fp string) (Result, bool, error) {
-	queries := db.New(tx)
-
-	open, err := queries.LockOpenEventGroup(ctx, fp)
+	open, err := db.New(tx).LockOpenEventGroup(ctx, fp)
 
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 	case err != nil:
 		return Result{}, false, fmt.Errorf("find the open group: %w", err)
-	case joinable(open, ev, rt):
-		res, err := g.join(ctx, tx, open, ev, rt)
+	default:
+		res, joined, err := g.joinOrClose(ctx, tx, open, ev, rt)
 		if err != nil {
-			return Result{}, false, fmt.Errorf("join group %s: %w", open.ID, err)
+			return Result{}, false, fmt.Errorf("group %s: %w", open.ID, err)
 		}
 
-		return res, true, nil
-	default:
-		if err := closeGroup(ctx, g.log, queries, open.ID, ClosedWindowEnded); err != nil {
-			return Result{}, false, fmt.Errorf("close group %s: %w", open.ID, err)
+		if joined {
+			return res, true, nil
 		}
 	}
 
-	related, found, err := g.lockRelated(ctx, queries, ev, rt)
+	related, found, err := g.lockRelated(ctx, tx, ev, rt)
 	if err != nil {
 		return Result{}, false, fmt.Errorf("find a related group: %w", err)
 	}
@@ -204,17 +201,43 @@ func (g *Grouper) tryGroup(ctx context.Context, tx pgx.Tx, ev db.Event, rt Route
 	return g.open(ctx, tx, ev, rt, fp)
 }
 
+// joinOrClose joins ev to grp, the open group with ev's fingerprint, when
+// ev may still join it. Otherwise it closes grp as window_ended and
+// reports false, so the caller looks further.
+func (g *Grouper) joinOrClose(ctx context.Context, tx pgx.Tx, grp db.EventGroup, ev db.Event, rt Route) (Result, bool, error) {
+	watching, err := watch.HasRunning(ctx, tx, grp.ID, time.Now())
+	if err != nil {
+		return Result{}, false, fmt.Errorf("look for running watchers: %w", err)
+	}
+
+	if !joinable(grp, ev, rt, watching) {
+		if err := closeGroup(ctx, g.log, db.New(tx), grp.ID, ClosedWindowEnded); err != nil {
+			return Result{}, false, fmt.Errorf("close the group: %w", err)
+		}
+
+		return Result{}, false, nil
+	}
+
+	res, err := g.join(ctx, tx, grp, ev, rt)
+	if err != nil {
+		return Result{}, false, fmt.Errorf("join the group: %w", err)
+	}
+
+	return res, true, nil
+}
+
 // lockRelated finds and locks the open group of rt that ev joins as a
 // related event: the one of ev's service or a service related to it, whose
 // newest event is at most rt.RelatedWindow older than ev, and that ev may
-// still join. It reports false when there is none, when rt has no related
-// window, or when ev names no service.
-func (g *Grouper) lockRelated(ctx context.Context, queries *db.Queries, ev db.Event, rt Route) (db.EventGroup, bool, error) {
+// still join, because its window has not ended or a watcher runs. It
+// reports false when there is none, when rt has no related window, or
+// when ev names no service.
+func (g *Grouper) lockRelated(ctx context.Context, tx pgx.Tx, ev db.Event, rt Route) (db.EventGroup, bool, error) {
 	if rt.RelatedWindow <= 0 || ev.Service == nil || *ev.Service == "" {
 		return db.EventGroup{}, false, nil
 	}
 
-	grp, err := queries.LockRelatedEventGroup(ctx, db.LockRelatedEventGroupParams{
+	grp, err := db.New(tx).LockRelatedEventGroup(ctx, db.LockRelatedEventGroupParams{
 		Services: g.catalog.Related(*ev.Service),
 		Since:    ev.ReceivedAt.Add(-rt.RelatedWindow),
 		Route:    rt.Name,
@@ -225,9 +248,14 @@ func (g *Grouper) lockRelated(ctx context.Context, queries *db.Queries, ev db.Ev
 		return db.EventGroup{}, false, nil
 	case err != nil:
 		return db.EventGroup{}, false, fmt.Errorf("look up the open groups of related services: %w", err)
-	default:
-		return grp, joinable(grp, ev, rt), nil
 	}
+
+	watching, err := watch.HasRunning(ctx, tx, grp.ID, time.Now())
+	if err != nil {
+		return db.EventGroup{}, false, fmt.Errorf("look for running watchers of group %s: %w", grp.ID, err)
+	}
+
+	return grp, joinable(grp, ev, rt, watching), nil
 }
 
 // join adds ev to the open group grp, writes it to the inbox of the group's
@@ -308,24 +336,16 @@ func (g *Grouper) open(ctx context.Context, tx pgx.Tx, ev db.Event, rt Route, fp
 }
 
 // joinable reports whether ev joins the open group grp: it arrived before
-// the group's window ended, or a watcher keeps the group open. A group
-// without a window, opened before groups had one, ends rt.Window after its
-// newest event.
-func joinable(grp db.EventGroup, ev db.Event, rt Route) bool {
+// the group's window ended, or watching says a watcher keeps the group
+// open. A group without a window, opened before groups had one, ends
+// rt.Window after its newest event.
+func joinable(grp db.EventGroup, ev db.Event, rt Route, watching bool) bool {
 	end := grp.LastEventAt.Add(rt.Window)
 	if grp.WindowUntil != nil {
 		end = *grp.WindowUntil
 	}
 
-	return ev.ReceivedAt.Before(end) || watchersRunning(grp)
-}
-
-// watchersRunning reports whether grp has a running watcher, which keeps
-// it open after its window ends.
-//
-// TODO: [SK-31] Look up the group's running watchers once they exist.
-func watchersRunning(db.EventGroup) bool {
-	return false
+	return ev.ReceivedAt.Before(end) || watching
 }
 
 // markGrouped records that the event with id is in the group with groupID.

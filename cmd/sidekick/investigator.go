@@ -12,17 +12,14 @@ import (
 	"github.com/nourtalaat/sidekick/internal/model/instrument"
 	"github.com/nourtalaat/sidekick/internal/model/pricing"
 	"github.com/nourtalaat/sidekick/internal/queue"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // registerInvestigator runs the investigate jobs that the router enqueues
-// for each new investigation, with every source behind the tool guard and
-// every model connector wrapped with its span and metrics.
-func registerInvestigator(a *app.App) error {
-	guard, err := newGuard(a)
-	if err != nil {
-		return fmt.Errorf("set up the tool guard: %w", err)
-	}
-
+// for each new investigation, with every source behind guard, every model
+// connector wrapped with its span and metrics, and start_watcher through
+// watchers.
+func registerInvestigator(a *app.App, guard *tools.Guard, watchers *watch.ModelStarter) error {
 	cfg := a.Config()
 	prices := pricing.New(cfg.Model.PriceTable())
 
@@ -64,6 +61,7 @@ func registerInvestigator(a *app.App) error {
 			MaxCostMicros: cfg.Budgets.Daily.MaxCostMicros(),
 			Skip:          cfg.Budgets.Daily.OnDailyCap == config.OnDailyCapSkip,
 		},
+		Watchers:       watchers,
 		Logger:         a.Logger().With("component", "investigator"),
 		Metrics:        metrics,
 		TracerProvider: a.Telemetry().TracerProvider(),
