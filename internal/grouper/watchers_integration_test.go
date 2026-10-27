@@ -9,31 +9,24 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/store/storetest"
 	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
-// Watchers of the seeded group, as SQL, for the tests to insert.
+// Fixtures that add watchers and a recovery to the seeded group.
 const (
-	runningHTTPWatcher = `INSERT INTO watchers (id, group_id, name, origin, check_type, spec, interval_s, passes_to_recover, check_timeout_s, status, started_at, deadline)
-		VALUES ('0192d3a4-0000-7000-8000-0000000000d1', '0192d3a4-0000-7000-8000-0000000000b1', 'health', 'route', 'http',
-		        '{"url": "http://127.0.0.1/healthz"}', 30, 2, 10, 'running', '2026-10-26 09:00:00+00', '2100-01-01 00:00:00+00')`
-	runningAlertWatcher = `INSERT INTO watchers (id, group_id, name, origin, check_type, spec, interval_s, passes_to_recover, check_timeout_s, status, started_at, deadline)
-		VALUES ('0192d3a4-0000-7000-8000-0000000000d2', '0192d3a4-0000-7000-8000-0000000000b1', 'cleared', 'route', 'alert',
-		        '{}', 30, 1, 10, 'running', '2026-10-26 09:00:00+00', '2100-01-01 00:00:00+00')`
-	pastDeadlineWatcher = `INSERT INTO watchers (id, group_id, name, origin, check_type, spec, interval_s, passes_to_recover, check_timeout_s, status, started_at, deadline)
-		VALUES ('0192d3a4-0000-7000-8000-0000000000d3', '0192d3a4-0000-7000-8000-0000000000b1', 'late', 'route', 'http',
-		        '{"url": "http://127.0.0.1/healthz"}', 30, 2, 10, 'running', '2026-10-26 08:00:00+00', '2026-10-26 09:00:00+00')`
-	// recoveryOfDisk is the recovery of the seeded group's only alert.
-	recoveryOfDisk = `INSERT INTO events (id, intake, key, kind, trusted, alert_name, service, labels, fingerprint, status, route, group_id, received_at)
-		VALUES ('0192d3a4-0000-7000-8000-000000000009', 'grafana', 'disk-1-resolved', 'resolved', false, 'DiskFull', 'db',
-		        '{}', 'fp-disk', 'grouped', 'default', '0192d3a4-0000-7000-8000-0000000000b1', '2026-10-26 09:20:00+00')`
+	runningHTTPWatcher  = "fixture/watcher-http.sql"
+	runningAlertWatcher = "fixture/watcher-alert.sql"
+	pastDeadlineWatcher = "fixture/watcher-past-deadline.sql"
+	recoveryOfDisk      = "fixture/recovery-of-disk.sql"
 )
 
 func TestCloseGroupWithWatchers(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
+		name string
+		// prepare are the fixtures loaded first.
 		prepare    []string
 		wantStatus string
 		wantReason *string
@@ -72,9 +65,8 @@ func TestCloseGroupWithWatchers(t *testing.T) {
 
 			h := setup(t)
 
-			for _, sql := range tt.prepare {
-				_, err := h.pool.Exec(t.Context(), sql)
-				require.NoError(t, err)
+			for _, fixture := range tt.prepare {
+				storetest.LoadFixture(t, h.pool, fixture)
 			}
 
 			require.NoError(t, enqueueClose(t.Context(), h.pool, diskGroup, seededWindowEnd, windowKey(diskGroup)))
@@ -114,10 +106,8 @@ func TestGroupClosesWhenTheLastWatcherEnds(t *testing.T) {
 
 			h := setup(t)
 
-			for _, sql := range []string{runningHTTPWatcher, runningAlertWatcher} {
-				_, err := h.pool.Exec(t.Context(), sql)
-				require.NoError(t, err)
-			}
+			storetest.LoadFixture(t, h.pool, runningHTTPWatcher)
+			storetest.LoadFixture(t, h.pool, runningAlertWatcher)
 
 			closer := NewCloser(CloserOptions{Pool: h.pool, Now: func() time.Time { return seededWindowEnd.Add(time.Second) }})
 
@@ -170,8 +160,7 @@ func TestGroupJoinsAfterTheWindowWhileAWatcherRuns(t *testing.T) {
 			require.NoError(t, err)
 
 			if tt.watcher {
-				_, err = h.pool.Exec(t.Context(), runningHTTPWatcher)
-				require.NoError(t, err)
+				storetest.LoadFixture(t, h.pool, runningHTTPWatcher)
 			}
 
 			res, err := h.group(t, diskRouted, Route{Name: "default", Window: window})
