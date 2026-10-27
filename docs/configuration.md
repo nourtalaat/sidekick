@@ -686,9 +686,42 @@ investigations:
 
 [Investigations in Slack](slack.md) describes how to set up the app.
 
+### `teams`
+
+```yaml
+teams:
+  appID: 00000000-1111-2222-3333-444444444444      # the bot's Microsoft App ID; required
+  tenantID: 55555555-6666-7777-8888-999999999999   # required
+  clientSecret: { name: sidekick-teams, key: clientSecret }   # or workloadIdentity: true
+  workloadIdentity: false
+  trustedBots: ["28:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"]  # bots whose messages can be trusted
+  serviceURL: https://smba.trafficmanager.net/teams/        # optional
+```
+
+The section sets up the Microsoft Teams bot, an Azure Bot resource of
+type single tenant or user-assigned managed identity.
+
+- `appID` is the bot's Microsoft App ID: the client ID of its Microsoft
+  Entra app registration or managed identity.
+- `tenantID` is the Microsoft Entra tenant of the bot and the teams it is
+  in. Messages from any other tenant are refused.
+- The bot gets its tokens in one of two ways; set exactly one:
+  - `clientSecret` names a client secret of the app registration.
+  - `workloadIdentity: true` uses Microsoft Entra Workload ID on AKS: the
+    token file in `AZURE_FEDERATED_TOKEN_FILE`, with a federated credential
+    for Sidekick's service account on the app registration or managed
+    identity. [Cloud credentials](install.md#cloud-credentials) shows how
+    to set it up with the chart.
+- `trustedBots` lists the Teams IDs of bots (`28:` and the bot's app ID)
+  whose messages are trusted in a listener marked `trusted: true`. Every
+  other message is untrusted.
+- `serviceURL` is the Bot Framework service URL for messages that do not
+  answer a Teams message, such as the result of a webhook alert. It must
+  be https and end in `/`.
+
 ### `listeners`
 
-A listener picks the messages in one Slack channel that start an
+A listener picks the messages in one Slack or Teams channel that start an
 investigation. The listener's name is the event's intake, so a route can
 select its events with `match.intake`.
 
@@ -719,6 +752,26 @@ text of its attachments and blocks added, one part per line.
 messages a listener sees and how events are built from them. Listeners
 need the Slack app to receive events, so `slack.appTokenSecret` (or
 `mode: events`) must be set.
+
+`source: teams` makes a listener watch a Teams channel instead, through
+the bot in the [`teams`](#teams) section. Its keys are the same, with
+Teams IDs:
+
+```yaml
+listeners:
+  teams-alerts:
+    source: teams                       # slack, the default, or teams
+    channel: "19:abc123@thread.tacv2"   # the channel ID; required
+    match:
+      sender:
+        kind: bot
+        bots: ["28:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"]   # bot IDs
+        users: [ffffffff-0000-1111-2222-333333333333]       # Microsoft Entra object IDs
+    trusted: true                       # trust the bots in teams.trustedBots
+```
+
+Mentions of the bot in Teams have the intake `teams-mention`, which no
+webhook endpoint or listener can be named.
 
 ### `outputs`
 
@@ -826,7 +879,7 @@ routes:
   - name: payments-latency
     priority: 10                       # default 100
     match:                             # every field that is set must match
-      intake: [alertmanager]           # webhook endpoint or listener names, or slack-mention
+      intake: [alertmanager]           # webhook endpoint or listener names, slack-mention or teams-mention
       labels: { team: payments }
       service: "checkout-*"            # a glob
       severity: [warning, critical]    # unknown, info, warning or critical
@@ -850,7 +903,8 @@ routes:
 ```
 
 A route without `strategy` uses the built-in `generic-alert` strategy.
-Events from mentions of `@Sidekick` have the intake `slack-mention`.
+Events from mentions of `@Sidekick` have the intake `slack-mention`, or
+`teams-mention` in Teams.
 
 The match runs on the event as it is stored, after
 [redaction](#redaction). `text` is matched against the event's title and
@@ -1251,7 +1305,7 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   are unique, start with a lower-case letter, hold only lower-case
   letters, digits and `-`, and are at most 24 characters long. No webhook
   endpoint and listener share a name, and neither is named
-  `slack-mention`, which mentions use.
+  `slack-mention` or `teams-mention`, which mentions use.
 - Every `provider`, source `type`, `adapter` and output `type` is one this
   version of Sidekick has, and its section passes that plugin's own checks.
 - `model.roles.investigate` is set, every role names a defined connector,
@@ -1271,6 +1325,12 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   of `human` or `bot`, bot and user IDs of the right shape, regular
   expressions that parse, `extract` patterns with at least one named
   group, and `trusted: true` only when `slack.trustedBots` is set.
+- `teams` has an `appID` and a `tenantID` of the right shape and exactly
+  one of `clientSecret` and `workloadIdentity: true`; `trustedBots` are
+  `28:` bot IDs, and `serviceURL` is https and ends in `/`. A listener's
+  `source` is `slack` or `teams`; listeners with `source: teams` need the
+  `teams` section, a Teams channel ID, Teams bot IDs and Microsoft Entra
+  object IDs, and `trusted: true` only with `teams.trustedBots`.
 - Every strategy file in `strategies.dir` is valid, and no two of them have
   the same name.
 - Every route is `read-only` with no `actions`, and its budgets, daily

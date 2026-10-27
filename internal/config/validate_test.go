@@ -169,6 +169,29 @@ func TestValidateFixtures(t *testing.T) {
 		}},
 		{file: "undefined-listener-intake", want: []string{`routes[0].match.intake[0]: intake "alerst" is not defined (did you mean "alerts"?)`}},
 		{file: "mention-without-slack", want: []string{`routes[0].match.intake[0]: intake "slack-mention" is not defined`}},
+		// Teams bot and listeners
+		{file: "teams-bad-values", want: []string{
+			"teams: set exactly one of clientSecret and workloadIdentity, not both",
+			`teams.appID: expected a client ID such as 00000000-1111-2222-3333-444444444444, got "sidekick-bot"`,
+			`teams.serviceURL: expected an https URL ending in "/", such as https://smba.trafficmanager.net/teams/, got "http://smba.trafficmanager.net/teams"`,
+			`teams.tenantID: expected a tenant ID such as 00000000-1111-2222-3333-444444444444, got "contoso.onmicrosoft.com"`,
+			`teams.trustedBots[0]: expected a bot ID such as 28:00000000-1111-2222-3333-444444444444, got "Grafana"`,
+		}},
+		{file: "teams-without-credentials", want: []string{
+			"teams: set clientSecret or workloadIdentity: true, so the bot can get tokens to post with",
+			"teams.appID: required",
+			"teams.tenantID: required",
+		}},
+		{file: "teams-listener-problems", want: []string{
+			`listeners.chat.source: expected slack or teams, got "team" (did you mean "teams"?)`,
+			`listeners.teams-alerts.channel: expected a Teams channel ID such as 19:abc123@thread.tacv2, got "#alerts"`,
+			`listeners.teams-alerts.match.sender.bots[0]: expected a bot ID such as 28:00000000-1111-2222-3333-444444444444, got "B01ABCDEF"`,
+			`listeners.teams-alerts.match.sender.users[0]: expected a user's Microsoft Entra object ID such as 00000000-1111-2222-3333-444444444444, got "U01ABCDEF"`,
+			"listeners.teams-alerts.trusted: has no effect without teams.trustedBots, the bots whose messages are trusted",
+			`listeners.teams-mention: name "teams-mention" is reserved for events from mentions of Sidekick in Teams`,
+		}},
+		{file: "teams-listeners-without-teams", want: []string{"listeners: listeners with source teams need the teams section, the Teams bot that receives their messages"}},
+		{file: "teams-mention-without-teams", want: []string{`routes[0].match.intake[0]: intake "teams-mention" is not defined`}},
 		{file: "negative-price", want: []string{"model.prices.claude-opus-5-5.inputPerMTok: must not be negative"}},
 		// Watchers
 		{file: "watch-http", want: []string{
@@ -226,6 +249,7 @@ func TestValidateValidFixtures(t *testing.T) {
 	}{
 		{name: "minimal", data: func(t *testing.T) []byte { t.Helper(); return readFixture(t, "valid/minimal.yaml") }},
 		{name: "example", data: exampleYAML},
+		{name: "teams", data: func(t *testing.T) []byte { t.Helper(); return readFixture(t, "valid/teams.yaml") }},
 	}
 
 	for _, tt := range tests {
