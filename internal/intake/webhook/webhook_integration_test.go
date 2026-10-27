@@ -10,8 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/nourtalaat/sidekick/internal/intake"
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
@@ -282,6 +284,80 @@ func TestHooks(t *testing.T) {
 			tt.check(t, h)
 		})
 	}
+}
+
+func TestDeliver(t *testing.T) {
+	t.Parallel()
+
+	alertmanager := readFixture(t, "requests/alertmanager-three-alerts.json")
+
+	tests := []struct {
+		name     string
+		endpoint string
+		body     []byte
+		// before is delivered first, to the same endpoint.
+		before  []byte
+		wantNew int
+		wantErr string
+	}{
+		{name: "new events need no authentication", endpoint: "alertmanager", body: alertmanager, wantNew: 3},
+		{name: "a repeated delivery stores nothing new", endpoint: "alertmanager", before: alertmanager, body: alertmanager, wantNew: 0},
+		{name: "an endpoint that is not configured", endpoint: "nope", body: alertmanager, wantErr: `deliver to "nope": the endpoint is not configured`},
+		{name: "a payload the adapter cannot parse", endpoint: "alertmanager", body: []byte(`{"version": "3"}`), wantErr: `deliver to "alertmanager": parse:`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := setup(t)
+			at := time.Date(2026, 5, 4, 10, 20, 0, 0, time.UTC)
+
+			if tt.before != nil {
+				_, err := h.handler.Deliver(t.Context(), intake.Request{Endpoint: tt.endpoint, Body: tt.before, ReceivedAt: at})
+				require.NoError(t, err)
+			}
+
+			before := len(h.events(t))
+
+			ids, err := h.handler.Deliver(t.Context(), intake.Request{Endpoint: tt.endpoint, Body: tt.body, ReceivedAt: at})
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				require.Len(t, h.events(t), before, "nothing is stored")
+
+				return
+			}
+
+			require.NoError(t, err)
+			require.Len(t, ids, tt.wantNew)
+
+			events := h.events(t)
+			require.Len(t, events, before+tt.wantNew)
+
+			for _, ev := range events {
+				require.Equal(t, at, ev.ReceivedAt.UTC(), "the event arrives at the request's time")
+			}
+
+			for _, id := range ids {
+				require.Contains(t, h.jobs(t), routeJob(eventByID(t, events, id)), "each new event has its route_event job")
+			}
+		})
+	}
+}
+
+// eventByID returns the event with id from events.
+func eventByID(t *testing.T, events []db.Event, id uuid.UUID) db.Event {
+	t.Helper()
+
+	for _, ev := range events {
+		if ev.ID == id {
+			return ev
+		}
+	}
+
+	require.Failf(t, "no such event", "event %s", id)
+
+	return db.Event{}
 }
 
 // requireNothingStored checks that no event and no job was written.
