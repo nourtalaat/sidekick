@@ -1,0 +1,5 @@
+# Job mode: a Role and a RoleBinding for Sidekick's service account, and a
+# NetworkPolicy with no ingress and no egress for the Job pods.
+validator:
+  enabled: true
+  mode: job

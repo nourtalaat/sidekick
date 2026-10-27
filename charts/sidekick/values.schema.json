@@ -281,6 +281,28 @@
         "enabled": { "type": "boolean" },
         "minAvailable": { "type": ["integer", "string"] }
       }
+    },
+    "validator": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "mode": { "enum": ["sidecar", "job"] },
+        "allowDownloads": { "type": "boolean" },
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["repository"],
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string", "not": { "const": "latest" } },
+            "digest": { "type": "string", "pattern": "^(sha256:[a-f0-9]{64})?$" },
+            "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+          }
+        },
+        "resources": { "$ref": "#/definitions/resources" },
+        "workDirSizeLimit": { "$ref": "#/definitions/quantity" }
+      }
     }
   }
 }
