@@ -1,0 +1,153 @@
+---
+# Source: sidekick/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sidekick
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: server
+spec:
+  replicas: 1
+  # A new pod starts before an old one stops, and an old one hands its jobs
+  # back to the queue when it stops, so investigations go on.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sidekick
+      app.kubernetes.io/instance: sidekick
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      annotations:
+        # A config change rolls the pods.
+        checksum/config: 11484d43f67ee3747dc0dc7dc1f7785262bff4e44fac47d37ed9cafdb17e48a7
+      labels:
+        app.kubernetes.io/name: sidekick
+        app.kubernetes.io/instance: sidekick
+        app.kubernetes.io/component: server
+    spec:
+      serviceAccountName: sidekick
+      automountServiceAccountToken: true
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        fsGroup: 65532
+        runAsGroup: 65532
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # Sidekick exits when the database does not answer at start-up, so
+        # with the bundled Postgres it waits for it first.
+        - name: wait-for-postgres
+          image: docker.io/library/postgres:18.6
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - until pg_isready -h sidekick-postgres -p 5432 -U sidekick; do sleep 2; done
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 64Mi }
+      containers:
+        - name: sidekick
+          image: ghcr.io/nourtalaat/sidekick:0.1.0
+          imagePullPolicy: IfNotPresent
+          args: [serve, --config, /etc/sidekick/sidekick.yaml]
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          env:
+            - name: GOMEMLIMIT
+              value: "460MiB"
+            # sidekick test-alert labels its alert with the pod it runs in.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef: { fieldPath: metadata.name }
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef: { fieldPath: metadata.namespace }
+          startupProbe:
+            httpGet: { path: /healthz, port: metrics }
+            periodSeconds: 5
+            failureThreshold: 24
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet: { path: /healthz, port: metrics }
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 2
+          readinessProbe:
+            httpGet: { path: /readyz, port: metrics }
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 6
+          resources:
+            limits:
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: config
+              mountPath: /etc/sidekick
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            - name: secret-0
+              mountPath: /var/run/secrets/sidekick/sidekick-anthropic
+              readOnly: true
+            - name: secret-1
+              mountPath: /var/run/secrets/sidekick/sidekick-slack
+              readOnly: true
+            - name: secret-2
+              mountPath: /var/run/secrets/sidekick/sidekick-webhook
+              readOnly: true
+            - name: secret-3
+              mountPath: /var/run/secrets/sidekick/sidekick-postgres
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: sidekick
+        - name: tmp
+          emptyDir: {}
+        - name: secret-0
+          secret:
+            secretName: sidekick-anthropic
+        - name: secret-1
+          secret:
+            secretName: sidekick-slack
+        - name: secret-2
+          secret:
+            secretName: sidekick-webhook
+        - name: secret-3
+          secret:
+            secretName: sidekick-postgres
+
+

@@ -231,6 +231,11 @@ type Grouping struct {
 	// the alert name, make the fingerprint of an alert. Empty means the
 	// fingerprint the intake gave the alert, which covers all its labels.
 	FingerprintLabels []string `yaml:"fingerprintLabels"`
+	// RelatedWindow lets an event join an open group of the same service,
+	// or of a service it depends on or that depends on it, when that
+	// group's newest event is at most this old. Dependencies come from the
+	// service catalog sources. Zero, the default, turns it off.
+	RelatedWindow time.Duration `yaml:"relatedWindow"`
 }
 
 // Match selects events for a route. Every field that is set must match.

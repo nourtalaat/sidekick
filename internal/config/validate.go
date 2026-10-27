@@ -468,10 +468,18 @@ func (v *validator) checkRouteRateLimit(path string, r *RateLimit) {
 	}
 }
 
-// checkGrouping checks that the window is positive and that each
+// checkGrouping checks that the window is positive, that the related
+// window is neither negative nor longer than the window, and that each
 // fingerprint label is named once.
 func (v *validator) checkGrouping(path string, g Grouping) {
 	v.positiveDuration(path+".window", g.Window)
+
+	switch {
+	case g.RelatedWindow < 0:
+		v.errs.add(path+".relatedWindow", "must not be negative")
+	case g.Window > 0 && g.RelatedWindow > g.Window:
+		v.errs.add(path+".relatedWindow", "%s is longer than the grouping window %s", g.RelatedWindow, g.Window)
+	}
 
 	seen := map[string]bool{}
 

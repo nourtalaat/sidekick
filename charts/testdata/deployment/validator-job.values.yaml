@@ -1,0 +1,5 @@
+# Job mode: no validator container, and the pods mount their service
+# account token, which Sidekick needs to create the Jobs.
+validator:
+  enabled: true
+  mode: job

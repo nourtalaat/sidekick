@@ -1,0 +1,6 @@
+# Downloads allowed, and the image pinned by digest.
+validator:
+  enabled: true
+  allowDownloads: true
+  image:
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000

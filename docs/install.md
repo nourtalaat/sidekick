@@ -104,7 +104,9 @@ cosign verify-attestation ghcr.io/nourtalaat/sidekick:0.1.0 --type spdxjson \
 The image is built for linux/amd64 and linux/arm64 on a distroless base.
 It runs as user 65532 with no shell, and the chart runs it with a
 read-only root filesystem and an `emptyDir` at `/tmp`. `LICENSE` and
-`NOTICE` are in `/usr/share/doc/sidekick/`.
+`NOTICE` are in `/usr/share/doc/sidekick/`. The validator image,
+`ghcr.io/nourtalaat/sidekick-validator`, is signed the same way; see
+[The monitor validator](validator.md#verifying-the-image).
 
 ## Production
 
@@ -301,6 +303,7 @@ every one, and the chart rejects unknown keys.
 | `mcpSidecars` | `[]` | stdio MCP servers behind a bridge: `name`, `image`, `args`, `env`, `port`, `healthPath`, `resources`, `volumeMounts`. |
 | `networkPolicy.enabled` | `true` | Network policies for Sidekick and the bundled Postgres. |
 | `rbac.kubernetesSource` | `true` | Read-only roles for each Kubernetes source that reads this cluster, made from its `namespaces` and `logs`; see [The Kubernetes source](sources/kubernetes.md#with-the-helm-chart). |
+| `validator.enabled`, `validator.mode` | `false`, `sidecar` | The monitor validator, as a sidecar or as Jobs; see [The monitor validator](validator.md). |
 | `pdb.enabled` | `true` | A PodDisruptionBudget with `pdb.minAvailable`. |
 | `metrics.serviceMonitor.enabled` | `false` | A ServiceMonitor. |
 | `ingress.enabled`, `httpRoute.enabled` | `false` | Expose `/hooks/` outside the cluster. |

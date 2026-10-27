@@ -238,3 +238,40 @@ pdb:
   # drain cannot finish.
   enabled: true
   minAvailable: 1
+
+# validator checks the monitor files a pull request action changes before
+# Sidekick opens the pull request (docs/validator.md). It runs the
+# validator image, which holds promtool, OpenTofu and a mirror of the
+# Datadog, SigNoz and Grafana providers.
+validator:
+  enabled: false
+  # mode says where validations run:
+  # - sidecar: a container in each Sidekick pod that listens on
+  #   127.0.0.1:8200. A NetworkPolicy applies to a whole pod, so it cannot
+  #   keep the sidecar off the network Sidekick uses; the validator keeps
+  #   its own tools from downloading anything instead.
+  # - job: Sidekick runs each validation as a Kubernetes Job in the
+  #   release's namespace, a few seconds slower. The chart lets Sidekick's
+  #   service account create those Jobs, and a NetworkPolicy keeps their
+  #   pods off the network. Pick it when you need that kept at the network
+  #   level. The Sidekick pods then mount their service account token.
+  mode: sidecar
+  # allowDownloads lets OpenTofu download providers that are not in the
+  # image's mirror, and remote modules, over HTTPS. In job mode the Job
+  # pods then get egress to port 443 and DNS.
+  allowDownloads: false
+  image:
+    repository: ghcr.io/nourtalaat/sidekick-validator
+    # tag defaults to the chart's appVersion.
+    tag: ""
+    # digest, such as sha256:..., pins the image exactly and wins over tag.
+    digest: ""
+    pullPolicy: IfNotPresent
+  # resources fit 2 validations at a time, each with an OpenTofu provider
+  # loaded.
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 1Gi }
+  # workDirSizeLimit bounds the emptyDir at /tmp that holds the files of
+  # running validations and the providers OpenTofu unpacks for them.
+  workDirSizeLimit: 2Gi
