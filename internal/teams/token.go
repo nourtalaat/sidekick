@@ -294,20 +294,11 @@ func NewTokens(opts TokenOptions) (*Tokens, error) {
 // is https, or http on a loopback host, so credentials never cross the
 // network unencrypted.
 func CheckBaseURL(raw string) error {
-	u, err := url.Parse(raw)
-
-	switch {
-	case err != nil:
-		return fmt.Errorf("parse %q: %w", raw, err)
-	case u.Host == "" || !strings.HasSuffix(u.Path, "/"):
-		return fmt.Errorf(`%q is not an absolute URL ending in "/"`, raw)
-	case u.Scheme == "https":
-		return nil
-	case u.Scheme == "http" && httpclient.IsLoopbackHost(u.Hostname()):
-		return nil
-	default:
-		return fmt.Errorf("%q must use https, or http only on a loopback host", raw)
+	if !strings.HasSuffix(raw, "/") {
+		return fmt.Errorf(`%q does not end in "/"`, raw)
 	}
+
+	return checkSecureURL(raw)
 }
 
 // refusal describes an error answer of the token endpoint. It names the
@@ -323,4 +314,23 @@ func refusal(status int, body tokenResponse) error {
 	}
 
 	return fmt.Errorf("Microsoft Entra ID refused the token request (HTTP %d): %s", status, what)
+}
+
+// checkSecureURL reports whether raw is an absolute https URL, or an http
+// one on a loopback host.
+func checkSecureURL(raw string) error {
+	u, err := url.Parse(raw)
+
+	switch {
+	case err != nil:
+		return fmt.Errorf("parse %q: %w", raw, err)
+	case u.Host == "":
+		return fmt.Errorf("%q is not an absolute URL", raw)
+	case u.Scheme == "https":
+		return nil
+	case u.Scheme == "http" && httpclient.IsLoopbackHost(u.Hostname()):
+		return nil
+	default:
+		return fmt.Errorf("%q must use https, or http only on a loopback host", raw)
+	}
 }

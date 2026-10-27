@@ -230,7 +230,7 @@ func TestNewTokens(t *testing.T) {
 		{
 			name:    "a login URL without a trailing slash",
 			change:  func(o *TokenOptions) { o.LoginURL = "https://login.example.com" },
-			wantErr: `ending in "/"`,
+			wantErr: `does not end in "/"`,
 		},
 		{
 			name:   "a loopback login URL over http",
