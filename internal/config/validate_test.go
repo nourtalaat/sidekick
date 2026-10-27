@@ -161,6 +161,10 @@ func TestValidateFixtures(t *testing.T) {
 			"watch.defaults.timeout: 5h0m0s is above watch.maxTimeout 4h0m0s",
 			"watch.maxPerGroup: must be positive",
 		}},
+		{file: "watcher-built-in-defaults", want: []string{
+			"the built-in default interval 30s is below routes[0].watcherLimits.minInterval 45s; set routes[0].watcherDefaults.interval or watch.defaults.interval",
+			"the built-in default timeout 1h0m0s is above watch.maxTimeout 30m0s; set watch.defaults.timeout",
+		}},
 		// Several problems, reported together and sorted by path.
 		{file: "three-errors", want: []string{
 			`report.minFalsePositiveConfidence: unknown confidence "hgh" (did you mean "high"?)`,

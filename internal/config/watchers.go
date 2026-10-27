@@ -19,6 +19,9 @@ const (
 	// strategyDefaultsPath is the path of a strategy's defaults inside
 	// its file.
 	strategyDefaultsPath = "watcherDefaults"
+	// builtInPath marks the level of the built-in defaults, which no field
+	// of the file holds, so its problems are reported with the fix.
+	builtInPath = "\x00built-in"
 )
 
 // allTypes are the check types a route allows when watcherLimits.types is
@@ -56,6 +59,15 @@ func (w Watch) bounds() watch.Bounds {
 	return watch.Bounds{Path: watchPath, MinInterval: w.MinInterval, MaxInterval: w.MaxInterval, MaxTimeout: w.MaxTimeout}
 }
 
+// defaultLevels returns the global defaults the file sets, then the
+// built-in ones for what it leaves out.
+func (w Watch) defaultLevels() []watch.Level {
+	return []watch.Level{
+		{Path: watchPath + ".defaults", Settings: w.Defaults},
+		{Path: builtInPath, Settings: watch.Complete(watch.Settings{})},
+	}
+}
+
 // checkWatchSettings checks the global watcher counts, bounds and
 // defaults, and the watcher settings of every route.
 func (v *validator) checkWatchSettings() {
@@ -70,16 +82,10 @@ func (v *validator) checkWatchSettings() {
 		v.errs.add(watchPath+".minInterval", "%s is above %s.maxInterval %s", w.MinInterval, watchPath, w.MaxInterval)
 	}
 
-	d := w.Defaults
-	v.positiveDuration(watchPath+".defaults.interval", d.Interval)
-	v.positiveDuration(watchPath+".defaults.timeout", d.Timeout)
-	v.positive(watchPath+".defaults.passesToRecover", d.PassesToRecover)
-	v.positiveDuration(watchPath+".defaults.checkTimeout", d.CheckTimeout)
-
 	checker := watcherChecker{cfg: v.cfg, errs: v.errs, seen: map[string]bool{}}
 
-	_, problems := watch.Resolve([]watch.Level{{Path: watchPath + ".defaults", Settings: d}}, []watch.Bounds{w.bounds()})
-	checker.add(problems)
+	_, problems := watch.Resolve(w.defaultLevels(), []watch.Bounds{w.bounds()})
+	checker.addDefaults(problems, "")
 
 	for i, r := range v.cfg.Routes {
 		checker.routePolicy(fmt.Sprintf("routes[%d]", i), r, strategyOf(v.strategies, r))
@@ -122,11 +128,10 @@ func (w watcherChecker) routePolicy(path string, r Route, st *strategy.Strategy)
 	w.checkLimits(limitsPath, r)
 	w.add(watch.Within(p.Bounds, global.bounds()))
 
-	globalDefaults := watch.Level{Path: watchPath + ".defaults", Settings: global.Defaults}
 	bounds := []watch.Bounds{p.Bounds, global.bounds()}
 
-	_, problems := watch.Resolve([]watch.Level{p.Defaults, globalDefaults}, bounds)
-	w.add(problems)
+	_, problems := watch.Resolve(append([]watch.Level{p.Defaults}, global.defaultLevels()...), bounds)
+	w.addDefaults(problems, path)
 
 	names := map[string]string{}
 
@@ -134,7 +139,7 @@ func (w watcherChecker) routePolicy(path string, r Route, st *strategy.Strategy)
 		at := fmt.Sprintf("%s.watchers[%d]", path, j)
 		w.checkName(at, def.Name, names)
 
-		levels := []watch.Level{{Path: at, Settings: def.WatcherSettings}, p.Defaults, globalDefaults}
+		levels := append([]watch.Level{{Path: at, Settings: def.WatcherSettings}, p.Defaults}, global.defaultLevels()...)
 		if d, ok := w.definition(at, def, watch.OriginRoute, levels, bounds, r); ok {
 			p.Definitions = append(p.Definitions, d)
 		}
@@ -161,13 +166,12 @@ func (w watcherChecker) strategyDefinitions(path string, r Route, st *strategy.S
 		defaults = *st.WatcherDefaults
 	}
 
-	globalDefaults := watch.Level{Path: watchPath + ".defaults", Settings: w.cfg.Watch.Defaults}
 	strategyDefaults := watch.Level{Path: strategyDefaultsPath, Settings: defaults}
 
 	var out []watch.Definition
 
 	for j, def := range st.Watchers {
-		levels := []watch.Level{{Path: fmt.Sprintf("watchers[%d]", j), Settings: def.WatcherSettings}, strategyDefaults, p.Defaults, globalDefaults}
+		levels := append([]watch.Level{{Path: fmt.Sprintf("watchers[%d]", j), Settings: def.WatcherSettings}, strategyDefaults, p.Defaults}, w.cfg.Watch.defaultLevels()...)
 		if d, ok := sub.definition(fmt.Sprintf("watchers[%d]", j), def, watch.OriginStrategy, levels, bounds, r); ok {
 			out = append(out, d)
 		}
@@ -296,6 +300,37 @@ func (w watcherChecker) checkName(at, name string, seen map[string]string) {
 func (w watcherChecker) add(problems []watch.Problem) {
 	for _, p := range problems {
 		w.addOnce(p.Path, p.Message)
+	}
+}
+
+// addDefaults records problems of resolved defaults once each. A problem
+// of a built-in default names no field, since the file sets none; it says
+// the value is built in and which fields can override it: the route's
+// watcherDefaults when routePath is set, and watch.defaults. The same
+// built-in problem found for several routes is recorded once, with the fix
+// of the first.
+func (w watcherChecker) addDefaults(problems []watch.Problem, routePath string) {
+	for _, p := range problems {
+		name, builtIn := strings.CutPrefix(p.Path, builtInPath+".")
+		if !builtIn {
+			w.addOnce(p.Path, p.Message)
+
+			continue
+		}
+
+		key := builtInPath + name + "\x00" + p.Message
+		if w.seen[key] {
+			continue
+		}
+
+		w.seen[key] = true
+
+		fix := watchPath + ".defaults." + name
+		if routePath != "" {
+			fix = routePath + ".watcherDefaults." + name + " or " + fix
+		}
+
+		w.errs.add("", "the built-in default %s %s; set %s", name, p.Message, fix)
 	}
 }
 

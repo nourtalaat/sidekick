@@ -308,6 +308,8 @@ type Watch struct {
 	// MaxTotal is the most watchers that run at once in the deployment.
 	MaxTotal int `yaml:"maxTotal"`
 	// Defaults are used when no route, strategy or watcher sets a value.
+	// After Load, the values the file leaves out hold the built-in
+	// defaults.
 	Defaults strategy.WatcherSettings `yaml:"defaults"`
 	// MinInterval, MaxInterval and MaxTimeout are the global bounds.
 	MinInterval time.Duration `yaml:"minInterval"`
@@ -534,6 +536,7 @@ func Parse(ctx context.Context, data []byte, opts LoadOptions) (*Config, error) 
 	}
 
 	cfg.resolveBudgets()
+	cfg.Watch.Defaults = watch.Complete(cfg.Watch.Defaults)
 	cfg.strategySet = v.strategies
 
 	return cfg, nil
@@ -596,12 +599,6 @@ func (t *Telemetry) setDefaults() {
 func (w *Watch) setDefaults() {
 	w.MaxPerGroup = watch.DefaultMaxPerGroup
 	w.MaxTotal = watch.DefaultMaxTotal
-	w.Defaults = strategy.WatcherSettings{
-		Interval:        watch.DefaultInterval,
-		Timeout:         watch.DefaultTimeout,
-		PassesToRecover: watch.DefaultPassesToRecover,
-		CheckTimeout:    watch.DefaultCheckTimeout,
-	}
 	w.MinInterval = watch.DefaultMinInterval
 	w.MaxInterval = watch.DefaultMaxInterval
 	w.MaxTimeout = watch.DefaultMaxTimeout

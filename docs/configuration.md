@@ -1145,15 +1145,18 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
 - Every `watch.http.allowHosts` entry is a host name, an IP address, or
   `*.` and a host name, and every `watch.http.allowPrivate` entry is a range
   in CIDR form or an IP address.
-- `watch.maxPerGroup`, `watch.maxTotal`, the global bounds and every
-  `watch.defaults` value are positive, and the defaults are inside the
-  global bounds. Each route's `watcherLimits` bounds are inside the global
+- `watch.maxPerGroup`, `watch.maxTotal` and the global bounds are
+  positive, no `watch.defaults` value is negative, and the defaults are
+  inside the global bounds. Each route's `watcherLimits` bounds are inside the global
   ones, its `types` are known check types, its `tools` are qualified tool
   names of its sources, and its `hosts` are inside `watch.http.allowHosts`.
 - Every default and watcher value, after the precedence above, is inside
   the route's and the global bounds. The error names the field and the
   bound, for example
   `routes[0].watchers[0].interval: 5s is below routes[0].watcherLimits.minInterval 15s`.
+  When the value is a built-in default that the file does not set, the
+  error says so and names the fields that can override it, for example
+  `the built-in default interval 30s is below routes[0].watcherLimits.minInterval 45s; set routes[0].watcherDefaults.interval or watch.defaults.interval`.
 - Watcher names are unique within a route, each check passes its own
   checks, an `http` check's host is in `watch.http.allowHosts`, and a `tool`
   check's source is one of the route's.
