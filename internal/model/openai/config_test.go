@@ -89,6 +89,36 @@ func TestConfigValidate(t *testing.T) {
 			wantErrs: []string{`baseURL: "localhost:11434/v1" must be an absolute http or https URL`},
 		},
 		{
+			name: "https baseURL on another host with a key",
+			cfg:  Config{Settings: model.Settings{Model: "gpt-6-sol"}, APIKeySecret: keyRef, BaseURL: "https://llm-gateway.internal/v1"},
+		},
+		{
+			name: "http baseURL on localhost with a key",
+			cfg:  Config{Settings: model.Settings{Model: "qwen3.8:27b"}, APIKeySecret: keyRef, BaseURL: ollamaURL},
+		},
+		{
+			name: "http baseURL on 127.0.0.0/8 with a key",
+			cfg:  Config{Settings: model.Settings{Model: "qwen3.8:27b"}, APIKeySecret: keyRef, BaseURL: "http://127.0.0.2:8000/v1"},
+		},
+		{
+			name: "http baseURL on ::1 with a key",
+			cfg:  Config{Settings: model.Settings{Model: "qwen3.8:27b"}, APIKeySecret: keyRef, BaseURL: "http://[::1]:8000/v1"},
+		},
+		{
+			name:     "http baseURL on another host with a key",
+			cfg:      Config{Settings: model.Settings{Model: "qwen3.8:27b"}, APIKeySecret: keyRef, BaseURL: "http://vllm.ml.svc:8000/v1"},
+			wantErrs: []string{`baseURL: "http://vllm.ml.svc:8000/v1" must use https when apiKeySecret is set`},
+		},
+		{
+			name:     "http baseURL on a host that only starts with localhost, with a key",
+			cfg:      Config{Settings: model.Settings{Model: "qwen3.8:27b"}, APIKeySecret: keyRef, BaseURL: "http://localhost.example.com/v1"},
+			wantErrs: []string{`baseURL: "http://localhost.example.com/v1" must use https when apiKeySecret is set`},
+		},
+		{
+			name: "http baseURL on another host without a key",
+			cfg:  Config{Settings: model.Settings{Model: "qwen3.8:27b"}, BaseURL: "http://vllm.ml.svc:8000/v1"},
+		},
+		{
 			name: "preset on Ollama with no key",
 			cfg:  Config{Settings: model.Settings{Model: "qwen3.8:27b", Effort: model.EffortLow}, BaseURL: ollamaURL},
 		},
