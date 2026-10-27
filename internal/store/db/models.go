@@ -122,6 +122,17 @@ type Job struct {
 	FinishedAt  *time.Time
 }
 
+type Listener struct {
+	Name         string
+	SlackChannel string
+	Match        json.RawMessage
+	Trusted      bool
+	Enabled      bool
+	Version      int32
+	UpdatedBy    *string
+	UpdatedAt    time.Time
+}
+
 type OutputRef struct {
 	InvestigationID uuid.UUID
 	Sink            string
@@ -139,6 +150,16 @@ type PublishState struct {
 	Body            json.RawMessage
 	UpdatedAt       time.Time
 	UpdateSeq       *int64
+}
+
+type Route struct {
+	Name      string
+	Priority  int32
+	Spec      json.RawMessage
+	Enabled   bool
+	Version   int32
+	UpdatedBy *string
+	UpdatedAt time.Time
 }
 
 type Step struct {
