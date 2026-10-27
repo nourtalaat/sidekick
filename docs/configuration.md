@@ -600,12 +600,35 @@ each route lists the outputs its investigations go to in `outputs`.
 ```yaml
 outputs:
   slack-thread: { type: slack, channel: "#alerts" }   # apiURL is optional
+  linear-comment:
+    type: linear.comment
+    apiKeySecret: { name: sidekick-linear, key: apiKey }
+    workspace: acme
+    teams: [OPS]
+  jira-comment:
+    type: jira.comment
+    url: https://acme.atlassian.net
+    email: sidekick@acme.example
+    apiTokenSecret: { name: sidekick-jira, key: apiToken }
+    projects: [OPS]
+  callback:
+    type: webhook
+    url: https://hooks.internal.example.com/sidekick
+    hmacSecret: { name: sidekick-hooks, key: callback }
 ```
 
-This release has one type, `slack`, which posts one message per
-investigation and edits it as the investigation runs.
-[Investigations in Slack](slack.md) describes its keys, what it posts and
-how to set up the Slack app.
+The types:
+
+- `slack` posts one message per investigation and edits it as the
+  investigation runs. [Investigations in Slack](slack.md) describes its
+  keys, what it posts and how to set up the Slack app.
+- `linear.comment` and `jira.comment` post the result as a comment on the
+  Linear or Jira issue the alert names. [Results on tickets](tickets.md)
+  describes their keys and how they find the issue.
+- `webhook` posts the final result and watcher events as JSON to `url`,
+  signed with `hmacSecret` the way webhook intake checks deliveries.
+  [Webhook callbacks](webhook-callbacks.md) describes the body, the
+  headers and how to check them.
 
 ### `strategies`
 

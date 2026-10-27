@@ -1,0 +1,42 @@
+{
+  "alert": {
+    "alertName": "CheckoutLatencyHigh",
+    "fingerprint": "3f2a9c",
+    "intake": "alertmanager",
+    "kind": "alert",
+    "labels": {
+      "env": "prod",
+      "service": "checkout-api"
+    },
+    "links": [
+      {
+        "title": "Source",
+        "url": "https://prometheus.example.com/graph"
+      }
+    ],
+    "receivedAt": "2026-10-26T10:04:00Z",
+    "service": "checkout-api",
+    "severity": "critical",
+    "startsAt": "2026-10-26T10:02:00Z",
+    "title": "checkout-api p99 latency above 2s"
+  },
+  "deliveryId": "0199c9d2-7f00-7000-8000-000000000001:watcher.recovered:6",
+  "event": "watcher.recovered",
+  "events": 2,
+  "investigationId": "0199c9d2-7f00-7000-8000-000000000001",
+  "seq": 6,
+  "url": "https://sidekick.example.com/investigations/0199c9d2-7f00-7000-8000-000000000001",
+  "watcher": {
+    "checkType": "http",
+    "checks": 9,
+    "endedAt": "2026-10-26T10:10:00Z",
+    "id": "0199c9d2-8a00-7000-8000-000000000002",
+    "lastCheckAt": "2026-10-26T10:10:00Z",
+    "lastResult": "HTTP 200",
+    "name": "checkout-health",
+    "passesInARow": 2,
+    "passesToRecover": 2,
+    "startedAt": "2026-10-26T10:06:00Z",
+    "status": "recovered"
+  }
+}

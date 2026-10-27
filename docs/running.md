@@ -151,6 +151,7 @@ process (`process_*`) metrics, this release has:
 | `sidekick_source_up` | gauge | `source` | 1 when a source is connected and its circuit breaker is closed, 0 otherwise. |
 | `sidekick_guard_keys_full_total` | counter | none | Guarded calls that are not source tool calls, such as watcher HTTP checks, refused because the guard already held limits for 1024 targets, all in use. |
 | `sidekick_slack_api_errors_total` | counter | `method`, `error` | Failed Slack Web API calls by method, such as `chat.update`, and error: Slack's error code, such as `channel_not_found`, or `ratelimited`, `request_failed`, `http_status`, `bad_response` or `other`. See [Investigations in Slack](slack.md). |
+| `sidekick_output_api_errors_total` | counter | `type`, `operation`, `error` | Failed calls of the ticket and webhook outputs to the service they post to, by output type, such as `linear.comment` or `webhook`, operation, such as `comment_create`, and error: `rate_limited`, `request_failed`, `bad_response`, `api_error`, or `http_` and the status, such as `http_503`. See [Results on tickets](tickets.md) and [Webhook callbacks](webhook-callbacks.md). |
 
 ## Logs
 
