@@ -80,7 +80,9 @@ func (l Limits) params() (limitParams, error) {
 
 // claimLimited leases the oldest ready job of kind whose route is under its
 // limit, when the global limit allows one more. It returns false when no
-// job may start now.
+// job may start now. When the commit fails, it returns the job it leased
+// and true with the error: the commit may have gone through, so the caller
+// hands the job back with handBackLost.
 func claimLimited(ctx context.Context, pool *pgxpool.Pool, worker, kind string, lease time.Duration, limits limitParams) (job db.Job, claimed bool, err error) {
 	err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
 		queries := db.New(tx)
@@ -111,7 +113,7 @@ func claimLimited(ctx context.Context, pool *pgxpool.Pool, worker, kind string, 
 		return nil
 	})
 	if err != nil {
-		return db.Job{}, false, fmt.Errorf("claim %s job: %w", kind, err)
+		return job, claimed, fmt.Errorf("claim %s job: %w", kind, err)
 	}
 
 	return job, claimed, nil

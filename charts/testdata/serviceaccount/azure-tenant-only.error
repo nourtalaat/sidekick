@@ -1,0 +1,1 @@
+serviceAccount.workloadIdentity.azureTenantId needs serviceAccount.workloadIdentity.azureClientId
