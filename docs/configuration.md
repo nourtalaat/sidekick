@@ -259,7 +259,9 @@ claude-on-aws:
 
 - **Credentials** come from the default AWS credential chain: IRSA or EKS
   Pod Identity on EKS, otherwise environment variables, the shared config
-  files or the instance role. There is no key in the config. The role
+  files or the instance role. There is no key in the config;
+  [Cloud credentials](install.md#cloud-credentials) shows how to give the
+  pod an IAM role. The role
   needs `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream`
   on the model or inference profile. A Bedrock API key in
   `AWS_BEARER_TOKEN_BEDROCK` is not used.

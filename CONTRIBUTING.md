@@ -73,8 +73,8 @@ Run `make help` for the full list. The main ones:
 | `make build` | Builds `bin/sidekick` with the version and commit set. |
 | `make vulncheck` | govulncheck on the code and its dependencies. |
 | `make helm-lint` | `helm lint --strict` of the chart, which checks `values.schema.json`, with the quick-start values and each file in `charts/sidekick/ci/`. |
-| `make helm-test` | Compares `helm template` of the quick-start values with `charts/testdata/quickstart.golden.yaml`, and runs `sidekick config validate` on the `sidekick.yaml` each example values file renders. |
-| `make helm-golden` | Rewrites the golden file after a chart change you intend. |
+| `make helm-test` | Compares `helm template` of the quick-start values with `charts/testdata/quickstart.golden.yaml`, and runs `sidekick config validate` on the `sidekick.yaml` each example values file renders. Each `charts/testdata/<template>/<case>.values.yaml` is layered on the quick-start values and must render `templates/<template>.yaml` as `<case>.golden.yaml`, or fail with the message in `<case>.error`. |
+| `make helm-golden` | Rewrites the golden files after a chart change you intend. |
 | `make image` | Builds the container image for linux/amd64 and linux/arm64 with Docker, or Podman when Docker is missing. `IMAGE_PLATFORMS=linux/arm64` builds one platform. |
 
 To add a target to `make ci`, put `CI_TARGETS += <name>` above its rule. A new
