@@ -1,0 +1,1 @@
+podLabels sets azure.workload.identity/use, which serviceAccount.workloadIdentity.azureClientId already sets

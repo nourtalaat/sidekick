@@ -1,0 +1,5 @@
+# Azure Workload Identity: the pods get the label that tells the AKS
+# webhook to add the identity token.
+serviceAccount:
+  workloadIdentity:
+    azureClientId: 00000000-1111-2222-3333-444444444444

@@ -1,0 +1,5 @@
+serviceAccount:
+  workloadIdentity:
+    azureClientId: 00000000-1111-2222-3333-444444444444
+podLabels:
+  azure.workload.identity/use: "true"
