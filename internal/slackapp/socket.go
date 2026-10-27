@@ -335,6 +335,8 @@ func (s *Socket) dispatch(ctx context.Context, client *socketmode.Client, evt so
 		}
 	case socketmode.EventTypeInvalidAuth:
 		s.log.ErrorContext(ctx, "Slack refused the app token; check slack.appTokenSecret", "slot", slot)
+	case socketmode.EventTypeErrorBadMessage:
+		s.log.WarnContext(ctx, "Slack Socket Mode message could not be read; it is not acknowledged", "slot", slot, "error", badMessage(evt.Data))
 	case socketmode.EventTypeConnectionError:
 		s.log.WarnContext(ctx, "could not connect to Slack Socket Mode; trying again", "slot", slot, "error", connectionError(evt.Data))
 	default:
@@ -472,6 +474,16 @@ func refusedToken(err error) bool {
 func connectionError(data any) string {
 	if e, ok := data.(*slack.ConnectionErrorEvent); ok && e.ErrorObj != nil {
 		return e.ErrorObj.Error()
+	}
+
+	return "unknown"
+}
+
+// badMessage returns why a message of an errors_bad_message event could
+// not be read. The message itself is never returned.
+func badMessage(data any) string {
+	if e, ok := data.(*socketmode.ErrorBadMessage); ok && e.Cause != nil {
+		return e.Cause.Error()
 	}
 
 	return "unknown"
