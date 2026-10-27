@@ -147,6 +147,24 @@ func TestValidateFixtures(t *testing.T) {
 			`watch.http.allowPrivate[1]: "10.20.0.0/33" is not an address range such as 10.20.0.0/16 or an IP address`,
 			`watch.http.allowPrivate[2]: "internal.example.com" is not an address range such as 10.20.0.0/16 or an IP address`,
 		}},
+		{file: "watchers-invalid", want: []string{
+			"routes[0].watcherDefaults.interval: 5s is below routes[0].watcherLimits.minInterval 15s",
+			"routes[0].watcherDefaults.interval: 5s is below watch.minInterval 10s",
+			`routes[0].watcherLimits.hosts[0]: host pattern "*.example.com" is not inside watch.http.allowHosts`,
+			"routes[0].watcherLimits.maxTimeout: 5h0m0s is above watch.maxTimeout 4h0m0s",
+			`routes[0].watcherLimits.tools[0]: "nosuch__tool" is not the qualified name of a tool of the route's sources, such as signoz__query_metrics`,
+			`routes[0].watcherLimits.types[1]: unknown check type "ping"; expected one of [http tool alert]`,
+			`routes[0].watchers[0].check.url: host "other.example.com" is not in watch.http.allowHosts`,
+			"routes[0].watchers[0].interval: 20m0s is above watch.maxInterval 15m0s",
+			`routes[0].watchers[1].check.source: source "signoz" is not one of the route's sources`,
+			`routes[0].watchers[1].name: watcher "health" is already defined at routes[0].watchers[0]`,
+			"watch.defaults.timeout: 5h0m0s is above watch.maxTimeout 4h0m0s",
+			"watch.maxPerGroup: must be positive",
+		}},
+		{file: "watcher-built-in-defaults", want: []string{
+			"the built-in default interval 30s is below routes[0].watcherLimits.minInterval 45s; set routes[0].watcherDefaults.interval or watch.defaults.interval",
+			"the built-in default timeout 1h0m0s is above watch.maxTimeout 30m0s; set watch.defaults.timeout",
+		}},
 		// Several problems, reported together and sorted by path.
 		{file: "three-errors", want: []string{
 			`report.minFalsePositiveConfidence: unknown confidence "hgh" (did you mean "high"?)`,

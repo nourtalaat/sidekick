@@ -101,6 +101,32 @@ routes:
     budgets: { maxToolCalls: 30, maxCostUSD: 0.75, daily: { maxCostUSD: 40, onDailyCap: skip } }
     rateLimit: { events: 60, per: 1h, overLimit: skip }
     concurrency: 3
+    watcherDefaults: { interval: 20s, timeout: 90m }
+    watchers:
+      - name: checkout-health
+        match: { alertName: ["*Down*", "*Unavailable*"] }
+        check:
+          type: http
+          url: https://checkout.internal.example.com/healthz
+          expect: { status: [200], bodyRegex: '"status":\s*"ok"' }
+        interval: 15s
+        passesToRecover: 3
+      - name: checkout-error-rate
+        match: { text: "(?i)error rate" }
+        check:
+          type: tool
+          source: signoz
+          tool: signoz_query_metrics
+          args: { query: "error_rate{service=\"checkout-api\"}", window: 5m }
+          condition: { jsonPath: "$.series[0].last", op: lt, value: 0.01 }
+      - name: alert-cleared
+        check: { type: alert, require: all }
+    watcherLimits:
+      types: [http, tool]
+      tools: ["signoz__signoz_query_metrics"]
+      hosts: ["*.internal.example.com"]
+      minInterval: 15s
+      maxTimeout: 2h
   - name: default
     strategy: generic-alert
     mode: read-only
@@ -123,6 +149,13 @@ redaction:
   hashKeySecret: { name: sidekick-redaction, key: key }
 
 watch:
+  allowModel: true
+  maxPerGroup: 3
+  maxTotal: 100
+  defaults: { interval: 30s, timeout: 60m, passesToRecover: 2, checkTimeout: 10s }
+  minInterval: 10s
+  maxInterval: 15m
+  maxTimeout: 4h
   http:
     allowHosts: ["*.internal.example.com", "status.example.com"]
     allowPrivate: ["10.20.0.0/16"]

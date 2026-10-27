@@ -32,8 +32,9 @@ to the first route that matches it and joins the open group of the same
 alert, or opens a new group with an investigation, which shows in the
 route's outputs, such as a Slack thread. The
 investigation asks the route's model, calls the sources it needs, and
-posts its verdict to the same outputs. Logs go to standard output as
-JSON.
+posts its verdict to the same outputs. Watchers that the route defines,
+or that the investigation starts, check on their own schedule whether
+the service is back up. Logs go to standard output as JSON.
 
 On SIGTERM or SIGINT it stops taking requests, hands back jobs it cannot
 finish, and exits within ` + app.ShutdownGrace.String() + `. A second signal exits at once.`,
@@ -90,7 +91,17 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
-	if err := registerInvestigator(a); err != nil {
+	guard, err := newGuard(a)
+	if err != nil {
+		return errors.Join(fmt.Errorf("start: set up the tool guard: %w", err), a.Close())
+	}
+
+	watchers, err := registerWatchers(a, guard)
+	if err != nil {
+		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
+	}
+
+	if err := registerInvestigator(a, guard, watchers); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
