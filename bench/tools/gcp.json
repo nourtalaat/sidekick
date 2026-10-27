@@ -35,6 +35,167 @@
       }
     },
     {
+      "name": "query_metrics",
+      "description": "Read Cloud Monitoring time series of a Google Cloud project with a monitoring filter such as metric.type=\"run.googleapis.com/request_count\" AND resource.labels.service_name=\"checkout\", optionally aligned and reduced. Returns each series' metric and resource labels and its points, newest first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "aligner": {
+            "type": "string",
+            "description": "How each series is aligned. ALIGN_RATE suits counters; ALIGN_MEAN suits gauges. Default: none, or ALIGN_MEAN with alignmentPeriod.",
+            "enum": [
+              "ALIGN_MEAN",
+              "ALIGN_MAX",
+              "ALIGN_MIN",
+              "ALIGN_SUM",
+              "ALIGN_COUNT",
+              "ALIGN_RATE",
+              "ALIGN_DELTA",
+              "ALIGN_NEXT_OLDER",
+              "ALIGN_PERCENTILE_99",
+              "ALIGN_PERCENTILE_95",
+              "ALIGN_PERCENTILE_50"
+            ]
+          },
+          "alignmentPeriod": {
+            "type": "integer",
+            "description": "Align points to periods of this many seconds, at least 60. Default: raw points, or a period that gives about 120 points when aligner is set.",
+            "minimum": 60
+          },
+          "filter": {
+            "type": "string",
+            "description": "The monitoring filter, passed to Cloud Monitoring as given. It must name one metric.type."
+          },
+          "groupBy": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Labels to keep when reducing, for example resource.labels.service_name."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 100. Default 20.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "project": {
+            "type": "string",
+            "description": "The project ID, for example shop-prod. It may be left out when Sidekick reads only one project."
+          },
+          "reducer": {
+            "type": "string",
+            "description": "Combine series with this reducer, grouped by groupBy. Needs an aligner.",
+            "enum": [
+              "REDUCE_MEAN",
+              "REDUCE_MAX",
+              "REDUCE_MIN",
+              "REDUCE_SUM",
+              "REDUCE_COUNT",
+              "REDUCE_PERCENTILE_99",
+              "REDUCE_PERCENTILE_95",
+              "REDUCE_PERCENTILE_50"
+            ]
+          },
+          "since": {
+            "type": "string",
+            "description": "The start of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: one hour before until.",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "description": "The end of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "filter"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "query_promql",
+      "description": "Run a PromQL range query on the Cloud Monitoring metrics of a Google Cloud project, including Managed Service for Prometheus metrics. Returns each series' labels and its points, oldest first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 100. Default 20.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "project": {
+            "type": "string",
+            "description": "The project ID, for example shop-prod. It may be left out when Sidekick reads only one project."
+          },
+          "query": {
+            "type": "string",
+            "description": "The PromQL query, for example sum(rate(http_requests_total{code=~\"5..\"}[5m])) by (service)."
+          },
+          "since": {
+            "type": "string",
+            "description": "The start of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: one hour before until.",
+            "format": "date-time"
+          },
+          "step": {
+            "type": "integer",
+            "description": "Seconds between points, at least 10. Default: a step that gives about 120 points.",
+            "minimum": 10
+          },
+          "until": {
+            "type": "string",
+            "description": "The end of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_alerts",
+      "description": "List the Cloud Monitoring alerts of a Google Cloud project that were open at some time in a range, newest first: state, open and close times, policy and severity, metric, resource and a console link.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 100. Default 30.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "project": {
+            "type": "string",
+            "description": "The project ID, for example shop-prod. It may be left out when Sidekick reads only one project."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only alerts open at or after this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: 24 hours before until.",
+            "format": "date-time"
+          },
+          "state": {
+            "type": "string",
+            "description": "Only alerts in this state. Default any.",
+            "enum": [
+              "open",
+              "closed",
+              "any"
+            ]
+          },
+          "until": {
+            "type": "string",
+            "description": "Only alerts opened before this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "list_changes",
       "description": "List what changed in a Google Cloud project in a time range, newest first, from its Admin Activity and System Event audit logs: deploys, config changes, GKE upgrades and the like. Returns each change's time, service, method, resource, who made it and whether it failed.",
       "inputSchema": {
@@ -66,6 +227,67 @@
           "until": {
             "type": "string",
             "description": "Only changes before this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_gke_cluster",
+      "description": "Get a GKE cluster of a Google Cloud project: status, versions, conditions, node pools with their status and autoscaling, and its most recent operations such as upgrades. Without cluster, list the project's clusters with their status.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cluster": {
+            "type": "string",
+            "description": "The cluster's name. Leave it out to list the clusters."
+          },
+          "location": {
+            "type": "string",
+            "description": "The cluster's region or zone, for example europe-west1. Required with cluster."
+          },
+          "project": {
+            "type": "string",
+            "description": "The project ID, for example shop-prod. It may be left out when Sidekick reads only one project."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_service_health_events",
+      "description": "List the Google Cloud incidents that Personalized Service Health says affect a project, most recently updated first: title, state, products and locations, times and the latest update.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 100. Default 30.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "project": {
+            "type": "string",
+            "description": "The project ID, for example shop-prod. It may be left out when Sidekick reads only one project."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only events updated at or after this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: 24 hours before until.",
+            "format": "date-time"
+          },
+          "state": {
+            "type": "string",
+            "description": "Only events in this state. Default any.",
+            "enum": [
+              "active",
+              "closed",
+              "any"
+            ]
+          },
+          "until": {
+            "type": "string",
+            "description": "Only events updated before this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
             "format": "date-time"
           }
         },

@@ -133,6 +133,7 @@ func newRoute(rc config.Route, globalRoles map[model.Role]string, strategies *st
 			Name:              rc.Name,
 			Window:            rc.Grouping.Window,
 			FingerprintLabels: rc.Grouping.FingerprintLabels,
+			RelatedWindow:     rc.Grouping.RelatedWindow,
 		},
 	}, nil
 }

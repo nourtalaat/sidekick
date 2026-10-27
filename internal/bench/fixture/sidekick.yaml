@@ -1,0 +1,17 @@
+# The config the bench tests load. The model connector is a scripted one
+# the tests register; the database secret is never read, since the tests
+# hand the runner a database of their own.
+secrets:
+  dir: fixture/secrets
+
+database:
+  urlSecret: { name: db, key: url }
+
+model:
+  connectors:
+    scripted: { provider: scripted, model: claude-opus-5-5 }
+  roles:
+    investigate: scripted
+
+routes:
+  - name: default

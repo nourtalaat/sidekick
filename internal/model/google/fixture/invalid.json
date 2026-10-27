@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": 400,
+    "message": "* GenerateContentRequest.tools[0].function_declarations[0].parameters_json_schema: unsupported keyword \"$dynamicRef\"\n",
+    "status": "INVALID_ARGUMENT"
+  }
+}

@@ -1,10 +1,12 @@
 -- A busy database for the query plan tests: 50,000 groups, one in ten
 -- open, each with two events, a fingerprint of its own for the open ones
--- and ten groups per fingerprint for the closed ones.
-INSERT INTO event_groups (id, fingerprint, route, status, event_count, opened_at, last_event_at, window_until, closed_reason)
+-- and ten groups per fingerprint for the closed ones, spread over 500
+-- services.
+INSERT INTO event_groups (id, fingerprint, route, service, status, event_count, opened_at, last_event_at, window_until, closed_reason)
 SELECT md5('group' || i)::uuid,
        CASE WHEN i % 10 = 0 THEN 'fp-open-' || i ELSE 'fp-' || (i % 5000) END,
        'default',
+       'svc-' || (i % 500),
        CASE WHEN i % 10 = 0 THEN 'open' ELSE 'closed' END,
        2,
        now() - make_interval(secs => i * 60),

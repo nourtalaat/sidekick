@@ -28,6 +28,12 @@ var ErrUnsupportedServer = errors.New("unsupported Postgres version, 15 or newer
 // connections, and checks that the server runs Postgres 15 or newer. The
 // caller closes the pool.
 func Open(ctx context.Context, url string, maxConns int32) (*pgxpool.Pool, error) {
+	return open(ctx, url, maxConns, nil)
+}
+
+// open is Open with configure, when not nil, changing the pool's config
+// before the pool connects.
+func open(ctx context.Context, url string, maxConns int32, configure func(*pgxpool.Config)) (*pgxpool.Pool, error) {
 	if maxConns < 1 {
 		return nil, fmt.Errorf("open database: max connections is %d, want at least 1", maxConns)
 	}
@@ -38,6 +44,10 @@ func Open(ctx context.Context, url string, maxConns int32) (*pgxpool.Pool, error
 	}
 
 	cfg.MaxConns = maxConns
+
+	if configure != nil {
+		configure(cfg)
+	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {

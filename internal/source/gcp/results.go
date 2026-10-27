@@ -110,6 +110,12 @@ func escape(s string) string {
 	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
 }
 
+// lastPart returns the part of a resource name after its last slash, such
+// as the ID at the end of projects/p/alerts/<id>.
+func lastPart(name string) string {
+	return name[strings.LastIndex(name, "/")+1:]
+}
+
 // cutLabels returns labels with each value cut to maxNameLen, and reports
 // whether one was cut.
 func cutLabels(labels map[string]string) (map[string]string, bool) {

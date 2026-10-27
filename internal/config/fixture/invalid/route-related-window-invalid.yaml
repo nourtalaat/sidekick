@@ -1,0 +1,18 @@
+# A negative related window, and one longer than the grouping window.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: payments
+    match: { labels: { team: payments } }
+    grouping: { window: 30m, relatedWindow: -1m }
+  - name: search
+    match: { labels: { team: search } }
+    grouping: { window: 30m, relatedWindow: 45m }
+  - name: default
