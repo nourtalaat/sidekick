@@ -44,21 +44,8 @@ func (r readiness) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	ctx, cancel := context.WithTimeout(req.Context(), readyTimeout)
 	defer cancel()
 
-	checks := r.checks(ctx)
-
-	status := http.StatusOK
-
-	var body strings.Builder
-
-	for _, c := range checks {
-		if !c.ok {
-			status = http.StatusServiceUnavailable
-		}
-
-		fmt.Fprintf(&body, "%s: %s\n", c.name, c.message)
-	}
-
-	writeText(w, status, body.String())
+	status, body := report(r.checks(ctx))
+	writeText(w, status, body)
 }
 
 func (r readiness) checks(ctx context.Context) []check {
@@ -96,6 +83,39 @@ func (r readiness) checkSchema(ctx context.Context) check {
 	}
 
 	return check{name: "schema", message: message}
+}
+
+// report gives the status and body of a /readyz answer: 200 when every
+// check passes and 503 otherwise, with one line per check. A message that
+// spans several lines, such as a pgx error that joins one error per
+// address it tried, is put on one line.
+func report(checks []check) (int, string) {
+	status := http.StatusOK
+
+	var body strings.Builder
+
+	for _, c := range checks {
+		if !c.ok {
+			status = http.StatusServiceUnavailable
+		}
+
+		fmt.Fprintf(&body, "%s: %s\n", c.name, oneLine(c.message))
+	}
+
+	return status, body.String()
+}
+
+// oneLine joins the non-empty lines of s with "; ".
+func oneLine(s string) string {
+	var lines []string
+
+	for line := range strings.Lines(s) {
+		if line = strings.TrimSpace(line); line != "" {
+			lines = append(lines, line)
+		}
+	}
+
+	return strings.Join(lines, "; ")
 }
 
 // healthz serves /healthz, which answers 200 for as long as the process

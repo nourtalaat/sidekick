@@ -333,6 +333,16 @@ type LoadOptions struct {
 	Logger *slog.Logger
 }
 
+// WithDefaults returns r with each nil registry replaced by the global one.
+func (r Registries) WithDefaults() Registries {
+	return Registries{
+		Models:  cmp.Or(r.Models, registry.Models),
+		Sources: cmp.Or(r.Sources, registry.Sources),
+		Intakes: cmp.Or(r.Intakes, registry.Intakes),
+		Outputs: cmp.Or(r.Outputs, registry.Outputs),
+	}
+}
+
 // RoutesInOrder returns the routes in the order they are matched: by
 // priority, lower first, then by name, with the default route last.
 func (c *Config) RoutesInOrder() []Route {

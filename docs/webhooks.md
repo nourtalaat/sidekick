@@ -182,6 +182,38 @@ levels:
 | `info` | `info`, `informational`, `notice`, `low`, `none` |
 | `unknown` | anything else, or no severity |
 
+## Sending a test alert
+
+`sidekick test-alert` sends a sample Alertmanager alert to Sidekick's own
+endpoint, with the endpoint's bearer token or HMAC signature, and prints
+Sidekick's answer:
+
+```sh
+kubectl exec deploy/sidekick -c sidekick -- sidekick test-alert
+```
+
+```text
+Sending a test alert to http://127.0.0.1:8080/hooks/alertmanager
+Sidekick answered 202 Accepted: {"duplicate":false,"events":[{"id":"0192d3a4-...","status":"received","duplicate":false}]}
+The route that matches the alert now investigates it and shows it in its outputs, such as its Slack channel.
+```
+
+The alert is a firing `SidekickTestAlert` with severity `warning` and
+service `sidekick`. In the Helm chart it also has the `namespace` and `pod`
+labels of Sidekick's own pod. Each run gets a new fingerprint, so it is
+never taken for a repeat. It then goes through routing like any other
+alert, so a route that matches it, usually `default`, investigates it
+and posts to its outputs.
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--config`, `-c` | `/etc/sidekick/sidekick.yaml` | The config file, for the endpoint and its secret. |
+| `--webhook` | the only endpoint with `adapter: alertmanager` | The endpoint to send to. It must use the `alertmanager` adapter. |
+| `--url` | `server.listen` on this machine | Sidekick's address, such as `http://sidekick.monitoring:8080`, to send from outside the pod. |
+
+The token is never printed. The exit status is 1 when Sidekick does not
+answer `202`.
+
 ## Monitoring intake
 
 Two metrics on `/metrics` show what arrives:
