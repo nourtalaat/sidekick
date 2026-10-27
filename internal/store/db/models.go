@@ -11,6 +11,18 @@ import (
 	"github.com/google/uuid"
 )
 
+type AuditLog struct {
+	ID              int64
+	At              time.Time
+	ActorKind       string
+	ActorID         *string
+	Action          string
+	TargetKind      *string
+	TargetID        *string
+	InvestigationID *uuid.UUID
+	Details         json.RawMessage
+}
+
 type Event struct {
 	ID          uuid.UUID
 	Intake      string
