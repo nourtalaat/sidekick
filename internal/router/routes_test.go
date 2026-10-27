@@ -123,7 +123,7 @@ func TestNewRoutesSettings(t *testing.T) {
 			wantStrategy:   strategy.GenericAlert,
 			wantVersion:    generic.Version,
 			wantConnectors: `{"investigate": {"connector": "fake", "model": "fake-model"}, "summarize": {"connector": "fake", "model": "fake-model"}}`,
-			wantBudget:     `{"max_tool_calls": 40, "max_wall_time_ms": 600000}`,
+			wantBudget:     `{"max_tokens": 400000, "max_tool_calls": 40, "max_wall_time_ms": 600000, "max_cost_micros": 1000000}`,
 			wantGrouping:   grouper.Route{Name: "billing", Window: 30 * time.Minute, RelatedWindow: 10 * time.Minute},
 		},
 		{
