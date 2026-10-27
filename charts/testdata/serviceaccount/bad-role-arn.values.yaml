@@ -1,0 +1,4 @@
+# The role name alone, without the ARN, is rejected by the values schema.
+serviceAccount:
+  workloadIdentity:
+    awsRoleArn: sidekick-bedrock

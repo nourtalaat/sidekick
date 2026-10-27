@@ -125,6 +125,8 @@ Start from the quick-start values and change these:
   before each upgrade; pods are not ready until the schema is current.
 - **Secrets.** `externalSecrets` makes Secrets with the External Secrets
   Operator and mounts them, so nothing is created by hand.
+- **Cloud credentials.** Give the pod a cloud identity instead of stored
+  keys; see [Cloud credentials](#cloud-credentials).
 - **Network.** `networkPolicy.httpFrom` limits who can reach the webhook
   port. `networkPolicy.restrictEgress` limits where Sidekick connects; list
   Slack, the model provider and each source under `networkPolicy.egress`.
@@ -167,6 +169,79 @@ has no readiness probe: one that is down makes only its source unavailable
 and never takes Sidekick out of service. Pin the image tag; `latest` is
 rejected.
 
+### Cloud credentials
+
+Sidekick needs no cloud keys in a Secret on EKS or GKE: the pod gets an
+identity through its service account, which the chart creates and names
+after the release (`sidekick` for a release named `sidekick`). The
+[Bedrock connector](configuration.md#the-bedrock-provider) uses the AWS
+identity. The identity applies to every container in the pod, so
+[MCP servers in sidecars](#mcp-servers-in-sidecars) can use it too.
+
+**EKS IRSA** (IAM roles for service accounts). The cluster needs an IAM
+OIDC provider, and the role's trust policy must let
+`system:serviceaccount:<namespace>:<service account>` call
+`sts:AssumeRoleWithWebIdentity`. Then set the role:
+
+```yaml
+serviceAccount:
+  workloadIdentity:
+    awsRoleArn: arn:aws:iam::111122223333:role/sidekick-bedrock
+```
+
+The chart sets the `eks.amazonaws.com/role-arn` annotation, and EKS adds
+the role and a token file to the pod.
+
+**EKS Pod Identity.** Nothing changes in the chart. Install the EKS Pod
+Identity Agent add-on, let `pods.eks.amazonaws.com` call `sts:AssumeRole`
+and `sts:TagSession` in the role's trust policy, and link the role to the
+service account:
+
+```sh
+aws eks create-pod-identity-association --cluster-name <cluster> \
+  --namespace sidekick --service-account sidekick \
+  --role-arn arn:aws:iam::111122223333:role/sidekick-bedrock
+```
+
+With `networkPolicy.restrictEgress`, allow the agent at
+`169.254.170.23/32` on port 80.
+
+**GKE Workload Identity.** With Workload Identity Federation on the
+cluster, let the Kubernetes service account act as a Google service
+account:
+
+```sh
+gcloud iam service-accounts add-iam-policy-binding \
+  sidekick@<project>.iam.gserviceaccount.com \
+  --role roles/iam.workloadIdentityUser \
+  --member "serviceAccount:<project>.svc.id.goog[sidekick/sidekick]"
+```
+
+Then set it in the chart, which adds the `iam.gke.io/gcp-service-account`
+annotation:
+
+```yaml
+serviceAccount:
+  workloadIdentity:
+    gcpServiceAccount: sidekick@<project>.iam.gserviceaccount.com
+```
+
+**Other annotations**, such as `azure.workload.identity/client-id` for
+Azure Workload Identity, go under `serviceAccount.annotations`. Azure also
+needs the pod label `azure.workload.identity/use: "true"` in `podLabels`.
+An annotation that `serviceAccount.workloadIdentity` already sets is
+rejected, so each one has one source.
+
+EKS adds the identity to a pod when the pod starts, so after setting or
+changing the role or the association, restart the pods with
+`kubectl -n sidekick rollout restart deploy/sidekick`; a `helm upgrade`
+that changes only the service account does not replace them. The token
+volumes that EKS adds are separate from the Kubernetes API token, so
+`serviceAccount.automountToken` can stay `false`. With
+`serviceAccount.create: false`, the chart uses the service account named
+in `serviceAccount.name`; annotate it yourself, since
+`serviceAccount.workloadIdentity` is then rejected.
+
 ## Values
 
 The main values; [values.yaml](../charts/sidekick/values.yaml) describes
@@ -182,6 +257,9 @@ every one, and the chart rejects unknown keys.
 | `replicaCount` | `2` | Sidekick pods. |
 | `image.tag`, `image.digest` | the chart's version | The image; a digest wins over the tag. |
 | `resources` | 100m CPU, 256Mi requested; 512Mi limit | `GOMEMLIMIT` is set to 90% of the memory limit. |
+| `serviceAccount.workloadIdentity.awsRoleArn` | `""` | The IAM role for EKS IRSA. |
+| `serviceAccount.workloadIdentity.gcpServiceAccount` | `""` | The Google service account for GKE Workload Identity. |
+| `serviceAccount.annotations` | `{}` | More service account annotations. |
 | `mcpSidecars` | `[]` | stdio MCP servers behind a bridge: `name`, `image`, `args`, `env`, `port`, `healthPath`, `resources`, `volumeMounts`. |
 | `networkPolicy.enabled` | `true` | Network policies for Sidekick and the bundled Postgres. |
 | `rbac.kubernetesSource` | `true` | Read-only roles for each Kubernetes source that reads this cluster, made from its `namespaces` and `logs`; see [The Kubernetes source](sources/kubernetes.md#with-the-helm-chart). |

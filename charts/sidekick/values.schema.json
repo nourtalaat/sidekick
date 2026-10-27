@@ -133,6 +133,14 @@
         "create": { "type": "boolean" },
         "name": { "type": "string" },
         "annotations": { "$ref": "#/definitions/stringMap" },
+        "workloadIdentity": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "awsRoleArn": { "type": "string", "pattern": "^(arn:aws(-[a-z]+)*:iam::[0-9]{12}:role/.+)?$" },
+            "gcpServiceAccount": { "type": "string", "pattern": "^([^@\\s]+@[^@\\s]+\\.iam\\.gserviceaccount\\.com)?$" }
+          }
+        },
         "automountToken": { "type": "boolean" }
       }
     },

@@ -1,5 +1,5 @@
 # A Kubernetes source that reads every namespace, with logs on: one
-# ClusterRole with get on pods/log, and the pod mounts its token.
+# ClusterRole with get on pods/log.
 config:
   sources:
     k8s:

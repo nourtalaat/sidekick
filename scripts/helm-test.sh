@@ -2,12 +2,12 @@
 # Tests the Helm chart without a cluster:
 # - `helm template` of the quick-start values must match the golden file
 #   charts/testdata/quickstart.golden.yaml;
-# - for each charts/testdata/rbac/<case>.values.yaml, laid over the
-#   quick-start values, the Kubernetes source's RBAC objects and whether
-#   the pods mount a service account token must match
-#   charts/testdata/rbac/<case>.golden.yaml;
+# - each charts/testdata/<template>/<case>.values.yaml, layered on the
+#   quick-start values, must render templates/<template>.yaml as
+#   <case>.golden.yaml, or fail with the message in <case>.error. A
+#   template that renders nothing for a case has an empty golden file;
 # - the sidekick.yaml the chart renders for each example values file and
-#   each RBAC case must pass `sidekick config validate`.
+#   each case with a golden file must pass `sidekick config validate`.
 # With --update, it rewrites the golden files.
 # Usage: scripts/helm-test.sh <helm> [--update]
 set -eu
@@ -23,14 +23,15 @@ trap 'rm -r "$work"' EXIT
 # The bundled Postgres gets a random password; a fixed one keeps the output
 # the same from run to run.
 render() {
-	"$helm" template sidekick "$chart" --namespace sidekick "$@" --set postgres.password=golden-not-a-real-password
+	values="$1"
+	shift
+	"$helm" template sidekick "$chart" --namespace sidekick -f "$values" --set postgres.password=golden-not-a-real-password "$@"
 }
 
 # check compares the file $2 with the golden file $1, or with --update
 # copies it there.
 check() {
 	if [ "$update" = "--update" ]; then
-		mkdir -p "$(dirname "$1")"
 		cp "$2" "$1"
 		echo "Updated $1"
 	elif ! diff -u "$1" "$2"; then
@@ -39,25 +40,48 @@ check() {
 	fi
 }
 
-# rbac prints, for the values files given, whether the Sidekick pods mount
-# a service account token, then every object from templates/rbac.yaml.
-rbac() {
-	token=$(render "$@" --show-only templates/deployment.yaml | sed -n 's/^ *automountServiceAccountToken: //p')
-	echo "# The Sidekick pods: automountServiceAccountToken: $token"
-	render "$@" | awk '
-		/^---$/ { separator = $0; keep = 0; header = 1; next }
-		header { header = 0; if ($0 == "# Source: sidekick/templates/rbac.yaml") { keep = 1; print separator } }
-		keep { print }
+# only keeps the objects of the template $1 from a whole render, laid out
+# as --show-only lays them out. Unlike --show-only, it gives empty output
+# when the template renders nothing.
+only() {
+	awk -v source="# Source: sidekick/$1" '
+		function finish() { if (keep) { print ""; print "" } blanks = 0; keep = 0 }
+		/^---$/ { finish(); header = 1; next }
+		header && $0 == source { print "---"; keep = 1 }
+		{ header = 0 }
+		keep && $0 == "" { blanks++; next }
+		keep { for (; blanks > 0; blanks--) print ""; print }
+		END { finish() }
 	'
 }
 
-render -f "$chart/quickstart-values.yaml" >"$work/quickstart.yaml"
+render "$chart/quickstart-values.yaml" >"$work/quickstart.yaml"
 check "$golden" "$work/quickstart.yaml"
 
-for values in charts/testdata/rbac/*.values.yaml; do
+for values in charts/testdata/*/*.values.yaml; do
+	[ -f "$values" ] || continue
+	dir=$(dirname "$values")
 	name=$(basename "$values" .values.yaml)
-	rbac -f "$chart/quickstart-values.yaml" -f "$values" >"$work/rbac-$name.yaml"
-	check "charts/testdata/rbac/$name.golden.yaml" "$work/rbac-$name.yaml"
+	template="templates/$(basename "$dir").yaml"
+
+	if [ -f "$dir/$name.error" ]; then
+		if render "$chart/quickstart-values.yaml" -f "$values" >/dev/null 2>"$work/error.txt"; then
+			echo "$values: helm template succeeded, but $dir/$name.error expects it to fail" >&2
+			exit 1
+		fi
+
+		if ! grep -qF -f "$dir/$name.error" "$work/error.txt"; then
+			echo "$values: helm template failed without the message in $dir/$name.error:" >&2
+			cat "$work/error.txt" >&2
+			exit 1
+		fi
+
+		continue
+	fi
+
+	render "$chart/quickstart-values.yaml" -f "$values" >"$work/render.yaml"
+	only "$template" <"$work/render.yaml" >"$work/case.yaml"
+	check "$dir/$name.golden.yaml" "$work/case.yaml"
 done
 
 go build -o "$work/sidekick" ./cmd/sidekick
@@ -72,10 +96,15 @@ validate() {
 
 for values in "$chart/quickstart-values.yaml" "$chart"/ci/*.yaml; do
 	echo "sidekick config validate: sidekick.yaml from $values"
-	validate -f "$values"
+	validate "$values"
 done
 
-for values in charts/testdata/rbac/*.values.yaml; do
+for values in charts/testdata/*/*.values.yaml; do
+	[ -f "$values" ] || continue
+	if [ -f "$(dirname "$values")/$(basename "$values" .values.yaml).error" ]; then
+		continue
+	fi
+
 	echo "sidekick config validate: sidekick.yaml from the quick-start values and $values"
-	validate -f "$chart/quickstart-values.yaml" -f "$values"
+	validate "$chart/quickstart-values.yaml" -f "$values"
 done

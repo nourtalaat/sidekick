@@ -1,5 +1,5 @@
 # Only a Kubernetes source that reads another cluster through a
-# kubeconfigSecret: no roles, and the pod mounts no token.
+# kubeconfigSecret: no roles.
 secrets:
   - sidekick-anthropic
   - sidekick-slack

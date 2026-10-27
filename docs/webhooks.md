@@ -37,6 +37,9 @@ open group of the same alert, or opens a new group with an investigation
 of its own (see [grouping](configuration.md#grouping)). A resolved alert
 is not routed: it is linked to the group its alert is in, and the
 investigation sees it as evidence.
+An event over a [rate limit](configuration.md#rate-limits) is not
+routed at once: its status becomes `delayed`, and it is routed once the
+window has room, or `skipped`, with the limit as its reason.
 
 Every secret is read again on each delivery, so a rotated token or key is
 used without a restart. An endpoint whose secret file is empty refuses

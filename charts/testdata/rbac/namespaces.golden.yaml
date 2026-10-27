@@ -1,4 +1,3 @@
-# The Sidekick pods: automountServiceAccountToken: true
 ---
 # Source: sidekick/templates/rbac.yaml
 # The Kubernetes sources read only the namespaces they list, but list_nodes
@@ -19,6 +18,7 @@ rules:
   - apiGroups: [""]
     resources: [nodes]
     verbs: [get, list]
+
 
 ---
 # Source: sidekick/templates/rbac.yaml
@@ -42,6 +42,7 @@ subjects:
     name: sidekick
     namespace: sidekick
 
+
 ---
 # Source: sidekick/templates/rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -73,6 +74,7 @@ rules:
   - apiGroups: [autoscaling]
     resources: [horizontalpodautoscalers]
     verbs: [list]
+
 
 ---
 # Source: sidekick/templates/rbac.yaml
@@ -110,6 +112,7 @@ rules:
     resources: [horizontalpodautoscalers]
     verbs: [list]
 
+
 ---
 # Source: sidekick/templates/rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -146,6 +149,7 @@ rules:
     resources: [horizontalpodautoscalers]
     verbs: [list]
 
+
 ---
 # Source: sidekick/templates/rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -168,6 +172,7 @@ subjects:
   - kind: ServiceAccount
     name: sidekick
     namespace: sidekick
+
 
 ---
 # Source: sidekick/templates/rbac.yaml
@@ -192,6 +197,7 @@ subjects:
     name: sidekick
     namespace: sidekick
 
+
 ---
 # Source: sidekick/templates/rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -214,4 +220,5 @@ subjects:
   - kind: ServiceAccount
     name: sidekick
     namespace: sidekick
+
 

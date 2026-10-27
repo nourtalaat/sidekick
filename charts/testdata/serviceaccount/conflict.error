@@ -1,0 +1,1 @@
+serviceAccount.annotations sets eks.amazonaws.com/role-arn, which serviceAccount.workloadIdentity already sets

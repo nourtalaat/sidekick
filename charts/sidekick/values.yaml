@@ -84,7 +84,19 @@ serviceAccount:
   create: true
   # name defaults to the release's full name.
   name: ""
+  # annotations are added to the service account as they are.
   annotations: {}
+  # workloadIdentity gives Sidekick a cloud identity without stored keys.
+  # EKS Pod Identity needs nothing here: create a pod identity association
+  # for this service account instead.
+  workloadIdentity:
+    # awsRoleArn is the IAM role for EKS IRSA, set as the
+    # eks.amazonaws.com/role-arn annotation.
+    awsRoleArn: ""
+    # gcpServiceAccount is the Google service account for GKE Workload
+    # Identity (<name>@<project>.iam.gserviceaccount.com), set as the
+    # iam.gke.io/gcp-service-account annotation.
+    gcpServiceAccount: ""
   # automountToken mounts a Kubernetes API token. The chart mounts it
   # anyway when a Kubernetes source reads this cluster as the pod.
   automountToken: false
