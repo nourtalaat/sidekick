@@ -169,7 +169,7 @@ func (w *Writer) row(d Delivery, ev event.Event) (db.InsertEventParams, error) {
 	p := db.InsertEventParams{
 		ID:          ids.New(),
 		Intake:      d.Intake,
-		Key:         w.storedKey(ev.Key),
+		Key:         w.StoredKey(ev.Key),
 		Kind:        string(ev.Kind),
 		SenderKind:  optional(string(ev.Sender.Kind)),
 		SenderID:    w.redactedText(ev.Sender.ID),
@@ -211,8 +211,9 @@ func (w *Writer) row(d Delivery, ev event.Event) (db.InsertEventParams, error) {
 	return p, nil
 }
 
-// storedKey returns key as it is stored.
-func (w *Writer) storedKey(key string) string {
+// StoredKey returns key as Store stores it, so an event can be looked up
+// by the key its intake gave it.
+func (w *Writer) StoredKey(key string) string {
 	if len(key) <= maxKeyBytes && store.ValidText(key) && w.redactor.Text(key).Counts == nil {
 		return key
 	}

@@ -32,7 +32,7 @@ func TestStoredKey(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := w.storedKey(tt.key)
+			got := w.StoredKey(tt.key)
 			if tt.wantKept {
 				require.Equal(t, tt.key, got)
 
@@ -41,7 +41,7 @@ func TestStoredKey(t *testing.T) {
 
 			require.True(t, strings.HasPrefix(got, hashedKeyPrefix))
 			require.Len(t, got, len(hashedKeyPrefix)+64)
-			require.Equal(t, got, w.storedKey(tt.key), "the same key gives the same hash")
+			require.Equal(t, got, w.StoredKey(tt.key), "the same key gives the same hash")
 		})
 	}
 }
