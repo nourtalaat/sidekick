@@ -4,7 +4,7 @@
 INSERT INTO events (
   id, intake, key, kind, sender_kind, sender_id, sender_name, trusted,
   alert_name, title, body, service, severity, labels, links, fingerprint,
-  slack, raw, status, skip_reason, starts_at, ends_at, received_at
+  slack, teams, raw, status, skip_reason, starts_at, ends_at, received_at
 )
 VALUES (
   @id,
@@ -24,6 +24,7 @@ VALUES (
   sqlc.narg(links),
   @fingerprint,
   sqlc.narg(slack),
+  sqlc.narg(teams),
   sqlc.narg(raw),
   @status,
   sqlc.narg(skip_reason),

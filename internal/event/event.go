@@ -73,6 +73,28 @@ type SlackRef struct {
 	UserID   string
 }
 
+// TeamsRef locates a Microsoft Teams channel message that produced or
+// carries the event.
+type TeamsRef struct {
+	// TenantID is the Microsoft Entra tenant of the team.
+	TenantID string
+	// TeamID is the team's Microsoft 365 group ID, which Graph names it by.
+	TeamID string
+	// ChannelID is the channel's conversation ID, such as
+	// 19:abc@thread.tacv2, without a ";messageid=" part.
+	ChannelID string
+	// MessageID is the ID of the message.
+	MessageID string
+	// ThreadID is the ID of the first message of the message's thread. It
+	// is MessageID for a message that starts a thread.
+	ThreadID string
+	// UserID is the sender's Teams user ID, such as 29:1abc.
+	UserID string
+	// ServiceURL is the Bot Framework service URL the message came from,
+	// which replies to it are sent to.
+	ServiceURL string
+}
+
 // Event is one thing that may need investigating.
 type Event struct {
 	// Key makes repeated delivery safe: (Intake, Key) is unique.
@@ -93,6 +115,7 @@ type Event struct {
 	ReceivedAt  time.Time
 	Links       []Link
 	Slack       *SlackRef
+	Teams       *TeamsRef
 	// Raw is the redacted original payload, kept for debugging and scenario export.
 	Raw json.RawMessage
 }
