@@ -286,19 +286,32 @@ gpt-with-a-key:
   for local runs. The identity needs the Cognitive Services OpenAI User
   role on the resource. Otherwise the key in `apiKeySecret` is sent in the
   `api-key` header, read again on every call.
-- **Known models** are the OpenAI models of the `openai` provider, named by
-  their model ID in `model`, whatever the deployment is called. For any
-  other model, add a `capabilities` block like the `openai` one.
-- **API.** The Responses API is the default, as Microsoft recommends for
-  Azure OpenAI models; set `api: chat_completions` to use Chat Completions.
+- **Known models** are named by their model ID in `model`, whatever the
+  deployment is called:
+  - the OpenAI models of the `openai` provider;
+  - these Foundry models from other providers, which call tools:
+    `DeepSeek-V4-Pro`, `DeepSeek-V4-Flash`, `DeepSeek-V3.2`, `Kimi-K2.6`,
+    `Kimi-K2.5`, `MAI-Thinking-1`, `grok-4.7`, `grok-4.6` and `grok-4.3`.
+    Foundry does not say whether they honour a forced tool choice, so
+    Sidekick does not force one; when the model ends a turn without
+    calling a tool, the investigation reminds it to call
+    `submit_verdict`. They take no `effort`.
+
+  For any other model, add a `capabilities` block like the `openai` one.
+- **API.** OpenAI models use the Responses API by default, as Microsoft
+  recommends; every other model uses Chat Completions. Set `api` to choose.
   Reasoning is kept by Sidekick, as for the `openai` provider, and is not
-  shared with OpenAI's own API.
+  shared with OpenAI's own API. Chat Completions does not carry reasoning
+  back, so models that return reasoning there start each turn without it.
 - **Thinking** is not accepted; use `effort`.
 - **Errors.** A prompt that Azure's content filter blocks, and a
   deployment that does not exist, fail the step without retries.
-- **Prices.** The shipped OpenAI prices apply, by `model`. They are the
-  prices of Global Standard deployments; Data Zone and Regional
-  deployments cost 10% more, so set them with `prices`.
+- **Prices.** The shipped OpenAI prices apply, by `model`, and the shipped
+  table also has DeepSeek-V4-Pro, DeepSeek-V4-Flash, Kimi-K2.6, Kimi-K2.5
+  and MAI-Thinking-1. They are the prices of Global Standard deployments;
+  Data Zone and Regional deployments cost 10% more, so set them with
+  `prices`. The Grok models and DeepSeek-V3.2 have no shipped price; set
+  one with `prices`, or their calls count as free in the budgets.
 
 #### The `bedrock` provider
 
