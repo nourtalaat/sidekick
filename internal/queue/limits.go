@@ -41,6 +41,9 @@ type Limits struct {
 
 // limitParams are Limits in the form ClaimLimitedJob takes them.
 type limitParams struct {
+	// lockKey is the claim lock, limitedClaimLockKey keyed by the
+	// Runner's schema.
+	lockKey     int64
 	global      int32
 	routes      []string
 	routeLimits []int32
@@ -68,6 +71,7 @@ func (l Limits) params() (limitParams, error) {
 	}
 
 	return limitParams{
+		lockKey:     limitedClaimLockKey,
 		global:      int32(l.Global), //nolint:gosec // Checked against maxLimit above.
 		routes:      routes,
 		routeLimits: routeLimits,
@@ -81,7 +85,7 @@ func claimLimited(ctx context.Context, pool *pgxpool.Pool, worker, kind string, 
 	err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
 		queries := db.New(tx)
 
-		if err := queries.LockLimitedClaims(ctx, limitedClaimLockKey); err != nil {
+		if err := queries.LockLimitedClaims(ctx, limits.lockKey); err != nil {
 			return fmt.Errorf("take the claim lock: %w", err)
 		}
 
