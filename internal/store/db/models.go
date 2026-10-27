@@ -89,6 +89,7 @@ type InvestigationInbox struct {
 	Author          *uuid.UUID
 	CreatedAt       time.Time
 	DeliveredSeq    *int32
+	Key             *string
 }
 
 type Job struct {

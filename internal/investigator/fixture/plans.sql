@@ -49,4 +49,17 @@ SELECT md5('inv' || i)::uuid, 'new_event', json_build_object('event_id', md5('ev
        '2026-10-26 00:00:04+00'::timestamptz + i * interval '1 minute'
 FROM generate_series(10, 20000, 10) AS i, generate_series(1, 2) AS n;
 
+-- Two delivered follow-up questions, with their Slack event IDs as keys,
+-- for every fifth investigation (8,000).
+INSERT INTO investigation_inbox (investigation_id, kind, body, key, created_at, delivered_seq)
+SELECT md5('inv' || i)::uuid, 'follow_up', json_build_object('text', 'Which pods?'), 'Ev' || i || '-' || n,
+       '2026-10-26 00:00:05+00'::timestamptz + i * interval '1 minute', 20 + n
+FROM generate_series(5, 20000, 5) AS i, generate_series(1, 2) AS n;
+
+-- One Slack message per investigation, in the thread of its alert.
+INSERT INTO output_refs (investigation_id, sink, external, ref, last_seq, published_at)
+SELECT md5('inv' || i)::uuid, 'slack-thread', 'C0123ALERTS:1793' || lpad(i::text, 6, '0') || '.000100', '{}', 26,
+       '2026-10-26 00:00:06+00'::timestamptz + i * interval '1 minute'
+FROM generate_series(1, 20000) AS i;
+
 ANALYZE;

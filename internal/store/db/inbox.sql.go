@@ -12,6 +12,27 @@ import (
 	"github.com/google/uuid"
 )
 
+const hasWaitingInbox = `-- name: HasWaitingInbox :one
+SELECT EXISTS (
+  SELECT 1 FROM investigation_inbox
+  WHERE investigation_id = $1 AND delivered_seq IS NULL AND kind = $2
+) AS waiting
+`
+
+type HasWaitingInboxParams struct {
+	InvestigationID uuid.UUID
+	Kind            string
+}
+
+// HasWaitingInbox reports whether an item of kind waits to be delivered
+// for an investigation.
+func (q *Queries) HasWaitingInbox(ctx context.Context, arg HasWaitingInboxParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasWaitingInbox, arg.InvestigationID, arg.Kind)
+	var waiting bool
+	err := row.Scan(&waiting)
+	return waiting, err
+}
+
 const insertInboxItem = `-- name: InsertInboxItem :exec
 INSERT INTO investigation_inbox (investigation_id, kind, body, created_at)
 VALUES ($1, $2, $3, now())
@@ -30,8 +51,36 @@ func (q *Queries) InsertInboxItem(ctx context.Context, arg InsertInboxItemParams
 	return err
 }
 
+const insertKeyedInboxItem = `-- name: InsertKeyedInboxItem :execrows
+INSERT INTO investigation_inbox (investigation_id, kind, body, key, created_at)
+VALUES ($1, $2, $3, $4::text, now())
+ON CONFLICT (investigation_id, key) WHERE key IS NOT NULL DO NOTHING
+`
+
+type InsertKeyedInboxItemParams struct {
+	InvestigationID uuid.UUID
+	Kind            string
+	Body            json.RawMessage
+	Key             string
+}
+
+// InsertKeyedInboxItem adds an item with a key, unless the investigation
+// has an item with that key already, in which case it counts no row.
+func (q *Queries) InsertKeyedInboxItem(ctx context.Context, arg InsertKeyedInboxItemParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertKeyedInboxItem,
+		arg.InvestigationID,
+		arg.Kind,
+		arg.Body,
+		arg.Key,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const listWaitingInbox = `-- name: ListWaitingInbox :many
-SELECT id, investigation_id, kind, body, author, created_at, delivered_seq FROM investigation_inbox
+SELECT id, investigation_id, kind, body, author, created_at, delivered_seq, key FROM investigation_inbox
 WHERE investigation_id = $1 AND delivered_seq IS NULL
 ORDER BY id
 `
@@ -55,6 +104,7 @@ func (q *Queries) ListWaitingInbox(ctx context.Context, investigationID uuid.UUI
 			&i.Author,
 			&i.CreatedAt,
 			&i.DeliveredSeq,
+			&i.Key,
 		); err != nil {
 			return nil, err
 		}

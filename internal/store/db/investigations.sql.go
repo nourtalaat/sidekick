@@ -59,6 +59,53 @@ func (q *Queries) AdvanceInvestigation(ctx context.Context, arg AdvanceInvestiga
 	return i, err
 }
 
+const endFollowUpRun = `-- name: EndFollowUpRun :one
+UPDATE investigations
+SET status = 'final', report = $1, finished_at = now()
+WHERE id = $2 AND status = 'running' AND run > 1
+RETURNING id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at
+`
+
+type EndFollowUpRunParams struct {
+	Report []byte
+	ID     uuid.UUID
+}
+
+// EndFollowUpRun ends the running follow-up run of an investigation whose
+// job is dead, with the report that says it could not answer. It returns
+// no row when no follow-up run is running.
+func (q *Queries) EndFollowUpRun(ctx context.Context, arg EndFollowUpRunParams) (Investigation, error) {
+	row := q.db.QueryRow(ctx, endFollowUpRun, arg.Report, arg.ID)
+	var i Investigation
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.Route,
+		&i.Strategy,
+		&i.StrategyVersion,
+		&i.Mode,
+		&i.Status,
+		&i.Run,
+		&i.NextSeq,
+		&i.Fence,
+		&i.Verdict,
+		&i.Confidence,
+		&i.Report,
+		&i.StopReason,
+		&i.Connectors,
+		&i.Budget,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.CostMicros,
+		&i.ToolCalls,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.FirstFindingAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
 const failInvestigation = `-- name: FailInvestigation :one
 UPDATE investigations
 SET status = 'failed', verdict = $1, confidence = $2, report = $3,
@@ -417,6 +464,95 @@ func (q *Queries) InsertInvestigation(ctx context.Context, arg InsertInvestigati
 		arg.Budget,
 	)
 	return err
+}
+
+const lockInvestigation = `-- name: LockInvestigation :one
+SELECT id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at FROM investigations WHERE id = $1 FOR UPDATE
+`
+
+// LockInvestigation returns an investigation and locks its row until the
+// transaction ends, so its status cannot change in between.
+func (q *Queries) LockInvestigation(ctx context.Context, id uuid.UUID) (Investigation, error) {
+	row := q.db.QueryRow(ctx, lockInvestigation, id)
+	var i Investigation
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.Route,
+		&i.Strategy,
+		&i.StrategyVersion,
+		&i.Mode,
+		&i.Status,
+		&i.Run,
+		&i.NextSeq,
+		&i.Fence,
+		&i.Verdict,
+		&i.Confidence,
+		&i.Report,
+		&i.StopReason,
+		&i.Connectors,
+		&i.Budget,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.CostMicros,
+		&i.ToolCalls,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.FirstFindingAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
+const startFollowUpRun = `-- name: StartFollowUpRun :one
+UPDATE investigations
+SET fence = $1,
+    run = CASE WHEN status = 'final' THEN run + 1 ELSE run END,
+    status = 'running'
+WHERE id = $2 AND fence < $1 AND (status = 'final' OR (status = 'running' AND run > 1))
+RETURNING id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at
+`
+
+type StartFollowUpRunParams struct {
+	Fence int64
+	ID    uuid.UUID
+}
+
+// StartFollowUpRun gives a follow-up run of an investigation to the job
+// claim with the token fence. An investigation that has ended gets the next
+// run number and is set running; a follow-up run that is running already
+// keeps its number, so a new claim resumes it. It returns no row when a
+// newer claim owns the run, or when the investigation is in neither state.
+func (q *Queries) StartFollowUpRun(ctx context.Context, arg StartFollowUpRunParams) (Investigation, error) {
+	row := q.db.QueryRow(ctx, startFollowUpRun, arg.Fence, arg.ID)
+	var i Investigation
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.Route,
+		&i.Strategy,
+		&i.StrategyVersion,
+		&i.Mode,
+		&i.Status,
+		&i.Run,
+		&i.NextSeq,
+		&i.Fence,
+		&i.Verdict,
+		&i.Confidence,
+		&i.Report,
+		&i.StopReason,
+		&i.Connectors,
+		&i.Budget,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.CostMicros,
+		&i.ToolCalls,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.FirstFindingAt,
+		&i.FinishedAt,
+	)
+	return i, err
 }
 
 const startInvestigationRun = `-- name: StartInvestigationRun :one

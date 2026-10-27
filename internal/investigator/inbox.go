@@ -22,6 +22,8 @@ const (
 	InboxNewEvent = "new_event"
 	// InboxResolved is a recovery event of an alert in the group.
 	InboxResolved = "resolved"
+	// InboxFollowUp is a follow-up question from a responder.
+	InboxFollowUp = "follow_up"
 )
 
 var errUnknownInboxKind = errors.New("unknown inbox kind")

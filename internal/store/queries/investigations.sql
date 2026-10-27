@@ -40,6 +40,33 @@ SET fence = @fence, status = 'running', started_at = coalesce(started_at, @now::
 WHERE id = @id AND fence < @fence AND status IN ('queued', 'running', 'failed')
 RETURNING *;
 
+-- name: LockInvestigation :one
+-- LockInvestigation returns an investigation and locks its row until the
+-- transaction ends, so its status cannot change in between.
+SELECT * FROM investigations WHERE id = @id FOR UPDATE;
+
+-- name: StartFollowUpRun :one
+-- StartFollowUpRun gives a follow-up run of an investigation to the job
+-- claim with the token fence. An investigation that has ended gets the next
+-- run number and is set running; a follow-up run that is running already
+-- keeps its number, so a new claim resumes it. It returns no row when a
+-- newer claim owns the run, or when the investigation is in neither state.
+UPDATE investigations
+SET fence = @fence,
+    run = CASE WHEN status = 'final' THEN run + 1 ELSE run END,
+    status = 'running'
+WHERE id = @id AND fence < @fence AND (status = 'final' OR (status = 'running' AND run > 1))
+RETURNING *;
+
+-- name: EndFollowUpRun :one
+-- EndFollowUpRun ends the running follow-up run of an investigation whose
+-- job is dead, with the report that says it could not answer. It returns
+-- no row when no follow-up run is running.
+UPDATE investigations
+SET status = 'final', report = @report, finished_at = now()
+WHERE id = @id AND status = 'running' AND run > 1
+RETURNING *;
+
 -- name: GetFirstEvent :one
 -- GetFirstEvent returns the event that opened a group, with the number of
 -- events in the group.
