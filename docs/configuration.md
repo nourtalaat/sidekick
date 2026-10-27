@@ -236,6 +236,8 @@ Without `server`, Sidekick assumes Ollama when the model is an Ollama tag
 a server that ignores a forced tool choice. That is safe: when the model
 ends a turn without calling a tool, the investigation reminds it to call
 `submit_verdict`.
+`sidekick doctor` warns when a preset has no `server` set, and asks the
+server whether it is Ollama, so it can print the line to add.
 
 Local models have no price, so they count as free in the budgets.
 
