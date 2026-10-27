@@ -28,7 +28,8 @@ database answers and has every migration this release needs, that Slack
 accepts the bot token (auth.test), that each model connector's API key
 works (with a call that costs nothing, such as listing models), and that
 each source connects and lists its tools, with the tools the model will
-not see and why. It also warns about models that have no price.
+not see and why. It also warns about models that have no price, and
+about investigate connectors that cannot be forced to call a tool.
 
 It prints one line per check, with a fix below each problem, and never
 prints a secret. The exit status is 1 when any check fails. Warnings do

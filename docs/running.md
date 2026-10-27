@@ -47,6 +47,7 @@ default `/etc/sidekick/sidekick.yaml`) and checks, in order:
 | `slack` | Calls Slack's `auth.test` with the bot token from `slack.botTokenSecret`, once for each Slack API address the `slack` outputs use. Nothing is posted. |
 | `model <name>` | Builds each model connector and checks its API key with a call that costs nothing: for `anthropic`, listing one model. |
 | `prices` | Warns about each connector whose model has no price, so its calls would show no cost. Add a `model.prices` entry to fix it. |
+| `tool choice <name>` | Warns about each connector that fills the `investigate` role, in `model.roles` or in a route, but cannot be forced to call a tool, such as a local model on Ollama. Investigations still work: when the model ends a turn without calling a tool, Sidekick reminds it to call `submit_verdict`. A local model preset gets a forced tool choice on vLLM with `server: vllm`. |
 | `source <name>` | Builds each source, waits up to 15 seconds for it to connect and list its tools, and lists the tools the model will not see, with the reason. |
 
 It prints one line per check, with a fix below each problem, for example:
