@@ -2,8 +2,11 @@
 
 The Backstage source (`type: backstage`) reads a Backstage software catalog,
 so an investigation can find out who owns a service, which system it is
-part of, and which services and resources it depends on. Every tool only
-reads. This page lists its keys, its tools and the token it needs.
+part of, and which services and resources it depends on. Sidekick also
+reads the catalog's dependencies in the background to group alerts of
+services that depend on each other; see
+[Grouping](../configuration.md#grouping). Every tool only reads. This page
+lists its keys, its tools and the token it needs.
 
 ## Config
 
@@ -55,6 +58,15 @@ How it behaves:
   app.
 - **Size.** Lists keep at most 100 entries, and long descriptions and names
   are cut; a result that was cut is marked as cut.
+
+## Dependencies for grouping
+
+Every 10 minutes, each Sidekick replica reads all components and resources
+of the catalog, in pages of 500, and keeps their `dependsOn` and
+`dependencyOf` relations. A service is named by its entity name without
+kind or namespace, so the names in the catalog must match the `service`
+that alerts carry. Relations to APIs are left out. When a read fails,
+Sidekick keeps the dependencies it read last and logs a warning.
 
 ## Token
 
