@@ -30,8 +30,8 @@ func (fakeConnector) Generate(context.Context, model.Request) (model.Response, e
 }
 
 // loadConfig loads fixture/sidekick.yaml and builds its plugins, and
-// returns the config with the shared settings of its connectors.
-func loadConfig(t *testing.T) (*config.Config, map[string]model.Settings) {
+// returns the config with the built instances.
+func loadConfig(t *testing.T) (*config.Config, *config.Instances) {
 	t.Helper()
 
 	regs := config.Registries{Models: fakeModels()}
@@ -43,7 +43,7 @@ func loadConfig(t *testing.T) (*config.Config, map[string]model.Settings) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, in.Close()) })
 
-	return cfg, in.ModelSettings
+	return cfg, in
 }
 
 // fakeModels is a model registry with a provider named fake.

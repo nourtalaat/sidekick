@@ -40,7 +40,10 @@ const (
 	DefaultMaxToolCalls  = 40
 	DefaultMaxWallTime   = 10 * time.Minute
 	DefaultConcurrency   = 8
-	DefaultLogLevel      = LogLevelInfo
+	// DefaultGroupingWindow is how long a group stays open after its
+	// newest event.
+	DefaultGroupingWindow = 30 * time.Minute
+	DefaultLogLevel       = LogLevelInfo
 	// DefaultStrategy is the strategy of a route that names none.
 	DefaultStrategy = strategy.GenericAlert
 )
@@ -181,6 +184,21 @@ type Route struct {
 	// once across every replica. Zero means only budgets.concurrency holds
 	// them.
 	Concurrency int `yaml:"concurrency"`
+	// Grouping decides which of the route's events join one group and one
+	// investigation (RT-3).
+	Grouping Grouping `yaml:"grouping"`
+}
+
+// Grouping decides which events join an open group.
+type Grouping struct {
+	// Window is how long a group stays open after its newest event. An
+	// event with the same fingerprint that arrives within it joins the
+	// group.
+	Window time.Duration `yaml:"window"`
+	// FingerprintLabels are the labels whose values, with the intake and
+	// the alert name, make the fingerprint of an alert. Empty means the
+	// fingerprint the intake gave the alert, which covers all its labels.
+	FingerprintLabels []string `yaml:"fingerprintLabels"`
 }
 
 // Match selects events for a route. Every field that is set must match.
@@ -496,6 +514,7 @@ func (r *Route) setDefaults() {
 	r.Priority = DefaultRoutePriority
 	r.Mode = action.ReadOnly
 	r.Strategy = DefaultStrategy
+	r.Grouping.Window = DefaultGroupingWindow
 }
 
 func (b *Budgets) setDefaults() {

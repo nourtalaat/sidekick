@@ -80,6 +80,16 @@ type Investigation struct {
 	FinishedAt      *time.Time
 }
 
+type InvestigationInbox struct {
+	ID              int64
+	InvestigationID uuid.UUID
+	Kind            string
+	Body            json.RawMessage
+	Author          *uuid.UUID
+	CreatedAt       time.Time
+	DeliveredSeq    *int32
+}
+
 type Job struct {
 	ID          int64
 	Kind        string
@@ -116,6 +126,7 @@ type PublishState struct {
 	Phase           string
 	Body            json.RawMessage
 	UpdatedAt       time.Time
+	UpdateSeq       *int64
 }
 
 type Step struct {
