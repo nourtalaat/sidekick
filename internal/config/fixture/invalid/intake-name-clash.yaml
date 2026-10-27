@@ -1,0 +1,31 @@
+# The reserved mention name, and a listener with a webhook's name.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default
+
+intake:
+  webhooks:
+    slack-mention:
+      adapter: alertmanager
+      auth: { bearer: { name: sidekick-hooks, key: am } }
+    alertmanager:
+      adapter: alertmanager
+      auth: { bearer: { name: sidekick-hooks, key: am } }
+
+slack:
+  botTokenSecret: { name: sidekick-slack, key: botToken }
+  appTokenSecret: { name: sidekick-slack, key: appToken }
+
+listeners:
+  alertmanager:
+    channel: C01ABCDEF
+  slack-mention:
+    channel: "#alerts"

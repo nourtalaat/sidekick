@@ -76,6 +76,13 @@ func setup(t *testing.T) *harness {
 
 	cfg, instances := loadConfig(t)
 
+	return setupWith(t, cfg, instances)
+}
+
+// setupWith is setup with another config.
+func setupWith(t *testing.T, cfg *config.Config, instances *config.Instances) *harness {
+	t.Helper()
+
 	pool := storetest.New(t)
 	storetest.LoadFixture(t, pool, "fixture/events.sql")
 

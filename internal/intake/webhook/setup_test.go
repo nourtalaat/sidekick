@@ -19,7 +19,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -29,6 +28,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/intake"
 	_ "github.com/nourtalaat/sidekick/internal/intake/alertmanager" // Adapter "alertmanager".
 	_ "github.com/nourtalaat/sidekick/internal/intake/generic"      // Adapter "generic".
+	"github.com/nourtalaat/sidekick/internal/intake/ingest"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/registry"
@@ -55,7 +55,7 @@ type harness struct {
 	url     string
 	pool    *pgxpool.Pool
 	handler *Handler
-	metrics *Metrics
+	reg     *prometheus.Registry
 	spans   *tracetest.SpanRecorder
 }
 
@@ -103,7 +103,9 @@ func setup(t *testing.T, seeds ...string) *harness {
 		storetest.LoadFixture(t, pool, seed)
 	}
 
-	metrics, err := NewMetrics(prometheus.NewRegistry())
+	reg := prometheus.NewRegistry()
+
+	metrics, err := ingest.NewMetrics(reg)
 	require.NoError(t, err)
 
 	spans := tracetest.NewSpanRecorder()
@@ -126,7 +128,7 @@ func setup(t *testing.T, seeds ...string) *harness {
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
-	return &harness{url: server.URL, pool: pool, handler: h, metrics: metrics, spans: spans}
+	return &harness{url: server.URL, pool: pool, handler: h, reg: reg, spans: spans}
 }
 
 // send posts d and returns the status and the body of the answer.
@@ -162,18 +164,18 @@ func (h *harness) requireTelemetry(t *testing.T, d delivery, wantResults map[str
 		label = d.endpoint
 	}
 
-	for _, result := range []string{resultAccepted, resultDuplicate, resultRejected} {
-		got := testutil.ToFloat64(h.metrics.received.WithLabelValues(label, result))
+	for _, result := range []string{ingest.ResultAccepted, ingest.ResultDuplicate, ingest.ResultRejected} {
+		got := h.counter(t, "sidekick_events_received_total", label, "result", result)
 		require.InDelta(t, float64(wantResults[result]), got, 0, "sidekick_events_received_total{intake=%q,result=%q}", label, result)
 	}
 
-	for _, reason := range []string{reasonUnauthenticated, reasonTooLarge, reasonInvalidPayload} {
+	for _, reason := range []string{ingest.ReasonUnauthenticated, ingest.ReasonTooLarge, ingest.ReasonInvalidPayload} {
 		want := 0.0
 		if reason == wantReason {
 			want = 1
 		}
 
-		got := testutil.ToFloat64(h.metrics.rejected.WithLabelValues(label, reason))
+		got := h.counter(t, "sidekick_events_rejected_total", label, "reason", reason)
 		require.InDelta(t, want, got, 0, "sidekick_events_rejected_total{intake=%q,reason=%q}", label, reason)
 	}
 
@@ -194,11 +196,40 @@ func (h *harness) requireTelemetry(t *testing.T, d delivery, wantResults map[str
 		require.Equal(t, wantReason, attrs[attrRejected].AsString())
 	}
 
-	if wantResults[resultAccepted]+wantResults[resultDuplicate] > 0 {
+	if wantResults[ingest.ResultAccepted]+wantResults[ingest.ResultDuplicate] > 0 {
 		require.NotEmpty(t, attrs[attrEventKey].AsStringSlice())
 		require.Equal(t, attribute.BOOL, attrs[attrDuplicate].Type())
-		require.Equal(t, wantResults[resultDuplicate] > 0, attrs[attrDuplicate].AsBool(), "in these cases a delivery with duplicates holds only duplicates")
+		require.Equal(t, wantResults[ingest.ResultDuplicate] > 0, attrs[attrDuplicate].AsBool(), "in these cases a delivery with duplicates holds only duplicates")
 	}
+}
+
+// counter returns the value of the counter series of the metric name with
+// the intake label intake and the label key set to value, or 0 when the
+// series does not exist.
+func (h *harness) counter(t *testing.T, name, intake, key, value string) float64 {
+	t.Helper()
+
+	families, err := h.reg.Gather()
+	require.NoError(t, err)
+
+	for _, f := range families {
+		if f.GetName() != name {
+			continue
+		}
+
+		for _, m := range f.GetMetric() {
+			labels := map[string]string{}
+			for _, l := range m.GetLabel() {
+				labels[l.GetName()] = l.GetValue()
+			}
+
+			if labels["intake"] == intake && labels[key] == value {
+				return m.GetCounter().GetValue()
+			}
+		}
+	}
+
+	return 0
 }
 
 // events returns every stored event, oldest first.
