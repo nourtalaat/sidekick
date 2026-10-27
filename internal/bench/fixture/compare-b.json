@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "sidekickVersion": "v0.2.0",
+  "gitSHA": "def5678",
+  "configHash": "c0ffee",
+  "scenarioSet": "bench/scenarios/sample",
+  "triggeredBy": "ci",
+  "connectors": {
+    "investigate": {
+      "connector": "claude",
+      "provider": "anthropic",
+      "model": "claude-opus-5"
+    },
+    "judge": {
+      "connector": "judge",
+      "provider": "openai",
+      "model": "gpt-5.6",
+      "temperature": 0
+    }
+  },
+  "strategies": {
+    "generic-alert": "9f8e7d6c"
+  },
+  "promptVersion": "2",
+  "judgePromptVersion": "1",
+  "startedAt": "2026-10-28T09:00:00Z",
+  "finishedAt": "2026-10-28T09:10:00Z",
+  "repeat": 3,
+  "seed": 1,
+  "resamples": 1000,
+  "confidenceLevel": 0.95,
+  "weights": {
+    "verdict": 0.5,
+    "rootCause": 0.3,
+    "evidence": 0.2
+  },
+  "metrics": {
+    "runs": 9,
+    "verdictAccuracy": 0.8333333333333334,
+    "falsePositive": {
+      "precision": 1,
+      "recall": 0.6666666666666666,
+      "predicted": 2,
+      "expected": 3,
+      "hits": 2
+    },
+    "truePositive": {
+      "precision": 0.75,
+      "recall": 1,
+      "predicted": 4,
+      "expected": 3,
+      "hits": 3
+    },
+    "rootCauseMatch": 0.8333333333333334,
+    "rootCauseScore": 0.9,
+    "evidence": 1,
+    "sourceFailuresReported": null,
+    "overall": 0.8666666666666667,
+    "judgeErrors": 1,
+    "toolCalls": 30,
+    "inputTokens": 80000,
+    "outputTokens": 8000,
+    "costMicros": 162000,
+    "judgeCostMicros": 9000,
+    "meanCostPerRunUSD": 0.018,
+    "meanDurationMs": 3800
+  },
+  "intervals": {
+    "overall": {
+      "lower": 0.75,
+      "upper": 0.95
+    },
+    "verdictAccuracy": {
+      "lower": 0.6666666666666666,
+      "upper": 1
+    },
+    "fpPrecision": {
+      "lower": 1,
+      "upper": 1
+    },
+    "rootCauseMatch": {
+      "lower": 0.6666666666666666,
+      "upper": 1
+    },
+    "evidence": {
+      "lower": 1,
+      "upper": 1
+    }
+  },
+  "scenarios": [
+    {
+      "id": "pool",
+      "expectedVerdict": "true_positive",
+      "spread": {
+        "runs": 3,
+        "correct": 3,
+        "rootCauseMean": 0.9,
+        "rootCauseSD": 0.05,
+        "costUSD": {
+          "min": 0.01,
+          "median": 0.02,
+          "max": 0.03
+        },
+        "durationMs": {
+          "min": 3000,
+          "median": 4000,
+          "max": 5000
+        }
+      },
+      "runs": []
+    },
+    {
+      "id": "noise",
+      "expectedVerdict": "true_positive",
+      "spread": {
+        "runs": 3,
+        "correct": 2,
+        "rootCauseMean": null,
+        "rootCauseSD": null,
+        "costUSD": {
+          "min": 0.01,
+          "median": 0.02,
+          "max": 0.03
+        },
+        "durationMs": {
+          "min": 3000,
+          "median": 4000,
+          "max": 5000
+        }
+      },
+      "runs": []
+    },
+    {
+      "id": "disk-full",
+      "expectedVerdict": "true_positive",
+      "spread": {
+        "runs": 3,
+        "correct": 3,
+        "rootCauseMean": 1,
+        "rootCauseSD": 0,
+        "costUSD": {
+          "min": 0.01,
+          "median": 0.02,
+          "max": 0.03
+        },
+        "durationMs": {
+          "min": 3000,
+          "median": 4000,
+          "max": 5000
+        }
+      },
+      "runs": []
+    }
+  ]
+}

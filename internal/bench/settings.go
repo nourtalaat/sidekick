@@ -16,6 +16,8 @@ type Settings struct {
 	// Weights weigh the parts of the overall score. Nil means
 	// DefaultWeights.
 	Weights *Weights `yaml:"weights"`
+	// Thresholds are the scores a run must reach.
+	Thresholds Thresholds `yaml:"thresholds"`
 }
 
 // LoadSettings reads and checks the bench.yaml at path. An empty path
@@ -77,5 +79,5 @@ func (s Settings) validate() []string {
 		}
 	}
 
-	return problems
+	return append(problems, s.Thresholds.validate()...)
 }

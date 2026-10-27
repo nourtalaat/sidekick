@@ -162,3 +162,63 @@ func TestBenchJudgeCheckBadInput(t *testing.T) {
 		})
 	}
 }
+
+func TestBenchCompare(t *testing.T) {
+	t.Parallel()
+
+	const fixtures = "../../internal/bench/fixture/"
+
+	tests := []struct {
+		name       string
+		args       []string
+		wantCode   int
+		wantGolden string
+		wantErr    string
+	}{
+		{
+			name:       "two reports side by side",
+			args:       []string{fixtures + "compare-a.json", fixtures + "compare-b.json"},
+			wantGolden: fixtures + "compare.golden",
+		},
+		{
+			name:     "one report",
+			args:     []string{fixtures + "compare-a.json"},
+			wantCode: exitBadInput,
+			wantErr:  "compare takes two report files, not 1",
+		},
+		{
+			name:     "a report that does not exist",
+			args:     []string{fixtures + "compare-a.json", fixtures + "missing.json"},
+			wantCode: exitBadInput,
+			wantErr:  "read the second report: invalid benchmark report",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var stdout, stderr bytes.Buffer
+
+			root := newTestRootCmd(newBenchCmd(fakeRegistries()))
+			root.SetArgs(append([]string{"bench", "compare"}, tt.args...))
+			root.SetOut(&stdout)
+			root.SetErr(&stderr)
+
+			err := root.ExecuteContext(t.Context())
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				require.Equal(t, tt.wantCode, exitCode(err), "the error: %v", err)
+				require.ErrorContains(t, err, tt.wantErr)
+
+				return
+			}
+
+			require.NoError(t, err)
+
+			want, err := os.ReadFile(tt.wantGolden)
+			require.NoError(t, err)
+			require.Equal(t, string(want), stdout.String())
+		})
+	}
+}

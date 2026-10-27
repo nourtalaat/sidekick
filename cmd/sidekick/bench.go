@@ -20,6 +20,9 @@ import (
 // benchmark's schema, which runs even after Ctrl-C.
 const benchCloseTimeout = time.Minute
 
+// compareArgs is the number of reports `sidekick bench compare` takes.
+const compareArgs = 2
+
 // defaultJudgeCases is the directory of the hand-graded reports that
 // `sidekick bench judge-check` reads by default.
 const defaultJudgeCases = "bench/judge-check"
@@ -51,6 +54,7 @@ func newBenchCmd(regs config.Registries) *cobra.Command {
 
 	cmd.AddCommand(newBenchRunCmd(regs))
 	cmd.AddCommand(newBenchJudgeCheckCmd(regs))
+	cmd.AddCommand(newBenchCompareCmd())
 
 	return cmd
 }
@@ -133,6 +137,31 @@ is unreachable after its retries.`,
 	cmd.Flags().Float64Var(&flags.minAgreement, "min-agreement", 0, "the share of items, from 0 to 1, the judge must grade as the hand grades do")
 
 	return cmd
+}
+
+// newBenchCompareCmd builds `sidekick bench compare`.
+func newBenchCompareCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "compare <a.json> <b.json>",
+		Short: "Show two benchmark reports side by side",
+		Long: `Show two report.json files of sidekick bench run side by side: what each
+run used, each metric with the change from the first to the second, and
+each scenario's runs. A share whose 95% intervals overlap in the two runs
+is flagged "no clear difference": the change may be chance.
+
+Exit status: 0 when both reports were read, 2 when one cannot be read or
+has another schema version.`,
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) != compareArgs {
+				return &exitError{code: exitBadInput, err: fmt.Errorf("compare takes two report files, not %d", len(args))}
+			}
+
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return benchCompare(cmd, args[0], args[1])
+		},
+	}
 }
 
 // benchRun checks the flags, the scenarios and the config, gets Postgres,
@@ -246,6 +275,25 @@ func benchJudgeCheck(ctx context.Context, cmd *cobra.Command, regs config.Regist
 
 	if flags.minAgreement > 0 && (check.Agreement == nil || *check.Agreement < flags.minAgreement) {
 		return &exitError{code: exitThresholdFailed, err: fmt.Errorf("the judge agrees with fewer than %g of the hand grades", flags.minAgreement)}
+	}
+
+	return nil
+}
+
+// benchCompare reads two reports and prints them side by side.
+func benchCompare(cmd *cobra.Command, pathA, pathB string) error {
+	a, err := bench.ReadReport(pathA)
+	if err != nil {
+		return &exitError{code: exitBadInput, err: fmt.Errorf("read the first report: %w", err)}
+	}
+
+	b, err := bench.ReadReport(pathB)
+	if err != nil {
+		return &exitError{code: exitBadInput, err: fmt.Errorf("read the second report: %w", err)}
+	}
+
+	if err := bench.WriteComparison(cmd.OutOrStdout(), a, b); err != nil {
+		return fmt.Errorf("print the comparison: %w", err)
 	}
 
 	return nil

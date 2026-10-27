@@ -172,6 +172,26 @@ Each entry under `sources` is a mock source, named as the model sees it:
 
 One matcher can set several operators, and all of them must hold.
 
+## Comparing two runs
+
+`sidekick bench compare a.json b.json` shows two `report.json` files of
+`sidekick bench run --out` side by side: what each run used (Sidekick
+version and commit, the scenario set, the connector and model of each
+role, the prompt and judge prompt versions and the strategy versions),
+each metric with the change from the first run to the second, and each
+scenario's runs.
+
+```
+METRIC                    A        B        CHANGE    DIFFERENCE
+overall score             0.55     0.87     +0.32     clear difference
+verdict accuracy          0.50     0.83     +0.33     no clear difference
+```
+
+A share whose 95% intervals overlap in the two runs is flagged
+`no clear difference`: the change may be chance, and more scenarios or
+more repeats would tell. The command exits with `2` when a report cannot be
+read or has another schema version, and `0` otherwise.
+
 ## Checking the judge
 
 `sidekick bench judge-check` has the judge grade a set of reports that a
