@@ -142,11 +142,33 @@ func TestConfigValidate(t *testing.T) {
 		{
 			name:     "baseURL that is not absolute",
 			cfg:      Config{Settings: model.Settings{Model: "claude-opus-5-5"}, BaseURL: "proxy.internal/anthropic"},
-			wantErrs: []string{`baseURL: "proxy.internal/anthropic" must be an absolute http or https URL`},
+			wantErrs: []string{`baseURL: "proxy.internal/anthropic" must be an absolute https URL`},
 		},
 		{
-			name: "baseURL of a proxy",
-			cfg:  Config{Settings: model.Settings{Model: "claude-opus-5-5"}, BaseURL: "https://llm-proxy.internal"},
+			name: "https baseURL of a proxy on another host",
+			cfg:  Config{Settings: model.Settings{Model: "claude-opus-5-5"}, APIKeySecret: apiKeyRef, BaseURL: "https://llm-proxy.internal"},
+		},
+		{
+			name: "http baseURL on localhost",
+			cfg:  Config{Settings: model.Settings{Model: "claude-opus-5-5"}, APIKeySecret: apiKeyRef, BaseURL: "http://localhost:8080"},
+		},
+		{
+			name: "http baseURL on 127.0.0.0/8",
+			cfg:  Config{Settings: model.Settings{Model: "claude-opus-5-5"}, APIKeySecret: apiKeyRef, BaseURL: "http://127.0.0.2:8080"},
+		},
+		{
+			name: "http baseURL on ::1",
+			cfg:  Config{Settings: model.Settings{Model: "claude-opus-5-5"}, APIKeySecret: apiKeyRef, BaseURL: "http://[::1]:8080"},
+		},
+		{
+			name:     "http baseURL on another host with a key",
+			cfg:      Config{Settings: model.Settings{Model: "claude-opus-5-5"}, APIKeySecret: apiKeyRef, BaseURL: "http://llm-proxy.internal"},
+			wantErrs: []string{`baseURL: "http://llm-proxy.internal" must use https, since every call carries the API key`},
+		},
+		{
+			name:     "http baseURL on another host without apiKeySecret, which New requires",
+			cfg:      Config{Settings: model.Settings{Model: "claude-opus-5-5"}, BaseURL: "http://llm-proxy.internal"},
+			wantErrs: []string{`baseURL: "http://llm-proxy.internal" must use https, since every call carries the API key`},
 		},
 	}
 

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/registry"
 )
@@ -220,7 +221,7 @@ func (c *Config) checkEndpoint() []error {
 		return errs
 	}
 
-	if err := checkBaseURL(c.BaseURL); err != nil {
+	if err := checkBaseURL(c.BaseURL, c.APIKeySecret != (registry.SecretRef{})); err != nil {
 		errs = append(errs, err)
 	}
 
@@ -320,15 +321,21 @@ func isOllamaTag(id string) bool {
 	return name != "" && tag != ""
 }
 
-// checkBaseURL checks that raw is an absolute http or https URL.
-func checkBaseURL(raw string) error {
+// checkBaseURL checks that raw is an absolute http or https URL. With a
+// key, raw must use https unless its host is loopback, so the key never
+// crosses the network unencrypted. Without a key, plain http stays allowed
+// for a compatible server on another host, since no credential is sent.
+func checkBaseURL(raw string, withKey bool) error {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return fmt.Errorf("baseURL: %w", err)
 	}
 
-	if (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+	switch {
+	case (u.Scheme != "https" && u.Scheme != "http") || u.Host == "":
 		return fmt.Errorf("baseURL: %q must be an absolute http or https URL", raw)
+	case withKey && u.Scheme == "http" && !httpclient.IsLoopbackHost(u.Hostname()):
+		return fmt.Errorf("baseURL: %q must use https when apiKeySecret is set; plain http is allowed only for localhost, 127.0.0.0/8 or ::1, or without apiKeySecret", raw)
 	}
 
 	return nil

@@ -13,6 +13,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/investigator"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/strategy"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // errNoStrategies means the config was not loaded with its strategies.
@@ -36,18 +37,22 @@ type route struct {
 	rateLimit *config.RateLimit
 	// grouping decides which group the route's events join.
 	grouping grouper.Route
+	// watchers are the route's and its strategy's watchers, which start
+	// when a group of the route opens.
+	watchers []watch.Definition
 }
 
 // newRoutes prepares the routes of cfg in the order they are tried.
 // modelSettings are the shared settings of each built connector, for the
-// model IDs.
-func newRoutes(cfg *config.Config, modelSettings map[string]model.Settings) ([]route, error) {
-	return compileRoutes(cfg, cfg.RoutesInOrder(), modelSettings)
+// model IDs, and policy holds the watchers of each file route.
+func newRoutes(cfg *config.Config, modelSettings map[string]model.Settings, policy watch.Policy) ([]route, error) {
+	return compileRoutes(cfg, cfg.RoutesInOrder(), modelSettings, policy)
 }
 
 // compileRoutes prepares ordered, routes already in the order they are
-// tried, with the roles and strategies of cfg.
-func compileRoutes(cfg *config.Config, ordered []config.Route, modelSettings map[string]model.Settings) ([]route, error) {
+// tried, with the roles and strategies of cfg. A route that policy does not
+// list, one added at runtime, gets its watchers from its strategy.
+func compileRoutes(cfg *config.Config, ordered []config.Route, modelSettings map[string]model.Settings, policy watch.Policy) ([]route, error) {
 	strategies := cfg.StrategySet()
 	if strategies == nil {
 		return nil, errNoStrategies
@@ -60,6 +65,13 @@ func compileRoutes(cfg *config.Config, ordered []config.Route, modelSettings map
 		if err != nil {
 			return nil, fmt.Errorf("route %q: %w", rc.Name, err)
 		}
+
+		rp, ok := policy.Routes[rc.Name]
+		if !ok {
+			rp = cfg.RuntimeRoutePolicy(rc)
+		}
+
+		r.watchers = rp.Definitions
 
 		routes = append(routes, r)
 	}

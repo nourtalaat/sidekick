@@ -1,0 +1,16 @@
+# Only a Kubernetes source that reads another cluster through a
+# kubeconfigSecret: no roles.
+secrets:
+  - sidekick-anthropic
+  - sidekick-slack
+  - sidekick-webhook
+  - sidekick-staging-cluster
+config:
+  sources:
+    staging-cluster:
+      type: kubernetes
+      kubeconfigSecret: { name: sidekick-staging-cluster, key: kubeconfig }
+  routes:
+    - name: default
+      sources: [staging-cluster]
+      outputs: [slack]

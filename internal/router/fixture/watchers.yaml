@@ -1,0 +1,36 @@
+# The config of the watcher tests. The tests replace HEALTH_URL with the
+# URL of a fake health check.
+database:
+  urlSecret: { name: db, key: url }
+
+model:
+  connectors:
+    fake: { provider: fake, model: fake-model }
+  roles:
+    investigate: fake
+
+intake:
+  webhooks:
+    alertmanager:
+      adapter: alertmanager
+      auth: { bearer: { name: hooks, key: alertmanager } }
+      trusted: true
+
+routes:
+  - name: service-down
+    match:
+      labels: { alertname: CheckoutDown }
+    watchers:
+      - name: checkout-health
+        match: { alertName: ["*Down*"] }
+        check: { type: http, url: "HEALTH_URL" }
+        interval: 10s
+      - name: checkout-latency
+        match: { alertName: ["*Latency*"] }
+        check: { type: alert }
+  - name: default
+
+watch:
+  http:
+    allowHosts: ["127.0.0.1"]
+    allowPrivate: ["127.0.0.1"]

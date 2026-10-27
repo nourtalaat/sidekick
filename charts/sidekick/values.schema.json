@@ -31,7 +31,11 @@
         "timeoutSeconds": { "type": "integer", "minimum": 1 }
       }
     },
-    "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+    "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+    "guidOrEmpty": {
+      "type": "string",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})?$"
+    }
   },
   "properties": {
     "global": { "type": "object" },
@@ -138,7 +142,9 @@
           "additionalProperties": false,
           "properties": {
             "awsRoleArn": { "type": "string", "pattern": "^(arn:aws(-[a-z]+)*:iam::[0-9]{12}:role/.+)?$" },
-            "gcpServiceAccount": { "type": "string", "pattern": "^([^@\\s]+@[^@\\s]+\\.iam\\.gserviceaccount\\.com)?$" }
+            "gcpServiceAccount": { "type": "string", "pattern": "^([^@\\s]+@[^@\\s]+\\.iam\\.gserviceaccount\\.com)?$" },
+            "azureClientId": { "$ref": "#/definitions/guidOrEmpty" },
+            "azureTenantId": { "$ref": "#/definitions/guidOrEmpty" }
           }
         },
         "automountToken": { "type": "boolean" }
@@ -265,6 +271,13 @@
         "metricsFrom": { "type": "array", "items": { "type": "object" } },
         "restrictEgress": { "type": "boolean" },
         "egress": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "rbac": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kubernetesSource": { "type": "boolean" }
       }
     },
     "pdb": {

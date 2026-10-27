@@ -108,6 +108,12 @@ UPDATE jobs
 SET status = 'pending', run_at = now(), locked_by = NULL, locked_until = NULL
 WHERE id = @id AND claim_token = @claim_token::bigint AND status = 'running';
 
+-- name: WaitForJobWriters :exec
+-- WaitForJobWriters waits until no other transaction is writing the jobs
+-- with these IDs. Outside a transaction it releases its row locks as soon as
+-- it has them, so it only waits for a claim whose commit is in flight to end.
+SELECT id FROM jobs WHERE id = ANY (@ids::bigint[]) FOR SHARE;
+
 -- name: TryLockReaper :one
 SELECT pg_try_advisory_lock(@lock_key::bigint) AS locked;
 

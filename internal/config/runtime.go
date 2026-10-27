@@ -3,6 +3,8 @@ package config
 import (
 	"context"
 	"slices"
+
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // The path prefixes of problems in runtime rules, as people see them in
@@ -77,6 +79,14 @@ func (c *Config) ResolveRuntimeRoute(r Route) Route {
 	resolveRouteBudgets(&r.Budgets, c.Budgets)
 
 	return r
+}
+
+// RuntimeRoutePolicy returns the watcher policy of a route saved at
+// runtime: the watchers of its strategy, with the global settings.
+func (c *Config) RuntimeRoutePolicy(r Route) watch.RoutePolicy {
+	w := watcherChecker{cfg: c, errs: &errorList{}, seen: map[string]bool{}}
+
+	return w.routePolicy(joinPath(runtimeRoutesPath, r.Name), r, c.routeStrategy(r))
 }
 
 // runtimeValidator returns a validator for runtime rules on c, with the

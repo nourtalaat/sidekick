@@ -25,7 +25,8 @@ Helm chart mounts the file. At start-up Sidekick:
    replicas start at once, one migrates and the others wait for it.
 5. Builds the configured connectors, sources, webhook adapters and outputs.
 6. Starts the job queue, which routes events, runs
-   [investigations](investigations.md) and publishes them to the outputs.
+   [investigations](investigations.md), publishes them to the outputs and
+   runs the checks of [watchers](configuration.md#watch).
 7. Starts serving HTTP on both listeners.
 
 `sidekick migrate up` and `sidekick migrate status` take the same
@@ -47,9 +48,12 @@ default `/etc/sidekick/sidekick.yaml`) and checks, in order:
 | `slack` | Calls Slack's `auth.test` with the bot token from `slack.botTokenSecret`, once for each Slack API address the `slack` outputs use. Nothing is posted. |
 | `model <name>` | Builds each model connector and checks its API key with a call that costs nothing: for `anthropic`, listing one model. |
 | `prices` | Warns about each connector whose model has no price, so its calls would show no cost and count nothing toward the cost budgets and daily caps. Add a `model.prices` entry to fix it. |
+| `tool choice <name>` | Warns about each `openai` connector that fills the `investigate` role, in `model.roles` or in a route, but cannot be forced to call a tool, such as a local model on Ollama. Investigations still work: when the model ends a turn without calling a tool, Sidekick reminds it to call `submit_verdict`. A local model preset gets a forced tool choice on vLLM with `server: vllm`. |
+| `server <name>` | Warns about each `openai` connector that runs a local model preset without `server` set. It calls Ollama's `GET /api/version` next to the `baseURL`, without credentials, and when Ollama answers, the fix is the `server: ollama` line to add. |
+| `context <name>` | For each `openai` connector that runs a local model preset on Ollama, with `server: ollama` or detected by the `server` check, calls Ollama's `GET /api/ps` and warns when the model runs with less context than the preset's minimum (65,536 tokens), or when the context cannot be told because the model is not loaded. The fix is to set `OLLAMA_CONTEXT_LENGTH` in Ollama's environment. |
 | `source <name>` | Builds each source, waits up to 15 seconds for it to connect and list its tools, and lists the tools the model will not see, with the reason. |
 
-It prints one line per check, with a fix below each problem, for example:
+It prints one line per check, with a fix below each problem. The `tool choice`, `server` and `context` checks print a line only for the connectors they apply to. For example:
 
 ```text
 ok    database: connected; the schema has every migration this release needs (7)
@@ -147,6 +151,9 @@ process (`process_*`) metrics, this release has:
 | `sidekick_tool_call_duration_seconds` | histogram | `source` | Duration of source tool calls. |
 | `sidekick_source_up` | gauge | `source` | 1 when a source is connected and its circuit breaker is closed, 0 otherwise. |
 | `sidekick_guard_keys_full_total` | counter | none | Guarded calls that are not source tool calls, such as watcher HTTP checks, refused because the guard already held limits for 1024 targets, all in use. |
+| `sidekick_watcher_checks_total` | counter | `type`, `result` | [Watcher](configuration.md#watch) checks by type (`http`, `tool` or `alert`) and result (`pass`, `fail` or `error`). |
+| `sidekick_watcher_check_duration_seconds` | histogram | `type` | Duration of watcher checks. |
+| `sidekick_watch_http_blocked_total` | counter | `reason` | Watcher HTTP checks the safety rules refused, by reason: `host`, `private_ip` or `redirect`. |
 | `sidekick_slack_api_errors_total` | counter | `method`, `error` | Failed Slack Web API calls by method, such as `chat.update`, and error: Slack's error code, such as `channel_not_found`, or `ratelimited`, `request_failed`, `http_status`, `bad_response` or `other`. See [Investigations in Slack](slack.md). |
 | `sidekick_output_api_errors_total` | counter | `type`, `operation`, `error` | Failed calls of the ticket and webhook outputs to the service they post to, by output type, such as `linear.comment` or `webhook`, operation, such as `comment_create`, and error: `rate_limited`, `request_failed`, `bad_response`, `api_error`, or `http_` and the status, such as `http_503`. See [Results on tickets](tickets.md) and [Webhook callbacks](webhook-callbacks.md). |
 

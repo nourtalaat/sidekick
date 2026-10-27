@@ -27,6 +27,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/publish"
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // SpanName is the name of the span of one route_event job.
@@ -81,6 +82,7 @@ type Router struct {
 	routes        atomic.Pointer[[]route]
 	cfg           *config.Config
 	modelSettings map[string]model.Settings
+	watch         watch.Policy
 	pool          *pgxpool.Pool
 	grouper       *grouper.Grouper
 	log           *slog.Logger
@@ -104,7 +106,9 @@ type routeEventPayload struct {
 
 // New prepares the routes of opts.Config.
 func New(opts Options) (*Router, error) {
-	routes, err := newRoutes(opts.Config, opts.ModelSettings)
+	policy := opts.Config.WatchPolicy()
+
+	routes, err := newRoutes(opts.Config, opts.ModelSettings, policy)
 	if err != nil {
 		return nil, fmt.Errorf("prepare the routes: %w", err)
 	}
@@ -122,6 +126,7 @@ func New(opts Options) (*Router, error) {
 	r := &Router{
 		cfg:           opts.Config,
 		modelSettings: opts.ModelSettings,
+		watch:         policy,
 		pool:          opts.Pool,
 		grouper:       grouper.New(grouper.Options{Logger: log, TracerProvider: tp}),
 		log:           log,
@@ -146,7 +151,7 @@ func New(opts Options) (*Router, error) {
 // routed after it returns use the new routes. On an error the routes stay
 // as they were.
 func (r *Router) SetRoutes(ordered []config.Route) error {
-	routes, err := compileRoutes(r.cfg, ordered, r.modelSettings)
+	routes, err := compileRoutes(r.cfg, ordered, r.modelSettings, r.watch)
 	if err != nil {
 		return fmt.Errorf("prepare the routes: %w", err)
 	}
@@ -163,8 +168,9 @@ func (r *Router) SetRoutes(ordered []config.Route) error {
 // event to routed with its route and hands it to the grouper,
 // which joins it to the open group with its fingerprint or opens a new
 // one. For a new group it creates a queued investigation, enqueues its
-// investigate job and enqueues the first publish job for each output of
-// the route. A recovery event is not routed: the grouper links it to the
+// investigate job, enqueues the first publish job for each output of the
+// route and starts the route's and its strategy's watchers that match the
+// event. A recovery event is not routed: the grouper links it to the
 // group its alert is in.
 //
 // It is safe to run more than once: an event that is no longer received,
@@ -346,6 +352,10 @@ func (r *Router) route(ctx context.Context, ev db.Event, rt route) (res grouper.
 		if err := startInvestigation(ctx, tx, ev, rt, res); err != nil {
 			return grouper.Result{}, false, fmt.Errorf("investigation %s: %w", res.InvestigationID, err)
 		}
+
+		if err := r.startWatchers(ctx, tx, ev, rt, res); err != nil {
+			return grouper.Result{}, false, fmt.Errorf("group %s: %w", res.GroupID, err)
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -379,6 +389,50 @@ func startInvestigation(ctx context.Context, tx pgx.Tx, ev db.Event, rt route, r
 
 	if err := publish.Open(ctx, tx, res.InvestigationID, rt.outputs); err != nil {
 		return fmt.Errorf("open its outputs: %w", err)
+	}
+
+	return nil
+}
+
+// startWatchers starts the watchers of rt and of its strategy that match
+// ev, for the group the grouper opened for it, in tx. A watcher over
+// watch.maxPerGroup or watch.maxTotal is not started, and a line is
+// logged.
+func (r *Router) startWatchers(ctx context.Context, tx pgx.Tx, ev db.Event, rt route, res grouper.Result) error {
+	if len(rt.watchers) == 0 {
+		return nil
+	}
+
+	c, err := candidateOf(ev)
+	if err != nil {
+		return fmt.Errorf("read the event: %w", err)
+	}
+
+	for _, d := range rt.watchers {
+		if !d.Match.Matches(deref(ev.AlertName), c.text) {
+			continue
+		}
+
+		_, err := watch.Start(ctx, tx, r.watch, watch.NewWatcher{
+			GroupID:         res.GroupID,
+			InvestigationID: res.InvestigationID,
+			Name:            d.Name,
+			Origin:          d.Origin,
+			Check:           d.Check,
+			Settings:        d.Settings,
+		}, r.now(), r.log)
+
+		if limit, ok := errors.AsType[*watch.LimitError](err); ok {
+			// TODO: [SK-32] Tell the investigation that the watcher did not start.
+			r.log.WarnContext(ctx, "watcher not started: a limit is reached",
+				"group_id", res.GroupID.String(), "watcher", d.Name, "limit", limit.Limit)
+
+			continue
+		}
+
+		if err != nil && !errors.Is(err, watch.ErrNameTaken) {
+			return fmt.Errorf("start watcher %s: %w", d.Name, err)
+		}
 	}
 
 	return nil

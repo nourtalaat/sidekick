@@ -1,0 +1,21 @@
+# Bounds that the built-in watcher defaults do not fit, with no defaults
+# set in the file: a route's minimum interval above the built-in 30s, and
+# a global maximum timeout below the built-in 60m.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: payments
+    match: { labels: { team: payments } }
+    watcherLimits:
+      minInterval: 45s
+  - name: default
+
+watch:
+  maxTimeout: 30m
