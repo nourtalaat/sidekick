@@ -52,6 +52,7 @@ var routeFields = []routeField{
 	{name: "maxCostUSD", value: "<dollars> such as 2.50, 0 for the global value", set: setMaxCostUSD},
 	{name: "maxWallTime", value: "<duration> such as 5m, 0 for the global value", set: setMaxWallTime},
 	{name: "window", value: "<duration> such as 30m, for grouping.window", set: setWindow},
+	{name: "relatedWindow", value: "<duration> such as 15m, 0 to turn it off, for grouping.relatedWindow", set: setRelatedWindow},
 }
 
 const routeSetUsage = "Usage: `/sidekick route set <name> <field> <value>`"
@@ -331,6 +332,17 @@ func setWindow(r *rules.Route, v string) error {
 	}
 
 	r.Config.Grouping.Window = d
+
+	return nil
+}
+
+func setRelatedWindow(r *rules.Route, v string) error {
+	d, err := duration(v)
+	if err != nil {
+		return err
+	}
+
+	r.Config.Grouping.RelatedWindow = d
 
 	return nil
 }

@@ -58,6 +58,7 @@ type budgetSpec struct {
 type groupingSpec struct {
 	Window            string   `json:"window,omitempty"`
 	FingerprintLabels []string `json:"fingerprintLabels,omitempty"`
+	RelatedWindow     string   `json:"relatedWindow,omitempty"`
 }
 
 // listenerView is what the audit log records of a listener. It holds only
@@ -150,6 +151,10 @@ func routeOfRow(row db.Route) (Route, error) {
 		return Route{}, fmt.Errorf("decode route %s: budgets.maxWallTime: %w", row.Name, err)
 	}
 
+	if r.Grouping.RelatedWindow, err = optionalDuration(s.Grouping.RelatedWindow); err != nil {
+		return Route{}, fmt.Errorf("decode route %s: grouping.relatedWindow: %w", row.Name, err)
+	}
+
 	if s.Grouping.Window != "" {
 		if r.Grouping.Window, err = time.ParseDuration(s.Grouping.Window); err != nil {
 			return Route{}, fmt.Errorf("decode route %s: grouping.window: %w", row.Name, err)
@@ -188,7 +193,11 @@ func specOfRoute(r config.Route) routeSpec {
 			MaxWallTime:  durationText(r.Budgets.MaxWallTime),
 			MaxCostUSD:   r.Budgets.MaxCostUSD,
 		},
-		Grouping: groupingSpec{Window: durationText(r.Grouping.Window), FingerprintLabels: r.Grouping.FingerprintLabels},
+		Grouping: groupingSpec{
+			Window:            durationText(r.Grouping.Window),
+			FingerprintLabels: r.Grouping.FingerprintLabels,
+			RelatedWindow:     durationText(r.Grouping.RelatedWindow),
+		},
 	}
 
 	if m := r.Match; m != nil {

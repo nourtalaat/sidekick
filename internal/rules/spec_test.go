@@ -25,7 +25,7 @@ func TestRouteSpecRoundTrip(t *testing.T) {
 	full.Sources = []string{"signoz"}
 	full.Outputs = []string{"slack-thread"}
 	full.Budgets = config.RouteBudgets{Limits: config.Limits{MaxTokens: 100_000, MaxToolCalls: 20, MaxWallTime: 5 * time.Minute, MaxCostUSD: 1.5}}
-	full.Grouping = config.Grouping{Window: time.Hour, FingerprintLabels: []string{"service"}}
+	full.Grouping = config.Grouping{Window: time.Hour, FingerprintLabels: []string{"service"}, RelatedWindow: 15 * time.Minute}
 
 	minimal := config.NewRoute("minimal")
 	minimal.Match = &config.Match{Service: "minimal"}
