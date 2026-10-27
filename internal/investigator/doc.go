@@ -17,4 +17,12 @@
 // when it gives no such report, or when a limit is reached; the last two
 // end as inconclusive, with a report built from the saved steps. Progress
 // and the final report go to the route's outputs through the publish job.
+//
+// A responder can stop a run from any replica with RequestCancel, which
+// sets the investigation's stop flag and sends a notification. The
+// Canceller of the replica that owns the run hears it and ends the context
+// of the model or tool call in flight; each step write also returns the
+// flag, so a run sees the stop at its next step even when the notification
+// is lost. The run then ends as cancelled, with a report built from the
+// saved steps.
 package investigator

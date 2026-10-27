@@ -67,6 +67,9 @@ type Options struct {
 	Logger *slog.Logger
 	// Metrics records the investigation metrics. Nil records none.
 	Metrics *Metrics
+	// Canceller stops the model or tool call in flight when a responder
+	// stops a run. Nil means a run sees a stop only at its next step.
+	Canceller *Canceller
 	// TracerProvider makes the tracer of the investigation.run spans. Nil
 	// means the global tracer provider.
 	TracerProvider trace.TracerProvider

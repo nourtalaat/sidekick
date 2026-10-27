@@ -18,6 +18,9 @@ const (
 	budgetWallTime  = "wall_time"
 )
 
+// cancelledReason is the reason of the report of a stopped run.
+const cancelledReason = "A responder stopped the investigation before it reached a verdict."
+
 // maxStopDetail is the longest stop detail kept in a report, in bytes.
 const maxStopDetail = 1000
 
@@ -49,6 +52,11 @@ func (r *run) overBudget(budget string) ending {
 // passed its checks.
 func (r *run) noVerdict(reason, detail string) ending {
 	return ending{report: r.hist.inconclusive(report.StopNoVerdict, reason, detail)}
+}
+
+// cancelled returns the ending of a run a responder stopped.
+func (r *run) cancelled() ending {
+	return ending{report: r.hist.inconclusive(report.StopCancelled, cancelledReason, ""), status: StatusCancelled}
 }
 
 // failed returns the ending of a run that could not go on.
