@@ -1,0 +1,47 @@
+# The config the Slack app tests load. The secrets under fixture/secrets are
+# test values only. The model connector is a fake the tests register. The
+# tests set slack.apiURL to their fake Slack Web API.
+database:
+  urlSecret: { name: db, key: url }
+
+secrets:
+  dir: fixture/secrets
+
+model:
+  connectors:
+    fake: { provider: fake }
+  roles:
+    investigate: fake
+
+slack:
+  botTokenSecret: { name: slack, key: botToken }
+  appTokenSecret: { name: slack, key: appToken }
+  signingSecret: { name: slack, key: signingSecret }
+  mode: events
+  trustedBots: [B01SIGNOZ]
+
+listeners:
+  alerts:
+    channel: "#alerts"
+    match:
+      sender: { kind: bot, names: [SigNoz, Datadog] }
+      text: "(?i)firing|resolved"
+    extract:
+      - "\\[[A-Z]+\\] (?P<alert>[A-Za-z]+)"
+      - "service=(?P<service>[a-z-]+)"
+      - "(?i)severity: (?P<severity>[a-z]+)"
+      - "env=(?P<env>[a-z]+)"
+    recovery: "(?i)resolved"
+    trusted: true
+  ops:
+    channel: C01OPS
+    match:
+      sender: { kind: human }
+
+routes:
+  - name: default
+
+redaction:
+  hashKeySecret: { name: redaction, key: hash-key }
+  custom:
+    - { name: seeded, pattern: "SEEDED-[A-Z0-9]{8}" }

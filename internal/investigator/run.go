@@ -142,9 +142,14 @@ func (r *run) savePrompt(ctx context.Context) error {
 		return fmt.Errorf("read event %s: %w", first.Event.ID, err)
 	}
 
+	specs := r.h.builtins.specs()
+	if spec, ok := r.h.opts.Watchers.Spec(r.inv.Route, specNames(r.tools.Tools())); ok {
+		specs = append(specs, spec)
+	}
+
 	req := prompt.Build(prompt.Input{
 		Strategy: st,
-		Tools:    append(r.h.builtins.specs(), r.tools.Tools()...),
+		Tools:    append(specs, r.tools.Tools()...),
 		Group:    prompt.Group{First: ev, Count: int(first.EventCount)},
 		Route:    prompt.RouteContext{Name: r.inv.Route},
 	})

@@ -1,0 +1,32 @@
+{
+  "version": "4",
+  "groupKey": "{}:{alertname=\"CheckoutDown\"}",
+  "status": "firing",
+  "receiver": "sidekick",
+  "groupLabels": {
+    "alertname": "CheckoutDown"
+  },
+  "commonLabels": {
+    "alertname": "CheckoutDown",
+    "service": "checkout"
+  },
+  "commonAnnotations": {},
+  "externalURL": "http://alertmanager.example.com",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "CheckoutDown",
+        "service": "checkout",
+        "severity": "critical"
+      },
+      "annotations": {
+        "summary": "The checkout service is down"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee99"
+    }
+  ]
+}

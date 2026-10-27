@@ -11,6 +11,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/source"
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // RecordFindingTool is the name of the built-in tool that records one
@@ -225,7 +226,17 @@ func isBuiltin(s db.Step, name string) bool {
 
 // isBuiltinName reports whether name is a built-in tool.
 func isBuiltinName(name string) bool {
-	return slices.Contains([]string{report.SubmitVerdictTool, RecordFindingTool}, name)
+	return slices.Contains([]string{report.SubmitVerdictTool, RecordFindingTool, watch.StartWatcherTool}, name)
+}
+
+// specNames returns the names of specs.
+func specNames(specs []model.ToolSpec) []string {
+	names := make([]string, len(specs))
+	for i, s := range specs {
+		names[i] = s.Name
+	}
+
+	return names
 }
 
 // rejectedText is what the model sees for a built-in call that failed its

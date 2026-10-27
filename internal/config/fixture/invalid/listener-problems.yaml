@@ -1,0 +1,28 @@
+# A listener with a problem in every field.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default
+
+slack:
+  botTokenSecret: { name: sidekick-slack, key: botToken }
+  appTokenSecret: { name: sidekick-slack, key: appToken }
+
+listeners:
+  alerts:
+    channel: alerts
+    match:
+      sender: { kind: robot, bots: [SigNoz], users: [bob] }
+      text: "(?i)alert("
+    extract:
+      - "service=([a-z]+)"
+      - "(?P<env>[a-z"
+    recovery: "resolved("
+    trusted: true

@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/intake"
+	"github.com/nourtalaat/sidekick/internal/intake/ingest"
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
@@ -41,7 +42,7 @@ func TestHooks(t *testing.T) {
 	}{
 		{
 			name:         "valid HMAC signature",
-			wantResults:  map[string]int{resultAccepted: 1},
+			wantResults:  map[string]int{ingest.ResultAccepted: 1},
 			send:         signed("ci", testHMACKey, now, generic),
 			wantStatus:   http.StatusAccepted,
 			wantResponse: "accepted-one.json",
@@ -77,8 +78,8 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "wrong HMAC signature",
-			wantResults:  map[string]int{resultRejected: 1},
-			wantReason:   reasonUnauthenticated,
+			wantResults:  map[string]int{ingest.ResultRejected: 1},
+			wantReason:   ingest.ReasonUnauthenticated,
 			send:         signed("ci", "not-the-key", now, generic),
 			wantStatus:   http.StatusUnauthorized,
 			wantResponse: "unauthenticated.json",
@@ -86,8 +87,8 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "HMAC timestamp outside the tolerance",
-			wantResults:  map[string]int{resultRejected: 1},
-			wantReason:   reasonUnauthenticated,
+			wantResults:  map[string]int{ingest.ResultRejected: 1},
+			wantReason:   ingest.ReasonUnauthenticated,
 			send:         signed("ci", testHMACKey, now.Add(-6*time.Minute), generic),
 			wantStatus:   http.StatusUnauthorized,
 			wantResponse: "unauthenticated.json",
@@ -95,8 +96,8 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "HMAC signature of another body",
-			wantResults:  map[string]int{resultRejected: 1},
-			wantReason:   reasonUnauthenticated,
+			wantResults:  map[string]int{ingest.ResultRejected: 1},
+			wantReason:   ingest.ReasonUnauthenticated,
 			send:         delivery{endpoint: "ci", header: signed("ci", testHMACKey, now, []byte(`{}`)).header, body: generic},
 			wantStatus:   http.StatusUnauthorized,
 			wantResponse: "unauthenticated.json",
@@ -104,7 +105,7 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "valid bearer token with several alerts and one resolved",
-			wantResults:  map[string]int{resultAccepted: 3},
+			wantResults:  map[string]int{ingest.ResultAccepted: 3},
 			send:         bearer("alertmanager", testBearerToken, alertmanager),
 			wantStatus:   http.StatusAccepted,
 			wantResponse: "accepted-alertmanager.json",
@@ -145,8 +146,8 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "wrong bearer token",
-			wantResults:  map[string]int{resultRejected: 1},
-			wantReason:   reasonUnauthenticated,
+			wantResults:  map[string]int{ingest.ResultRejected: 1},
+			wantReason:   ingest.ReasonUnauthenticated,
 			send:         bearer("alertmanager", testBearerToken+"x", alertmanager),
 			wantStatus:   http.StatusUnauthorized,
 			wantResponse: "unauthenticated.json",
@@ -154,8 +155,8 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "no credentials",
-			wantResults:  map[string]int{resultRejected: 1},
-			wantReason:   reasonUnauthenticated,
+			wantResults:  map[string]int{ingest.ResultRejected: 1},
+			wantReason:   ingest.ReasonUnauthenticated,
 			send:         delivery{endpoint: "alertmanager", body: alertmanager},
 			wantStatus:   http.StatusUnauthorized,
 			wantResponse: "unauthenticated.json",
@@ -163,8 +164,8 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "an empty secret accepts nothing",
-			wantResults:  map[string]int{resultRejected: 1},
-			wantReason:   reasonUnauthenticated,
+			wantResults:  map[string]int{ingest.ResultRejected: 1},
+			wantReason:   ingest.ReasonUnauthenticated,
 			send:         bearer("empty-secret", "", generic),
 			wantStatus:   http.StatusUnauthorized,
 			wantResponse: "unauthenticated.json",
@@ -180,8 +181,8 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "unknown endpoint",
-			wantResults:  map[string]int{resultRejected: 1},
-			wantReason:   reasonUnauthenticated,
+			wantResults:  map[string]int{ingest.ResultRejected: 1},
+			wantReason:   ingest.ReasonUnauthenticated,
 			send:         bearer("nope", testBearerToken, alertmanager),
 			wantStatus:   http.StatusNotFound,
 			wantResponse: "not-found.json",
@@ -189,8 +190,8 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "body over the limit",
-			wantResults:  map[string]int{resultRejected: 1},
-			wantReason:   reasonTooLarge,
+			wantResults:  map[string]int{ingest.ResultRejected: 1},
+			wantReason:   ingest.ReasonTooLarge,
 			send:         bearer("alertmanager", testBearerToken, oversized()),
 			wantStatus:   http.StatusRequestEntityTooLarge,
 			wantResponse: "too-large.json",
@@ -198,8 +199,8 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "payload the adapter rejects",
-			wantResults:  map[string]int{resultRejected: 1},
-			wantReason:   reasonInvalidPayload,
+			wantResults:  map[string]int{ingest.ResultRejected: 1},
+			wantReason:   ingest.ReasonInvalidPayload,
 			send:         signed("ci", testHMACKey, now, readFixture(t, "requests/generic-missing-title.json")),
 			wantStatus:   http.StatusBadRequest,
 			wantResponse: "invalid-payload.json",
@@ -207,7 +208,7 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "a repeated delivery is a duplicate",
-			wantResults:  map[string]int{resultAccepted: 3, resultDuplicate: 3},
+			wantResults:  map[string]int{ingest.ResultAccepted: 3, ingest.ResultDuplicate: 3},
 			before:       []delivery{bearer("alertmanager", testBearerToken, alertmanager)},
 			send:         bearer("alertmanager", testBearerToken, alertmanager),
 			wantStatus:   http.StatusAccepted,
@@ -221,7 +222,7 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "an event stored before is a duplicate",
-			wantResults:  map[string]int{resultDuplicate: 1},
+			wantResults:  map[string]int{ingest.ResultDuplicate: 1},
 			seeds:        []string{"fixture/existing-ci-event.sql"},
 			send:         signed("ci", testHMACKey, now, generic),
 			wantStatus:   http.StatusAccepted,
@@ -237,7 +238,7 @@ func TestHooks(t *testing.T) {
 		},
 		{
 			name:         "seeded secrets never reach the events table",
-			wantResults:  map[string]int{resultAccepted: 1},
+			wantResults:  map[string]int{ingest.ResultAccepted: 1},
 			send:         signed("ci", testHMACKey, now, readFixture(t, "requests/generic-with-secrets.json")),
 			wantStatus:   http.StatusAccepted,
 			wantResponse: "accepted-one.json",

@@ -22,7 +22,7 @@ Sidekick receives alerts from webhooks or Slack, investigates them with the LLM 
 - [Sending alerts to Sidekick](docs/webhooks.md): webhook endpoints, the Alertmanager and generic adapters, how deliveries are authenticated, and `sidekick test-alert`.
 - [Setting up senders](docs/senders.md): pointing SigNoz, Datadog, Sentry and Grafana at Sidekick, and what each of their alerts becomes.
 - [How investigations run](docs/investigations.md): the agent loop, the report checks, how an investigation ends, its limits, and what happens on a restart.
-- [Investigations in Slack](docs/slack.md): the Slack output, what it posts while an investigation runs and when it finishes, and how to set up the Slack app.
+- [Investigations in Slack](docs/slack.md): how to set up the Slack app from its manifest, how listeners and mentions start investigations, and what the Slack output posts while an investigation runs and when it finishes.
 - [Results on tickets](docs/tickets.md): the Linear and Jira comment outputs, how it finds the ticket an alert is about, and how to set it up.
 - [Webhook callbacks](docs/webhook-callbacks.md): the signed JSON callback with each final result and watcher event, and how a receiver checks it.
 - [Benchmarks](docs/benchmark.md): `sidekick bench run`, scenario files, mock sources and their matchers, and the Postgres a benchmark runs on.

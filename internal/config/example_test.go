@@ -14,6 +14,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/strategy"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // exampleSecrets are the secret references in fixture/valid/example.yaml.
@@ -24,6 +25,7 @@ var exampleSecrets = []registry.SecretRef{
 	{Name: "sidekick-hooks", Key: "alertmanager"},
 	{Name: "sidekick-hooks", Key: "ci"},
 	{Name: "sidekick-slack", Key: "botToken"},
+	{Name: "sidekick-slack", Key: "appToken"},
 	{Name: "sidekick-redaction", Key: "key"},
 }
 
@@ -71,6 +73,23 @@ func TestExampleConfig(t *testing.T) {
 			},
 		},
 		{
+			name: "the Slack app and its listeners",
+			check: func(t *testing.T, cfg *Config) {
+				t.Helper()
+				require.Equal(t, SlackModeSocket, cfg.Slack.Mode)
+				require.True(t, cfg.Slack.Connects())
+				require.Equal(t, []string{"B01SIGNOZ"}, cfg.Slack.TrustedBots)
+
+				alerts := cfg.Listeners["alerts"]
+				require.Equal(t, "#alerts", alerts.Channel)
+				require.Equal(t, ListenerSender{Kind: event.SenderBot, Names: []string{"SigNoz"}}, alerts.Match.Sender)
+				require.Len(t, alerts.Extract, 4)
+				require.Equal(t, "(?i)resolved|recovered", alerts.Recovery)
+				require.True(t, alerts.Trusted)
+				require.Equal(t, []string{"alertmanager", "alerts", SlackMentionIntake}, cfg.RoutesInOrder()[0].Match.Intake)
+			},
+		},
+		{
 			name: "built-in and file strategies",
 			check: func(t *testing.T, cfg *Config) {
 				t.Helper()
@@ -103,6 +122,44 @@ func TestExampleConfig(t *testing.T) {
 				require.Nil(t, routes[1].RateLimit)
 				require.Equal(t, 8, cfg.Budgets.Concurrency)
 				require.Equal(t, map[string]int{"payments-latency": 3}, cfg.RouteConcurrency())
+			},
+		},
+		{
+			name: "watcher policy with resolved route watchers",
+			check: func(t *testing.T, cfg *Config) {
+				t.Helper()
+
+				p := cfg.WatchPolicy()
+				require.Equal(t, 3, p.MaxPerGroup)
+				require.Equal(t, 100, p.MaxTotal)
+				require.Equal(t, watch.Bounds{Path: "watch", MinInterval: 10 * time.Second, MaxInterval: 15 * time.Minute, MaxTimeout: 4 * time.Hour}, p.Bounds)
+
+				payments, ok := p.Route("payments-latency")
+				require.True(t, ok)
+				require.True(t, payments.AllowModel)
+				require.Equal(t, []watch.Type{watch.TypeHTTP, watch.TypeTool}, payments.Types)
+				require.Equal(t, []string{"*.internal.example.com"}, payments.Hosts)
+				require.Len(t, payments.Definitions, 3)
+
+				health := payments.Definitions[0]
+				require.Equal(t, "checkout-health", health.Name)
+				require.Equal(t, watch.OriginRoute, health.Origin)
+				require.Equal(t, watch.Settings{Interval: 15 * time.Second, Timeout: 90 * time.Minute, PassesToRecover: 3, CheckTimeout: 10 * time.Second}, health.Settings)
+				require.True(t, health.Match.Matches("CheckoutDown", ""))
+				require.False(t, health.Match.Matches("CheckoutLatency", ""))
+				require.IsType(t, watch.HTTPCheck{}, health.Check)
+
+				errorRate := payments.Definitions[1]
+				require.Equal(t, 20*time.Second, errorRate.Settings.Interval)
+				require.IsType(t, watch.ToolCheck{}, errorRate.Check)
+				require.Equal(t, watch.TypeAlert, payments.Definitions[2].Check.Type())
+
+				def, ok := p.Route("default")
+				require.True(t, ok)
+				require.Equal(t, []watch.Type{watch.TypeHTTP, watch.TypeTool, watch.TypeAlert}, def.Types)
+				require.Empty(t, def.Tools)
+				require.Equal(t, cfg.Watch.HTTP.AllowHosts, def.Hosts)
+				require.Empty(t, def.Definitions)
 			},
 		},
 	}
