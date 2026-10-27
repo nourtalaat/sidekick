@@ -1,9 +1,11 @@
 # Azure source
 
 The Azure source (`type: azure`) lets investigations read the Azure
-subscriptions your services run in: Log Analytics logs, and what changed
-according to the Activity Log. It calls the Log Analytics query API and
-Azure Resource Manager with one identity, and it only reads.
+subscriptions your services run in: Log Analytics logs, Azure Monitor
+metrics and alerts, what changed according to the Activity Log, Resource
+Health and Azure service health, and AKS clusters. It calls the Log
+Analytics query API and Azure Resource Manager with one identity, and it
+only reads.
 
 This page lists the smallest set of permissions the source needs and how to
 give Sidekick its identity. The source's config keys are in
@@ -18,7 +20,11 @@ custom role:
 | Action | Used by |
 |---|---|
 | `Microsoft.OperationalInsights/workspaces/read`, `Microsoft.OperationalInsights/workspaces/query/*/read` | `query_logs` |
+| `Microsoft.Insights/metrics/read`, `Microsoft.Insights/metricDefinitions/read` | `query_metrics` |
+| `Microsoft.AlertsManagement/alerts/read` | `list_alerts` |
 | `Microsoft.Insights/eventtypes/values/read` | `list_changes` |
+| `Microsoft.ResourceHealth/availabilityStatuses/read`, `Microsoft.ResourceHealth/events/read` | `get_resource_health` |
+| `Microsoft.ContainerService/managedClusters/read` | `get_aks_cluster` |
 
 ```json
 {
@@ -27,7 +33,13 @@ custom role:
   "Actions": [
     "Microsoft.OperationalInsights/workspaces/read",
     "Microsoft.OperationalInsights/workspaces/query/*/read",
-    "Microsoft.Insights/eventtypes/values/read"
+    "Microsoft.Insights/metrics/read",
+    "Microsoft.Insights/metricDefinitions/read",
+    "Microsoft.AlertsManagement/alerts/read",
+    "Microsoft.Insights/eventtypes/values/read",
+    "Microsoft.ResourceHealth/availabilityStatuses/read",
+    "Microsoft.ResourceHealth/events/read",
+    "Microsoft.ContainerService/managedClusters/read"
   ],
   "NotActions": [],
   "AssignableScopes": ["/subscriptions/<subscription id>"]
@@ -52,8 +64,15 @@ What the source can read is what this role allows:
   workspaces you list. To keep some tables away from Sidekick, replace
   `workspaces/query/*/read` with `workspaces/query/<table>/read` for each
   table it may read.
-- Every API version the source uses is stable: Log Analytics `v1` and the
-  Activity Log `2015-04-01`.
+- `query_metrics` passes the model's dimension filter to Azure Monitor as
+  it is.
+- `managedClusters/read` returns a cluster's settings, never its
+  credentials. The source has no call that lists cluster credentials, and
+  the role does not allow one. Objects inside a cluster are read by the
+  [Kubernetes source](kubernetes.md).
+- `list_alerts` uses the Alerts Management API version
+  `2023-07-12-preview`: Microsoft publishes no stable version of the alerts
+  list. Every other API version the source uses is stable.
 - Nothing in the role writes. The source sends only GET requests, and the
   Log Analytics query, a POST request that changes nothing.
 
@@ -103,12 +122,17 @@ sources:
 
 ## Limits
 
-- **Time range.** Every tool reads at most 7 days. `query_logs` reads the
-  last hour by default, and `list_changes` the last 24 hours.
+- **Time range.** Every tool reads at most 7 days. `query_logs` and
+  `query_metrics` read the last hour by default, and `list_alerts`,
+  `list_changes` and the service health events of `get_resource_health`
+  the last 24 hours.
 - **Rows.** `query_logs` returns up to 100 rows by default and at most 500
   over all tables, with each cell cut at 1 KiB; write the query with
   `take` or `summarize` so it returns what matters. `list_changes` returns
   up to 100 events by default and at most 500, from at most 5 pages.
-- **Size.** Error messages are cut at 2 KiB,
+  `query_metrics` returns up to 10 series by default and at most 50, with
+  at most 120 points each, for at most 10 metrics. `list_alerts` returns
+  up to 30 alerts by default and at most 100.
+- **Size.** Descriptions, summaries and error messages are cut at 2 KiB,
   and names at 512 bytes. A result stops adding items at 256 KiB. A
   result that was cut says so.

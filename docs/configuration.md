@@ -585,7 +585,11 @@ The tools, as the model sees them with the source name `azure`:
 | Tool | Returns |
 |---|---|
 | `azure__query_logs` | The tables and rows of a KQL query on a Log Analytics workspace. |
+| `azure__query_metrics` | Azure Monitor platform metrics of one resource, optionally split by dimension. |
+| `azure__list_alerts` | Azure Monitor alerts that started in a range, with severity, state and target. |
 | `azure__list_changes` | Activity Log writes, deletes and actions: deployments and config changes, with who made them. |
+| `azure__get_resource_health` | The Resource Health of one resource, or the subscription's unavailable resources and Azure service health events. |
+| `azure__get_aks_cluster` | An AKS cluster's state, versions, upgrade channel and node pools, or the list of clusters. |
 
 How it behaves:
 
@@ -597,14 +601,16 @@ How it behaves:
   `subscriptions` lists one, a full `resource` ID, or a `workspace`. Any
   of them outside the config, or input that does not fit, such as a range
   longer than 7 days, is a tool error, and nothing is sent.
-- **Queries.** The KQL of `query_logs` goes to Log Analytics as the model
-  wrote it, so the identity's role is what limits what can be read.
-- **Results** are JSON with links to the workspace's logs or the Activity
-  Log in the Azure portal, which become evidence links in the report. Lists are
+- **Queries.** The KQL of `query_logs` and the dimension filter of
+  `query_metrics` go to Azure as the model wrote them, so the identity's
+  role is what limits what can be read.
+- **Results** are JSON with links to the workspace's logs, the resource's
+  metrics or health page, the alert, the Activity Log or the cluster in
+  the Azure portal, which become evidence links in the report. Lists are
   capped as [Azure source](sources/azure.md#limits) describes, and say
   when they were cut.
-- **No data.** A query that returns no rows, an empty list, and a
-  workspace Azure does not have, are reported as no data.
+- **No data.** A query that returns no rows, metrics without values, an
+  empty list, and a resource Azure does not have, are reported as no data.
 - **Errors.** A refused request, such as a query Log Analytics cannot
   parse or a permission the identity lacks, goes to the model as a tool
   error with Azure's message. A refused token, rate limits, server errors
