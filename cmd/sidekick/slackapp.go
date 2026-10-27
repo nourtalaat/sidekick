@@ -9,12 +9,14 @@ import (
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/rules"
 	"github.com/nourtalaat/sidekick/internal/slackapp"
+	"github.com/nourtalaat/sidekick/internal/slackcmd"
 )
 
 // registerSlackApp receives Slack events when the slack section lets the
 // app receive them: over Socket Mode with the app token, or at
-// POST /slack/events in events mode. Without either, Sidekick only posts
-// to Slack.
+// POST /slack/events in events mode, and answers /sidekick commands the
+// same way, at POST /slack/commands in events mode. Without either,
+// Sidekick only posts to Slack.
 func registerSlackApp(ctx context.Context, a *app.App, cache *rules.Cache) error {
 	cfg := a.Config()
 	log := a.Logger().With("component", "slackapp")
@@ -52,9 +54,15 @@ func registerSlackApp(ctx context.Context, a *app.App, cache *rules.Cache) error
 		return nil
 	})
 
+	commands, err := newSlackCommands(a, h, cache)
+	if err != nil {
+		return fmt.Errorf("set up the /sidekick commands: %w", err)
+	}
+
 	if cfg.Slack.Mode == config.SlackModeEvents {
 		if err := a.RegisterRoutes(func(mux *http.ServeMux) {
 			mux.Handle(slackapp.EventsPattern, h)
+			mux.Handle(slackcmd.CommandsPattern, slackcmd.NewHTTPHandler(commands, h))
 		}); err != nil {
 			return fmt.Errorf("register the Slack Events API route: %w", err)
 		}
@@ -69,6 +77,7 @@ func registerSlackApp(ctx context.Context, a *app.App, cache *rules.Cache) error
 		AppToken: cfg.Slack.AppTokenSecret,
 		APIURL:   cfg.Slack.APIURL,
 		Logger:   log,
+		Commands: commands,
 	})
 
 	if err := a.RegisterTask("slack-socket-mode", socket.Run); err != nil {

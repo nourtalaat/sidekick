@@ -560,6 +560,7 @@ investigations:
   Slack user group IDs (`S...`) to roles, and `roleUsers` maps user IDs
   (`U...` or `W...`) to roles, for teams without user groups. A user gets
   the highest role from either map; a user in neither is a `responder`.
+  [Roles](slack.md#roles) says what each role may do.
 
 [Investigations in Slack](slack.md) describes how to set up the app.
 
@@ -595,7 +596,8 @@ text of its attachments and blocks added, one part per line.
 [Listeners and mentions](slack.md#listeners-and-mentions) says which
 messages a listener sees and how events are built from them. Listeners
 need the Slack app to receive events, so `slack.appTokenSecret` (or
-`mode: events`) must be set.
+`mode: events`) must be set. Listeners can also be added from Slack with
+[`/sidekick listen`](slack.md#the-sidekick-command).
 
 ### `outputs`
 

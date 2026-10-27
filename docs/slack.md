@@ -119,9 +119,11 @@ slack:
   mode: events
 ```
 
-Slash commands and buttons are not handled yet. Over Socket Mode they are
-acknowledged and do nothing; with the Events API, their URLs are not
-served yet.
+With the Events API, also enter `https://<your host>/slack/commands` as
+the **Request URL** of the `/sidekick` command under **Slash Commands**.
+Command requests are checked with the signing secret in the same way.
+Buttons are not handled yet; over Socket Mode they are acknowledged and do
+nothing.
 
 ## Listeners and mentions
 
@@ -171,6 +173,76 @@ Mentioning `@Sidekick` asks it to investigate a message:
 Events from mentions have the intake `slack-mention` and are never
 trusted. A mention in a thread that Sidekick started itself is left alone;
 follow-up questions there come in a later release.
+
+## The /sidekick command
+
+`/sidekick` lets people add listeners and routes from Slack, without a
+config change, and ask Sidekick to investigate any message. Replies are
+shown only to the person who sent the command.
+
+| Command | Role | Does |
+|---|---|---|
+| `/sidekick listen #channel [bot:<name or ID>] [pattern:<regex>] [name:<name>]` | responder | Adds a listener for the channel. `bot:` takes a bot name such as `Grafana` or a bot ID such as `B01ABCDEF`, and can be given more than once; `pattern:` is a regular expression over the message text, in double quotes when it holds spaces. The listener is named after the channel unless `name:` is given. |
+| `/sidekick unlisten <name>` | responder | Removes a listener added with `listen`. |
+| `/sidekick listeners` | viewer | Lists the listeners in effect. |
+| `/sidekick routes` | viewer | Lists the routes, in the order they are tried. |
+| `/sidekick route set <name> <field> <value>` | admin | Changes one field of a route added from Slack, or adds the route. `/sidekick route set` lists the fields. |
+| `/sidekick investigate <message link>` | responder | Investigates the message, as a mention of `@Sidekick` in its thread would. Use the message's **Copy link**; for a reply in a thread, the thread's first message is investigated. |
+| `/sidekick status` | anyone | Shows the version, your role and how many rules are in effect. |
+| `/sidekick help` | anyone | Lists the commands. |
+
+`route set` can change these fields: `priority`, `enabled`, `mode`,
+`strategy`, `sources`, `outputs`, `intake`, `service`, `severity`,
+`labels`, `text`, `maxToolCalls`, `maxWallTime` and `window`. List fields
+take values separated by commas, and `none` clears a list or a match
+field. A new route needs a match field (`intake`, `service`, `severity`,
+`labels` or `text`) first, so it never takes every event ahead of the
+`default` route. Routes set from Slack are `read-only`.
+
+### Rules from Slack and from the config file
+
+Listeners and routes added from Slack are kept in Postgres, so every
+replica uses them, and each replica reloads them within a second of a
+change and again every minute. They pass the same checks as those in the
+config file, and may use only what the file defines: its sources,
+outputs and strategies, with budgets at or below
+`budgets.perInvestigation`. Infrastructure, such as connectors, sources,
+outputs and credentials, is set only in the file.
+
+- The config file wins: a rule from Slack cannot take the name of a file
+  rule. If a config change later adds a file rule with the name of one
+  from Slack, the file rule is used, and the other is logged at start-up
+  and shown as not in effect by `/sidekick listeners` and
+  `/sidekick routes`.
+- Routes are tried by `priority`, lower first, then routes from the file
+  before those from Slack, then by name. The `default` route is set only
+  in the file and is always tried last.
+- A rule from Slack that a config change makes invalid, for example by
+  removing a source it uses, stops being used and is logged.
+- Every change is written to the audit log with who made it and the old
+  and new values.
+
+### Roles
+
+Until web UI login arrives, roles come from the `slack` section:
+`roleGroups` maps Slack user groups to roles, and `roleUsers` maps single
+users, for teams without user groups. A user gets the highest role from
+either; anyone else is a `responder`. Each role can do everything the
+roles below it can: `viewer`, then `responder`, then `approver`, then
+`admin`.
+
+```yaml
+slack:
+  roleGroups:
+    S01SRE: admin          # the user group ID, from the group's page in Slack
+  roleUsers:
+    U01LEAD: approver
+```
+
+Sidekick reads a user's groups with `usergroups.users.list`, one call per
+group in `roleGroups`, and keeps them for a day. When someone is refused
+for their role, it reads their groups again at once, so a person just
+added to a group does not wait.
 
 ## Output keys
 
