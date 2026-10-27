@@ -40,6 +40,13 @@ type benchFlags struct {
 	scenarios  string
 	repeat     int
 	db         bool
+	// settings is bench.yaml.
+	settings string
+	seed     uint64
+	label    string
+	out      string
+	junit    string
+	markdown string
 }
 
 // newBenchCmd builds `sidekick bench`, which holds the benchmark
@@ -81,9 +88,15 @@ end, so nothing is left behind and a Sidekick serving from the same
 database never sees the runs' jobs. The database role then needs CREATE on
 the database.
 
-Exit status: 0 when every run finished, 2 for bad flags, a bad config file
-or a bad scenario file, 3 when the model provider is unreachable after its
-retries or Docker or the database fails, and 1 for anything else.`,
+Once every run has finished, the judge grades each run's root cause, the
+runs are scored and the command prints the spread of each scenario, the
+run totals with their 95% intervals, and the thresholds of --bench-config.
+--out, --junit and --markdown write the results to files as well.
+
+Exit status: 0 when every run finished and every threshold is met, 1 when
+a threshold failed, 2 for bad flags, a bad config, bench.yaml, baseline or
+scenario file, 3 when the model provider is unreachable after its retries
+or Docker or the database fails, and 1 for anything else.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGTERM, os.Interrupt)
@@ -101,6 +114,12 @@ retries or Docker or the database fails, and 1 for anything else.`,
 	cmd.Flags().StringVarP(&flags.scenarios, "scenarios", "s", "", "a scenario file, or a directory of them (required)")
 	cmd.Flags().IntVarP(&flags.repeat, "repeat", "n", bench.DefaultRepeat, "how many times each scenario runs")
 	cmd.Flags().BoolVar(&flags.db, "db", false, "run in a schema of its own on the database of database.urlSecret, instead of a temporary Postgres")
+	cmd.Flags().StringVar(&flags.settings, "bench-config", "", "a bench.yaml with the weights of the overall score and the thresholds")
+	cmd.Flags().Uint64Var(&flags.seed, "seed", bench.DefaultSeed, "seeds the resampling of the 95% intervals")
+	cmd.Flags().StringVar(&flags.label, "label", "", "a name for the run, kept in report.json")
+	cmd.Flags().StringVar(&flags.out, "out", "", "write the results to this report.json")
+	cmd.Flags().StringVar(&flags.junit, "junit", "", "write the results to this JUnit XML file")
+	cmd.Flags().StringVar(&flags.markdown, "markdown", "", "write a Markdown summary, for a pull request comment, to this file")
 
 	if err := cmd.MarkFlagRequired("scenarios"); err != nil {
 		panic(fmt.Sprintf("mark flag required: %v", err))
@@ -164,12 +183,18 @@ has another schema version.`,
 	}
 }
 
-// benchRun checks the flags, the scenarios and the config, gets Postgres,
-// runs the scenarios and prints the table of results, also of the runs
-// that finished before a failure or Ctrl-C.
+// benchRun checks the flags, the settings, the scenarios and the config,
+// gets Postgres, runs the scenarios, scores them and prints the results,
+// writes the output files and checks the thresholds. When a run fails it
+// prints the table of the runs that finished before it, unscored.
 func benchRun(ctx context.Context, cmd *cobra.Command, regs config.Registries, flags benchFlags) (err error) {
 	if flags.repeat < 1 {
 		return &exitError{code: exitBadInput, err: fmt.Errorf("--repeat must be at least 1, not %d", flags.repeat)}
+	}
+
+	settings, baseline, err := benchSettings(flags.settings)
+	if err != nil {
+		return &exitError{code: exitBadInput, err: err}
 	}
 
 	scenarios, err := bench.LoadScenarios(flags.scenarios, bench.LoadOptions{})
@@ -199,6 +224,11 @@ func benchRun(ctx context.Context, cmd *cobra.Command, regs config.Registries, f
 		return configProblems(cmd, err)
 	}
 
+	judge, err := runner.Judge()
+	if err != nil {
+		return &exitError{code: exitBadInput, err: err}
+	}
+
 	database, err := benchDatabase(ctx, cfg, flags.db, log)
 	if err != nil {
 		return err
@@ -214,6 +244,11 @@ func benchRun(ctx context.Context, cmd *cobra.Command, regs config.Registries, f
 	}()
 
 	results, runErr := runner.Run(ctx, database)
+	if runErr == nil {
+		log.InfoContext(ctx, "grading the root causes", "judge", judge.Name())
+
+		runErr = bench.Score(ctx, results, bench.ScoreOptions{Grader: judge, Weights: settings.ScoreWeights(), Seed: flags.seed})
+	}
 
 	if err := results.WriteTable(cmd.OutOrStdout()); err != nil {
 		return errors.Join(runErr, fmt.Errorf("print the results: %w", err))
@@ -221,12 +256,27 @@ func benchRun(ctx context.Context, cmd *cobra.Command, regs config.Registries, f
 
 	switch {
 	case runErr == nil:
-		return nil
 	case errors.Is(runErr, bench.ErrInfrastructure):
 		return &exitError{code: exitInfrastructure, err: runErr}
 	default:
 		return fmt.Errorf("run the scenarios: %w", runErr)
 	}
+
+	thresholds := settings.Thresholds.Check(*results.Summary, baseline)
+
+	if err := printBenchResults(cmd, results, thresholds); err != nil {
+		return err
+	}
+
+	if err := writeBenchOutputs(results, benchInfo(runner, flags), thresholds, flags); err != nil {
+		return err
+	}
+
+	if failed := bench.Failed(thresholds); len(failed) > 0 {
+		return &exitError{code: exitThresholdFailed, err: fmt.Errorf("%d of %d thresholds failed: %s", len(failed), len(thresholds), thresholdNames(failed))}
+	}
+
+	return nil
 }
 
 // benchJudgeCheck loads the cases and the config, has the judge grade each

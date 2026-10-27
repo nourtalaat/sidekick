@@ -83,6 +83,7 @@ model:
       apiKeySecret: { name: sidekick-anthropic, key: apiKey }
   roles:
     investigate: claude      # required, and the model must be able to call tools
+    judge: claude            # grades benchmark runs; must call tools; default: the investigate connector
     summarize: claude
   prices:
     claude-opus-5-5: { inputPerMTok: 4, outputPerMTok: 20, cacheReadPerMTok: 0.2, cacheWritePerMTok: 5 }   # replaces the shipped price
@@ -1485,8 +1486,8 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
 - Every `provider`, source `type`, `adapter` and output `type` is one this
   version of Sidekick has, and its section passes that plugin's own checks.
 - `model.roles.investigate` is set, every role names a defined connector,
-  and the connector for `investigate`, globally or on a route, can call
-  tools.
+  and the connectors for `investigate` and `judge`, globally or on a
+  route, can call tools.
 - Every secret reference has a `name` and a `key`, each a plain name without
   `/`. At start-up, every referenced secret file must exist and be readable.
 - Every webhook endpoint sets exactly one of `bearer` and `hmac`. Every

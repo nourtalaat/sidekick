@@ -8,8 +8,12 @@ import (
 	"time"
 )
 
-// junitName names the test suites of junit.xml.
-const junitName = "sidekick bench"
+const (
+	// junitName names the test suites of junit.xml.
+	junitName = "sidekick bench"
+	// junitThresholds names the test suite of the thresholds.
+	junitThresholds = "thresholds"
+)
 
 // junitSuites is the root element of junit.xml.
 type junitSuites struct {
@@ -46,9 +50,10 @@ type junitFailure struct {
 
 // WriteJUnit writes the scored results as JUnit XML, for CI systems that
 // show test results: one test suite per scenario with one test case per
-// run. A run fails when its verdict does not count as correct, or its root
-// cause was graded and does not match.
-func (r *Results) WriteJUnit(w io.Writer) error {
+// run, and a suite of the thresholds when there are any. A run fails when
+// its verdict does not count as correct, or its root cause was graded and
+// does not match.
+func (r *Results) WriteJUnit(w io.Writer, thresholds []ThresholdResult) error {
 	root := junitSuites{Name: junitName}
 
 	for _, sc := range r.Scenarios {
@@ -68,6 +73,13 @@ func (r *Results) WriteJUnit(w io.Writer) error {
 		}
 
 		suite.Time = seconds(took)
+		root.Suites = append(root.Suites, suite)
+		root.Tests += suite.Tests
+		root.Failures += suite.Failures
+	}
+
+	if len(thresholds) > 0 {
+		suite := thresholdSuite(thresholds)
 		root.Suites = append(root.Suites, suite)
 		root.Tests += suite.Tests
 		root.Failures += suite.Failures
@@ -121,6 +133,29 @@ func (r RunResult) junitCase(sc ScenarioResult) junitCase {
 	}
 
 	return c
+}
+
+// thresholdSuite returns the test suite of the thresholds, one test case
+// each.
+func thresholdSuite(thresholds []ThresholdResult) junitSuite {
+	suite := junitSuite{Name: junitThresholds, Time: seconds(0)}
+
+	for _, t := range thresholds {
+		c := junitCase{
+			ClassName: junitThresholds, Name: t.Name, Time: seconds(0),
+			SystemOut: fmt.Sprintf("limit %.4g, value %s", t.Limit, valueCell(t.Value)),
+		}
+
+		if !t.Passed {
+			c.Failure = &junitFailure{Message: fmt.Sprintf("%s is %s; the limit is %.4g", t.Name, valueCell(t.Value), t.Limit), Text: t.Detail}
+			suite.Failures++
+		}
+
+		suite.Cases = append(suite.Cases, c)
+		suite.Tests++
+	}
+
+	return suite
 }
 
 // seconds formats d as seconds with three decimals, as JUnit times are.

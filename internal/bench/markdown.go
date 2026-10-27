@@ -9,9 +9,9 @@ import (
 )
 
 // WriteMarkdown writes a summary of the scored results as Markdown, for a
-// pull request comment: what ran, the run totals with their intervals, and
-// one row per scenario.
-func (r *Results) WriteMarkdown(w io.Writer, info RunInfo) error {
+// pull request comment: what ran, the thresholds, the run totals with
+// their intervals, and one row per scenario.
+func (r *Results) WriteMarkdown(w io.Writer, info RunInfo, thresholds []ThresholdResult) error {
 	if r.Summary == nil {
 		return errNotScored
 	}
@@ -30,6 +30,29 @@ func (r *Results) WriteMarkdown(w io.Writer, info RunInfo) error {
 	}
 
 	fmt.Fprintf(&b, ". Prompt %s, judge prompt %s.\n\n", info.PromptVersion, info.JudgePromptVersion)
+
+	if len(thresholds) > 0 {
+		failed := len(Failed(thresholds))
+
+		if failed == 0 {
+			b.WriteString("Every threshold is met.\n\n")
+		} else {
+			fmt.Fprintf(&b, "**%d of %d thresholds failed.**\n\n", failed, len(thresholds))
+		}
+
+		b.WriteString("| Threshold | Limit | Value | Result |\n|---|---|---|---|\n")
+
+		for _, t := range thresholds {
+			result := "passed"
+			if !t.Passed {
+				result = "**failed**"
+			}
+
+			fmt.Fprintf(&b, "| %s | %.4g | %s | %s |\n", t.Name, t.Limit, valueCell(t.Value), result)
+		}
+
+		b.WriteString("\n")
+	}
 
 	m := r.Summary.Metrics
 

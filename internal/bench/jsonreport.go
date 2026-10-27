@@ -76,7 +76,9 @@ type JSONReport struct {
 	Weights         Weights             `json:"weights"`
 	Metrics         Metrics             `json:"metrics"`
 	Intervals       map[string]Interval `json:"intervals"`
-	Scenarios       []ScenarioReport    `json:"scenarios"`
+	// Thresholds are the checks of the thresholds of bench.yaml.
+	Thresholds []ThresholdResult `json:"thresholds"`
+	Scenarios  []ScenarioReport  `json:"scenarios"`
 }
 
 // ScenarioReport is one scenario in report.json.
@@ -128,8 +130,9 @@ type EvidenceReport struct {
 	Passed     bool   `json:"passed"`
 }
 
-// Report returns report.json for the scored results, with info.
-func (r *Results) Report(info RunInfo) (*JSONReport, error) {
+// Report returns report.json for the scored results, with info and the
+// checks of the thresholds.
+func (r *Results) Report(info RunInfo, thresholds []ThresholdResult) (*JSONReport, error) {
 	if r.Summary == nil {
 		return nil, errNotScored
 	}
@@ -146,11 +149,16 @@ func (r *Results) Report(info RunInfo) (*JSONReport, error) {
 		Weights:         r.Summary.Weights,
 		Metrics:         r.Summary.Metrics,
 		Intervals:       r.Summary.Intervals,
+		Thresholds:      thresholds,
 		Scenarios:       make([]ScenarioReport, 0, len(r.Scenarios)),
 	}
 
 	if out.Intervals == nil {
 		out.Intervals = map[string]Interval{}
+	}
+
+	if out.Thresholds == nil {
+		out.Thresholds = []ThresholdResult{}
 	}
 
 	for _, sc := range r.Scenarios {

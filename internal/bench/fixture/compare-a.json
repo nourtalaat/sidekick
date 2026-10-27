@@ -86,6 +86,7 @@
       "upper": 1
     }
   },
+  "thresholds": [],
   "scenarios": [
     {
       "id": "pool",

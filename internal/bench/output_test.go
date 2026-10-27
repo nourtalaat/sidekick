@@ -19,6 +19,12 @@ import (
 	"github.com/nourtalaat/sidekick/internal/report"
 )
 
+// testThresholds are the threshold checks of the output tests.
+var testThresholds = []ThresholdResult{
+	{Name: thresholdVerdictAccuracy, Limit: 0.8, Value: new(0.8), Passed: true},
+	{Name: thresholdRootCauseMatch, Limit: 0.7, Value: new(0.25), Detail: "below the limit"},
+}
+
 // reportSchemaFile is the published schema of report.json.
 const reportSchemaFile = "../../docs/bench-report.schema.json"
 
@@ -67,7 +73,7 @@ func TestReportMatchesSchema(t *testing.T) {
 
 			results := scoredResults(t)
 
-			rep, err := results.Report(testInfo)
+			rep, err := results.Report(testInfo, testThresholds)
 			require.NoError(t, err)
 
 			var out bytes.Buffer
@@ -117,7 +123,7 @@ func TestReadReport(t *testing.T) {
 			if tt.content == "WRITTEN" {
 				var err error
 
-				written, err = scoredResults(t).Report(testInfo)
+				written, err = scoredResults(t).Report(testInfo, testThresholds)
 				require.NoError(t, err)
 
 				var out bytes.Buffer
@@ -141,6 +147,7 @@ func TestReadReport(t *testing.T) {
 			require.Equal(t, written.Intervals, got.Intervals)
 			require.Equal(t, written.Scenarios, got.Scenarios)
 			require.Equal(t, written.RunInfo, got.RunInfo)
+			require.Equal(t, written.Thresholds, got.Thresholds)
 		})
 	}
 }
@@ -152,8 +159,8 @@ func TestReportBeforeScore(t *testing.T) {
 		name  string
 		write func(r *Results) error
 	}{
-		{name: "report.json", write: func(r *Results) error { _, err := r.Report(testInfo); return err }},
-		{name: "the Markdown summary", write: func(r *Results) error { return r.WriteMarkdown(&bytes.Buffer{}, testInfo) }},
+		{name: "report.json", write: func(r *Results) error { _, err := r.Report(testInfo, nil); return err }},
+		{name: "the Markdown summary", write: func(r *Results) error { return r.WriteMarkdown(&bytes.Buffer{}, testInfo, nil) }},
 	}
 
 	for _, tt := range tests {
@@ -175,7 +182,7 @@ func TestWriteJUnit(t *testing.T) {
 		{
 			name: "one suite per scenario and one case per run",
 			want: []string{
-				`<testsuites name="sidekick bench" tests="5" failures="3">`,
+				`<testsuites name="sidekick bench" tests="7" failures="4">`,
 				`<testsuite name="pool" tests="3" failures="2" time="6.000">`,
 				`<testcase classname="pool" name="run 1" time="1.000">`,
 				`<failure message="the root cause does not match: score 0.60, every required item met: false">`,
@@ -183,6 +190,8 @@ func TestWriteJUnit(t *testing.T) {
 				`<testsuite name="judge-error" tests="1" failures="1" time="1.000">`,
 				`the judge gave no grades: no grades`,
 				`<testsuite name="no-rubric" tests="1" failures="0" time="1.000">`,
+				`<testsuite name="thresholds" tests="2" failures="1" time="0.000">`,
+				`<failure message="rootCauseMatch is 0.25; the limit is 0.7">`,
 			},
 		},
 	}
@@ -192,7 +201,7 @@ func TestWriteJUnit(t *testing.T) {
 			t.Parallel()
 
 			var out bytes.Buffer
-			require.NoError(t, scoredResults(t).WriteJUnit(&out))
+			require.NoError(t, scoredResults(t).WriteJUnit(&out, testThresholds))
 			require.True(t, strings.HasPrefix(out.String(), xml.Header))
 
 			for _, want := range tt.want {
@@ -201,7 +210,7 @@ func TestWriteJUnit(t *testing.T) {
 
 			var parsed junitSuites
 			require.NoError(t, xml.Unmarshal(out.Bytes(), &parsed))
-			require.Len(t, parsed.Suites, 3)
+			require.Len(t, parsed.Suites, 4)
 		})
 	}
 }
@@ -217,6 +226,9 @@ func TestWriteMarkdown(t *testing.T) {
 			name: "the totals and one row per scenario",
 			want: []string{
 				"## Sidekick benchmark\n",
+				"**1 of 2 thresholds failed.**\n\n| Threshold | Limit | Value | Result |\n|---|---|---|---|\n",
+				"| verdictAccuracy | 0.8 | 0.8 | passed |\n",
+				"| rootCauseMatch | 0.7 | 0.25 | **failed** |\n",
 				"Sidekick v0.1.0 (abc1234), 3 scenarios, 3 runs each, investigated by claude (claude-opus-5-5), judged by judge (gpt-5.6). Prompt 2, judge prompt " + JudgePromptVersion + ".\n",
 				"| Metric | Value | 95% interval |\n|---|---|---|\n",
 				"| verdict accuracy | 0.80 | ",
@@ -234,7 +246,7 @@ func TestWriteMarkdown(t *testing.T) {
 			t.Parallel()
 
 			var out bytes.Buffer
-			require.NoError(t, scoredResults(t).WriteMarkdown(&out, testInfo))
+			require.NoError(t, scoredResults(t).WriteMarkdown(&out, testInfo, testThresholds))
 
 			for _, want := range tt.want {
 				require.Contains(t, out.String(), want)

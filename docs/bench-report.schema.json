@@ -7,7 +7,7 @@
   "required": [
     "schemaVersion", "sidekickVersion", "gitSHA", "configHash", "scenarioSet", "triggeredBy",
     "connectors", "strategies", "promptVersion", "judgePromptVersion", "startedAt", "finishedAt",
-    "repeat", "seed", "resamples", "confidenceLevel", "weights", "metrics", "intervals", "scenarios"
+    "repeat", "seed", "resamples", "confidenceLevel", "weights", "metrics", "intervals", "thresholds", "scenarios"
   ],
   "properties": {
     "schemaVersion": {"type": "integer", "minimum": 1, "maximum": 1},
@@ -48,6 +48,10 @@
       "type": "object",
       "additionalProperties": {"$ref": "#/$defs/interval"}
     },
+    "thresholds": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/threshold"}
+    },
     "scenarios": {
       "type": "array",
       "items": {"$ref": "#/$defs/scenario"}
@@ -56,6 +60,18 @@
   "$defs": {
     "share": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
     "count": {"type": "integer", "minimum": 0},
+    "threshold": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "limit", "value", "passed"],
+      "properties": {
+        "name": {"enum": ["verdictAccuracy", "fpPrecision", "rootCauseMatch", "maxCostPerRunUSD", "baseline"]},
+        "limit": {"type": "number"},
+        "value": {"type": ["number", "null"]},
+        "passed": {"type": "boolean"},
+        "detail": {"type": "string"}
+      }
+    },
     "connector": {
       "type": "object",
       "additionalProperties": false,

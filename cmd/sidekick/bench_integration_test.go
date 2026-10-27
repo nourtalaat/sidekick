@@ -38,6 +38,9 @@ func TestBenchRun(t *testing.T) {
 	tests := []struct {
 		name string
 		db   bool
+		// outputs adds --bench-config with a verdict accuracy threshold,
+		// --out, --junit and --markdown.
+		outputs bool
 		// anthropic answers the model calls.
 		anthropic  func(t *testing.T) *fakehttp.Server
 		wantCode   int
@@ -47,15 +50,24 @@ func TestBenchRun(t *testing.T) {
 		{
 			name:       "a temporary Postgres",
 			anthropic:  inconclusiveAnthropic,
-			wantStdout: []string{"SCENARIO", "checkout-pool-size", "1/1", "inconclusive", "true_positive"},
+			wantStdout: []string{"SCENARIO", "checkout-pool-size", "1/1", "inconclusive", "true_positive", "overall score"},
 			wantStderr: []string{"starting a temporary Postgres container", "stopped the temporary Postgres container"},
 		},
 		{
 			name:       "--db, in a schema of its own",
 			db:         true,
 			anthropic:  inconclusiveAnthropic,
-			wantStdout: []string{"checkout-pool-size", "1/1", "inconclusive"},
+			wantStdout: []string{"checkout-pool-size", "1/1", "inconclusive", "root cause match"},
 			wantStderr: []string{"created the benchmark's schema", "dropped the benchmark's schema"},
+		},
+		{
+			name:       "the output files and a failed threshold",
+			db:         true,
+			outputs:    true,
+			anthropic:  inconclusiveAnthropic,
+			wantCode:   exitThresholdFailed,
+			wantStdout: []string{"THRESHOLD", "verdictAccuracy", "FAILED"},
+			wantStderr: []string{"1 of 1 thresholds failed: verdictAccuracy"},
 		},
 		{
 			name: "the model provider is unreachable",
@@ -90,6 +102,15 @@ func TestBenchRun(t *testing.T) {
 				args = append(args, "--db")
 			}
 
+			out := t.TempDir()
+			if tt.outputs {
+				settings := filepath.Join(out, "bench.yaml")
+				require.NoError(t, os.WriteFile(settings, []byte("thresholds: { verdictAccuracy: 0.5 }\n"), 0o600))
+
+				args = append(args, "--bench-config", settings, "--label", "integration",
+					"--out", filepath.Join(out, "report.json"), "--junit", filepath.Join(out, "junit.xml"), "--markdown", filepath.Join(out, "summary.md"))
+			}
+
 			code, stdout, stderr := runBench(t, args)
 			require.Equal(t, tt.wantCode, code, "stderr:\n%s", stderr)
 
@@ -102,6 +123,24 @@ func TestBenchRun(t *testing.T) {
 			}
 
 			require.Equal(t, 0, benchSchemas(t, dbURL), "no benchmark schema is left behind")
+
+			if tt.outputs {
+				rep, err := bench.ReadReport(filepath.Join(out, "report.json"))
+				require.NoError(t, err)
+				require.Equal(t, "integration", rep.Label)
+				require.Len(t, rep.Scenarios, 1)
+				require.Len(t, rep.Thresholds, 1)
+				require.False(t, rep.Thresholds[0].Passed)
+				require.NotNil(t, rep.Scenarios[0].Runs[0].RootCause, "the judge graded the run")
+
+				junit, err := os.ReadFile(filepath.Join(out, "junit.xml"))
+				require.NoError(t, err)
+				require.Contains(t, string(junit), `<testsuite name="checkout-pool-size"`)
+
+				summary, err := os.ReadFile(filepath.Join(out, "summary.md"))
+				require.NoError(t, err)
+				require.Contains(t, string(summary), "**1 of 1 thresholds failed.**")
+			}
 		})
 	}
 }
@@ -148,12 +187,12 @@ func TestBenchJudgeCheck(t *testing.T) {
 	}
 }
 
-// inconclusiveAnthropic answers one model call with an inconclusive
-// verdict.
+// inconclusiveAnthropic answers the investigation's model call with an
+// inconclusive verdict, and the judge's with grades.
 func inconclusiveAnthropic(t *testing.T) *fakehttp.Server {
 	t.Helper()
 
-	return fakeAnthropic(t, "fixture/anthropic-inconclusive.sse")
+	return fakeAnthropic(t, "fixture/anthropic-inconclusive.sse", "fixture/anthropic-grades.sse")
 }
 
 // runBench runs this test binary as `sidekick` with args in the repository
