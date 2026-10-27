@@ -9,6 +9,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/config"
+	"github.com/nourtalaat/sidekick/internal/grouper"
 	"github.com/nourtalaat/sidekick/internal/investigator"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/strategy"
@@ -31,6 +32,8 @@ type route struct {
 	budget     []byte
 	// outputs are the sinks the investigation's updates go to.
 	outputs []string
+	// grouping decides which group the route's events join.
+	grouping grouper.Route
 }
 
 // newRoutes prepares the routes of cfg in the order they are tried.
@@ -106,6 +109,11 @@ func newRoute(rc config.Route, globalRoles map[model.Role]string, strategies *st
 		connectors:      connectorsJSON,
 		budget:          budgetJSON,
 		outputs:         rc.Outputs,
+		grouping: grouper.Route{
+			Name:              rc.Name,
+			Window:            rc.Grouping.Window,
+			FingerprintLabels: rc.Grouping.FingerprintLabels,
+		},
 	}, nil
 }
 

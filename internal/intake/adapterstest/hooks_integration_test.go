@@ -42,7 +42,7 @@ func TestHooks(t *testing.T) {
 		wantResponse string
 		// wantKinds are the kinds of the stored events, oldest first.
 		wantKinds []string
-		// wantRouteJobs counts the route_event jobs: one per stored alert.
+		// wantRouteJobs counts the route_event jobs: one per stored event.
 		wantRouteJobs int
 		check         func(t *testing.T, events []db.Event)
 	}{
@@ -52,7 +52,7 @@ func TestHooks(t *testing.T) {
 			wantStatus:    http.StatusAccepted,
 			wantResponse:  "accepted-alert-and-resolved.json",
 			wantKinds:     []string{"alert", "resolved"},
-			wantRouteJobs: 1,
+			wantRouteJobs: 2,
 			check: func(t *testing.T, events []db.Event) {
 				t.Helper()
 
@@ -69,7 +69,7 @@ func TestHooks(t *testing.T) {
 			wantStatus:    http.StatusAccepted,
 			wantResponse:  "duplicate-two.json",
 			wantKinds:     []string{"alert", "resolved"},
-			wantRouteJobs: 1,
+			wantRouteJobs: 2,
 		},
 		{
 			name:         "SigNoz: a wrong token",
@@ -84,7 +84,7 @@ func TestHooks(t *testing.T) {
 			wantStatus:    http.StatusAccepted,
 			wantResponse:  "accepted-resolved.json",
 			wantKinds:     []string{"alert", "resolved"},
-			wantRouteJobs: 1,
+			wantRouteJobs: 2,
 			check: func(t *testing.T, events []db.Event) {
 				t.Helper()
 
@@ -131,7 +131,7 @@ func TestHooks(t *testing.T) {
 			wantStatus:    http.StatusAccepted,
 			wantResponse:  "accepted-resolved.json",
 			wantKinds:     []string{"alert", "resolved"},
-			wantRouteJobs: 1,
+			wantRouteJobs: 2,
 		},
 		{
 			name:         "Sentry: an assigned issue stores nothing",
@@ -177,7 +177,7 @@ func TestHooks(t *testing.T) {
 			wantStatus:    http.StatusAccepted,
 			wantResponse:  "accepted-resolved.json",
 			wantKinds:     []string{"resolved"},
-			wantRouteJobs: 0,
+			wantRouteJobs: 1,
 			check: func(t *testing.T, events []db.Event) {
 				t.Helper()
 

@@ -60,8 +60,8 @@ func (q *Queries) GetPublishState(ctx context.Context, arg GetPublishStateParams
 }
 
 const insertPublishState = `-- name: InsertPublishState :execrows
-INSERT INTO publish_states (investigation_id, sinks, seq, phase, body, updated_at)
-VALUES ($1, $2::text[], $3, $4, $5, now())
+INSERT INTO publish_states (investigation_id, sinks, seq, update_seq, phase, body, updated_at)
+VALUES ($1, $2::text[], $3, $3, $4, $5, now())
 ON CONFLICT (investigation_id) DO NOTHING
 `
 
@@ -104,6 +104,24 @@ func (q *Queries) LockPublishSeq(ctx context.Context, investigationID uuid.UUID)
 	return seq, err
 }
 
+const refreshPublishState = `-- name: RefreshPublishState :one
+UPDATE publish_states
+SET seq = seq + 1, update_seq = coalesce(update_seq, seq), updated_at = now()
+WHERE investigation_id = $1
+RETURNING sinks
+`
+
+// RefreshPublishState adds 1 to the seq of an investigation's state without
+// changing what it holds, so the outputs show it again with what changed
+// around it, such as the number of events in the group. It returns the
+// sinks, or no row when the investigation has no state.
+func (q *Queries) RefreshPublishState(ctx context.Context, investigationID uuid.UUID) ([]string, error) {
+	row := q.db.QueryRow(ctx, refreshPublishState, investigationID)
+	var sinks []string
+	err := row.Scan(&sinks)
+	return sinks, err
+}
+
 const saveOutputRef = `-- name: SaveOutputRef :exec
 INSERT INTO output_refs (investigation_id, sink, external, ref, last_seq, published_at)
 VALUES ($1, $2, $3, $4, $5, now())
@@ -138,8 +156,12 @@ func (q *Queries) SaveOutputRef(ctx context.Context, arg SaveOutputRefParams) er
 
 const updatePublishState = `-- name: UpdatePublishState :one
 UPDATE publish_states
-SET seq = $1, phase = $2, body = $3, updated_at = now()
-WHERE investigation_id = $4 AND seq < $1
+SET seq = greatest(publish_states.seq + 1, $1::bigint),
+    update_seq = $1::bigint,
+    phase = $2,
+    body = $3,
+    updated_at = now()
+WHERE investigation_id = $4 AND coalesce(update_seq, publish_states.seq) < $1::bigint
 RETURNING sinks
 `
 
@@ -151,8 +173,10 @@ type UpdatePublishStateParams struct {
 }
 
 // UpdatePublishState replaces the state of an investigation when seq is
-// newer than the stored one, and returns the sinks. It returns no row when
-// the stored state is as new or newer, or when there is none.
+// newer than the update stored last, and returns the sinks. It returns no
+// row when the stored update is as new or newer, or when there is none.
+// The state's own seq becomes seq, or one more than before when a refresh
+// has taken it that far already, so it always grows.
 func (q *Queries) UpdatePublishState(ctx context.Context, arg UpdatePublishStateParams) ([]string, error) {
 	row := q.db.QueryRow(ctx, updatePublishState,
 		arg.Seq,

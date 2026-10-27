@@ -120,8 +120,8 @@ func TestHooks(t *testing.T) {
 				}
 
 				require.Equal(t, []string{"alert", "alert", "resolved"}, []string{events[0].Kind, events[1].Kind, events[2].Kind})
-				require.Equal(t, []string{"received", "received", "skipped"}, []string{events[0].Status, events[1].Status, events[2].Status})
-				require.Equal(t, "resolved events are linked in M1", *events[2].SkipReason)
+				require.Equal(t, []string{"received", "received", "received"}, []string{events[0].Status, events[1].Status, events[2].Status})
+				require.Nil(t, events[2].SkipReason)
 
 				var raw map[string]any
 				require.NoError(t, json.Unmarshal(events[2].Raw, &raw))
@@ -138,7 +138,7 @@ func TestHooks(t *testing.T) {
 				require.NotNil(t, resolved.EndsAt)
 				require.Equal(t, time.Date(2026, 10, 26, 9, 10, 0, 0, time.UTC), resolved.EndsAt.UTC())
 
-				require.Equal(t, []jobRow{routeJob(events[0]), routeJob(events[1])}, h.jobs(t), "the resolved alert gets no route_event job")
+				require.Equal(t, []jobRow{routeJob(events[0]), routeJob(events[1]), routeJob(events[2])}, h.jobs(t), "the resolved alert gets a route_event job too")
 			},
 		},
 		{
@@ -214,7 +214,7 @@ func TestHooks(t *testing.T) {
 				t.Helper()
 
 				require.Len(t, h.events(t), 3)
-				require.Len(t, h.jobs(t), 2)
+				require.Len(t, h.jobs(t), 3, "the first delivery's jobs, one per event")
 			},
 		},
 		{

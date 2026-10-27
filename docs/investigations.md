@@ -17,6 +17,13 @@ then loops:
 3. The loop goes on until the model submits its report, or a limit is
    reached.
 
+Events that join the investigation's group while it runs, and recoveries
+of its alerts, wait in the investigation's inbox. Before the model's next
+answer, Sidekick sends everything that waits as one message, with what the
+sender wrote marked as data from outside Sidekick. A message shows at most
+20 events in full and counts the rest. A recovery is evidence, for example
+that the alert cleared on its own; it never stops the investigation.
+
 The model uses the connector that `model.roles.investigate` names, or the
 route's own `roles.investigate`. A call that fails because the provider is
 busy or rate limited is repeated up to the connector's `retries`.
@@ -94,8 +101,8 @@ queue.
 
 ## Restarts and several replicas
 
-Every prompt, model answer, tool result and reminder is saved as a step
-before the next one starts. If the replica running an investigation stops,
+Every prompt, model answer, tool result, reminder and inbox message is
+saved as a step before the next one starts. If the replica running an investigation stops,
 another one takes over the job when its lease runs out (within about a
 minute and a half, or at once after a clean shutdown) and goes on from the last saved
 step: it repeats the tool calls that were in progress, which are read-only,

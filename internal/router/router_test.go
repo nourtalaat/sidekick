@@ -74,14 +74,14 @@ func TestTrust(t *testing.T) {
 func TestNew(t *testing.T) {
 	t.Parallel()
 
-	cfg, settings := loadConfig(t)
+	cfg, in := loadConfig(t)
 
 	tests := []struct {
 		name    string
 		opts    Options
 		wantErr bool
 	}{
-		{name: "defaults for the logger and tracer provider", opts: Options{Config: cfg, ModelSettings: settings}},
+		{name: "defaults for the logger and tracer provider", opts: Options{Config: cfg, ModelSettings: in.ModelSettings}},
 		{name: "a config without strategies", opts: Options{Config: &config.Config{}}, wantErr: true},
 	}
 

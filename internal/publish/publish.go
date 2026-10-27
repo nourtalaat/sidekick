@@ -1,7 +1,8 @@
 // Package publish shows each investigation in its route's outputs. It
-// holds the publish job and the two calls that enqueue it: Open, which the
-// router calls when it creates an investigation, and Enqueue, which the
-// investigator calls with each new state.
+// holds the publish job and the calls that enqueue it: Open, which the
+// router calls when it creates an investigation, Enqueue, which the
+// investigator calls with each new state, and Refresh, which the grouper
+// calls when an event joins the investigation's group.
 //
 // The newest state of an investigation, its publish state, is one row
 // that every update replaces when its Seq is newer. A publish job carries
@@ -17,7 +18,16 @@
 // gives up its unique key and, when the state is newer than what it showed,
 // enqueues a new job, all in one transaction. Both sides take the locks in
 // the same order, the state row first and then the job row, so they never
-// wait for each other in a circle.
+// wait for each other in a circle. Refresh takes them in that order too.
+//
+// The state has two counters. update_seq is the Seq of the newest Update
+// written, and an Update whose Seq is not above it is dropped, so the
+// investigator's updates keep their order and its final update, whose Seq
+// is above every step's, always wins. seq is what jobs, output refs and
+// sinks compare: every write raises it, an Update to its Seq or to one more
+// than before, whichever is higher, and a Refresh by one. So a refresh is
+// shown like any other change, and an update after it still counts as
+// newer.
 package publish
 
 import (
@@ -169,6 +179,25 @@ func Enqueue(ctx context.Context, q db.DBTX, u Update) error {
 	}
 
 	return enqueueJobs(ctx, q, u.InvestigationID, sinks)
+}
+
+// Refresh shows the state of an investigation again without changing it,
+// for a change the outputs read from elsewhere, such as the number of
+// events in its group: it raises the state's seq by one and enqueues a
+// publish job for each sink, as Enqueue does. An investigation that Open
+// was not called for changes nothing. Call it in the transaction that makes
+// the change.
+func Refresh(ctx context.Context, q db.DBTX, investigationID uuid.UUID) error {
+	sinks, err := db.New(q).RefreshPublishState(ctx, investigationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("refresh the publish state: %w", err)
+	}
+
+	return enqueueJobs(ctx, q, investigationID, sinks)
 }
 
 // enqueueJobs adds the publish job of each sink. A job that is already

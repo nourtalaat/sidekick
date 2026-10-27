@@ -12,33 +12,173 @@ import (
 	"github.com/google/uuid"
 )
 
-const insertEventGroup = `-- name: InsertEventGroup :exec
-INSERT INTO event_groups (
-  id, fingerprint, route, service, status, opened_at, last_event_at, investigation_id
-)
-VALUES (
-  $1, $2, $3, $4, 'open', now(), $5, $6
-)
+const allAlertsRecovered = `-- name: AllAlertsRecovered :one
+SELECT coalesce(bool_and(kind = 'resolved'), false)::boolean AS recovered
+FROM (
+  SELECT DISTINCT ON (fingerprint) kind
+  FROM events
+  WHERE group_id = $1::uuid AND kind IN ('alert', 'resolved')
+  ORDER BY fingerprint, received_at DESC, id DESC
+) AS newest
 `
 
-type InsertEventGroupParams struct {
+// AllAlertsRecovered reports whether every alert in a group has recovered:
+// the newest event of each alert, by its fingerprint, is a recovery. A
+// group without alerts has not recovered.
+func (q *Queries) AllAlertsRecovered(ctx context.Context, groupID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, allAlertsRecovered, groupID)
+	var recovered bool
+	err := row.Scan(&recovered)
+	return recovered, err
+}
+
+const closeEventGroup = `-- name: CloseEventGroup :execrows
+UPDATE event_groups
+SET status = 'closed', closed_reason = $1::text
+WHERE id = $2 AND status = 'open'
+`
+
+type CloseEventGroupParams struct {
+	ClosedReason string
+	ID           uuid.UUID
+}
+
+// CloseEventGroup closes an open group with a reason. A group that is
+// closed already is left as it is and not counted.
+func (q *Queries) CloseEventGroup(ctx context.Context, arg CloseEventGroupParams) (int64, error) {
+	result, err := q.db.Exec(ctx, closeEventGroup, arg.ClosedReason, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const joinEventGroup = `-- name: JoinEventGroup :one
+UPDATE event_groups
+SET event_count = event_count + 1,
+    last_event_at = greatest(last_event_at, $1),
+    window_until = greatest(window_until, $2::timestamptz)
+WHERE id = $3
+RETURNING id, fingerprint, route, service, status, event_count, opened_at, last_event_at, window_until, closed_reason, investigation_id
+`
+
+type JoinEventGroupParams struct {
+	ReceivedAt  time.Time
+	WindowUntil time.Time
+	ID          uuid.UUID
+}
+
+// JoinEventGroup adds one event to a group: it counts the event, and moves
+// the newest event time and the end of the window forward, never back.
+// GREATEST skips NULL, so a group opened without a window gets one.
+func (q *Queries) JoinEventGroup(ctx context.Context, arg JoinEventGroupParams) (EventGroup, error) {
+	row := q.db.QueryRow(ctx, joinEventGroup, arg.ReceivedAt, arg.WindowUntil, arg.ID)
+	var i EventGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Fingerprint,
+		&i.Route,
+		&i.Service,
+		&i.Status,
+		&i.EventCount,
+		&i.OpenedAt,
+		&i.LastEventAt,
+		&i.WindowUntil,
+		&i.ClosedReason,
+		&i.InvestigationID,
+	)
+	return i, err
+}
+
+const lockEventGroup = `-- name: LockEventGroup :one
+SELECT id, fingerprint, route, service, status, event_count, opened_at, last_event_at, window_until, closed_reason, investigation_id FROM event_groups WHERE id = $1 FOR UPDATE
+`
+
+// LockEventGroup returns the group with id and locks it until the
+// transaction ends.
+func (q *Queries) LockEventGroup(ctx context.Context, id uuid.UUID) (EventGroup, error) {
+	row := q.db.QueryRow(ctx, lockEventGroup, id)
+	var i EventGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Fingerprint,
+		&i.Route,
+		&i.Service,
+		&i.Status,
+		&i.EventCount,
+		&i.OpenedAt,
+		&i.LastEventAt,
+		&i.WindowUntil,
+		&i.ClosedReason,
+		&i.InvestigationID,
+	)
+	return i, err
+}
+
+const lockOpenEventGroup = `-- name: LockOpenEventGroup :one
+SELECT id, fingerprint, route, service, status, event_count, opened_at, last_event_at, window_until, closed_reason, investigation_id FROM event_groups
+WHERE fingerprint = $1 AND status = 'open'
+FOR UPDATE
+`
+
+// LockOpenEventGroup returns the open group with a fingerprint and locks it
+// until the transaction ends. It returns no row when no group with the
+// fingerprint is open.
+func (q *Queries) LockOpenEventGroup(ctx context.Context, fingerprint string) (EventGroup, error) {
+	row := q.db.QueryRow(ctx, lockOpenEventGroup, fingerprint)
+	var i EventGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Fingerprint,
+		&i.Route,
+		&i.Service,
+		&i.Status,
+		&i.EventCount,
+		&i.OpenedAt,
+		&i.LastEventAt,
+		&i.WindowUntil,
+		&i.ClosedReason,
+		&i.InvestigationID,
+	)
+	return i, err
+}
+
+const openEventGroup = `-- name: OpenEventGroup :one
+INSERT INTO event_groups (
+  id, fingerprint, route, service, status, opened_at, last_event_at, window_until, investigation_id
+)
+VALUES (
+  $1, $2, $3, $4, 'open', now(), $5, $6::timestamptz, $7
+)
+ON CONFLICT (fingerprint) WHERE status = 'open' DO NOTHING
+RETURNING id
+`
+
+type OpenEventGroupParams struct {
 	ID              uuid.UUID
 	Fingerprint     string
 	Route           string
 	Service         *string
 	LastEventAt     time.Time
+	WindowUntil     time.Time
 	InvestigationID *uuid.UUID
 }
 
-// InsertEventGroup opens a group with one event.
-func (q *Queries) InsertEventGroup(ctx context.Context, arg InsertEventGroupParams) error {
-	_, err := q.db.Exec(ctx, insertEventGroup,
+// OpenEventGroup opens a group with one event and returns its ID. It
+// returns no row, and opens nothing, when a group with the same fingerprint
+// is open already; it waits for a transaction that is opening one to end
+// first.
+func (q *Queries) OpenEventGroup(ctx context.Context, arg OpenEventGroupParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, openEventGroup,
 		arg.ID,
 		arg.Fingerprint,
 		arg.Route,
 		arg.Service,
 		arg.LastEventAt,
+		arg.WindowUntil,
 		arg.InvestigationID,
 	)
-	return err
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
