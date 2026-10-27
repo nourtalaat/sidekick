@@ -136,6 +136,12 @@ Start from the quick-start values and change these:
   the Prometheus Operator.
 - **Webhooks from outside the cluster.** `ingress` or `httpRoute` expose
   `/hooks/` only. Keep the metrics port off the public network.
+- **Microsoft Teams.** The Teams bot's messaging endpoint,
+  `/teams/messages` on the webhook port, needs a public https URL that the
+  Bot Framework can reach. The chart adds no Ingress for it by default;
+  add the path to `ingress.hosts`, as
+  [Reaching the messaging endpoint](teams.md#reaching-the-messaging-endpoint)
+  shows.
 
 ### MCP servers in sidecars
 

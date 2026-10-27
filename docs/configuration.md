@@ -830,6 +830,11 @@ type single tenant or user-assigned managed identity.
   answer a Teams message, such as the result of a webhook alert. It must
   be https and end in `/`.
 
+With the section set, Sidekick serves the bot's messaging endpoint at
+`POST /teams/messages` on `server.listen`, which needs a public https URL.
+[Investigations in Microsoft Teams](teams.md) describes how to set up the
+bot.
+
 ### `listeners`
 
 A listener picks the messages in one Slack or Teams channel that start an
