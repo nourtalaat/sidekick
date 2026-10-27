@@ -37,7 +37,7 @@ const (
 // The Socket Mode payloads of a slash command and a button click.
 const (
 	commandPayload = `{"command": "/sidekick", "text": "status", "channel_id": "C01ALERTS", "user_id": "U01PERSON"}`
-	clickPayload   = `{"type": "block_actions", "actions": [{"type": "button", "action_id": "sidekick_ack", "value": "inv-1"}]}`
+	clickPayload   = `{"type": "block_actions", "actions": [{"type": "button", "block_id": "sidekick_actions", "action_id": "sidekick_ack", "value": "inv-1"}]}`
 )
 
 func TestSocketAcknowledgesAfterStoring(t *testing.T) {
@@ -231,6 +231,7 @@ func TestSocketAnswersCommandsAndInteractions(t *testing.T) {
 
 				if tt.wantCalls > 0 {
 					require.Equal(t, slack.InteractionTypeBlockActions, clicks[0].Type)
+					require.Len(t, clicks[0].ActionCallback.BlockActions, 1)
 					require.Equal(t, "sidekick_ack", clicks[0].ActionCallback.BlockActions[0].ActionID)
 				}
 			}
@@ -279,16 +280,24 @@ func TestSocketTakesOverAFreedSlot(t *testing.T) {
 		// free frees the slot of r: it stops the replica, or ends its
 		// database session.
 		free func(t *testing.T, h *harness, r *replica)
+		// maxHolders is the most replicas that may hold a connection at
+		// once.
+		maxHolders int
 	}{
 		{
-			name: "a replica stops",
+			name:       "a replica stops",
+			maxHolders: SocketSlots,
 			free: func(t *testing.T, _ *harness, r *replica) {
 				t.Helper()
 				r.stop()
 			},
 		},
 		{
-			name: "a replica loses its database session, and so its lock",
+			// The lock is freed as the session ends, but the replica only
+			// closes its connection at its next slot check, so another
+			// replica may connect first.
+			name:       "a replica loses its database session, and so its lock",
+			maxHolders: SocketSlots + 1,
 			free: func(t *testing.T, h *harness, r *replica) {
 				t.Helper()
 
@@ -336,7 +345,7 @@ func TestSocketTakesOverAFreedSlot(t *testing.T) {
 			})
 
 			_, most := hs.counts()
-			require.LessOrEqual(t, most, SocketSlots)
+			require.LessOrEqual(t, most, tt.maxHolders)
 		})
 	}
 }
