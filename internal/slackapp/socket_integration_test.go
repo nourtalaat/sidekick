@@ -4,13 +4,16 @@ package slackapp
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/socketmode"
 	"github.com/stretchr/testify/require"
 
@@ -29,6 +32,12 @@ const (
 	socketQuiet = time.Second
 	// testSlotWait replaces the slot and reconnect waits in the tests.
 	testSlotWait = 100 * time.Millisecond
+)
+
+// The Socket Mode payloads of a slash command and a button click.
+const (
+	commandPayload = `{"command": "/sidekick", "text": "status", "channel_id": "C01ALERTS", "user_id": "U01PERSON"}`
+	clickPayload   = `{"type": "block_actions", "actions": [{"type": "button", "action_id": "sidekick_ack", "value": "inv-1"}]}`
 )
 
 func TestSocketAcknowledgesAfterStoring(t *testing.T) {
@@ -122,6 +131,112 @@ func TestSocketAcknowledgesAfterStoring(t *testing.T) {
 			waitFor(t, func() bool { open, _, _ := f.counts(); return open == 1 })
 
 			tt.check(t, h, f)
+		})
+	}
+}
+
+func TestSocketAnswersCommandsAndInteractions(t *testing.T) {
+	t.Parallel()
+
+	const answer = `{"text": "Sidekick is running"}`
+
+	tests := []struct {
+		name    string
+		kind    string
+		payload string
+		// handled is whether the Socket gets the fake handlers.
+		handled bool
+		resp    []byte
+		err     error
+		// wantAck is the payload of the ack; empty means an empty ack.
+		wantAck   string
+		wantCalls int
+	}{
+		{
+			name: "a slash command is acknowledged with its handler's response",
+			kind: socketmode.RequestTypeSlashCommands, payload: commandPayload, handled: true,
+			resp: []byte(answer), wantAck: answer, wantCalls: 1,
+		},
+		{
+			name: "a slash command whose handler gives no response gets an empty ack",
+			kind: socketmode.RequestTypeSlashCommands, payload: commandPayload, handled: true, wantCalls: 1,
+		},
+		{
+			name: "a slash command whose handler fails gets an empty ack",
+			kind: socketmode.RequestTypeSlashCommands, payload: commandPayload, handled: true,
+			resp: []byte(answer), err: errors.New("the command failed"), wantCalls: 1,
+		},
+		{
+			name: "a slash command whose handler answers with text that is not JSON gets an empty ack",
+			kind: socketmode.RequestTypeSlashCommands, payload: commandPayload, handled: true,
+			resp: []byte("not JSON"), wantCalls: 1,
+		},
+		{
+			name: "a slash command without a handler gets an empty ack",
+			kind: socketmode.RequestTypeSlashCommands, payload: commandPayload,
+		},
+		{
+			name: "a button click is acknowledged with its handler's response",
+			kind: socketmode.RequestTypeInteractive, payload: clickPayload, handled: true,
+			resp: []byte(answer), wantAck: answer, wantCalls: 1,
+		},
+		{
+			name: "a button click whose handler fails gets an empty ack",
+			kind: socketmode.RequestTypeInteractive, payload: clickPayload, handled: true,
+			err: errors.New("the click failed"), wantCalls: 1,
+		},
+		{
+			name: "a button click without a handler gets an empty ack",
+			kind: socketmode.RequestTypeInteractive, payload: clickPayload,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := setup(t)
+			f := newFakeSocket(t, h.slack)
+			answers := &fakeAnswers{resp: tt.resp, err: tt.err}
+
+			startSocket(t, h, h.pool, &holders{}, func(o *SocketOptions) {
+				if tt.handled {
+					o.Commands, o.Interactions = answers, answers
+				}
+			})
+			waitFor(t, func() bool { open, _, _ := f.counts(); return open == 1 })
+
+			f.sendRequest(tt.kind, "env-1", 0, []byte(tt.payload))
+			waitFor(t, func() bool { return f.acked("env-1") })
+
+			if tt.wantAck == "" {
+				require.Nil(t, f.ackPayload("env-1"))
+			} else {
+				require.JSONEq(t, tt.wantAck, string(f.ackPayload("env-1")))
+			}
+
+			commands, clicks := answers.calls()
+
+			if tt.kind == socketmode.RequestTypeSlashCommands {
+				require.Len(t, commands, tt.wantCalls)
+				require.Empty(t, clicks)
+
+				if tt.wantCalls > 0 {
+					require.Equal(t, "/sidekick", commands[0].Command)
+					require.Equal(t, "status", commands[0].Text)
+				}
+			} else {
+				require.Len(t, clicks, tt.wantCalls)
+				require.Empty(t, commands)
+
+				if tt.wantCalls > 0 {
+					require.Equal(t, slack.InteractionTypeBlockActions, clicks[0].Type)
+					require.Equal(t, "sidekick_ack", clicks[0].ActionCallback.BlockActions[0].ActionID)
+				}
+			}
+
+			_, _, opened := f.counts()
+			require.Equal(t, 1, opened, "the connection carries on")
 		})
 	}
 }
@@ -259,6 +374,45 @@ func TestSocketWithABadAppToken(t *testing.T) {
 	}
 }
 
+// fakeAnswers is a CommandHandler and InteractionHandler that answers
+// with resp and err, and records what it is given.
+type fakeAnswers struct {
+	resp []byte
+	err  error
+
+	mu       sync.Mutex
+	commands []slack.SlashCommand
+	clicks   []slack.InteractionCallback
+}
+
+// HandleCommand records cmd and answers it.
+func (a *fakeAnswers) HandleCommand(_ context.Context, cmd slack.SlashCommand) ([]byte, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.commands = append(a.commands, cmd)
+
+	return a.resp, a.err
+}
+
+// HandleInteraction records cb and answers it.
+func (a *fakeAnswers) HandleInteraction(_ context.Context, cb slack.InteractionCallback) ([]byte, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.clicks = append(a.clicks, cb)
+
+	return a.resp, a.err
+}
+
+// calls returns the commands and interactions handled so far.
+func (a *fakeAnswers) calls() ([]slack.SlashCommand, []slack.InteractionCallback) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	return slices.Clone(a.commands), slices.Clone(a.clicks)
+}
+
 // replica is one running Socket, as one replica of Sidekick runs it.
 type replica struct {
 	stop func()
@@ -310,12 +464,12 @@ func (r *replica) slot() int32 {
 }
 
 // startSocket runs a Socket for h's handler with pool until the test ends,
-// with short waits, counting it in hs while it holds a connection. Run must
-// return nil once stopped.
-func startSocket(t *testing.T, h *harness, pool *pgxpool.Pool, hs *holders) *replica {
+// with short waits, counting it in hs while it holds a connection. Each of
+// with changes the options first. Run must return nil once stopped.
+func startSocket(t *testing.T, h *harness, pool *pgxpool.Pool, hs *holders, with ...func(*SocketOptions)) *replica {
 	t.Helper()
 
-	s := NewSocket(SocketOptions{
+	opts := SocketOptions{
 		Handler:  h.handler,
 		Pool:     pool,
 		Secrets:  secrets.NewDir(h.cfg.Secrets.Dir),
@@ -323,7 +477,13 @@ func startSocket(t *testing.T, h *harness, pool *pgxpool.Pool, hs *holders) *rep
 		APIURL:   h.cfg.Slack.APIURL,
 		HTTP:     h.slack.Client(),
 		Logger:   slog.New(slog.DiscardHandler),
-	})
+	}
+
+	for _, change := range with {
+		change(&opts)
+	}
+
+	s := NewSocket(opts)
 	s.slotRetry, s.slotCheck, s.reconnectWait = testSlotWait, testSlotWait, testSlotWait
 	s.clientOptions = []socketmode.Option{socketmode.OptionPingInterval(socketTimeout)}
 

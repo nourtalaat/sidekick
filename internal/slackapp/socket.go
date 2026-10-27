@@ -3,6 +3,7 @@ package slackapp
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -54,6 +55,17 @@ var authErrors = []string{"invalid_auth", "not_authed", "account_inactive", "tok
 // errEmptyAppToken is returned when the app token's file is empty.
 var errEmptyAppToken = errors.New("the app token is empty")
 
+// CommandHandler answers a slash command. A nil response sends an empty ack.
+type CommandHandler interface {
+	HandleCommand(ctx context.Context, cmd slack.SlashCommand) ([]byte, error)
+}
+
+// InteractionHandler answers an interaction such as a button click. A nil
+// response sends an empty ack.
+type InteractionHandler interface {
+	HandleInteraction(ctx context.Context, cb slack.InteractionCallback) ([]byte, error)
+}
+
 // SocketOptions set up a Socket. Handler, Pool, Secrets, AppToken and
 // Logger are required.
 type SocketOptions struct {
@@ -73,20 +85,29 @@ type SocketOptions struct {
 	HTTP *http.Client
 	// Logger gets the connection's life cycle. Payloads are never logged.
 	Logger *slog.Logger
+	// Commands answers slash commands. Nil acknowledges them with an empty
+	// ack.
+	Commands CommandHandler
+	// Interactions answers interactions such as button clicks. Nil
+	// acknowledges them with an empty ack.
+	Interactions InteractionHandler
 }
 
 // Socket receives events over one Socket Mode connection while this
 // replica holds one of SocketSlots slots, and hands every Events API
 // payload to the Handler. It acknowledges a payload only once the Handler
-// has stored it.
+// has stored it. Slash commands and interactions go to Commands and
+// Interactions, and are acknowledged with their response.
 type Socket struct {
-	handler  *Handler
-	pool     *pgxpool.Pool
-	secrets  registry.Secrets
-	appToken registry.SecretRef
-	apiURL   string
-	http     *http.Client
-	log      *slog.Logger
+	handler      *Handler
+	commands     CommandHandler
+	interactions InteractionHandler
+	pool         *pgxpool.Pool
+	secrets      registry.Secrets
+	appToken     registry.SecretRef
+	apiURL       string
+	http         *http.Client
+	log          *slog.Logger
 
 	// The waits and options below are constants outside tests.
 	slotRetry     time.Duration
@@ -104,6 +125,8 @@ type Socket struct {
 func NewSocket(opts SocketOptions) *Socket {
 	return &Socket{
 		handler:       opts.Handler,
+		commands:      opts.Commands,
+		interactions:  opts.Interactions,
 		pool:          opts.Pool,
 		secrets:       opts.Secrets,
 		appToken:      opts.AppToken,
@@ -288,9 +311,9 @@ func (s *Socket) watchSlot(ctx context.Context, conn *pgx.Conn) error {
 // dispatch handles one event of the connection. An Events API payload is
 // handled in its own goroutine, at most maxInFlight at once, and
 // acknowledged once it is stored; one that cannot be stored is not
-// acknowledged, so Slack sends it again. Commands and clicks are not
-// handled yet and are acknowledged at once, so Slack does not send them
-// again.
+// acknowledged, so Slack sends it again. Slash commands and interactions
+// are answered the same way by their handler, and acknowledged with its
+// response.
 func (s *Socket) dispatch(ctx context.Context, client *socketmode.Client, evt socketmode.Event, slot int32, sem chan struct{}, inFlight *sync.WaitGroup) {
 	switch evt.Type {
 	case socketmode.EventTypeEventsAPI:
@@ -299,21 +322,11 @@ func (s *Socket) dispatch(ctx context.Context, client *socketmode.Client, evt so
 			return
 		}
 
-		select {
-		case sem <- struct{}{}:
-		case <-ctx.Done():
-			return
-		}
-
-		inFlight.Go(func() {
-			defer func() { <-sem }()
-
-			s.handle(ctx, client, *req)
-		})
-	case socketmode.EventTypeSlashCommand, socketmode.EventTypeInteractive:
-		if evt.Request != nil {
-			s.ack(ctx, client, evt.Request.EnvelopeID)
-		}
+		s.inBackground(ctx, sem, inFlight, func() { s.handle(ctx, client, *req) })
+	case socketmode.EventTypeSlashCommand:
+		s.dispatchCommand(ctx, client, evt, sem, inFlight)
+	case socketmode.EventTypeInteractive:
+		s.dispatchInteraction(ctx, client, evt, sem, inFlight)
 	case socketmode.EventTypeConnected:
 		s.log.InfoContext(ctx, "Slack Socket Mode connected", "slot", slot)
 
@@ -327,6 +340,66 @@ func (s *Socket) dispatch(ctx context.Context, client *socketmode.Client, evt so
 	default:
 		s.log.DebugContext(ctx, "Slack Socket Mode event", "type", string(evt.Type))
 	}
+}
+
+// dispatchCommand answers a slash command with the CommandHandler in its
+// own goroutine. Without a CommandHandler it acknowledges the command at
+// once.
+func (s *Socket) dispatchCommand(ctx context.Context, client *socketmode.Client, evt socketmode.Event, sem chan struct{}, inFlight *sync.WaitGroup) {
+	req := evt.Request
+	if req == nil {
+		return
+	}
+
+	cmd, ok := evt.Data.(slack.SlashCommand)
+	if s.commands == nil || !ok {
+		s.ack(ctx, client, req.EnvelopeID, nil)
+
+		return
+	}
+
+	s.inBackground(ctx, sem, inFlight, func() {
+		resp, err := s.commands.HandleCommand(ctx, cmd)
+		s.answer(ctx, client, *req, "slash command", resp, err)
+	})
+}
+
+// dispatchInteraction answers an interaction with the InteractionHandler
+// in its own goroutine. Without an InteractionHandler it acknowledges the
+// interaction at once.
+func (s *Socket) dispatchInteraction(ctx context.Context, client *socketmode.Client, evt socketmode.Event, sem chan struct{}, inFlight *sync.WaitGroup) {
+	req := evt.Request
+	if req == nil {
+		return
+	}
+
+	cb, ok := evt.Data.(slack.InteractionCallback)
+	if s.interactions == nil || !ok {
+		s.ack(ctx, client, req.EnvelopeID, nil)
+
+		return
+	}
+
+	s.inBackground(ctx, sem, inFlight, func() {
+		resp, err := s.interactions.HandleInteraction(ctx, cb)
+		s.answer(ctx, client, *req, "interaction", resp, err)
+	})
+}
+
+// inBackground runs fn in its own goroutine, with at most maxInFlight
+// running at once. When ctx ends before there is room, fn does not run.
+func (s *Socket) inBackground(ctx context.Context, sem chan struct{}, inFlight *sync.WaitGroup, fn func()) {
+	select {
+	case sem <- struct{}{}:
+	case <-ctx.Done():
+		return
+	}
+
+	inFlight.Go(func() {
+		defer func() { <-sem }()
+
+		fn()
+	})
 }
 
 // handle stores one payload and acknowledges it once stored. A payload that
@@ -343,12 +416,37 @@ func (s *Socket) handle(ctx context.Context, client *socketmode.Client, req sock
 		return
 	}
 
-	s.ack(ctx, client, req.EnvelopeID)
+	s.ack(ctx, client, req.EnvelopeID, nil)
 }
 
-// ack acknowledges the payload with envelopeID.
-func (s *Socket) ack(ctx context.Context, client *socketmode.Client, envelopeID string) {
-	if err := client.AckCtx(ctx, envelopeID, nil); err != nil {
+// answer acknowledges req, a request of kind, with resp, its handler's
+// response. When the handler failed or its response is not JSON, it logs
+// that and sends an empty ack instead, so Slack shows no error to the user
+// and the connection carries on.
+func (s *Socket) answer(ctx context.Context, client *socketmode.Client, req socketmode.Request, kind string, resp []byte, err error) {
+	switch {
+	case err != nil:
+		s.log.ErrorContext(ctx, "Slack "+kind+" handler failed; sent an empty ack", "error", err.Error())
+
+		resp = nil
+	case resp != nil && !json.Valid(resp):
+		s.log.ErrorContext(ctx, "Slack "+kind+" handler answered with a response that is not JSON; sent an empty ack")
+
+		resp = nil
+	}
+
+	var payload any
+	if resp != nil {
+		payload = json.RawMessage(resp)
+	}
+
+	s.ack(ctx, client, req.EnvelopeID, payload)
+}
+
+// ack acknowledges the payload with envelopeID, with payload as the
+// response; nil sends an empty ack.
+func (s *Socket) ack(ctx context.Context, client *socketmode.Client, envelopeID string, payload any) {
+	if err := client.AckCtx(ctx, envelopeID, payload); err != nil {
 		s.log.WarnContext(ctx, "could not acknowledge a Slack payload; Slack sends it again", "error", err.Error())
 	}
 }
