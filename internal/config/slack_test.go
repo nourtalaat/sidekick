@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/nourtalaat/sidekick/internal/roles"
 )
 
 func TestSlackConnects(t *testing.T) {
@@ -44,6 +46,30 @@ func TestSlackConnects(t *testing.T) {
 			if tt.wantMode != "" {
 				require.Equal(t, tt.wantMode, cfg.Slack.Mode)
 			}
+		})
+	}
+}
+
+func TestRoleNameRole(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name RoleName
+		want roles.Role
+	}{
+		{name: RoleViewer, want: roles.Viewer},
+		{name: RoleResponder, want: roles.Responder},
+		{name: RoleApprover, want: roles.Approver},
+		{name: RoleAdmin, want: roles.Admin},
+		{name: "owner", want: 0},
+		{name: "", want: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.name), func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tt.want, tt.name.Role())
 		})
 	}
 }

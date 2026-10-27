@@ -75,6 +75,8 @@ func TestExampleConfig(t *testing.T) {
 				require.Equal(t, SlackModeSocket, cfg.Slack.Mode)
 				require.True(t, cfg.Slack.Connects())
 				require.Equal(t, []string{"B01SIGNOZ"}, cfg.Slack.TrustedBots)
+				require.Equal(t, map[string]RoleName{"S01ONCALL": RoleResponder, "S01SRE": RoleAdmin}, cfg.Slack.RoleGroups)
+				require.Equal(t, map[string]RoleName{"U01LEAD": RoleApprover}, cfg.Slack.RoleUsers)
 
 				alerts := cfg.Listeners["alerts"]
 				require.Equal(t, "#alerts", alerts.Channel)

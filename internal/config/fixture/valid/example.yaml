@@ -79,6 +79,11 @@ slack:
   botTokenSecret: { name: sidekick-slack, key: botToken }
   appTokenSecret: { name: sidekick-slack, key: appToken }
   trustedBots: [B01SIGNOZ]
+  roleGroups:
+    S01ONCALL: responder
+    S01SRE: admin
+  roleUsers:
+    U01LEAD: approver
 
 listeners:
   alerts:

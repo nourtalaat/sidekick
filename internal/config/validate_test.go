@@ -125,6 +125,11 @@ func TestValidateFixtures(t *testing.T) {
 			`slack.apiURL: expected an absolute http or https URL ending in "/", such as https://slack.com/api/, got "https://slack.com/api"`,
 			`slack.trustedBots[0]: expected a bot ID such as B01ABCDEF, got "SigNoz"`,
 		}},
+		{file: "slack-bad-roles", want: []string{
+			`slack.roleGroups.S01ADMINS: unknown role "admn", expected one of viewer, responder, approver, admin (did you mean "admin"?)`,
+			`slack.roleGroups.oncall: expected a user group ID such as S01ABCDEF, got "oncall"`,
+			`slack.roleUsers.B01SIGNOZ: expected a user ID such as U01ABCDEF, got "B01SIGNOZ"`,
+		}},
 		{file: "listeners-without-app-token", want: []string{listenersNeedSlack}},
 		{file: "listeners-without-slack", want: []string{listenersNeedSlack}},
 		{file: "listener-problems", want: []string{
