@@ -524,10 +524,68 @@ senders](senders.md) shows how to set up each one.
 ```yaml
 slack:
   botTokenSecret: { name: sidekick-slack, key: botToken }   # required when the section is set
+  appTokenSecret: { name: sidekick-slack, key: appToken }   # Socket Mode
+  mode: socket                                              # or events
+  signingSecret: { name: sidekick-slack, key: signingSecret }   # required with mode: events
+  trustedBots: [B01SIGNOZ]                                  # bot IDs whose messages can be trusted
+  apiURL: https://slack.com/api/                            # optional
 ```
 
-The bot token of the Slack app. Every `slack` output posts with it, so the
-section is required when an output has `type: slack`.
+`botTokenSecret` is the bot token of the Slack app. Every `slack` output
+posts with it, so the section is required when an output has
+`type: slack`.
+
+The other keys let Sidekick receive messages, so that
+[listeners](#listeners) and mentions of `@Sidekick` start
+investigations:
+
+- `mode: socket`, the default, connects to Slack over Socket Mode with the
+  app-level token in `appTokenSecret`, so Sidekick needs no public URL.
+  Without `appTokenSecret`, Sidekick only posts, and says so in a log line
+  at start-up.
+- `mode: events` receives events at `POST /slack/events` on
+  `server.listen` instead, checked with the signing secret in
+  `signingSecret`. Slack must be able to reach that URL.
+- `trustedBots` lists the bot IDs (`B...`) whose messages are trusted in a
+  listener marked `trusted: true`. Every other message is untrusted.
+- `apiURL` is the Slack Web API base URL, ending in `/`. GovSlack
+  workspaces use `https://slack-gov.com/api/`.
+
+[Investigations in Slack](slack.md) describes how to set up the app.
+
+### `listeners`
+
+A listener picks the messages in one Slack channel that start an
+investigation. The listener's name is the event's intake, so a route can
+select its events with `match.intake`.
+
+```yaml
+listeners:
+  alerts:
+    channel: "#alerts"                  # a channel name or ID; required
+    match:                              # every field that is set must match
+      sender:
+        kind: bot                       # human or bot
+        names: [SigNoz]                 # bot names, compared without case
+        bots: [B01SIGNOZ]               # bot IDs
+        users: [U01ABCDEF]              # user IDs
+      text: "(?i)alert|firing"          # a regular expression
+    extract:                            # regular expressions with named groups
+      - "Alert: (?P<alert>[A-Za-z0-9]+)"
+      - "service=(?P<service>[a-z0-9-]+)"
+      - "(?i)severity: (?P<severity>[a-z]+)"
+      - "env=(?P<env>[a-z]+)"           # any other name sets a label
+    recovery: "(?i)resolved|recovered"  # turns a message into a recovery event
+    trusted: true                       # trust the bots in slack.trustedBots
+```
+
+When `names`, `bots` or `users` are set, the sender must be in one of
+them. `text`, `extract` and `recovery` run on the message text with the
+text of its attachments and blocks added, one part per line.
+[Listeners and mentions](slack.md#listeners-and-mentions) says which
+messages a listener sees and how events are built from them. Listeners
+need the Slack app to receive events, so `slack.appTokenSecret` (or
+`mode: events`) must be set.
 
 ### `outputs`
 
@@ -608,7 +666,7 @@ routes:
   - name: payments-latency
     priority: 10                       # default 100
     match:                             # every field that is set must match
-      intake: [alertmanager]           # webhook endpoint names
+      intake: [alertmanager]           # webhook endpoint or listener names, or slack-mention
       labels: { team: payments }
       service: "checkout-*"            # a glob
       severity: [warning, critical]    # unknown, info, warning or critical
@@ -628,6 +686,7 @@ routes:
 ```
 
 A route without `strategy` uses the built-in `generic-alert` strategy.
+Events from mentions of `@Sidekick` have the intake `slack-mention`.
 
 The match runs on the event as it is stored, after
 [redaction](#redaction). `text` is matched against the event's title and
@@ -836,6 +895,8 @@ A refused request ends the check with an error and is counted in
 | `database.migrations` | `startup` |
 | `secrets.dir` | `/var/run/secrets/sidekick` |
 | `intake.webhooks.<name>.auth.tolerance` | `5m` |
+| `slack.mode` | `socket` |
+| `slack.apiURL` | `https://slack.com/api/` |
 | `routes[].priority` | `100` |
 | `routes[].strategy` | `generic-alert` |
 | `routes[].mode` | `read-only` |
@@ -856,9 +917,11 @@ A refused request ends the check with an error and is counted in
 
 Besides unknown keys and values of the wrong type, Sidekick checks that:
 
-- Connector, source, output, webhook endpoint and route names are unique,
-  start with a lower-case letter, hold only lower-case letters, digits and
-  `-`, and are at most 24 characters long.
+- Connector, source, output, webhook endpoint, listener and route names
+  are unique, start with a lower-case letter, hold only lower-case
+  letters, digits and `-`, and are at most 24 characters long. No webhook
+  endpoint and listener share a name, and neither is named
+  `slack-mention`, which mentions use.
 - Every `provider`, source `type`, `adapter` and output `type` is one this
   version of Sidekick has, and its section passes that plugin's own checks.
 - `model.roles.investigate` is set, every role names a defined connector,
@@ -870,8 +933,14 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   `generic` endpoint sets `fields.title`, and each of its field paths
   parses.
 - There is exactly one `default` route, and it has no `match`. Every source,
-  output, webhook and strategy a route names is defined. Glob and regular
+  output, intake and strategy a route names is defined. Glob and regular
   expression matches parse.
+- `slack.mode` is `socket` or `events`, and `events` has `signingSecret`.
+  `trustedBots` are bot IDs, and listeners are set only when the Slack app
+  receives events. Each listener has a channel name or ID, a `sender.kind`
+  of `human` or `bot`, bot and user IDs of the right shape, regular
+  expressions that parse, `extract` patterns with at least one named
+  group, and `trusted: true` only when `slack.trustedBots` is set.
 - Every strategy file in `strategies.dir` is valid, and no two of them have
   the same name.
 - Every route is `read-only` with no `actions`, and its budgets and

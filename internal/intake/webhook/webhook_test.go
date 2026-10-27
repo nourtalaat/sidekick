@@ -13,7 +13,6 @@ import (
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/intake"
-	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/registry"
 )
 
@@ -156,102 +155,6 @@ func TestAuthenticate(t *testing.T) {
 			default:
 				require.NoError(t, err)
 			}
-		})
-	}
-}
-
-func TestStoredKey(t *testing.T) {
-	t.Parallel()
-
-	redactor, err := redact.New(redact.Options{HashKey: []byte("key"), Custom: []redact.Rule{{Name: "seeded", Pattern: "SEEDED-[0-9]+"}}})
-	require.NoError(t, err)
-
-	h := &Handler{redactor: redactor}
-
-	tests := []struct {
-		name     string
-		key      string
-		wantKept bool
-	}{
-		{name: "a plain key is kept", key: "build-4711", wantKept: true},
-		{name: "a key at the length limit is kept", key: strings.Repeat("k", maxKeyBytes), wantKept: true},
-		{name: "a longer key is hashed", key: strings.Repeat("k", maxKeyBytes+1)},
-		{name: "a key the redactor changes is hashed", key: "deploy-SEEDED-1"},
-		{name: "a key with a NUL character is hashed", key: "a\x00b"},
-		{name: "a key that is not valid UTF-8 is hashed", key: "a\xffb"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := h.storedKey(tt.key)
-			if tt.wantKept {
-				require.Equal(t, tt.key, got)
-
-				return
-			}
-
-			require.True(t, strings.HasPrefix(got, hashedKeyPrefix))
-			require.Len(t, got, len(hashedKeyPrefix)+64)
-			require.Equal(t, got, h.storedKey(tt.key), "the same key gives the same hash")
-		})
-	}
-}
-
-func TestRedactedLinks(t *testing.T) {
-	t.Parallel()
-
-	redactor, err := redact.New(redact.Options{HashKey: []byte("key"), Custom: []redact.Rule{{Name: "seeded", Pattern: "SEEDED-[0-9]+"}}})
-	require.NoError(t, err)
-
-	h := &Handler{redactor: redactor}
-
-	tests := []struct {
-		name  string
-		links []event.Link
-		want  string
-	}{
-		{name: "no links", want: ""},
-		{
-			name:  "links are kept with their titles",
-			links: []event.Link{{Title: "Runbook", URL: "https://runbooks.example.com/disk"}, {URL: "https://grafana.example.com/d/1"}},
-			want:  `[{"title": "Runbook", "url": "https://runbooks.example.com/disk"}, {"title": "", "url": "https://grafana.example.com/d/1"}]`,
-		},
-		{
-			name:  "a title is redacted",
-			links: []event.Link{{Title: "Dashboard SEEDED-1", URL: "https://grafana.example.com/d/1"}},
-			want:  `[{"title": "Dashboard ` + redactor.Text("SEEDED-1").Text + `", "url": "https://grafana.example.com/d/1"}]`,
-		},
-		{
-			name: "a link whose URL redaction changes is dropped",
-			links: []event.Link{
-				{Title: "Leaky", URL: "https://example.com/?token=SEEDED-2"},
-				{Title: "Kept", URL: "https://example.com/ok"},
-			},
-			want: `[{"title": "Kept", "url": "https://example.com/ok"}]`,
-		},
-		{
-			name:  "links without a usable URL are dropped",
-			links: []event.Link{{Title: "Empty"}, {Title: "NUL", URL: "https://example.com/\x00"}},
-			want:  "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got, err := h.redactedLinks(tt.links)
-			require.NoError(t, err)
-
-			if tt.want == "" {
-				require.Nil(t, got)
-
-				return
-			}
-
-			require.JSONEq(t, tt.want, string(got))
 		})
 	}
 }

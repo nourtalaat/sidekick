@@ -75,6 +75,10 @@ type Config struct {
 	Telemetry  Telemetry          `yaml:"telemetry"`
 	Watch      Watch              `yaml:"watch"`
 
+	// Listeners are the file listeners, by name. Their events go through
+	// the Slack app.
+	Listeners map[string]Listener `yaml:"listeners"`
+
 	// strategySet holds the built-in and file strategies, loaded by Parse.
 	strategySet *strategy.Set
 }
@@ -143,11 +147,6 @@ type Intake struct {
 	Webhooks map[string]Webhook `yaml:"webhooks"`
 }
 
-// Slack holds the Slack credentials. M0 posts with the bot token only.
-type Slack struct {
-	BotTokenSecret registry.SecretRef `yaml:"botTokenSecret"`
-}
-
 // Strategies says where file strategies are read from.
 type Strategies struct {
 	// Dir holds file strategies, one YAML file each. They are read, never
@@ -203,7 +202,8 @@ type Grouping struct {
 
 // Match selects events for a route. Every field that is set must match.
 type Match struct {
-	// Intake lists webhook endpoint names.
+	// Intake lists webhook endpoint and listener names, and
+	// SlackMentionIntake for mentions.
 	Intake []string `yaml:"intake"`
 	// Labels must all be present with these values.
 	Labels map[string]string `yaml:"labels"`

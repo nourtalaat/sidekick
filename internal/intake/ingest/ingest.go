@@ -1,4 +1,11 @@
-package webhook
+// Package ingest stores the events that intake receives, whether from a
+// webhook endpoint or from Slack. It redacts each event, keeps its key
+// stable and short, takes trust from the caller's config rather than the
+// payload, and writes every event of a delivery with its route_event job in
+// one transaction.
+//
+// The route_event job's payload is {"event_id": "<the event's ID>"}.
+package ingest
 
 import (
 	"cmp"
@@ -14,17 +21,18 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/ids"
-	"github.com/nourtalaat/sidekick/internal/intake"
 	"github.com/nourtalaat/sidekick/internal/queue"
+	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
-// statusReceived is the events.status that intake writes.
-const statusReceived = "received"
+// StatusReceived is the events.status that intake writes.
+const StatusReceived = "received"
 
 // maxKeyBytes is the longest key stored as it is. Longer keys are stored
 // as their hash, so the unique index on (intake, key) stays small.
@@ -47,19 +55,52 @@ type storedLink struct {
 	URL   string `json:"url"`
 }
 
-// storedEvent is what happened to one event of a delivery.
-type storedEvent struct {
-	id        uuid.UUID
-	key       string
-	status    string
-	duplicate bool
+// Writer stores events. It is safe for concurrent use.
+type Writer struct {
+	pool     *pgxpool.Pool
+	redactor *redact.Redactor
 }
 
-// store writes the events in one transaction. Each event that is new gets
-// a route_event job in the same transaction. An event whose key the intake
-// already has is left as it is and reported as a duplicate.
-func (h *Handler) store(ctx context.Context, ep endpoint, req intake.Request, events []event.Event) (stored []storedEvent, err error) {
-	tx, err := h.pool.Begin(ctx)
+// Delivery is what one request or Slack payload brought in.
+type Delivery struct {
+	// Intake is the webhook endpoint or Slack listener name.
+	Intake string
+	// Trusted comes from the intake's config, never from the payload. It
+	// applies to every event of the delivery.
+	Trusted bool
+	// ReceivedAt is when the delivery arrived.
+	ReceivedAt time.Time
+	// Events are the events the delivery holds. Each needs a Key.
+	Events []event.Event
+}
+
+// Stored is what happened to one event of a delivery.
+type Stored struct {
+	// ID is the new event's ID; it is the zero UUID for a duplicate.
+	ID uuid.UUID
+	// Key is the key as it is stored: redacted keys and long keys are
+	// hashed.
+	Key string
+	// Status is StatusReceived; empty for a duplicate.
+	Status string
+	// Duplicate is true when the intake already had an event with the key.
+	Duplicate bool
+}
+
+// NewWriter returns a Writer that redacts events with redactor and stores
+// them in pool.
+func NewWriter(pool *pgxpool.Pool, redactor *redact.Redactor) *Writer {
+	return &Writer{pool: pool, redactor: redactor}
+}
+
+// Store writes the events of d in one transaction and returns what
+// happened to each, in order. Each event that is new gets a route_event
+// job in the same transaction; a resolved event too, so the router can
+// link it to its group. An event whose key the intake already has is left
+// as it is and reported as a duplicate. When Store returns without an
+// error, every event is committed.
+func (w *Writer) Store(ctx context.Context, d Delivery) (stored []Stored, err error) {
+	tx, err := w.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin: %w", err)
 	}
@@ -71,17 +112,17 @@ func (h *Handler) store(ctx context.Context, ep endpoint, req intake.Request, ev
 	}()
 
 	queries := db.New(tx)
-	stored = make([]storedEvent, 0, len(events))
+	stored = make([]Stored, 0, len(d.Events))
 
-	for i, ev := range events {
-		params, err := h.row(ep, req, ev)
+	for i, ev := range d.Events {
+		params, err := w.row(d, ev)
 		if err != nil {
 			return nil, fmt.Errorf("event %d: %w", i, err)
 		}
 
 		id, err := queries.InsertEvent(ctx, params)
 		if errors.Is(err, pgx.ErrNoRows) {
-			stored = append(stored, storedEvent{key: params.Key, duplicate: true})
+			stored = append(stored, Stored{Key: params.Key, Duplicate: true})
 
 			continue
 		}
@@ -94,7 +135,7 @@ func (h *Handler) store(ctx context.Context, ep endpoint, req intake.Request, ev
 			return nil, fmt.Errorf("event %d: %w", i, err)
 		}
 
-		stored = append(stored, storedEvent{id: id, key: params.Key, status: params.Status})
+		stored = append(stored, Stored{ID: id, Key: params.Key, Status: params.Status})
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -105,48 +146,48 @@ func (h *Handler) store(ctx context.Context, ep endpoint, req intake.Request, ev
 }
 
 // row builds the events row for ev. Every text from the payload is
-// redacted, and a link whose URL redaction would change is dropped. The key is kept as it is unless the redactor finds something
-// in it, it is too long, or it is not valid text; then it is stored as its
-// SHA-256, which still makes a repeated delivery map to the same row.
-// Trust comes from the endpoint's config.
-func (h *Handler) row(ep endpoint, req intake.Request, ev event.Event) (db.InsertEventParams, error) {
-	labels, err := h.redactedLabels(ev.Labels)
+// redacted, and a link whose URL redaction would change is dropped. The key
+// is kept as it is unless the redactor finds something in it, it is too
+// long, or it is not valid text; then it is stored as its SHA-256, which
+// still makes a repeated delivery map to the same row.
+func (w *Writer) row(d Delivery, ev event.Event) (db.InsertEventParams, error) {
+	labels, err := w.redactedLabels(ev.Labels)
 	if err != nil {
 		return db.InsertEventParams{}, fmt.Errorf("redact labels: %w", err)
 	}
 
-	links, err := h.redactedLinks(ev.Links)
+	links, err := w.redactedLinks(ev.Links)
 	if err != nil {
 		return db.InsertEventParams{}, fmt.Errorf("redact links: %w", err)
 	}
 
 	fingerprint := ev.Fingerprint
 	if fingerprint == "" {
-		fingerprint = event.Fingerprint(ep.name, ev.AlertName, ev.Labels, slices.Collect(maps.Keys(ev.Labels)))
+		fingerprint = event.Fingerprint(d.Intake, ev.AlertName, ev.Labels, slices.Collect(maps.Keys(ev.Labels)))
 	}
 
 	p := db.InsertEventParams{
 		ID:          ids.New(),
-		Intake:      ep.name,
-		Key:         h.storedKey(ev.Key),
+		Intake:      d.Intake,
+		Key:         w.storedKey(ev.Key),
 		Kind:        string(ev.Kind),
 		SenderKind:  optional(string(ev.Sender.Kind)),
-		SenderID:    h.redactedText(ev.Sender.ID),
-		SenderName:  h.redactedText(ev.Sender.Name),
-		Trusted:     ep.cfg.Trusted,
-		AlertName:   h.redactedText(ev.AlertName),
-		Title:       h.redactedText(ev.Title),
-		Body:        h.redactedText(ev.Text),
-		Service:     h.redactedText(ev.Service),
+		SenderID:    w.redactedText(ev.Sender.ID),
+		SenderName:  w.redactedText(ev.Sender.Name),
+		Trusted:     d.Trusted,
+		AlertName:   w.redactedText(ev.AlertName),
+		Title:       w.redactedText(ev.Title),
+		Body:        w.redactedText(ev.Text),
+		Service:     w.redactedText(ev.Service),
 		Severity:    optional(string(cmp.Or(ev.Severity, event.SeverityUnknown))),
 		Labels:      labels,
 		Links:       links,
-		Fingerprint: store.Text(h.redactor.Text(fingerprint).Text),
-		Raw:         h.redactedJSON(ev.Raw),
-		Status:      statusReceived,
+		Fingerprint: store.Text(w.redactor.Text(fingerprint).Text),
+		Raw:         w.redactedJSON(ev.Raw),
+		Status:      StatusReceived,
 		StartsAt:    optionalTime(ev.StartsAt),
 		EndsAt:      optionalTime(ev.EndsAt),
-		ReceivedAt:  req.ReceivedAt,
+		ReceivedAt:  d.ReceivedAt,
 	}
 
 	if ev.Slack != nil {
@@ -155,15 +196,15 @@ func (h *Handler) row(ep endpoint, req intake.Request, ev event.Event) (db.Inser
 			return db.InsertEventParams{}, fmt.Errorf("encode the Slack reference: %w", err)
 		}
 
-		p.Slack = h.redactedJSON(slack)
+		p.Slack = w.redactedJSON(slack)
 	}
 
 	return p, nil
 }
 
 // storedKey returns key as it is stored.
-func (h *Handler) storedKey(key string) string {
-	if len(key) <= maxKeyBytes && store.ValidText(key) && h.redactor.Text(key).Counts == nil {
+func (w *Writer) storedKey(key string) string {
+	if len(key) <= maxKeyBytes && store.ValidText(key) && w.redactor.Text(key).Counts == nil {
 		return key
 	}
 
@@ -174,17 +215,17 @@ func (h *Handler) storedKey(key string) string {
 
 // redactedText redacts s and makes it fit a text column. Empty text gives
 // nil, for NULL.
-func (h *Handler) redactedText(s string) *string {
+func (w *Writer) redactedText(s string) *string {
 	if s == "" {
 		return nil
 	}
 
-	return optional(store.Text(h.redactor.Text(s).Text))
+	return optional(store.Text(w.redactor.Text(s).Text))
 }
 
 // redactedLabels redacts the labels, names and values both, as a JSON
 // object.
-func (h *Handler) redactedLabels(labels map[string]string) (json.RawMessage, error) {
+func (w *Writer) redactedLabels(labels map[string]string) (json.RawMessage, error) {
 	if labels == nil {
 		labels = map[string]string{}
 	}
@@ -194,22 +235,22 @@ func (h *Handler) redactedLabels(labels map[string]string) (json.RawMessage, err
 		return nil, fmt.Errorf("encode labels: %w", err)
 	}
 
-	return h.redactedJSON(raw), nil
+	return w.redactedJSON(raw), nil
 }
 
 // redactedLinks returns the links as a JSON array of title and URL, with
 // each title redacted. A link whose URL the redactor would change, or that
 // a text column cannot hold, is dropped, because a URL with a placeholder in
 // it is broken. No links give nil, for NULL.
-func (h *Handler) redactedLinks(links []event.Link) ([]byte, error) {
+func (w *Writer) redactedLinks(links []event.Link) ([]byte, error) {
 	kept := make([]storedLink, 0, len(links))
 
 	for _, l := range links {
-		if l.URL == "" || !store.ValidText(l.URL) || h.redactor.Text(l.URL).Text != l.URL {
+		if l.URL == "" || !store.ValidText(l.URL) || w.redactor.Text(l.URL).Text != l.URL {
 			continue
 		}
 
-		kept = append(kept, storedLink{Title: store.Text(h.redactor.Text(l.Title).Text), URL: l.URL})
+		kept = append(kept, storedLink{Title: store.Text(w.redactor.Text(l.Title).Text), URL: l.URL})
 	}
 
 	if len(kept) == 0 {
@@ -226,12 +267,12 @@ func (h *Handler) redactedLinks(links []event.Link) ([]byte, error) {
 
 // redactedJSON redacts raw and makes it fit a jsonb column. Empty input
 // gives nil, for NULL.
-func (h *Handler) redactedJSON(raw []byte) []byte {
+func (w *Writer) redactedJSON(raw []byte) []byte {
 	if len(raw) == 0 {
 		return nil
 	}
 
-	out, _ := h.redactor.JSON(raw)
+	out, _ := w.redactor.JSON(raw)
 
 	return store.JSON(out)
 }

@@ -1,0 +1,24 @@
+{
+  "token": "unused-verification-token",
+  "team_id": "T01TEAM",
+  "api_app_id": "A01SIDEKICK",
+  "type": "event_callback",
+  "event_id": "Ev09MSG",
+  "event_time": 1761472800,
+  "authorizations": [
+    {
+      "team_id": "T01TEAM",
+      "user_id": "U01SIDEKICK",
+      "is_bot": true
+    }
+  ],
+  "event": {
+    "type": "message",
+    "channel": "C01OPS",
+    "team": "T01TEAM",
+    "user": "U02ALICE",
+    "text": "<@U01SIDEKICK> why is checkout slow?",
+    "ts": "1761473000.000900",
+    "blocks": []
+  }
+}

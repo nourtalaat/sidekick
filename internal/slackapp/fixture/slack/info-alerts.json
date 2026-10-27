@@ -1,0 +1,8 @@
+{
+  "ok": true,
+  "channel": {
+    "id": "C01ALERTS",
+    "name": "alerts",
+    "is_channel": true
+  }
+}
