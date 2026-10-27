@@ -87,9 +87,10 @@ func TestCancel(t *testing.T) {
 				close(started)
 			}
 
+			job := h.claim(t)
 			done := make(chan error, 1)
 
-			go func() { done <- h.run(t) }()
+			go func() { done <- h.handler.Handle(t.Context(), job) }()
 
 			<-started
 

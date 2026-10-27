@@ -171,8 +171,8 @@ func (b *Buttons) HandleInteraction(ctx context.Context, cb slack.InteractionCal
 
 	log := b.log.With("action", action.ActionID, "user_id", cb.User.ID)
 
-	id, err := uuid.Parse(action.Value)
-	if err != nil {
+	id, ok := investigationID(action.Value)
+	if !ok {
 		log.WarnContext(ctx, "ignoring a click whose value is not an investigation ID")
 
 		return nil, nil
@@ -345,6 +345,14 @@ func ourAction(actions []*slack.BlockAction) (*slack.BlockAction, bool) {
 	}
 
 	return nil, false
+}
+
+// investigationID returns the investigation ID a button carries as its
+// value, and false when the value is not one.
+func investigationID(value string) (uuid.UUID, bool) {
+	id, err := uuid.Parse(value)
+
+	return id, err == nil
 }
 
 // decodeInteraction reads the interaction in a form-encoded body.

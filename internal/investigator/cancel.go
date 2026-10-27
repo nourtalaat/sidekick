@@ -93,20 +93,18 @@ func NewCanceller(pool *pgxpool.Pool, log *slog.Logger) *Canceller {
 // Run listens for stops until ctx ends, and returns nil then. When its
 // connection fails it listens again after a pause.
 func (c *Canceller) Run(ctx context.Context) error {
-	for {
-		err := c.listen(ctx)
-		if ctx.Err() != nil {
-			return nil
+	for ctx.Err() == nil {
+		if err := c.listen(ctx); err != nil && ctx.Err() == nil {
+			c.log.WarnContext(ctx, "listening for stopped investigations failed; runs see a stop at their next step until it works again", "error", err.Error())
 		}
-
-		c.log.WarnContext(ctx, "listening for stopped investigations failed; runs see a stop at their next step until it works again", "error", err.Error())
 
 		select {
 		case <-ctx.Done():
-			return nil
 		case <-time.After(c.retry):
 		}
 	}
+
+	return nil
 }
 
 // listen holds one connection that listens for stops. Once it listens, it

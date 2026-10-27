@@ -4,6 +4,7 @@ package publish
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -37,7 +38,7 @@ func TestFinalShowsResponders(t *testing.T) {
 					if _, err := feedback.RateVerdict(t.Context(), tx, feedback.VerdictRating{
 						InvestigationID: webhookInvestigation, Rating: output.RatingCorrect, SlackUserID: "U01ANA",
 					}); err != nil {
-						return err
+						return fmt.Errorf("rate the verdict: %w", err)
 					}
 
 					return Refresh(t.Context(), tx, webhookInvestigation)

@@ -3,6 +3,7 @@
 package feedback
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
@@ -50,8 +51,11 @@ func rate(t *testing.T, pool *pgxpool.Pool, r VerdictRating) (Result, error) {
 
 		return err
 	})
+	if err != nil {
+		return Result{}, fmt.Errorf("rate in a transaction: %w", err)
+	}
 
-	return res, err
+	return res, nil
 }
 
 // investigation returns the investigation with id.
