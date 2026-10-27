@@ -36,7 +36,7 @@ func (c *Connector) checkRequest(req model.Request) error {
 	}
 
 	if effort := c.effort(req); !c.caps.SupportsEffort(effort) {
-		errs = append(errs, fmt.Errorf("effort: %q is not supported by %s", effort, c.cfg.Model))
+		errs = append(errs, fmt.Errorf("effort: %q is not supported by %s", effort, c.settings.Model))
 	}
 
 	switch req.ToolChoice.Mode {
@@ -78,7 +78,7 @@ func (c *Connector) effort(req model.Request) model.Effort {
 		return req.Effort
 	}
 
-	return c.cfg.Effort
+	return c.settings.Effort
 }
 
 // temperature returns the request's temperature, else the config's.
@@ -87,7 +87,7 @@ func (c *Connector) temperature(req model.Request) *float64 {
 		return req.Temperature
 	}
 
-	return c.cfg.Temperature
+	return c.settings.Temperature
 }
 
 // systemText joins the system text blocks.
@@ -145,4 +145,20 @@ func toolInput(arguments string) json.RawMessage {
 	}
 
 	return quoted
+}
+
+// maxTokens returns the output limit of a call: the requested one, else
+// the configured one, capped at the model's maximum. Zero leaves the limit
+// out, so the model's or server's own applies.
+func maxTokens(requested, configured int, caps model.Capabilities) int {
+	n := requested
+	if n <= 0 {
+		n = configured
+	}
+
+	if caps.MaxOutputTokens > 0 && n > caps.MaxOutputTokens {
+		return caps.MaxOutputTokens
+	}
+
+	return max(n, 0)
 }
