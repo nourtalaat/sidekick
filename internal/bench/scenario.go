@@ -210,7 +210,9 @@ func loadScenario(file string, opts LoadOptions) (Scenario, []string) {
 		return Scenario{}, []string{fmt.Sprintf("%s: %v", file, err)}
 	}
 
-	sc, problems := decodeScenario(raw)
+	var sc Scenario
+
+	problems := decodeStrict(raw, &sc)
 	if len(problems) == 0 {
 		problems = sc.validate()
 	}
@@ -399,35 +401,33 @@ func (l Limits) validate() []string {
 	return problems
 }
 
-// decodeScenario decodes one YAML document strictly: an unknown key is a
-// problem.
-func decodeScenario(raw []byte) (Scenario, []string) {
+// decodeStrict decodes one YAML document into target strictly: an unknown
+// key is a problem. Scenario files and bench.yaml are read with it.
+func decodeStrict(raw []byte, target any) []string {
 	dec := yaml.NewDecoder(bytes.NewReader(raw))
 
 	var doc yaml.Node
 	if err := dec.Decode(&doc); err != nil {
 		if errors.Is(err, io.EOF) {
-			return Scenario{}, []string{"the file is empty"}
+			return []string{"the file is empty"}
 		}
 
-		return Scenario{}, []string{"invalid YAML: " + strings.TrimPrefix(err.Error(), "yaml: ")}
+		return []string{"invalid YAML: " + strings.TrimPrefix(err.Error(), "yaml: ")}
 	}
 
 	var extra yaml.Node
 	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
-		return Scenario{}, []string{"the file must hold one YAML document"}
+		return []string{"the file must hold one YAML document"}
 	}
 
-	var sc Scenario
-
-	err := config.Section{Node: &doc}.Decode(&sc)
+	err := config.Section{Node: &doc}.Decode(target)
 	if err == nil {
-		return sc, nil
+		return nil
 	}
 
 	var decodeErrs config.Errors
 	if !errors.As(err, &decodeErrs) {
-		return Scenario{}, []string{err.Error()}
+		return []string{err.Error()}
 	}
 
 	problems := make([]string, len(decodeErrs))
@@ -435,7 +435,7 @@ func decodeScenario(raw []byte) (Scenario, []string) {
 		problems[i] = e.String()
 	}
 
-	return Scenario{}, problems
+	return problems
 }
 
 // scenarioFiles returns path when it is a file, or the scenario files
