@@ -2,10 +2,8 @@
 // deliver alerts. For each delivery it reads the body up to MaxBodyBytes,
 // authenticates it with the endpoint's bearer token or HMAC signature
 // before anything parses it, lets the endpoint's adapter turn it into
-// events, redacts them, and stores each one with a route_event job in one
-// transaction.
-//
-// The route_event job's payload is {"event_id": "<the event's ID>"}.
+// events, and stores them through package ingest, which redacts them and
+// writes each one with a route_event job in one transaction.
 package webhook
 
 import (
@@ -28,6 +26,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/intake"
+	"github.com/nourtalaat/sidekick/internal/intake/ingest"
 	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/secrets"
@@ -57,6 +56,11 @@ const MaxBodyBytes = 1 << 20
 
 // pathName is the wildcard in Pattern that holds the endpoint name.
 const pathName = "name"
+
+// unknownIntake is the intake label of deliveries to an endpoint that is
+// not configured, so a sender cannot add label values. Endpoint names
+// cannot start with "_", so it never mixes with a real one.
+const unknownIntake = "_unknown"
 
 // The messages of error responses. They never name configured endpoints
 // or say which check failed.
@@ -97,7 +101,7 @@ type Options struct {
 	// Logger receives one line per delivery. Payloads are never logged.
 	Logger *slog.Logger
 	// Metrics counts deliveries and events. Nil counts nothing.
-	Metrics *Metrics
+	Metrics *ingest.Metrics
 	// TracerProvider makes the tracer of the intake.receive spans. Nil
 	// means the global tracer provider.
 	TracerProvider trace.TracerProvider
@@ -108,10 +112,9 @@ type Options struct {
 type Handler struct {
 	endpoints map[string]endpoint
 	secrets   registry.Secrets
-	redactor  *redact.Redactor
-	pool      *pgxpool.Pool
+	writer    *ingest.Writer
 	log       *slog.Logger
-	metrics   *Metrics
+	metrics   *ingest.Metrics
 	tracer    trace.Tracer
 }
 
@@ -133,8 +136,7 @@ func New(opts Options) (*Handler, error) {
 	h := &Handler{
 		endpoints: make(map[string]endpoint, len(opts.Webhooks)),
 		secrets:   opts.Secrets,
-		redactor:  opts.Redactor,
-		pool:      opts.Pool,
+		writer:    ingest.NewWriter(opts.Pool, opts.Redactor),
 		log:       opts.Logger,
 		metrics:   opts.Metrics,
 		tracer:    tp.Tracer(tracerName),
@@ -151,7 +153,7 @@ func New(opts Options) (*Handler, error) {
 		}
 
 		h.endpoints[name] = endpoint{name: name, cfg: cfg, adapter: adapter}
-		h.metrics.init(name)
+		h.metrics.Init(name)
 	}
 
 	return h, nil
@@ -178,7 +180,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	d := &reply{h: h, w: w, span: span, intake: intakeLabel, log: h.log.With("intake", intakeLabel)}
 
 	if !known {
-		d.reject(ctx, reasonUnauthenticated, http.StatusNotFound, msgNotFound, "webhook delivery for an unknown endpoint", nil)
+		d.reject(ctx, ingest.ReasonUnauthenticated, http.StatusNotFound, msgNotFound, "webhook delivery for an unknown endpoint", nil)
 
 		return
 	}
@@ -186,12 +188,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxBodyBytes))
 	if err != nil {
 		if _, tooLarge := errors.AsType[*http.MaxBytesError](err); tooLarge {
-			d.reject(ctx, reasonTooLarge, http.StatusRequestEntityTooLarge, msgTooLarge, "webhook delivery rejected: the body is too large", nil)
+			d.reject(ctx, ingest.ReasonTooLarge, http.StatusRequestEntityTooLarge, msgTooLarge, "webhook delivery rejected: the body is too large", nil)
 
 			return
 		}
 
-		d.reject(ctx, reasonInvalidPayload, http.StatusBadRequest, msgUnreadable, "webhook delivery rejected: the body could not be read", err)
+		d.reject(ctx, ingest.ReasonInvalidPayload, http.StatusBadRequest, msgUnreadable, "webhook delivery rejected: the body could not be read", err)
 
 		return
 	}
@@ -205,19 +207,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		d.reject(ctx, reasonUnauthenticated, http.StatusUnauthorized, msgUnauthenticated, "webhook delivery rejected: authentication failed", err)
+		d.reject(ctx, ingest.ReasonUnauthenticated, http.StatusUnauthorized, msgUnauthenticated, "webhook delivery rejected: authentication failed", err)
 
 		return
 	}
 
 	events, err := parse(ctx, ep, req)
 	if err != nil {
-		d.reject(ctx, reasonInvalidPayload, http.StatusBadRequest, msgInvalidPayload+err.Error(), "webhook delivery rejected: the payload is not valid", err)
+		d.reject(ctx, ingest.ReasonInvalidPayload, http.StatusBadRequest, msgInvalidPayload+err.Error(), "webhook delivery rejected: the payload is not valid", err)
 
 		return
 	}
 
-	stored, err := h.store(ctx, ep, req, events)
+	stored, err := h.writer.Store(ctx, ingest.Delivery{Intake: ep.name, Trusted: ep.cfg.Trusted, ReceivedAt: req.ReceivedAt, Events: events})
 	if err != nil {
 		d.fail(ctx, "webhook delivery not stored", err)
 
@@ -299,16 +301,16 @@ type reply struct {
 }
 
 // accept answers 202 with what happened to each event.
-func (d *reply) accept(ctx context.Context, stored []storedEvent) {
+func (d *reply) accept(ctx context.Context, stored []ingest.Stored) {
 	resp := newResponse(stored)
 
 	keys := make([]string, 0, len(stored))
 	for _, s := range stored {
-		keys = append(keys, s.key)
+		keys = append(keys, s.Key)
 	}
 
 	d.span.SetAttributes(attribute.StringSlice(attrEventKey, keys), attribute.Bool(attrDuplicate, resp.Duplicate))
-	d.h.metrics.stored(d.intake, stored)
+	d.h.metrics.Stored(d.intake, stored)
 	d.log.InfoContext(ctx, "webhook delivery accepted", "events", len(stored), "duplicate", resp.Duplicate)
 	d.h.writeJSON(ctx, d.w, http.StatusAccepted, resp)
 }
@@ -317,7 +319,7 @@ func (d *reply) accept(ctx context.Context, stored []storedEvent) {
 // says why in the log; it never holds payload values.
 func (d *reply) reject(ctx context.Context, reason string, status int, msg, logMsg string, err error) {
 	d.span.SetAttributes(attribute.String(attrRejected, reason))
-	d.h.metrics.reject(d.intake, reason)
+	d.h.metrics.Reject(d.intake, reason)
 
 	if err != nil {
 		d.log.InfoContext(ctx, logMsg, "error", err.Error())
@@ -350,18 +352,18 @@ type responseEntity struct {
 	Duplicate bool   `json:"duplicate"`
 }
 
-func newResponse(stored []storedEvent) response {
+func newResponse(stored []ingest.Stored) response {
 	resp := response{Duplicate: len(stored) > 0, Events: make([]responseEntity, 0, len(stored))}
 
 	for _, s := range stored {
-		if s.duplicate {
+		if s.Duplicate {
 			resp.Events = append(resp.Events, responseEntity{Duplicate: true})
 
 			continue
 		}
 
 		resp.Duplicate = false
-		resp.Events = append(resp.Events, responseEntity{ID: s.id.String(), Status: s.status})
+		resp.Events = append(resp.Events, responseEntity{ID: s.ID.String(), Status: s.Status})
 	}
 
 	return resp

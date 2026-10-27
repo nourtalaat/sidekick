@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/nourtalaat/sidekick/internal/app"
@@ -36,7 +37,13 @@ func registerRouter(a *app.App) error {
 		return nil
 	}
 
-	if err := a.RegisterWorker("catalog", catalog.Run); err != nil {
+	readCatalogs := func(ctx context.Context) error {
+		catalog.Run(ctx)
+
+		return nil
+	}
+
+	if err := a.RegisterTask("catalog", readCatalogs); err != nil {
 		return fmt.Errorf("register the service catalog reader: %w", err)
 	}
 

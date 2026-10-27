@@ -1,0 +1,39 @@
+{
+  "token": "unused-verification-token",
+  "team_id": "T01TEAM",
+  "api_app_id": "A01SIDEKICK",
+  "type": "event_callback",
+  "event_id": "Ev05OPS",
+  "event_time": 1761472800,
+  "authorizations": [
+    {
+      "team_id": "T01TEAM",
+      "user_id": "U01SIDEKICK",
+      "is_bot": true
+    }
+  ],
+  "event": {
+    "type": "message",
+    "channel": "C01OPS",
+    "team": "T01TEAM",
+    "user": "U02ALICE",
+    "text": "Checkout returns 502 for some users, token SEEDED-ABCDEFGH leaked in the log",
+    "ts": "1761472960.000500",
+    "blocks": [
+      {
+        "type": "rich_text",
+        "elements": [
+          {
+            "type": "rich_text_section",
+            "elements": [
+              {
+                "type": "text",
+                "text": "Checkout returns 502 for some users, token SEEDED-ABCDEFGH leaked in the log"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

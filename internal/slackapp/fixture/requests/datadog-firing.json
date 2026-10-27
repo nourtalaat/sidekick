@@ -1,0 +1,42 @@
+{
+  "token": "unused-verification-token",
+  "team_id": "T01TEAM",
+  "api_app_id": "A01SIDEKICK",
+  "type": "event_callback",
+  "event_id": "Ev03DATADOG",
+  "event_time": 1761472800,
+  "authorizations": [
+    {
+      "team_id": "T01TEAM",
+      "user_id": "U01SIDEKICK",
+      "is_bot": true
+    }
+  ],
+  "event": {
+    "type": "message",
+    "subtype": "bot_message",
+    "channel": "C01ALERTS",
+    "channel_type": "channel",
+    "team": "T01TEAM",
+    "bot_id": "B03DATADOG",
+    "bot_profile": {
+      "id": "B03DATADOG",
+      "app_id": "A03DATADOG",
+      "name": "Datadog"
+    },
+    "text": "",
+    "ts": "1761472900.000300",
+    "attachments": [
+      {
+        "title": "[FIRING] DiskFull",
+        "text": "db-1 disk at 97%",
+        "fields": [
+          {
+            "title": "Labels",
+            "value": "service=db env=prod"
+          }
+        ]
+      }
+    ]
+  }
+}

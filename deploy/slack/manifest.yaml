@@ -1,0 +1,43 @@
+# The Slack app manifest for Sidekick. Each organization creates its own
+# internal app from it: in https://api.slack.com/apps choose "Create New
+# App", then "From a manifest", and paste this file. Then install the app,
+# and create an app-level token with the connections:write scope for
+# Socket Mode. docs/slack.md walks through the steps.
+display_information:
+  name: Sidekick
+  description: Investigates alerts and posts what it finds
+  background_color: "#243165"
+features:
+  bot_user:
+    display_name: Sidekick
+    always_online: true
+  slash_commands:
+    - command: /sidekick
+      description: Set up listeners and routes, or ask Sidekick to investigate
+      usage_hint: "listen #channel | investigate <message link> | status | help"
+      should_escape: false
+oauth_config:
+  scopes:
+    bot:
+      - app_mentions:read    # mentions of @Sidekick
+      - channels:history     # read messages in public channels Sidekick is in
+      - groups:history       # the same for private channels
+      - channels:read        # channel names, for listeners that name their channel
+      - groups:read
+      - chat:write           # post and update replies
+      - reactions:write      # add reactions to alert messages
+      - commands             # /sidekick
+      - users:read
+      - users:read.email     # match Slack users to Sidekick users for roles
+      - usergroups:read      # map Slack user groups to roles
+settings:
+  event_subscriptions:
+    bot_events:
+      - app_mention
+      - message.channels
+      - message.groups
+  interactivity:
+    is_enabled: true         # buttons and forms
+  socket_mode_enabled: true
+  org_deploy_enabled: false
+  token_rotation_enabled: false

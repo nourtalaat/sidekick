@@ -134,8 +134,8 @@ process (`process_*`) metrics, this release has:
 | `sidekick_queue_jobs` | gauge | `kind`, `status` | Jobs in the queue that are pending, running or dead. Every replica reports the same numbers, so combine replicas with `max`. |
 | `sidekick_queue_wait_seconds` | histogram | `kind` | Time from a job being ready to being claimed. |
 | `sidekick_jobs_dead_total` | counter | `kind` | Jobs that failed for the last time on this replica. |
-| `sidekick_events_received_total` | counter | `intake`, `result` | Webhook events by result: `accepted` and `duplicate` count events, `rejected` counts deliveries turned away. See [Monitoring intake](webhooks.md#monitoring-intake). |
-| `sidekick_events_rejected_total` | counter | `intake`, `reason` | Rejected webhook deliveries by reason: `unauthenticated`, `too_large` or `invalid_payload`. |
+| `sidekick_events_received_total` | counter | `intake`, `result` | Webhook and Slack events by result: `accepted` and `duplicate` count events, `rejected` counts deliveries turned away. See [Monitoring intake](webhooks.md#monitoring-intake). |
+| `sidekick_events_rejected_total` | counter | `intake`, `reason` | Rejected webhook deliveries and Slack Events API requests by reason: `unauthenticated`, `too_large` or `invalid_payload`. Slack requests count under the intake `_slack`; see [Investigations in Slack](slack.md#limits-and-errors). |
 | `sidekick_investigations_total` | counter | `route`, `verdict`, `stop_reason` | Investigations that ended, by verdict and [stop reason](investigations.md#how-an-investigation-ends). |
 | `sidekick_investigations_running` | gauge | `route` | Investigations running on this replica. Sum it across replicas. |
 | `sidekick_investigation_duration_seconds` | histogram | `route` | Time from the start of an investigation to its end. |

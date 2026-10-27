@@ -32,6 +32,9 @@ const (
 	jobTimeout = 30 * time.Second
 )
 
+// errTaskFailed is the error of a task that fails at once.
+var errTaskFailed = errors.New("boom")
+
 func TestNewStartUp(t *testing.T) {
 	t.Parallel()
 
@@ -224,33 +227,52 @@ func TestRegistered(t *testing.T) {
 			},
 		},
 		{
-			name: "registered workers run until shutdown",
+			name: "registered tasks run until shutdown starts",
 			check: func(t *testing.T) {
 				t.Helper()
 
 				started, stopped := make(chan struct{}), make(chan struct{})
 
 				r := startApp(t, storetest.NewURL(t), config.MigrationsStartup, func(a *App) {
-					require.NoError(t, a.RegisterWorker("test", func(ctx context.Context) {
+					require.NoError(t, a.RegisterTask("loop", func(ctx context.Context) error {
 						close(started)
 						<-ctx.Done()
 						close(stopped)
+
+						return ctx.Err()
 					}))
 				})
 
 				select {
 				case <-started:
 				case <-time.After(jobTimeout):
-					t.Fatal("the worker did not start")
+					t.Fatal("the task did not start")
 				}
 
-				require.NoError(t, r.stop())
+				require.NoError(t, r.stop(), "a task that returns once its context ends is not a failure")
 
 				select {
 				case <-stopped:
 				default:
-					t.Fatal("Run returned before the worker did")
+					t.Fatal("Run returned before the task stopped")
 				}
+			},
+		},
+		{
+			name: "a task that fails ends Run with its error",
+			check: func(t *testing.T) {
+				t.Helper()
+
+				a, err := newApp(t, storetest.NewURL(t), config.MigrationsStartup, &syncBuffer{})
+				require.NoError(t, err)
+				require.NoError(t, a.RegisterTask("broken", func(context.Context) error { return errTaskFailed }))
+
+				ctx, cancel := context.WithTimeout(t.Context(), jobTimeout)
+				defer cancel()
+
+				err = a.Run(ctx)
+				require.ErrorIs(t, err, errTaskFailed)
+				require.ErrorContains(t, err, "task broken")
 			},
 		},
 		{
@@ -272,7 +294,7 @@ func TestRegistered(t *testing.T) {
 
 				require.ErrorIs(t, r.app.RegisterRoutes(func(*http.ServeMux) {}), errAlreadyRunning)
 				require.ErrorIs(t, r.app.RegisterJob(testJobKind, queue.HandlerFunc(func(context.Context, db.Job) error { return nil }), queue.KindOptions{}), errAlreadyRunning)
-				require.ErrorIs(t, r.app.RegisterWorker("late", func(context.Context) {}), errAlreadyRunning)
+				require.ErrorIs(t, r.app.RegisterTask("late", func(context.Context) error { return nil }), errAlreadyRunning)
 				require.ErrorIs(t, r.app.Run(t.Context()), errAlreadyRunning)
 			},
 		},
