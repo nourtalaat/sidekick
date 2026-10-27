@@ -17,6 +17,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -75,9 +76,12 @@ const (
 
 var (
 	errNoAdapter = errors.New("no adapter was built for the endpoint")
-	errNoAuth    = errors.New("the endpoint has neither bearer nor hmac set")
-	errEmptyKey  = errors.New("key: empty")
-	errBadKind   = errors.New("kind: must be alert, resolved, message or mention")
+	// errUnknownEndpoint is returned by Deliver for an endpoint that is
+	// not configured.
+	errUnknownEndpoint = errors.New("the endpoint is not configured")
+	errNoAuth          = errors.New("the endpoint has neither bearer nor hmac set")
+	errEmptyKey        = errors.New("key: empty")
+	errBadKind         = errors.New("kind: must be alert, resolved, message or mention")
 )
 
 // knownKinds are the event kinds an adapter may return.
@@ -227,6 +231,40 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	d.accept(ctx, stored)
+}
+
+// Deliver stores a delivery that comes from inside the process rather than
+// over HTTP, such as a benchmark scenario's payload. It skips
+// authentication, which only makes sense for a sender over the network,
+// and then does what ServeHTTP does: the endpoint's adapter parses the
+// payload, and its events are redacted and stored, each new one with its
+// route_event job, in one transaction. It returns the IDs of the events
+// that were new, in the order of the payload.
+func (h *Handler) Deliver(ctx context.Context, req intake.Request) ([]uuid.UUID, error) {
+	ep, ok := h.endpoints[req.Endpoint]
+	if !ok {
+		return nil, fmt.Errorf("deliver to %q: %w", req.Endpoint, errUnknownEndpoint)
+	}
+
+	events, err := parse(ctx, ep, req)
+	if err != nil {
+		return nil, fmt.Errorf("deliver to %q: %w", req.Endpoint, err)
+	}
+
+	stored, err := h.writer.Store(ctx, ingest.Delivery{Intake: ep.name, Trusted: ep.cfg.Trusted, ReceivedAt: req.ReceivedAt, Events: events})
+	if err != nil {
+		return nil, fmt.Errorf("deliver to %q: store: %w", req.Endpoint, err)
+	}
+
+	ids := make([]uuid.UUID, 0, len(stored))
+
+	for _, s := range stored {
+		if !s.Duplicate {
+			ids = append(ids, s.ID)
+		}
+	}
+
+	return ids, nil
 }
 
 // authenticate resolves the endpoint's secret and checks the delivery with
