@@ -47,9 +47,12 @@ default `/etc/sidekick/sidekick.yaml`) and checks, in order:
 | `slack` | Calls Slack's `auth.test` with the bot token from `slack.botTokenSecret`, once for each Slack API address the `slack` outputs use. Nothing is posted. |
 | `model <name>` | Builds each model connector and checks its API key with a call that costs nothing: for `anthropic`, listing one model. |
 | `prices` | Warns about each connector whose model has no price, so its calls would show no cost and count nothing toward the cost budgets and daily caps. Add a `model.prices` entry to fix it. |
+| `tool choice <name>` | Warns about each `openai` connector that fills the `investigate` role, in `model.roles` or in a route, but cannot be forced to call a tool, such as a local model on Ollama. Investigations still work: when the model ends a turn without calling a tool, Sidekick reminds it to call `submit_verdict`. A local model preset gets a forced tool choice on vLLM with `server: vllm`. |
+| `server <name>` | Warns about each `openai` connector that runs a local model preset without `server` set. It calls Ollama's `GET /api/version` next to the `baseURL`, without credentials, and when Ollama answers, the fix is the `server: ollama` line to add. |
+| `context <name>` | For each `openai` connector that runs a local model preset on Ollama, with `server: ollama` or detected by the `server` check, calls Ollama's `GET /api/ps` and warns when the model runs with less context than the preset's minimum (65,536 tokens), or when the context cannot be told because the model is not loaded. The fix is to set `OLLAMA_CONTEXT_LENGTH` in Ollama's environment. |
 | `source <name>` | Builds each source, waits up to 15 seconds for it to connect and list its tools, and lists the tools the model will not see, with the reason. |
 
-It prints one line per check, with a fix below each problem, for example:
+It prints one line per check, with a fix below each problem. The `tool choice`, `server` and `context` checks print a line only for the connectors they apply to. For example:
 
 ```text
 ok    database: connected; the schema has every migration this release needs (7)
