@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/nourtalaat/sidekick/internal/ids"
+	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
@@ -127,6 +128,12 @@ type Options struct {
 	MetricsInterval time.Duration
 	// Logger receives the Runner's logs. The default is slog.Default().
 	Logger *slog.Logger
+	// Schema is the Postgres schema the jobs table is in, when the pool's
+	// search_path names one of its own (see store.OpenSchema). The
+	// Runner's advisory locks are keyed by it, so a Runner in one schema
+	// never waits for, or holds up, Runners in another schema of the same
+	// database. Empty means the default schema.
+	Schema string
 }
 
 // Runner claims ready jobs from the queue and runs the handler registered
@@ -193,6 +200,7 @@ func NewRunner(pool *pgxpool.Pool, opts Options) (*Runner, error) {
 			return nil, fmt.Errorf("new runner: Options.Limits: %w", err)
 		}
 
+		params.lockKey = store.SchemaLockKey(limitedClaimLockKey, opts.Schema)
 		limits = &params
 	}
 
@@ -387,7 +395,7 @@ func (r *Runner) reapOnce(ctx context.Context) {
 	reapCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), dbTimeout)
 	defer cancel()
 
-	reaped, _, err := reap(reapCtx, r.pool)
+	reaped, _, err := reap(reapCtx, r.pool, store.SchemaLockKey(reaperLockKey, r.opts.Schema))
 	if err != nil {
 		r.log.Error("reaping expired leases failed", "error", err)
 	}

@@ -9,6 +9,6 @@ import (
 
 func main() {
 	if err := newRootCmd(buildinfo.Current()).Execute(); err != nil {
-		os.Exit(1)
+		os.Exit(exitCode(err))
 	}
 }

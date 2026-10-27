@@ -22,5 +22,6 @@ import (
 	_ "github.com/nourtalaat/sidekick/internal/source/github"       // Source type "github".
 	_ "github.com/nourtalaat/sidekick/internal/source/kubernetes"   // Source type "kubernetes".
 	_ "github.com/nourtalaat/sidekick/internal/source/mcp"          // Source type "mcp".
+	_ "github.com/nourtalaat/sidekick/internal/source/mock"         // Source type "mock", for benchmarks.
 	_ "github.com/nourtalaat/sidekick/internal/source/postgres"     // Source type "postgres".
 )
