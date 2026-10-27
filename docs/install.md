@@ -256,6 +256,10 @@ webhook adds a token file and the `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and
 `networkPolicy.restrictEgress`, allow `login.microsoftonline.com` on port
 443.
 
+The [Azure connector](configuration.md#the-azure-provider) uses this
+identity with `auth: entra`. Give the managed identity the Cognitive
+Services OpenAI User role on the Azure OpenAI or Foundry resource.
+
 **Other annotations** go under `serviceAccount.annotations`. An
 annotation that `serviceAccount.workloadIdentity` already sets is
 rejected, and so is `azure.workload.identity/use` in `podLabels` when
