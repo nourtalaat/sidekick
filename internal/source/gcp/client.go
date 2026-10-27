@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 
 	"golang.org/x/oauth2"
 
@@ -25,7 +24,7 @@ const maxErrorBodySize = 64 << 10
 
 // errResponseTooLarge is returned when a response body is larger than
 // maxResponseSize.
-var errResponseTooLarge = fmt.Errorf("Google Cloud sent a response larger than %d bytes", maxResponseSize)
+var errResponseTooLarge = fmt.Errorf("the response from Google Cloud is larger than %d bytes", maxResponseSize)
 
 // client sends requests to the Google Cloud APIs with the source's tokens.
 type client struct {
@@ -56,16 +55,6 @@ func (e *statusError) Error() string {
 	}
 
 	return text
-}
-
-// get sends a GET request for target with query, and decodes the JSON
-// answer into out.
-func (c *client) get(ctx context.Context, target string, query url.Values, out any) error {
-	if len(query) > 0 {
-		target += "?" + query.Encode()
-	}
-
-	return c.do(ctx, http.MethodGet, target, nil, out)
 }
 
 // post sends body as JSON in a POST request for target, and decodes the
