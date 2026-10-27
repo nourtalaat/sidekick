@@ -262,6 +262,7 @@ every one, and the chart rejects unknown keys.
 | `serviceAccount.annotations` | `{}` | More service account annotations. |
 | `mcpSidecars` | `[]` | stdio MCP servers behind a bridge: `name`, `image`, `args`, `env`, `port`, `healthPath`, `resources`, `volumeMounts`. |
 | `networkPolicy.enabled` | `true` | Network policies for Sidekick and the bundled Postgres. |
+| `rbac.kubernetesSource` | `true` | Read-only roles for each Kubernetes source that reads this cluster, made from its `namespaces` and `logs`; see [The Kubernetes source](sources/kubernetes.md#with-the-helm-chart). |
 | `pdb.enabled` | `true` | A PodDisruptionBudget with `pdb.minAvailable`. |
 | `metrics.serviceMonitor.enabled` | `false` | A ServiceMonitor. |
 | `ingress.enabled`, `httpRoute.enabled` | `false` | Expose `/hooks/` outside the cluster. |
