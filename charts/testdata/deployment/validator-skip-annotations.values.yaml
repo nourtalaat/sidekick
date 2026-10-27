@@ -1,0 +1,8 @@
+# Skip lists that podAnnotations already sets get the validator added to
+# them, with each webhook's own separator.
+podAnnotations:
+  eks.amazonaws.com/skip-containers: mcp-git
+  azure.workload.identity/skip-containers: mcp-git
+  example.com/team: payments
+validator:
+  enabled: true

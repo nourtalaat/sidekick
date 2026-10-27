@@ -1,0 +1,4 @@
+# The default mode: a validator container in each Sidekick pod, with its
+# own emptyDir at /tmp.
+validator:
+  enabled: true
