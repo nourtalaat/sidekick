@@ -1,0 +1,25 @@
+Sidekick {{ .Chart.AppVersion }} is installed as {{ include "sidekick.fullname" . }} in {{ .Release.Namespace }}.
+
+Wait for it to be ready:
+
+  kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "sidekick.fullname" . }}
+
+Check that it can reach the database, Slack, the model provider and every source:
+
+  kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "sidekick.fullname" . }} -c sidekick -- sidekick doctor
+
+Send a test alert to its own webhook endpoint; the matching route's outputs, such as a Slack channel, show the investigation:
+
+  kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "sidekick.fullname" . }} -c sidekick -- sidekick test-alert
+
+Alertmanager in the cluster can send alerts to:
+
+  http://{{ include "sidekick.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.httpPort }}/hooks/<endpoint name>
+{{- if .Values.postgres.enabled }}
+
+The bundled Postgres is for evaluation only. Use a managed Postgres in production.
+{{- end }}
+{{- if eq .Values.migrations.mode "manual" }}
+
+migrations.mode is manual: run `sidekick migrate up` before each upgrade. Pods are not ready until the schema is current.
+{{- end }}
