@@ -66,9 +66,12 @@ func runJob(ctx context.Context, tools *toolFlags, requestPath string, out io.Wr
 
 	res, runErr := validateFile(ctx, tools, log, requestPath)
 	if runErr != nil {
-		writeJobOutput(log, out, terminationLog, jobError{Error: runErr.Error()}, nil)
+		// The error can quote tool output, so only its redacted text
+		// leaves the validator, and the original error is not kept.
+		message := validate.RedactTokens(runErr.Error())
+		writeJobOutput(log, out, terminationLog, jobError{Error: message}, nil)
 
-		return fmt.Errorf("job: %w", runErr)
+		return fmt.Errorf("job: %s", message)
 	}
 
 	message, err := validate.TerminationMessage(res)

@@ -50,7 +50,7 @@ func (s *Service) Handler() http.Handler {
 func (s *Service) serveValidate(w http.ResponseWriter, r *http.Request) {
 	req, err := DecodeRequest(http.MaxBytesReader(w, r.Body, MaxRequestBytes))
 	if err != nil {
-		s.writeJSON(w, http.StatusBadRequest, errorBody{Error: err.Error()})
+		s.writeJSON(w, http.StatusBadRequest, errorBody{Error: RedactTokens(err.Error())})
 
 		return
 	}
@@ -59,22 +59,29 @@ func (s *Service) serveValidate(w http.ResponseWriter, r *http.Request) {
 	res, err := s.Validate(r.Context(), req)
 	log := s.log.With("format", req.Format, "files", len(req.Files), "duration", time.Since(start).Round(time.Millisecond))
 
-	switch {
-	case err == nil:
+	if err == nil {
 		log.Info("validated", "ok", res.OK, "errors", len(res.Errors), "not_checked", len(res.NotChecked))
 		s.writeJSON(w, http.StatusOK, res)
+
+		return
+	}
+
+	// Errors can quote tool output, so they are redacted like results.
+	message := RedactTokens(err.Error())
+
+	switch {
 	case errors.Is(err, ErrBadRequest):
-		s.writeJSON(w, http.StatusBadRequest, errorBody{Error: err.Error()})
+		s.writeJSON(w, http.StatusBadRequest, errorBody{Error: message})
 	case errors.Is(err, ErrBusy):
-		log.Warn("refused a validation", "error", err)
+		log.Warn("refused a validation", "error", message)
 		w.Header().Set("Retry-After", strconv.Itoa(int(busyRetryAfter.Seconds())))
-		s.writeJSON(w, http.StatusServiceUnavailable, errorBody{Error: err.Error()})
+		s.writeJSON(w, http.StatusServiceUnavailable, errorBody{Error: message})
 	case errors.Is(err, ErrTimeout):
-		log.Warn("validation timed out", "error", err)
-		s.writeJSON(w, http.StatusGatewayTimeout, errorBody{Error: err.Error()})
+		log.Warn("validation timed out", "error", message)
+		s.writeJSON(w, http.StatusGatewayTimeout, errorBody{Error: message})
 	default:
-		log.Error("validation failed", "error", err)
-		s.writeJSON(w, http.StatusInternalServerError, errorBody{Error: err.Error()})
+		log.Error("validation failed", "error", message)
+		s.writeJSON(w, http.StatusInternalServerError, errorBody{Error: message})
 	}
 }
 

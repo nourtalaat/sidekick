@@ -217,7 +217,7 @@ func (s *Service) Validate(ctx context.Context, req Request) (Result, error) {
 
 	res.OK = len(res.Errors) == 0
 
-	return res, nil
+	return redactResult(res), nil
 }
 
 // checkRequest returns the checker for the request's format, or an
