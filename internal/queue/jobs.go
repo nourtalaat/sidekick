@@ -16,16 +16,37 @@ import (
 // keeps in last_error.
 const maxErrorBytes = 4096
 
-// claim leases up to batch ready jobs of kind to worker for lease.
-func claim(ctx context.Context, q db.DBTX, worker, kind string, lease time.Duration, batch int32) ([]db.Job, error) {
-	jobs, err := db.New(q).ClaimJobs(ctx, db.ClaimJobsParams{
-		Worker:       worker,
-		LeaseSeconds: lease.Seconds(),
-		Kinds:        []string{kind},
-		Batch:        batch,
+// txBeginner starts a transaction: a pool, a connection, or a transaction,
+// which starts a savepoint.
+type txBeginner interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
+// claim leases up to batch ready jobs of kind to worker for lease. It runs
+// in a transaction of its own, so that a claim whose caller gives up before
+// the commit is rolled back. When the commit fails, claim returns the jobs
+// it leased with the error: the commit may have gone through, so the caller
+// hands them back with handBackLost.
+func claim(ctx context.Context, q txBeginner, worker, kind string, lease time.Duration, batch int32) ([]db.Job, error) {
+	var jobs []db.Job
+
+	err := pgx.BeginFunc(ctx, q, func(tx pgx.Tx) error {
+		var err error
+
+		jobs, err = db.New(tx).ClaimJobs(ctx, db.ClaimJobsParams{
+			Worker:       worker,
+			LeaseSeconds: lease.Seconds(),
+			Kinds:        []string{kind},
+			Batch:        batch,
+		})
+		if err != nil {
+			return fmt.Errorf("run the claim: %w", err)
+		}
+
+		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("claim %s jobs: %w", kind, err)
+		return jobs, fmt.Errorf("claim %s jobs: %w", kind, err)
 	}
 
 	return jobs, nil
@@ -67,6 +88,49 @@ func fail(ctx context.Context, q db.DBTX, job db.Job, cause error, giveUp bool, 
 	}
 
 	return failed, nil
+}
+
+// handBackLost hands back jobs whose claim may have committed although its
+// result never reached the caller, for example when the commit's reply came
+// after the caller's timeout. It first waits for the claim's transaction to
+// end, so that it sees whether the claim committed. Each hand-back checks
+// the job's claim token, so a job whose claim did not commit, or that another
+// claim owns by now, is left alone. It returns the jobs it handed back.
+func handBackLost(ctx context.Context, q db.DBTX, jobs []db.Job) ([]db.Job, error) {
+	ids := make([]int64, len(jobs))
+	for i, job := range jobs {
+		ids[i] = job.ID
+	}
+
+	if err := db.New(q).WaitForJobWriters(ctx, ids); err != nil {
+		return nil, fmt.Errorf("wait for the claim to end: %w", err)
+	}
+
+	var (
+		handedBack []db.Job
+		errs       []error
+	)
+
+	for _, job := range jobs {
+		err := handBack(ctx, q, job)
+		if errors.Is(err, ErrLeaseLost) {
+			continue
+		}
+
+		if err != nil {
+			errs = append(errs, err)
+
+			continue
+		}
+
+		handedBack = append(handedBack, job)
+	}
+
+	if len(errs) > 0 {
+		return handedBack, fmt.Errorf("hand back lost claims: %w", errors.Join(errs...))
+	}
+
+	return handedBack, nil
 }
 
 // handBack returns a claimed job to pending at once, with its attempts
