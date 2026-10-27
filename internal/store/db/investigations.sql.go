@@ -196,7 +196,7 @@ func (q *Queries) FinishInvestigation(ctx context.Context, arg FinishInvestigati
 }
 
 const getEventInvestigation = `-- name: GetEventInvestigation :one
-SELECT investigations.id, investigations.group_id, investigations.route, investigations.strategy, investigations.strategy_version, investigations.mode, investigations.status, investigations.run, investigations.next_seq, investigations.fence, investigations.verdict, investigations.confidence, investigations.report, investigations.stop_reason, investigations.connectors, investigations.budget, investigations.input_tokens, investigations.output_tokens, investigations.cost_micros, investigations.tool_calls, investigations.created_at, investigations.started_at, investigations.first_finding_at, investigations.finished_at
+SELECT investigations.id, investigations.group_id, investigations.route, investigations.strategy, investigations.strategy_version, investigations.mode, investigations.status, investigations.run, investigations.next_seq, investigations.fence, investigations.verdict, investigations.confidence, investigations.report, investigations.stop_reason, investigations.connectors, investigations.budget, investigations.input_tokens, investigations.output_tokens, investigations.cost_micros, investigations.tool_calls, investigations.created_at, investigations.started_at, investigations.first_finding_at, investigations.finished_at, investigations.cancel_requested_at, investigations.cancel_requested_by, investigations.cancel_requested_by_slack_user, investigations.confirmed_verdict, investigations.confirmed_cause, investigations.confirmed_by, investigations.confirmed_by_slack_user, investigations.confirmed_at
 FROM events
 JOIN event_groups ON event_groups.id = events.group_id
 JOIN investigations ON investigations.id = event_groups.investigation_id
@@ -237,6 +237,14 @@ func (q *Queries) GetEventInvestigation(ctx context.Context, eventID uuid.UUID) 
 		&i.Investigation.StartedAt,
 		&i.Investigation.FirstFindingAt,
 		&i.Investigation.FinishedAt,
+		&i.Investigation.CancelRequestedAt,
+		&i.Investigation.CancelRequestedBy,
+		&i.Investigation.CancelRequestedBySlackUser,
+		&i.Investigation.ConfirmedVerdict,
+		&i.Investigation.ConfirmedCause,
+		&i.Investigation.ConfirmedBy,
+		&i.Investigation.ConfirmedBySlackUser,
+		&i.Investigation.ConfirmedAt,
 	)
 	return i, err
 }
