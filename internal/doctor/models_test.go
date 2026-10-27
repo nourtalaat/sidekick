@@ -148,7 +148,7 @@ func TestCheckPrices(t *testing.T) {
 			config: strings.Replace(baseConfig, "  roles:", strings.TrimPrefix(custom, "\n")+"  roles:", 1),
 			want: []Result{{
 				Check: "price custom", Status: StatusWarn,
-				Message: "the model claude-custom-1 has no price, so its calls show no cost",
+				Message: "the model claude-custom-1 has no price, so its calls show no cost and count nothing toward the cost budgets and daily caps",
 				Fix:     `add model.prices."claude-custom-1" with inputPerMTok and outputPerMTok, in US dollars per million tokens`,
 			}},
 		},

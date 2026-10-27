@@ -3,7 +3,9 @@ description: An invalid pattern, budget and watcher.
 match:
   textPattern: "(unclosed"
 budgets:
+  maxTokens: -1
   maxToolCalls: -1
+  maxCostUSD: -0.5
 watchers:
   - name: probe
     check: { type: ping }

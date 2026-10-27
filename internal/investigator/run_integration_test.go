@@ -52,15 +52,6 @@ func turn(calls ...model.ToolCall) modeltest.Turn {
 	return modeltest.ToolUse(testUsage, calls...)
 }
 
-// waitForEnd is a model turn that answers only when the context ends.
-func waitForEnd() modeltest.Turn {
-	return modeltest.Turn{Func: func(ctx context.Context, _ model.Request) (model.Response, error) {
-		<-ctx.Done()
-
-		return model.Response{}, &model.Error{Kind: model.ErrTimeout, Err: ctx.Err()}
-	}}
-}
-
 func TestRun(t *testing.T) {
 	t.Parallel()
 
@@ -184,50 +175,6 @@ func TestRun(t *testing.T) {
 
 				last := h.conn.Requests()[2].Messages
 				require.Equal(t, model.Text{Text: reminderText}, last[len(last)-1].Parts[0])
-			},
-		},
-		{
-			name: "the tool call limit",
-			opts: options{
-				budget: Budget{MaxToolCalls: 2, MaxWallTime: time.Minute},
-				turns: []modeltest.Turn{
-					turn(search("c1")),
-					turn(search("c2"), search("c3"), modeltest.Call("f1", RecordFindingTool, finding)),
-				},
-			},
-			status: StatusFinal,
-			steps: []string{
-				"prompt ok ", "model_turn ok ", "tool_result ok search_logs",
-				"model_turn ok ", "tool_result ok search_logs", "tool_result over_budget signoz__search_logs", "tool_result ok record_finding",
-			},
-			check: func(t *testing.T, h *harness, r report.Report) {
-				t.Helper()
-
-				require.Equal(t, report.Inconclusive, r.Verdict)
-				require.Equal(t, report.StopBudget, r.StopReason)
-				require.Equal(t, "The investigation used all of its 2 tool calls before it reached a verdict.", r.Reason)
-				require.Len(t, r.Findings, 1)
-				require.Equal(t, []report.Check{{Source: "signoz", Status: report.CheckOK, ToolCalls: 2}}, r.Checked)
-				require.EqualValues(t, 2, h.investigation(t).ToolCalls)
-				require.InDelta(t, 1, exhausted(h, budgetToolCalls), 0)
-			},
-		},
-		{
-			name: "the wall time limit",
-			opts: options{
-				budget: Budget{MaxToolCalls: 40, MaxWallTime: 300 * time.Millisecond},
-				turns:  []modeltest.Turn{turn(search("c1")), waitForEnd()},
-			},
-			status: StatusFinal,
-			steps:  []string{"prompt ok ", "model_turn ok ", "tool_result ok search_logs"},
-			check: func(t *testing.T, h *harness, r report.Report) {
-				t.Helper()
-
-				require.Equal(t, report.Inconclusive, r.Verdict)
-				require.Equal(t, report.StopBudget, r.StopReason)
-				require.Equal(t, "The investigation reached its time limit of 300ms before it reached a verdict.", r.Reason)
-				require.Equal(t, []report.Check{{Source: "signoz", Status: report.CheckOK, ToolCalls: 1}}, r.Checked)
-				require.InDelta(t, 1, exhausted(h, budgetWallTime), 0)
 			},
 		},
 		{

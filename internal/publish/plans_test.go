@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -102,6 +103,15 @@ func TestQueryPlans(t *testing.T) {
 				return fmt.Errorf("run query: %w", err)
 			},
 			wantIndex: []string{"investigations_pkey", "events_group"},
+		},
+		{
+			name: "ClaimNotice",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ClaimNotice(ctx, db.ClaimNoticeParams{Key: "daily_cap:route:route-5000", SentAt: time.Now(), NotBefore: time.Now().Add(-time.Hour)})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"Insert on notices", "Conflict Arbiter Indexes: notices_pkey"},
 		},
 	}
 
