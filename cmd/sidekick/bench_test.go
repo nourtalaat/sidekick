@@ -106,3 +106,59 @@ func TestBenchRunBadInput(t *testing.T) {
 		})
 	}
 }
+
+func TestBenchJudgeCheckBadInput(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// args follow "bench judge-check"; CONFIG is replaced.
+		args       []string
+		wantStderr string
+	}{
+		{
+			name:       "an agreement above 1",
+			args:       []string{"--config", "CONFIG", "--min-agreement", "2"},
+			wantStderr: "--min-agreement must be from 0 to 1, not 2",
+		},
+		{
+			name:       "no such case path",
+			args:       []string{"--config", "CONFIG", "--cases", "CASES/missing"},
+			wantStderr: "invalid scenario",
+		},
+		{
+			name:       "a case with an unknown field",
+			args:       []string{"--config", "CONFIG", "--cases", "CASES"},
+			wantStderr: `unknown field "colour"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "case.json"), []byte(`{"colour": 1}`), 0o600))
+
+			configPath := writeConfig(t, validConfig, "")
+
+			args := []string{"bench", "judge-check"}
+			for _, a := range tt.args {
+				args = append(args, strings.NewReplacer("CASES", dir, "CONFIG", configPath).Replace(a))
+			}
+
+			var stdout, stderr bytes.Buffer
+
+			root := newTestRootCmd(newBenchCmd(fakeRegistries()))
+			root.SetArgs(args)
+			root.SetOut(&stdout)
+			root.SetErr(&stderr)
+
+			err := root.ExecuteContext(t.Context())
+			require.Error(t, err)
+			require.Equal(t, exitBadInput, exitCode(err), "the error: %v", err)
+			require.Contains(t, err.Error()+stderr.String(), tt.wantStderr)
+			require.Empty(t, stdout.String(), "nothing ran")
+		})
+	}
+}

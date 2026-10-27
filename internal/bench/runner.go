@@ -155,6 +155,31 @@ func (r *Runner) Run(ctx context.Context, database *Database) (*Results, error) 
 	return results, nil
 }
 
+// Judge returns the judge that grades the runs' root causes, with the
+// model of the config's judge role, or of the investigate role when no
+// judge role is set.
+func (r *Runner) Judge() (*Judge, error) {
+	name := cmp.Or(r.cfg.Model.Roles[model.RoleJudge], r.cfg.Model.Roles[model.RoleInvestigate])
+
+	conn, ok := r.connectors[name]
+	if !ok {
+		return nil, fmt.Errorf("judge: no model connector is called %q", name)
+	}
+
+	judge, err := NewJudge(JudgeOptions{
+		Connector: conn.Connector,
+		Retries:   conn.Retries,
+		Name:      name,
+		Model:     r.models.ModelSettings[name].Model,
+		Prices:    r.prices,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("judge: %w", err)
+	}
+
+	return judge, nil
+}
+
 // New builds the model connectors of opts.Config and checks every
 // scenario without a database: its strategy is loaded, its adapter turns
 // its payload into exactly one event, and its mock sources build. Problems

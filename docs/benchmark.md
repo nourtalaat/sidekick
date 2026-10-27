@@ -171,3 +171,55 @@ Each entry under `sources` is a mock source, named as the model sees it:
 | `within: <duration>` | is an RFC 3339 time no further than the duration, such as `2h`, from `now`, before or after it. |
 
 One matcher can set several operators, and all of them must hold.
+
+## Checking the judge
+
+`sidekick bench judge-check` has the judge grade a set of reports that a
+person graded by hand, and shows how far its grades agree, item by item.
+Run it when you change the judge model, to see how far its grades move.
+
+```sh
+sidekick bench judge-check --config sidekick.yaml
+```
+
+| Flag | Default | Does |
+|---|---|---|
+| `--cases` | `bench/judge-check` | A case file, or a directory: every `.json` file under it is a case. |
+| `--config`, `-c` | `/etc/sidekick/sidekick.yaml` | The config file whose judge model grades the cases. |
+| `--min-agreement` | `0` | The share of items, from 0 to 1, the judge must grade as the hand grades do. Below it the command exits with `1`. |
+
+The judge is the model of `model.roles.judge`, or of
+`model.roles.investigate` when no judge role is set. Pick a judge from a
+different model family than the investigate model when you have one, so
+the judge does not share the blind spots of the model it grades. The
+judge must be able to call tools.
+
+Each case holds an expected root cause with its rubric, a report, and the
+hand grade of each rubric item:
+
+```json
+{
+  "id": "pool-no-commit",
+  "rootCause": {
+    "summary": "The DB connection pool ran out after commit abc123 lowered the pool size to 5.",
+    "rubric": [
+      {"id": "pool", "text": "Names connection pool exhaustion as the cause", "weight": 2, "required": true},
+      {"id": "commit", "text": "Links the cause to commit abc123 or the 10:05 deploy", "weight": 2, "required": true}
+    ]
+  },
+  "report": {"verdict": "true_positive", "confidence": "medium", "summary": "...", "reason": "...", "cause": "...", "findings": []},
+  "grades": {"pool": true, "commit": false}
+}
+```
+
+The command prints one line per case, with the items the judge graded
+otherwise, then the share of items it agreed on and the mean difference
+between its root-cause scores and the hand-graded ones.
+
+| Status | Means |
+|---|---|
+| `0` | The judge graded every case and agreed with at least `--min-agreement` of the items. |
+| `1` | It agreed with fewer. |
+| `2` | A bad flag, config file or case file. |
+| `3` | The model provider is unreachable after the connector's retries. |
+

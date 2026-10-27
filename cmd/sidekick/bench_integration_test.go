@@ -106,6 +106,48 @@ func TestBenchRun(t *testing.T) {
 	}
 }
 
+// TestBenchJudgeCheck runs `sidekick bench judge-check` on a shipped case
+// as its own process, with the judge model answered by a fake Anthropic
+// API that grades the fix item as not met where the hand grade says met.
+func TestBenchJudgeCheck(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		args       []string
+		wantCode   int
+		wantStdout []string
+	}{
+		{
+			name:       "the agreement with the hand grades",
+			wantStdout: []string{"pool-full", "fix", "agreement: 0.67 (2 of 3 items)"},
+		},
+		{
+			name:       "an agreement below --min-agreement",
+			args:       []string{"--min-agreement", "0.9"},
+			wantCode:   exitThresholdFailed,
+			wantStdout: []string{"agreement: 0.67"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			configPath := writeConfig(t, serveConfig(fakeAnthropic(t, "fixture/anthropic-grades.sse").URL()), "")
+
+			args := append([]string{"bench", "judge-check", "--cases", "bench/judge-check/pool-full.json", "--config", configPath}, tt.args...)
+
+			code, stdout, stderr := runBench(t, args)
+			require.Equal(t, tt.wantCode, code, "stderr:\n%s", stderr)
+
+			for _, want := range tt.wantStdout {
+				require.Contains(t, stdout, want)
+			}
+		})
+	}
+}
+
 // inconclusiveAnthropic answers one model call with an inconclusive
 // verdict.
 func inconclusiveAnthropic(t *testing.T) *fakehttp.Server {

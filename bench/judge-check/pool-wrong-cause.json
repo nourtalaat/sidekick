@@ -1,0 +1,28 @@
+{
+  "id": "pool-wrong-cause",
+  "rootCause": {
+    "summary": "The DB connection pool ran out after commit abc123 lowered the pool size to 5.",
+    "rubric": [
+      {"id": "pool", "text": "Names connection pool exhaustion as the cause", "weight": 2, "required": true},
+      {"id": "commit", "text": "Links the cause to commit abc123 or the 10:05 deploy", "weight": 2, "required": true},
+      {"id": "fix", "text": "Proposes restoring the pool size or rolling back", "weight": 1}
+    ]
+  },
+  "report": {
+    "verdict": "true_positive",
+    "confidence": "medium",
+    "reason": "p99 latency rose at 10:10. Commit abc123 was deployed at 10:05, but it only changes the DB pool settings, so it is unlikely to matter; the payment provider's API looks slow instead.",
+    "summary": "Checkout is slow because the payment provider's API is slow.",
+    "cause": "The payment provider's API answers slowly, and checkout waits for it. Pool exhaustion was considered and ruled out.",
+    "impact": "Checkout p99 latency is above 2s.",
+    "findings": [
+      {"id": "f1", "claim": "p99 latency rose from 190ms to 2.4s at 10:10.", "evidence": [{"kind": "metric", "title": "checkout-api p99"}]}
+    ],
+    "fixes": [
+      {"id": "x1", "title": "Raise the payment API timeout", "detail": "Give the payment provider more time, and ask them about the slowness."}
+    ],
+    "checked": [],
+    "stopReason": "submitted"
+  },
+  "grades": {"pool": false, "commit": false, "fix": false}
+}
