@@ -30,7 +30,17 @@ const (
 // uniqueKeyPrefix starts the unique key of an investigate job.
 const uniqueKeyPrefix = "investigate:"
 
-// Payload is the payload of an investigate job.
+// followUpKeyPrefix starts the unique key of a follow_up job.
+const followUpKeyPrefix = "follow_up:"
+
+// FollowUpUniqueKey returns the unique key of the follow_up job of the
+// investigation with id, so at most one is pending or running per
+// investigation, and questions that arrive while it waits share its run.
+func FollowUpUniqueKey(id uuid.UUID) string {
+	return followUpKeyPrefix + id.String()
+}
+
+// Payload is the payload of an investigate job, and of a follow_up job.
 type Payload struct {
 	InvestigationID uuid.UUID `json:"investigation_id"`
 	GroupID         uuid.UUID `json:"group_id"`
@@ -106,4 +116,16 @@ func (b *Budget) UnmarshalJSON(data []byte) error {
 	}
 
 	return nil
+}
+
+// FollowUp returns the budget of each follow-up run of an investigation
+// with budget b: half of each limit, and at least 1 of a limit that is
+// set.
+func (b Budget) FollowUp() Budget {
+	return Budget{
+		MaxTokens:     followUpShare(b.MaxTokens),
+		MaxToolCalls:  followUpShare(b.MaxToolCalls),
+		MaxWallTime:   followUpShare(b.MaxWallTime),
+		MaxCostMicros: followUpShare(b.MaxCostMicros),
+	}
 }

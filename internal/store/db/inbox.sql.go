@@ -79,6 +79,48 @@ func (q *Queries) InsertKeyedInboxItem(ctx context.Context, arg InsertKeyedInbox
 	return result.RowsAffected(), nil
 }
 
+const listDeliveredKeyedInbox = `-- name: ListDeliveredKeyedInbox :many
+SELECT id, investigation_id, kind, body, author, created_at, delivered_seq, key FROM investigation_inbox
+WHERE investigation_id = $1 AND key IS NOT NULL AND delivered_seq >= $2::integer
+ORDER BY id
+`
+
+type ListDeliveredKeyedInboxParams struct {
+	InvestigationID uuid.UUID
+	FromSeq         int32
+}
+
+// ListDeliveredKeyedInbox returns the items with a key, such as follow-up
+// questions, that steps from from_seq on delivered, oldest first.
+func (q *Queries) ListDeliveredKeyedInbox(ctx context.Context, arg ListDeliveredKeyedInboxParams) ([]InvestigationInbox, error) {
+	rows, err := q.db.Query(ctx, listDeliveredKeyedInbox, arg.InvestigationID, arg.FromSeq)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InvestigationInbox
+	for rows.Next() {
+		var i InvestigationInbox
+		if err := rows.Scan(
+			&i.ID,
+			&i.InvestigationID,
+			&i.Kind,
+			&i.Body,
+			&i.Author,
+			&i.CreatedAt,
+			&i.DeliveredSeq,
+			&i.Key,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWaitingInbox = `-- name: ListWaitingInbox :many
 SELECT id, investigation_id, kind, body, author, created_at, delivered_seq, key FROM investigation_inbox
 WHERE investigation_id = $1 AND delivered_seq IS NULL

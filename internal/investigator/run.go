@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
@@ -26,6 +27,12 @@ const maxReminders = 2
 const reminderText = "You ended your turn without calling a tool. Call submit_verdict now with your verdict, " +
 	"or call a tool if you need more evidence first. Do not answer with plain text."
 
+// followUpReminderText is the note that asks the model for its answer in
+// a follow-up run.
+const followUpReminderText = "You ended your turn without calling a tool. Call answer_follow_up now with your " +
+	"answer, call submit_verdict if the answer changes your verdict, or call a tool if you need more evidence " +
+	"first. Do not answer with plain text."
+
 // errWallTime is the cause of a run's context when its wall time ends.
 var errWallTime = errors.New("the investigation's wall time ended")
 
@@ -45,10 +52,34 @@ type run struct {
 	conn      Connector
 	connector string
 	modelID   string
+	// summarize is the connector of the summarize role, which falls back
+	// to the investigate connector, and summarizer and summaryModel its
+	// name and model.
+	summarize    Connector
+	summarizer   string
+	summaryModel string
+
+	// runStart is when the run started; zero means when the investigation
+	// started. before is what the earlier runs used, so the budget of a
+	// follow-up run counts only its own use.
+	runStart time.Time
+	before   usage
+
+	// job is the follow_up job of a follow-up run, whose unique key the
+	// run gives up when it ends.
+	job db.Job
+}
+
+// usage is what runs used of the counted budgets.
+type usage struct {
+	costMicros int64
+	toolCalls  int32
 }
 
 // newRun loads the saved steps of a started investigation and prepares
 // its run. On the first run it builds the prompt and saves it as step 0.
+// A follow-up run, whose run number is above 1, gets the follow-up budget
+// and counts its use from its own first step.
 func (h *Handler) newRun(ctx context.Context, inv db.Investigation, log *slog.Logger) (*run, error) {
 	r := &run{h: h, inv: inv, log: log}
 
@@ -70,6 +101,13 @@ func (h *Handler) newRun(ctx context.Context, inv db.Investigation, log *slog.Lo
 		return nil, fmt.Errorf("%w: read the steps: %w", queue.ErrGiveUp, err)
 	}
 
+	r.hist.startRun(inv.Run)
+
+	if r.followUp() {
+		r.budget = r.budget.FollowUp()
+		r.runStart, r.before = r.hist.runUse(h.now(), inv)
+	}
+
 	r.tools = h.opts.Guard.Start(ctx, inv.ID.String(), h.opts.Routes[inv.Route].Sources)
 
 	if len(steps) == 0 {
@@ -78,9 +116,15 @@ func (h *Handler) newRun(ctx context.Context, inv db.Investigation, log *slog.Lo
 		}
 	}
 
-	log.InfoContext(ctx, "investigation run started", "from_seq", len(steps), "tool_calls", inv.ToolCalls)
+	log.InfoContext(ctx, "investigation run started", "run", inv.Run, "from_seq", len(steps), "tool_calls", inv.ToolCalls)
 
 	return r, nil
+}
+
+// followUp reports whether the run is a follow-up run: any run after the
+// first.
+func (r *run) followUp() bool {
+	return r.inv.Run > 1
 }
 
 // settings reads the investigation's stored settings and finds the
@@ -111,6 +155,13 @@ func (r *run) settings() error {
 	}
 
 	r.conn, r.connector, r.modelID = conn, rc.Connector, rc.Model
+	r.summarize, r.summarizer, r.summaryModel = conn, rc.Connector, rc.Model
+
+	if sc, ok := conns[model.RoleSummarize]; ok {
+		if summarize, ok := r.h.opts.Connectors[sc.Connector]; ok {
+			r.summarize, r.summarizer, r.summaryModel = summarize, sc.Connector, sc.Model
+		}
+	}
 
 	return nil
 }
@@ -271,26 +322,32 @@ func (r *run) untilEnd(ctx, runCtx context.Context) (ending, error) {
 }
 
 // withWallTime returns ctx with the run's wall time deadline, counted from
-// when the investigation first started, so time spent before a resume
-// counts too. The time left is measured with the handler's clock.
+// when the run first started, so time spent before a resume counts too.
+// The time left is measured with the handler's clock.
 func (r *run) withWallTime(ctx context.Context) (context.Context, context.CancelFunc) {
-	if r.budget.MaxWallTime <= 0 || r.inv.StartedAt == nil {
+	started, ok := r.started()
+	if r.budget.MaxWallTime <= 0 || !ok {
 		return context.WithCancel(ctx)
 	}
 
-	left := r.inv.StartedAt.Add(r.budget.MaxWallTime).Sub(r.h.now())
+	left := started.Add(r.budget.MaxWallTime).Sub(r.h.now())
 
 	return context.WithTimeoutCause(ctx, left, errWallTime)
 }
 
-// ended reports whether the saved steps end the run, and how: an accepted
-// report, which is inconclusive when the model submitted it in its final
-// turn, or too many reports that failed their checks.
+// ended reports whether the saved steps of the current run end it, and
+// how: an accepted report, which is inconclusive when the model submitted
+// it in its final turn, an accepted answer in a follow-up run, or too many
+// reports or answers that failed their checks.
 func (r *run) ended() (ending, bool) {
 	var rejected []db.Step
 
-	for _, s := range r.hist.steps {
+	for _, s := range r.hist.runSteps() {
 		switch {
+		case isBuiltin(s, report.AnswerFollowUpTool) && s.Status == statusOK:
+			return r.answered(s), true
+		case isBuiltin(s, report.AnswerFollowUpTool) && s.Status == statusRejected:
+			rejected = append(rejected, s)
 		case isBuiltin(s, report.SubmitVerdictTool) && s.Status == statusOK:
 			rep, _ := r.h.builtins.submitted(r.hist, r.hist.calls[*s.ToolCallID], r.h.opts.Rules)
 			rep.StopReason = report.StopSubmitted
@@ -314,9 +371,15 @@ func (r *run) ended() (ending, bool) {
 	return ending{}, false
 }
 
-// remind saves a note that asks the model for its verdict.
+// remind saves a note that asks the model for its verdict, or in a
+// follow-up run for its answer.
 func (r *run) remind(ctx context.Context) error {
-	note := newStep{kind: kindNote, parts: []model.Part{model.Text{Text: reminderText}}, status: statusOK, startedAt: time.Now()}
+	text := reminderText
+	if r.followUp() {
+		text = followUpReminderText
+	}
+
+	note := newStep{kind: kindNote, parts: []model.Part{model.Text{Text: text}}, status: statusOK, startedAt: time.Now()}
 	if _, err := r.save(ctx, note); err != nil {
 		return fmt.Errorf("save a reminder: %w", err)
 	}
@@ -330,7 +393,17 @@ func (r *run) remind(ctx context.Context) error {
 // ended during the call, which the loop then handles. Other failures
 // return an error, so the job is retried.
 func (r *run) modelTurn(ctx, runCtx context.Context, final bool) (*ending, error) {
-	req := r.hist.request()
+	if r.followUp() {
+		if err := r.compact(ctx, runCtx); err != nil {
+			return nil, fmt.Errorf("shorten the history: %w", err)
+		}
+	}
+
+	req := withoutOtherReasoning(r.hist.request(), r.conn.Type)
+	if r.followUp() {
+		req.Tools = append(slices.Clip(req.Tools), r.h.builtins.answerSpec())
+	}
+
 	if final {
 		req = r.finalRequest(req)
 	}

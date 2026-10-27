@@ -83,6 +83,15 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"investigation_inbox_waiting"},
 		},
 		{
+			name: "ListDeliveredKeyedInbox",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListDeliveredKeyedInbox(ctx, db.ListDeliveredKeyedInboxParams{InvestigationID: ended, FromSeq: 21})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"investigation_inbox_key"},
+		},
+		{
 			name: "LockInvestigation",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.LockInvestigation(ctx, ended)

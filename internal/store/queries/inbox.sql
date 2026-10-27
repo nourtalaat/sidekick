@@ -19,6 +19,13 @@ SELECT EXISTS (
   WHERE investigation_id = @investigation_id AND delivered_seq IS NULL AND kind = @kind
 ) AS waiting;
 
+-- name: ListDeliveredKeyedInbox :many
+-- ListDeliveredKeyedInbox returns the items with a key, such as follow-up
+-- questions, that steps from from_seq on delivered, oldest first.
+SELECT * FROM investigation_inbox
+WHERE investigation_id = @investigation_id AND key IS NOT NULL AND delivered_seq >= @from_seq::integer
+ORDER BY id;
+
 -- name: ListWaitingInbox :many
 -- ListWaitingInbox returns the items of an investigation that wait to be
 -- delivered, oldest first.

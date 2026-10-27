@@ -43,12 +43,26 @@ const (
 	recordFindingDescription = "Record one finding as soon as you have it, so responders see it while you keep " +
 		"investigating. Cite the IDs of the tool calls whose results support it. Recording a finding does not end the " +
 		"investigation."
+	answerFollowUpDescription = "Answer the follow-up questions in a few sentences, without changing your verdict. " +
+		"Cite the IDs of the tool calls whose results support the answer, from this run or an earlier one. Never " +
+		"write URLs. If the answer changes your verdict, call submit_verdict with a new report instead."
 )
+
+// notFollowUpText is the problem of an answer_follow_up call outside a
+// follow-up run.
+const notFollowUpText = "answer_follow_up is only available in a follow-up run; call submit_verdict"
 
 // builtins are the built-in tools with their parsed input schemas.
 type builtins struct {
-	submitVerdict *tools.InputSchema
-	recordFinding *tools.InputSchema
+	submitVerdict  *tools.InputSchema
+	recordFinding  *tools.InputSchema
+	answerFollowUp *tools.InputSchema
+}
+
+// followUpAnswer is the input of answer_follow_up.
+type followUpAnswer struct {
+	Answer    string   `json:"answer"`
+	Citations []string `json:"evidenceToolCallIds"`
 }
 
 // submission is the input of submit_verdict.
@@ -83,6 +97,35 @@ func (b builtins) specs() []model.ToolSpec {
 		{Name: report.SubmitVerdictTool, Description: submitVerdictDescription, InputSchema: report.SubmitVerdictSchema},
 		{Name: RecordFindingTool, Description: recordFindingDescription, InputSchema: recordFindingSchema},
 	}
+}
+
+// answerSpec returns the tool spec of answer_follow_up, which only
+// follow-up runs offer.
+func (b builtins) answerSpec() model.ToolSpec {
+	return model.ToolSpec{Name: report.AnswerFollowUpTool, Description: answerFollowUpDescription, InputSchema: report.AnswerFollowUpSchema}
+}
+
+// answer checks the input of an answer_follow_up call, and returns the
+// answer with the evidence of the calls it cites, or the problems the
+// model must fix.
+func (b builtins) answer(h *history, call model.ToolCall) (text string, evidence []source.Evidence, problems []string) {
+	input, err := b.answerFollowUp.Check(call.Input)
+	if err != nil {
+		return "", nil, []string{err.Error()}
+	}
+
+	var a followUpAnswer
+	if err := json.Unmarshal(input, &a); err != nil {
+		return "", nil, []string{"the input does not decode: " + err.Error()}
+	}
+
+	if strings.TrimSpace(a.Answer) == "" {
+		problems = append(problems, "answer is empty")
+	}
+
+	f, bad := h.finding(0, citedFinding{Claim: a.Answer, Citations: a.Citations})
+
+	return a.Answer, f.Evidence, append(problems, bad...)
 }
 
 // submitted checks the input of a submit_verdict call against its schema,
@@ -226,7 +269,7 @@ func isBuiltin(s db.Step, name string) bool {
 
 // isBuiltinName reports whether name is a built-in tool.
 func isBuiltinName(name string) bool {
-	return slices.Contains([]string{report.SubmitVerdictTool, RecordFindingTool, watch.StartWatcherTool}, name)
+	return slices.Contains([]string{report.SubmitVerdictTool, RecordFindingTool, watch.StartWatcherTool, report.AnswerFollowUpTool}, name)
 }
 
 // specNames returns the names of specs.

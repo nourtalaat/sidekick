@@ -83,6 +83,10 @@ type Options struct {
 // Connector is one model connector with its retry setting.
 type Connector struct {
 	Connector model.Connector
+	// Type is the connector's provider type, such as anthropic, which the
+	// model.Reasoning parts it returns name as their Provider. Reasoning
+	// from another type is not sent to it. Empty sends all reasoning.
+	Type string
 	// Retries is how many times a call that failed with a retryable error
 	// is repeated.
 	Retries int
@@ -132,6 +136,11 @@ func New(opts Options) (*Handler, error) {
 		return nil, fmt.Errorf("new investigator: %s: %w", RecordFindingTool, err)
 	}
 
+	answer, err := tools.ParseInputSchema(report.AnswerFollowUpSchema)
+	if err != nil {
+		return nil, fmt.Errorf("new investigator: %s: %w", report.AnswerFollowUpTool, err)
+	}
+
 	tp := opts.TracerProvider
 	if tp == nil {
 		tp = otel.GetTracerProvider()
@@ -144,7 +153,7 @@ func New(opts Options) (*Handler, error) {
 
 	h := &Handler{
 		opts:     opts,
-		builtins: builtins{submitVerdict: submit, recordFinding: record},
+		builtins: builtins{submitVerdict: submit, recordFinding: record, answerFollowUp: answer},
 		log:      log,
 		tracer:   tp.Tracer(tracerName),
 		now:      time.Now,
