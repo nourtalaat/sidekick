@@ -56,8 +56,14 @@ func newTestSource(t *testing.T, api *fakehttp.Server, projects ...string) *Sour
 			tokens:    oauth2.StaticTokenSource(&oauth2.Token{AccessToken: testToken}),
 			userAgent: "sidekick/test",
 		},
-		apis: endpoints{logging: api.URL() + "/logging/v2"},
-		now:  func() time.Time { return testNow },
+		apis: endpoints{
+			logging:       api.URL() + "/logging/v2",
+			monitoring:    api.URL() + "/monitoring/v3",
+			prometheus:    api.URL() + "/prometheus/v1",
+			container:     api.URL() + "/container/v1",
+			serviceHealth: api.URL() + "/servicehealth/v1",
+		},
+		now: func() time.Time { return testNow },
 	}
 }
 
