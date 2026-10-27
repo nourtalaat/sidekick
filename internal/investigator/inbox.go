@@ -330,5 +330,5 @@ func questionOf(item db.InvestigationInbox) (report.FollowUpQuestion, error) {
 		return report.FollowUpQuestion{}, fmt.Errorf("decode the question: %w", err)
 	}
 
-	return report.FollowUpQuestion{Author: body.Author, Text: body.Text}, nil
+	return report.FollowUpQuestion{Author: body.Author, AuthorID: body.AuthorID, Text: body.Text}, nil
 }

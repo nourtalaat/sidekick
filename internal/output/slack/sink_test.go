@@ -420,7 +420,13 @@ func TestPublishFailures(t *testing.T) {
 func TestPublishFollowUpAnswers(t *testing.T) {
 	t.Parallel()
 
-	asked := []report.FollowUpQuestion{{Author: "Ana", Text: "Which pods?"}, {Author: "Bo", Text: "Since when?"}, {Author: "Ana", Text: "And now?"}}
+	asked := []report.FollowUpQuestion{
+		{Author: "Ana", Text: "Which pods?"},
+		{Author: "Bo <!channel>", Text: "Since when?"},
+		{Author: "Ana", Text: "And now?"},
+		{AuthorID: "U01CARLA", Text: "Is it fixed?"},
+		{AuthorID: "<!here>", Text: "Hello?"},
+	}
 	first := report.FollowUp{Run: 2, Questions: asked, Answered: true, Answer: "Only checkout-api pods, since 14:02.", Evidence: []source.Evidence{
 		{Kind: source.EvidenceLogQuery, Title: "Logs", URL: "https://signoz.example.com/l/1"},
 	}}
@@ -441,11 +447,12 @@ func TestPublishFollowUpAnswers(t *testing.T) {
 		wantAnswers string
 	}{
 		{
-			name:        "a new answer goes in the thread",
-			phase:       output.PhaseFollowUp,
-			verdict:     report.TruePositive,
-			followUps:   []report.FollowUp{first},
-			want:        []string{":speech_balloon: *Answer* for Ana, Bo\nOnly checkout-api pods, since 14:02.\n<https://signoz.example.com/l/1|Logs>"},
+			name:      "a new answer goes in the thread",
+			phase:     output.PhaseFollowUp,
+			verdict:   report.TruePositive,
+			followUps: []report.FollowUp{first},
+			want: []string{":speech_balloon: *Answer* for Ana, Bo &lt;!channel&gt;, <@U01CARLA>\n" +
+				"Only checkout-api pods, since 14:02.\n<https://signoz.example.com/l/1|Logs>"},
 			wantAnswers: "1",
 		},
 		{

@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"cmp"
 	"fmt"
 	"regexp"
 	"strings"
@@ -33,7 +34,8 @@ const followUpIntro = "# Follow-up questions\n\n" +
 // FollowUps writes the message that gives the model the follow-up
 // questions that arrived since its last turn, oldest first, at most
 // maxFollowUpQuestions of them. Each question is in a follow_up_question
-// element with its author; anything in the text that could open or close
+// element with its author's name, or their ID when the name is not known;
+// anything in the text that could open or close
 // that element, or an untrusted_data block, is escaped, so a question
 // cannot pass itself off as Sidekick's own text.
 func FollowUps(questions []report.FollowUpQuestion) string {
@@ -45,7 +47,7 @@ func FollowUps(questions []report.FollowUpQuestion) string {
 
 	for _, q := range shown {
 		b.WriteString("\n<" + followUpTag)
-		writeAttribute(&b, "author", q.Author)
+		writeAttribute(&b, "author", cmp.Or(q.Author, q.AuthorID))
 		b.WriteString(">\n")
 
 		text := escapeFollowUp(escapeUntrusted(q.Text))

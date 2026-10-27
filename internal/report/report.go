@@ -163,9 +163,11 @@ type FollowUp struct {
 
 // FollowUpQuestion is one question a responder asked.
 type FollowUpQuestion struct {
-	// Author is the name the responder goes by, when it is known.
-	Author string `json:"author,omitempty"`
-	Text   string `json:"text"`
+	// Author is the name the responder goes by, when it is known, and
+	// AuthorID their ID where they asked, such as a Slack user ID.
+	Author   string `json:"author,omitempty"`
+	AuthorID string `json:"authorId,omitempty"`
+	Text     string `json:"text"`
 }
 
 // VerdictChanged reports whether the follow-up run changed the verdict.

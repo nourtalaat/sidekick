@@ -99,7 +99,7 @@ func TestFollowUp(t *testing.T) {
 
 				answer := r.FollowUps[0]
 				require.Equal(t, 2, answer.Run)
-				require.Equal(t, []report.FollowUpQuestion{{Author: "Ana", Text: askDeploy}, {Author: "Ana", Text: askPods}}, answer.Questions)
+				require.Equal(t, []report.FollowUpQuestion{{Author: "Ana", AuthorID: "U01ANA", Text: askDeploy}, {Author: "Ana", AuthorID: "U01ANA", Text: askPods}}, answer.Questions)
 				require.True(t, answer.Answered)
 				require.Equal(t, "The errors started with deploy 4f2c1a at 14:00.", answer.Answer)
 				require.Equal(t, []source.Evidence{{Kind: source.EvidenceMetric, Title: "SigNoz", URL: signozDashboard.URL, ToolCallID: "c2"}}, answer.Evidence)
@@ -283,7 +283,7 @@ func TestFollowUp(t *testing.T) {
 				require.Len(t, r.FollowUps, 1)
 				require.False(t, r.FollowUps[0].Answered)
 				require.Equal(t, unansweredDead, r.FollowUps[0].Answer)
-				require.Equal(t, []report.FollowUpQuestion{{Author: "Ana", Text: askDeploy}}, r.FollowUps[0].Questions)
+				require.Equal(t, []report.FollowUpQuestion{{Author: "Ana", AuthorID: "U01ANA", Text: askDeploy}}, r.FollowUps[0].Questions)
 
 				_, phase, _ := h.publishState(t)
 				require.Equal(t, "follow_up", phase)

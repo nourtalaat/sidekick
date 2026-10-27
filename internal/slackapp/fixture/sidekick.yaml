@@ -38,8 +38,12 @@ listeners:
     match:
       sender: { kind: human }
 
+outputs:
+  slack-thread: { type: slack, channel: "#alerts" }
+
 routes:
   - name: default
+    outputs: [slack-thread]
 
 redaction:
   hashKeySecret: { name: redaction, key: hash-key }

@@ -2,6 +2,7 @@ package slack
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -10,6 +11,10 @@ import (
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
+
+// slackUserID matches a Slack user ID, such as U01ABCDEF, the only text
+// that becomes a mention.
+var slackUserID = regexp.MustCompile(`^[UW][A-Z0-9]{2,}$`)
 
 // Bar colors that are not a verdict's.
 const (
@@ -157,7 +162,7 @@ func answerView(u output.Update, f report.FollowUp) view {
 	}
 
 	if askers := askerNames(f.Questions); askers != "" {
-		heading += " for " + escape(askers)
+		heading += " for " + askers
 	}
 
 	text := escape(cut(f.Answer, maxReasonChars))
@@ -179,14 +184,20 @@ func answerView(u output.Update, f report.FollowUp) view {
 	}
 }
 
-// askerNames returns the names of the people who asked questions, each
-// once, in the order they asked.
+// askerNames returns who asked the questions, each once, in the order
+// they asked, escaped: their names, or a mention of a Slack user known
+// only by ID, which also lets them know of the answer.
 func askerNames(questions []report.FollowUpQuestion) string {
 	var names []string
 
 	for _, q := range questions {
-		if q.Author != "" && !slices.Contains(names, q.Author) {
-			names = append(names, q.Author)
+		name := escape(q.Author)
+		if name == "" && slackUserID.MatchString(q.AuthorID) {
+			name = "<@" + q.AuthorID + ">"
+		}
+
+		if name != "" && !slices.Contains(names, name) {
+			names = append(names, name)
 		}
 	}
 
