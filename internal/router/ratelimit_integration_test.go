@@ -145,7 +145,7 @@ func TestRateLimitRetry(t *testing.T) {
 func setupRateLimit(t *testing.T, route, global *config.RateLimit) *harness {
 	t.Helper()
 
-	cfg, settings := loadConfig(t)
+	cfg, instances := loadConfig(t)
 	cfg.Budgets.RateLimit = global
 
 	for i := range cfg.Routes {
@@ -159,7 +159,7 @@ func setupRateLimit(t *testing.T, route, global *config.RateLimit) *harness {
 
 	r, err := New(Options{
 		Config:        cfg,
-		ModelSettings: settings,
+		ModelSettings: instances.ModelSettings,
 		Pool:          pool,
 		Logger:        slog.New(slog.DiscardHandler),
 		Metrics:       prometheus.NewRegistry(),
