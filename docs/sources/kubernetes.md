@@ -71,26 +71,55 @@ How it behaves:
 
 ## Permissions
 
-The source only reads, with `get` and `list`. It does not need `watch`,
-because every tool makes single `get` or `list` calls and keeps nothing
-open. It needs no access to Secrets or ConfigMaps, which often hold
-credentials, so do not grant it any.
+The source only reads. Each tool makes single `get` or `list` calls and
+keeps nothing open, so it needs no `watch`, and each resource gets only the
+verb its tools use. It needs no access to Secrets or ConfigMaps, which
+often hold credentials, so do not grant it any.
 
 | API group | Resources | Verbs | Used by |
 |---|---|---|---|
-| core (`""`) | `events` | `get`, `list` | `list_events` |
-| core (`""`) | `pods` | `get`, `list` | `list_pod_problems` |
+| core (`""`) | `events` | `list` | `list_events` |
+| core (`""`) | `pods` | `list` | `list_pod_problems` |
 | core (`""`) | `pods/log` | `get` | `get_pod_logs`, only with `logs: true` |
 | core (`""`) | `nodes` (cluster scope) | `get`, `list` | `list_nodes` |
-| `apps` | `deployments`, `statefulsets`, `daemonsets` | `get`, `list` | `get_workload`, `get_rollout_history` |
-| `apps` | `replicasets` | `get`, `list` | `get_rollout_history` |
-| `autoscaling` | `horizontalpodautoscalers` | `get`, `list` | `get_workload` |
+| `apps` | `deployments` | `get` | `get_workload`, `get_rollout_history` |
+| `apps` | `statefulsets`, `daemonsets` | `get` | `get_workload` |
+| `apps` | `replicasets` | `list` | `get_rollout_history` |
+| `autoscaling` | `horizontalpodautoscalers` | `list` | `get_workload` |
 
 A tool whose permission is missing fails with a tool error and the others
 keep working, so you can leave out a tool you do not want, for example
 `list_nodes`, and deny it with `tools.deny` so the model does not try it.
 
-### Every namespace: one ClusterRole
+### With the Helm chart
+
+The chart grants these rules itself, and mounts the pod's service account
+token, for every source in `config.sources` with `type: kubernetes` and no
+`kubeconfigSecret`. It reads `namespaces` and `logs` from those sources,
+so the rules always match what the sources read:
+
+- A source without `namespaces` gets one ClusterRole and
+  ClusterRoleBinding with every rule.
+- When every source lists `namespaces`, each listed namespace gets a Role
+  and RoleBinding with the namespaced rules. `list_nodes` is always
+  offered and nodes have no namespace, so a small ClusterRole allows `get`
+  and `list` on nodes only.
+- `get` on `pods/log` is in a Role only when a source that lists the
+  namespace has `logs: true`, and in the ClusterRole when any source has
+  it.
+- Without such a source, the chart makes no roles and the pod mounts no
+  token, unless `serviceAccount.automountToken` is set.
+
+The roles are named after the release's namespace and full name, for
+example `sidekick-sidekick-kubernetes-source` for the release `sidekick`
+in the namespace `sidekick`, and the nodes ClusterRole has `-nodes` after
+that. Each namespace a source
+lists must exist before you install. To manage the roles yourself, for
+example to leave out nodes, set `rbac.kubernetesSource: false` and apply
+the rules below. The pod still mounts its token, because the source needs
+it.
+
+### Without the chart: every namespace
 
 Without `namespaces`, grant the rules cluster-wide. Replace the service
 account name and namespace with Sidekick's own.
@@ -102,18 +131,24 @@ metadata:
   name: sidekick-kubernetes-source
 rules:
   - apiGroups: [""]
-    resources: [events, pods, nodes]
-    verbs: [get, list]
-  - apiGroups: [apps]
-    resources: [deployments, replicasets, statefulsets, daemonsets]
-    verbs: [get, list]
-  - apiGroups: [autoscaling]
-    resources: [horizontalpodautoscalers]
-    verbs: [get, list]
+    resources: [events, pods]
+    verbs: [list]
   # Only with logs: true.
   - apiGroups: [""]
     resources: [pods/log]
     verbs: [get]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets]
+    verbs: [get]
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [list]
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [list]
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -129,7 +164,7 @@ subjects:
     namespace: sidekick
 ```
 
-### Some namespaces: a Role in each
+### Without the chart: some namespaces
 
 With `namespaces`, grant the namespaced rules with a Role and RoleBinding
 in each listed namespace. Nodes have no namespace, so `list_nodes` still
@@ -145,17 +180,20 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: [events, pods]
-    verbs: [get, list]
-  - apiGroups: [apps]
-    resources: [deployments, replicasets, statefulsets, daemonsets]
-    verbs: [get, list]
-  - apiGroups: [autoscaling]
-    resources: [horizontalpodautoscalers]
-    verbs: [get, list]
+    verbs: [list]
   # Only with logs: true.
   - apiGroups: [""]
     resources: [pods/log]
     verbs: [get]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets]
+    verbs: [get]
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [list]
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
