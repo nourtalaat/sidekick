@@ -81,13 +81,11 @@ func SchemaLockKey(key int64, schema string) int64 {
 		return key
 	}
 
+	buf := binary.BigEndian.AppendUint64(nil, uint64(key)) //nolint:gosec // The bits of the key are hashed, not its value.
+	buf = append(buf, schema...)
+
 	h := fnv.New64a()
-
-	var raw [8]byte
-
-	binary.BigEndian.PutUint64(raw[:], uint64(key)) //nolint:gosec // The bits of the key are hashed, not its value.
-	h.Write(raw[:])
-	h.Write([]byte(schema))
+	_, _ = h.Write(buf) // Writing to a hash never fails.
 
 	return int64(h.Sum64()) //nolint:gosec // Any 64 bits make a lock key.
 }
