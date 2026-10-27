@@ -280,16 +280,24 @@ func TestSocketTakesOverAFreedSlot(t *testing.T) {
 		// free frees the slot of r: it stops the replica, or ends its
 		// database session.
 		free func(t *testing.T, h *harness, r *replica)
+		// maxHolders is the most replicas that may hold a connection at
+		// once.
+		maxHolders int
 	}{
 		{
-			name: "a replica stops",
+			name:       "a replica stops",
+			maxHolders: SocketSlots,
 			free: func(t *testing.T, _ *harness, r *replica) {
 				t.Helper()
 				r.stop()
 			},
 		},
 		{
-			name: "a replica loses its database session, and so its lock",
+			// The lock is freed as the session ends, but the replica only
+			// closes its connection at its next slot check, so another
+			// replica may connect first.
+			name:       "a replica loses its database session, and so its lock",
+			maxHolders: SocketSlots + 1,
 			free: func(t *testing.T, h *harness, r *replica) {
 				t.Helper()
 
@@ -337,7 +345,7 @@ func TestSocketTakesOverAFreedSlot(t *testing.T) {
 			})
 
 			_, most := hs.counts()
-			require.LessOrEqual(t, most, SocketSlots)
+			require.LessOrEqual(t, most, tt.maxHolders)
 		})
 	}
 }
