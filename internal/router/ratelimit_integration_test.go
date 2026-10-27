@@ -4,6 +4,7 @@ package router
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"sync"
 	"testing"
@@ -84,7 +85,7 @@ func TestRateLimit(t *testing.T) {
 			wg.Wait()
 
 			statuses := h.statuses(t, ids)
-			require.Equal(t, rateLimitEvents, statuses["routed"])
+			require.Equal(t, rateLimitEvents, statuses["grouped"])
 			require.Equal(t, 1, statuses[tt.status], "one event is held")
 			require.Len(t, h.investigations(t), rateLimitEvents)
 
@@ -114,7 +115,7 @@ func TestRateLimit(t *testing.T) {
 			require.NoError(t, h.router.Handle(t.Context(), later[0]))
 
 			ev := h.event(t, held.ID)
-			require.Equal(t, "routed", ev.Status)
+			require.Equal(t, "grouped", ev.Status)
 			require.Nil(t, ev.SkipReason)
 			require.Len(t, h.investigations(t), rateEvents)
 			require.Len(t, h.rateNotices(t), 1, "one notice per window")
@@ -135,7 +136,7 @@ func TestRateLimitRetry(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, h.router.Handle(t.Context(), job))
-	require.Equal(t, "routed", h.event(t, ids[0]).Status)
+	require.Equal(t, "grouped", h.event(t, ids[0]).Status)
 	require.Empty(t, h.rateNotices(t))
 }
 
@@ -172,7 +173,8 @@ func setupRateLimit(t *testing.T, route, global *config.RateLimit) *harness {
 }
 
 // billingEvents stores n received events that fit the billing route, a
-// second apart, and returns their IDs in order.
+// second apart, each with its own fingerprint so that each opens a group,
+// and returns their IDs in order.
 func (h *harness) billingEvents(t *testing.T, n int) []uuid.UUID {
 	t.Helper()
 
@@ -185,7 +187,7 @@ func (h *harness) billingEvents(t *testing.T, n int) []uuid.UUID {
 		_, err := h.pool.Exec(t.Context(), `
 INSERT INTO events (id, intake, key, kind, trusted, alert_name, title, severity, labels, fingerprint, status, received_at)
 VALUES ($1, 'alertmanager', $2, 'alert', true, 'InvoiceLag', 'Invoices are late', 'warning', '{"team": "billing"}',
-        'fp-billing', 'received', $3)`, id, id.String(), rateNow.Add(time.Duration(i)*time.Second))
+        $3, 'received', $4)`, id, id.String(), fmt.Sprintf("fp-billing-%d", i), rateNow.Add(time.Duration(i)*time.Second))
 		require.NoError(t, err)
 	}
 
