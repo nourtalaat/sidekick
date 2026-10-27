@@ -219,8 +219,19 @@ lock while it runs. `sidekick serve` also migrates at start-up, unless
    `make verify-generated` (part of `make ci`) fails if you forget.
 3. Call it through `db.New(pool)`, and use the generated row and parameter
    types directly rather than copying them into types of your own.
-4. Put the query's `EXPLAIN ANALYZE` output, against realistic data, in the
-   pull request description.
+4. Add the query to the `TestQueryPlans` test of its package: run it
+   through `db.New(storetest.NewExplainer(t, tx))` against seeded data and
+   check that the plan uses the index you expect.
+5. Put the query's `EXPLAIN ANALYZE` output in the pull request
+   description. CI writes each plan the tests read to a file and uploads
+   them as the `query-plans` artifact of the `make ci` job: open the
+   workflow run from the pull request's checks, and download the artifact
+   from the run's summary page, which also lists the files. Each file is
+   named `<package directory>/<test name>.txt`, for example
+   `internal/queue/TestQueryPlans/ClaimJobs.txt`, and holds the query
+   followed by its plan. To write the files yourself, set
+   `SIDEKICK_PLANS_DIR` to a directory when you run the integration tests,
+   with `-count=1` so Go does not reuse a cached result that wrote nothing.
 
 ## Background jobs
 
