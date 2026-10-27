@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	tcexec "github.com/testcontainers/testcontainers-go/exec"
 
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
 	"github.com/nourtalaat/sidekick/internal/model"
@@ -272,26 +274,19 @@ func TestReplicationLag(t *testing.T) {
 		require.NoError(t, standbyAdmin.Close(ctx))
 	})
 
+	waitForStandby(t, standbyAdmin, "the standby to stream from the primary", func(st standbyStatus) bool { return st.receiver == "streaming" })
+
 	_, err = standbyAdmin.Exec(t.Context(), "SELECT pg_wal_replay_pause()")
 	require.NoError(t, err)
 
-	_, err = db.admin.Exec(t.Context(), "UPDATE accounts SET balance = balance + 1")
-	require.NoError(t, err)
+	// Each poll writes on the primary again, so WAL keeps arriving until the
+	// paused standby has received some it has not replayed.
+	waitForStandby(t, standbyAdmin, "the standby to fall behind", func(st standbyStatus) bool {
+		_, err := db.admin.Exec(t.Context(), "UPDATE accounts SET balance = balance + 1 WHERE id = 1")
+		require.NoError(t, err)
 
-	deadline := time.Now().Add(waitTimeout)
-
-	for {
-		var behind bool
-		require.NoError(t, standbyAdmin.QueryRow(t.Context(),
-			"SELECT pg_wal_lsn_diff(pg_last_wal_receive_lsn(), pg_last_wal_replay_lsn()) > 0").Scan(&behind))
-
-		if behind {
-			break
-		}
-
-		require.True(t, time.Now().Before(deadline), "timed out waiting for the standby to fall behind")
-		time.Sleep(pollEvery)
-	}
+		return st.behind
+	})
 
 	tests := []struct {
 		name     string
@@ -337,6 +332,65 @@ func TestReplicationLag(t *testing.T) {
 			require.NotEmpty(t, got.Note)
 		})
 	}
+}
+
+// standbyStatus is what waitForStandby reads on the standby.
+type standbyStatus struct {
+	behind   bool
+	pause    string
+	receive  string
+	replay   string
+	receiver string
+}
+
+// waitForStandby polls the standby until done returns true, and fails
+// with the standby's state when it does not in time.
+func waitForStandby(t *testing.T, standby *pgx.Conn, what string, done func(st standbyStatus) bool) {
+	t.Helper()
+
+	const sql = `SELECT COALESCE(pg_wal_lsn_diff(pg_last_wal_receive_lsn(), pg_last_wal_replay_lsn()) > 0, false),
+	pg_get_wal_replay_pause_state(),
+	COALESCE(pg_last_wal_receive_lsn()::text, ''),
+	COALESCE(pg_last_wal_replay_lsn()::text, ''),
+	COALESCE((SELECT status FROM pg_stat_wal_receiver), '')`
+
+	deadline := time.Now().Add(standbyWaitTimeout)
+
+	for {
+		var st standbyStatus
+		require.NoError(t, standby.QueryRow(t.Context(), sql).Scan(&st.behind, &st.pause, &st.receive, &st.replay, &st.receiver))
+
+		if done(st) {
+			return
+		}
+
+		if time.Now().After(deadline) {
+			require.FailNow(t, "timed out waiting for "+what, "standby state: %+v\nstandby log:\n%s", st, standbyLog(t))
+		}
+
+		time.Sleep(pollEvery)
+	}
+}
+
+// standbyLog returns the standby's server log, so a test that gives up
+// waiting on the standby shows why it did not stream or replay.
+func standbyLog(t *testing.T) string {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
+	defer cancel()
+
+	_, out, err := server.container.Exec(ctx, []string{"cat", standbyLogPath}, tcexec.Multiplexed())
+	if err != nil {
+		return fmt.Sprintf("read %s: %v", standbyLogPath, err)
+	}
+
+	log, err := io.ReadAll(out)
+	if err != nil {
+		return fmt.Sprintf("read %s: %v", standbyLogPath, err)
+	}
+
+	return string(log)
 }
 
 // TestSafety checks the limits every query runs under, and the checks on

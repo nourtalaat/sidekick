@@ -48,6 +48,7 @@ const (
 
 	standbyPort        = "5433/tcp"
 	standbyScript      = "/usr/local/bin/start-standby.sh"
+	standbyLogPath     = "/tmp/standby.log"
 	testDatabasePrefix = "sk57_"
 
 	setupTimeout    = 3 * time.Minute
@@ -57,7 +58,10 @@ const (
 	// waitTimeout bounds how long a test waits for a session to reach the
 	// state it set up, such as waiting for a lock.
 	waitTimeout = 20 * time.Second
-	pollEvery   = 50 * time.Millisecond
+	// standbyWaitTimeout bounds how long a test waits for the standby,
+	// which also replays the other tests' databases being made and dropped.
+	standbyWaitTimeout = time.Minute
+	pollEvery          = 50 * time.Millisecond
 )
 
 // testServer is the Postgres container shared by every test in the test
