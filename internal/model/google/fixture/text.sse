@@ -1,0 +1,6 @@
+data: {"candidates": [{"content": {"parts": [{"text": "The checkout service ran out of"}],"role": "model"},"index": 0}],"usageMetadata": {"promptTokenCount": 1290,"candidatesTokenCount": 7,"totalTokenCount": 1297},"modelVersion": "gemini-3.8-flash","responseId": "sYJbaZ-tAsCN1dkPu4TkgQk"}
+
+data: {"candidates": [{"content": {"parts": [{"text": " database connections."}],"role": "model"},"index": 0}],"usageMetadata": {"promptTokenCount": 1290,"candidatesTokenCount": 12,"totalTokenCount": 1302},"modelVersion": "gemini-3.8-flash","responseId": "sYJbaZ-tAsCN1dkPu4TkgQk"}
+
+data: {"candidates": [{"content": {"parts": [{"text": "","thoughtSignature": "Q2lRQjBlMnhhbWFNWDZyNFlFbVRPNmw="}],"role": "model"},"finishReason": "STOP","index": 0}],"usageMetadata": {"promptTokenCount": 1290,"candidatesTokenCount": 12,"totalTokenCount": 1428,"cachedContentTokenCount": 1024,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 1290}],"cacheTokensDetails": [{"modality": "TEXT","tokenCount": 1024}],"thoughtsTokenCount": 126},"modelVersion": "gemini-3.8-flash","responseId": "sYJbaZ-tAsCN1dkPu4TkgQk"}
+
