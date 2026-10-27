@@ -1,0 +1,42 @@
+{
+  "type": "conversationUpdate",
+  "id": "1761642000012",
+  "timestamp": "2026-10-28T09:00:00.000Z",
+  "serviceUrl": "https://smba.trafficmanager.net/emea/",
+  "channelId": "msteams",
+  "from": {
+    "id": "29:alice",
+    "name": "Alice",
+    "aadObjectId": "ffffffff-0000-1111-2222-333333333333"
+  },
+  "conversation": {
+    "isGroup": true,
+    "conversationType": "channel",
+    "tenantId": "55555555-6666-7777-8888-999999999999",
+    "id": "19:alerts@thread.tacv2;messageid=1761642000012"
+  },
+  "recipient": {
+    "id": "28:00000000-1111-2222-3333-444444444444",
+    "name": "Sidekick"
+  },
+  "textFormat": "plain",
+  "text": "",
+  "attachments": [],
+  "entities": [],
+  "channelData": {
+    "teamsChannelId": "19:alerts@thread.tacv2",
+    "teamsTeamId": "19:team@thread.tacv2",
+    "channel": {
+      "id": "19:alerts@thread.tacv2"
+    },
+    "team": {
+      "id": "19:team@thread.tacv2",
+      "aadGroupId": "66666666-7777-8888-9999-000000000000"
+    },
+    "tenant": {
+      "id": "55555555-6666-7777-8888-999999999999"
+    },
+    "eventType": "teamMemberAdded"
+  },
+  "locale": "en-US"
+}
