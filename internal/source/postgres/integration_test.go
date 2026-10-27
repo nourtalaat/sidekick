@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 	"testing"
 	"time"
 
@@ -644,12 +643,10 @@ func TestQueryPlans(t *testing.T) {
 				require.NoError(t, tx.Rollback(ctx))
 			})
 
-			explainer := &storetest.Explainer{Tx: tx}
+			explainer := storetest.NewExplainer(t, tx)
 			_, err = explainer.Query(t.Context(), tt.sql, tt.args...)
 			require.ErrorIs(t, err, storetest.ErrExplained)
 			require.NotEmpty(t, explainer.Plan)
-
-			t.Logf("%s\n%s", strings.TrimSpace(tt.sql), explainer.Plan)
 		})
 	}
 }

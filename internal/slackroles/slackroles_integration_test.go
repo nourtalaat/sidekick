@@ -128,7 +128,7 @@ func TestLookup(t *testing.T) {
 }
 
 // TestQueryPlans runs EXPLAIN ANALYZE on the slack_identities queries over
-// 5,000 users. Run with -v to see the plans.
+// 5,000 users.
 func TestQueryPlans(t *testing.T) {
 	t.Parallel()
 
@@ -171,10 +171,9 @@ func TestQueryPlans(t *testing.T) {
 
 			defer func() { _ = tx.Rollback(t.Context()) }()
 
-			explain := &storetest.Explainer{Tx: tx}
+			explain := storetest.NewExplainer(t, tx)
 
 			require.ErrorIs(t, tt.run(t.Context(), db.New(explain)), storetest.ErrExplained)
-			t.Logf("EXPLAIN ANALYZE of %s:\n%s", tt.name, explain.Plan)
 			require.Contains(t, explain.Plan, tt.wantIndex)
 			require.NotContains(t, explain.Plan, "Seq Scan")
 		})
