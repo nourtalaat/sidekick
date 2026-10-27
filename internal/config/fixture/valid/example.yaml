@@ -77,6 +77,22 @@ intake:
 
 slack:
   botTokenSecret: { name: sidekick-slack, key: botToken }
+  appTokenSecret: { name: sidekick-slack, key: appToken }
+  trustedBots: [B01SIGNOZ]
+
+listeners:
+  alerts:
+    channel: "#alerts"
+    match:
+      sender: { kind: bot, names: [SigNoz] }
+      text: "(?i)alert|firing"
+    extract:
+      - "Alert: (?P<alert>[A-Za-z0-9]+)"
+      - "service=(?P<service>[a-z0-9-]+)"
+      - "(?i)severity: (?P<severity>[a-z]+)"
+      - "env=(?P<env>[a-z]+)"
+    recovery: "(?i)resolved|recovered"
+    trusted: true
 
 outputs:
   slack-thread: { type: slack, channel: "#alerts" }
@@ -88,7 +104,7 @@ routes:
   - name: payments-latency
     priority: 10
     match:
-      intake: [alertmanager]
+      intake: [alertmanager, alerts, slack-mention]
       labels: { team: payments }
       service: "checkout-*"
       severity: [warning, critical]

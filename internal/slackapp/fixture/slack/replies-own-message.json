@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "type": "message",
+      "subtype": "bot_message",
+      "channel": "C01OPS",
+      "team": "T01TEAM",
+      "bot_id": "B09SIDEKICK",
+      "app_id": "A01SIDEKICK",
+      "user": "U01SIDEKICK",
+      "text": "Looking into it",
+      "ts": "1761472970.000600",
+      "thread_ts": "1761472970.000600",
+      "bot_profile": {
+        "id": "B09SIDEKICK",
+        "app_id": "A01SIDEKICK",
+        "name": "Sidekick"
+      }
+    }
+  ]
+}

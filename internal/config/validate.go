@@ -257,7 +257,7 @@ func (v *validator) checkSources() {
 func (v *validator) checkWebhooks() {
 	for _, name := range sortedKeys(v.cfg.Intake.Webhooks) {
 		w := v.cfg.Intake.Webhooks[name]
-		v.checkName(w.Path(), name)
+		v.checkIntakeName(w.Path(), name)
 		checkPlugin(v, v.regs.Intakes, "intake adapter", adapterKey, name, w.Section)
 
 		authPath := joinPath(w.Path(), "auth")
@@ -272,12 +272,6 @@ func (v *validator) checkWebhooks() {
 		if w.Auth.Tolerance <= 0 {
 			v.errs.add(joinPath(authPath, "tolerance"), "must be positive")
 		}
-	}
-}
-
-func (v *validator) checkSlack() {
-	if v.cfg.Slack != nil && v.cfg.Slack.BotTokenSecret == (registry.SecretRef{}) {
-		v.errs.add("slack.botTokenSecret", "required")
 	}
 }
 
@@ -364,7 +358,7 @@ func (v *validator) checkRoute(path string, r Route) {
 }
 
 func (v *validator) checkMatch(at string, m Match) {
-	v.references(at+".intake", "intake", m.Intake, slices.Collect(maps.Keys(v.cfg.Intake.Webhooks)))
+	v.references(at+".intake", "intake", m.Intake, v.intakeNames())
 
 	if m.Service != "" {
 		if _, err := path.Match(m.Service, ""); err != nil {
@@ -600,23 +594,13 @@ func (v *validator) positiveDuration(path string, d time.Duration) {
 	}
 }
 
-// withDefaults fills nil registries with the global ones.
-func (r Registries) withDefaults() Registries {
-	return Registries{
-		Models:  cmp.Or(r.Models, registry.Models),
-		Sources: cmp.Or(r.Sources, registry.Sources),
-		Intakes: cmp.Or(r.Intakes, registry.Intakes),
-		Outputs: cmp.Or(r.Outputs, registry.Outputs),
-	}
-}
-
 // newValidator returns a validator for one check of cfg.
 func newValidator(ctx context.Context, cfg *Config, opts LoadOptions) *validator {
 	return &validator{
 		ctx:  ctx,
 		cfg:  cfg,
 		opts: opts,
-		regs: opts.Registries.withDefaults(),
+		regs: opts.Registries.WithDefaults(),
 		caps: map[string]model.Capabilities{},
 		errs: &errorList{},
 	}

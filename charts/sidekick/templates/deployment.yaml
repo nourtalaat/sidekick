@@ -1,0 +1,207 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sidekick.fullname" . }}
+  labels:
+    {{- include "sidekick.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  replicas: {{ .Values.replicaCount }}
+  # A new pod starts before an old one stops, and an old one hands its jobs
+  # back to the queue when it stops, so investigations go on.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "sidekick.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      annotations:
+        # A config change rolls the pods.
+        checksum/config: {{ include "sidekick.config" . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "sidekick.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: server
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "sidekick.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountToken }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- if .Values.postgres.enabled }}
+      initContainers:
+        # Sidekick exits when the database does not answer at start-up, so
+        # with the bundled Postgres it waits for it first.
+        - name: wait-for-postgres
+          image: {{ include "sidekick.postgres.image" . }}
+          imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - until pg_isready -h {{ include "sidekick.postgres.fullname" . }} -p 5432 -U {{ .Values.postgres.user }}; do sleep 2; done
+          securityContext:
+            {{- include "sidekick.containerSecurityContext" . | nindent 12 }}
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 64Mi }
+      {{- end }}
+      containers:
+        - name: sidekick
+          image: {{ include "sidekick.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: [serve, --config, /etc/sidekick/sidekick.yaml]
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.httpPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.service.metricsPort }}
+              protocol: TCP
+          env:
+            {{- with (include "sidekick.goMemLimit" .) }}
+            - name: GOMEMLIMIT
+              {{- . | trim | nindent 14 }}
+            {{- end }}
+            # sidekick test-alert labels its alert with the pod it runs in.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef: { fieldPath: metadata.name }
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef: { fieldPath: metadata.namespace }
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          startupProbe:
+            httpGet: { path: /healthz, port: metrics }
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+            timeoutSeconds: {{ .Values.probes.startup.timeoutSeconds }}
+          livenessProbe:
+            httpGet: { path: /healthz, port: metrics }
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+          readinessProbe:
+            httpGet: { path: /readyz, port: metrics }
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- include "sidekick.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/sidekick
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            {{- range $i, $name := include "sidekick.secretNames" . | fromJsonArray }}
+            - name: secret-{{ $i }}
+              mountPath: {{ include "sidekick.secretsDir" $ }}/{{ $name }}
+              readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- range .Values.mcpSidecars }}
+        - name: mcp-{{ .name }}
+          image: {{ .image }}
+          imagePullPolicy: {{ default "IfNotPresent" .imagePullPolicy }}
+          {{- with .command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .env }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .port }}
+          ports:
+            - name: mcp-{{ .name | trunc 11 | trimSuffix "-" }}
+              containerPort: {{ .port }}
+              protocol: TCP
+          {{- end }}
+          {{- if .healthPath }}
+          # Only startup and liveness probes: a sidecar that is down makes
+          # its source unavailable and never takes Sidekick out of service.
+          startupProbe:
+            httpGet: { path: {{ .healthPath }}, port: {{ .port }} }
+            periodSeconds: 5
+            # Up to 5 minutes, for servers that download packages first.
+            failureThreshold: 60
+          livenessProbe:
+            httpGet: { path: {{ .healthPath }}, port: {{ .port }} }
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          {{- end }}
+          {{- with .resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- include "sidekick.containerSecurityContext" $ | nindent 12 }}
+          volumeMounts:
+            - name: mcp-{{ .name }}-tmp
+              mountPath: /tmp
+            {{- with .volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "sidekick.fullname" . }}
+        - name: tmp
+          emptyDir: {}
+        {{- range $i, $name := include "sidekick.secretNames" . | fromJsonArray }}
+        - name: secret-{{ $i }}
+          secret:
+            secretName: {{ $name }}
+        {{- end }}
+        {{- range .Values.mcpSidecars }}
+        - name: mcp-{{ .name }}-tmp
+          emptyDir: {}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,42 @@
+{
+  "token": "unused-verification-token",
+  "team_id": "T01TEAM",
+  "api_app_id": "A01SIDEKICK",
+  "type": "event_callback",
+  "event_id": "Ev02RESOLVED",
+  "event_time": 1761472800,
+  "authorizations": [
+    {
+      "team_id": "T01TEAM",
+      "user_id": "U01SIDEKICK",
+      "is_bot": true
+    }
+  ],
+  "event": {
+    "type": "message",
+    "subtype": "bot_message",
+    "channel": "C01ALERTS",
+    "channel_type": "channel",
+    "team": "T01TEAM",
+    "bot_id": "B01SIGNOZ",
+    "bot_profile": {
+      "id": "B01SIGNOZ",
+      "app_id": "A02SIGNOZ",
+      "name": "SigNoz"
+    },
+    "text": "",
+    "ts": "1761473400.000200",
+    "attachments": [
+      {
+        "title": "[RESOLVED] HighErrorRate",
+        "text": "Error rate is back to 0.1% on checkout",
+        "fields": [
+          {
+            "title": "Labels",
+            "value": "service=checkout env=prod severity: critical"
+          }
+        ]
+      }
+    ]
+  }
+}
