@@ -1,7 +1,8 @@
 // Package webhook is the webhook callback output: it posts the final result
 // of an investigation, and each watcher state change, as JSON to a URL
-// from the config, signed with the same HMAC scheme Sidekick's own webhook intake checks, so a receiver can
-// verify a callback the way intake verifies a delivery.
+// from the config, signed with the same HMAC scheme Sidekick's own webhook
+// intake checks, so a receiver can verify a callback the way intake
+// verifies a delivery.
 //
 // Each request carries X-Sidekick-Timestamp, the Unix seconds it was
 // signed at, and X-Sidekick-Signature, "sha256=" and the hex HMAC-SHA256 of
