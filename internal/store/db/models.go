@@ -162,6 +162,16 @@ type Route struct {
 	UpdatedAt time.Time
 }
 
+type SlackIdentity struct {
+	SlackUserID string
+	TeamID      *string
+	Email       *string
+	UserID      *uuid.UUID
+	Groups      []string
+	Role        *string
+	RefreshedAt time.Time
+}
+
 type Step struct {
 	InvestigationID  uuid.UUID
 	Seq              int32

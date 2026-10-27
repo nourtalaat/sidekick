@@ -70,6 +70,30 @@ func TestRoleNameRole(t *testing.T) {
 			t.Parallel()
 
 			require.Equal(t, tt.want, tt.name.Role())
+
+			if tt.want != 0 {
+				require.Equal(t, tt.name, RoleNameOf(tt.want))
+			}
+		})
+	}
+}
+
+func TestRoleNameOfUnknownRole(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		role roles.Role
+	}{
+		{name: "zero", role: 0},
+		{name: "above admin", role: roles.Admin + 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Empty(t, RoleNameOf(tt.role))
 		})
 	}
 }

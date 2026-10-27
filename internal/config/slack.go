@@ -61,6 +61,15 @@ func (n RoleName) Role() roles.Role {
 	return roles.Role(slices.Index(knownRoleNames, n) + 1)
 }
 
+// RoleNameOf returns the name of r, or "" for a value that is not a role.
+func RoleNameOf(r roles.Role) RoleName {
+	if r < roles.Viewer || int(r) > len(knownRoleNames) {
+		return ""
+	}
+
+	return knownRoleNames[r-1]
+}
+
 // The sender kinds a listener can match.
 var knownListenerSenders = []event.SenderKind{event.SenderHuman, event.SenderBot}
 
