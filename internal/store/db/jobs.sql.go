@@ -523,3 +523,15 @@ func (q *Queries) UnlockReaper(ctx context.Context, lockKey int64) (bool, error)
 	err := row.Scan(&unlocked)
 	return unlocked, err
 }
+
+const waitForJobWriters = `-- name: WaitForJobWriters :exec
+SELECT id FROM jobs WHERE id = ANY ($1::bigint[]) FOR SHARE
+`
+
+// WaitForJobWriters waits until no other transaction is writing the jobs
+// with these IDs. Outside a transaction it releases its row locks as soon as
+// it has them, so it only waits for a claim whose commit is in flight to end.
+func (q *Queries) WaitForJobWriters(ctx context.Context, ids []int64) error {
+	_, err := q.db.Exec(ctx, waitForJobWriters, ids)
+	return err
+}

@@ -226,7 +226,8 @@ Whether a model may be forced to call a tool depends on the server:
   memory: 4K tokens below 24 GiB and 32K below 48 GiB, both too small. A
   prompt that does not fit is cut rather than refused. Start it with
   `OLLAMA_CONTEXT_LENGTH=65536 ollama serve`, and check the `CONTEXT`
-  column of `ollama ps`.
+  column of `ollama ps`. `sidekick doctor` checks it too while the model is
+  loaded.
 - **llama.cpp server** (`server: llamacpp`) needs `--jinja` for tool
   calling. Give the model a preset ID with `--alias`:
   `llama-server --jinja -c 65536 --alias Qwen/Qwen3.8-27B -m <file>.gguf`.
@@ -236,6 +237,8 @@ Without `server`, Sidekick assumes Ollama when the model is an Ollama tag
 a server that ignores a forced tool choice. That is safe: when the model
 ends a turn without calling a tool, the investigation reminds it to call
 `submit_verdict`.
+`sidekick doctor` warns when a preset has no `server` set, and asks the
+server whether it is Ollama, so it can print the line to add.
 
 Local models have no price, so they count as free in the budgets.
 

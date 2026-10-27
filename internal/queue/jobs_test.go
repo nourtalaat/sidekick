@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
@@ -425,6 +426,112 @@ func TestHandBackKeepsAttempts(t *testing.T) {
 	require.Greater(t, *next.ClaimToken, *job.ClaimToken, "the next claim gets a new token")
 }
 
+// TestHandBackLost claims a job in a transaction, as a claim whose result
+// never arrived, ends that transaction in different ways, and checks that
+// handBackLost hands the job back only when the claim committed and still
+// owns it.
+func TestHandBackLost(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// settle ends the claim's transaction. It runs while handBackLost
+		// waits for the claim when duringWait is set, and before it
+		// otherwise.
+		settle     func(t *testing.T, pool *pgxpool.Pool, tx pgx.Tx, lost db.Job)
+		duringWait bool
+		// wantHandedBack is whether handBackLost returns the job.
+		wantHandedBack bool
+		wantStatus     string
+	}{
+		{
+			name:           "a claim that committed",
+			settle:         commitClaim,
+			wantHandedBack: true,
+			wantStatus:     StatusPending,
+		},
+		{
+			name:           "a claim that commits while the hand-back waits for it",
+			settle:         commitClaim,
+			duringWait:     true,
+			wantHandedBack: true,
+			wantStatus:     StatusPending,
+		},
+		{
+			name: "a claim that rolled back",
+			settle: func(t *testing.T, _ *pgxpool.Pool, tx pgx.Tx, _ db.Job) {
+				t.Helper()
+
+				require.NoError(t, tx.Rollback(t.Context()))
+			},
+			wantStatus: StatusPending,
+		},
+		{
+			name: "a job that another claim owns by now",
+			settle: func(t *testing.T, pool *pgxpool.Pool, tx pgx.Tx, lost db.Job) {
+				t.Helper()
+
+				commitClaim(t, pool, tx, lost)
+				require.NoError(t, handBack(t.Context(), pool, lost))
+				mustClaimOne(t, pool, KindPublish)
+			},
+			wantStatus: StatusRunning,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			pool := setup(t)
+			id := mustEnqueue(t, pool, NewJob{Kind: KindPublish})
+
+			tx, err := pool.Begin(t.Context())
+			require.NoError(t, err)
+
+			defer func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) }()
+
+			lost, err := claim(t.Context(), tx, testWorker, KindPublish, testLease, 1)
+			require.NoError(t, err)
+			require.Len(t, lost, 1)
+
+			type result struct {
+				handedBack []db.Job
+				err        error
+			}
+
+			results := make(chan result, 1)
+			handBackNow := func() {
+				handedBack, err := handBackLost(t.Context(), pool, lost)
+				results <- result{handedBack: handedBack, err: err}
+			}
+
+			if tt.duringWait {
+				go handBackNow()
+
+				eventually(t, func() bool { return lockWaiters(t, pool) > 0 })
+				tt.settle(t, pool, tx, lost[0])
+			} else {
+				tt.settle(t, pool, tx, lost[0])
+				handBackNow()
+			}
+
+			got := <-results
+			require.NoError(t, got.err)
+
+			if tt.wantHandedBack {
+				require.Equal(t, []int64{id}, jobIDs(got.handedBack))
+			} else {
+				require.Empty(t, got.handedBack)
+			}
+
+			job := getJob(t, pool, id)
+			require.Equal(t, tt.wantStatus, job.Status)
+			require.Zero(t, job.Attempts, "a hand-back does not count an attempt")
+		})
+	}
+}
+
 // secondsUntilRunAt returns how far the job's run_at is from the database's
 // clock now.
 func secondsUntilRunAt(t *testing.T, pool *pgxpool.Pool, id int64) float64 {
@@ -436,4 +543,21 @@ func secondsUntilRunAt(t *testing.T, pool *pgxpool.Pool, id int64) float64 {
 	require.NoError(t, err)
 
 	return seconds
+}
+
+// commitClaim commits the transaction of a claim.
+func commitClaim(t *testing.T, _ *pgxpool.Pool, tx pgx.Tx, _ db.Job) {
+	t.Helper()
+
+	require.NoError(t, tx.Commit(t.Context()))
+}
+
+// jobIDs returns the IDs of jobs.
+func jobIDs(jobs []db.Job) []int64 {
+	ids := make([]int64, len(jobs))
+	for i, job := range jobs {
+		ids[i] = job.ID
+	}
+
+	return ids
 }

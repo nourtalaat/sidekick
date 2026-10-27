@@ -1,0 +1,11 @@
+# rbac.kubernetesSource off with a Kubernetes source: no roles.
+rbac:
+  kubernetesSource: false
+config:
+  sources:
+    k8s:
+      type: kubernetes
+  routes:
+    - name: default
+      sources: [k8s]
+      outputs: [slack]
