@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -23,6 +24,11 @@ const (
 	planFileMode fs.FileMode = 0o600
 )
 
+// unsafeNameChars matches the characters of a test name that are not safe
+// in a file name on every system or in a workflow artifact, such as the
+// colon that GitHub's artifact upload rejects.
+var unsafeNameChars = regexp.MustCompile(`[^A-Za-z0-9._/-]+`)
+
 // writePlan writes sql and its plan to the file of the test named testName,
 // under dir and the directory of the test's package.
 func writePlan(dir, testName, sql, plan string) error {
@@ -35,9 +41,11 @@ func writePlan(dir, testName, sql, plan string) error {
 }
 
 // writePlanFile writes sql and its plan to <dir>/<testName>.txt. A subtest's
-// name holds slashes, so each level of it becomes a directory.
+// name holds slashes, so each level of it becomes a directory. Each run of
+// unsafe characters in the name becomes an underscore.
 func writePlanFile(dir, testName, sql, plan string) error {
-	path := filepath.Join(dir, filepath.FromSlash(testName)+".txt")
+	name := unsafeNameChars.ReplaceAllString(testName, "_")
+	path := filepath.Join(dir, filepath.FromSlash(name)+".txt")
 
 	//nolint:gosec // The person running the tests chooses the plans directory.
 	if err := os.MkdirAll(filepath.Dir(path), plansDirMode); err != nil {

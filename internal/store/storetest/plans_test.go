@@ -20,6 +20,11 @@ func TestWritePlanFile(t *testing.T) {
 	}{
 		{name: "top-level test", testName: "TestQueryPlans", wantPath: "TestQueryPlans.txt"},
 		{name: "subtest", testName: "TestQueryPlans/ClaimJobs", wantPath: "TestQueryPlans/ClaimJobs.txt"},
+		{
+			name:     "unsafe characters",
+			testName: "TestQueryPlans/lock_waits:_waiting_sessions?#01",
+			wantPath: "TestQueryPlans/lock_waits__waiting_sessions_01.txt",
+		},
 	}
 
 	for _, tt := range tests {
