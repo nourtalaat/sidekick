@@ -75,10 +75,12 @@ type App struct {
 	runner    *queue.Runner
 	mux       *http.ServeMux
 
-	// mu guards running and jobKinds, which RegisterJob and Run touch.
+	// mu guards running, jobKinds and tasks, which the Register methods
+	// and Run touch.
 	mu       sync.Mutex
 	running  bool
 	jobKinds int
+	tasks    []task
 
 	// started is closed once both listeners serve; listenAddr and
 	// metricsAddr are set before that.
@@ -227,9 +229,9 @@ func (a *App) Addrs() (listen, metrics net.Addr) {
 }
 
 // Run starts the job queue, if any job handler is registered, then serves
-// the main and metrics listeners until ctx ends or one of them fails. Then
-// it stops everything in the reverse order of start-up, taking at most
-// ShutdownGrace, and closes the App. It returns nil after a shutdown that
+// the main and metrics listeners and runs the registered tasks until ctx
+// ends or one of them fails. Then it stops everything in the reverse order
+// of start-up, taking at most ShutdownGrace, and closes the App. It returns nil after a shutdown that
 // ctx started and finished in time.
 func (a *App) Run(ctx context.Context) error {
 	if err := a.markRunning(); err != nil {
@@ -245,8 +247,10 @@ func (a *App) Run(ctx context.Context) error {
 	if err != nil {
 		cancelStop()
 
-		return errors.Join(fmt.Errorf("start listeners: %w", err), a.shutdown(ctx, nil, jobs))
+		return errors.Join(fmt.Errorf("start listeners: %w", err), a.shutdown(ctx, taskGroup{}, nil, jobs))
 	}
+
+	tasks := a.startTasks(stopCtx)
 
 	a.log.InfoContext(ctx, "sidekick started",
 		"listen", a.listenAddr.String(), "metrics_listen", a.metricsAddr.String(),
@@ -265,11 +269,13 @@ func (a *App) Run(ctx context.Context) error {
 		runErr = fmt.Errorf("serve: %w", err)
 	case err := <-jobs.done:
 		runErr = fmt.Errorf("run job queue: %w", err)
+	case err := <-tasks.failed:
+		runErr = fmt.Errorf("run: %w", err)
 	}
 
 	cancelStop()
 
-	return errors.Join(runErr, a.shutdown(ctx, servers, jobs))
+	return errors.Join(runErr, a.shutdown(ctx, tasks, servers, jobs))
 }
 
 // Close releases what New opened: the plugin instances, the database pool
@@ -419,13 +425,19 @@ func (a *App) startJobs(ctx context.Context) jobQueue {
 	return jobQueue{stop: stop, done: done}
 }
 
-// shutdown stops the listeners, then the job queue, then closes the rest,
-// all within ShutdownGrace of now.
-func (a *App) shutdown(ctx context.Context, servers []*http.Server, jobs jobQueue) error {
+// shutdown stops the tasks and the listeners, then the job queue, then
+// closes the rest, all within ShutdownGrace of now.
+func (a *App) shutdown(ctx context.Context, tasks taskGroup, servers []*http.Server, jobs jobQueue) error {
 	graceCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ShutdownGrace)
 	defer cancel()
 
 	var errs []error
+
+	if tasks.stop != nil {
+		if err := tasks.stopAndWait(graceCtx); err != nil {
+			errs = append(errs, fmt.Errorf("stop tasks: %w", err))
+		}
+	}
 
 	for _, server := range servers {
 		if err := server.Shutdown(graceCtx); err != nil {

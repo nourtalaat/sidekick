@@ -22,6 +22,8 @@ func TestValidateFixtures(t *testing.T) {
 
 	const readOnlyUntilM4 = "routes are read-only until action modes arrive in M4"
 
+	const listenersNeedSlack = "listeners: listeners need the Slack app to receive events: set slack.appTokenSecret, or slack.mode: events with slack.signingSecret"
+
 	tests := []struct {
 		file string
 		want []string
@@ -139,6 +141,34 @@ func TestValidateFixtures(t *testing.T) {
 		}},
 		{file: "slack-without-token", want: []string{"slack.botTokenSecret: required"}},
 		{file: "slack-output-without-slack", want: []string{"outputs.slack-thread: type slack needs slack.botTokenSecret"}},
+		// Slack app and listeners
+		{file: "slack-bad-mode", want: []string{`slack.mode: expected socket or events, got "sockets" (did you mean "socket"?)`}},
+		{file: "slack-events-without-signing-secret", want: []string{"slack.signingSecret: required with mode events"}},
+		{file: "slack-bad-values", want: []string{
+			`slack.apiURL: expected an absolute http or https URL ending in "/", such as https://slack.com/api/, got "https://slack.com/api"`,
+			`slack.trustedBots[0]: expected a bot ID such as B01ABCDEF, got "SigNoz"`,
+		}},
+		{file: "listeners-without-app-token", want: []string{listenersNeedSlack}},
+		{file: "listeners-without-slack", want: []string{listenersNeedSlack}},
+		{file: "listener-problems", want: []string{
+			`listeners.alerts.channel: expected a channel name such as "#alerts" or a channel ID such as C01ABCDEF, got "alerts"`,
+			"listeners.alerts.extract[0]: has no named group such as (?P<service>...); only named groups set fields",
+			"listeners.alerts.extract[1]: invalid regular expression: error parsing regexp: missing closing ]: `[a-z`",
+			`listeners.alerts.match.sender.bots[0]: expected a bot ID such as B01ABCDEF, got "SigNoz"`,
+			`listeners.alerts.match.sender.kind: expected human or bot, got "robot" (did you mean "bot"?)`,
+			`listeners.alerts.match.sender.users[0]: expected a user ID such as U01ABCDEF, got "bob"`,
+			"listeners.alerts.match.text: invalid regular expression: error parsing regexp: missing closing ): `(?i)alert(`",
+			"listeners.alerts.recovery: invalid regular expression: error parsing regexp: missing closing ): `resolved(`",
+			"listeners.alerts.trusted: has no effect without slack.trustedBots, the bots whose messages are trusted",
+		}},
+		{file: "intake-name-clash", want: []string{
+			`intake.webhooks.slack-mention: name "slack-mention" is reserved for events from mentions of Sidekick in Slack`,
+			`listeners.alertmanager: listener "alertmanager" has the name of a webhook endpoint; events of both would share one intake name`,
+			`listeners.slack-mention: listener "slack-mention" has the name of a webhook endpoint; events of both would share one intake name`,
+			`listeners.slack-mention: name "slack-mention" is reserved for events from mentions of Sidekick in Slack`,
+		}},
+		{file: "undefined-listener-intake", want: []string{`routes[0].match.intake[0]: intake "alerst" is not defined (did you mean "alerts"?)`}},
+		{file: "mention-without-slack", want: []string{`routes[0].match.intake[0]: intake "slack-mention" is not defined`}},
 		{file: "negative-price", want: []string{"model.prices.claude-opus-5-5.inputPerMTok: must not be negative"}},
 		// Watchers
 		{file: "watch-http", want: []string{

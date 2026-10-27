@@ -27,7 +27,9 @@ func newServeCmd(regs config.Registries, info buildinfo.Info) *cobra.Command {
 		Long: `Run Sidekick. It loads the config file and checks every secret it
 references, migrates the database unless database.migrations is manual,
 then serves webhooks at /hooks/<name> on server.listen, and /metrics,
-/healthz and /readyz on server.metricsListen. Each new event is routed
+/healthz and /readyz on server.metricsListen. With the Slack app's app
+token it receives Slack messages over Socket Mode, or at /slack/events
+with slack.mode events. Each new event is routed
 to the first route that matches it and joins the open group of the same
 alert, or opens a new group with an investigation, which shows in the
 route's outputs, such as a Slack thread. The
@@ -76,6 +78,10 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 	}
 
 	if err := registerWebhooks(a); err != nil {
+		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
+	}
+
+	if err := registerSlackApp(ctx, a); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
