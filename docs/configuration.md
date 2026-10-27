@@ -573,6 +573,32 @@ How it behaves:
   stops waiting for response headers after 60 seconds; `sidekick config
   validate` rejects a longer one.
 
+#### Backstage sources (`type: backstage`)
+
+A Backstage source reads a Backstage software catalog with a static token,
+so investigations can find a service's owner, system and dependencies. Its
+tools only read. [The Backstage source](sources/backstage.md) lists its
+tools and how to give Sidekick a token.
+
+| Key | Meaning |
+|---|---|
+| `baseURL` | The root of the Backstage backend, for example `https://backstage.example.com`. Required. It must use `https`; plain `http` is accepted only for `localhost` and loopback addresses. |
+| `tokenSecret` | `{ name, key }` of the Secret that holds the token. Required. |
+| `appURL` | The root of the Backstage web app, for evidence links. Default: `baseURL`. |
+| `namespace` | The catalog namespace of a name given without one. Default: `default`. |
+
+```yaml
+sources:
+  backstage:
+    type: backstage
+    baseURL: https://backstage.example.com
+    tokenSecret: { name: sidekick-backstage, key: token }
+```
+
+The tools, as the model sees them with the source name `backstage`, are
+`backstage__get_service`, `backstage__get_owner` and
+`backstage__get_system`.
+
 #### Google Cloud sources (`type: gcp`)
 
 A Google Cloud source reads Google Cloud projects through the Cloud
@@ -929,6 +955,7 @@ routes:
     grouping:
       window: 30m                      # default 30m
       fingerprintLabels: [alertname, service, env]
+      relatedWindow: 10m               # default 0, which is off
   - name: default
     strategy: generic-alert
     outputs: [slack-thread]
@@ -978,6 +1005,21 @@ event with the same fingerprint opens a new group and a new investigation.
 A group also closes, as `resolved`, once every alert in it has recovered.
 A group with a running [watcher](#watchers) stays open after its window
 and closes when its last watcher ends.
+
+With `grouping.relatedWindow`, alerts of related services join one group
+too. An event that finds no open group with its fingerprint joins the
+route's open group of the same service, or of a service that it depends on
+or that depends on it, when that group's newest event is at most
+`relatedWindow` old. If several groups fit, it joins the one with the
+newest event. The running investigation sees the event, with its service,
+before the model's next turn. The group keeps the fingerprint of the alert
+that opened it, so later events with the joined alert's fingerprint join
+it only while it stays related and recent. Only events of the same route
+join, and only direct dependencies count, not dependencies of
+dependencies. Dependencies come from the [service catalog
+sources](sources/backstage.md); without one, only alerts of the same
+service join. The default, `0`, turns related grouping off; `10m` is a good
+start. It must not be longer than `window`.
 
 Recovery events, such as a resolved notification from Alertmanager, are not
 routed. Each one is linked to the newest group that has the same alert,

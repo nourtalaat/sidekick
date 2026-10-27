@@ -15,6 +15,7 @@ Sidekick receives alerts from webhooks or Slack, investigates them with the LLM 
 
 - [Installing Sidekick](docs/install.md): the Helm chart, the quick start, verifying the image, production settings, upgrades.
 - [Configuration](docs/configuration.md): the `sidekick.yaml` sections, the checks Sidekick runs on them, and `sidekick config validate`.
+- [Backstage source](docs/sources/backstage.md): the keys and tools of the Backstage service catalog source, and the token it needs.
 - [GitHub source](docs/sources/github.md): the GitHub App permissions the GitHub source needs, and how to set the app up.
 - [Google Cloud source](docs/sources/gcp.md): the permissions the Google Cloud source needs, and how to give Sidekick its Google Cloud identity.
 - [Kubernetes source](docs/sources/kubernetes.md): the keys and tools of the Kubernetes source, and the read-only RBAC it needs.
