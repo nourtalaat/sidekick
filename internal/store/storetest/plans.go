@@ -39,12 +39,14 @@ func writePlan(dir, testName, sql, plan string) error {
 func writePlanFile(dir, testName, sql, plan string) error {
 	path := filepath.Join(dir, filepath.FromSlash(testName)+".txt")
 
+	//nolint:gosec // The person running the tests chooses the plans directory.
 	if err := os.MkdirAll(filepath.Dir(path), plansDirMode); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
 	}
 
 	content := strings.TrimSpace(sql) + "\n\n" + plan + "\n"
 
+	//nolint:gosec // The person running the tests chooses the plans directory.
 	if err := os.WriteFile(path, []byte(content), planFileMode); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
