@@ -1,0 +1,16 @@
+# A route daily cap above the global one, with an unknown onDailyCap.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default
+    budgets: { daily: { maxCostUSD: 20, onDailyCap: wiat } }
+
+budgets:
+  daily: { maxCostUSD: 10 }

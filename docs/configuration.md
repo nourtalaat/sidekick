@@ -259,7 +259,9 @@ claude-on-aws:
 
 - **Credentials** come from the default AWS credential chain: IRSA or EKS
   Pod Identity on EKS, otherwise environment variables, the shared config
-  files or the instance role. There is no key in the config. The role
+  files or the instance role. There is no key in the config;
+  [Cloud credentials](install.md#cloud-credentials) shows how to give the
+  pod an IAM role. The role
   needs `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream`
   on the model or inference profile. A Bedrock API key in
   `AWS_BEARER_TOKEN_BEDROCK` is not used.
@@ -482,6 +484,64 @@ How it behaves:
   stops waiting for response headers after 60 seconds; `sidekick config
   validate` rejects a longer one.
 
+#### Postgres sources (`type: postgres`)
+
+A Postgres source reads the statistics views of Postgres databases your
+services use, not Sidekick's own: slow statements, running queries, lock
+waits and replication lag. Its tools only read, and run fixed SQL in
+read-only transactions. [Postgres source](sources/postgres.md) lists the
+role it needs, the TLS rules for its URL, and how to turn on
+`pg_stat_statements`.
+
+| Key | Meaning |
+|---|---|
+| `databases` | The databases the tools may read. Required, at least one. The model picks one by `name` on each call. |
+| `databases[].name` | What the model calls the database, for example `orders`: a lower-case letter, then lower-case letters, digits, `_` and `-`, at most 63 in all. Each name is used once. |
+| `databases[].urlSecret` | `{ name, key }` of the Secret that holds the database's `postgres://` URL, with the role and its password. Required. |
+| `databases[].allowInsecure` | Accept a URL that does not verify the server's TLS certificate, and log a warning each time Sidekick connects with it. Default `false`, so the URL must set `sslmode=verify-full` or `verify-ca` unless every host is local. |
+| `omitQueryText` | Leave the text of queries out of every result. Default `false`. |
+| `statementTimeout` | How long one query may run, set as `statement_timeout` on each transaction. Default `10s`; it must be shorter than `timeout`. |
+
+```yaml
+sources:
+  db:
+    type: postgres
+    databases:
+      - name: orders
+        urlSecret: { name: sidekick-orders-db, key: url }
+      - name: orders-replica
+        urlSecret: { name: sidekick-orders-replica-db, key: url }
+    omitQueryText: false
+```
+
+The tools, as the model sees them with the source name `db`:
+
+| Tool | Returns |
+|---|---|
+| `db__slow_queries` | The statements with the highest mean or total execution time, from `pg_stat_statements`. |
+| `db__running_queries` | Sessions running a query or holding a transaction open, longest first, with wait events and blockers. |
+| `db__lock_waits` | Sessions waiting for a lock, the sessions blocking them, and the heads of the blocking chains. |
+| `db__replication_lag` | On a primary, each standby's lag in bytes and time; on a standby, its own replay delay. |
+
+How it behaves:
+
+- **Start-up never waits for a database.** The first call for a database
+  reads its URL Secret and connects. The Secret is read on every call, and
+  new connections are made when the URL changed, so a rotated password
+  needs no restart.
+- **Safety.** Each call runs in a `READ ONLY` transaction with
+  `statement_timeout` set to `statementTimeout` and `lock_timeout` set to
+  1 second. Sidekick refuses to connect as a superuser, and warns when the
+  role is not a member of `pg_monitor`.
+- **Results** are JSON. Each tool returns up to `limit` rows (default 20,
+  at most 100), and the text of each query is cut at 2 KiB. A view with
+  nothing to show, or a database without `pg_stat_statements` for
+  `slow_queries`, is reported as no data.
+- **Errors.** An error Postgres reports for a query, such as a timeout or
+  a missing privilege, goes to the model as a tool error with its message.
+  A database that cannot be reached, a refused login and a refused URL
+  count as failures of the source.
+
 ### `intake.webhooks`
 
 Each webhook endpoint receives alerts at `/hooks/<name>`. It names an
@@ -646,8 +706,8 @@ falsePositiveSigns:
 verdictHints:                      # also truePositive, inconclusive, duplicate,
   falsePositive: Propose a minimum request rate condition.   # knownIssue, flapping
 budgets:                           # where the route sets one too, the lower
-  maxToolCalls: 30                 # of the two limits applies
-  maxWallTime: 5m
+  maxToolCalls: 30                 # of the two limits applies; also
+  maxWallTime: 5m                  # maxTokens and maxCostUSD
 ```
 
 `watchers` and `watcherDefaults` are accepted and checked, but watchers are
@@ -675,8 +735,12 @@ routes:
     roles: { investigate: claude }     # overrides model.roles for this route
     sources: [signoz]
     outputs: [slack-thread]
-    budgets: { maxToolCalls: 30 }      # at or below the global budgets
+    budgets:                           # at or below the global budgets
+      maxToolCalls: 30
+      maxCostUSD: 0.75
+      daily: { maxCostUSD: 40, onDailyCap: skip }   # this route's daily cap
     concurrency: 3                     # at most 3 of its investigations at once
+    rateLimit: { events: 60, per: 1h, overLimit: delay }   # at most 60 events an hour
     grouping:
       window: 30m                      # default 30m
       fingerprintLabels: [alertname, service, env]
@@ -745,14 +809,57 @@ and the ceilings route budgets must stay within.
 
 ```yaml
 budgets:
-  perInvestigation: { maxToolCalls: 40, maxWallTime: 10m }
+  perInvestigation: { maxTokens: 400000, maxToolCalls: 40, maxWallTime: 10m, maxCostUSD: 1.00 }
+  daily: { maxCostUSD: 200, timeZone: UTC, onDailyCap: wait }   # or skip
   concurrency: 8
+  rateLimit: { events: 600, per: 1h, overLimit: delay }          # or skip
 ```
 
-`maxToolCalls` counts calls to source tools, and `maxWallTime` counts from
-when the investigation first started, including time lost to a restart. An
-investigation that reaches either ends as "Not sure yet" with what it
-found; see [Limits](investigations.md#limits).
+`maxTokens` counts the input tokens, including those read from or written
+to the prompt cache, and the output tokens of every model call.
+`maxToolCalls` counts calls to source tools. `maxWallTime` counts from when
+the investigation first started, including time lost to a restart.
+`maxCostUSD` is the cost of the model calls, in US dollars, from the
+[price table](#model). Near any of them, the model gets one last turn to
+report what it found; an investigation that runs out ends as "Not sure yet"
+with what it found. See [Limits](investigations.md#limits).
+
+#### Daily caps
+
+`daily.maxCostUSD` caps what every investigation together may cost in one
+day, and a route's own `budgets.daily.maxCostUSD` caps that route's share,
+at or below the global cap. Neither is set by default. The day starts at
+midnight in `daily.timeZone`, an IANA name such as `UTC` or
+`Europe/Berlin`; it is the same for every cap, and routes cannot set their
+own.
+
+Once a cap is reached, `onDailyCap` decides what happens to investigations
+that have not started yet:
+
+- `wait` (the default) holds them until the next day starts, then runs
+  them.
+- `skip` ends them at once as "Not sure yet", with the cap as the reason.
+
+A route's `onDailyCap` applies at its own cap; the global one applies at
+the global cap and on routes that set none. Either way, Sidekick posts one
+notice a day to the route's outputs that can take one, such as the
+channel of a Slack output. An investigation that is already running when
+a cap is reached is not stopped at once: the model gets its last turn and
+the investigation ends as for a budget.
+
+#### Rate limits
+
+`rateLimit` limits how many events are routed in any window of `per`,
+counted when each event is routed. A route's own `rateLimit` counts that
+route's events and must not allow more events per second than the global
+one. An event over a limit is:
+
+- `delay` (the default): marked `delayed` and routed again once the window
+  has room, so it is investigated later.
+- `skip`: marked `skipped` with the reason, and never investigated.
+
+Each limit posts at most one notice per window to the route's outputs that
+can take one. Recovery events are not counted.
 
 `concurrency` is how many investigations run at once, counted across every
 replica. A route's own `concurrency` caps that route's share of them and
@@ -901,10 +1008,19 @@ A refused request ends the check with an error and is counted in
 | `routes[].strategy` | `generic-alert` |
 | `routes[].mode` | `read-only` |
 | `routes[].budgets` | the values in `budgets.perInvestigation` |
+| `routes[].budgets.daily.maxCostUSD` | none: only `budgets.daily.maxCostUSD` applies |
+| `routes[].budgets.daily.onDailyCap` | `budgets.daily.onDailyCap` |
+| `budgets.perInvestigation.maxTokens` | `400000` |
 | `budgets.perInvestigation.maxToolCalls` | `40` |
 | `budgets.perInvestigation.maxWallTime` | `10m` |
+| `budgets.perInvestigation.maxCostUSD` | `1.00` |
+| `budgets.daily.maxCostUSD` | none |
+| `budgets.daily.timeZone` | `UTC` |
+| `budgets.daily.onDailyCap` | `wait` |
 | `budgets.concurrency` | `8` |
 | `routes[].concurrency` | none: only `budgets.concurrency` applies |
+| `budgets.rateLimit`, `routes[].rateLimit` | none |
+| `rateLimit.overLimit` | `delay` |
 | `routes[].grouping.window` | `30m` |
 | `routes[].grouping.fingerprintLabels` | none: the intake's own fingerprint |
 | `report.minFalsePositiveConfidence` | `high` |
@@ -943,9 +1059,13 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   group, and `trusted: true` only when `slack.trustedBots` is set.
 - Every strategy file in `strategies.dir` is valid, and no two of them have
   the same name.
-- Every route is `read-only` with no `actions`, and its budgets and
-  `concurrency` are at or below the global ones. `budgets.concurrency` is
-  at least 1. Each route's `grouping.window` is positive, and no
+- Every route is `read-only` with no `actions`, and its budgets, daily
+  cap and `concurrency` are at or below the global ones, and its
+  `rateLimit` is no looser than `budgets.rateLimit`. The global
+  per-investigation limits and `budgets.concurrency` are positive, dollar
+  amounts are not negative, `budgets.daily.timeZone` is a known time zone,
+  `onDailyCap` is `wait` or `skip`, and `overLimit` is `delay` or `skip`.
+  Each route's `grouping.window` is positive, and no
   `grouping.fingerprintLabels` entry is empty or listed twice.
 - Every `redaction.builtIn` entry is a built-in rule. Every custom
   redaction rule has a unique name of the right shape that is not a

@@ -28,7 +28,8 @@ func (d *doctor) checkModels(ctx context.Context) []Result {
 	return results
 }
 
-// checkPrices warns about each connector whose model has no price.
+// checkPrices warns about each connector whose model has no price: its
+// calls cost nothing as far as the cost budgets and daily caps can tell.
 func (d *doctor) checkPrices(ctx context.Context) []Result {
 	models := map[string]string{}
 
@@ -56,7 +57,7 @@ func (d *doctor) checkPrices(ctx context.Context) []Result {
 	for _, u := range unpriced {
 		results = append(results, Result{
 			Check: "price " + u.Connector, Status: StatusWarn,
-			Message: fmt.Sprintf("the model %s has no price, so its calls show no cost", u.Model),
+			Message: fmt.Sprintf("the model %s has no price, so its calls show no cost and count nothing toward the cost budgets and daily caps", u.Model),
 			Fix:     fmt.Sprintf("add model.prices.%q with inputPerMTok and outputPerMTok, in US dollars per million tokens", u.Model),
 		})
 	}
