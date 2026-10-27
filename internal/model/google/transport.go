@@ -19,7 +19,7 @@ const maxResponseSize = 64 << 20
 
 // Headers the transport sets.
 const (
-	apiKeyHeader      = "x-goog-api-key"
+	apiKeyHeader      = "x-goog-api-key" //nolint:gosec // G101: a header name, not a credential.
 	userProjectHeader = "X-Goog-User-Project"
 	authHeader        = "Authorization"
 )
