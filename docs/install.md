@@ -171,7 +171,7 @@ rejected.
 
 ### Cloud credentials
 
-Sidekick needs no cloud keys in a Secret on EKS or GKE: the pod gets an
+Sidekick needs no cloud keys in a Secret on EKS, GKE or AKS: the pod gets an
 identity through its service account, which the chart creates and names
 after the release (`sidekick` for a release named `sidekick`). The
 [Bedrock connector](configuration.md#the-bedrock-provider) uses the AWS
@@ -226,21 +226,52 @@ serviceAccount:
     gcpServiceAccount: sidekick@<project>.iam.gserviceaccount.com
 ```
 
-**Other annotations**, such as `azure.workload.identity/client-id` for
-Azure Workload Identity, go under `serviceAccount.annotations`. Azure also
-needs the pod label `azure.workload.identity/use: "true"` in `podLabels`.
-An annotation that `serviceAccount.workloadIdentity` already sets is
-rejected, so each one has one source.
+**AKS Workload Identity.** Turn on the OIDC issuer and workload identity
+on the cluster, then let the Kubernetes service account use a
+user-assigned managed identity (or a Microsoft Entra application) through
+a federated credential:
 
-EKS adds the identity to a pod when the pod starts, so after setting or
-changing the role or the association, restart the pods with
-`kubectl -n sidekick rollout restart deploy/sidekick`; a `helm upgrade`
-that changes only the service account does not replace them. The token
-volumes that EKS adds are separate from the Kubernetes API token, so
-`serviceAccount.automountToken` can stay `false`. With
+```sh
+az identity federated-credential create --name sidekick \
+  --identity-name sidekick --resource-group <group> \
+  --issuer "$(az aks show -g <group> -n <cluster> --query oidcIssuerProfile.issuerUrl -o tsv)" \
+  --subject system:serviceaccount:sidekick:sidekick \
+  --audiences api://AzureADTokenExchange
+```
+
+Then set the identity's client ID in the chart:
+
+```yaml
+serviceAccount:
+  workloadIdentity:
+    azureClientId: 00000000-1111-2222-3333-444444444444
+    # azureTenantId: only when the identity is in another tenant
+```
+
+The chart sets the `azure.workload.identity/client-id` annotation (and
+`azure.workload.identity/tenant-id` when `azureTenantId` is set) and gives
+the Sidekick pods the label `azure.workload.identity/use: "true"`. The AKS
+webhook adds a token file and the `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and
+`AZURE_FEDERATED_TOKEN_FILE` variables only to pods with that label. With
+`networkPolicy.restrictEgress`, allow `login.microsoftonline.com` on port
+443.
+
+**Other annotations** go under `serviceAccount.annotations`. An
+annotation that `serviceAccount.workloadIdentity` already sets is
+rejected, and so is `azure.workload.identity/use` in `podLabels` when
+`azureClientId` is set, so each one has one source.
+
+EKS and AKS add the identity to a pod when the pod starts, so after
+setting or changing the role, the association or the client ID, restart
+the pods with `kubectl -n sidekick rollout restart deploy/sidekick`; a
+`helm upgrade` that changes only the service account does not replace
+them. The token volumes that EKS and AKS add are separate from the
+Kubernetes API token, so `serviceAccount.automountToken` can stay
+`false`. With
 `serviceAccount.create: false`, the chart uses the service account named
 in `serviceAccount.name`; annotate it yourself, since
-`serviceAccount.workloadIdentity` is then rejected.
+`serviceAccount.workloadIdentity` is then rejected. For Azure, also set
+the `azure.workload.identity/use: "true"` label in `podLabels`.
 
 ## Values
 
@@ -259,6 +290,8 @@ every one, and the chart rejects unknown keys.
 | `resources` | 100m CPU, 256Mi requested; 512Mi limit | `GOMEMLIMIT` is set to 90% of the memory limit. |
 | `serviceAccount.workloadIdentity.awsRoleArn` | `""` | The IAM role for EKS IRSA. |
 | `serviceAccount.workloadIdentity.gcpServiceAccount` | `""` | The Google service account for GKE Workload Identity. |
+| `serviceAccount.workloadIdentity.azureClientId` | `""` | The client ID of the identity for AKS Workload Identity; also adds the `azure.workload.identity/use` pod label. |
+| `serviceAccount.workloadIdentity.azureTenantId` | `""` | That identity's tenant, when it is not the cluster's. |
 | `serviceAccount.annotations` | `{}` | More service account annotations. |
 | `mcpSidecars` | `[]` | stdio MCP servers behind a bridge: `name`, `image`, `args`, `env`, `port`, `healthPath`, `resources`, `volumeMounts`. |
 | `networkPolicy.enabled` | `true` | Network policies for Sidekick and the bundled Postgres. |

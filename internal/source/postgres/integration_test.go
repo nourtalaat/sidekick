@@ -274,6 +274,7 @@ func TestReplicationLag(t *testing.T) {
 	})
 
 	waitForStandby(t, standbyAdmin, "the standby to stream from the primary", func(st standbyStatus) bool { return st.receiver == "streaming" })
+	waitForStreaming(t, db)
 
 	_, err = standbyAdmin.Exec(t.Context(), "SELECT pg_wal_replay_pause()")
 	require.NoError(t, err)
@@ -365,6 +366,33 @@ func waitForStandby(t *testing.T, standby *pgx.Conn, what string, done func(st s
 
 		if time.Now().After(deadline) {
 			require.FailNow(t, "timed out waiting for "+what, "standby state: %+v\nstandby log:\n%s", st, standbyLog(t))
+		}
+
+		time.Sleep(pollEvery)
+	}
+}
+
+// waitForStreaming polls the primary until pg_stat_replication lists only
+// the standby, as streaming. The primary reports catchup until it has once
+// sent the standby all the WAL it was behind by, which can take a while as
+// the other tests keep writing WAL.
+func waitForStreaming(t *testing.T, db testDB) {
+	t.Helper()
+
+	const sql = `SELECT COALESCE(string_agg(state, ',' ORDER BY pid), '') FROM pg_stat_replication`
+
+	deadline := time.Now().Add(standbyWaitTimeout)
+
+	for {
+		var states string
+		require.NoError(t, db.admin.QueryRow(t.Context(), sql).Scan(&states))
+
+		if states == "streaming" {
+			return
+		}
+
+		if time.Now().After(deadline) {
+			require.FailNow(t, "timed out waiting for the primary to stream to the standby", "pg_stat_replication states: %q\nstandby log:\n%s", states, standbyLog(t))
 		}
 
 		time.Sleep(pollEvery)
