@@ -146,7 +146,7 @@ func TestTokensErrors(t *testing.T) {
 				Status: http.StatusUnauthorized,
 				Body:   []byte(`{"error":"invalid_client","error_description":"AADSTS7000215: Invalid client secret provided.","error_codes":[7000215]}`),
 			},
-			wantErr: "Microsoft Entra ID refused the token request (HTTP 401): invalid_client (AADSTS7000215)",
+			wantErr: "token request refused by Microsoft Entra ID (HTTP 401): invalid_client (AADSTS7000215)",
 		},
 		{
 			name:    "an error answer that is not JSON",

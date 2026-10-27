@@ -187,6 +187,7 @@ func (c *keyCache) getJSON(ctx context.Context, url string, v any) error {
 	if err != nil {
 		return fmt.Errorf("send the request: %w", err)
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 
 	data, err := io.ReadAll(httpclient.LimitBody(resp.Body, maxKeysResponseBytes, errKeysTooLarge))

@@ -45,7 +45,7 @@ const maxTokenResponseBytes = 64 << 10
 // The form values of a client credentials request.
 const (
 	grantClientCredentials = "client_credentials"
-	assertionTypeJWTBearer = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+	assertionTypeJWTBearer = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" //nolint:gosec // G101: the name of an OAuth assertion type, not a credential.
 )
 
 var (
@@ -57,7 +57,7 @@ var (
 	errNoSecrets           = errors.New("no secrets resolver to read the client secret with")
 	errNoTokenFile         = errors.New("workload identity needs " + FederatedTokenFileEnv + `; is the pod labeled azure.workload.identity/use: "true"?`)
 	errEmptyFederatedToken = errors.New("the federated token file is empty")
-	errNoAccessToken       = errors.New("Microsoft Entra ID returned no access token or no expiry")
+	errNoAccessToken       = errors.New("the token response has no access token or no expiry")
 	errTokenTooLarge       = errors.New("the token response is larger than 64 KiB")
 )
 
@@ -175,6 +175,7 @@ func (t *Tokens) request(ctx context.Context) (string, time.Time, error) {
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("send the token request: %w", err)
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 
 	var body tokenResponse
@@ -310,10 +311,10 @@ func refusal(status int, body tokenResponse) error {
 	}
 
 	if len(body.ErrorCodes) > 0 {
-		return fmt.Errorf("Microsoft Entra ID refused the token request (HTTP %d): %s (AADSTS%d)", status, what, body.ErrorCodes[0])
+		return fmt.Errorf("token request refused by Microsoft Entra ID (HTTP %d): %s (AADSTS%d)", status, what, body.ErrorCodes[0])
 	}
 
-	return fmt.Errorf("Microsoft Entra ID refused the token request (HTTP %d): %s", status, what)
+	return fmt.Errorf("token request refused by Microsoft Entra ID (HTTP %d): %s", status, what)
 }
 
 // checkSecureURL reports whether raw is an absolute https URL, or an http
