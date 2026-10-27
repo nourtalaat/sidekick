@@ -134,7 +134,7 @@ helm-lint: $(HELM) ## Lint the Helm chart, values schema included, with each exa
 
 CI_TARGETS += helm-test
 .PHONY: helm-test
-helm-test: $(HELM) ## Compare helm template of the quick-start values with its golden file, and validate each rendered sidekick.yaml
+helm-test: $(HELM) ## Compare helm template of the quick-start values and the RBAC cases with their golden files, and validate each rendered sidekick.yaml
 	sh scripts/helm-test.sh $(HELM)
 
 .PHONY: helm-path
@@ -142,7 +142,7 @@ helm-path: $(HELM) ## Install the pinned Helm and print its path, for scripts
 	@echo $(HELM)
 
 .PHONY: helm-golden
-helm-golden: $(HELM) ## Rewrite the golden file of the quick-start values after an intended chart change
+helm-golden: $(HELM) ## Rewrite the golden files of the quick-start values and the RBAC cases after an intended chart change
 	sh scripts/helm-test.sh $(HELM) --update
 
 .PHONY: vulncheck

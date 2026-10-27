@@ -85,8 +85,8 @@ serviceAccount:
   # name defaults to the release's full name.
   name: ""
   annotations: {}
-  # automountToken mounts a Kubernetes API token. Sidekick does not call
-  # the Kubernetes API in this release.
+  # automountToken mounts a Kubernetes API token. The chart mounts it
+  # anyway when a Kubernetes source reads this cluster as the pod.
   automountToken: false
 
 # mcpSidecars run stdio MCP servers next to Sidekick, each behind a bridge
@@ -197,6 +197,18 @@ networkPolicy:
   # providers and sources, so list them when you turn it on.
   restrictEgress: false
   egress: []
+
+# rbac gives the Kubernetes source read access to the cluster Sidekick runs
+# in. The chart finds each source in config.sources with type kubernetes
+# and no kubeconfigSecret, and grants only the get and list calls its tools
+# make, never on Secrets or ConfigMaps. A source without namespaces gets a
+# ClusterRole. Otherwise each namespace the sources list gets a Role, and a
+# ClusterRole allows get and list on nodes only. get on pods/log is granted
+# only with logs: true. docs/sources/kubernetes.md lists every rule.
+rbac:
+  # kubernetesSource makes these roles and their bindings. Turn it off to
+  # manage them yourself.
+  kubernetesSource: true
 
 pdb:
   # enabled keeps at least minAvailable pods running during voluntary

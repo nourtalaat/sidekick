@@ -1,0 +1,25 @@
+# Two Kubernetes sources that list namespaces, one with logs on, and one
+# that reads another cluster: a Role in each listed namespace, get on
+# pods/log only where a source with logs on lists it, and a nodes-only
+# ClusterRole. The source with a kubeconfigSecret adds nothing.
+secrets:
+  - sidekick-anthropic
+  - sidekick-slack
+  - sidekick-webhook
+  - sidekick-staging-cluster
+config:
+  sources:
+    apps:
+      type: kubernetes
+      namespaces: [prod, staging]
+      logs: true
+    jobs:
+      type: kubernetes
+      namespaces: [staging, batch]
+    staging-cluster:
+      type: kubernetes
+      kubeconfigSecret: { name: sidekick-staging-cluster, key: kubeconfig }
+  routes:
+    - name: default
+      sources: [apps, jobs, staging-cluster]
+      outputs: [slack]

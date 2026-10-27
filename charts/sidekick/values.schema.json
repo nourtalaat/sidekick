@@ -259,6 +259,13 @@
         "egress": { "type": "array", "items": { "type": "object" } }
       }
     },
+    "rbac": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kubernetesSource": { "type": "boolean" }
+      }
+    },
     "pdb": {
       "type": "object",
       "additionalProperties": false,

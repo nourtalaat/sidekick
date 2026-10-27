@@ -1,0 +1,11 @@
+# A Kubernetes source that reads every namespace, with logs on: one
+# ClusterRole with get on pods/log, and the pod mounts its token.
+config:
+  sources:
+    k8s:
+      type: kubernetes
+      logs: true
+  routes:
+    - name: default
+      sources: [k8s]
+      outputs: [slack]

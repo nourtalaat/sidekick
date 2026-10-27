@@ -1,0 +1,72 @@
+{{- $access := include "sidekick.kubernetesSource.access" . | fromJson }}
+{{- if and .Values.rbac.kubernetesSource $access.any }}
+{{- $name := include "sidekick.kubernetesSource.rbacName" . }}
+{{- if $access.clusterWide }}
+# A Kubernetes source reads every namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "sidekick.labels" . | nindent 4 }}
+    app.kubernetes.io/component: kubernetes-source
+rules:
+  {{- include "sidekick.kubernetesSource.rules" (dict "logs" $access.logs "namespaced" false) | nindent 2 }}
+{{- else }}
+# The Kubernetes sources read only the namespaces they list, but list_nodes
+# reads nodes, which have no namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $name }}-nodes
+  labels:
+    {{- include "sidekick.labels" . | nindent 4 }}
+    app.kubernetes.io/component: kubernetes-source
+rules:
+  {{- include "sidekick.kubernetesSource.nodeRules" . | nindent 2 }}
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $name }}{{ if not $access.clusterWide }}-nodes{{ end }}
+  labels:
+    {{- include "sidekick.labels" . | nindent 4 }}
+    app.kubernetes.io/component: kubernetes-source
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $name }}{{ if not $access.clusterWide }}-nodes{{ end }}
+subjects:
+  {{- include "sidekick.kubernetesSource.subjects" . | nindent 2 }}
+{{- if not $access.clusterWide }}
+{{- range $namespace, $logs := $access.namespaces }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "sidekick.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: kubernetes-source
+rules:
+  {{- include "sidekick.kubernetesSource.rules" (dict "logs" $logs "namespaced" true) | nindent 2 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "sidekick.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: kubernetes-source
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  {{- include "sidekick.kubernetesSource.subjects" $ | nindent 2 }}
+{{- end }}
+{{- end }}
+{{- end }}
