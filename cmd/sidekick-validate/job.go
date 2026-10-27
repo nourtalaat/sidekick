@@ -92,7 +92,10 @@ func validateFile(ctx context.Context, tools *toolFlags, log *slog.Logger, reque
 	if err != nil {
 		return validate.Result{}, fmt.Errorf("open the request: %w", err)
 	}
-	defer f.Close()
+	defer func() {
+		// The file is only read; a close error changes nothing.
+		_ = f.Close()
+	}()
 
 	req, err := validate.DecodeRequest(io.LimitReader(f, validate.MaxRequestBytes))
 	if err != nil {

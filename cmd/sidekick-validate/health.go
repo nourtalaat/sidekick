@@ -48,7 +48,10 @@ func checkHealth(ctx context.Context, addr string) error {
 	if err != nil {
 		return fmt.Errorf("check health: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		// Only the status is read; a close error changes nothing.
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("check health: GET /healthz answered %s", resp.Status)
