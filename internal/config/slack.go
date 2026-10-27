@@ -280,6 +280,7 @@ func (v *validator) checkIntakeName(path, name string) {
 func (v *validator) intakeNames() []string {
 	names := slices.Collect(maps.Keys(v.cfg.Intake.Webhooks))
 	names = append(names, slices.Collect(maps.Keys(v.cfg.Listeners))...)
+	names = append(names, v.extraIntakes...)
 
 	if v.cfg.Slack != nil {
 		names = append(names, SlackMentionIntake)
