@@ -3,6 +3,7 @@
 package investigator
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -120,7 +121,8 @@ func TestFollowUp(t *testing.T) {
 				require.True(t, ok)
 				require.Contains(t, question.Text, askDeploy)
 				require.Contains(t, question.Text, askPods)
-				require.Equal(t, reqs[1].Messages, reqs[2].Messages[:len(reqs[1].Messages)], "the rebuilt history starts as the first run's")
+				require.Equal(t, compactInputs(t, reqs[1].Messages), compactInputs(t, reqs[2].Messages[:len(reqs[1].Messages)]),
+					"the rebuilt history starts as the first run's")
 
 				require.Zero(t, h.pendingFollowUps(t))
 			},
@@ -431,6 +433,33 @@ func longSignoz(t *testing.T) source.Source {
 	}).AnyTimes()
 
 	return src
+}
+
+// compactInputs returns a copy of messages with the input of each tool call
+// compacted, since a jsonb column keeps the JSON but not its spaces.
+func compactInputs(t *testing.T, messages []model.Message) []model.Message {
+	t.Helper()
+
+	out := make([]model.Message, len(messages))
+
+	for i, m := range messages {
+		parts := make([]model.Part, len(m.Parts))
+
+		for j, p := range m.Parts {
+			if call, ok := p.(model.ToolCall); ok {
+				var b bytes.Buffer
+				require.NoError(t, json.Compact(&b, call.Input))
+				call.Input = b.Bytes()
+				p = call
+			}
+
+			parts[j] = p
+		}
+
+		out[i] = model.Message{Role: m.Role, Parts: parts}
+	}
+
+	return out
 }
 
 // toolResults returns the tool results of req by call ID.
