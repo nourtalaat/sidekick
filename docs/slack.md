@@ -193,7 +193,8 @@ shown only to the person who sent the command.
 
 `route set` can change these fields: `priority`, `enabled`, `mode`,
 `strategy`, `sources`, `outputs`, `intake`, `service`, `severity`,
-`labels`, `text`, `maxToolCalls`, `maxWallTime` and `window`. List fields
+`labels`, `text`, `maxToolCalls`, `maxTokens`, `maxCostUSD`,
+`maxWallTime` and `window`. List fields
 take values separated by commas, and `none` clears a list or a match
 field. A new route needs a match field (`intake`, `service`, `severity`,
 `labels` or `text`) first, so it never takes every event ahead of the

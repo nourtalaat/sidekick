@@ -48,6 +48,8 @@ var routeFields = []routeField{
 	{name: "labels", value: "<name>=<value>,... or none, for match.labels", set: setLabels},
 	{name: "text", value: "<regex> or none, for match.text", set: setText},
 	{name: "maxToolCalls", value: "<number>, 0 for the global value", set: setMaxToolCalls},
+	{name: "maxTokens", value: "<number>, 0 for the global value", set: setMaxTokens},
+	{name: "maxCostUSD", value: "<dollars> such as 2.50, 0 for the global value", set: setMaxCostUSD},
 	{name: "maxWallTime", value: "<duration> such as 5m, 0 for the global value", set: setMaxWallTime},
 	{name: "window", value: "<duration> such as 30m, for grouping.window", set: setWindow},
 }
@@ -285,6 +287,28 @@ func setMaxToolCalls(r *rules.Route, v string) error {
 	}
 
 	r.Config.Budgets.MaxToolCalls = n
+
+	return nil
+}
+
+func setMaxTokens(r *rules.Route, v string) error {
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return &userError{msg: fmt.Sprintf("maxTokens must be a whole number, not %s.", code(v))}
+	}
+
+	r.Config.Budgets.MaxTokens = n
+
+	return nil
+}
+
+func setMaxCostUSD(r *rules.Route, v string) error {
+	usd, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return &userError{msg: fmt.Sprintf("maxCostUSD must be an amount in dollars such as 2.50, not %s.", code(v))}
+	}
+
+	r.Config.Budgets.MaxCostUSD = usd
 
 	return nil
 }

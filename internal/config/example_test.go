@@ -48,7 +48,10 @@ func TestExampleConfig(t *testing.T) {
 				require.Equal(t, MigrationsManual, cfg.Database.Migrations)
 				require.Equal(t, "claude", cfg.Model.Roles[model.RoleInvestigate])
 				require.Equal(t, map[string]model.Price{"claude-opus-5-5": {InputPerMTok: 5_000_000, OutputPerMTok: 25_000_000, CacheReadPerMTok: 500_000}}, cfg.Model.PriceTable())
-				require.Equal(t, Limits{MaxToolCalls: 40, MaxWallTime: 10 * time.Minute}, cfg.Budgets.PerInvestigation)
+				require.Equal(t, Limits{MaxTokens: 400_000, MaxToolCalls: 40, MaxWallTime: 10 * time.Minute, MaxCostUSD: 1}, cfg.Budgets.PerInvestigation)
+				require.Equal(t, DailyBudget{MaxCostUSD: 200, TimeZone: "UTC", OnDailyCap: OnDailyCapWait}, cfg.Budgets.Daily)
+				require.Equal(t, int64(200_000_000), cfg.Budgets.Daily.MaxCostMicros())
+				require.Equal(t, &RateLimit{Events: 600, Per: time.Hour, OverLimit: OverLimitDelay}, cfg.Budgets.RateLimit)
 				require.Equal(t, report.Rules{MinFalsePositiveConfidence: report.High}, cfg.Report.Rules())
 				require.Equal(t, exampleStrategiesDir, cfg.Strategies.Dir)
 				require.Equal(t, LogLevelInfo, cfg.Telemetry.LogLevel)
@@ -108,10 +111,16 @@ func TestExampleConfig(t *testing.T) {
 				require.Equal(t, "payments-latency", routes[0].Name)
 				require.Equal(t, 10, routes[0].Priority)
 				require.Equal(t, []event.Severity{event.SeverityWarning, event.SeverityCritical}, routes[0].Match.Severity)
-				require.Equal(t, Limits{MaxToolCalls: 30, MaxWallTime: 10 * time.Minute}, routes[0].Budgets)
+				require.Equal(t, RouteBudgets{
+					Limits: Limits{MaxTokens: 400_000, MaxToolCalls: 30, MaxWallTime: 10 * time.Minute, MaxCostUSD: 0.75},
+					Daily:  RouteDaily{MaxCostUSD: 40, OnDailyCap: OnDailyCapSkip},
+				}, routes[0].Budgets)
+				require.Equal(t, int64(750_000), routes[0].Budgets.MaxCostMicros())
+				require.Equal(t, &RateLimit{Events: 60, Per: time.Hour, OverLimit: OverLimitSkip}, routes[0].RateLimit)
 				require.Equal(t, "default", routes[1].Name)
 				require.Equal(t, action.ReadOnly, routes[1].Mode)
-				require.Equal(t, Limits{MaxToolCalls: 40, MaxWallTime: 10 * time.Minute}, routes[1].Budgets)
+				require.Equal(t, RouteBudgets{Limits: Limits{MaxTokens: 400_000, MaxToolCalls: 40, MaxWallTime: 10 * time.Minute, MaxCostUSD: 1}, Daily: RouteDaily{OnDailyCap: OnDailyCapWait}}, routes[1].Budgets)
+				require.Nil(t, routes[1].RateLimit)
 				require.Equal(t, 8, cfg.Budgets.Concurrency)
 				require.Equal(t, map[string]int{"payments-latency": 3}, cfg.RouteConcurrency())
 			},

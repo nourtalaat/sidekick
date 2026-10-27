@@ -56,22 +56,34 @@ type RoleConnector struct {
 }
 
 // Budget is the content of investigations.budget: the limits in effect for
-// one investigation, fixed when it is created. Zero means no limit.
+// one investigation, fixed when it is created. Zero means no limit, which
+// is also what a budget stored before a limit existed decodes to.
 type Budget struct {
-	MaxToolCalls int
-	MaxWallTime  time.Duration
+	// MaxTokens counts input tokens, including those read from or written
+	// to the prompt cache, and output tokens.
+	MaxTokens     int64
+	MaxToolCalls  int
+	MaxWallTime   time.Duration
+	MaxCostMicros int64
 }
 
 // budgetJSON is how a Budget is stored. The wall time is in milliseconds,
 // so the stored value does not depend on Go's duration format.
 type budgetJSON struct {
+	MaxTokens     int64 `json:"max_tokens,omitempty"`
 	MaxToolCalls  int   `json:"max_tool_calls"`
 	MaxWallTimeMS int64 `json:"max_wall_time_ms"`
+	MaxCostMicros int64 `json:"max_cost_micros,omitempty"`
 }
 
 // MarshalJSON stores the wall time in milliseconds.
 func (b Budget) MarshalJSON() ([]byte, error) {
-	out, err := json.Marshal(budgetJSON{MaxToolCalls: b.MaxToolCalls, MaxWallTimeMS: b.MaxWallTime.Milliseconds()})
+	out, err := json.Marshal(budgetJSON{
+		MaxTokens:     b.MaxTokens,
+		MaxToolCalls:  b.MaxToolCalls,
+		MaxWallTimeMS: b.MaxWallTime.Milliseconds(),
+		MaxCostMicros: b.MaxCostMicros,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("encode the budget: %w", err)
 	}
@@ -86,7 +98,12 @@ func (b *Budget) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("decode the budget: %w", err)
 	}
 
-	*b = Budget{MaxToolCalls: in.MaxToolCalls, MaxWallTime: time.Duration(in.MaxWallTimeMS) * time.Millisecond}
+	*b = Budget{
+		MaxTokens:     in.MaxTokens,
+		MaxToolCalls:  in.MaxToolCalls,
+		MaxWallTime:   time.Duration(in.MaxWallTimeMS) * time.Millisecond,
+		MaxCostMicros: in.MaxCostMicros,
+	}
 
 	return nil
 }

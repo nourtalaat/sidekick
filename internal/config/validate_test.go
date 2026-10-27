@@ -81,6 +81,29 @@ func TestValidateFixtures(t *testing.T) {
 			"routes[0].budgets.maxWallTime: must not be negative",
 		}},
 		{file: "global-budget-zero", want: []string{"budgets.perInvestigation.maxToolCalls: must be positive"}},
+		{file: "route-tokens-cost-above-ceiling", want: []string{
+			"routes[0].budgets.daily.maxCostUSD: must be a dollar amount that is not negative",
+			"routes[0].budgets.maxCostUSD: 2.50 is above the global ceiling budgets.perInvestigation.maxCostUSD 1.00",
+			"routes[0].budgets.maxTokens: 500000 is above the global ceiling budgets.perInvestigation.maxTokens 400000",
+		}},
+		{file: "route-daily-above-global", want: []string{
+			"routes[0].budgets.daily.maxCostUSD: 20.00 is above the global cap budgets.daily.maxCostUSD 10.00",
+			`routes[0].budgets.daily.onDailyCap: unknown value "wiat" (did you mean "wait"?)`,
+		}},
+		{file: "daily-bad-time-zone", want: []string{
+			"budgets.daily.maxCostUSD: must be a dollar amount that is not negative",
+			`budgets.daily.timeZone: unknown time zone "Mars/Olympus": use an IANA name such as UTC or Europe/Berlin`,
+			"budgets.perInvestigation.maxCostUSD: must be a positive dollar amount",
+			"budgets.perInvestigation.maxTokens: must be positive",
+		}},
+		{file: "rate-limit-invalid", want: []string{
+			"budgets.rateLimit.events: must be positive",
+			`budgets.rateLimit.overLimit: unknown value "dely" (did you mean "delay"?)`,
+			"budgets.rateLimit.per: must be positive",
+		}},
+		{file: "route-rate-limit-looser", want: []string{
+			"routes[0].rateLimit: 120 events per 1h0m0s is looser than the global limit budgets.rateLimit of 10 events per 10m0s",
+		}},
 		{file: "route-concurrency-above-global", want: []string{
 			"routes[0].concurrency: 12 is above the global limit budgets.concurrency 8",
 			"routes[1].concurrency: must not be negative",

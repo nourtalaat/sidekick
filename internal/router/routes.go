@@ -32,6 +32,8 @@ type route struct {
 	budget     []byte
 	// outputs are the sinks the investigation's updates go to.
 	outputs []string
+	// rateLimit is the route's own rate limit, nil for none.
+	rateLimit *config.RateLimit
 	// grouping decides which group the route's events join.
 	grouping grouper.Route
 }
@@ -100,7 +102,7 @@ func newRoute(rc config.Route, globalRoles map[model.Role]string, strategies *st
 		return route{}, fmt.Errorf("encode the connectors: %w", err)
 	}
 
-	budgetJSON, err := json.Marshal(effectiveBudget(rc.Budgets, st.Budgets))
+	budgetJSON, err := json.Marshal(effectiveBudget(rc.Budgets.Limits, st.Budgets))
 	if err != nil {
 		return route{}, fmt.Errorf("encode the budget: %w", err)
 	}
@@ -114,6 +116,7 @@ func newRoute(rc config.Route, globalRoles map[model.Role]string, strategies *st
 		connectors:      connectorsJSON,
 		budget:          budgetJSON,
 		outputs:         rc.Outputs,
+		rateLimit:       rc.RateLimit,
 		grouping: grouper.Route{
 			Name:              rc.Name,
 			Window:            rc.Grouping.Window,
@@ -139,13 +142,15 @@ func pick(routes []route, c candidate) (route, bool) {
 // is loaded, the route always has one.
 func effectiveBudget(r config.Limits, s strategy.Budgets) investigator.Budget {
 	return investigator.Budget{
-		MaxToolCalls: lower(r.MaxToolCalls, s.MaxToolCalls),
-		MaxWallTime:  lower(r.MaxWallTime, s.MaxWallTime),
+		MaxTokens:     int64(lower(r.MaxTokens, s.MaxTokens)),
+		MaxToolCalls:  lower(r.MaxToolCalls, s.MaxToolCalls),
+		MaxWallTime:   lower(r.MaxWallTime, s.MaxWallTime),
+		MaxCostMicros: lower(r.MaxCostMicros(), config.Limits{MaxCostUSD: s.MaxCostUSD}.MaxCostMicros()),
 	}
 }
 
 // lower returns the lower of two limits, where zero means no limit.
-func lower[T int | time.Duration](a, b T) T {
+func lower[T int | int64 | time.Duration](a, b T) T {
 	switch {
 	case a == 0:
 		return b

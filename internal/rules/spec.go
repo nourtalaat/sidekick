@@ -27,9 +27,9 @@ type senderSpec struct {
 	Users []string `json:"users,omitempty"`
 }
 
-// routeSpec is the spec column of a runtime route: every part of a file
-// route except its name and priority. Durations are written as Go
-// durations, such as 10m0s.
+// routeSpec is the spec column of a runtime route: the parts of a file
+// route that Slack can set, without its name and priority. Durations are
+// written as Go durations, such as 10m0s.
 type routeSpec struct {
 	Match    *matchSpec   `json:"match,omitempty"`
 	Strategy string       `json:"strategy,omitempty"`
@@ -49,8 +49,10 @@ type matchSpec struct {
 }
 
 type budgetSpec struct {
-	MaxToolCalls int    `json:"maxToolCalls,omitempty"`
-	MaxWallTime  string `json:"maxWallTime,omitempty"`
+	MaxTokens    int     `json:"maxTokens,omitempty"`
+	MaxToolCalls int     `json:"maxToolCalls,omitempty"`
+	MaxWallTime  string  `json:"maxWallTime,omitempty"`
+	MaxCostUSD   float64 `json:"maxCostUSD,omitempty"`
 }
 
 type groupingSpec struct {
@@ -124,7 +126,9 @@ func routeOfRow(row db.Route) (Route, error) {
 	r.Sources = s.Sources
 	r.Outputs = s.Outputs
 	r.Grouping.FingerprintLabels = s.Grouping.FingerprintLabels
+	r.Budgets.MaxTokens = s.Budgets.MaxTokens
 	r.Budgets.MaxToolCalls = s.Budgets.MaxToolCalls
+	r.Budgets.MaxCostUSD = s.Budgets.MaxCostUSD
 
 	if s.Strategy != "" {
 		r.Strategy = s.Strategy
@@ -178,7 +182,12 @@ func specOfRoute(r config.Route) routeSpec {
 		Sources:  r.Sources,
 		Mode:     string(r.Mode),
 		Outputs:  r.Outputs,
-		Budgets:  budgetSpec{MaxToolCalls: r.Budgets.MaxToolCalls, MaxWallTime: durationText(r.Budgets.MaxWallTime)},
+		Budgets: budgetSpec{
+			MaxTokens:    r.Budgets.MaxTokens,
+			MaxToolCalls: r.Budgets.MaxToolCalls,
+			MaxWallTime:  durationText(r.Budgets.MaxWallTime),
+			MaxCostUSD:   r.Budgets.MaxCostUSD,
+		},
 		Grouping: groupingSpec{Window: durationText(r.Grouping.Window), FingerprintLabels: r.Grouping.FingerprintLabels},
 	}
 

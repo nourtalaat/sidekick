@@ -41,6 +41,9 @@ type newStep struct {
 	usage            *model.Usage
 	cost             *int64
 
+	// budget names the budget of the note that starts the final turn.
+	budget string
+
 	// toolCalls counts toward the tool call limit; finding marks an
 	// accepted record_finding.
 	toolCalls int32
@@ -54,8 +57,9 @@ type newStep struct {
 }
 
 // save writes s as the next step, in one transaction with the fenced
-// advance of next_seq, the marking of the inbox items it delivers and,
-// when the step adds a progress line, the new publish state. It returns the saved step, or an error that wraps
+// advance of next_seq, the daily spend of a model turn, the marking of
+// the inbox items it delivers and, when the step adds a progress line, the
+// new publish state. It returns the saved step, or an error that wraps
 // queue.ErrLeaseLost when a newer claim owns the run.
 func (r *run) save(ctx context.Context, s newStep) (db.Step, error) {
 	params, err := r.stepParams(s)
@@ -99,6 +103,12 @@ func (r *run) save(ctx context.Context, s newStep) (db.Step, error) {
 
 		if err := queries.InsertStep(ctx, params); err != nil {
 			return fmt.Errorf("insert step %d: %w", step.Seq, err)
+		}
+
+		if s.kind == kindModelTurn {
+			if err := r.addSpend(ctx, tx, s); err != nil {
+				return fmt.Errorf("step %d: %w", step.Seq, err)
+			}
 		}
 
 		if err := markDelivered(ctx, queries, r.inv.ID, step.Seq, s.inbox); err != nil {
@@ -180,6 +190,7 @@ func (r *run) stepParams(s newStep) (db.InsertStepParams, error) {
 		CostMicros:      s.cost,
 		StartedAt:       s.startedAt,
 		DurationMs:      int32(min(s.duration.Milliseconds(), maxDurationMS)), //nolint:gosec // Capped at maxDurationMS.
+		Budget:          optional(s.budget),
 	}
 
 	if len(s.evidence) > 0 {

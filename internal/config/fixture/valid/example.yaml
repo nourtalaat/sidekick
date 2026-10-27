@@ -119,7 +119,8 @@ routes:
     sources: [signoz]
     mode: read-only
     outputs: [slack-thread]
-    budgets: { maxToolCalls: 30 }
+    budgets: { maxToolCalls: 30, maxCostUSD: 0.75, daily: { maxCostUSD: 40, onDailyCap: skip } }
+    rateLimit: { events: 60, per: 1h, overLimit: skip }
     concurrency: 3
   - name: default
     strategy: generic-alert
@@ -127,8 +128,10 @@ routes:
     outputs: [slack-thread]
 
 budgets:
-  perInvestigation: { maxToolCalls: 40, maxWallTime: 10m }
+  perInvestigation: { maxTokens: 400000, maxToolCalls: 40, maxWallTime: 10m, maxCostUSD: 1.00 }
+  daily: { maxCostUSD: 200, timeZone: UTC, onDailyCap: wait }
   concurrency: 8
+  rateLimit: { events: 600, per: 1h }
 
 report:
   minFalsePositiveConfidence: high

@@ -62,7 +62,7 @@ func TestCheckRuntimeRoute(t *testing.T) {
 		},
 		{
 			name:  "a budget above the file ceiling",
-			route: route(func(r *Route) { r.Budgets = Limits{MaxToolCalls: 80, MaxWallTime: time.Hour} }),
+			route: route(func(r *Route) { r.Budgets = RouteBudgets{Limits: Limits{MaxToolCalls: 80, MaxWallTime: time.Hour}} }),
 			want: []string{
 				"routes.checkout.budgets.maxToolCalls: 80 is above the global ceiling budgets.perInvestigation.maxToolCalls 40",
 				"routes.checkout.budgets.maxWallTime: 1h0m0s is above the global ceiling budgets.perInvestigation.maxWallTime 10m0s",

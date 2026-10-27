@@ -168,7 +168,8 @@ func TestMergeFillsRuntimeBudgets(t *testing.T) {
 	}})
 
 	require.Equal(t, "checkout", e.Routes[0].Config.Name)
-	require.Equal(t, config.Limits{MaxToolCalls: 20, MaxWallTime: 10 * time.Minute}, e.Routes[0].Config.Budgets)
+	require.Equal(t, 20, e.Routes[0].Config.Budgets.MaxToolCalls)
+	require.Equal(t, 10*time.Minute, e.Routes[0].Config.Budgets.MaxWallTime)
 }
 
 func TestMergeListeners(t *testing.T) {

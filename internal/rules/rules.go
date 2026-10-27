@@ -202,7 +202,7 @@ func (e *Effective) mergeRoutes(ctx context.Context, file *config.Config, runtim
 				continue
 			}
 
-			e.Routes = append(e.Routes, EffectiveRoute{Config: withGlobalBudgets(r.Config, file.Budgets.PerInvestigation), Layer: LayerRuntime})
+			e.Routes = append(e.Routes, EffectiveRoute{Config: file.ResolveRuntimeRoute(r.Config), Layer: LayerRuntime})
 		}
 	}
 
@@ -234,17 +234,4 @@ func compareRoutes(a, b EffectiveRoute) int {
 	}
 
 	return cmp.Compare(a.Config.Name, b.Config.Name)
-}
-
-// withGlobalBudgets fills the limits r leaves unset with the global ones.
-func withGlobalBudgets(r config.Route, global config.Limits) config.Route {
-	if r.Budgets.MaxToolCalls == 0 {
-		r.Budgets.MaxToolCalls = global.MaxToolCalls
-	}
-
-	if r.Budgets.MaxWallTime == 0 {
-		r.Budgets.MaxWallTime = global.MaxWallTime
-	}
-
-	return r
 }

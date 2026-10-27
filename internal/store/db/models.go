@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type AuditLog struct {
@@ -133,6 +134,11 @@ type Listener struct {
 	UpdatedAt    time.Time
 }
 
+type Notice struct {
+	Key    string
+	SentAt time.Time
+}
+
 type OutputRef struct {
 	InvestigationID uuid.UUID
 	Sink            string
@@ -150,6 +156,12 @@ type PublishState struct {
 	Body            json.RawMessage
 	UpdatedAt       time.Time
 	UpdateSeq       *int64
+}
+
+type RateAdmission struct {
+	Scope      string
+	EventID    uuid.UUID
+	AdmittedAt time.Time
 }
 
 type Route struct {
@@ -170,6 +182,16 @@ type SlackIdentity struct {
 	Groups      []string
 	Role        *string
 	RefreshedAt time.Time
+}
+
+type SpendDaily struct {
+	Day          pgtype.Date
+	Route        string
+	Connector    string
+	Model        string
+	CostMicros   int64
+	InputTokens  int64
+	OutputTokens int64
 }
 
 type Step struct {
@@ -193,4 +215,5 @@ type Step struct {
 	CostMicros       *int64
 	StartedAt        time.Time
 	DurationMs       int32
+	Budget           *string
 }

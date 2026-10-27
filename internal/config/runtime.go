@@ -71,6 +71,14 @@ func (c *Config) CheckRuntimeListener(ctx context.Context, name string, l Listen
 	return v.errs.err()
 }
 
+// ResolveRuntimeRoute returns r with the budgets it leaves unset filled
+// from the global ones, as Load does for file routes.
+func (c *Config) ResolveRuntimeRoute(r Route) Route {
+	resolveRouteBudgets(&r.Budgets, c.Budgets)
+
+	return r
+}
+
 // runtimeValidator returns a validator for runtime rules on c, with the
 // strategies c was loaded with, and runtimeListeners as further intakes.
 func (c *Config) runtimeValidator(ctx context.Context, runtimeListeners []string) *validator {
