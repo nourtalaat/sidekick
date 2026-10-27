@@ -7,6 +7,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/app"
 	"github.com/nourtalaat/sidekick/internal/config"
+	"github.com/nourtalaat/sidekick/internal/rules"
 	"github.com/nourtalaat/sidekick/internal/slackapp"
 )
 
@@ -14,7 +15,7 @@ import (
 // app receive them: over Socket Mode with the app token, or at
 // POST /slack/events in events mode. Without either, Sidekick only posts
 // to Slack.
-func registerSlackApp(ctx context.Context, a *app.App) error {
+func registerSlackApp(ctx context.Context, a *app.App, cache *rules.Cache) error {
 	cfg := a.Config()
 	log := a.Logger().With("component", "slackapp")
 
@@ -38,6 +39,18 @@ func registerSlackApp(ctx context.Context, a *app.App) error {
 	if err != nil {
 		return fmt.Errorf("set up the Slack app: %w", err)
 	}
+
+	if err := h.SetListeners(cache.Current().ListenerConfigs()); err != nil {
+		return fmt.Errorf("use the runtime listeners: %w", err)
+	}
+
+	cache.Subscribe(func(_ context.Context, e *rules.Effective) error {
+		if err := h.SetListeners(e.ListenerConfigs()); err != nil {
+			return fmt.Errorf("apply the runtime listeners: %w", err)
+		}
+
+		return nil
+	})
 
 	if cfg.Slack.Mode == config.SlackModeEvents {
 		if err := a.RegisterRoutes(func(mux *http.ServeMux) {

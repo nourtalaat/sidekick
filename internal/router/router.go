@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -70,11 +71,15 @@ type Options struct {
 // Router handles route_event jobs. Make it with New and register it for
 // queue.KindRouteEvent.
 type Router struct {
-	routes  []route
-	pool    *pgxpool.Pool
-	grouper *grouper.Grouper
-	log     *slog.Logger
-	tracer  trace.Tracer
+	// routes are the routes in effect, in the order they are tried.
+	// SetRoutes replaces them while events are routed.
+	routes        atomic.Pointer[[]route]
+	cfg           *config.Config
+	modelSettings map[string]model.Settings
+	pool          *pgxpool.Pool
+	grouper       *grouper.Grouper
+	log           *slog.Logger
+	tracer        trace.Tracer
 }
 
 var _ queue.Handler = (*Router)(nil)
@@ -102,13 +107,32 @@ func New(opts Options) (*Router, error) {
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	return &Router{
-		routes:  routes,
-		pool:    opts.Pool,
-		grouper: grouper.New(grouper.Options{Logger: log, TracerProvider: tp}),
-		log:     log,
-		tracer:  tp.Tracer(tracerName),
-	}, nil
+	r := &Router{
+		cfg:           opts.Config,
+		modelSettings: opts.ModelSettings,
+		pool:          opts.Pool,
+		grouper:       grouper.New(grouper.Options{Logger: log, TracerProvider: tp}),
+		log:           log,
+		tracer:        tp.Tracer(tracerName),
+	}
+	r.routes.Store(&routes)
+
+	return r, nil
+}
+
+// SetRoutes replaces the routes in effect with ordered, which must already
+// be in the order they are tried, as rules.Effective lists them. Events
+// routed after it returns use the new routes. On an error the routes stay
+// as they were.
+func (r *Router) SetRoutes(ordered []config.Route) error {
+	routes, err := compileRoutes(r.cfg, ordered, r.modelSettings)
+	if err != nil {
+		return fmt.Errorf("prepare the routes: %w", err)
+	}
+
+	r.routes.Store(&routes)
+
+	return nil
 }
 
 // Handle routes the event of one route_event job inside a router.route
@@ -246,7 +270,7 @@ func (r *Router) match(ev db.Event) (route, error) {
 		return route{}, fmt.Errorf("%w: %w", queue.ErrGiveUp, err)
 	}
 
-	rt, ok := pick(r.routes, c)
+	rt, ok := pick(*r.routes.Load(), c)
 	if !ok {
 		return route{}, fmt.Errorf("%w: %w", queue.ErrGiveUp, errNoRoute)
 	}
