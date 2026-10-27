@@ -19,6 +19,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/publish"
 	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // SpanName is the name of the span of grouping one event.
@@ -159,19 +160,27 @@ func (g *Grouper) tryGroup(ctx context.Context, tx pgx.Tx, ev db.Event, rt Route
 
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
+		return g.open(ctx, tx, ev, rt, fp)
 	case err != nil:
 		return Result{}, false, fmt.Errorf("find the open group: %w", err)
-	case joinable(open, ev, rt):
+	}
+
+	watching, err := watch.HasRunning(ctx, tx, open.ID, time.Now())
+	if err != nil {
+		return Result{}, false, fmt.Errorf("group %s: %w", open.ID, err)
+	}
+
+	if joinable(open, ev, rt, watching) {
 		res, err := g.join(ctx, tx, open, ev, rt)
 		if err != nil {
 			return Result{}, false, fmt.Errorf("join group %s: %w", open.ID, err)
 		}
 
 		return res, true, nil
-	default:
-		if err := closeGroup(ctx, g.log, queries, open.ID, ClosedWindowEnded); err != nil {
-			return Result{}, false, fmt.Errorf("close group %s: %w", open.ID, err)
-		}
+	}
+
+	if err := closeGroup(ctx, g.log, queries, open.ID, ClosedWindowEnded); err != nil {
+		return Result{}, false, fmt.Errorf("close group %s: %w", open.ID, err)
 	}
 
 	return g.open(ctx, tx, ev, rt, fp)
@@ -255,24 +264,16 @@ func (g *Grouper) open(ctx context.Context, tx pgx.Tx, ev db.Event, rt Route, fp
 }
 
 // joinable reports whether ev joins the open group grp: it arrived before
-// the group's window ended, or a watcher keeps the group open. A group
-// without a window, opened before groups had one, ends rt.Window after its
-// newest event.
-func joinable(grp db.EventGroup, ev db.Event, rt Route) bool {
+// the group's window ended, or watching says a watcher keeps the group
+// open. A group without a window, opened before groups had one, ends
+// rt.Window after its newest event.
+func joinable(grp db.EventGroup, ev db.Event, rt Route, watching bool) bool {
 	end := grp.LastEventAt.Add(rt.Window)
 	if grp.WindowUntil != nil {
 		end = *grp.WindowUntil
 	}
 
-	return ev.ReceivedAt.Before(end) || watchersRunning(grp)
-}
-
-// watchersRunning reports whether grp has a running watcher, which keeps
-// it open after its window ends.
-//
-// TODO: [SK-31] Look up the group's running watchers once they exist.
-func watchersRunning(db.EventGroup) bool {
-	return false
+	return ev.ReceivedAt.Before(end) || watching
 }
 
 // markGrouped records that the event with id is in the group with groupID.
