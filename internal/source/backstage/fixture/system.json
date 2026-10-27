@@ -1,0 +1,12 @@
+{
+  "apiVersion": "backstage.io/v1alpha1",
+  "kind": "System",
+  "metadata": {"name": "shop", "namespace": "default", "title": "Shop"},
+  "spec": {"owner": "payments", "domain": "commerce"},
+  "relations": [
+    {"type": "ownedBy", "targetRef": "group:default/payments"},
+    {"type": "partOf", "targetRef": "domain:default/commerce"},
+    {"type": "hasPart", "targetRef": "component:default/checkout-api"},
+    {"type": "hasPart", "targetRef": "resource:default/orders-db"}
+  ]
+}

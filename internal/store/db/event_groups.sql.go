@@ -143,6 +143,46 @@ func (q *Queries) LockOpenEventGroup(ctx context.Context, fingerprint string) (E
 	return i, err
 }
 
+const lockRelatedEventGroup = `-- name: LockRelatedEventGroup :one
+SELECT id, fingerprint, route, service, status, event_count, opened_at, last_event_at, window_until, closed_reason, investigation_id FROM event_groups
+WHERE status = 'open'
+  AND service = ANY ($1::text[])
+  AND last_event_at >= $2
+  AND route = $3
+ORDER BY last_event_at DESC, id DESC
+LIMIT 1
+FOR UPDATE
+`
+
+type LockRelatedEventGroupParams struct {
+	Services []string
+	Since    time.Time
+	Route    string
+}
+
+// LockRelatedEventGroup returns the open group of a route whose service is
+// one of services and whose newest event is at or after since, the one
+// with the newest event first, and locks it until the transaction ends. It
+// returns no row when there is none.
+func (q *Queries) LockRelatedEventGroup(ctx context.Context, arg LockRelatedEventGroupParams) (EventGroup, error) {
+	row := q.db.QueryRow(ctx, lockRelatedEventGroup, arg.Services, arg.Since, arg.Route)
+	var i EventGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Fingerprint,
+		&i.Route,
+		&i.Service,
+		&i.Status,
+		&i.EventCount,
+		&i.OpenedAt,
+		&i.LastEventAt,
+		&i.WindowUntil,
+		&i.ClosedReason,
+		&i.InvestigationID,
+	)
+	return i, err
+}
+
 const openEventGroup = `-- name: OpenEventGroup :one
 INSERT INTO event_groups (
   id, fingerprint, route, service, status, opened_at, last_event_at, window_until, investigation_id

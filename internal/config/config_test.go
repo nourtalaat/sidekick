@@ -89,7 +89,7 @@ func TestParseDefaults(t *testing.T) {
 server: {listen: ":1"}
 budgets: {perInvestigation: {maxToolCalls: 10}, concurrency: 4}
 routes:
-  - {name: a, priority: 0, budgets: {maxWallTime: 1m}, concurrency: 2, grouping: {window: 5m, fingerprintLabels: [service, env]}}
+  - {name: a, priority: 0, budgets: {maxWallTime: 1m}, concurrency: 2, grouping: {window: 5m, relatedWindow: 2m, fingerprintLabels: [service, env]}}
   - {name: default}
 `,
 			check: func(t *testing.T, cfg *Config) {
@@ -100,7 +100,7 @@ routes:
 				require.Equal(t, RouteBudgets{Limits: Limits{MaxTokens: 400_000, MaxToolCalls: 10, MaxWallTime: time.Minute, MaxCostUSD: 1}, Daily: RouteDaily{OnDailyCap: OnDailyCapWait}}, cfg.Routes[0].Budgets)
 				require.Equal(t, 4, cfg.Budgets.Concurrency)
 				require.Equal(t, map[string]int{"a": 2}, cfg.RouteConcurrency())
-				require.Equal(t, Grouping{Window: 5 * time.Minute, FingerprintLabels: []string{"service", "env"}}, cfg.Routes[0].Grouping)
+				require.Equal(t, Grouping{Window: 5 * time.Minute, FingerprintLabels: []string{"service", "env"}, RelatedWindow: 2 * time.Minute}, cfg.Routes[0].Grouping)
 				require.Equal(t, Grouping{Window: DefaultGroupingWindow}, cfg.Routes[1].Grouping)
 			},
 		},
