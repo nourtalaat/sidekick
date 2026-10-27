@@ -1,0 +1,3 @@
+# No workload identity. EKS Pod Identity also uses this service account as
+# it is, since its association is made outside the chart.
+serviceAccount: {}

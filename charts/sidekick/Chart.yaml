@@ -1,0 +1,19 @@
+apiVersion: v2
+name: sidekick
+description: Investigates alerts with an LLM and your tools, and says whether each one is real.
+type: application
+# The release workflow sets version and appVersion from the tag it runs on.
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.29.0-0"
+home: https://github.com/nourtalaat/sidekick
+icon: https://raw.githubusercontent.com/nourtalaat/sidekick/main/assets/sidekick-icon.png
+sources:
+  - https://github.com/nourtalaat/sidekick
+keywords:
+  - alerts
+  - incident-response
+  - llm
+  - observability
+annotations:
+  artifacthub.io/license: Apache-2.0

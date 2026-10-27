@@ -1,0 +1,3 @@
+serviceAccount:
+  workloadIdentity:
+    awsRoleArn: arn:aws:iam::111122223333:role/sidekick-bedrock
