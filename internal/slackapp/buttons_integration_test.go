@@ -1,0 +1,499 @@
+//go:build integration
+
+package slackapp
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"slices"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+
+	"github.com/nourtalaat/sidekick/internal/fakehttp"
+	"github.com/nourtalaat/sidekick/internal/feedback"
+	"github.com/nourtalaat/sidekick/internal/investigator"
+	"github.com/nourtalaat/sidekick/internal/investigator/tools"
+	"github.com/nourtalaat/sidekick/internal/model"
+	"github.com/nourtalaat/sidekick/internal/model/modeltest"
+	"github.com/nourtalaat/sidekick/internal/model/pricing"
+	"github.com/nourtalaat/sidekick/internal/output"
+	slackout "github.com/nourtalaat/sidekick/internal/output/slack"
+	"github.com/nourtalaat/sidekick/internal/queue"
+	"github.com/nourtalaat/sidekick/internal/redact"
+	"github.com/nourtalaat/sidekick/internal/report"
+	"github.com/nourtalaat/sidekick/internal/roles"
+	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/store/storetest"
+	"github.com/nourtalaat/sidekick/internal/strategy"
+	"github.com/nourtalaat/sidekick/strategies"
+)
+
+// The investigations in fixture/investigations.sql.
+var (
+	finalInvestigation  = uuid.MustParse("0192d3a4-0000-7000-8000-0000000000c1")
+	queuedInvestigation = uuid.MustParse("0192d3a4-0000-7000-8000-0000000000c2")
+)
+
+// stopWithin is how soon a stopped run must end.
+const stopWithin = 5 * time.Second
+
+// responsePath is the path of the response URL of the test clicks.
+const responsePath = "/actions/T01TEAM/1/xyz"
+
+// testWorker is the locked_by value of the jobs the tests claim.
+const testWorker = "test-worker"
+
+// clickBy is a click on one of Sidekick's buttons.
+type clickBy struct {
+	user   string
+	action string
+	id     uuid.UUID
+}
+
+func TestInteractivity(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// role is the role every user has; zero means responder.
+		role roles.Role
+		// before are clicks sent first; their answers must be 200.
+		before []clickBy
+		send   clickBy
+		// forged signs the request with the wrong secret.
+		forged     bool
+		wantStatus int
+		// wantNotes are the notes posted to the user, in order.
+		wantNotes []string
+		check     func(t *testing.T, b *buttonsHarness)
+	}{
+		{
+			name:       "Correct confirms the verdict and shows who gave it",
+			send:       clickBy{user: "U01ANA", action: slackout.ActionVerdictCorrect, id: finalInvestigation},
+			wantStatus: http.StatusOK,
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				inv := b.investigation(t, finalInvestigation)
+				require.Equal(t, "true_positive", *inv.ConfirmedVerdict)
+				require.Equal(t, "U01ANA", *inv.ConfirmedBySlackUser)
+				require.Equal(t, []output.Feedback{{Rating: output.RatingCorrect, By: output.Person{SlackUserID: "U01ANA"}}}, b.ratings(t))
+				require.Equal(t, int64(6), b.publishSeq(t, finalInvestigation), "the message is shown again")
+				require.Equal(t, 1, b.publishJobs(t))
+				require.InDelta(t, 1, b.feedbackCount(t, output.RatingCorrect), 0)
+			},
+		},
+		{
+			name:       "Wrong is stored without confirming the verdict",
+			send:       clickBy{user: "U01ANA", action: slackout.ActionVerdictWrong, id: finalInvestigation},
+			wantStatus: http.StatusOK,
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				require.Nil(t, b.investigation(t, finalInvestigation).ConfirmedVerdict)
+				require.Equal(t, []output.Feedback{{Rating: output.RatingWrong, By: output.Person{SlackUserID: "U01ANA"}}}, b.ratings(t))
+				require.Equal(t, int64(6), b.publishSeq(t, finalInvestigation))
+				require.InDelta(t, 1, b.feedbackCount(t, output.RatingWrong), 0)
+			},
+		},
+		{
+			name:       "a repeated click changes nothing",
+			before:     []clickBy{{user: "U01ANA", action: slackout.ActionVerdictCorrect, id: finalInvestigation}},
+			send:       clickBy{user: "U01ANA", action: slackout.ActionVerdictCorrect, id: finalInvestigation},
+			wantStatus: http.StatusOK,
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				require.Len(t, b.ratings(t), 1)
+				require.Equal(t, int64(6), b.publishSeq(t, finalInvestigation), "only the first click shows the message again")
+				require.InDelta(t, 1, b.feedbackCount(t, output.RatingCorrect), 0, "only the first click counts")
+			},
+		},
+		{
+			name:       "Stop asks the run to stop",
+			send:       clickBy{user: "U01STOP", action: slackout.ActionStop, id: queuedInvestigation},
+			wantStatus: http.StatusOK,
+			wantNotes:  []string{noteStopping},
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				inv := b.investigation(t, queuedInvestigation)
+				require.NotNil(t, inv.CancelRequestedAt)
+				require.Equal(t, "U01STOP", *inv.CancelRequestedBySlackUser)
+			},
+		},
+		{
+			name:       "a repeated Stop says the run is stopping already",
+			before:     []clickBy{{user: "U01STOP", action: slackout.ActionStop, id: queuedInvestigation}},
+			send:       clickBy{user: "U01BEN", action: slackout.ActionStop, id: queuedInvestigation},
+			wantStatus: http.StatusOK,
+			wantNotes:  []string{noteStopping, noteEnded},
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				require.Equal(t, "U01STOP", *b.investigation(t, queuedInvestigation).CancelRequestedBySlackUser, "the first Stop is kept")
+			},
+		},
+		{
+			name:       "Correct before there is a verdict",
+			send:       clickBy{user: "U01ANA", action: slackout.ActionVerdictCorrect, id: queuedInvestigation},
+			wantStatus: http.StatusOK,
+			wantNotes:  []string{noteNoVerdict},
+			check:      requireNoRatings,
+		},
+		{
+			name:       "a viewer is denied",
+			role:       roles.Viewer,
+			send:       clickBy{user: "U01VIEW", action: slackout.ActionStop, id: queuedInvestigation},
+			wantStatus: http.StatusOK,
+			wantNotes:  []string{noteDenied},
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				require.Nil(t, b.investigation(t, queuedInvestigation).CancelRequestedAt)
+			},
+		},
+		{
+			name:       "a forged signature is refused",
+			send:       clickBy{user: "U01ANA", action: slackout.ActionVerdictCorrect, id: finalInvestigation},
+			forged:     true,
+			wantStatus: http.StatusUnauthorized,
+			check:      requireNoRatings,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			role := tt.role
+			if role == 0 {
+				role = roles.Responder
+			}
+
+			b := setupButtons(t, role)
+
+			for _, c := range tt.before {
+				require.Equal(t, http.StatusOK, b.click(t, c, false))
+			}
+
+			require.Equal(t, tt.wantStatus, b.click(t, tt.send, tt.forged))
+			require.Equal(t, tt.wantNotes, b.notes(t))
+			tt.check(t, b)
+		})
+	}
+}
+
+// TestStopAcrossReplicas presses Stop on one replica while the run waits
+// for a slow model call on another, and checks that the run ends as
+// cancelled within a few seconds.
+func TestStopAcrossReplicas(t *testing.T) {
+	t.Parallel()
+
+	b := setupButtons(t, roles.Responder)
+
+	started := make(chan struct{})
+	slow := modeltest.New(t, model.Capabilities{ToolCalling: true}, modeltest.Turn{
+		Func: func(ctx context.Context, _ model.Request) (model.Response, error) {
+			close(started)
+			<-ctx.Done()
+
+			return model.Response{}, &model.Error{Kind: model.ErrTimeout, Err: ctx.Err()}
+		},
+	})
+	slow.ExpectAllUsed()
+
+	// Replica A runs the investigation on a pool of its own.
+	poolA, err := pgxpool.NewWithConfig(t.Context(), b.pool.Config().Copy())
+	require.NoError(t, err)
+	t.Cleanup(poolA.Close)
+
+	canceller := investigator.NewCanceller(poolA, slog.New(slog.DiscardHandler))
+
+	go func() { _ = canceller.Run(t.Context()) }()
+
+	runner := newInvestigator(t, poolA, slow, canceller)
+
+	jobs, err := db.New(poolA).ClaimJobs(t.Context(), db.ClaimJobsParams{
+		Worker: testWorker, LeaseSeconds: time.Minute.Seconds(), Kinds: []string{queue.KindInvestigate}, Batch: 1,
+	})
+	require.NoError(t, err)
+	require.Len(t, jobs, 1)
+
+	done := make(chan error, 1)
+
+	go func() { done <- runner.Handle(t.Context(), jobs[0]) }()
+
+	select {
+	case <-started:
+	case <-time.After(stopWithin):
+		t.Fatal("the model call did not start")
+	}
+
+	// Replica B, the one Slack sends the click to, has the test's pool.
+	require.Equal(t, http.StatusOK, b.click(t, clickBy{user: "U01STOP", action: slackout.ActionStop, id: queuedInvestigation}, false))
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(stopWithin):
+		t.Fatalf("the run did not end within %s of the Stop", stopWithin)
+	}
+
+	inv := b.investigation(t, queuedInvestigation)
+	require.Equal(t, investigator.StatusCancelled, inv.Status)
+	require.Equal(t, string(report.StopCancelled), *inv.StopReason)
+	require.Equal(t, "U01STOP", *inv.CancelRequestedBySlackUser)
+}
+
+// buttonsHarness serves Buttons at InteractivityPattern on the Slack app
+// harness, with the investigations of fixture/investigations.sql and a
+// fake Slack that takes the notes posted to response URLs.
+type buttonsHarness struct {
+	*harness
+
+	buttons *Buttons
+	// responses is Slack's side of the response URL.
+	responses *fakehttp.Server
+	url       string
+
+	mu sync.Mutex
+	// posted are the notes posted to the user who clicked, in order.
+	posted []string
+}
+
+// fixedRole gives every user one role.
+type fixedRole roles.Role
+
+func (r fixedRole) Role(context.Context, string, string) (roles.Role, error) {
+	return roles.Role(r), nil
+}
+
+func setupButtons(t *testing.T, role roles.Role) *buttonsHarness {
+	t.Helper()
+
+	h := setup(t)
+	storetest.LoadFixture(t, h.pool, "fixture/investigations.sql")
+
+	metrics, err := feedback.NewMetrics(h.reg)
+	require.NoError(t, err)
+
+	b := &buttonsHarness{harness: h, responses: fakehttp.New(t)}
+	b.responses.HandleFunc(http.MethodPost, responsePath, b.record)
+
+	b.buttons = NewButtons(ButtonsOptions{
+		Handler: h.handler,
+		Pool:    h.pool,
+		Roles:   fixedRole(role),
+		Metrics: metrics,
+		HTTP:    b.responses.Client(),
+		Logger:  slog.New(slog.DiscardHandler),
+	})
+
+	mux := http.NewServeMux()
+	mux.Handle(InteractivityPattern, b.buttons)
+
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	b.url = server.URL + "/slack/interactivity"
+
+	return b
+}
+
+// click sends c to POST /slack/interactivity as Slack does, signed with
+// the test signing secret, or a wrong one when forged is set, and returns
+// the status of the answer.
+func (b *buttonsHarness) click(t *testing.T, c clickBy, forged bool) int {
+	t.Helper()
+
+	payload, err := json.Marshal(map[string]any{
+		"type":         "block_actions",
+		"team":         map[string]string{"id": "T01TEAM"},
+		"user":         map[string]string{"id": c.user},
+		"api_app_id":   "A01SIDEKICK",
+		"response_url": b.responses.URL() + responsePath,
+		"channel":      map[string]string{"id": "C01ALERTS"},
+		"actions": []map[string]any{{
+			"type": "button", "action_id": c.action, "block_id": "feedback", "value": c.id.String(),
+			"action_ts": "1793023330.000300",
+		}},
+	})
+	require.NoError(t, err)
+
+	body := []byte(url.Values{payloadField: {string(payload)}}.Encode())
+
+	secret := testSigningSecret
+	if forged {
+		secret = "not-the-signing-secret"
+	}
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, b.url, bytes.NewReader(body))
+	require.NoError(t, err)
+
+	req.Header = signed(secret, time.Now(), body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+
+	return resp.StatusCode
+}
+
+// record keeps the text of one note posted to the response URL.
+func (b *buttonsHarness) record(w http.ResponseWriter, r *http.Request) {
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+
+		return
+	}
+
+	var note struct {
+		ResponseType    string `json:"response_type"`
+		ReplaceOriginal bool   `json:"replace_original"`
+		Text            string `json:"text"`
+	}
+
+	if err := json.Unmarshal(raw, &note); err != nil || note.ResponseType != "ephemeral" || note.ReplaceOriginal {
+		http.Error(w, "not an ephemeral note", http.StatusBadRequest)
+
+		return
+	}
+
+	b.mu.Lock()
+	b.posted = append(b.posted, note.Text)
+	b.mu.Unlock()
+}
+
+// notes returns the notes posted so far.
+func (b *buttonsHarness) notes(t *testing.T) []string {
+	t.Helper()
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if len(b.posted) == 0 {
+		return nil
+	}
+
+	return slices.Clone(b.posted)
+}
+
+// investigation returns the investigation with id.
+func (b *buttonsHarness) investigation(t *testing.T, id uuid.UUID) db.Investigation {
+	t.Helper()
+
+	inv, err := db.New(b.pool).GetInvestigation(t.Context(), id)
+	require.NoError(t, err)
+
+	return inv
+}
+
+// ratings returns the ratings of the final investigation's verdict.
+func (b *buttonsHarness) ratings(t *testing.T) []output.Feedback {
+	t.Helper()
+
+	got, err := feedback.Verdicts(t.Context(), b.pool, b.investigation(t, finalInvestigation))
+	require.NoError(t, err)
+
+	return got
+}
+
+// publishSeq returns the seq of the publish state of id.
+func (b *buttonsHarness) publishSeq(t *testing.T, id uuid.UUID) int64 {
+	t.Helper()
+
+	var seq int64
+	require.NoError(t, b.pool.QueryRow(t.Context(), "SELECT seq FROM publish_states WHERE investigation_id = $1", id).Scan(&seq))
+
+	return seq
+}
+
+// publishJobs counts the publish jobs.
+func (b *buttonsHarness) publishJobs(t *testing.T) int {
+	t.Helper()
+
+	var n int
+	require.NoError(t, b.pool.QueryRow(t.Context(), "SELECT count(*) FROM jobs WHERE kind = 'publish'").Scan(&n))
+
+	return n
+}
+
+// feedbackCount returns sidekick_feedback_total for verdict ratings of
+// rating, or 0 when the series does not exist.
+func (b *buttonsHarness) feedbackCount(t *testing.T, rating output.Rating) float64 {
+	t.Helper()
+
+	families, err := b.reg.Gather()
+	require.NoError(t, err)
+
+	for _, f := range families {
+		if f.GetName() != feedback.MetricFeedback {
+			continue
+		}
+
+		for _, m := range f.GetMetric() {
+			labels := map[string]string{}
+			for _, l := range m.GetLabel() {
+				labels[l.GetName()] = l.GetValue()
+			}
+
+			if labels["target"] == feedback.TargetVerdict && labels["rating"] == string(rating) {
+				return m.GetCounter().GetValue()
+			}
+		}
+	}
+
+	return 0
+}
+
+// requireNoRatings checks that no rating was stored.
+func requireNoRatings(t *testing.T, b *buttonsHarness) {
+	t.Helper()
+
+	require.Empty(t, b.ratings(t))
+	require.Nil(t, b.investigation(t, finalInvestigation).ConfirmedVerdict)
+}
+
+// newInvestigator returns an investigator on pool whose only connector,
+// fake, is conn, with no sources.
+func newInvestigator(t *testing.T, pool *pgxpool.Pool, conn model.Connector, canceller *investigator.Canceller) *investigator.Handler {
+	t.Helper()
+
+	redactor, err := redact.New(redact.Options{HashKey: []byte("test key")})
+	require.NoError(t, err)
+
+	guard, err := tools.New(nil, tools.Options{Redactor: redactor, Logger: slog.New(slog.DiscardHandler)})
+	require.NoError(t, err)
+
+	set, err := strategy.Load(strategies.FS, "", nil)
+	require.NoError(t, err)
+
+	h, err := investigator.New(investigator.Options{
+		Pool:       pool,
+		Guard:      guard,
+		Connectors: map[string]investigator.Connector{"fake": {Connector: conn}},
+		Prices:     pricing.Shipped(),
+		Strategies: set,
+		Routes:     map[string]investigator.Route{"default": {}},
+		Rules:      report.Rules{},
+		Canceller:  canceller,
+	})
+	require.NoError(t, err)
+
+	return h
+}
