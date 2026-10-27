@@ -1,5 +1,12 @@
 package watch
 
+import (
+	"fmt"
+	"net/url"
+
+	"github.com/nourtalaat/sidekick/internal/watch/safehttp"
+)
+
 // Global limits of watchers, used when watch sets none.
 const (
 	DefaultMaxPerGroup = 3
@@ -60,4 +67,25 @@ func (p Policy) Resolve(r RoutePolicy, own, strategyDefaults Level) (Settings, [
 	s, problems := Resolve([]Level{own, strategyDefaults, r.Defaults, p.Defaults}, []Bounds{r.Bounds, p.Bounds})
 
 	return Complete(s), problems
+}
+
+// hostProblem returns why the route's hosts do not take an HTTP check's
+// URL, naming the limit, or "" when they do or the check is not an HTTP
+// check.
+func (r RoutePolicy) hostProblem(check Check) string {
+	h, ok := check.(HTTPCheck)
+	if !ok {
+		return ""
+	}
+
+	u, err := url.Parse(h.URL)
+	if err != nil {
+		return "url: the URL does not parse"
+	}
+
+	if !safehttp.MatchesHost(r.Hosts, u.Hostname()) {
+		return fmt.Sprintf("url: host %q is not allowed; %s.watcherLimits.hosts allows %v", u.Hostname(), r.Path, r.Hosts)
+	}
+
+	return ""
 }
