@@ -140,6 +140,9 @@ claude:
   rejects `temperature`, `top_p` and `top_k` on every model.
 - **Prompt caching** uses the 5-minute cache. Cache reads and writes are
   priced at their own rates.
+- **Base URL.** Every call carries the API key, so `baseURL` must use
+  `https`. Plain `http` is accepted only for `localhost` and loopback
+  addresses (127.0.0.0/8 and ::1), such as a proxy on the same machine.
 
 #### The `openai` provider
 
@@ -193,7 +196,13 @@ local:
   reads and writes are priced at their own rates, writes at the 30-minute
   price.
 - **API key.** With `baseURL` the key is optional; leave `apiKeySecret` out
-  for a local server that needs none.
+  for a local server that needs none. Without `apiKeySecret`, Sidekick sends
+  no key at all; it does not read `OPENAI_API_KEY` from the environment.
+- **Base URL.** With `apiKeySecret` set, `baseURL` must use `https`, so the
+  key never crosses the network unencrypted. Plain `http` is accepted with a
+  key only for `localhost` and loopback addresses (127.0.0.0/8 and ::1).
+  Without `apiKeySecret`, plain `http` works to any host, for example an
+  Ollama or vLLM server elsewhere in the cluster that needs no key.
 
 ##### Local models for free setups
 
