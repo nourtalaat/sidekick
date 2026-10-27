@@ -25,7 +25,7 @@ const maxErrorBodySize = 64 << 10
 
 // errResponseTooLarge is returned when a response body is larger than
 // maxResponseSize.
-var errResponseTooLarge = fmt.Errorf("Google Cloud sent a response larger than %d bytes", maxResponseSize)
+var errResponseTooLarge = fmt.Errorf("the response from Google Cloud is larger than %d bytes", maxResponseSize)
 
 // client sends requests to the Google Cloud APIs with the source's tokens.
 type client struct {
