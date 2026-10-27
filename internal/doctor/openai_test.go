@@ -178,7 +178,7 @@ func TestOllamaURL(t *testing.T) {
 		{name: "a trailing slash", baseURL: "http://ollama:11434/v1/", want: "http://ollama:11434/api/version"},
 		{name: "no path", baseURL: "http://ollama:11434", want: "http://ollama:11434/api/version"},
 		{name: "behind a path prefix", baseURL: "https://proxy.example/ollama/v1", want: "https://proxy.example/ollama/api/version"},
-		{name: "user info and query are dropped", baseURL: "https://user:pass@proxy.example/v1?key=value", want: "https://proxy.example/api/version"},
+		{name: "user info and query are dropped", baseURL: "https://user:pass@proxy.example/v1?key=value", want: "https://proxy.example/api/version"}, //nolint:gosec // A fake password.
 	}
 
 	for _, tt := range tests {
