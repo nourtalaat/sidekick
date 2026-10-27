@@ -26,7 +26,7 @@ const maxErrorBodySize = 64 << 10
 var (
 	// errResponseTooLarge is returned when a response body is larger than
 	// maxResponseSize.
-	errResponseTooLarge = fmt.Errorf("Backstage sent a response larger than %d bytes", maxResponseSize)
+	errResponseTooLarge = fmt.Errorf("the response from Backstage is larger than %d bytes", maxResponseSize)
 	// errEmptyToken is returned when the token secret holds nothing.
 	errEmptyToken = errors.New("the token secret is empty")
 )
