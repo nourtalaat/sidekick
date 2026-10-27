@@ -80,6 +80,11 @@ type Capabilities struct {
 	PromptCaching    bool
 	ContextTokens    int
 	MaxOutputTokens  int
+	// Temperature is true when the model takes a sampling temperature.
+	// The Anthropic API and the reasoning models of OpenAI reject one, so
+	// it is false for them, and callers such as the benchmark judge leave
+	// the temperature to the provider.
+	Temperature bool
 }
 
 // SupportsThinking reports whether mode is accepted. An empty mode, which is
