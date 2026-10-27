@@ -2,11 +2,11 @@
 
 Sidekick works in Slack in two directions. The Slack app receives
 messages: alerts that bots post in the channels it listens to, and
-mentions of `@Sidekick`, each of which starts an investigation. The
-`slack` output shows each investigation as one Slack message that is
-edited in place while the investigation runs. Buttons, slash commands,
-follow-up questions in the thread and a link to the web UI come in later
-releases.
+mentions of `@Sidekick`, each of which starts an investigation, and
+follow-up questions in the thread of an investigation. The `slack` output
+shows each investigation as one Slack message that is edited in place
+while the investigation runs, and answers the questions in its thread.
+Buttons, slash commands and a link to the web UI come in later releases.
 
 ## What it posts
 
@@ -41,6 +41,10 @@ releases.
 - **A run that could not finish** shows "Could not finish" with a yellow
   bar and what was checked, and gets a short reply too, so no message is
   left on "Investigating".
+- **Each follow-up answer** is a new reply in the thread, which mentions
+  the people who asked. An answer that changes the verdict also updates
+  the message and gets a new verdict reply. See
+  [Follow-up questions](#follow-up-questions).
 
 Text from the alert and from the model is escaped, so it cannot mention
 `@channel` or a person, or add links. The only links are to evidence that
@@ -169,8 +173,37 @@ Mentioning `@Sidekick` asks it to investigate a message:
   the mention.
 
 Events from mentions have the intake `slack-mention` and are never
-trusted. A mention in a thread that Sidekick started itself is left alone;
-follow-up questions there come in a later release.
+trusted. A mention in a thread that Sidekick started itself is left alone,
+and a mention in the thread of an investigation is a follow-up question.
+
+### Follow-up questions
+
+A reply in the thread of an investigation's message is a follow-up
+question: with `slack.followUps: mention`, the default, only a reply that
+mentions `@Sidekick`, and with `followUps: any`, every reply a person
+writes there. Replies from bots never are. Sidekick finds the
+investigation from the thread, so the question goes to that investigation
+rather than starting a new one.
+
+Sidekick answers in a new run of the same investigation, which starts from
+everything the first run saw:
+
+- Questions that arrive close together, or while the investigation still
+  runs, are answered together in one run, after the investigation's own
+  verdict.
+- The run has the same tools as the first, and half of its limits: half the
+  tokens, tool calls, time and cost. See [Limits](investigations.md#limits).
+- When the answer does not change the verdict, it is posted as a reply.
+  When it does, the model gives a new report, which replaces the old one,
+  and the message shows the new verdict. The report keeps every earlier
+  answer either way.
+- A run that cannot answer, for example at its limits, posts a reply that
+  says so, and the report stays as it was.
+
+A question is redacted like event text before it is stored, and the model
+reads it as a request about what to look at: it cannot change the
+investigation's tools, its action mode or the verdict rules. Until roles
+arrive, anyone in the channel can ask.
 
 ## Output keys
 

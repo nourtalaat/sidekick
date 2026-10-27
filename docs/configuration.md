@@ -1111,7 +1111,9 @@ the investigation first started, including time lost to a restart.
 `maxCostUSD` is the cost of the model calls, in US dollars, from the
 [price table](#model). Near any of them, the model gets one last turn to
 report what it found; an investigation that runs out ends as "Not sure yet"
-with what it found. See [Limits](investigations.md#limits).
+with what it found. See [Limits](investigations.md#limits). Each
+[follow-up run](investigations.md#follow-up-questions) gets half of each
+of the investigation's limits; there is no key to change that yet.
 
 #### Daily caps
 
