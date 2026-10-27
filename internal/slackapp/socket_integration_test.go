@@ -32,6 +32,10 @@ const (
 	socketQuiet = time.Second
 	// testSlotWait replaces the slot and reconnect waits in the tests.
 	testSlotWait = 100 * time.Millisecond
+	// takeoverReconnectWait replaces the reconnect wait in the takeover
+	// test. It is longer than the test waits, so a replica whose connection
+	// ended cannot take its slot back before the spare replica takes it.
+	takeoverReconnectWait = 2 * socketTimeout
 )
 
 // The Socket Mode payloads of a slash command and a button click.
@@ -322,7 +326,7 @@ func TestSocketTakesOverAFreedSlot(t *testing.T) {
 
 			replicas := make([]*replica, 0, SocketSlots+1)
 			for range SocketSlots + 1 {
-				replicas = append(replicas, startSocket(t, h, replicaPool(t, h), hs))
+				replicas = append(replicas, startSocketWith(t, h, replicaPool(t, h), hs, takeoverReconnectWait))
 			}
 
 			waitFor(t, func() bool { now, _ := hs.counts(); return now == SocketSlots })
@@ -481,6 +485,14 @@ func (r *replica) slot() int32 {
 func startSocket(t *testing.T, h *harness, pool *pgxpool.Pool, hs *holders, with ...func(*SocketOptions)) *replica {
 	t.Helper()
 
+	return startSocketWith(t, h, pool, hs, testSlotWait, with...)
+}
+
+// startSocketWith is startSocket with reconnect as the wait after a
+// connection ends.
+func startSocketWith(t *testing.T, h *harness, pool *pgxpool.Pool, hs *holders, reconnect time.Duration, with ...func(*SocketOptions)) *replica {
+	t.Helper()
+
 	opts := SocketOptions{
 		Handler:  h.handler,
 		Pool:     pool,
@@ -496,7 +508,7 @@ func startSocket(t *testing.T, h *harness, pool *pgxpool.Pool, hs *holders, with
 	}
 
 	s := NewSocket(opts)
-	s.slotRetry, s.slotCheck, s.reconnectWait = testSlotWait, testSlotWait, testSlotWait
+	s.slotRetry, s.slotCheck, s.reconnectWait = testSlotWait, testSlotWait, reconnect
 	s.clientOptions = []socketmode.Option{socketmode.OptionPingInterval(socketTimeout)}
 
 	r := &replica{}
