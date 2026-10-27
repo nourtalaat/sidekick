@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -64,7 +65,7 @@ func TestValidateRemovesTheWorkDirectory(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			work := t.TempDir()
+			work := shortTempDir(t)
 			s := newService(t, Options{WorkDir: work})
 
 			res, err := s.Validate(t.Context(), Request{Format: FormatGrafanaAlertFile, Files: tt.files})
@@ -143,22 +144,30 @@ func TestValidateGivesUpWhenTheCallerDoes(t *testing.T) {
 	}
 }
 
-func TestNewFailsOnAMirrorItCannotRead(t *testing.T) {
+func TestNewRefusesBadOptions(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name   string
-		mirror string
+		name    string
+		mirror  string
+		workDir string
+		want    string
 	}{
-		{name: "missing directory", mirror: filepath.Join(t.TempDir(), "missing")},
+		{name: "mirror that does not exist", mirror: filepath.Join(t.TempDir(), "missing"), want: "read the provider mirror"},
+		{name: "work directory with a long path", workDir: "/" + strings.Repeat("w", MaxWorkDirLength), want: "too long for the providers' sockets"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := New(Options{Mirror: tt.mirror, WorkDir: t.TempDir()})
-			require.ErrorContains(t, err, "read the provider mirror")
+			workDir := tt.workDir
+			if workDir == "" {
+				workDir = shortTempDir(t)
+			}
+
+			_, err := New(Options{Mirror: tt.mirror, WorkDir: workDir})
+			require.ErrorContains(t, err, tt.want)
 		})
 	}
 }

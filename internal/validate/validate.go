@@ -44,6 +44,12 @@ const (
 	MaxFiles = 500
 	// MaxRequestBytes bounds the size of one request body.
 	MaxRequestBytes = 8 << 20
+	// MaxWorkDirLength bounds the length of the work directory's path.
+	// OpenTofu providers listen on a Unix socket in their temporary
+	// directory, <work dir>/run-<number>/home, and a socket path longer
+	// than 107 bytes cannot be bound, which makes the provider exit before
+	// tofu can talk to it.
+	MaxWorkDirLength = 64
 )
 
 // Errors that Validate wraps, so callers can tell them apart.
@@ -127,8 +133,14 @@ type checker interface {
 }
 
 // New returns a Service. It reads the provider mirror once, so a mirror
-// that cannot be read fails here rather than in every request.
+// that cannot be read fails here rather than in every request, and it
+// refuses a work directory longer than MaxWorkDirLength.
 func New(opts Options) (*Service, error) {
+	if len(opts.WorkDir) > MaxWorkDirLength {
+		return nil, fmt.Errorf("the work directory %s is longer than %d bytes, too long for the providers' sockets",
+			opts.WorkDir, MaxWorkDirLength)
+	}
+
 	mirror, err := readMirror(opts.Mirror)
 	if err != nil {
 		return nil, fmt.Errorf("read the provider mirror: %w", err)

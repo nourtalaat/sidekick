@@ -32,8 +32,24 @@ func tools(t *testing.T) Options {
 		Promtool: filepath.Join(dir, "promtool"),
 		Tofu:     filepath.Join(dir, "tofu"),
 		Mirror:   filepath.Join(dir, "providers"),
-		WorkDir:  t.TempDir(),
+		WorkDir:  shortTempDir(t),
 	}
+}
+
+// shortTempDir makes a temporary directory with a short path, removed when
+// the test ends. t.TempDir names its directory after the test, which can
+// make the path too long for the providers' sockets (MaxWorkDirLength).
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+
+	dir, err := os.MkdirTemp("", "sv-")
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		require.NoError(t, os.RemoveAll(dir))
+	})
+
+	return dir
 }
 
 // newService builds a Service and fails the test if it cannot.
@@ -41,7 +57,7 @@ func newService(t *testing.T, opts Options) *Service {
 	t.Helper()
 
 	if opts.WorkDir == "" {
-		opts.WorkDir = t.TempDir()
+		opts.WorkDir = shortTempDir(t)
 	}
 
 	s, err := New(opts)

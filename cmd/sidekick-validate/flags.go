@@ -32,7 +32,8 @@ func (f *toolFlags) add(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.promtool, "promtool", defaultPromtool, "path of promtool")
 	cmd.Flags().StringVar(&f.tofu, "tofu", defaultTofu, "path of tofu")
 	cmd.Flags().StringVar(&f.mirror, "mirror", defaultMirror, "directory of the OpenTofu provider mirror")
-	cmd.Flags().StringVar(&f.workDir, "work-dir", defaultWorkDir, "directory for the files of running validations")
+	cmd.Flags().StringVar(&f.workDir, "work-dir", defaultWorkDir,
+		fmt.Sprintf("directory for the files of running validations, a path of at most %d bytes", validate.MaxWorkDirLength))
 	cmd.Flags().BoolVar(&f.allowDownloads, "allow-downloads", false,
 		"let OpenTofu download providers that are not in the mirror, and remote modules")
 }
