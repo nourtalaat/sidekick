@@ -171,6 +171,23 @@ jobs:
           kubectl -n sidekick get events --sort-by=.lastTimestamp || true
           kubectl -n sidekick logs -l app.kubernetes.io/instance=sidekick --all-containers --prefix --tail=200 || true
 
+  validator-image:
+    name: validator image
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The Go modules linked into the tools are left out of this build's
+      # NOTICE; the release build lists them.
+      - name: Build the validator image
+        run: docker build -f Dockerfile.validator -t sidekick-validator:ci --build-arg VERSION=ci --build-arg COMMIT="$GITHUB_SHA" --build-arg NOTICE_MODULES=false .
+
+      - name: Check each format in the image, with no network
+        run: sh scripts/validator-image-test.sh docker sidekick-validator:ci
+
   dependency-review:
     name: dependency review
     if: github.event_name == 'pull_request'

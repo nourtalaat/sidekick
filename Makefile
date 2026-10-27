@@ -44,6 +44,11 @@ IMAGE_REPOSITORY ?= ghcr.io/nourtalaat/sidekick
 IMAGE_TAG ?= $(VERSION)
 IMAGE ?= $(IMAGE_REPOSITORY):$(IMAGE_TAG)
 IMAGE_PLATFORMS ?= linux/amd64,linux/arm64
+VALIDATOR_IMAGE_REPOSITORY ?= ghcr.io/nourtalaat/sidekick-validator
+VALIDATOR_IMAGE ?= $(VALIDATOR_IMAGE_REPOSITORY):$(IMAGE_TAG)
+# false leaves the Go modules linked into the validator's tools out of its
+# NOTICE, which saves downloading each of them in a test build.
+VALIDATOR_NOTICE_MODULES ?= true
 CONTAINER_TOOL ?= $(if $(shell command -v docker 2>/dev/null),docker,podman)
 comma := ,
 
@@ -128,6 +133,19 @@ else
 	docker buildx build --platform $(IMAGE_PLATFORMS) -t $(IMAGE) \
 		$(if $(findstring $(comma),$(IMAGE_PLATFORMS)),,--load) \
 		--build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) .
+endif
+
+# The validator image, built the same way as the Sidekick image.
+.PHONY: validator-image
+validator-image: ## Build the validator image for linux/amd64 and linux/arm64 (IMAGE_PLATFORMS=linux/arm64 for one)
+ifeq ($(CONTAINER_TOOL),podman)
+	-podman manifest rm $(VALIDATOR_IMAGE) 2>/dev/null
+	podman build -f Dockerfile.validator --platform $(IMAGE_PLATFORMS) --manifest $(VALIDATOR_IMAGE) \
+		--build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg NOTICE_MODULES=$(VALIDATOR_NOTICE_MODULES) .
+else
+	docker buildx build -f Dockerfile.validator --platform $(IMAGE_PLATFORMS) -t $(VALIDATOR_IMAGE) \
+		$(if $(findstring $(comma),$(IMAGE_PLATFORMS)),,--load) \
+		--build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg NOTICE_MODULES=$(VALIDATOR_NOTICE_MODULES) .
 endif
 
 CI_TARGETS += helm-lint

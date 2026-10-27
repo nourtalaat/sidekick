@@ -112,7 +112,13 @@ EOF
 # go_module_section prints one Go module, given as path@version: its
 # license and notice files from the module cache, downloaded first when
 # needed, which checks the module against the checksum database.
+# It returns 1, printing nothing, when the module cannot be downloaded.
 go_module_section() {
-	dir=$(go mod download -json "$1" | sed -n 's/^[[:space:]]*"Dir": "\(.*\)",$/\1/p')
+	json=$(go mod download -json "$1") || return 1
+	dir=$(echo "$json" | sed -n 's/^[[:space:]]*"Dir": "\(.*\)",$/\1/p')
+	if [ -z "$dir" ]; then
+		return 1
+	fi
+
 	section "$(echo "$1" | sed 's/@/ /')" "$dir"
 }
