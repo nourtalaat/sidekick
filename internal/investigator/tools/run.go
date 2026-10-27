@@ -105,6 +105,18 @@ func (r *Run) QualifiedName(sourceName, tool string) (string, bool) {
 	return "", false
 }
 
+// SourceTool returns the source and the source's own name of the tool the
+// run exposes as qualified. It reports false when the run does not expose
+// it.
+func (r *Run) SourceTool(qualified string) (sourceName, tool string, ok bool) {
+	t, ok := r.tools[qualified]
+	if !ok {
+		return "", "", false
+	}
+
+	return t.src.name, t.exposed.Tool.Name, true
+}
+
 // Call runs one model tool call through the guard: it checks the input
 // against the tool's schema, waits for a free slot of the source's
 // concurrency limit, and calls the source within its timeout, unless the

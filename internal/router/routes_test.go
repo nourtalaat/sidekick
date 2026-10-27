@@ -12,6 +12,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/grouper"
 	"github.com/nourtalaat/sidekick/internal/investigator"
 	"github.com/nourtalaat/sidekick/internal/strategy"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 func TestPick(t *testing.T) {
@@ -19,7 +20,7 @@ func TestPick(t *testing.T) {
 
 	cfg, in := loadConfig(t)
 
-	routes, err := newRoutes(cfg, in.ModelSettings)
+	routes, err := newRoutes(cfg, in.ModelSettings, cfg.WatchPolicy())
 	require.NoError(t, err)
 
 	names := make([]string, 0, len(routes))
@@ -81,7 +82,7 @@ func TestNewRoutesSettings(t *testing.T) {
 	generic, ok := cfg.StrategySet().Get(strategy.GenericAlert)
 	require.True(t, ok)
 
-	routes, err := newRoutes(cfg, in.ModelSettings)
+	routes, err := newRoutes(cfg, in.ModelSettings, cfg.WatchPolicy())
 	require.NoError(t, err)
 
 	byName := map[string]route{}
@@ -192,7 +193,7 @@ func TestNewRoutesErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := newRoutes(tt.cfg(t), nil)
+			_, err := newRoutes(tt.cfg(t), nil, watch.Policy{})
 			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}

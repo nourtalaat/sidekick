@@ -1,0 +1,22 @@
+# A route match that names a listener that does not exist.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+slack:
+  botTokenSecret: { name: sidekick-slack, key: botToken }
+  appTokenSecret: { name: sidekick-slack, key: appToken }
+
+listeners:
+  alerts:
+    channel: "#alerts"
+
+routes:
+  - name: alerts
+    match: { intake: [alerst, slack-mention] }
+  - name: default

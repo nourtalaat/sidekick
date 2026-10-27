@@ -25,7 +25,8 @@ Helm chart mounts the file. At start-up Sidekick:
    replicas start at once, one migrates and the others wait for it.
 5. Builds the configured connectors, sources, webhook adapters and outputs.
 6. Starts the job queue, which routes events, runs
-   [investigations](investigations.md) and publishes them to the outputs.
+   [investigations](investigations.md), publishes them to the outputs and
+   runs the checks of [watchers](configuration.md#watch).
 7. Starts serving HTTP on both listeners.
 
 `sidekick migrate up` and `sidekick migrate status` take the same
@@ -133,8 +134,8 @@ process (`process_*`) metrics, this release has:
 | `sidekick_queue_jobs` | gauge | `kind`, `status` | Jobs in the queue that are pending, running or dead. Every replica reports the same numbers, so combine replicas with `max`. |
 | `sidekick_queue_wait_seconds` | histogram | `kind` | Time from a job being ready to being claimed. |
 | `sidekick_jobs_dead_total` | counter | `kind` | Jobs that failed for the last time on this replica. |
-| `sidekick_events_received_total` | counter | `intake`, `result` | Webhook events by result: `accepted` and `duplicate` count events, `rejected` counts deliveries turned away. See [Monitoring intake](webhooks.md#monitoring-intake). |
-| `sidekick_events_rejected_total` | counter | `intake`, `reason` | Rejected webhook deliveries by reason: `unauthenticated`, `too_large` or `invalid_payload`. |
+| `sidekick_events_received_total` | counter | `intake`, `result` | Webhook and Slack events by result: `accepted` and `duplicate` count events, `rejected` counts deliveries turned away. See [Monitoring intake](webhooks.md#monitoring-intake). |
+| `sidekick_events_rejected_total` | counter | `intake`, `reason` | Rejected webhook deliveries and Slack Events API requests by reason: `unauthenticated`, `too_large` or `invalid_payload`. Slack requests count under the intake `_slack`; see [Investigations in Slack](slack.md#limits-and-errors). |
 | `sidekick_investigations_total` | counter | `route`, `verdict`, `stop_reason` | Investigations that ended, by verdict and [stop reason](investigations.md#how-an-investigation-ends). |
 | `sidekick_investigations_running` | gauge | `route` | Investigations running on this replica. Sum it across replicas. |
 | `sidekick_investigation_duration_seconds` | histogram | `route` | Time from the start of an investigation to its end. |
@@ -150,6 +151,9 @@ process (`process_*`) metrics, this release has:
 | `sidekick_tool_call_duration_seconds` | histogram | `source` | Duration of source tool calls. |
 | `sidekick_source_up` | gauge | `source` | 1 when a source is connected and its circuit breaker is closed, 0 otherwise. |
 | `sidekick_guard_keys_full_total` | counter | none | Guarded calls that are not source tool calls, such as watcher HTTP checks, refused because the guard already held limits for 1024 targets, all in use. |
+| `sidekick_watcher_checks_total` | counter | `type`, `result` | [Watcher](configuration.md#watch) checks by type (`http`, `tool` or `alert`) and result (`pass`, `fail` or `error`). |
+| `sidekick_watcher_check_duration_seconds` | histogram | `type` | Duration of watcher checks. |
+| `sidekick_watch_http_blocked_total` | counter | `reason` | Watcher HTTP checks the safety rules refused, by reason: `host`, `private_ip` or `redirect`. |
 | `sidekick_slack_api_errors_total` | counter | `method`, `error` | Failed Slack Web API calls by method, such as `chat.update`, and error: Slack's error code, such as `channel_not_found`, or `ratelimited`, `request_failed`, `http_status`, `bad_response` or `other`. See [Investigations in Slack](slack.md). |
 | `sidekick_output_api_errors_total` | counter | `type`, `operation`, `error` | Failed calls of the ticket and webhook outputs to the service they post to, by output type, such as `linear.comment` or `webhook`, operation, such as `comment_create`, and error: `rate_limited`, `request_failed`, `bad_response`, `api_error`, or `http_` and the status, such as `http_503`. See [Results on tickets](tickets.md) and [Webhook callbacks](webhook-callbacks.md). |
 

@@ -1,0 +1,14 @@
+# A route match that names mentions without a slack section.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: mentions
+    match: { intake: [slack-mention] }
+  - name: default
