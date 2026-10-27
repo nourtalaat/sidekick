@@ -13,6 +13,7 @@ import (
 	_ "github.com/nourtalaat/sidekick/internal/intake/signoz"       // Intake adapter "signoz".
 	_ "github.com/nourtalaat/sidekick/internal/model/anthropic"     // Model provider "anthropic".
 	_ "github.com/nourtalaat/sidekick/internal/model/bedrock"       // Model provider "bedrock".
+	_ "github.com/nourtalaat/sidekick/internal/model/google"        // Model provider "google".
 	_ "github.com/nourtalaat/sidekick/internal/model/openai"        // Model provider "openai".
 	_ "github.com/nourtalaat/sidekick/internal/output/jira"         // Output type "jira.comment".
 	_ "github.com/nourtalaat/sidekick/internal/output/linear"       // Output type "linear.comment".
@@ -23,5 +24,6 @@ import (
 	_ "github.com/nourtalaat/sidekick/internal/source/github"       // Source type "github".
 	_ "github.com/nourtalaat/sidekick/internal/source/kubernetes"   // Source type "kubernetes".
 	_ "github.com/nourtalaat/sidekick/internal/source/mcp"          // Source type "mcp".
+	_ "github.com/nourtalaat/sidekick/internal/source/mock"         // Source type "mock", for benchmarks.
 	_ "github.com/nourtalaat/sidekick/internal/source/postgres"     // Source type "postgres".
 )

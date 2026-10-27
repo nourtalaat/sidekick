@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 
 	"golang.org/x/oauth2"
 
@@ -55,6 +56,16 @@ func (e *statusError) Error() string {
 	}
 
 	return text
+}
+
+// get sends a GET request for target with query, and decodes the JSON
+// answer into out.
+func (c *client) get(ctx context.Context, target string, query url.Values, out any) error {
+	if len(query) > 0 {
+		target += "?" + query.Encode()
+	}
+
+	return c.do(ctx, http.MethodGet, target, nil, out)
 }
 
 // post sends body as JSON in a POST request for target, and decodes the

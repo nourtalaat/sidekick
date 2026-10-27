@@ -1,0 +1,4 @@
+data: {"candidates": [{"content": {"parts": [{"text": "**Checking the deploys**\n\nThe errors start at 13:42, right after","thought": true}],"role": "model"},"index": 0}],"usageMetadata": {"promptTokenCount": 640,"totalTokenCount": 640},"modelVersion": "gemini-2.5-pro","responseId": "eXJbaZbGBey21dkPgbbm0Qs"}
+
+data: {"candidates": [{"content": {"parts": [{"text": " a deploy.","thought": true,"thoughtSignature": "Q3BJQkFkSDdTTF9wT2VMNHZpV3c="},{"text": "A deploy at 13:40 caused it."}],"role": "model"},"finishReason": "STOP","index": 0}],"usageMetadata": {"promptTokenCount": 640,"candidatesTokenCount": 9,"totalTokenCount": 1101,"thoughtsTokenCount": 452},"modelVersion": "gemini-2.5-pro","responseId": "eXJbaZbGBey21dkPgbbm0Qs"}
+

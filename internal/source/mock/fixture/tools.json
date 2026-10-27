@@ -1,0 +1,14 @@
+{
+  "tools": [
+    {
+      "name": "search_logs",
+      "description": "Search the logs.",
+      "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "service": {"type": "string"}}}
+    },
+    {
+      "name": "query_metrics",
+      "description": "Query a metric.",
+      "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}, "since": {"type": "string"}}}
+    }
+  ]
+}

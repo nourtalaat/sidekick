@@ -18,12 +18,13 @@ func TestLimitsParams(t *testing.T) {
 		{
 			name:   "global only",
 			limits: Limits{Global: 8},
-			want:   limitParams{global: 8, routes: []string{}, routeLimits: []int32{}},
+			want:   limitParams{lockKey: limitedClaimLockKey, global: 8, routes: []string{}, routeLimits: []int32{}},
 		},
 		{
 			name:   "routes in a fixed order",
 			limits: Limits{Global: 8, Routes: map[string]int{"payments": 3, "checkout": 1, "search": 0}},
 			want: limitParams{
+				lockKey:     limitedClaimLockKey,
 				global:      8,
 				routes:      []string{"checkout", "payments", "search"},
 				routeLimits: []int32{1, 3, 0},

@@ -40,9 +40,9 @@ func renew(ctx context.Context, q db.DBTX, job db.Job, lease time.Duration) erro
 
 // reap counts an attempt for every running job whose lease expired, and
 // sets it back to pending, or to dead on its last attempt. Only one replica
-// reaps at a time: when another holds the reaper lock, reap does nothing and
-// returns locked false. It returns the jobs it changed.
-func reap(ctx context.Context, pool *pgxpool.Pool) (reaped []db.Job, locked bool, err error) {
+// reaps at a time: when another holds the reaper lock, lockKey, reap does
+// nothing and returns locked false. It returns the jobs it changed.
+func reap(ctx context.Context, pool *pgxpool.Pool, lockKey int64) (reaped []db.Job, locked bool, err error) {
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
 		return nil, false, fmt.Errorf("reap expired leases: acquire connection: %w", err)
@@ -52,7 +52,7 @@ func reap(ctx context.Context, pool *pgxpool.Pool) (reaped []db.Job, locked bool
 
 	queries := db.New(conn)
 
-	locked, err = queries.TryLockReaper(ctx, reaperLockKey)
+	locked, err = queries.TryLockReaper(ctx, lockKey)
 	if err != nil {
 		return nil, false, fmt.Errorf("reap expired leases: take the reaper lock: %w", err)
 	}
@@ -68,7 +68,7 @@ func reap(ctx context.Context, pool *pgxpool.Pool) (reaped []db.Job, locked bool
 		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
 		defer cancel()
 
-		unlocked, unlockErr := queries.UnlockReaper(releaseCtx, reaperLockKey)
+		unlocked, unlockErr := queries.UnlockReaper(releaseCtx, lockKey)
 		if unlockErr == nil && unlocked {
 			return
 		}

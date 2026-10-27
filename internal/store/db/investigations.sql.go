@@ -177,6 +177,52 @@ func (q *Queries) FinishInvestigation(ctx context.Context, arg FinishInvestigati
 	return i, err
 }
 
+const getEventInvestigation = `-- name: GetEventInvestigation :one
+SELECT investigations.id, investigations.group_id, investigations.route, investigations.strategy, investigations.strategy_version, investigations.mode, investigations.status, investigations.run, investigations.next_seq, investigations.fence, investigations.verdict, investigations.confidence, investigations.report, investigations.stop_reason, investigations.connectors, investigations.budget, investigations.input_tokens, investigations.output_tokens, investigations.cost_micros, investigations.tool_calls, investigations.created_at, investigations.started_at, investigations.first_finding_at, investigations.finished_at
+FROM events
+JOIN event_groups ON event_groups.id = events.group_id
+JOIN investigations ON investigations.id = event_groups.investigation_id
+WHERE events.id = $1
+`
+
+type GetEventInvestigationRow struct {
+	Investigation Investigation
+}
+
+// GetEventInvestigation returns the investigation of the group the event
+// with event_id is in. It returns no row until the event is grouped.
+func (q *Queries) GetEventInvestigation(ctx context.Context, eventID uuid.UUID) (GetEventInvestigationRow, error) {
+	row := q.db.QueryRow(ctx, getEventInvestigation, eventID)
+	var i GetEventInvestigationRow
+	err := row.Scan(
+		&i.Investigation.ID,
+		&i.Investigation.GroupID,
+		&i.Investigation.Route,
+		&i.Investigation.Strategy,
+		&i.Investigation.StrategyVersion,
+		&i.Investigation.Mode,
+		&i.Investigation.Status,
+		&i.Investigation.Run,
+		&i.Investigation.NextSeq,
+		&i.Investigation.Fence,
+		&i.Investigation.Verdict,
+		&i.Investigation.Confidence,
+		&i.Investigation.Report,
+		&i.Investigation.StopReason,
+		&i.Investigation.Connectors,
+		&i.Investigation.Budget,
+		&i.Investigation.InputTokens,
+		&i.Investigation.OutputTokens,
+		&i.Investigation.CostMicros,
+		&i.Investigation.ToolCalls,
+		&i.Investigation.CreatedAt,
+		&i.Investigation.StartedAt,
+		&i.Investigation.FirstFindingAt,
+		&i.Investigation.FinishedAt,
+	)
+	return i, err
+}
+
 const getFirstEvent = `-- name: GetFirstEvent :one
 SELECT events.id, events.intake, events.key, events.kind, events.sender_kind, events.sender_id, events.sender_name, events.trusted, events.alert_name, events.title, events.body, events.service, events.severity, events.labels, events.links, events.fingerprint, events.slack, events.raw, events.status, events.skip_reason, events.route, events.group_id, events.starts_at, events.ends_at, events.received_at, event_groups.event_count
 FROM event_groups
