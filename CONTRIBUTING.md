@@ -341,6 +341,11 @@ if err := a.RegisterJob(queue.KindRouteEvent, router, queue.KindOptions{}); err 
 }
 ```
 
+A loop that runs for the life of the process, such as the Slack Socket
+Mode connection, registers with `a.RegisterTask(name, run)`. Run starts it
+once the listeners serve and ends its context first at shutdown; a task
+that returns an error before then stops the process.
+
 Routes go on the main listener (`server.listen`); the metrics listener is
 reserved for `/metrics`, `/healthz` and `/readyz`. The job queue runs only
 when at least one handler is registered. Get the config, logger, metrics

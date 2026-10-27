@@ -12,6 +12,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // maxParallelToolCalls is how many source calls of one model turn run at
@@ -46,13 +47,19 @@ func (r *run) runTools(ctx, runCtx context.Context, calls []model.ToolCall) erro
 	}
 
 	for i, call := range calls {
-		var s newStep
+		var (
+			s   newStep
+			err error
+		)
 
 		switch {
 		case final && call.Name != report.SubmitVerdictTool:
 			s = finalTurnOnlyStep(call)
 		case isBuiltinName(call.Name):
-			s = r.builtin(call)
+			s, err = r.builtin(ctx, call)
+			if err != nil {
+				return fmt.Errorf("built-in tool %s: %w", call.Name, err)
+			}
 		case pending[i] == nil:
 			s = overBudgetStep(call)
 		default:
@@ -111,8 +118,9 @@ func (r *run) startSourceCalls(ctx context.Context, calls []model.ToolCall, wg *
 	return pending
 }
 
-// builtin handles a call to a built-in tool.
-func (r *run) builtin(call model.ToolCall) newStep {
+// builtin handles a call to a built-in tool. It fails only when a
+// watcher that start_watcher accepted cannot be stored.
+func (r *run) builtin(ctx context.Context, call model.ToolCall) (newStep, error) {
 	started := time.Now()
 
 	var (
@@ -142,6 +150,18 @@ func (r *run) builtin(call model.ToolCall) newStep {
 		if !finding {
 			content = rejectedText("finding", problems)
 		}
+	case watch.StartWatcherTool:
+		res, err := r.startWatcher(ctx, call)
+		if err != nil {
+			return newStep{}, fmt.Errorf("start the watcher: %w", err)
+		}
+
+		content = fmt.Sprintf("Started watcher %q with ID %s. It runs on its own schedule; you do not need to wait for it.", res.Name, res.ID)
+
+		if res.Refusal != "" {
+			problems = []string{res.Refusal}
+			content = rejectedText("watcher", problems) + "\nNothing started."
+		}
 	}
 
 	s := newStep{
@@ -160,7 +180,32 @@ func (r *run) builtin(call model.ToolCall) newStep {
 		s.errText = store.Text(strings.Join(problems, "\n"))
 	}
 
-	return s
+	return s, nil
+}
+
+// startWatcher asks the watch package to start the watcher of a
+// start_watcher call of the last model turn.
+func (r *run) startWatcher(ctx context.Context, call model.ToolCall) (watch.ModelResult, error) {
+	var defaults watch.Settings
+	if st, ok := r.h.opts.Strategies.Get(deref(r.inv.Strategy)); ok && st.WatcherDefaults != nil {
+		defaults = *st.WatcherDefaults
+	}
+
+	res, err := r.h.opts.Watchers.Start(ctx, watch.ModelRequest{
+		Route:            r.inv.Route,
+		Strategy:         deref(r.inv.Strategy),
+		StrategyDefaults: defaults,
+		GroupID:          r.inv.GroupID,
+		InvestigationID:  r.inv.ID,
+		StartedBySeq:     r.hist.steps[r.hist.lastTurn].Seq,
+		Input:            call.Input,
+		SourceTool:       r.tools.SourceTool,
+	})
+	if err != nil {
+		return watch.ModelResult{}, fmt.Errorf("start_watcher: %w", err)
+	}
+
+	return res, nil
 }
 
 // sourceStep returns the step of a source call's result.
