@@ -23,7 +23,7 @@ spec:
       annotations:
         # A config change rolls the pods.
         checksum/config: {{ include "sidekick.config" . | sha256sum }}
-        {{- with .Values.podAnnotations }}
+        {{- with (include "sidekick.validator.podAnnotations" . | fromYaml) }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
@@ -179,6 +179,9 @@ spec:
             {{- toYaml . | nindent 12 }}
             {{- end }}
         {{- end }}
+        {{- if include "sidekick.validator.sidecar" . }}
+        {{- include "sidekick.validator.container" . | nindent 8 }}
+        {{- end }}
       volumes:
         - name: config
           configMap:
@@ -193,6 +196,9 @@ spec:
         {{- range .Values.mcpSidecars }}
         - name: mcp-{{ .name }}-tmp
           emptyDir: {}
+        {{- end }}
+        {{- if include "sidekick.validator.sidecar" . }}
+        {{- include "sidekick.validator.volume" . | nindent 8 }}
         {{- end }}
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}

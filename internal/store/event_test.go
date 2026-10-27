@@ -34,6 +34,7 @@ func TestEventOf(t *testing.T) {
 				Labels:      json.RawMessage(`{"team": "payments"}`),
 				Links:       []byte(`[{"title": "Runbook", "url": "https://runbooks.example.com"}]`),
 				Slack:       []byte(`{"TeamID": "T1", "Channel": "C9", "TS": "1.2", "ThreadTS": "1.1", "UserID": "U1"}`),
+				Teams:       []byte(`{"TenantID": "t1", "TeamID": "g1", "ChannelID": "19:a@thread.tacv2", "MessageID": "2", "ThreadID": "1", "UserID": "29:u", "ServiceURL": "https://smba.example.com/teams/"}`),
 				Fingerprint: "fp", StartsAt: &starts, ReceivedAt: received,
 			},
 			want: event.Event{
@@ -41,9 +42,13 @@ func TestEventOf(t *testing.T) {
 				Sender:    event.Sender{Kind: event.SenderSystem, ID: "am", Name: "Alertmanager"},
 				AlertName: "CheckoutLatencyP99", Title: "p99 above 2s", Text: "Slow.",
 				Service: "checkout-api", Severity: event.SeverityCritical,
-				Labels:      map[string]string{"team": "payments"},
-				Links:       []event.Link{{Title: "Runbook", URL: "https://runbooks.example.com"}},
-				Slack:       &event.SlackRef{TeamID: "T1", Channel: "C9", TS: "1.2", ThreadTS: "1.1", UserID: "U1"},
+				Labels: map[string]string{"team": "payments"},
+				Links:  []event.Link{{Title: "Runbook", URL: "https://runbooks.example.com"}},
+				Slack:  &event.SlackRef{TeamID: "T1", Channel: "C9", TS: "1.2", ThreadTS: "1.1", UserID: "U1"},
+				Teams: &event.TeamsRef{
+					TenantID: "t1", TeamID: "g1", ChannelID: "19:a@thread.tacv2", MessageID: "2", ThreadID: "1",
+					UserID: "29:u", ServiceURL: "https://smba.example.com/teams/",
+				},
 				Fingerprint: "fp", StartsAt: starts, ReceivedAt: received,
 			},
 		},
@@ -55,6 +60,7 @@ func TestEventOf(t *testing.T) {
 		{name: "broken labels", row: db.Event{Labels: json.RawMessage(`[`)}, wantErr: true},
 		{name: "broken links", row: db.Event{Labels: json.RawMessage(`{}`), Links: []byte(`{`)}, wantErr: true},
 		{name: "broken Slack reference", row: db.Event{Labels: json.RawMessage(`{}`), Slack: []byte(`[`)}, wantErr: true},
+		{name: "broken Teams reference", row: db.Event{Labels: json.RawMessage(`{}`), Teams: []byte(`[`)}, wantErr: true},
 	}
 
 	for _, tt := range tests {

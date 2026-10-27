@@ -93,6 +93,7 @@ func (v *validator) run() {
 	v.checkSources()
 	v.checkWebhooks()
 	v.checkSlack()
+	v.checkTeams()
 	v.checkOutputs()
 	v.loadStrategies()
 	v.checkRoutes()

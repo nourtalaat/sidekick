@@ -1,0 +1,49 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: payments
+    folder: Payments alerts
+    interval: 1m
+    rules:
+      - uid: payments-latency
+        title: Payments p99 latency
+        condition: C
+        for: 5m
+        labels:
+          team: payments
+        annotations:
+          summary: Payments p99 latency is above 2 seconds
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              datasource: { type: prometheus, uid: prometheus }
+              expr: histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{job="payments"}[$__rate_interval])))
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model: { type: reduce, expression: A, reducer: last, refId: B }
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator: { type: gt, params: [2] }
+      - uid: payments-errors-logged
+        title: Payments errors in the logs
+        condition: B
+        for: 0s
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: loki
+            model:
+              datasource: { type: loki, uid: loki }
+              expr: sum(count_over_time({app="payments"} |= "error" [5m]))
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model: { type: threshold, expression: A, refId: B, conditions: [{ evaluator: { type: gt, params: [10] } }] }

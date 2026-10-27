@@ -164,6 +164,17 @@ func TestRow(t *testing.T) {
 				require.Contains(t, got.slack, `"Channel":"C1"`)
 			},
 		},
+		{
+			name: "the Teams reference is redacted",
+			d:    Delivery{Intake: "alerts"},
+			ev:   event.Event{Key: "k", Kind: event.KindMessage, Teams: &event.TeamsRef{ChannelID: "19:a@thread.tacv2", MessageID: "2", UserID: "SEEDED-9"}},
+			check: func(t *testing.T, _ event.Event, got rowView) {
+				t.Helper()
+				require.NotContains(t, got.teams, "SEEDED-9")
+				require.Contains(t, got.teams, `"ChannelID":"19:a@thread.tacv2"`)
+				require.Empty(t, got.slack)
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -174,7 +185,7 @@ func TestRow(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tt.d.Intake, p.Intake)
 
-			got := rowView{trusted: p.Trusted, status: p.Status, fingerprint: p.Fingerprint, slack: string(p.Slack)}
+			got := rowView{trusted: p.Trusted, status: p.Status, fingerprint: p.Fingerprint, slack: string(p.Slack), teams: string(p.Teams)}
 			if p.Severity != nil {
 				got.severity = *p.Severity
 			}
@@ -201,6 +212,7 @@ type rowView struct {
 	fingerprint string
 	body        string
 	slack       string
+	teams       string
 }
 
 // testRedactor redacts SEEDED-<digits>.
