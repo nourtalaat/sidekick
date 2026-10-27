@@ -1,0 +1,15 @@
+# A global rate limit with bad fields.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default
+
+budgets:
+  rateLimit: { events: 0, per: 0s, overLimit: dely }

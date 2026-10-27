@@ -40,7 +40,7 @@ func TestRouteEvent(t *testing.T) {
 			event:       paymentsEvent,
 			wantRoute:   "payments-latency",
 			wantMode:    "read-only",
-			wantBudget:  `{"max_tool_calls": 30, "max_wall_time_ms": 300000}`,
+			wantBudget:  `{"max_tokens": 400000, "max_tool_calls": 30, "max_wall_time_ms": 300000, "max_cost_micros": 1000000}`,
 			wantService: ptr("checkout-api"),
 		},
 		{
@@ -48,7 +48,7 @@ func TestRouteEvent(t *testing.T) {
 			event:       diskEvent,
 			wantRoute:   "grafana",
 			wantMode:    "read-only",
-			wantBudget:  `{"max_tool_calls": 40, "max_wall_time_ms": 600000}`,
+			wantBudget:  `{"max_tokens": 400000, "max_tool_calls": 40, "max_wall_time_ms": 600000, "max_cost_micros": 1000000}`,
 			wantService: ptr("db"),
 		},
 		{
@@ -56,7 +56,7 @@ func TestRouteEvent(t *testing.T) {
 			event:      otherEvent,
 			wantRoute:  "default",
 			wantMode:   "read-only",
-			wantBudget: `{"max_tool_calls": 40, "max_wall_time_ms": 600000}`,
+			wantBudget: `{"max_tokens": 400000, "max_tool_calls": 40, "max_wall_time_ms": 600000, "max_cost_micros": 1000000}`,
 		},
 		{
 			name:        "the same job run twice creates nothing more",
@@ -64,7 +64,7 @@ func TestRouteEvent(t *testing.T) {
 			runs:        2,
 			wantRoute:   "payments-latency",
 			wantMode:    "read-only",
-			wantBudget:  `{"max_tool_calls": 30, "max_wall_time_ms": 300000}`,
+			wantBudget:  `{"max_tokens": 400000, "max_tool_calls": 30, "max_wall_time_ms": 300000, "max_cost_micros": 1000000}`,
 			wantService: ptr("checkout-api"),
 		},
 	}
