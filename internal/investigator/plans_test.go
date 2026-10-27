@@ -91,6 +91,15 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"investigations_pkey"},
 		},
 		{
+			name: "GetEventInvestigation",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.GetEventInvestigation(ctx, busyEvent)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"events_pkey", "event_groups_pkey", "investigations_pkey"},
+		},
+		{
 			name: "StartInvestigationRun",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.StartInvestigationRun(ctx, db.StartInvestigationRunParams{ID: busy, Fence: planFence + 1})
