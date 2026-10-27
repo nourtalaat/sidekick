@@ -499,8 +499,9 @@ How it behaves:
 #### Google Cloud sources (`type: gcp`)
 
 A Google Cloud source reads Google Cloud projects through the Cloud
-Logging REST API, with Application Default Credentials (Workload Identity
-on GKE). Its tools only read. [Google Cloud source](sources/gcp.md) lists the permissions the
+Logging, Cloud Monitoring, GKE and Personalized Service Health REST APIs,
+with Application Default Credentials (Workload Identity on GKE). Its tools
+only read. [Google Cloud source](sources/gcp.md) lists the permissions the
 identity needs and how to set it up.
 
 | Key | Meaning |
@@ -520,7 +521,12 @@ The tools, as the model sees them with the source name `gcp`:
 | Tool | Returns |
 |---|---|
 | `gcp__query_logs` | Cloud Logging entries that match a Logging query language filter, newest first. |
+| `gcp__query_metrics` | Cloud Monitoring time series for a monitoring filter, optionally aligned and reduced. |
+| `gcp__query_promql` | The series of a PromQL range query on Cloud Monitoring metrics. |
+| `gcp__list_alerts` | Cloud Monitoring alerts open at some time in a range, with their policy and severity. |
 | `gcp__list_changes` | Changes from the Admin Activity and System Event audit logs: deploys, config changes, upgrades. |
+| `gcp__get_gke_cluster` | A GKE cluster's status, versions, node pools and recent operations, or the list of clusters. |
+| `gcp__list_service_health_events` | Google Cloud incidents that Personalized Service Health says affect the project. |
 
 How it behaves:
 
@@ -532,14 +538,16 @@ How it behaves:
   `projects` lists one. A project not in `projects`, or input that does
   not fit, such as a range longer than 7 days, is a tool error, and
   nothing is sent.
-- **Queries.** The filter of `query_logs` goes to Cloud Logging as the
-  model wrote it, so the identity's roles are what limit what can be read.
-- **Results** are JSON with a link to the Logs Explorer query, which
-  becomes an evidence link in the report. Lists are capped as
+- **Queries.** The filter of `query_logs` and `query_metrics` and the
+  query of `query_promql` go to Google Cloud as the model wrote them, so
+  the identity's roles are what limit what can be read.
+- **Results** are JSON with links to the Logs Explorer query, Metrics
+  Explorer, the alert, the cluster or the Service Health page, which
+  become evidence links in the report. Lists are capped as
   [Google Cloud source](sources/gcp.md#limits) describes, and say when
   they were cut.
-- **No data.** A query that matches nothing, and a project Google Cloud
-  does not have, are reported as no data.
+- **No data.** A query that matches nothing, and a project or cluster
+  Google Cloud does not have, are reported as no data.
 - **Errors.** A refused request, such as a filter Google Cloud cannot
   parse or a permission the identity lacks, goes to the model as a tool
   error with Google Cloud's message. A refused token, rate limits, server
