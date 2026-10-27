@@ -2,17 +2,33 @@
 -- InsertPublishState writes the first state of an investigation, with the
 -- sinks its updates go to. A second insert for the same investigation
 -- changes nothing and counts no row.
-INSERT INTO publish_states (investigation_id, sinks, seq, phase, body, updated_at)
-VALUES (@investigation_id, @sinks::text[], @seq, @phase, @body, now())
+INSERT INTO publish_states (investigation_id, sinks, seq, update_seq, phase, body, updated_at)
+VALUES (@investigation_id, @sinks::text[], @seq, @seq, @phase, @body, now())
 ON CONFLICT (investigation_id) DO NOTHING;
 
 -- name: UpdatePublishState :one
 -- UpdatePublishState replaces the state of an investigation when seq is
--- newer than the stored one, and returns the sinks. It returns no row when
--- the stored state is as new or newer, or when there is none.
+-- newer than the update stored last, and returns the sinks. It returns no
+-- row when the stored update is as new or newer, or when there is none.
+-- The state's own seq becomes seq, or one more than before when a refresh
+-- has taken it that far already, so it always grows.
 UPDATE publish_states
-SET seq = @seq, phase = @phase, body = @body, updated_at = now()
-WHERE investigation_id = @investigation_id AND seq < @seq
+SET seq = greatest(publish_states.seq + 1, @seq::bigint),
+    update_seq = @seq::bigint,
+    phase = @phase,
+    body = @body,
+    updated_at = now()
+WHERE investigation_id = @investigation_id AND coalesce(update_seq, publish_states.seq) < @seq::bigint
+RETURNING sinks;
+
+-- name: RefreshPublishState :one
+-- RefreshPublishState adds 1 to the seq of an investigation's state without
+-- changing what it holds, so the outputs show it again with what changed
+-- around it, such as the number of events in the group. It returns the
+-- sinks, or no row when the investigation has no state.
+UPDATE publish_states
+SET seq = seq + 1, update_seq = coalesce(update_seq, seq), updated_at = now()
+WHERE investigation_id = @investigation_id
 RETURNING sinks;
 
 -- name: GetPublishState :one

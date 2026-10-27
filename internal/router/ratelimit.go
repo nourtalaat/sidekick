@@ -168,6 +168,15 @@ func (r *Router) hold(ctx context.Context, tx pgx.Tx, job db.Job, ev db.Event, r
 	return nil
 }
 
+// skipped counts an event that is not investigated, for reason.
+func (r *Router) skipped(route, reason string) {
+	if r.skippedEvents == nil {
+		return
+	}
+
+	r.skippedEvents.WithLabelValues(route, reason).Inc()
+}
+
 // notice returns the notice of the event's limit.
 func (h heldEvent) notice() output.Notice {
 	then := "are delayed and investigated once the window has room"

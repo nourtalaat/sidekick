@@ -28,15 +28,16 @@ sends again stores nothing new: the answer is still `202`, with
 {"duplicate": false, "events": [{"id": "0192d3a4-...", "status": "received", "duplicate": false}]}
 ```
 
-`status` is `received` for an alert, and `skipped` for a resolved alert:
-for now, resolved alerts are stored but not investigated. A path under
-`/hooks/` that names no configured endpoint gets `404`.
+`status` is `received` for every new event. A path under `/hooks/` that
+names no configured endpoint gets `404`.
 
 Right after the answer, Sidekick sends each received event to the first
-[route](configuration.md#routes) that matches it and opens an
-investigation for it. For now every event gets an investigation of its
-own, even when the same alert fires again while an earlier one is still
-open. An event over a [rate limit](configuration.md#rate-limits) is not
+[route](configuration.md#routes) that matches it. The event joins the
+open group of the same alert, or opens a new group with an investigation
+of its own (see [grouping](configuration.md#grouping)). A resolved alert
+is not routed: it is linked to the group its alert is in, and the
+investigation sees it as evidence.
+An event over a [rate limit](configuration.md#rate-limits) is not
 routed at once: its status becomes `delayed`, and it is routed once the
 window has room, or `skipped`, with the limit as its reason.
 
@@ -94,7 +95,7 @@ stores one event per alert in the delivery. The event's title is the
 alert's `summary` annotation, or its `alertname`; the text is its
 `description` annotation; the service and severity come from its `service`
 and `severity` labels. Alerts with status `resolved` become resolved
-events. The `generatorURL` and a `runbook_url` annotation become links.
+events, so keep `send_resolved: true` for Sidekick to see recoveries. The `generatorURL` and a `runbook_url` annotation become links.
 The adapter has no settings of its own.
 
 Point an Alertmanager receiver at the endpoint with the bearer token:

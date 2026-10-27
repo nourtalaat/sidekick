@@ -1,0 +1,37 @@
+# New since your last turn
+
+1 new event joined the group.
+1 recovery arrived. A recovery means the sender reports that the alert has cleared. Weigh it as evidence; the investigation goes on until you submit your verdict.
+
+## New event
+
+Intake: alertmanager
+Kind: alert
+Received: 2026-10-26T10:05:00Z
+
+<untrusted_data source="alertmanager">
+Alert name: CheckoutHighErrorRate
+Title: Checkout error rate above 5%
+Service: checkout-api
+Severity: critical
+Labels:
+  alertname: CheckoutHighErrorRate
+  pod: checkout-api-7d9f
+</untrusted_data>
+
+## Recovery
+
+Intake: alertmanager
+Kind: resolved
+Received: 2026-10-26T10:06:00Z
+
+<untrusted_data source="alertmanager">
+Alert name: CheckoutHighErrorRate
+Title: Checkout error rate above 5%
+Service: checkout-api
+Severity: critical
+Ended: 2026-10-26T10:04:00Z
+Labels:
+  alertname: CheckoutHighErrorRate
+  pod: checkout-api-7d9f
+</untrusted_data>

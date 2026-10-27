@@ -106,6 +106,11 @@ func TestValidateFixtures(t *testing.T) {
 			"routes[0].concurrency: 12 is above the global limit budgets.concurrency 8",
 			"routes[1].concurrency: must not be negative",
 		}},
+		{file: "route-grouping-invalid", want: []string{
+			"routes[0].grouping.fingerprintLabels[1]: must not be empty",
+			`routes[0].grouping.fingerprintLabels[2]: label "service" is listed twice`,
+			"routes[0].grouping.window: must be positive",
+		}},
 		{file: "global-concurrency-zero", want: []string{"budgets.concurrency: must be positive"}},
 		// Report
 		{file: "unknown-confidence", want: []string{`report.minFalsePositiveConfidence: unknown confidence "hgh" (did you mean "high"?)`}},

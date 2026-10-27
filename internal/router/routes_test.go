@@ -9,6 +9,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/event"
+	"github.com/nourtalaat/sidekick/internal/grouper"
 	"github.com/nourtalaat/sidekick/internal/investigator"
 	"github.com/nourtalaat/sidekick/internal/strategy"
 )
@@ -16,9 +17,9 @@ import (
 func TestPick(t *testing.T) {
 	t.Parallel()
 
-	cfg, settings := loadConfig(t)
+	cfg, in := loadConfig(t)
 
-	routes, err := newRoutes(cfg, settings)
+	routes, err := newRoutes(cfg, in.ModelSettings)
 	require.NoError(t, err)
 
 	names := make([]string, 0, len(routes))
@@ -26,7 +27,7 @@ func TestPick(t *testing.T) {
 		names = append(names, r.name)
 	}
 
-	require.Equal(t, []string{"payments-latency", "grafana", "billing", "critical", "default"}, names, "by priority, then name, with default last")
+	require.Equal(t, []string{"payments-latency", "crashloop", "grafana", "billing", "critical", "default"}, names, "by priority, then name, with default last")
 
 	payments := candidate{
 		intake:   "alertmanager",
@@ -75,12 +76,12 @@ func TestPickWithoutDefault(t *testing.T) {
 func TestNewRoutesSettings(t *testing.T) {
 	t.Parallel()
 
-	cfg, settings := loadConfig(t)
+	cfg, in := loadConfig(t)
 
 	generic, ok := cfg.StrategySet().Get(strategy.GenericAlert)
 	require.True(t, ok)
 
-	routes, err := newRoutes(cfg, settings)
+	routes, err := newRoutes(cfg, in.ModelSettings)
 	require.NoError(t, err)
 
 	byName := map[string]route{}
@@ -95,6 +96,7 @@ func TestNewRoutesSettings(t *testing.T) {
 		wantVersion    string
 		wantConnectors string
 		wantBudget     string
+		wantGrouping   grouper.Route
 	}{
 		{
 			name:           "own strategy, roles and budgets",
@@ -103,7 +105,17 @@ func TestNewRoutesSettings(t *testing.T) {
 			wantConnectors: `{"investigate": {"connector": "big", "model": "big-model"}, "summarize": {"connector": "fake", "model": "fake-model"}}`,
 			// The route allows 35 tool calls and 5 minutes; the strategy
 			// 30 tool calls and 8 minutes.
-			wantBudget: `{"max_tokens": 400000, "max_tool_calls": 30, "max_wall_time_ms": 300000, "max_cost_micros": 1000000}`,
+			wantBudget:   `{"max_tokens": 400000, "max_tool_calls": 30, "max_wall_time_ms": 300000, "max_cost_micros": 1000000}`,
+			wantGrouping: grouper.Route{Name: "payments-latency", Window: config.DefaultGroupingWindow},
+		},
+		{
+			name:           "own grouping",
+			route:          "crashloop",
+			wantStrategy:   strategy.GenericAlert,
+			wantVersion:    generic.Version,
+			wantConnectors: `{"investigate": {"connector": "fake", "model": "fake-model"}, "summarize": {"connector": "fake", "model": "fake-model"}}`,
+			wantBudget:     `{"max_tokens": 400000, "max_tool_calls": 40, "max_wall_time_ms": 600000, "max_cost_micros": 1000000}`,
+			wantGrouping:   grouper.Route{Name: "crashloop", Window: 30 * time.Minute, FingerprintLabels: []string{"service", "env"}},
 		},
 		{
 			name:           "the defaults",
@@ -112,6 +124,7 @@ func TestNewRoutesSettings(t *testing.T) {
 			wantVersion:    generic.Version,
 			wantConnectors: `{"investigate": {"connector": "fake", "model": "fake-model"}, "summarize": {"connector": "fake", "model": "fake-model"}}`,
 			wantBudget:     `{"max_tokens": 400000, "max_tool_calls": 40, "max_wall_time_ms": 600000, "max_cost_micros": 1000000}`,
+			wantGrouping:   grouper.Route{Name: "default", Window: config.DefaultGroupingWindow},
 		},
 	}
 
@@ -131,6 +144,7 @@ func TestNewRoutesSettings(t *testing.T) {
 			require.Equal(t, action.ReadOnly, r.mode)
 			require.JSONEq(t, tt.wantConnectors, string(r.connectors))
 			require.JSONEq(t, tt.wantBudget, string(r.budget))
+			require.Equal(t, tt.wantGrouping, r.grouping)
 		})
 	}
 }

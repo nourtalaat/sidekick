@@ -1,0 +1,15 @@
+# A grouping window of zero, an empty fingerprint label and one listed twice.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: payments
+    match: { labels: { team: payments } }
+    grouping: { window: 0s, fingerprintLabels: [service, "", service] }
+  - name: default

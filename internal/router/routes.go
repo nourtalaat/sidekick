@@ -9,6 +9,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/config"
+	"github.com/nourtalaat/sidekick/internal/grouper"
 	"github.com/nourtalaat/sidekick/internal/investigator"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/strategy"
@@ -33,6 +34,8 @@ type route struct {
 	outputs []string
 	// rateLimit is the route's own rate limit, nil for none.
 	rateLimit *config.RateLimit
+	// grouping decides which group the route's events join.
+	grouping grouper.Route
 }
 
 // newRoutes prepares the routes of cfg in the order they are tried.
@@ -109,6 +112,11 @@ func newRoute(rc config.Route, globalRoles map[model.Role]string, strategies *st
 		budget:          budgetJSON,
 		outputs:         rc.Outputs,
 		rateLimit:       rc.RateLimit,
+		grouping: grouper.Route{
+			Name:              rc.Name,
+			Window:            rc.Grouping.Window,
+			FingerprintLabels: rc.Grouping.FingerprintLabels,
+		},
 	}, nil
 }
 

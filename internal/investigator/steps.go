@@ -22,6 +22,9 @@ const (
 	// kindNote is text Sidekick adds to the conversation, such as a
 	// reminder to submit a verdict.
 	kindNote = "note"
+	// kindInbox delivers what arrived while the investigation ran, such as
+	// new events in its group and recoveries.
+	kindInbox = "inbox"
 )
 
 // The values of steps.status.

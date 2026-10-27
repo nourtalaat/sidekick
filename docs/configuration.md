@@ -623,6 +623,9 @@ routes:
       daily: { maxCostUSD: 40, onDailyCap: skip }   # this route's daily cap
     concurrency: 3                     # at most 3 of its investigations at once
     rateLimit: { events: 60, per: 1h, overLimit: delay }   # at most 60 events an hour
+    grouping:
+      window: 30m                      # default 30m
+      fingerprintLabels: [alertname, service, env]
   - name: default
     strategy: generic-alert
     outputs: [slack-thread]
@@ -647,6 +650,34 @@ has started. An investigation whose route, connector or strategy is no
 longer in the config when it starts or resumes ends as "Could not
 finish". `sources` limits the tools the investigation may call to those
 sources; without it, every source's tools are offered.
+
+#### Grouping
+
+Events that are the same alert join one group, and a group has one
+investigation and one Slack message, so 30 alerts with the same fingerprint
+make one investigation, not 30. An event joins the open group with its
+fingerprint; when there is none, it opens a new group and a new
+investigation. A joined event adds 1 to the event count the Slack message
+shows, and the running investigation sees it before the model's next turn.
+
+The fingerprint of an alert is made from the intake, the alert name and the
+values of the labels in `grouping.fingerprintLabels`. A label the alert
+does not have counts as empty. Without `fingerprintLabels`, or when the
+alert has none of the listed labels, the fingerprint is the one the intake
+gave the alert, which for Alertmanager and the generic adapter covers all
+of its labels, so only repeats of the very same alert join. Messages and
+mentions always use the intake's own fingerprint.
+
+A group stays open for `grouping.window` after its newest event. When no
+event has arrived for that long, it closes as `window_ended`, and the next
+event with the same fingerprint opens a new group and a new investigation.
+A group also closes, as `resolved`, once every alert in it has recovered.
+
+Recovery events, such as a resolved notification from Alertmanager, are not
+routed. Each one is linked to the newest group that has the same alert,
+and the investigation sees it before the model's next turn, as a sign that
+the alert may have cleared on its own. A recovery never stops a running
+investigation. A recovery whose alert is in no group is stored as skipped.
 
 For now every route is `mode: read-only`, which is also the default, and
 `actions` must be empty. Modes that let Sidekick take actions come in a
@@ -869,6 +900,8 @@ A refused request ends the check with an error and is counted in
 | `routes[].concurrency` | none: only `budgets.concurrency` applies |
 | `budgets.rateLimit`, `routes[].rateLimit` | none |
 | `rateLimit.overLimit` | `delay` |
+| `routes[].grouping.window` | `30m` |
+| `routes[].grouping.fingerprintLabels` | none: the intake's own fingerprint |
 | `report.minFalsePositiveConfidence` | `high` |
 | `redaction.builtIn` | every built-in rule except `ip_addresses` |
 | `telemetry.logLevel` | `info` |
@@ -903,6 +936,8 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   per-investigation limits and `budgets.concurrency` are positive, dollar
   amounts are not negative, `budgets.daily.timeZone` is a known time zone,
   `onDailyCap` is `wait` or `skip`, and `overLimit` is `delay` or `skip`.
+  Each route's `grouping.window` is positive, and no
+  `grouping.fingerprintLabels` entry is empty or listed twice.
 - Every `redaction.builtIn` entry is a built-in rule. Every custom
   redaction rule has a unique name of the right shape that is not a
   built-in rule's name, and a pattern that parses.

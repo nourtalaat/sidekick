@@ -1,0 +1,54 @@
+{
+  "version": "4",
+  "groupKey": "{}:{alertname=\"KubePodCrashLooping\"}",
+  "status": "firing",
+  "receiver": "sidekick",
+  "groupLabels": {
+    "alertname": "KubePodCrashLooping"
+  },
+  "commonLabels": {
+    "alertname": "KubePodCrashLooping",
+    "service": "checkout",
+    "env": "prod"
+  },
+  "commonAnnotations": {},
+  "externalURL": "http://alertmanager.example.com",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-0",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-0 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee00"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "env": "prod",
+        "namespace": "shop",
+        "pod": "checkout-1",
+        "service": "checkout",
+        "severity": "warning"
+      },
+      "annotations": {
+        "summary": "Pod checkout-1 is crash looping"
+      },
+      "startsAt": "2026-10-26T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "",
+      "fingerprint": "00000000c0ffee01"
+    }
+  ]
+}
