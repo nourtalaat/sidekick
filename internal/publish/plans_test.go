@@ -124,10 +124,9 @@ func TestQueryPlans(t *testing.T) {
 
 			defer func() { _ = tx.Rollback(t.Context()) }()
 
-			explain := &storetest.Explainer{Tx: tx}
+			explain := storetest.NewExplainer(t, tx)
 
 			require.ErrorIs(t, tt.run(t.Context(), db.New(explain)), storetest.ErrExplained)
-			t.Logf("EXPLAIN ANALYZE of %s:\n%s", tt.name, explain.Plan)
 
 			for _, index := range tt.wantIndex {
 				require.Contains(t, explain.Plan, index)
