@@ -29,6 +29,14 @@ const (
 	notInImage = "provider version not in the validator image"
 )
 
+// providerInstallErrors start the tofu init errors that mean a provider
+// could not be installed.
+var providerInstallErrors = []string{
+	"Failed to query available provider packages",
+	"Failed to resolve provider packages",
+	"Failed to install provider",
+}
+
 // mirrorFile matches a provider package in the packed mirror layout.
 var mirrorFile = regexp.MustCompile(`^terraform-provider-([a-z0-9-]+)_([^_]+)_([a-z0-9]+)_([a-z0-9]+)\.zip$`)
 
@@ -176,8 +184,7 @@ func (c tofuChecker) writeCLIConfig(r *run) (string, error) {
 // image, as a missing lock file version does.
 func (c tofuChecker) initProblem(dir string, out output) Problem {
 	message := strings.TrimSpace(out.stderr + "\n" + out.stdout)
-	if !c.allowDownloads && (strings.Contains(message, "Failed to query available provider packages") ||
-		strings.Contains(message, "Failed to install provider")) {
+	if !c.allowDownloads && slices.ContainsFunc(providerInstallErrors, func(e string) bool { return strings.Contains(message, e) }) {
 		message = notInImage + " (it has " + c.mirror.summary() + "), or the version constraints match none of them; " +
 			"set validator.allowDownloads to let the validator download providers. tofu init said: " + message
 	}

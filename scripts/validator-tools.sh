@@ -5,14 +5,16 @@
 #   <dest>/promtool
 #   <dest>/tofu
 #   <dest>/providers/registry.opentofu.org/<namespace>/<type>/terraform-provider-<type>_<version>_linux_<arch>.zip
-#   <dest>/providers/registry.terraform.io -> registry.opentofu.org
+#   <dest>/providers/registry.terraform.io/...   the same packages, hard linked
 #   <dest>/licenses/<tool>/...   each tool's own license and notice files
 #   <dest>/tools.txt             each tool's name, version, source and
 #                                binary (or provider package), one per line
 # The provider mirror uses OpenTofu's packed layout, so `tofu init` checks
 # each package against the hashes in a module's lock file. The
-# registry.terraform.io link serves the same packages to lock files and
-# sources that name Terraform's registry.
+# registry.terraform.io copy serves the same packages to lock files and
+# sources that name Terraform's registry. It is a hard link, not a
+# symbolic link to the directory, because OpenTofu does not follow
+# directory links in a mirror.
 #
 # The Dockerfile of the validator image and `make validator-tools` (which CI
 # uses for the validator tests) both run this script. To update a tool,
@@ -135,6 +137,8 @@ provider() {
 	package="providers/registry.opentofu.org/$namespace/$type/$zip"
 	mkdir -p "$(dirname "$dest/$package")"
 	cp "$work/$zip" "$dest/$package"
+	mkdir -p "$dest/providers/registry.terraform.io/$namespace/$type"
+	ln "$dest/$package" "$dest/providers/registry.terraform.io/$namespace/$type/$zip"
 
 	mkdir "$work/$type"
 	unzip -q -d "$work/$type" "$work/$zip"
@@ -148,7 +152,5 @@ eval "grafana_sum=\$GRAFANA_SHA256_$arch"
 provider datadog datadog DataDog/terraform-provider-datadog "$DATADOG_VERSION" "$datadog_sum"
 provider signoz signoz SigNoz/terraform-provider-signoz "$SIGNOZ_VERSION" "$signoz_sum"
 provider grafana grafana grafana/terraform-provider-grafana "$GRAFANA_VERSION" "$grafana_sum"
-
-ln -s registry.opentofu.org "$dest/providers/registry.terraform.io"
 
 echo "$stamp" >"$dest/.stamp"
