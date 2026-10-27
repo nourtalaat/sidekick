@@ -29,12 +29,20 @@ spec:
       labels:
         {{- include "sidekick.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: server
+        {{- if .Values.serviceAccount.workloadIdentity.azureClientId }}
+        {{- if hasKey .Values.podLabels "azure.workload.identity/use" }}
+        {{- fail "podLabels sets azure.workload.identity/use, which serviceAccount.workloadIdentity.azureClientId already sets; keep only one of them" }}
+        {{- end }}
+        # The AKS webhook adds the Azure identity token only to pods with
+        # this label.
+        azure.workload.identity/use: "true"
+        {{- end }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
       serviceAccountName: {{ include "sidekick.serviceAccountName" . }}
-      automountServiceAccountToken: {{ .Values.serviceAccount.automountToken }}
+      automountServiceAccountToken: {{ include "sidekick.automountToken" . }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}

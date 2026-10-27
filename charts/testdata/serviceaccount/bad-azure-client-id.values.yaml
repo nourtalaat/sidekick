@@ -1,0 +1,4 @@
+# The identity name, not its client ID, is rejected by the values schema.
+serviceAccount:
+  workloadIdentity:
+    azureClientId: sidekick-identity

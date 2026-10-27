@@ -137,11 +137,13 @@ type Runner struct {
 	// limits is nil when Options.Limits is not set.
 	limits *limitParams
 	log    *slog.Logger
-	// backoff gives the wait before a failed job's next try, and
+	// backoff gives the wait before a failed job's next try,
 	// handBackGrace is the time handlers have to return at shutdown after
-	// their context is cancelled. Tests shorten both.
+	// their context is cancelled, and claimTimeout bounds each claim. Tests
+	// shorten all three.
 	backoff       func(attempts int32) time.Duration
 	handBackGrace time.Duration
+	claimTimeout  time.Duration
 
 	mu      sync.Mutex
 	workers map[string]*worker
@@ -206,6 +208,7 @@ func NewRunner(pool *pgxpool.Pool, opts Options) (*Runner, error) {
 		log:           logger.With("component", "queue", "worker", opts.WorkerID),
 		backoff:       Backoff,
 		handBackGrace: handBackGrace,
+		claimTimeout:  dbTimeout,
 		workers:       map[string]*worker{},
 	}, nil
 }
@@ -471,11 +474,6 @@ func (r *Runner) claimReady(ctx, workCtx context.Context, w *worker, jobs *sync.
 		}
 
 		claimed, err := r.claim(ctx, w, free)
-		if err != nil {
-			r.log.Error("claiming jobs failed", "job_kind", w.kind, "error", err)
-
-			return
-		}
 
 		for _, job := range claimed {
 			w.slots <- struct{}{}
@@ -485,22 +483,37 @@ func (r *Runner) claimReady(ctx, workCtx context.Context, w *worker, jobs *sync.
 			jobs.Go(func() { r.runJob(workCtx, w, job) })
 		}
 
+		if err != nil {
+			r.log.Error("claiming jobs failed", "job_kind", w.kind, "error", err)
+
+			return
+		}
+
 		if len(claimed) < free {
 			return
 		}
 	}
 }
 
-// claim claims up to limit ready jobs of w's kind. The query runs on a
-// context that ctx ending does not cancel, so a claim that the database
-// made is never lost on the way back.
+// claim claims up to limit ready jobs of w's kind. It returns the jobs it
+// claimed even with an error, when a limited claim fails after earlier ones
+// committed. The queries run on a context that ctx ending does not cancel,
+// so shutdown does not cut a claim off on the way back.
+//
+// A claim can still time out on the client while its commit goes through.
+// Each claim runs in a transaction, so the database commits it only when the
+// commit was sent before the timeout, and the claim's jobs are in hand by
+// then: claim hands them back, so that they do not stay running with no
+// handler until their lease ends.
 func (r *Runner) claim(ctx context.Context, w *worker, limit int) ([]db.Job, error) {
-	claimCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), dbTimeout)
+	claimCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.claimTimeout)
 	defer cancel()
 
 	if !w.limited {
 		jobs, err := claim(claimCtx, r.pool, r.opts.WorkerID, w.kind, w.opts.Lease, int32(limit)) //nolint:gosec // limit is at most maxConcurrency.
 		if err != nil {
+			r.handBackLost(ctx, jobs)
+
 			return nil, fmt.Errorf("claim: %w", err)
 		}
 
@@ -512,6 +525,10 @@ func (r *Runner) claim(ctx context.Context, w *worker, limit int) ([]db.Job, err
 	for range limit {
 		job, claimed, err := claimLimited(claimCtx, r.pool, r.opts.WorkerID, w.kind, w.opts.Lease, *r.limits)
 		if err != nil {
+			if claimed {
+				r.handBackLost(ctx, []db.Job{job})
+			}
+
 			return jobs, fmt.Errorf("claim: %w", err)
 		}
 
@@ -523,6 +540,27 @@ func (r *Runner) claim(ctx context.Context, w *worker, limit int) ([]db.Job, err
 	}
 
 	return jobs, nil
+}
+
+// handBackLost hands back the jobs of a claim whose commit failed, in case
+// the commit went through anyway. When the hand-back fails too, the reaper
+// takes the jobs when their lease ends.
+func (r *Runner) handBackLost(ctx context.Context, jobs []db.Job) {
+	if len(jobs) == 0 {
+		return
+	}
+
+	lostCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), dbTimeout)
+	defer cancel()
+
+	handedBack, err := handBackLost(lostCtx, r.pool, jobs)
+	for _, job := range handedBack {
+		r.log.Warn("a claim committed after it timed out, its job was handed back", jobAttrs(job)...)
+	}
+
+	if err != nil {
+		r.log.Error("handing back the jobs of a lost claim failed, they wait for their lease to end", "error", err)
+	}
 }
 
 // shutdown waits for running jobs after the loops have stopped, first

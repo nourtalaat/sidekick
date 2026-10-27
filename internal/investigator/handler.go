@@ -23,6 +23,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 	"github.com/nourtalaat/sidekick/internal/strategy"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // SpanName is the name of the span of one run of an investigate job.
@@ -64,6 +65,9 @@ type Options struct {
 	Rules report.Rules
 	// Daily are the daily spending caps and their time zone.
 	Daily DailyCaps
+	// Watchers starts the watchers the model asks for with start_watcher.
+	// Nil offers the tool to no investigation.
+	Watchers *watch.ModelStarter
 	// Logger receives a line when a run starts and ends, with IDs, the
 	// route, the verdict and the stop reason only, never event text, tool
 	// results or model output. Nil logs nothing.

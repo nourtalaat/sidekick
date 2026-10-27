@@ -111,6 +111,15 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: "jobs_pkey",
 		},
 		{
+			name: "WaitForJobWriters",
+			run: func(ctx context.Context, q *db.Queries, rows planRows) error {
+				err := q.WaitForJobWriters(ctx, []int64{rows.claimed.ID})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "jobs_pkey",
+		},
+		{
 			name: "ReapExpiredLeases",
 			run: func(ctx context.Context, q *db.Queries, _ planRows) error {
 				_, err := q.ReapExpiredLeases(ctx)
@@ -162,10 +171,9 @@ func TestQueryPlans(t *testing.T) {
 			defer func() { _ = tx.Rollback(t.Context()) }()
 
 			rows := findPlanRows(t, tx)
-			explain := &storetest.Explainer{Tx: tx}
+			explain := storetest.NewExplainer(t, tx)
 
 			require.ErrorIs(t, tt.run(t.Context(), db.New(explain), rows), storetest.ErrExplained)
-			t.Logf("EXPLAIN ANALYZE of %s:\n%s", tt.name, explain.Plan)
 			require.Contains(t, explain.Plan, tt.wantIndex)
 		})
 	}

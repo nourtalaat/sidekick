@@ -1,0 +1,5 @@
+serviceAccount:
+  create: false
+  name: sidekick
+  workloadIdentity:
+    azureClientId: 00000000-1111-2222-3333-444444444444

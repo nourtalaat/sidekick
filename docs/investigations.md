@@ -30,7 +30,7 @@ busy or rate limited is repeated up to the connector's `retries`.
 
 ## Tools
 
-The model sees two built-in tools and the tools of the route's sources:
+The model sees the built-in tools and the tools of the route's sources:
 
 - **`record_finding`** records one finding while the investigation runs,
   citing the tool calls that support it. Slack shows it in the message's
@@ -39,6 +39,13 @@ The model sees two built-in tools and the tools of the route's sources:
   the confidence, the reason, a summary, the findings, and for a real issue
   the cause, the impact and the fixes, or for a false alarm why it fired
   and how to stop it.
+- **`start_watcher`** starts a [watcher](configuration.md#watch), a
+  read-only check that runs on its own schedule and tells when the service
+  is back up. It is offered only when `watch.allowModel` is on and the
+  route does not turn it off, and only with the check types, tools and
+  hosts the route's `watcherLimits` allow. A request outside them gets an
+  error naming the limit, and nothing starts. The watcher keeps running
+  after the investigation ends.
 - **Source tools** are named `<source>__<tool>`, for example
   `signoz__search_logs`. A route's `sources` list limits them to those
   sources; without one, every source's tools are offered. See

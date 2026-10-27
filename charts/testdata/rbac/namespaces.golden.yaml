@@ -1,0 +1,224 @@
+---
+# Source: sidekick/templates/rbac.yaml
+# The Kubernetes sources read only the namespaces they list, but list_nodes
+# reads nodes, which have no namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sidekick-sidekick-kubernetes-source-nodes
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: kubernetes-source
+rules:
+  # list_nodes.
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list]
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sidekick-sidekick-kubernetes-source-nodes
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: kubernetes-source
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sidekick-sidekick-kubernetes-source-nodes
+subjects:
+  - kind: ServiceAccount
+    name: sidekick
+    namespace: sidekick
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sidekick-sidekick-kubernetes-source
+  namespace: batch
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: kubernetes-source
+rules:
+  # list_events and list_pod_problems.
+  - apiGroups: [""]
+    resources: [events, pods]
+    verbs: [list]
+  # get_workload and get_rollout_history.
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets]
+    verbs: [get]
+  # get_rollout_history.
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [list]
+  # get_workload.
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [list]
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sidekick-sidekick-kubernetes-source
+  namespace: prod
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: kubernetes-source
+rules:
+  # list_events and list_pod_problems.
+  - apiGroups: [""]
+    resources: [events, pods]
+    verbs: [list]
+  # get_pod_logs.
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+  # get_workload and get_rollout_history.
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets]
+    verbs: [get]
+  # get_rollout_history.
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [list]
+  # get_workload.
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [list]
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sidekick-sidekick-kubernetes-source
+  namespace: staging
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: kubernetes-source
+rules:
+  # list_events and list_pod_problems.
+  - apiGroups: [""]
+    resources: [events, pods]
+    verbs: [list]
+  # get_pod_logs.
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+  # get_workload and get_rollout_history.
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets]
+    verbs: [get]
+  # get_rollout_history.
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [list]
+  # get_workload.
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [list]
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sidekick-sidekick-kubernetes-source
+  namespace: batch
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: kubernetes-source
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sidekick-sidekick-kubernetes-source
+subjects:
+  - kind: ServiceAccount
+    name: sidekick
+    namespace: sidekick
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sidekick-sidekick-kubernetes-source
+  namespace: prod
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: kubernetes-source
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sidekick-sidekick-kubernetes-source
+subjects:
+  - kind: ServiceAccount
+    name: sidekick
+    namespace: sidekick
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sidekick-sidekick-kubernetes-source
+  namespace: staging
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: kubernetes-source
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sidekick-sidekick-kubernetes-source
+subjects:
+  - kind: ServiceAccount
+    name: sidekick
+    namespace: sidekick
+
+
