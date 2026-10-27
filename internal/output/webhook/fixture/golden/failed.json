@@ -1,0 +1,40 @@
+{
+  "alert": {
+    "alertName": "CheckoutLatencyHigh",
+    "fingerprint": "3f2a9c",
+    "intake": "alertmanager",
+    "kind": "alert",
+    "labels": {
+      "env": "prod",
+      "service": "checkout-api"
+    },
+    "links": [
+      {
+        "title": "Source",
+        "url": "https://prometheus.example.com/graph"
+      }
+    ],
+    "receivedAt": "2026-10-26T10:04:00Z",
+    "service": "checkout-api",
+    "severity": "critical",
+    "startsAt": "2026-10-26T10:02:00Z",
+    "title": "checkout-api p99 latency above 2s"
+  },
+  "deliveryId": "0199c9d2-7f00-7000-8000-000000000001:investigation.final:5",
+  "event": "investigation.final",
+  "events": 2,
+  "investigationId": "0199c9d2-7f00-7000-8000-000000000001",
+  "report": {
+    "checked": null,
+    "confidence": "",
+    "findings": null,
+    "reason": "",
+    "stopDetail": "The model provider was down.",
+    "stopReason": "error",
+    "summary": "",
+    "verdict": "inconclusive"
+  },
+  "seq": 5,
+  "status": "failed",
+  "url": "https://sidekick.example.com/investigations/0199c9d2-7f00-7000-8000-000000000001"
+}
