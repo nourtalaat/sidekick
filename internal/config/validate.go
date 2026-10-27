@@ -358,8 +358,10 @@ func (v *validator) checkRoute(path string, r Route) {
 		v.errs.add(path+".actions", "must be empty: routes are read-only until action modes arrive in M4")
 	}
 
-	v.checkRouteBudgets(path+".budgets", r.Budgets)
+	v.checkRouteBudgets(path+".budgets", r.Budgets.Limits)
+	v.checkRouteDaily(path+".budgets.daily", r.Budgets.Daily)
 	v.checkRouteConcurrency(path+".concurrency", r.Concurrency)
+	v.checkRouteRateLimit(path+".rateLimit", r.RateLimit)
 	v.checkGrouping(path+".grouping", r.Grouping)
 }
 
@@ -391,6 +393,20 @@ func (v *validator) checkRouteBudgets(path string, b Limits) {
 	ceiling := v.cfg.Budgets.PerInvestigation
 
 	switch {
+	case b.MaxTokens < 0:
+		v.errs.add(path+".maxTokens", "must not be negative")
+	case ceiling.MaxTokens > 0 && b.MaxTokens > ceiling.MaxTokens:
+		v.errs.add(path+".maxTokens", "%d is above the global ceiling budgets.perInvestigation.maxTokens %d", b.MaxTokens, ceiling.MaxTokens)
+	}
+
+	switch {
+	case !validUSD(b.MaxCostUSD):
+		v.errs.add(path+".maxCostUSD", "must be a dollar amount that is not negative")
+	case ceiling.MaxCostUSD > 0 && b.MaxCostUSD > ceiling.MaxCostUSD:
+		v.errs.add(path+".maxCostUSD", "%.2f is above the global ceiling budgets.perInvestigation.maxCostUSD %.2f", b.MaxCostUSD, ceiling.MaxCostUSD)
+	}
+
+	switch {
 	case b.MaxToolCalls < 0:
 		v.errs.add(path+".maxToolCalls", "must not be negative")
 	case ceiling.MaxToolCalls > 0 && b.MaxToolCalls > ceiling.MaxToolCalls:
@@ -418,6 +434,45 @@ func (v *validator) checkRouteConcurrency(path string, n int) {
 	}
 }
 
+// checkRouteDaily checks a route's daily cap: not negative, and not above
+// the global one when that is set.
+func (v *validator) checkRouteDaily(path string, d RouteDaily) {
+	global := v.cfg.Budgets.Daily
+
+	switch {
+	case !validUSD(d.MaxCostUSD):
+		v.errs.add(path+".maxCostUSD", "must be a dollar amount that is not negative")
+	case global.MaxCostUSD > 0 && d.MaxCostUSD > global.MaxCostUSD:
+		v.errs.add(path+".maxCostUSD", "%.2f is above the global cap budgets.daily.maxCostUSD %.2f", d.MaxCostUSD, global.MaxCostUSD)
+	}
+
+	if d.OnDailyCap != "" {
+		v.checkOnDailyCap(path+".onDailyCap", d.OnDailyCap)
+	}
+}
+
+// checkRouteRateLimit checks a route's rate limit, which must not allow
+// more events per second than the global one when both are set.
+func (v *validator) checkRouteRateLimit(path string, r *RateLimit) {
+	if r == nil {
+		return
+	}
+
+	if !v.checkRateLimit(path, *r) {
+		return
+	}
+
+	global := v.cfg.Budgets.RateLimit
+	if global == nil || global.Events <= 0 || global.Per <= 0 {
+		return
+	}
+
+	if r.perSecond() > global.perSecond() {
+		v.errs.add(path, "%d events per %s is looser than the global limit budgets.rateLimit of %d events per %s",
+			r.Events, r.Per, global.Events, global.Per)
+	}
+}
+
 // checkGrouping checks that the window is positive and that each
 // fingerprint label is named once.
 func (v *validator) checkGrouping(path string, g Grouping) {
@@ -441,9 +496,61 @@ func (v *validator) checkGrouping(path string, g Grouping) {
 
 func (v *validator) checkBudgets() {
 	b := v.cfg.Budgets.PerInvestigation
+	v.positive("budgets.perInvestigation.maxTokens", b.MaxTokens)
 	v.positive("budgets.perInvestigation.maxToolCalls", b.MaxToolCalls)
 	v.positiveDuration("budgets.perInvestigation.maxWallTime", b.MaxWallTime)
+
+	if !validUSD(b.MaxCostUSD) || b.MaxCostUSD == 0 {
+		v.errs.add("budgets.perInvestigation.maxCostUSD", "must be a positive dollar amount")
+	}
+
+	d := v.cfg.Budgets.Daily
+	if !validUSD(d.MaxCostUSD) {
+		v.errs.add("budgets.daily.maxCostUSD", "must be a dollar amount that is not negative")
+	}
+
+	if _, err := d.Location(); err != nil {
+		v.errs.add("budgets.daily.timeZone", "unknown time zone %q: use an IANA name such as UTC or Europe/Berlin", d.TimeZone)
+	}
+
+	v.checkOnDailyCap("budgets.daily.onDailyCap", d.OnDailyCap)
 	v.positive("budgets.concurrency", v.cfg.Budgets.Concurrency)
+
+	if r := v.cfg.Budgets.RateLimit; r != nil {
+		v.checkRateLimit("budgets.rateLimit", *r)
+	}
+}
+
+func (v *validator) checkOnDailyCap(path string, c OnDailyCap) {
+	if !slices.Contains(knownOnDailyCap, c) {
+		v.errs.add(path, "unknown value %q%s", c, didYouMean(string(c), asStrings(knownOnDailyCap)))
+	}
+}
+
+// checkRateLimit checks the fields of a rate limit, and reports whether
+// they are all valid.
+func (v *validator) checkRateLimit(path string, r RateLimit) bool {
+	ok := true
+
+	if r.Events <= 0 {
+		v.errs.add(path+".events", "must be positive")
+
+		ok = false
+	}
+
+	if r.Per <= 0 {
+		v.errs.add(path+".per", "must be positive")
+
+		ok = false
+	}
+
+	if !slices.Contains(knownOverLimit, r.OverLimit) {
+		v.errs.add(path+".overLimit", "unknown value %q%s", r.OverLimit, didYouMean(string(r.OverLimit), asStrings(knownOverLimit)))
+
+		ok = false
+	}
+
+	return ok
 }
 
 func (v *validator) checkReport() {

@@ -178,9 +178,10 @@ func (r *run) loop(ctx context.Context) error {
 // at the saved steps to decide what comes next, so a resumed run picks up
 // exactly where the last one stopped: it answers the calls of the last
 // model turn that have no result, ends the run if the steps say it is
-// over, reminds the model when it called no tool, and otherwise delivers
-// the inbox and asks the model for a turn. ctx ends when the worker must stop; runCtx also ends
-// when the wall time does.
+// over, gives the model its final turn when a budget is nearly used,
+// reminds the model when it called no tool, and otherwise delivers the
+// inbox and asks the model for a turn. ctx ends when the worker must stop;
+// runCtx also ends when the wall time does.
 func (r *run) untilEnd(ctx, runCtx context.Context) (ending, error) {
 	for {
 		if ctx.Err() != nil {
@@ -203,6 +204,40 @@ func (r *run) untilEnd(ctx, runCtx context.Context) (ending, error) {
 			return r.overBudget(budgetWallTime), nil
 		}
 
+		if budget, started := r.hist.finalTurn(); started {
+			if r.hist.finalTurnTaken() {
+				return r.overBudget(budget), nil
+			}
+
+			end, err := r.modelTurn(ctx, runCtx, true)
+			if err != nil {
+				return ending{}, fmt.Errorf("final turn: %w", err)
+			}
+
+			if end != nil {
+				return *end, nil
+			}
+
+			continue
+		}
+
+		dailyCapped, err := r.dailyCapped(ctx)
+		if err != nil {
+			return ending{}, fmt.Errorf("check the daily caps: %w", err)
+		}
+
+		if budget, hard := r.budgetReached(r.h.now(), dailyCapped); budget != "" {
+			if hard {
+				return r.overBudget(budget), nil
+			}
+
+			if err := r.startFinalTurn(ctx, budget); err != nil {
+				return ending{}, fmt.Errorf("start the final turn: %w", err)
+			}
+
+			continue
+		}
+
 		if r.hist.needsReminder() {
 			if r.hist.count(isNote) >= maxReminders {
 				return r.noVerdict(fmt.Sprintf("The model ended its turn without a verdict %d times.", maxReminders+1), ""), nil
@@ -219,7 +254,7 @@ func (r *run) untilEnd(ctx, runCtx context.Context) (ending, error) {
 			return ending{}, fmt.Errorf("inbox: %w", err)
 		}
 
-		end, err := r.modelTurn(ctx, runCtx)
+		end, err := r.modelTurn(ctx, runCtx, false)
 		if err != nil {
 			return ending{}, fmt.Errorf("model turn: %w", err)
 		}
@@ -232,18 +267,20 @@ func (r *run) untilEnd(ctx, runCtx context.Context) (ending, error) {
 
 // withWallTime returns ctx with the run's wall time deadline, counted from
 // when the investigation first started, so time spent before a resume
-// counts too.
+// counts too. The time left is measured with the handler's clock.
 func (r *run) withWallTime(ctx context.Context) (context.Context, context.CancelFunc) {
 	if r.budget.MaxWallTime <= 0 || r.inv.StartedAt == nil {
 		return context.WithCancel(ctx)
 	}
 
-	return context.WithDeadlineCause(ctx, r.inv.StartedAt.Add(r.budget.MaxWallTime), errWallTime)
+	left := r.inv.StartedAt.Add(r.budget.MaxWallTime).Sub(r.h.now())
+
+	return context.WithTimeoutCause(ctx, left, errWallTime)
 }
 
 // ended reports whether the saved steps end the run, and how: an accepted
-// report, too many reports that failed their checks, or a call over the
-// tool call limit.
+// report, which is inconclusive when the model submitted it in its final
+// turn, or too many reports that failed their checks.
 func (r *run) ended() (ending, bool) {
 	var rejected []db.Step
 
@@ -253,11 +290,13 @@ func (r *run) ended() (ending, bool) {
 			rep, _ := r.h.builtins.submitted(r.hist, r.hist.calls[*s.ToolCallID], r.h.opts.Rules)
 			rep.StopReason = report.StopSubmitted
 
+			if budget, started := r.hist.finalTurn(); started && r.hist.finalTurnTaken() {
+				return r.submittedInFinalTurn(rep, budget), true
+			}
+
 			return ending{report: rep}, true
 		case isBuiltin(s, report.SubmitVerdictTool) && s.Status == statusRejected:
 			rejected = append(rejected, s)
-		case s.Kind == kindToolResult && s.Status == statusOverBudget:
-			return r.overBudget(budgetToolCalls), true
 		}
 	}
 
@@ -280,12 +319,17 @@ func (r *run) remind(ctx context.Context) error {
 	return nil
 }
 
-// modelTurn asks the model for its next turn and saves it. It returns an
-// ending when the model refuses the request for good, and nil, with no
-// error, when the run's wall time ended during the call, which the loop
-// then handles. Other failures return an error, so the job is retried.
-func (r *run) modelTurn(ctx, runCtx context.Context) (*ending, error) {
+// modelTurn asks the model for its next turn, the final one when final is
+// set, and saves it. It returns an ending when the model refuses the
+// request for good, and nil, with no error, when the run's wall time
+// ended during the call, which the loop then handles. Other failures
+// return an error, so the job is retried.
+func (r *run) modelTurn(ctx, runCtx context.Context, final bool) (*ending, error) {
 	req := r.hist.request()
+	if final {
+		req = r.finalRequest(req)
+	}
+
 	req.Metadata = map[string]string{model.MetadataRole: string(model.RoleInvestigate), model.MetadataRoute: r.inv.Route}
 
 	started := time.Now()
@@ -343,7 +387,8 @@ func wallTimeOver(runCtx context.Context) bool {
 	return errors.Is(context.Cause(runCtx), errWallTime)
 }
 
-// isNote reports whether s is a note, which so far is always a reminder.
+// isNote reports whether s is a reminder note, not the note that starts
+// the final turn.
 func isNote(s db.Step) bool {
-	return s.Kind == kindNote
+	return s.Kind == kindNote && s.Budget == nil
 }

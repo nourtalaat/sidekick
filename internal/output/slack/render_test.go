@@ -45,6 +45,11 @@ func TestRenderGolden(t *testing.T) {
 		{name: "false-alarm-fields", view: mainView(testUpdate(output.PhaseFinal, falseAlarm()))},
 		{name: "untrusted-text", view: mainView(untrustedUpdate())},
 		{name: "no-verdict", view: mainView(testUpdate(output.PhaseFinal, noVerdict()))},
+		{name: "notice", view: noticeView(output.Notice{
+			Kind:  output.NoticeDailyCap,
+			Title: "Daily cap reached",
+			Text:  "Route payments has used all of today's $40.00 cap. New investigations on this route wait until 00:00 UTC.",
+		})},
 	}
 
 	for _, v := range []report.Verdict{report.TruePositive, report.FalsePositive, report.Inconclusive, report.Duplicate, report.KnownIssue, report.Flapping} {
