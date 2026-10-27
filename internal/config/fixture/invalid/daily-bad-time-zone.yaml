@@ -1,0 +1,16 @@
+# A daily time zone that does not exist, and a negative global daily cap.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default
+
+budgets:
+  perInvestigation: { maxTokens: 0, maxCostUSD: 0 }
+  daily: { maxCostUSD: -5, timeZone: Mars/Olympus }

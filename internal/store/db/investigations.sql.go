@@ -375,22 +375,24 @@ func (q *Queries) InsertInvestigation(ctx context.Context, arg InsertInvestigati
 
 const startInvestigationRun = `-- name: StartInvestigationRun :one
 UPDATE investigations
-SET fence = $1, status = 'running', started_at = coalesce(started_at, now())
-WHERE id = $2 AND fence < $1 AND status IN ('queued', 'running', 'failed')
+SET fence = $1, status = 'running', started_at = coalesce(started_at, $2::timestamptz)
+WHERE id = $3 AND fence < $1 AND status IN ('queued', 'running', 'failed')
 RETURNING id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at
 `
 
 type StartInvestigationRunParams struct {
 	Fence int64
+	Now   time.Time
 	ID    uuid.UUID
 }
 
 // StartInvestigationRun gives the run of an investigation to the job claim
-// with the token fence, and sets it running. It returns no row when a newer
+// with the token fence, and sets it running; the first run sets started_at
+// to now, from the caller's clock. It returns no row when a newer
 // claim owns the run already, or when the investigation has ended; a failed
 // investigation runs again when an admin retries its dead job.
 func (q *Queries) StartInvestigationRun(ctx context.Context, arg StartInvestigationRunParams) (Investigation, error) {
-	row := q.db.QueryRow(ctx, startInvestigationRun, arg.Fence, arg.ID)
+	row := q.db.QueryRow(ctx, startInvestigationRun, arg.Fence, arg.Now, arg.ID)
 	var i Investigation
 	err := row.Scan(
 		&i.ID,

@@ -74,7 +74,7 @@ either.
 |---|---|---|
 | `submitted` | The model submitted a report that passed its checks. | The model's |
 | `no_verdict` | The report failed its checks 3 times, or the model ended its turn without calling a tool 3 times (after 2 reminders). | Not sure yet |
-| `budget` | The investigation used all its tool calls, or reached its time limit. | Not sure yet |
+| `budget` | A budget ran out: tokens, tool calls, time or cost, or a daily cap was reached. | Not sure yet |
 | `error` | The model refused the request for good, for example because it was too long, or the job failed on every attempt. | Could not finish |
 
 The first three end in status `final`; `error` ends in status `failed`.
@@ -83,17 +83,41 @@ the findings recorded with `record_finding` and what was checked.
 
 ## Limits
 
-Two limits hold each investigation: the lower of the route's `budgets` and
+Four limits hold each investigation: the lower of the route's `budgets` and
 the strategy's `budgets`, fixed when the investigation is created (see
-[`budgets`](configuration.md#budgets)).
+[`budgets`](configuration.md#budgets)). What each has used is saved with
+every step, so a restarted investigation goes on counting.
 
+- **`maxTokens`** counts the input tokens, including those read from or
+  written to the prompt cache, and the output tokens of every model call.
 - **`maxToolCalls`** counts the calls to source tools. A call past the
-  limit is not run; the model is told so, and the investigation ends with
-  stop reason `budget`.
+  limit is not run, and the model is told so.
 - **`maxWallTime`** counts from when the investigation first started,
-  including any time a restart took. When it runs out, the call in
-  progress is stopped and the investigation ends with stop reason
-  `budget`.
+  including any time a restart took.
+- **`maxCostUSD`** counts the cost of the model calls, from the price
+  table.
+
+When 90% of the tokens, cost or tool calls are used, or a minute before
+the time limit (a tenth of it when the limit is under 10 minutes), the
+model gets one last turn. It is told the budget is nearly used, and
+`submit_verdict` is the only tool it may call; where the model's provider
+allows it, the call is required. A report it submits then keeps its
+findings, cause and fixes, but its verdict becomes "Not sure yet", with
+stop reason `budget` and the budget in the stop detail, which also names
+the verdict the model submitted.
+
+The investigation ends without that last turn, with a report built from
+the findings recorded so far, when the last turn does not submit a report
+that passes its checks, when the time limit passes, or when the tokens or
+cost are used up before the last turn could start. Either way
+`sidekick_budget_exhausted_total` counts it, with the budget as its
+`budget` label.
+
+A [daily cap](configuration.md#daily-caps) is checked before an
+investigation starts and before each model call. Before it starts, a cap
+that is reached holds it until the next day or ends it at once, as
+`onDailyCap` says; once it runs, a cap that is reached gives the model
+its last turn as above, with `daily_cap` as the budget.
 
 `budgets.concurrency` and each route's `concurrency` limit how many
 investigations run at once across all replicas; the others wait in the
@@ -120,3 +144,11 @@ Each model answer is saved with its tokens and its cost, from the price
 table (see [the `model` section](configuration.md#model)), and the
 investigation keeps the totals. A model without a price is saved without a
 cost.
+
+Each answer's cost and tokens are also added to the day's spend of its
+route, connector and model, in the same database write as the answer, so
+the [daily caps](configuration.md#daily-caps) always see what was spent.
+The day starts at midnight in `budgets.daily.timeZone`. The gauge
+`sidekick_daily_spend_usd`, with a `route` label, shows what each route
+has spent today, read from the database at each scrape, so every replica
+shows the same total.
