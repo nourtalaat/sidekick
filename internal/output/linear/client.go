@@ -181,7 +181,7 @@ func (c *client) CreateComment(ctx context.Context, issue ticket.Issue, comment 
 	}
 
 	if updateErr := c.update(ctx, id, body); updateErr != nil {
-		return "", fmt.Errorf("create the comment: %w", err)
+		return "", fmt.Errorf("create the comment: %w", errors.Join(err, fmt.Errorf("edit an earlier attempt: %w", updateErr)))
 	}
 
 	return id, nil

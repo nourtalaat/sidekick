@@ -95,6 +95,8 @@ func TestCreateComment(t *testing.T) {
 		responses []fakehttp.Response
 		want      string
 		wantErr   error
+		// wantAlso is a second error that must be in the chain.
+		wantAlso  error
 		wantCalls []string
 	}{
 		{
@@ -113,6 +115,14 @@ func TestCreateComment(t *testing.T) {
 			name:      "refused, and there is no comment to edit",
 			responses: []fakehttp.Response{{BodyFile: "fixture/comment_create_refused.json"}, {BodyFile: "fixture/comment_not_found.json"}},
 			wantErr:   &apiError{Code: "INVALID_INPUT"},
+			wantAlso:  ticket.ErrNotFound,
+			wantCalls: []string{"commentCreate", "commentUpdate"},
+		},
+		{
+			name:      "refused, and the edit fails too",
+			responses: []fakehttp.Response{{BodyFile: "fixture/comment_create_refused.json"}, {Status: http.StatusBadGateway}},
+			wantErr:   &apiError{Code: "INVALID_INPUT"},
+			wantAlso:  &sinkhttp.StatusError{Status: http.StatusBadGateway},
 			wantCalls: []string{"commentCreate", "commentUpdate"},
 		},
 		{
@@ -145,6 +155,12 @@ func TestCreateComment(t *testing.T) {
 
 			got, err := testClient(t, api).CreateComment(t.Context(), testIssue, comment)
 			requireErr(t, tt.wantErr, err)
+
+			if tt.wantAlso != nil {
+				requireErr(t, tt.wantAlso, err)
+				require.ErrorContains(t, err, "edit an earlier attempt")
+			}
+
 			require.Equal(t, tt.want, got)
 
 			reqs := requests(t, api)
