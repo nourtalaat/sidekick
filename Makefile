@@ -137,6 +137,17 @@ CI_TARGETS += helm-test
 helm-test: $(HELM) ## Compare helm template of the quick-start values and of each charts/testdata case with its golden file, and validate each rendered sidekick.yaml
 	sh scripts/helm-test.sh $(HELM)
 
+# The tools of the validator image (promtool, OpenTofu and its provider
+# mirror) for Linux, which the validator tests run when
+# SIDEKICK_VALIDATE_TOOLS names this directory, as in CI.
+# scripts/validator-tools.sh pins their versions and checksums.
+VALIDATOR_TOOLS := $(BIN_DIR)/validator-tools
+VALIDATOR_ARCH ?= $(HOST_ARCH)
+
+.PHONY: validator-tools
+validator-tools: ## Install the validator image's tools for Linux in bin/validator-tools, for the validator tests
+	sh scripts/validator-tools.sh $(VALIDATOR_TOOLS) $(VALIDATOR_ARCH)
+
 .PHONY: helm-path
 helm-path: $(HELM) ## Install the pinned Helm and print its path, for scripts
 	@echo $(HELM)
