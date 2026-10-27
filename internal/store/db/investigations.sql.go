@@ -22,7 +22,7 @@ SET next_seq = next_seq + 1,
     tool_calls = tool_calls + $4,
     first_finding_at = CASE WHEN $5::boolean THEN coalesce(first_finding_at, now()) ELSE first_finding_at END
 WHERE id = $6 AND fence = $7 AND status = 'running'
-RETURNING next_seq - 1 AS seq, first_finding_at
+RETURNING next_seq - 1 AS seq, first_finding_at, cancel_requested_at
 `
 
 type AdvanceInvestigationParams struct {
@@ -36,14 +36,16 @@ type AdvanceInvestigationParams struct {
 }
 
 type AdvanceInvestigationRow struct {
-	Seq            int32
-	FirstFindingAt *time.Time
+	Seq               int32
+	FirstFindingAt    *time.Time
+	CancelRequestedAt *time.Time
 }
 
 // AdvanceInvestigation takes the next step seq of a running investigation
 // and adds the step's counters, when fence still owns the run. Run it in
 // the transaction that inserts the step. It returns no row when the fence
-// is stale, so a worker that lost its lease writes nothing.
+// is stale, so a worker that lost its lease writes nothing. It also
+// returns cancel_requested_at, so the run sees a Stop at every step.
 func (q *Queries) AdvanceInvestigation(ctx context.Context, arg AdvanceInvestigationParams) (AdvanceInvestigationRow, error) {
 	row := q.db.QueryRow(ctx, advanceInvestigation,
 		arg.InputTokens,
@@ -55,7 +57,7 @@ func (q *Queries) AdvanceInvestigation(ctx context.Context, arg AdvanceInvestiga
 		arg.Fence,
 	)
 	var i AdvanceInvestigationRow
-	err := row.Scan(&i.Seq, &i.FirstFindingAt)
+	err := row.Scan(&i.Seq, &i.FirstFindingAt, &i.CancelRequestedAt)
 	return i, err
 }
 
@@ -64,7 +66,7 @@ UPDATE investigations
 SET status = 'failed', verdict = $1, confidence = $2, report = $3,
     stop_reason = $4, finished_at = now()
 WHERE id = $5 AND status IN ('queued', 'running')
-RETURNING id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at
+RETURNING id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at, cancel_requested_at, cancel_requested_by, cancel_requested_by_slack_user, confirmed_verdict, confirmed_cause, confirmed_by, confirmed_by_slack_user, confirmed_at
 `
 
 type FailInvestigationParams struct {
@@ -112,6 +114,14 @@ func (q *Queries) FailInvestigation(ctx context.Context, arg FailInvestigationPa
 		&i.StartedAt,
 		&i.FirstFindingAt,
 		&i.FinishedAt,
+		&i.CancelRequestedAt,
+		&i.CancelRequestedBy,
+		&i.CancelRequestedBySlackUser,
+		&i.ConfirmedVerdict,
+		&i.ConfirmedCause,
+		&i.ConfirmedBy,
+		&i.ConfirmedBySlackUser,
+		&i.ConfirmedAt,
 	)
 	return i, err
 }
@@ -121,7 +131,7 @@ UPDATE investigations
 SET status = $1, verdict = $2, confidence = $3, report = $4,
     stop_reason = $5, finished_at = now()
 WHERE id = $6 AND fence = $7 AND status = 'running'
-RETURNING id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at
+RETURNING id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at, cancel_requested_at, cancel_requested_by, cancel_requested_by_slack_user, confirmed_verdict, confirmed_cause, confirmed_by, confirmed_by_slack_user, confirmed_at
 `
 
 type FinishInvestigationParams struct {
@@ -173,6 +183,14 @@ func (q *Queries) FinishInvestigation(ctx context.Context, arg FinishInvestigati
 		&i.StartedAt,
 		&i.FirstFindingAt,
 		&i.FinishedAt,
+		&i.CancelRequestedAt,
+		&i.CancelRequestedBy,
+		&i.CancelRequestedBySlackUser,
+		&i.ConfirmedVerdict,
+		&i.ConfirmedCause,
+		&i.ConfirmedBy,
+		&i.ConfirmedBySlackUser,
+		&i.ConfirmedAt,
 	)
 	return i, err
 }
@@ -228,7 +246,7 @@ func (q *Queries) GetFirstEvent(ctx context.Context, groupID uuid.UUID) (GetFirs
 }
 
 const getInvestigation = `-- name: GetInvestigation :one
-SELECT id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at FROM investigations WHERE id = $1
+SELECT id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at, cancel_requested_at, cancel_requested_by, cancel_requested_by_slack_user, confirmed_verdict, confirmed_cause, confirmed_by, confirmed_by_slack_user, confirmed_at FROM investigations WHERE id = $1
 `
 
 func (q *Queries) GetInvestigation(ctx context.Context, id uuid.UUID) (Investigation, error) {
@@ -259,12 +277,20 @@ func (q *Queries) GetInvestigation(ctx context.Context, id uuid.UUID) (Investiga
 		&i.StartedAt,
 		&i.FirstFindingAt,
 		&i.FinishedAt,
+		&i.CancelRequestedAt,
+		&i.CancelRequestedBy,
+		&i.CancelRequestedBySlackUser,
+		&i.ConfirmedVerdict,
+		&i.ConfirmedCause,
+		&i.ConfirmedBy,
+		&i.ConfirmedBySlackUser,
+		&i.ConfirmedAt,
 	)
 	return i, err
 }
 
 const getInvestigationWithEvent = `-- name: GetInvestigationWithEvent :one
-SELECT investigations.id, investigations.group_id, investigations.route, investigations.strategy, investigations.strategy_version, investigations.mode, investigations.status, investigations.run, investigations.next_seq, investigations.fence, investigations.verdict, investigations.confidence, investigations.report, investigations.stop_reason, investigations.connectors, investigations.budget, investigations.input_tokens, investigations.output_tokens, investigations.cost_micros, investigations.tool_calls, investigations.created_at, investigations.started_at, investigations.first_finding_at, investigations.finished_at, events.id, events.intake, events.key, events.kind, events.sender_kind, events.sender_id, events.sender_name, events.trusted, events.alert_name, events.title, events.body, events.service, events.severity, events.labels, events.links, events.fingerprint, events.slack, events.raw, events.status, events.skip_reason, events.route, events.group_id, events.starts_at, events.ends_at, events.received_at
+SELECT investigations.id, investigations.group_id, investigations.route, investigations.strategy, investigations.strategy_version, investigations.mode, investigations.status, investigations.run, investigations.next_seq, investigations.fence, investigations.verdict, investigations.confidence, investigations.report, investigations.stop_reason, investigations.connectors, investigations.budget, investigations.input_tokens, investigations.output_tokens, investigations.cost_micros, investigations.tool_calls, investigations.created_at, investigations.started_at, investigations.first_finding_at, investigations.finished_at, investigations.cancel_requested_at, investigations.cancel_requested_by, investigations.cancel_requested_by_slack_user, investigations.confirmed_verdict, investigations.confirmed_cause, investigations.confirmed_by, investigations.confirmed_by_slack_user, investigations.confirmed_at, events.id, events.intake, events.key, events.kind, events.sender_kind, events.sender_id, events.sender_name, events.trusted, events.alert_name, events.title, events.body, events.service, events.severity, events.labels, events.links, events.fingerprint, events.slack, events.raw, events.status, events.skip_reason, events.route, events.group_id, events.starts_at, events.ends_at, events.received_at
 FROM investigations
 JOIN events ON events.group_id = investigations.group_id
 WHERE investigations.id = $1
@@ -307,6 +333,14 @@ func (q *Queries) GetInvestigationWithEvent(ctx context.Context, id uuid.UUID) (
 		&i.Investigation.StartedAt,
 		&i.Investigation.FirstFindingAt,
 		&i.Investigation.FinishedAt,
+		&i.Investigation.CancelRequestedAt,
+		&i.Investigation.CancelRequestedBy,
+		&i.Investigation.CancelRequestedBySlackUser,
+		&i.Investigation.ConfirmedVerdict,
+		&i.Investigation.ConfirmedCause,
+		&i.Investigation.ConfirmedBy,
+		&i.Investigation.ConfirmedBySlackUser,
+		&i.Investigation.ConfirmedAt,
 		&i.Event.ID,
 		&i.Event.Intake,
 		&i.Event.Key,
@@ -373,11 +407,83 @@ func (q *Queries) InsertInvestigation(ctx context.Context, arg InsertInvestigati
 	return err
 }
 
+const listCancelRequested = `-- name: ListCancelRequested :many
+SELECT id FROM investigations
+WHERE id = ANY($1::uuid[]) AND cancel_requested_at IS NOT NULL
+`
+
+// ListCancelRequested returns which of the investigations with ids have a
+// stop asked for.
+func (q *Queries) ListCancelRequested(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listCancelRequested, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listenInvestigationCancel = `-- name: ListenInvestigationCancel :exec
+LISTEN investigation_cancel
+`
+
+func (q *Queries) ListenInvestigationCancel(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, listenInvestigationCancel)
+	return err
+}
+
+const notifyInvestigationCancel = `-- name: NotifyInvestigationCancel :exec
+SELECT pg_notify('investigation_cancel', $1::text)
+`
+
+// NotifyInvestigationCancel tells every replica, once the transaction
+// commits, that a stop was asked for the investigation with id.
+func (q *Queries) NotifyInvestigationCancel(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, notifyInvestigationCancel, id)
+	return err
+}
+
+const requestInvestigationCancel = `-- name: RequestInvestigationCancel :one
+UPDATE investigations
+SET cancel_requested_at = now(),
+    cancel_requested_by = $1,
+    cancel_requested_by_slack_user = $2
+WHERE id = $3 AND status IN ('queued', 'running') AND cancel_requested_at IS NULL
+RETURNING cancel_requested_at
+`
+
+type RequestInvestigationCancelParams struct {
+	UserID      *uuid.UUID
+	SlackUserID *string
+	ID          uuid.UUID
+}
+
+// RequestInvestigationCancel records that a responder asked to stop a
+// queued or running investigation. It returns no row when the
+// investigation has ended or a stop was asked for already.
+func (q *Queries) RequestInvestigationCancel(ctx context.Context, arg RequestInvestigationCancelParams) (*time.Time, error) {
+	row := q.db.QueryRow(ctx, requestInvestigationCancel, arg.UserID, arg.SlackUserID, arg.ID)
+	var cancel_requested_at *time.Time
+	err := row.Scan(&cancel_requested_at)
+	return cancel_requested_at, err
+}
+
 const startInvestigationRun = `-- name: StartInvestigationRun :one
 UPDATE investigations
 SET fence = $1, status = 'running', started_at = coalesce(started_at, now())
 WHERE id = $2 AND fence < $1 AND status IN ('queued', 'running', 'failed')
-RETURNING id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at
+RETURNING id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at, cancel_requested_at, cancel_requested_by, cancel_requested_by_slack_user, confirmed_verdict, confirmed_cause, confirmed_by, confirmed_by_slack_user, confirmed_at
 `
 
 type StartInvestigationRunParams struct {
@@ -417,6 +523,14 @@ func (q *Queries) StartInvestigationRun(ctx context.Context, arg StartInvestigat
 		&i.StartedAt,
 		&i.FirstFindingAt,
 		&i.FinishedAt,
+		&i.CancelRequestedAt,
+		&i.CancelRequestedBy,
+		&i.CancelRequestedBySlackUser,
+		&i.ConfirmedVerdict,
+		&i.ConfirmedCause,
+		&i.ConfirmedBy,
+		&i.ConfirmedBySlackUser,
+		&i.ConfirmedAt,
 	)
 	return i, err
 }
