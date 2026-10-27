@@ -30,6 +30,8 @@ spec:
       annotations:
         # A config change rolls the pods.
         checksum/config: 11484d43f67ee3747dc0dc7dc1f7785262bff4e44fac47d37ed9cafdb17e48a7
+        azure.workload.identity/skip-containers: validator
+        eks.amazonaws.com/skip-containers: validator
       labels:
         app.kubernetes.io/name: sidekick
         app.kubernetes.io/instance: sidekick
@@ -164,6 +166,9 @@ spec:
           volumeMounts:
             - name: validator-tmp
               mountPath: /tmp
+            - name: validator-no-token
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
       volumes:
         - name: config
           configMap:
@@ -185,5 +190,8 @@ spec:
         - name: validator-tmp
           emptyDir:
             sizeLimit: 2Gi
+        - name: validator-no-token
+          emptyDir:
+            sizeLimit: 1Mi
 
 

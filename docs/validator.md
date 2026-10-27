@@ -128,6 +128,38 @@ the Sidekick pods mount their service account token, whatever
 `serviceAccount.automountToken` says. Creating Jobs lets Sidekick run pods
 in its namespace, so install it in a namespace of its own.
 
+### Keeping tokens away from the validator
+
+The files the validator checks are written by the model, and OpenTofu
+evaluates functions such as `file()` while it validates a module. A
+module like `locals { x = tonumber(file("/var/run/secrets/kubernetes.io/serviceaccount/token")) }`
+would put the file's contents into the error that goes back to Sidekick
+and the model. So the validator's container must not see any token:
+
+- **Kubernetes service account token.** The sidecar has an empty,
+  read-only directory mounted at `/var/run/secrets/kubernetes.io/serviceaccount`.
+  Kubernetes does not add its token mount to a container that already
+  has a mount at that path, so the sidecar gets no token even when the
+  Sidekick container does (with a Kubernetes source, or in job mode).
+- **AWS (IRSA and EKS Pod Identity).** The pod gets the annotation
+  `eks.amazonaws.com/skip-containers: validator`. The EKS pod identity
+  webhook, which adds the IRSA token and the EKS Pod Identity token to
+  containers, skips the containers it names, for both kinds of token.
+- **Azure Workload Identity.** The pod gets the annotation
+  `azure.workload.identity/skip-containers: validator`, so the Azure
+  webhook adds no token volume to the validator container.
+
+When `podAnnotations` already sets one of these annotations, the chart
+adds `validator` to its list. The validator also replaces anything that
+looks like a JWT in the messages it returns with `<redacted>`, as a second
+line of defence.
+
+In job mode, the Job pods must likewise get no token: they must run with
+`automountServiceAccountToken: false`, without the
+`azure.workload.identity/use` label or any cloud identity annotation, and
+with a service account other than Sidekick's, since the EKS webhook adds
+the IRSA token to pods whose service account names an IAM role.
+
 ## Limits
 
 - A validation, all its files included, gets 60 seconds.
