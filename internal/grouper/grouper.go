@@ -122,10 +122,11 @@ func New(opts Options) *Grouper {
 // Group puts ev, which the caller has just marked routed in tx, into a
 // group of rt inside a grouper.group span: it joins the open group with
 // its fingerprint, or else, when rt has a related window, the open group
-// of the same or a related service, or else opens a new one. A joined event goes to the inbox of
-// the group's investigation, and the investigation's outputs are refreshed
-// to show the new event count. When the result is Opened, the caller must
-// create the investigation with Result.InvestigationID in tx.
+// of the same or a related service, or else opens a new one. A joined
+// event goes to the inbox of the group's investigation, and the
+// investigation's outputs are refreshed to show the new event count. When
+// the result is Opened, the caller must create the investigation with
+// Result.InvestigationID in tx.
 func (g *Grouper) Group(ctx context.Context, tx pgx.Tx, ev db.Event, rt Route) (res Result, err error) {
 	ctx, span := g.tracer.Start(ctx, SpanName, trace.WithAttributes(attribute.String(attrRoute, rt.Name)))
 
