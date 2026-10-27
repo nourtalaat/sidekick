@@ -2,9 +2,10 @@
 // names: the database and its schema, the Slack bot token, each model
 // connector's API key and each source, and warns about models without a
 // price, about investigate connectors that cannot be forced to call a
-// tool, and about local model presets without a server set. Each check gives a Result with a fix for any problem. The checks
-// make only calls that change nothing and cost nothing, and no secret value
-// ever appears in a Result.
+// tool, about local model presets without a server set, and about presets
+// that Ollama runs with too small a context. Each check gives a Result
+// with a fix for any problem. The checks make only calls that change
+// nothing and cost nothing, and no secret value ever appears in a Result.
 package doctor
 
 import (
@@ -82,8 +83,9 @@ type Options struct {
 }
 
 // Run runs every check, in order: database, Slack, model keys, prices,
-// tool choice, local model servers, sources. It never stops early, so one run shows every problem. Secret
-// values that any check read are replaced in the results.
+// tool choice, local model servers and their context, sources. It never
+// stops early, so one run shows every problem. Secret values that any check
+// read are replaced in the results.
 func Run(ctx context.Context, opts Options) []Result {
 	d := newDoctor(opts)
 

@@ -17,8 +17,17 @@ func TestCheckLocalModels(t *testing.T) {
 
 	const serverFix = "add the kind of server at baseURL to model.connectors.local: `server: vllm`, `server: llamacpp` or `server: ollama`"
 
+	const (
+		confirmFix = "if OLLAMA_CONTEXT_LENGTH is not set to 65536 or more in Ollama's environment, set it and restart Ollama; then run sidekick doctor again while `ollama ps` lists qwen3.8:27b"
+		unset      = "unless OLLAMA_CONTEXT_LENGTH is set, Ollama picks the context from the video memory, which is too small below 48 GiB"
+	)
+
 	version := fakehttp.Response{BodyFile: filepath.Join("fixture", "ollama-version.json"), Headers: jsonHeaders}
 	notFound := fakehttp.Response{Status: http.StatusNotFound}
+	running := func(file string) fakehttp.Response {
+		return fakehttp.Response{BodyFile: filepath.Join("fixture", file), Headers: jsonHeaders}
+	}
+	contextOK := Result{Check: "context local", Status: StatusOK, Message: "Ollama runs qwen3.8:27b with a context of 65536 tokens, at least the 65536 an investigation needs"}
 
 	tests := []struct {
 		name    string
@@ -43,14 +52,74 @@ func TestCheckLocalModels(t *testing.T) {
 			replace: []string{"LOCAL_MODEL", "my-model", "LOCAL_EXTRA", ", capabilities: { toolCalling: true }"},
 		},
 		{
-			name:    "no server set, and Ollama answers",
-			replace: []string{"LOCAL_MODEL", "Qwen/Qwen3.8-27B"},
-			routes:  map[string][]fakehttp.Response{"/api/version": {version}},
+			name:    "Ollama runs the preset with a long enough context",
+			replace: []string{"LOCAL_EXTRA", ", server: ollama"},
+			routes:  map[string][]fakehttp.Response{"/api/ps": {running("ollama-ps-65536.json")}},
+			want:    []Result{contextOK},
+		},
+		{
+			name: "Ollama runs the preset, named without a tag, with a long enough context",
+			replace: []string{
+				"LOCAL_MODEL", "qwen3.8",
+				"LOCAL_EXTRA", ", server: ollama",
+			},
+			routes: map[string][]fakehttp.Response{"/api/ps": {{Body: []byte(`{"models":[{"name":"qwen3.8:latest","model":"qwen3.8:latest","context_length":131072}]}`), Headers: jsonHeaders}}},
+			want:   []Result{{Check: "context local", Status: StatusOK, Message: "Ollama runs qwen3.8:latest with a context of 131072 tokens, at least the 65536 an investigation needs"}},
+		},
+		{
+			name:    "Ollama runs the preset with its 4K default context",
+			replace: []string{"LOCAL_EXTRA", ", server: ollama"},
+			routes:  map[string][]fakehttp.Response{"/api/ps": {running("ollama-ps-4096.json")}},
 			want: []Result{{
-				Check: "server local", Status: StatusWarn,
-				Message: "no server set; the server at baseURL is Ollama 0.13.3",
-				Fix:     "add `server: ollama` to model.connectors.local",
+				Check: "context local", Status: StatusWarn,
+				Message: "Ollama runs qwen3.8:27b with a context of 4096 tokens, below the 65536 an investigation needs, so long prompts are cut",
+				Fix:     "set OLLAMA_CONTEXT_LENGTH=65536 or more in Ollama's environment and restart Ollama",
 			}},
+		},
+		{
+			name:    "Ollama has not loaded the preset",
+			replace: []string{"LOCAL_EXTRA", ", server: ollama"},
+			routes:  map[string][]fakehttp.Response{"/api/ps": {running("ollama-ps-other.json")}},
+			want: []Result{{
+				Check: "context local", Status: StatusWarn,
+				Message: "Ollama has not loaded qwen3.8:27b, so its context cannot be checked; " + unset,
+				Fix:     confirmFix,
+			}},
+		},
+		{
+			name:    "Ollama does not report the context",
+			replace: []string{"LOCAL_EXTRA", ", server: ollama"},
+			routes:  map[string][]fakehttp.Response{"/api/ps": {running("ollama-ps-no-context.json")}},
+			want: []Result{{
+				Check: "context local", Status: StatusWarn,
+				Message: "this Ollama version does not report the context it runs qwen3.8:27b with; " + unset,
+				Fix:     confirmFix,
+			}},
+		},
+		{
+			name:    "Ollama cannot list its models",
+			replace: []string{"LOCAL_EXTRA", ", server: ollama, apiKeySecret: { name: anthropic, key: apiKey }"},
+			routes:  map[string][]fakehttp.Response{"/api/ps": {{Status: http.StatusInternalServerError}}},
+			want: []Result{{
+				Check: "context local", Status: StatusWarn,
+				Message: "cannot ask Ollama which context it runs qwen3.8:27b with: /api/ps answered 500 Internal Server Error",
+				Fix:     confirmFix,
+			}},
+		},
+		{
+			name: "no server set, and Ollama answers",
+			routes: map[string][]fakehttp.Response{
+				"/api/version": {version},
+				"/api/ps":      {running("ollama-ps-65536.json")},
+			},
+			want: []Result{
+				{
+					Check: "server local", Status: StatusWarn,
+					Message: "no server set; the server at baseURL is Ollama 0.13.3",
+					Fix:     "add `server: ollama` to model.connectors.local",
+				},
+				contextOK,
+			},
 		},
 		{
 			name:    "no server set on a server that is not Ollama",
