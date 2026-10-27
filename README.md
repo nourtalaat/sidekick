@@ -15,6 +15,7 @@ Sidekick receives alerts from webhooks or Slack, investigates them with the LLM 
 
 - [Installing Sidekick](docs/install.md): the Helm chart, the quick start, verifying the image, production settings, upgrades.
 - [Configuration](docs/configuration.md): the `sidekick.yaml` sections, the checks Sidekick runs on them, and `sidekick config validate`.
+- [Azure source](docs/sources/azure.md): the read-only role the Azure source needs, and how to give Sidekick its Azure identity.
 - [GitHub source](docs/sources/github.md): the GitHub App permissions the GitHub source needs, and how to set the app up.
 - [Kubernetes source](docs/sources/kubernetes.md): the keys and tools of the Kubernetes source, and the read-only RBAC it needs.
 - [Postgres source](docs/sources/postgres.md): the read-only role the Postgres source needs, the TLS rules for its URL, and how to turn on `pg_stat_statements`.
