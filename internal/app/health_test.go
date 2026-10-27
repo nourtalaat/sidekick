@@ -187,10 +187,16 @@ func latestMigration(t *testing.T) int64 {
 	return version
 }
 
+// terminateWaitMillis bounds how long stopDatabase waits for each session
+// it ends to exit.
+const terminateWaitMillis = 5000
+
 // stopDatabase makes the database at dbURL refuse new connections and
 // closes the ones it has, as if the server went away. It works from the
 // server's postgres database, since a database cannot refuse the session
-// that changes it.
+// that changes it. It returns only once those sessions have exited, so the
+// request that follows fails whether the pool pings a closed connection or
+// notices it is closed and dials a new one, which is refused.
 func stopDatabase(t *testing.T, dbURL string) {
 	t.Helper()
 
@@ -208,8 +214,14 @@ func stopDatabase(t *testing.T, dbURL string) {
 	_, err = conn.Exec(t.Context(), "ALTER DATABASE "+pgx.Identifier{name}.Sanitize()+" WITH ALLOW_CONNECTIONS false")
 	require.NoError(t, err)
 
-	_, err = conn.Exec(t.Context(), "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()", name)
+	var ended bool
+
+	err = conn.QueryRow(t.Context(),
+		"SELECT coalesce(bool_and(pg_terminate_backend(pid, $2)), true) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
+		name, terminateWaitMillis,
+	).Scan(&ended)
 	require.NoError(t, err)
+	require.True(t, ended, "the sessions of %s did not end within %d ms", name, terminateWaitMillis)
 }
 
 // migrateDatabase applies every migration to the database at dbURL, as an

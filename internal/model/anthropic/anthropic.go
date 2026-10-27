@@ -31,6 +31,9 @@ const Provider = "anthropic"
 // Anthropic SDK suggests ten minutes for streamed calls.
 const defaultTimeout = 10 * time.Minute
 
+// keyCheckTimeout bounds the call CheckKey makes.
+const keyCheckTimeout = 15 * time.Second
+
 // requestIDHeader is the response header that carries Anthropic's request ID.
 const requestIDHeader = "request-id"
 
@@ -59,7 +62,10 @@ type Connector struct {
 	logger  *slog.Logger
 }
 
-var _ model.Connector = (*Connector)(nil)
+var (
+	_ model.Connector  = (*Connector)(nil)
+	_ model.KeyChecker = (*Connector)(nil)
+)
 
 // Capabilities reports what the configured model supports.
 func (c *Connector) Capabilities() model.Capabilities {
@@ -100,6 +106,25 @@ func (c *Connector) Generate(ctx context.Context, req model.Request) (model.Resp
 	resp.RequestID = requestID
 
 	return resp, nil
+}
+
+// CheckKey implements model.KeyChecker: it lists one model with the API
+// key, a call that costs nothing, so a rejected key or an unreachable API
+// shows without a paid generation.
+func (c *Connector) CheckKey(ctx context.Context) error {
+	key, err := secrets.ResolveText(ctx, c.secrets, c.cfg.APIKeySecret)
+	if err != nil {
+		return &model.Error{Kind: model.ErrAuth, Err: fmt.Errorf("connector %s: read API key: %w", c.name, err)}
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, keyCheckTimeout)
+	defer cancel()
+
+	if _, err := c.client.Models.List(ctx, anthropic.ModelListParams{Limit: anthropic.Int(1)}, option.WithAPIKey(key)); err != nil {
+		return classify(fmt.Errorf("connector %s: list models: %w", c.name, err))
+	}
+
+	return nil
 }
 
 // stream sends params as a streamed request and collects the events into

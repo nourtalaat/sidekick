@@ -1,0 +1,10 @@
+{{- include "sidekick.validate" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sidekick.fullname" . }}
+  labels:
+    {{- include "sidekick.labels" . | nindent 4 }}
+data:
+  sidekick.yaml: |
+    {{- include "sidekick.config" . | nindent 4 }}
