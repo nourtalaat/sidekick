@@ -27,8 +27,19 @@ const (
 // when several replicas start at once, one migrates and the others wait for
 // it and then find nothing left to do.
 func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
-	if err := migrate(ctx, pool, migrations.FS); err != nil {
+	if err := migrate(ctx, pool, migrations.FS, lock.DefaultLockID); err != nil {
 		return fmt.Errorf("migrate database: %w", err)
+	}
+
+	return nil
+}
+
+// MigrateSchema is Migrate for a pool from OpenSchema. Its migration lock
+// is keyed by schema, so migrating it never waits for, or holds up, a
+// replica that migrates another schema of the same database.
+func MigrateSchema(ctx context.Context, pool *pgxpool.Pool, schema string) error {
+	if err := migrate(ctx, pool, migrations.FS, SchemaLockKey(lock.DefaultLockID, schema)); err != nil {
+		return fmt.Errorf("migrate schema %s: %w", schema, err)
 	}
 
 	return nil
@@ -36,7 +47,7 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 
 // MigrationStatus reports each migration and whether the database has it.
 func MigrationStatus(ctx context.Context, pool *pgxpool.Pool) (statuses []*goose.MigrationStatus, err error) {
-	provider, err := newProvider(pool, migrations.FS)
+	provider, err := newProvider(pool, migrations.FS, lock.DefaultLockID)
 	if err != nil {
 		return nil, fmt.Errorf("read migration status: %w", err)
 	}
@@ -58,7 +69,7 @@ func MigrationStatus(ctx context.Context, pool *pgxpool.Pool) (statuses []*goose
 // current when current is at least target. It does not take the migration
 // lock, so it neither waits for nor holds up a replica that is migrating.
 func SchemaVersion(ctx context.Context, pool *pgxpool.Pool) (current, target int64, err error) {
-	provider, err := newProvider(pool, migrations.FS)
+	provider, err := newProvider(pool, migrations.FS, lock.DefaultLockID)
 	if err != nil {
 		return 0, 0, fmt.Errorf("read schema version: %w", err)
 	}
@@ -75,10 +86,10 @@ func SchemaVersion(ctx context.Context, pool *pgxpool.Pool) (current, target int
 	return current, target, nil
 }
 
-// migrate applies the migrations in fsys. Tests call it with their own
-// migrations.
-func migrate(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS) (err error) {
-	provider, err := newProvider(pool, fsys)
+// migrate applies the migrations in fsys under the migration lock lockID.
+// Tests call it with their own migrations.
+func migrate(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, lockID int64) (err error) {
+	provider, err := newProvider(pool, fsys, lockID)
 	if err != nil {
 		return fmt.Errorf("set up goose: %w", err)
 	}
@@ -94,8 +105,8 @@ func migrate(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS) (err error) {
 	return nil
 }
 
-func newProvider(pool *pgxpool.Pool, fsys fs.FS) (*goose.Provider, error) {
-	locker, err := lock.NewPostgresSessionLocker(lock.WithLockTimeout(lockRetrySeconds, lockRetries))
+func newProvider(pool *pgxpool.Pool, fsys fs.FS, lockID int64) (*goose.Provider, error) {
+	locker, err := lock.NewPostgresSessionLocker(lock.WithLockID(lockID), lock.WithLockTimeout(lockRetrySeconds, lockRetries))
 	if err != nil {
 		return nil, fmt.Errorf("create migration lock: %w", err)
 	}

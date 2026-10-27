@@ -1,0 +1,72 @@
+# A sample scenario: checkout latency after a commit that shrank the
+# database connection pool, with the Kubernetes source down.
+id: checkout-pool-size
+title: Checkout p99 latency after a commit that shrank the DB pool
+tags: [latency, database, deploy, sample]
+strategy: generic-alert
+now: 2026-05-04T10:20:00Z
+route:
+  mode: read-only
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="CheckoutLatencyHigh"}'
+    alerts:
+      - status: firing
+        labels: { alertname: CheckoutLatencyHigh, service: checkout-api, env: prod, severity: critical }
+        annotations: { summary: "checkout-api p99 latency above 2s for 5m" }
+        startsAt: 2026-05-04T10:12:00Z
+        fingerprint: 6f1c2a9b3d4e5f60
+sources:
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        match:
+          args:
+            repo: { equals: acme/checkout }
+            since: { within: 6h }
+        respond:
+          text: "abc123 2026-05-04T10:05Z 'Lower DB pool size to 5 to save connections'"
+          evidence:
+            - { kind: commit, title: abc123, url: "https://github.com/acme/checkout/commit/abc123" }
+      - tool: list_commits
+        match:
+          args:
+            service: { oneOf: [checkout-api, checkout] }
+        respond:
+          text: "abc123 2026-05-04T10:05Z 'Lower DB pool size to 5 to save connections'"
+          evidence:
+            - { kind: commit, title: abc123, url: "https://github.com/acme/checkout/commit/abc123" }
+      - tool: get_commit
+        match:
+          args:
+            ref: { regex: "^abc123" }
+        respond:
+          text: "abc123: config/database.yaml: pool_size 20 -> 5"
+          evidence:
+            - { kind: commit, title: abc123, url: "https://github.com/acme/checkout/commit/abc123" }
+      - tool: list_workflow_runs
+        responses:
+          - text: "run 991 deploy checkout-api 10:06Z success"
+          - noData: true
+  k8s:
+    unavailable: true
+default: no_data
+expected:
+  verdict: true_positive
+  acceptable: [true_positive]
+  rootCause:
+    summary: The DB connection pool ran out after commit abc123 lowered the pool size to 5.
+    rubric:
+      - { id: pool, text: Names connection pool exhaustion as the cause, weight: 2, required: true }
+      - { id: commit, text: Links the cause to commit abc123 or the 10:05 deploy, weight: 2, required: true }
+      - { id: fix, text: Proposes restoring the pool size or rolling back, weight: 1 }
+  evidence:
+    - { calledTool: github__list_commits }
+    - { citedURL: "https://github.com/acme/checkout/commit/abc123" }
+  unavailableReported: [k8s]
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }

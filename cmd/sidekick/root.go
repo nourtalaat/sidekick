@@ -22,6 +22,7 @@ func newRootCmd(info buildinfo.Info) *cobra.Command {
 	root.AddCommand(newServeCmd(config.Registries{}, info))
 	root.AddCommand(newDoctorCmd(config.Registries{}))
 	root.AddCommand(newTestAlertCmd(config.Registries{}))
+	root.AddCommand(newBenchCmd(config.Registries{}))
 
 	return root
 }
