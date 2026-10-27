@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -97,8 +98,11 @@ func TestHandlerRedactsTokensInErrors(t *testing.T) {
 			newService(t, Options{}).Handler().ServeHTTP(rec, req)
 
 			require.Equal(t, http.StatusBadRequest, rec.Code)
-			require.NotContains(t, rec.Body.String(), fakeJWT)
-			require.Contains(t, rec.Body.String(), redacted)
+
+			var body errorBody
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+			require.NotContains(t, body.Error, fakeJWT)
+			require.Contains(t, body.Error, redacted)
 		})
 	}
 }
