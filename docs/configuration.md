@@ -522,6 +522,59 @@ The tools, as the model sees them with the source name `backstage`, are
 `backstage__get_service`, `backstage__get_owner` and
 `backstage__get_system`.
 
+#### Google Cloud sources (`type: gcp`)
+
+A Google Cloud source reads Google Cloud projects through the Cloud
+Logging REST API, with Application Default Credentials (Workload Identity
+on GKE). Its tools only read. [Google Cloud source](sources/gcp.md) lists the permissions the
+identity needs and how to set it up.
+
+| Key | Meaning |
+|---|---|
+| `projects` | The IDs of the projects the tools may read. Required; a call for any other project fails before anything is sent. |
+| `credentialsSecret` | `{ name, key }` of a Secret that holds a credential file: a workload identity federation configuration, or a service account key. Default: Application Default Credentials. |
+
+```yaml
+sources:
+  gcp:
+    type: gcp
+    projects: [shop-prod, shop-staging]
+```
+
+The tools, as the model sees them with the source name `gcp`:
+
+| Tool | Returns |
+|---|---|
+| `gcp__query_logs` | Cloud Logging entries that match a Logging query language filter, newest first. |
+| `gcp__list_changes` | Changes from the Admin Activity and System Event audit logs: deploys, config changes, upgrades. |
+
+How it behaves:
+
+- **Start-up never waits for Google Cloud.** The first tool call finds the
+  credentials and makes the first token. Tokens are kept until shortly
+  before they expire; a credential file in `credentialsSecret` is read
+  again for each new token.
+- **Project.** Every tool takes `project`, which may be left out when
+  `projects` lists one. A project not in `projects`, or input that does
+  not fit, such as a range longer than 7 days, is a tool error, and
+  nothing is sent.
+- **Queries.** The filter of `query_logs` goes to Cloud Logging as the
+  model wrote it, so the identity's roles are what limit what can be read.
+- **Results** are JSON with a link to the Logs Explorer query, which
+  becomes an evidence link in the report. Lists are capped as
+  [Google Cloud source](sources/gcp.md#limits) describes, and say when
+  they were cut.
+- **No data.** A query that matches nothing, and a project Google Cloud
+  does not have, are reported as no data.
+- **Errors.** A refused request, such as a filter Google Cloud cannot
+  parse or a permission the identity lacks, goes to the model as a tool
+  error with Google Cloud's message. A refused token, rate limits, server
+  errors and credentials that cannot be found count as failures of the
+  source.
+- **Timeout.** `timeout` may be at most `60s`, because the HTTP client
+  stops waiting for response headers after 60 seconds; `sidekick config
+  validate` rejects a longer one.
+
 #### Postgres sources (`type: postgres`)
 
 A Postgres source reads the statistics views of Postgres databases your

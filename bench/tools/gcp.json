@@ -1,0 +1,76 @@
+{
+  "tools": [
+    {
+      "name": "query_logs",
+      "description": "Search the Cloud Logging entries of a Google Cloud project in a time range, newest first, with a Logging query language filter such as resource.type=\"k8s_container\" AND severity\u003e=ERROR. Returns each entry's time, severity, log, resource and message, cut when long, and a Logs Explorer link.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "filter": {
+            "type": "string",
+            "description": "The Logging query language filter, passed to Cloud Logging as given. The time range is added to it. Empty matches every entry."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 500. Default 100.",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "project": {
+            "type": "string",
+            "description": "The project ID, for example shop-prod. It may be left out when Sidekick reads only one project."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only entries at or after this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: one hour before until.",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "description": "Only entries before this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_changes",
+      "description": "List what changed in a Google Cloud project in a time range, newest first, from its Admin Activity and System Event audit logs: deploys, config changes, GKE upgrades and the like. Returns each change's time, service, method, resource, who made it and whether it failed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 500. Default 100.",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "project": {
+            "type": "string",
+            "description": "The project ID, for example shop-prod. It may be left out when Sidekick reads only one project."
+          },
+          "resource": {
+            "type": "string",
+            "description": "Only changes to resources whose name contains this text, for example services/checkout."
+          },
+          "service": {
+            "type": "string",
+            "description": "Only changes through this API, for example run.googleapis.com or container.googleapis.com."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only changes at or after this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: 24 hours before until.",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "description": "Only changes before this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}
