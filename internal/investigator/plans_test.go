@@ -129,6 +129,33 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"investigations_pkey"},
 		},
 		{
+			name: "RequestInvestigationCancel",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.RequestInvestigationCancel(ctx, db.RequestInvestigationCancelParams{SlackUserID: new("U01STOP"), ID: busy})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"investigations_pkey"},
+		},
+		{
+			name: "ListCancelRequested",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListCancelRequested(ctx, []uuid.UUID{busy})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"investigations_pkey"},
+		},
+		{
+			name: "NotifyInvestigationCancel",
+			run: func(ctx context.Context, q *db.Queries) error {
+				err := q.NotifyInvestigationCancel(ctx, busy.String())
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"Result"},
+		},
+		{
 			name: "InsertStep",
 			run: func(ctx context.Context, q *db.Queries) error {
 				err := q.InsertStep(ctx, db.InsertStepParams{
