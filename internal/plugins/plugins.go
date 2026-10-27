@@ -15,6 +15,7 @@ import (
 	_ "github.com/nourtalaat/sidekick/internal/model/bedrock"       // Model provider "bedrock".
 	_ "github.com/nourtalaat/sidekick/internal/model/openai"        // Model provider "openai".
 	_ "github.com/nourtalaat/sidekick/internal/output/slack"        // Output type "slack".
+	_ "github.com/nourtalaat/sidekick/internal/source/backstage"    // Source type "backstage".
 	_ "github.com/nourtalaat/sidekick/internal/source/github"       // Source type "github".
 	_ "github.com/nourtalaat/sidekick/internal/source/kubernetes"   // Source type "kubernetes".
 	_ "github.com/nourtalaat/sidekick/internal/source/mcp"          // Source type "mcp".

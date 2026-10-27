@@ -482,6 +482,32 @@ How it behaves:
   stops waiting for response headers after 60 seconds; `sidekick config
   validate` rejects a longer one.
 
+#### Backstage sources (`type: backstage`)
+
+A Backstage source reads a Backstage software catalog with a static token,
+so investigations can find a service's owner, system and dependencies. Its
+tools only read. [The Backstage source](sources/backstage.md) lists its
+tools and how to give Sidekick a token.
+
+| Key | Meaning |
+|---|---|
+| `baseURL` | The root of the Backstage backend, for example `https://backstage.example.com`. Required. It must use `https`; plain `http` is accepted only for `localhost` and loopback addresses. |
+| `tokenSecret` | `{ name, key }` of the Secret that holds the token. Required. |
+| `appURL` | The root of the Backstage web app, for evidence links. Default: `baseURL`. |
+| `namespace` | The catalog namespace of a name given without one. Default: `default`. |
+
+```yaml
+sources:
+  backstage:
+    type: backstage
+    baseURL: https://backstage.example.com
+    tokenSecret: { name: sidekick-backstage, key: token }
+```
+
+The tools, as the model sees them with the source name `backstage`, are
+`backstage__get_service`, `backstage__get_owner` and
+`backstage__get_system`.
+
 ### `intake.webhooks`
 
 Each webhook endpoint receives alerts at `/hooks/<name>`. It names an
