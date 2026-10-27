@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/nourtalaat/sidekick/internal/feedback"
 	"github.com/nourtalaat/sidekick/internal/output"
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/store"
@@ -196,6 +197,12 @@ func (h *Handler) update(ctx context.Context, investigationID uuid.UUID, state d
 		u.Progress = append(u.Progress, output.Progress(line))
 	}
 
+	if u.Phase == output.PhaseFinal {
+		if err := h.addResponders(ctx, &u, loaded.Investigation); err != nil {
+			return output.Update{}, fmt.Errorf("load what responders did: %w", err)
+		}
+	}
+
 	if state.PreviousRef != nil {
 		var prev output.Ref
 		if err := json.Unmarshal(state.PreviousRef, &prev); err != nil {
@@ -206,6 +213,23 @@ func (h *Handler) update(ctx context.Context, investigationID uuid.UUID, state d
 	}
 
 	return u, nil
+}
+
+// addResponders adds to a final update who rated the verdict and who
+// stopped the run.
+func (h *Handler) addResponders(ctx context.Context, u *output.Update, inv db.Investigation) error {
+	ratings, err := feedback.Verdicts(ctx, h.pool, inv)
+	if err != nil {
+		return fmt.Errorf("load the ratings: %w", err)
+	}
+
+	u.Feedback = ratings
+
+	if inv.CancelRequestedBySlackUser != nil {
+		u.StoppedBy = &output.Person{SlackUserID: *inv.CancelRequestedBySlackUser}
+	}
+
+	return nil
 }
 
 // finish ends the run in one transaction: it locks the state row, stores
