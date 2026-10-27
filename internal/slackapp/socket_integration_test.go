@@ -37,7 +37,7 @@ const (
 // The Socket Mode payloads of a slash command and a button click.
 const (
 	commandPayload = `{"command": "/sidekick", "text": "status", "channel_id": "C01ALERTS", "user_id": "U01PERSON"}`
-	clickPayload   = `{"type": "block_actions", "actions": [{"type": "button", "action_id": "sidekick_ack", "value": "inv-1"}]}`
+	clickPayload   = `{"type": "block_actions", "actions": [{"type": "button", "block_id": "sidekick_actions", "action_id": "sidekick_ack", "value": "inv-1"}]}`
 )
 
 func TestSocketAcknowledgesAfterStoring(t *testing.T) {
@@ -231,6 +231,7 @@ func TestSocketAnswersCommandsAndInteractions(t *testing.T) {
 
 				if tt.wantCalls > 0 {
 					require.Equal(t, slack.InteractionTypeBlockActions, clicks[0].Type)
+					require.Len(t, clicks[0].ActionCallback.BlockActions, 1)
 					require.Equal(t, "sidekick_ack", clicks[0].ActionCallback.BlockActions[0].ActionID)
 				}
 			}
