@@ -542,6 +542,14 @@ How it behaves:
   A database that cannot be reached, a refused login and a refused URL
   count as failures of the source.
 
+#### Mock sources (`type: mock`)
+
+A mock source answers tool calls from fixtures instead of a real system.
+Benchmark scenarios use it for every source; [Benchmarks](benchmark.md#mock-sources)
+lists its keys: `tools.snapshot`, `fixtures`, `default` and `unavailable`.
+It can also go under `sources` in `sidekick.yaml`, for example to try a route
+without access to the real system.
+
 ### `intake.webhooks`
 
 Each webhook endpoint receives alerts at `/hooks/<name>`. It names an
