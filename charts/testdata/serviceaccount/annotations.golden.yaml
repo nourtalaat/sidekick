@@ -1,0 +1,18 @@
+---
+# Source: sidekick/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sidekick
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws-us-gov:iam::111122223333:role/teams/sidekick
+    eks.amazonaws.com/sts-regional-endpoints: "true"
+automountServiceAccountToken: false
+
+
