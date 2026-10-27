@@ -1,11 +1,12 @@
 // Package doctor checks that Sidekick can reach everything its config
 // names: the database and its schema, the Slack bot token, each model
 // connector's API key and each source, and warns about models without a
-// price, about investigate connectors that cannot be forced to call a
-// tool, about local model presets without a server set, and about presets
-// that Ollama runs with too small a context. Each check gives a Result
-// with a fix for any problem. The checks make only calls that change
-// nothing and cost nothing, and no secret value ever appears in a Result.
+// price, about OpenAI-compatible investigate connectors that cannot be
+// forced to call a tool, about local model presets without a server set,
+// and about presets that Ollama runs with too small a context. Each check
+// gives a Result with a fix for any problem. The checks make only calls
+// that change nothing and cost nothing, and no secret value ever appears
+// in a Result.
 package doctor
 
 import (

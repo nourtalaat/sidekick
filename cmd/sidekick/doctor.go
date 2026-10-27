@@ -29,7 +29,8 @@ accepts the bot token (auth.test), that each model connector's API key
 works (with a call that costs nothing, such as listing models), and that
 each source connects and lists its tools, with the tools the model will
 not see and why. It also warns about models that have no price, about
-investigate connectors that cannot be forced to call a tool, about
+OpenAI-compatible investigate connectors that cannot be forced to call
+a tool, about
 local model presets without a server set, and about a preset that Ollama
 runs with too small a context.
 

@@ -24,7 +24,7 @@ func TestCheckToolChoice(t *testing.T) {
 		want    []Result
 	}{
 		{
-			name:    "an Anthropic model investigates",
+			name:    "an Anthropic model without forced tool choice investigates",
 			replace: []string{"INVESTIGATE", "claude"},
 		},
 		{

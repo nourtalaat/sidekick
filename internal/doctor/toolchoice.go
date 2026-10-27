@@ -5,17 +5,21 @@ import (
 	"slices"
 
 	"github.com/nourtalaat/sidekick/internal/model"
+	"github.com/nourtalaat/sidekick/internal/model/openai"
 )
 
-// checkToolChoice warns about each connector that fills the investigate
-// role, in model.roles or in a route, but cannot be forced to call a tool.
-// Its investigations then rely on a reminder to end with submit_verdict.
+// checkToolChoice warns about each OpenAI-compatible connector that fills
+// the investigate role, in model.roles or in a route, but cannot be forced
+// to call a tool. Its investigations then rely on a reminder to end with
+// submit_verdict. Other providers are left out: whether their models take
+// a forced tool choice depends on the model alone, not on a server the
+// user can change, and the default Claude model takes none.
 func (d *doctor) checkToolChoice(ctx context.Context) []Result {
 	var results []Result
 
 	for _, name := range d.investigateConnectors() {
 		c, ok := d.cfg.Model.Connectors[name]
-		if !ok {
+		if !ok || c.Type != openai.Provider {
 			continue
 		}
 
@@ -24,15 +28,15 @@ func (d *doctor) checkToolChoice(ctx context.Context) []Result {
 			continue
 		}
 
-		declarer, ok := decoded.(model.CapabilityDeclarer)
-		if !ok || declarer.Capabilities().ToolChoice {
+		cfg, ok := decoded.(*openai.Config)
+		if !ok || cfg.Capabilities().ToolChoice {
 			continue
 		}
 
 		results = append(results, Result{
 			Check: "tool choice " + name, Status: StatusWarn,
 			Message: "the connector fills the investigate role but cannot be forced to call a tool, so each investigation relies on a reminder to end with submit_verdict",
-			Fix:     toolChoiceFix(decoded),
+			Fix:     toolChoiceFix(cfg),
 		})
 	}
 
@@ -64,8 +68,8 @@ func (d *doctor) investigateConnectors() []string {
 // toolChoiceFix is the fix for a connector without forced tool choice. A
 // local model preset gets it on vLLM; any other model needs its
 // capabilities block to say the server honours it.
-func toolChoiceFix(decoded any) string {
-	if _, ok := openAIPreset(decoded); ok {
+func toolChoiceFix(cfg *openai.Config) string {
+	if _, ok := openAIPreset(cfg); ok {
 		return "serve the model with vLLM, started with --enable-auto-tool-choice, and set `server: vllm` on the connector; investigations still work without it"
 	}
 
