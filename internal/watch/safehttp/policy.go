@@ -126,6 +126,50 @@ func CheckHostPattern(pattern string) error {
 	return nil
 }
 
+// MatchesHost reports whether host matches one of the host patterns, as
+// allowHosts matches the host of a URL. Patterns that do not parse match
+// nothing.
+func MatchesHost(patterns []string, host string) bool {
+	var l hostList
+
+	for _, p := range patterns {
+		one, err := parseHosts([]string{p})
+		if err != nil {
+			continue
+		}
+
+		l.names = append(l.names, one.names...)
+		l.suffixes = append(l.suffixes, one.suffixes...)
+		l.addrs = append(l.addrs, one.addrs...)
+	}
+
+	return l.allows(host)
+}
+
+// Covers reports whether every host that pattern matches is matched by one
+// of patterns too: pattern is one of them, it is a name or an address one
+// of them matches, or it is "*." and a name below a "*." pattern.
+func Covers(patterns []string, pattern string) bool {
+	normal := strings.ToLower(strings.TrimSuffix(pattern, "."))
+
+	for _, p := range patterns {
+		if strings.ToLower(strings.TrimSuffix(p, ".")) == normal {
+			return true
+		}
+	}
+
+	name, wildcard := strings.CutPrefix(normal, wildcardPrefix)
+	if !wildcard {
+		return MatchesHost(patterns, pattern)
+	}
+
+	wildcards := slices.DeleteFunc(slices.Clone(patterns), func(p string) bool {
+		return !strings.HasPrefix(p, wildcardPrefix)
+	})
+
+	return MatchesHost(wildcards, name)
+}
+
 // ParsePrefix parses one watch.http.allowPrivate entry: an address range in
 // CIDR form, such as 10.20.0.0/16, or one IP address.
 func ParsePrefix(s string) (netip.Prefix, error) {
