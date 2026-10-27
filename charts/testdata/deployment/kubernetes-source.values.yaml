@@ -1,0 +1,13 @@
+# A Kubernetes source that reads this cluster, with rbac.kubernetesSource
+# off: the pods mount their service account token anyway, because the
+# source uses it.
+rbac:
+  kubernetesSource: false
+config:
+  sources:
+    k8s:
+      type: kubernetes
+  routes:
+    - name: default
+      sources: [k8s]
+      outputs: [slack]

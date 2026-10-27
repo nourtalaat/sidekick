@@ -34,7 +34,7 @@ spec:
         {{- end }}
     spec:
       serviceAccountName: {{ include "sidekick.serviceAccountName" . }}
-      automountServiceAccountToken: {{ .Values.serviceAccount.automountToken }}
+      automountServiceAccountToken: {{ include "sidekick.automountToken" . }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
