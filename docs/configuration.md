@@ -140,6 +140,9 @@ claude:
   rejects `temperature`, `top_p` and `top_k` on every model.
 - **Prompt caching** uses the 5-minute cache. Cache reads and writes are
   priced at their own rates.
+- **Base URL.** Every call carries the API key, so `baseURL` must use
+  `https`. Plain `http` is accepted only for `localhost` and loopback
+  addresses (127.0.0.0/8 and ::1), such as a proxy on the same machine.
 
 #### The `openai` provider
 
