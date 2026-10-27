@@ -598,7 +598,10 @@ How it behaves:
   of them outside the config, or input that does not fit, such as a range
   longer than 7 days, is a tool error, and nothing is sent.
 - **Queries.** The KQL of `query_logs` goes to Log Analytics as the model
-  wrote it, so the identity's role is what limits what can be read.
+  wrote it, so the identity's role assignments are what limit what can be
+  read. A query that calls `workspace()`, `app()`, `resource()`, `adx()`,
+  `arg()`, `cluster()` or `database()`, or uses `externaldata`, is refused
+  before it is sent, because those reach beyond the workspace.
 - **Results** are JSON with links to the workspace's logs or the Activity
   Log in the Azure portal, which become evidence links in the report. Lists are
   capped as [Azure source](sources/azure.md#limits) describes, and say

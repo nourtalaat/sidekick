@@ -267,6 +267,8 @@ func TestSourceCallInput(t *testing.T) {
 		{name: "no workspace in the config", workspaces: []Workspace{}, tool: toolQueryLogs, input: `{"query":"x"}`,
 			want: "no Log Analytics workspace is configured"},
 		{name: "an empty query", tool: toolQueryLogs, input: `{"query":" "}`, want: "query: required"},
+		{name: "a query that reads another workspace", tool: toolQueryLogs, input: `{"query":"workspace(\"other\").AppRequests"}`,
+			want: "workspace() reads outside the workspace"},
 		{name: "a resource group and a resource", tool: toolListChanges, input: `{"resourceGroup":"shop","resource":"` + testSite + `"}`,
 			want: "give resourceGroup or resource, not both"},
 		{name: "a resource group with a quote", tool: toolListChanges, input: `{"resourceGroup":"shop' or 1 eq 1"}`,
