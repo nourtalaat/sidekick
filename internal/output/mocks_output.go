@@ -67,3 +67,41 @@ func (mr *MockSinkMockRecorder) Publish(ctx, update any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Publish", reflect.TypeOf((*MockSink)(nil).Publish), ctx, update)
 }
+
+// MockNoticer is a mock of Noticer interface.
+type MockNoticer struct {
+	ctrl     *gomock.Controller
+	recorder *MockNoticerMockRecorder
+	isgomock struct{}
+}
+
+// MockNoticerMockRecorder is the mock recorder for MockNoticer.
+type MockNoticerMockRecorder struct {
+	mock *MockNoticer
+}
+
+// NewMockNoticer creates a new mock instance.
+func NewMockNoticer(ctrl *gomock.Controller) *MockNoticer {
+	mock := &MockNoticer{ctrl: ctrl}
+	mock.recorder = &MockNoticerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockNoticer) EXPECT() *MockNoticerMockRecorder {
+	return m.recorder
+}
+
+// Notice mocks base method.
+func (m *MockNoticer) Notice(ctx context.Context, n Notice) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Notice", ctx, n)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Notice indicates an expected call of Notice.
+func (mr *MockNoticerMockRecorder) Notice(ctx, n any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Notice", reflect.TypeOf((*MockNoticer)(nil).Notice), ctx, n)
+}

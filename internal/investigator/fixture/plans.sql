@@ -1,5 +1,5 @@
 -- 20,000 investigations, each with its group, one event and 25 steps
--- (500,000 steps), for the query plan tests. Investigation i has the ID
+-- (500,000 steps), and a year of daily spend, for the query plan tests. Investigation i has the ID
 -- md5('inv' || i) and fence 1000 + i.
 INSERT INTO event_groups (id, fingerprint, route, service, status, event_count, opened_at, last_event_at, investigation_id)
 SELECT md5('grp' || i)::uuid, 'fp-' || i, 'payments', 'checkout-api', 'open', 1,
@@ -31,6 +31,11 @@ SELECT md5('inv' || i)::uuid, s, 1, 'tool_result',
        'signoz', 'search_logs', 'c' || s, 'ok',
        '2026-10-26 00:00:02+00'::timestamptz + i * interval '1 minute', 120
 FROM generate_series(1, 20000) AS i, generate_series(0, 24) AS s;
+
+-- A year of daily spend for 20 routes on 3 models: 21,900 rows.
+INSERT INTO spend_daily (day, route, connector, model, cost_micros, input_tokens, output_tokens)
+SELECT '2026-10-26'::date - d, 'route-' || r, 'claude', 'model-' || m, 10500 * r, 1000 * r, 200 * r
+FROM generate_series(0, 364) AS d, generate_series(1, 20) AS r, generate_series(1, 3) AS m;
 
 -- Five delivered inbox items per investigation (100,000), and two more
 -- waiting for every tenth one, which is running.

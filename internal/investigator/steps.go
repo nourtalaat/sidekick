@@ -104,6 +104,10 @@ type history struct {
 	// turnMessage the index of its message in req.Messages.
 	lastTurn    int
 	turnMessage int
+	// finalNote is the index in steps of the note that starts the final
+	// turn, or -1, and finalBudget the budget it names.
+	finalNote   int
+	finalBudget string
 }
 
 // add appends a saved step and adds it to the conversation.
@@ -136,6 +140,10 @@ func (h *history) add(s db.Step) error {
 		}
 
 		h.addParts(s, parts)
+	}
+
+	if s.Kind == kindNote && s.Budget != nil && h.finalNote < 0 {
+		h.finalNote, h.finalBudget = len(h.steps), *s.Budget
 	}
 
 	h.steps = append(h.steps, s)
@@ -226,6 +234,33 @@ func (h *history) needsReminder() bool {
 	return h.lastTurn >= 0 && h.lastTurn == len(h.steps)-1 && len(h.turnCalls()) == 0
 }
 
+// finalTurn returns the budget of the final turn, when it has started.
+func (h *history) finalTurn() (budget string, started bool) {
+	return h.finalBudget, h.finalNote >= 0
+}
+
+// finalTurnTaken reports whether the model has answered in the final
+// turn.
+func (h *history) finalTurnTaken() bool {
+	return h.finalNote >= 0 && h.lastTurn > h.finalNote
+}
+
+// tokens returns the tokens of every model turn: input, including those
+// read from or written to the prompt cache, and output.
+func (h *history) tokens() int64 {
+	var n int64
+
+	for _, s := range h.steps {
+		if s.Kind != kindModelTurn {
+			continue
+		}
+
+		n += deref(s.InputTokens) + deref(s.CacheReadTokens) + deref(s.CacheWriteTokens) + deref(s.OutputTokens)
+	}
+
+	return n
+}
+
 // count returns the number of steps for which match is true.
 func (h *history) count(match func(db.Step) bool) int {
 	n := 0
@@ -241,7 +276,7 @@ func (h *history) count(match func(db.Step) bool) int {
 
 // newHistory returns the history of the saved steps, in seq order.
 func newHistory(steps []db.Step) (*history, error) {
-	h := &history{calls: map[string]model.ToolCall{}, results: map[string]db.Step{}, lastTurn: -1}
+	h := &history{calls: map[string]model.ToolCall{}, results: map[string]db.Step{}, lastTurn: -1, finalNote: -1}
 
 	for _, s := range steps {
 		if int(s.Seq) != len(h.steps) {

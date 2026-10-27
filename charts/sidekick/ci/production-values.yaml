@@ -1,0 +1,124 @@
+# Values that turn on every optional part of the chart, for `make
+# helm-lint`: an external database migrated by a Job, an MCP server in a
+# sidecar, Secrets from the External Secrets Operator, a ServiceMonitor,
+# an Ingress, an HTTPRoute and restricted egress.
+
+image:
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+migrations:
+  mode: job
+
+secrets:
+  - sidekick-db
+  - sidekick-webhook
+
+externalSecrets:
+  - name: sidekick-anthropic
+    secretStoreRef: { name: vault, kind: ClusterSecretStore }
+    data:
+      - secretKey: apiKey
+        remoteRef: { key: sidekick/anthropic, property: apiKey }
+  - name: sidekick-slack
+    refreshInterval: 15m
+    secretStoreRef: { name: vault, kind: ClusterSecretStore }
+    dataFrom:
+      - extract: { key: sidekick/slack }
+
+config:
+  database:
+    urlSecret: { name: sidekick-db, key: url }
+  model:
+    connectors:
+      claude:
+        provider: anthropic
+        model: claude-opus-5-5
+        apiKeySecret: { name: sidekick-anthropic, key: apiKey }
+    roles:
+      investigate: claude
+  slack:
+    botTokenSecret: { name: sidekick-slack, key: botToken }
+  outputs:
+    slack: { type: slack, channel: "#alerts" }
+  intake:
+    webhooks:
+      alertmanager:
+        adapter: alertmanager
+        auth: { bearer: { name: sidekick-webhook, key: token } }
+  sources:
+    git:
+      type: mcp
+      transport: http
+      url: http://127.0.0.1:8101/mcp
+      tools: { allow: [git_log, git_show, git_diff] }
+  routes:
+    - name: default
+      sources: [git]
+      outputs: [slack]
+
+mcpSidecars:
+  - name: git
+    image: supercorp/supergateway:4.2.1-uvx
+    args:
+      - --stdio
+      - uvx mcp-server-git --repository /work/repo
+      - --outputTransport
+      - streamableHttp
+      - --host
+      - 127.0.0.1
+      - --port
+      - "8101"
+      - --healthEndpoint
+      - /healthz
+      - --healthCheck
+      - server
+    env:
+      - name: HOME
+        value: /tmp
+    port: 8101
+    healthPath: /healthz
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 256Mi }
+    volumeMounts:
+      - name: repo
+        mountPath: /work/repo
+        readOnly: true
+
+extraVolumes:
+  - name: repo
+    emptyDir: {}
+
+metrics:
+  serviceMonitor:
+    enabled: true
+    labels: { release: prometheus }
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: sidekick.example.com
+      paths: [{ path: /hooks/, pathType: Prefix }]
+  tls:
+    - hosts: [sidekick.example.com]
+      secretName: sidekick-tls
+
+httpRoute:
+  enabled: true
+  parentRefs: [{ name: public, namespace: gateway }]
+  hostnames: [sidekick.example.com]
+
+networkPolicy:
+  httpFrom:
+    - namespaceSelector:
+        matchLabels: { kubernetes.io/metadata.name: monitoring }
+  restrictEgress: true
+  egress:
+    - ports: [{ port: 443, protocol: TCP }]
+    - to: [{ ipBlock: { cidr: 10.0.0.0/8 } }]
+      ports: [{ port: 5432, protocol: TCP }]
+
+resources:
+  requests: { cpu: 200m, memory: 512Mi }
+  limits: { memory: 1Gi }

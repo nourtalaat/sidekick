@@ -1,0 +1,279 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Values of the Sidekick chart",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "quantity": {
+      "type": ["string", "integer"],
+      "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$"
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requests": { "type": "object", "additionalProperties": { "$ref": "#/definitions/quantity" } },
+        "limits": { "type": "object", "additionalProperties": { "$ref": "#/definitions/quantity" } }
+      }
+    },
+    "secretName": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$",
+      "maxLength": 253
+    },
+    "stringMap": { "type": "object", "additionalProperties": { "type": "string" } },
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "periodSeconds": { "type": "integer", "minimum": 1 },
+        "failureThreshold": { "type": "integer", "minimum": 1 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+  },
+  "properties": {
+    "global": { "type": "object" },
+    "replicaCount": { "type": "integer", "minimum": 0 },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string", "not": { "const": "latest" } },
+        "digest": { "type": "string", "pattern": "^(sha256:[a-f0-9]{64})?$" },
+        "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    },
+    "imagePullSecrets": { "type": "array", "items": { "type": "object" } },
+    "nameOverride": { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+    "config": {
+      "description": "sidekick.yaml; `sidekick config validate` checks it.",
+      "type": "object",
+      "properties": {
+        "database": { "type": "object" },
+        "server": { "type": "object" },
+        "secrets": { "type": "object" }
+      }
+    },
+    "secrets": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/definitions/secretName" }
+    },
+    "externalSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "secretStoreRef"],
+        "properties": {
+          "name": { "$ref": "#/definitions/secretName" },
+          "refreshInterval": { "type": "string" },
+          "secretStoreRef": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "kind": { "enum": ["SecretStore", "ClusterSecretStore"] }
+            }
+          },
+          "data": { "type": "array", "items": { "type": "object" } },
+          "dataFrom": { "type": "array", "items": { "type": "object" } }
+        },
+        "anyOf": [{ "required": ["data"] }, { "required": ["dataFrom"] }]
+      }
+    },
+    "migrations": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "enum": ["startup", "job", "manual"] },
+        "job": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "backoffLimit": { "type": "integer", "minimum": 0 },
+            "activeDeadlineSeconds": { "type": "integer", "minimum": 1 },
+            "serviceAccountName": { "type": "string" },
+            "resources": { "$ref": "#/definitions/resources" }
+          }
+        }
+      }
+    },
+    "postgres": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string", "minLength": 1, "not": { "const": "latest" } },
+            "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+          }
+        },
+        "storage": { "$ref": "#/definitions/quantity" },
+        "storageClassName": { "type": "string" },
+        "database": { "type": "string", "minLength": 1 },
+        "user": { "type": "string", "minLength": 1 },
+        "password": { "type": "string" },
+        "resources": { "$ref": "#/definitions/resources" }
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" },
+        "annotations": { "$ref": "#/definitions/stringMap" },
+        "workloadIdentity": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "awsRoleArn": { "type": "string", "pattern": "^(arn:aws(-[a-z]+)*:iam::[0-9]{12}:role/.+)?$" },
+            "gcpServiceAccount": { "type": "string", "pattern": "^([^@\\s]+@[^@\\s]+\\.iam\\.gserviceaccount\\.com)?$" }
+          }
+        },
+        "automountToken": { "type": "boolean" }
+      }
+    },
+    "mcpSidecars": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "image"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 40 },
+          "image": { "type": "string", "minLength": 1, "not": { "pattern": "(:latest$)" } },
+          "imagePullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] },
+          "command": { "type": "array", "items": { "type": "string" } },
+          "args": { "type": "array", "items": { "type": "string" } },
+          "env": { "type": "array", "items": { "type": "object" } },
+          "port": { "$ref": "#/definitions/port" },
+          "healthPath": { "type": "string", "pattern": "^/" },
+          "resources": { "$ref": "#/definitions/resources" },
+          "volumeMounts": { "type": "array", "items": { "type": "object" } }
+        },
+        "dependencies": { "healthPath": ["port"] }
+      }
+    },
+    "extraVolumes": { "type": "array", "items": { "type": "object" } },
+    "extraVolumeMounts": { "type": "array", "items": { "type": "object" } },
+    "extraEnv": { "type": "array", "items": { "type": "object" } },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+        "annotations": { "$ref": "#/definitions/stringMap" },
+        "httpPort": { "$ref": "#/definitions/port" },
+        "metricsPort": { "$ref": "#/definitions/port" }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "annotations": { "$ref": "#/definitions/stringMap" },
+        "hosts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["host", "paths"],
+            "properties": {
+              "host": { "type": "string" },
+              "paths": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["path"],
+                  "properties": {
+                    "path": { "type": "string", "pattern": "^/" },
+                    "pathType": { "enum": ["Prefix", "Exact", "ImplementationSpecific"] }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tls": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "httpRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "annotations": { "$ref": "#/definitions/stringMap" },
+        "parentRefs": { "type": "array", "items": { "type": "object" } },
+        "hostnames": { "type": "array", "items": { "type": "string" } },
+        "pathPrefix": { "type": "string", "pattern": "^/" }
+      }
+    },
+    "resources": { "$ref": "#/definitions/resources" },
+    "podSecurityContext": { "type": "object" },
+    "securityContext": { "type": "object" },
+    "probes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "startup": { "$ref": "#/definitions/probe" },
+        "liveness": { "$ref": "#/definitions/probe" },
+        "readiness": { "$ref": "#/definitions/probe" }
+      }
+    },
+    "podAnnotations": { "$ref": "#/definitions/stringMap" },
+    "podLabels": { "$ref": "#/definitions/stringMap" },
+    "nodeSelector": { "$ref": "#/definitions/stringMap" },
+    "tolerations": { "type": "array", "items": { "type": "object" } },
+    "affinity": { "type": "object" },
+    "topologySpreadConstraints": { "type": "array", "items": { "type": "object" } },
+    "priorityClassName": { "type": "string" },
+    "terminationGracePeriodSeconds": { "type": "integer", "minimum": 0 },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "serviceMonitor": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "interval": { "type": "string" },
+            "scrapeTimeout": { "type": "string" },
+            "labels": { "$ref": "#/definitions/stringMap" }
+          }
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "httpFrom": { "type": "array", "items": { "type": "object" } },
+        "metricsFrom": { "type": "array", "items": { "type": "object" } },
+        "restrictEgress": { "type": "boolean" },
+        "egress": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "pdb": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minAvailable": { "type": ["integer", "string"] }
+      }
+    }
+  }
+}

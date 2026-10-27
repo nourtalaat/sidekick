@@ -53,6 +53,32 @@ jobs:
           key: tools-${{ runner.os }}-${{ hashFiles('Makefile') }}
 
       - run: make ci
+        env:
+          SIDEKICK_PLANS_DIR: ${{ runner.temp }}/query-plans
+
+      # The plan tests write each query and its EXPLAIN ANALYZE plan here, for
+      # pull request descriptions.
+      - name: Upload the query plans
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: query-plans
+          path: ${{ runner.temp }}/query-plans
+          if-no-files-found: warn
+
+      - name: List the query plans in the job summary
+        if: always()
+        shell: bash
+        env:
+          PLANS_DIR: ${{ runner.temp }}/query-plans
+        run: |
+          {
+            echo '### Query plans'
+            echo 'Download the `query-plans` artifact of this run for the files.'
+            echo '```'
+            (cd "$PLANS_DIR" 2>/dev/null && find . -type f -name '*.txt' | sed 's|^\./||' | sort) || echo 'No query plans were written'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   vulncheck:
     name: govulncheck
@@ -92,6 +118,44 @@ jobs:
             cat "$RUNNER_TEMP/vulncheck.txt" 2>/dev/null || echo 'govulncheck did not run'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  kind:
+    name: chart in kind
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Cache tools
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: bin/tools
+          key: tools-${{ runner.os }}-${{ hashFiles('Makefile') }}
+
+      - name: Build the image
+        run: docker build -t sidekick:ci --build-arg VERSION=ci --build-arg COMMIT="$GITHUB_SHA" .
+
+      - uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
+        with:
+          version: v0.33.0
+          node_image: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
+          cluster_name: sidekick
+
+      - name: Load the image into the cluster
+        run: kind load docker-image sidekick:ci --name sidekick
+
+      - name: Install the chart and wait until Sidekick is ready
+        run: sh scripts/kind-test.sh "$(make -s helm-path)" sidekick ci
+
+      - name: Show the pods, events and logs
+        if: failure()
+        run: |
+          kubectl -n sidekick get pods -o wide || true
+          kubectl -n sidekick describe pods || true
+          kubectl -n sidekick get events --sort-by=.lastTimestamp || true
+          kubectl -n sidekick logs -l app.kubernetes.io/instance=sidekick --all-containers --prefix --tail=200 || true
 
   dependency-review:
     name: dependency review

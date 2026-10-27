@@ -1,0 +1,218 @@
+# Values for the Sidekick chart. docs/install.md in the Sidekick repository
+# describes the install, and docs/configuration.md describes `config`.
+
+# replicaCount is the number of Sidekick pods. Every replica runs every
+# part of Sidekick; the job queue in Postgres spreads the work.
+replicaCount: 2
+
+image:
+  repository: ghcr.io/nourtalaat/sidekick
+  # tag defaults to the chart's appVersion.
+  tag: ""
+  # digest, such as sha256:..., pins the image exactly and wins over tag.
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# config becomes sidekick.yaml, mounted at /etc/sidekick/sidekick.yaml. See
+# docs/configuration.md. The chart sets server.listen,
+# server.metricsListen, secrets.dir and database.migrations itself, and
+# database.urlSecret when postgres.enabled is true and it is not set.
+config: {}
+
+# secrets names Kubernetes Secrets to mount, each at
+# /var/run/secrets/sidekick/<name>, one file per key, so config can refer
+# to them as { name: <name>, key: <key> }. Secrets made by externalSecrets
+# and the bundled Postgres are mounted without being listed here.
+secrets: []
+
+# externalSecrets makes Secrets with the External Secrets Operator, which
+# must be installed, and mounts them like secrets. Each entry is the spec of
+# one ExternalSecret, whose target Secret has the entry's name:
+#   - name: sidekick-slack
+#     refreshInterval: 1h
+#     secretStoreRef: { name: vault, kind: ClusterSecretStore }
+#     data:
+#       - secretKey: botToken
+#         remoteRef: { key: sidekick/slack, property: botToken }
+externalSecrets: []
+
+migrations:
+  # mode says when the database is migrated:
+  # - startup: each replica migrates when it starts; one migrates at a time.
+  # - job: a Job runs `sidekick migrate up` before each install and
+  #   upgrade, and Sidekick runs with database.migrations: manual. It needs
+  #   an external database, since the bundled Postgres starts after the Job.
+  # - manual: nothing migrates; run `sidekick migrate up` yourself before
+  #   each upgrade. Pods are not ready until the schema is current.
+  mode: startup
+  job:
+    backoffLimit: 3
+    activeDeadlineSeconds: 600
+    # serviceAccountName runs the Job as an existing service account. The
+    # chart's own one does not exist yet when a pre-install Job runs, so
+    # the default is the namespace's default service account.
+    serviceAccountName: ""
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { memory: 256Mi }
+
+# postgres runs a single Postgres pod, for evaluation only. Use a managed
+# Postgres 15 or newer in production.
+postgres:
+  enabled: false
+  image:
+    repository: docker.io/library/postgres
+    tag: "18.6"
+    pullPolicy: IfNotPresent
+  storage: 10Gi
+  # storageClassName empty means the cluster's default storage class.
+  storageClassName: ""
+  database: sidekick
+  user: sidekick
+  # password empty means a random one, made at install and kept across
+  # upgrades.
+  password: ""
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 512Mi }
+
+serviceAccount:
+  create: true
+  # name defaults to the release's full name.
+  name: ""
+  # annotations are added to the service account as they are.
+  annotations: {}
+  # workloadIdentity gives Sidekick a cloud identity without stored keys.
+  # EKS Pod Identity needs nothing here: create a pod identity association
+  # for this service account instead.
+  workloadIdentity:
+    # awsRoleArn is the IAM role for EKS IRSA, set as the
+    # eks.amazonaws.com/role-arn annotation.
+    awsRoleArn: ""
+    # gcpServiceAccount is the Google service account for GKE Workload
+    # Identity (<name>@<project>.iam.gserviceaccount.com), set as the
+    # iam.gke.io/gcp-service-account annotation.
+    gcpServiceAccount: ""
+  # automountToken mounts a Kubernetes API token. Sidekick does not call
+  # the Kubernetes API in this release.
+  automountToken: false
+
+# mcpSidecars run stdio MCP servers next to Sidekick, each behind a bridge
+# that serves it as streamable HTTP on localhost. Point a source at it with
+# url: http://127.0.0.1:<port>/mcp. Each sidecar runs with Sidekick's
+# security context and gets its own emptyDir at /tmp; set HOME=/tmp for
+# servers that download packages at start-up. healthPath, when set, is
+# checked by a startup probe and a liveness probe on port, which restart a
+# bridge that stops answering. There is no readiness probe, so a sidecar
+# that is down makes only its source unavailable and never takes Sidekick
+# out of service. Pin image tags; never use latest.
+#   - name: git
+#     image: supercorp/supergateway:<pinned tag>
+#     args: [--stdio, "uvx mcp-server-git --repository /work/repo", --outputTransport, streamableHttp,
+#            --host, 127.0.0.1, --port, "8101", --healthEndpoint, /healthz, --healthCheck, server]
+#     env: [{ name: HOME, value: /tmp }]
+#     port: 8101
+#     healthPath: /healthz
+#     resources: { requests: { cpu: 50m, memory: 128Mi }, limits: { memory: 256Mi } }
+#     volumeMounts: []
+mcpSidecars: []
+
+# extraVolumes and extraVolumeMounts add volumes to the pod and mounts to
+# the Sidekick container, such as a directory of file strategies.
+extraVolumes: []
+extraVolumeMounts: []
+# extraEnv adds environment variables to the Sidekick container.
+extraEnv: []
+
+service:
+  type: ClusterIP
+  annotations: {}
+  # httpPort serves webhooks; metricsPort serves /metrics, /healthz and
+  # /readyz.
+  httpPort: 8080
+  metricsPort: 9090
+
+# ingress exposes the webhook endpoints (/hooks/<name>) outside the
+# cluster. Keep the metrics port off the public network.
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  # hosts: [{ host: sidekick.example.com, paths: [{ path: /hooks/, pathType: Prefix }] }]
+  hosts: []
+  tls: []
+
+# httpRoute exposes the webhook endpoints through the Gateway API.
+httpRoute:
+  enabled: false
+  annotations: {}
+  # parentRefs: [{ name: public, namespace: gateway }]
+  parentRefs: []
+  hostnames: []
+  pathPrefix: /hooks/
+
+resources:
+  requests: { cpu: 100m, memory: 256Mi }
+  limits: { memory: 512Mi }
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile: { type: RuntimeDefault }
+
+securityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities: { drop: [ALL] }
+
+probes:
+  # The startup probe allows 2 minutes (24 x 5s) for start-up migrations.
+  startup: { periodSeconds: 5, failureThreshold: 24, timeoutSeconds: 2 }
+  liveness: { periodSeconds: 10, failureThreshold: 3, timeoutSeconds: 2 }
+  # /readyz bounds its own checks at 5 seconds.
+  readiness: { periodSeconds: 10, failureThreshold: 3, timeoutSeconds: 6 }
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+priorityClassName: ""
+# terminationGracePeriodSeconds leaves room for Sidekick's own 30 second
+# shutdown, which hands running jobs back to the queue.
+terminationGracePeriodSeconds: 60
+
+metrics:
+  serviceMonitor:
+    # enabled makes a ServiceMonitor for the Prometheus Operator, which
+    # must be installed.
+    enabled: false
+    interval: 30s
+    scrapeTimeout: ""
+    labels: {}
+
+networkPolicy:
+  enabled: true
+  # httpFrom and metricsFrom are NetworkPolicy peers allowed to reach each
+  # port. Empty allows every source.
+  httpFrom: []
+  metricsFrom: []
+  # restrictEgress allows Sidekick's pods to reach only DNS, the bundled
+  # Postgres and the egress rules below. Sidekick calls Slack, model
+  # providers and sources, so list them when you turn it on.
+  restrictEgress: false
+  egress: []
+
+pdb:
+  # enabled keeps at least minAvailable pods running during voluntary
+  # disruptions such as node drains. Turn it off with one replica, or a
+  # drain cannot finish.
+  enabled: true
+  minAvailable: 1

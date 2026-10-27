@@ -10,6 +10,7 @@ package strategy
 
 import (
 	"fmt"
+	"math"
 	"path"
 	"regexp"
 	"slices"
@@ -111,10 +112,12 @@ type VerdictHints struct {
 }
 
 // Budgets are a strategy's limits for one investigation. The fields match
-// the route budgets that exist so far.
+// the per-investigation route budgets.
 type Budgets struct {
+	MaxTokens    int           `yaml:"maxTokens"`
 	MaxToolCalls int           `yaml:"maxToolCalls"`
 	MaxWallTime  time.Duration `yaml:"maxWallTime"`
+	MaxCostUSD   float64       `yaml:"maxCostUSD"`
 }
 
 // Watcher is a periodic, read-only check that reports when the affected
@@ -245,6 +248,14 @@ func (s *Strategy) validate() []string {
 
 	if err := checkRegex(s.Match.TextPattern); err != nil {
 		add("match.textPattern: %v", err)
+	}
+
+	if s.Budgets.MaxTokens < 0 {
+		add("budgets.maxTokens: must not be negative")
+	}
+
+	if !(s.Budgets.MaxCostUSD >= 0) || math.IsInf(s.Budgets.MaxCostUSD, 1) {
+		add("budgets.maxCostUSD: must be a dollar amount that is not negative")
 	}
 
 	if s.Budgets.MaxToolCalls < 0 {

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -103,6 +104,15 @@ func TestQueryPlans(t *testing.T) {
 			},
 			wantIndex: []string{"investigations_pkey", "events_group"},
 		},
+		{
+			name: "ClaimNotice",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ClaimNotice(ctx, db.ClaimNoticeParams{Key: "daily_cap:route:route-5000", SentAt: time.Now(), NotBefore: time.Now().Add(-time.Hour)})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"Insert on notices", "Conflict Arbiter Indexes: notices_pkey"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -114,10 +124,9 @@ func TestQueryPlans(t *testing.T) {
 
 			defer func() { _ = tx.Rollback(t.Context()) }()
 
-			explain := &storetest.Explainer{Tx: tx}
+			explain := storetest.NewExplainer(t, tx)
 
 			require.ErrorIs(t, tt.run(t.Context(), db.New(explain)), storetest.ErrExplained)
-			t.Logf("EXPLAIN ANALYZE of %s:\n%s", tt.name, explain.Plan)
 
 			for _, index := range tt.wantIndex {
 				require.Contains(t, explain.Plan, index)
