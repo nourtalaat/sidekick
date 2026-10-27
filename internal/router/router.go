@@ -65,6 +65,9 @@ type Options struct {
 	// TracerProvider makes the tracer of the router.route and
 	// grouper.group spans. Nil means the global tracer provider.
 	TracerProvider trace.TracerProvider
+	// Catalog says which services depend on each other, for routes with
+	// grouping.relatedWindow. Nil means it knows of no dependencies.
+	Catalog *grouper.Catalog
 }
 
 // Router handles route_event jobs. Make it with New and register it for
@@ -105,7 +108,7 @@ func New(opts Options) (*Router, error) {
 	return &Router{
 		routes:  routes,
 		pool:    opts.Pool,
-		grouper: grouper.New(grouper.Options{Logger: log, TracerProvider: tp}),
+		grouper: grouper.New(grouper.Options{Logger: log, TracerProvider: tp, Catalog: opts.Catalog}),
 		log:     log,
 		tracer:  tp.Tracer(tracerName),
 	}, nil

@@ -60,6 +60,7 @@ routes:
   - name: billing
     match:
       labels: { team: billing }
+    grouping: { window: 30m, relatedWindow: 10m }
   - name: default
 
 budgets:

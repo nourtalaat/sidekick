@@ -1,3 +1,5 @@
+//go:generate mockgen -source catalog.go -destination mocks_catalog.go -package source -write_package_comment=false
+
 package source
 
 import "context"

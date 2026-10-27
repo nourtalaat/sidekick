@@ -648,6 +648,7 @@ routes:
     grouping:
       window: 30m                      # default 30m
       fingerprintLabels: [alertname, service, env]
+      relatedWindow: 10m               # default 0, which is off
   - name: default
     strategy: generic-alert
     outputs: [slack-thread]
@@ -694,6 +695,21 @@ A group stays open for `grouping.window` after its newest event. When no
 event has arrived for that long, it closes as `window_ended`, and the next
 event with the same fingerprint opens a new group and a new investigation.
 A group also closes, as `resolved`, once every alert in it has recovered.
+
+With `grouping.relatedWindow`, alerts of related services join one group
+too. An event that finds no open group with its fingerprint joins the
+route's open group of the same service, or of a service that it depends on
+or that depends on it, when that group's newest event is at most
+`relatedWindow` old. If several groups fit, it joins the one with the
+newest event. The running investigation sees the event, with its service,
+before the model's next turn. The group keeps the fingerprint of the alert
+that opened it, so later events with the joined alert's fingerprint join
+it only while it stays related and recent. Only events of the same route
+join, and only direct dependencies count, not dependencies of
+dependencies. Dependencies come from the [service catalog
+sources](sources/backstage.md); without one, only alerts of the same
+service join. The default, `0`, turns related grouping off; `10m` is a good
+start. It must not be longer than `window`.
 
 Recovery events, such as a resolved notification from Alertmanager, are not
 routed. Each one is linked to the newest group that has the same alert,

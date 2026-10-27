@@ -63,13 +63,19 @@ type Options struct {
 	// TracerProvider makes the tracer of the grouper.group spans. Nil
 	// means the global tracer provider.
 	TracerProvider trace.TracerProvider
+	// Catalog says which services depend on each other, for routes with a
+	// related window. Nil means none do, so only events of the same
+	// service join a group that another alert opened.
+	Catalog *Catalog
 }
 
 // Grouper puts events into groups. Make it with New. It holds no state of
-// its own, so one Grouper serves every goroutine.
+// its own beyond the Catalog, which is safe for concurrent use, so one
+// Grouper serves every goroutine.
 type Grouper struct {
-	log    *slog.Logger
-	tracer trace.Tracer
+	log     *slog.Logger
+	tracer  trace.Tracer
+	catalog *Catalog
 }
 
 // Route is what grouping needs to know about the route of an event.
@@ -81,6 +87,11 @@ type Route struct {
 	// FingerprintLabels are the labels the fingerprint of an alert is made
 	// from; empty means the fingerprint the intake stored.
 	FingerprintLabels []string
+	// RelatedWindow lets an event without an open group of its own
+	// fingerprint join the route's open group of the same service or a
+	// related one, when that group's newest event is at most this old.
+	// Zero turns it off.
+	RelatedWindow time.Duration
 }
 
 // Result is the group an event went to.
@@ -105,12 +116,13 @@ func New(opts Options) *Grouper {
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	return &Grouper{log: log, tracer: tp.Tracer(tracerName)}
+	return &Grouper{log: log, tracer: tp.Tracer(tracerName), catalog: opts.Catalog}
 }
 
 // Group puts ev, which the caller has just marked routed in tx, into a
 // group of rt inside a grouper.group span: it joins the open group with
-// its fingerprint, or opens a new one. A joined event goes to the inbox of
+// its fingerprint, or else, when rt has a related window, the open group
+// of the same or a related service, or else opens a new one. A joined event goes to the inbox of
 // the group's investigation, and the investigation's outputs are refreshed
 // to show the new event count. When the result is Opened, the caller must
 // create the investigation with Result.InvestigationID in tx.
@@ -149,9 +161,9 @@ func (g *Grouper) Group(ctx context.Context, tx pgx.Tx, ev db.Event, rt Route) (
 	return Result{}, fmt.Errorf("group event %s: %w", ev.ID, errContended)
 }
 
-// tryGroup joins the open group with fingerprint fp, or opens one. It
-// reports false when another transaction opened a group for fp first,
-// so the caller tries again and joins that one.
+// tryGroup joins the open group with fingerprint fp, or a related open
+// group, or opens one. It reports false when another transaction opened a
+// group for fp first, so the caller tries again and joins that one.
 func (g *Grouper) tryGroup(ctx context.Context, tx pgx.Tx, ev db.Event, rt Route, fp string) (Result, bool, error) {
 	queries := db.New(tx)
 
@@ -174,7 +186,47 @@ func (g *Grouper) tryGroup(ctx context.Context, tx pgx.Tx, ev db.Event, rt Route
 		}
 	}
 
+	related, found, err := g.lockRelated(ctx, queries, ev, rt)
+	if err != nil {
+		return Result{}, false, fmt.Errorf("find a related group: %w", err)
+	}
+
+	if found {
+		res, err := g.join(ctx, tx, related, ev, rt)
+		if err != nil {
+			return Result{}, false, fmt.Errorf("join related group %s: %w", related.ID, err)
+		}
+
+		return res, true, nil
+	}
+
 	return g.open(ctx, tx, ev, rt, fp)
+}
+
+// lockRelated finds and locks the open group of rt that ev joins as a
+// related event: the one of ev's service or a service related to it, whose
+// newest event is at most rt.RelatedWindow older than ev, and that ev may
+// still join. It reports false when there is none, when rt has no related
+// window, or when ev names no service.
+func (g *Grouper) lockRelated(ctx context.Context, queries *db.Queries, ev db.Event, rt Route) (db.EventGroup, bool, error) {
+	if rt.RelatedWindow <= 0 || ev.Service == nil || *ev.Service == "" {
+		return db.EventGroup{}, false, nil
+	}
+
+	grp, err := queries.LockRelatedEventGroup(ctx, db.LockRelatedEventGroupParams{
+		Services: g.catalog.Related(*ev.Service),
+		Since:    ev.ReceivedAt.Add(-rt.RelatedWindow),
+		Route:    rt.Name,
+	})
+
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return db.EventGroup{}, false, nil
+	case err != nil:
+		return db.EventGroup{}, false, fmt.Errorf("look up the open groups of related services: %w", err)
+	default:
+		return grp, joinable(grp, ev, rt), nil
+	}
 }
 
 // join adds ev to the open group grp, writes it to the inbox of the group's
