@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/nourtalaat/sidekick/internal/source"
 )
@@ -137,6 +138,39 @@ type Report struct {
 	Checked    []Check    `json:"checked"`
 	StopReason StopReason `json:"stopReason"`
 	StopDetail string     `json:"stopDetail,omitempty"`
+	// FollowUps are the follow-up runs after the first, oldest first. A
+	// report submitted in a follow-up run keeps the list of the report it
+	// replaces.
+	FollowUps []FollowUp `json:"followUps,omitempty"`
+}
+
+// FollowUp is one follow-up run: the questions it took and its answer
+// (INV-6).
+type FollowUp struct {
+	// Run is the investigation's run number, from 2.
+	Run       int                `json:"run"`
+	Questions []FollowUpQuestion `json:"questions"`
+	// Answer is the model's answer. When Answered is false, it says why
+	// there is none, for example that the run used its budget.
+	Answer   string            `json:"answer"`
+	Answered bool              `json:"answered"`
+	Evidence []source.Evidence `json:"evidence,omitempty"`
+	// PreviousVerdict is set when the run submitted a new report with a
+	// different verdict: the verdict before it.
+	PreviousVerdict Verdict   `json:"previousVerdict,omitempty"`
+	At              time.Time `json:"at"`
+}
+
+// FollowUpQuestion is one question a responder asked.
+type FollowUpQuestion struct {
+	// Author is the name the responder goes by, when it is known.
+	Author string `json:"author,omitempty"`
+	Text   string `json:"text"`
+}
+
+// VerdictChanged reports whether the follow-up run changed the verdict.
+func (f FollowUp) VerdictChanged() bool {
+	return f.PreviousVerdict != ""
 }
 
 // DefaultMinFalsePositiveConfidence is the lowest confidence a false_positive
