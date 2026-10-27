@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"time"
 
 	"github.com/nourtalaat/sidekick/internal/action"
@@ -67,7 +68,7 @@ func compileRoutes(cfg *config.Config, ordered []config.Route, modelSettings map
 		}
 
 		rp, ok := policy.Routes[rc.Name]
-		if !ok {
+		if !ok && !slices.ContainsFunc(cfg.Routes, func(f config.Route) bool { return f.Name == rc.Name }) {
 			rp = cfg.RuntimeRoutePolicy(rc)
 		}
 
