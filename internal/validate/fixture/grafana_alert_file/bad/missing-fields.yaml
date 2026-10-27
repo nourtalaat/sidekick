@@ -1,0 +1,11 @@
+apiVersion: 1
+groups:
+  - name: payments
+    folder: Payments alerts
+    rules:
+      - uid: payments-latency
+        title: Payments p99 latency
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            model: { expr: up == 0 }

@@ -1,0 +1,35 @@
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "orgId": 1,
+      "name": "checkout",
+      "folder": "Checkout alerts",
+      "interval": "30s",
+      "rules": [
+        {
+          "uid": "checkout-errors",
+          "title": "Checkout error rate",
+          "condition": "B",
+          "for": "10m",
+          "data": [
+            {
+              "refId": "A",
+              "datasourceUid": "mimir",
+              "model": {
+                "expr": "sum(rate(http_requests_total{job=\"checkout\", code=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"checkout\"}[5m]))",
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "-100",
+              "model": { "type": "math", "expression": "$A > 0.05", "refId": "B" }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "deleteRules": [{ "orgId": 1, "uid": "checkout-old" }]
+}

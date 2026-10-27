@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nourtalaat/sidekick/internal/validate/grafana_alert_file.schema.json",
+  "title": "Grafana alerting file provisioning: alert rules",
+  "description": "The fields Grafana documents as required for alert rule groups and rules in a file provisioning file. Other top-level keys, such as contactPoints or policies, are allowed and not checked.",
+  "type": "object",
+  "required": ["apiVersion"],
+  "properties": {
+    "apiVersion": { "type": "integer", "minimum": 1 },
+    "groups": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/group" }
+    },
+    "deleteRules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["uid"],
+        "properties": {
+          "orgId": { "type": "integer" },
+          "uid": { "$ref": "#/$defs/uid" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "uid": { "type": "string", "minLength": 1, "maxLength": 40 },
+    "duration": {
+      "type": "string",
+      "pattern": "^([0-9]+(ms|s|m|h|d|w|y))+$"
+    },
+    "group": {
+      "type": "object",
+      "required": ["name", "folder", "interval", "rules"],
+      "properties": {
+        "orgId": { "type": "integer" },
+        "name": { "type": "string", "minLength": 1 },
+        "folder": { "type": "string", "minLength": 1 },
+        "interval": { "$ref": "#/$defs/duration" },
+        "rules": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/rule" }
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "required": ["uid", "title", "condition", "data", "for"],
+      "properties": {
+        "uid": { "$ref": "#/$defs/uid" },
+        "title": { "type": "string", "minLength": 1 },
+        "condition": { "type": "string", "minLength": 1 },
+        "for": { "$ref": "#/$defs/duration" },
+        "data": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/query" }
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "isPaused": { "type": "boolean" }
+      }
+    },
+    "query": {
+      "type": "object",
+      "required": ["refId", "datasourceUid", "model"],
+      "properties": {
+        "refId": { "type": "string", "minLength": 1 },
+        "datasourceUid": { "type": "string", "minLength": 1 },
+        "relativeTimeRange": {
+          "type": "object",
+          "properties": {
+            "from": { "type": "integer", "minimum": 0 },
+            "to": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "model": { "type": "object" }
+      }
+    }
+  }
+}
