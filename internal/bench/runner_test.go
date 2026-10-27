@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/model/modeltest"
 	"github.com/nourtalaat/sidekick/internal/report"
@@ -176,6 +177,43 @@ func TestConfigDecoder(t *testing.T) {
 
 			require.NoError(t, err)
 			require.Equal(t, &want, tt.target)
+		})
+	}
+}
+
+func TestBenchConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		cfg  config.Config
+	}{
+		{
+			name: "a config with everything benchmark runs leave out",
+			cfg: config.Config{
+				Sources: map[string]config.Section{"signoz": {Type: "mcp"}},
+				Outputs: map[string]config.Section{"slack": {Type: "slack"}},
+				Intake:  config.Intake{Webhooks: map[string]config.Webhook{"am": {}}},
+				Routes:  []config.Route{{Name: config.DefaultRouteName}},
+				Budgets: config.Budgets{RateLimit: &config.RateLimit{Events: 1}, Daily: config.DailyBudget{MaxCostUSD: 5}},
+				Watch:   config.Watch{AllowModel: true},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := benchConfig(&tt.cfg)
+			require.Nil(t, got.Sources)
+			require.Nil(t, got.Outputs)
+			require.Empty(t, got.Intake.Webhooks)
+			require.Nil(t, got.Routes)
+			require.Nil(t, got.Budgets.RateLimit)
+			require.Zero(t, got.Budgets.Daily.MaxCostUSD)
+			require.False(t, got.Watch.AllowModel, "runs never offer start_watcher")
+			require.True(t, tt.cfg.Watch.AllowModel, "the config itself is left as it is")
 		})
 	}
 }

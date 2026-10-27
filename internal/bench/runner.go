@@ -35,6 +35,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/source"
 	"github.com/nourtalaat/sidekick/internal/source/mock"
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // RouteName is the name of the route every benchmark run goes through.
@@ -447,7 +448,13 @@ func (r *Runner) jobQueue(database *Database, sc Scenario, guard *tools.Guard, r
 	cfg := r.cfg
 	cfg.Routes = []config.Route{r.route(sc)}
 
-	rt, err := router.New(router.Options{Config: &cfg, ModelSettings: r.models.ModelSettings, Pool: database.Pool, Logger: r.compLog})
+	rt, err := router.New(router.Options{
+		Config:        &cfg,
+		ModelSettings: r.models.ModelSettings,
+		Pool:          database.Pool,
+		Logger:        r.compLog,
+		WatchPolicy:   &watch.Policy{},
+	})
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("build the router: %w", err)
 	}
@@ -690,7 +697,8 @@ func (d configDecoder[C]) Decode(target any) error {
 
 // benchConfig returns a copy of cfg for benchmark runs: without its
 // sources, outputs, webhooks and routes, which the runs replace with their
-// own, and without rate limits and daily caps, which would hold runs back.
+// own, without rate limits and daily caps, which would hold runs back, and
+// with start_watcher off, since runs start no watchers.
 func benchConfig(cfg *config.Config) config.Config {
 	out := *cfg
 	out.Sources = nil
@@ -699,6 +707,7 @@ func benchConfig(cfg *config.Config) config.Config {
 	out.Routes = nil
 	out.Budgets.RateLimit = nil
 	out.Budgets.Daily.MaxCostUSD = 0
+	out.Watch.AllowModel = false
 
 	return out
 }
