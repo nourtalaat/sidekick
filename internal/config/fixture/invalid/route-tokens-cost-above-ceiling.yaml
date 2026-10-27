@@ -1,0 +1,14 @@
+# Route token and cost limits above the global ceilings, and a negative
+# route daily cap.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default
+    budgets: { maxTokens: 500000, maxCostUSD: 2.5, daily: { maxCostUSD: -1 } }

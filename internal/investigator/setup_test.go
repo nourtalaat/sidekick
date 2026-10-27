@@ -40,6 +40,9 @@ var testInvestigation = uuid.MustParse("0192d3a4-0000-7000-8000-0000000000c1")
 // shipped price table has.
 const testModel = "claude-opus-5-5"
 
+// stoppedAt is when the clock stands still for options.stoppedTime.
+var stoppedAt = time.Date(2026, 10, 26, 14, 2, 5, 0, time.UTC)
+
 // testWorker is the locked_by value of jobs the tests claim by hand.
 const testWorker = "test-worker"
 
@@ -64,6 +67,17 @@ type options struct {
 	budget Budget
 	// caps are the connector's capabilities; tool calling is always on.
 	caps model.Capabilities
+	// startedAgo, when set, makes the investigation look as if its first
+	// run started that long ago.
+	startedAgo time.Duration
+	// stoppedTime stops the handler's clock at stoppedAt, when the run
+	// starts, so the final turn for the wall time never starts, and the
+	// wall time is counted only from the start of the agent loop, after
+	// the prompt is saved.
+	stoppedTime bool
+	// route is the payments route's settings, and daily the daily caps.
+	route Route
+	daily DailyCaps
 }
 
 // harness is a Handler with a scripted connector and a fake signoz source
@@ -93,12 +107,24 @@ func setup(t *testing.T, o options) *harness {
 	_, err = pool.Exec(t.Context(), "UPDATE investigations SET budget = $1 WHERE id = $2", budget, testInvestigation)
 	require.NoError(t, err)
 
+	if o.startedAgo > 0 {
+		_, err = pool.Exec(t.Context(), "UPDATE investigations SET started_at = now() - make_interval(secs => $1) WHERE id = $2",
+			o.startedAgo.Seconds(), testInvestigation)
+		require.NoError(t, err)
+	}
+
 	o.caps.ToolCalling = true
 	conn := modeltest.New(t, o.caps, o.turns...)
 	conn.ExpectAllUsed()
 
 	h := &harness{pool: pool, conn: conn, spans: tracetest.NewSpanRecorder(), registry: prometheus.NewRegistry()}
 	h.handler = newHandler(t, pool, conn, fakeSignoz(t), h.spans, h.registry)
+	h.handler.opts.Routes["payments"] = o.route
+	h.handler.opts.Daily = o.daily
+
+	if o.stoppedTime {
+		h.handler.now = func() time.Time { return stoppedAt }
+	}
 
 	return h
 }
