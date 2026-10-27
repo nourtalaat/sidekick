@@ -53,6 +53,32 @@ jobs:
           key: tools-${{ runner.os }}-${{ hashFiles('Makefile') }}
 
       - run: make ci
+        env:
+          SIDEKICK_PLANS_DIR: ${{ runner.temp }}/query-plans
+
+      # The plan tests write each query and its EXPLAIN ANALYZE plan here, for
+      # pull request descriptions.
+      - name: Upload the query plans
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: query-plans
+          path: ${{ runner.temp }}/query-plans
+          if-no-files-found: warn
+
+      - name: List the query plans in the job summary
+        if: always()
+        shell: bash
+        env:
+          PLANS_DIR: ${{ runner.temp }}/query-plans
+        run: |
+          {
+            echo '### Query plans'
+            echo 'Download the `query-plans` artifact of this run for the files.'
+            echo '```'
+            (cd "$PLANS_DIR" 2>/dev/null && find . -type f -name '*.txt' | sed 's|^\./||' | sort) || echo 'No query plans were written'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   vulncheck:
     name: govulncheck
