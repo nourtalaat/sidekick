@@ -39,7 +39,7 @@ type Instances struct {
 // set from slack.botTokenSecret. On problems it closes what it built and
 // returns Errors.
 func Build(ctx context.Context, cfg *Config, regs Registries, deps registry.Deps) (*Instances, error) {
-	regs = regs.withDefaults()
+	regs = regs.WithDefaults()
 	if deps.Secrets == nil {
 		deps.Secrets = secrets.NewDir(cfg.Secrets.Dir)
 	}

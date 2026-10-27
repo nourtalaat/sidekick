@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/slack-go/slack/socketmode"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
@@ -29,7 +30,8 @@ const (
 
 // fakeSocket is a Socket Mode server for one test, on the test's fake
 // Slack Web API: apps.connections.open hands out its URL, and every
-// connection gets a hello. It records the acknowledgements it reads.
+// connection gets a hello. It records the acknowledgements it reads, with
+// their payloads.
 type fakeSocket struct {
 	t        *testing.T
 	upgrader websocket.Upgrader
@@ -42,6 +44,8 @@ type fakeSocket struct {
 	maxOpen int
 	opened  int
 	acks    []string
+	// payloads holds the payload of each acknowledgement that had one.
+	payloads map[string]json.RawMessage
 }
 
 // socketConn is one connection with its write lock, since a connection
@@ -56,7 +60,11 @@ func newFakeSocket(t *testing.T, slack *fakehttp.Server) *fakeSocket {
 	t.Helper()
 
 	// The client sends Slack's own Origin, which a fake server cannot match.
-	f := &fakeSocket{t: t, upgrader: websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}}
+	f := &fakeSocket{
+		t:        t,
+		upgrader: websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }},
+		payloads: map[string]json.RawMessage{},
+	}
 	wsURL := "ws" + strings.TrimPrefix(slack.URL(), "http") + socketPath
 
 	slack.HandleFunc(http.MethodPost, "/apps.connections.open", func(w http.ResponseWriter, r *http.Request) {
@@ -83,11 +91,19 @@ func newFakeSocket(t *testing.T, slack *fakehttp.Server) *fakeSocket {
 func (f *fakeSocket) send(envelopeID string, retry int, payload []byte) {
 	f.t.Helper()
 
+	f.sendRequest(socketmode.RequestTypeEventsAPI, envelopeID, retry, payload)
+}
+
+// sendRequest sends a Socket Mode message of kind, such as slash_commands,
+// with the payload to the newest open connection.
+func (f *fakeSocket) sendRequest(kind, envelopeID string, retry int, payload []byte) {
+	f.t.Helper()
+
 	msg, err := json.Marshal(map[string]any{
-		"type":                     "events_api",
+		"type":                     kind,
 		"envelope_id":              envelopeID,
 		"payload":                  json.RawMessage(payload),
-		"accepts_response_payload": false,
+		"accepts_response_payload": kind != socketmode.RequestTypeEventsAPI,
 		"retry_attempt":            retry,
 	})
 	require.NoError(f.t, err)
@@ -111,6 +127,15 @@ func (f *fakeSocket) acked(envelopeID string) bool {
 	}
 
 	return false
+}
+
+// ackPayload returns the payload the acknowledgement of envelopeID carried,
+// or nil for an empty ack.
+func (f *fakeSocket) ackPayload(envelopeID string) json.RawMessage {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.payloads[envelopeID]
 }
 
 // counts returns how many connections are open, the most that were open at
@@ -165,7 +190,8 @@ func (f *fakeSocket) serve(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var ack struct {
-			EnvelopeID string `json:"envelope_id"`
+			EnvelopeID string          `json:"envelope_id"`
+			Payload    json.RawMessage `json:"payload"`
 		}
 
 		if json.Unmarshal(msg, &ack) != nil || ack.EnvelopeID == "" {
@@ -178,6 +204,10 @@ func (f *fakeSocket) serve(w http.ResponseWriter, r *http.Request) {
 
 		f.mu.Lock()
 		f.acks = append(f.acks, ack.EnvelopeID)
+		if ack.Payload != nil {
+			f.payloads[ack.EnvelopeID] = ack.Payload
+		}
+
 		f.mu.Unlock()
 	}
 }

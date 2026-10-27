@@ -1,0 +1,49 @@
+# Quick-start values: one replica, the bundled Postgres (for evaluation
+# only), the Anthropic API, one Alertmanager webhook endpoint and one Slack
+# channel. docs/install.md walks through them. Before installing, create
+# the three Secrets listed under secrets, and set the channel:
+#   helm install sidekick oci://ghcr.io/nourtalaat/charts/sidekick \
+#     -f quickstart-values.yaml --set config.outputs.slack.channel='#alerts'
+
+replicaCount: 1
+
+# With one replica a disruption budget would block node drains.
+pdb:
+  enabled: false
+
+postgres:
+  enabled: true
+  storage: 2Gi
+
+secrets:
+  - sidekick-anthropic
+  - sidekick-slack
+  - sidekick-webhook
+
+config:
+  model:
+    connectors:
+      claude:
+        provider: anthropic
+        model: claude-opus-5-5
+        apiKeySecret: { name: sidekick-anthropic, key: apiKey }
+    roles:
+      investigate: claude
+
+  slack:
+    botTokenSecret: { name: sidekick-slack, key: botToken }
+
+  outputs:
+    slack:
+      type: slack
+      channel: "#alerts"
+
+  intake:
+    webhooks:
+      alertmanager:
+        adapter: alertmanager
+        auth: { bearer: { name: sidekick-webhook, key: token } }
+
+  routes:
+    - name: default
+      outputs: [slack]

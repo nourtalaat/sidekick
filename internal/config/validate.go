@@ -597,23 +597,13 @@ func (v *validator) positiveDuration(path string, d time.Duration) {
 	}
 }
 
-// withDefaults fills nil registries with the global ones.
-func (r Registries) withDefaults() Registries {
-	return Registries{
-		Models:  cmp.Or(r.Models, registry.Models),
-		Sources: cmp.Or(r.Sources, registry.Sources),
-		Intakes: cmp.Or(r.Intakes, registry.Intakes),
-		Outputs: cmp.Or(r.Outputs, registry.Outputs),
-	}
-}
-
 // newValidator returns a validator for one check of cfg.
 func newValidator(ctx context.Context, cfg *Config, opts LoadOptions) *validator {
 	return &validator{
 		ctx:  ctx,
 		cfg:  cfg,
 		opts: opts,
-		regs: opts.Registries.withDefaults(),
+		regs: opts.Registries.WithDefaults(),
 		caps: map[string]model.Capabilities{},
 		errs: &errorList{},
 	}

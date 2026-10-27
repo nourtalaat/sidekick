@@ -73,7 +73,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.verify(ctx, r.Header, body); err != nil {
+	if err := h.Verify(ctx, r.Header, body); err != nil {
 		if !errors.Is(err, intake.ErrUnauthenticated) {
 			h.fail(ctx, w, "Slack request not checked: the signing secret could not be read", err)
 
@@ -102,12 +102,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// verify checks Slack's signature on a request: X-Slack-Signature is "v0="
+// Verify checks Slack's signature on a request: X-Slack-Signature is "v0="
 // and the hex HMAC-SHA256, keyed with the signing secret, of "v0:", the
 // X-Slack-Request-Timestamp value, ":" and the body. The timestamp must be
-// within SignatureTolerance of now. Errors that do not wrap
-// intake.ErrUnauthenticated mean the secret could not be read.
-func (h *Handler) verify(ctx context.Context, header http.Header, body []byte) error {
+// within SignatureTolerance of now. Every Slack HTTP route checks the raw
+// body with it before parsing anything. An error that wraps
+// intake.ErrUnauthenticated means the request must be refused with 401;
+// any other error means the secret could not be read.
+func (h *Handler) Verify(ctx context.Context, header http.Header, body []byte) error {
 	secret, err := secrets.ResolveText(ctx, h.secrets, h.signingSecret)
 	if err != nil {
 		return fmt.Errorf("resolve the signing secret: %w", err)

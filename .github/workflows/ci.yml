@@ -93,6 +93,44 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+  kind:
+    name: chart in kind
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Cache tools
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: bin/tools
+          key: tools-${{ runner.os }}-${{ hashFiles('Makefile') }}
+
+      - name: Build the image
+        run: docker build -t sidekick:ci --build-arg VERSION=ci --build-arg COMMIT="$GITHUB_SHA" .
+
+      - uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
+        with:
+          version: v0.33.0
+          node_image: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
+          cluster_name: sidekick
+
+      - name: Load the image into the cluster
+        run: kind load docker-image sidekick:ci --name sidekick
+
+      - name: Install the chart and wait until Sidekick is ready
+        run: sh scripts/kind-test.sh "$(make -s helm-path)" sidekick ci
+
+      - name: Show the pods, events and logs
+        if: failure()
+        run: |
+          kubectl -n sidekick get pods -o wide || true
+          kubectl -n sidekick describe pods || true
+          kubectl -n sidekick get events --sort-by=.lastTimestamp || true
+          kubectl -n sidekick logs -l app.kubernetes.io/instance=sidekick --all-containers --prefix --tail=200 || true
+
   dependency-review:
     name: dependency review
     if: github.event_name == 'pull_request'
