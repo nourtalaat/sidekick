@@ -1,0 +1,6 @@
+# Free-form annotations are added next to the workload identity ones.
+serviceAccount:
+  annotations:
+    eks.amazonaws.com/sts-regional-endpoints: "true"
+  workloadIdentity:
+    awsRoleArn: arn:aws-us-gov:iam::111122223333:role/teams/sidekick
