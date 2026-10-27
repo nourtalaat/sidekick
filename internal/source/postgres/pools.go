@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/url"
 	"slices"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/secrets"
 )
@@ -215,23 +215,12 @@ func localHosts(cfg *pgx.ConnConfig) bool {
 	}
 
 	for _, host := range hosts {
-		if !strings.HasPrefix(host, "/") && !loopback(host) {
+		if !strings.HasPrefix(host, "/") && !httpclient.IsLoopbackHost(host) {
 			return false
 		}
 	}
 
 	return true
-}
-
-// loopback reports whether host is localhost or a loopback IP address.
-func loopback(host string) bool {
-	if strings.EqualFold(host, "localhost") {
-		return true
-	}
-
-	ip := net.ParseIP(host)
-
-	return ip != nil && ip.IsLoopback()
 }
 
 // modeName returns the sslmode for a message, naming the default when the

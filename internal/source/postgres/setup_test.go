@@ -25,6 +25,7 @@ import (
 	tcexec "github.com/testcontainers/testcontainers-go/exec"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
+	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/ids"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/secrets"
@@ -311,7 +312,7 @@ func newSource(t *testing.T, cfg Config, targets ...target) (*Source, *bytes.Buf
 		cfg.Databases = append(cfg.Databases, Database{
 			Name:          tg.name,
 			URLSecret:     registry.SecretRef{Name: tg.name, Key: "url"},
-			AllowInsecure: !loopback(server.host),
+			AllowInsecure: !httpclient.IsLoopbackHost(server.host),
 		})
 	}
 
