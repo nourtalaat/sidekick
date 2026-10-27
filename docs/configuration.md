@@ -289,13 +289,17 @@ gpt-with-a-key:
 - **Known models** are named by their model ID in `model`, whatever the
   deployment is called:
   - the OpenAI models of the `openai` provider;
-  - these Foundry models from other providers, which call tools:
-    `DeepSeek-V4-Pro`, `DeepSeek-V4-Flash`, `DeepSeek-V3.2`, `Kimi-K2.6`,
-    `Kimi-K2.5`, `MAI-Thinking-1`, `grok-4.7`, `grok-4.6` and `grok-4.3`.
-    Foundry does not say whether they honour a forced tool choice, so
-    Sidekick does not force one; when the model ends a turn without
-    calling a tool, the investigation reminds it to call
-    `submit_verdict`. They take no `effort`.
+  - these Foundry models from other providers: `Kimi-K2.6`, `Kimi-K2.5`,
+    `grok-4.7`, `grok-4.6` and `grok-4.3`, which call tools, and
+    `DeepSeek-V4-Pro`, `DeepSeek-V4-Flash` and `DeepSeek-V3.2`, which
+    cannot be the `investigate` model. DeepSeek's thinking models fail a
+    tool call turn unless the reasoning of earlier turns is sent back, which
+    Sidekick does not do on Chat Completions; use them for `triage` or
+    `summarize`. Foundry does not say whether these models honour a forced
+    tool choice, so Sidekick does not force one; when the model ends a turn
+    without calling a tool, the investigation reminds it to call
+    `submit_verdict`. They take no `effort`. MAI-Thinking-1 is served under
+    another path (`/mai/v1`) and does not work with this provider.
 
   For any other model, add a `capabilities` block like the `openai` one.
 - **API.** OpenAI models use the Responses API by default, as Microsoft
@@ -307,8 +311,8 @@ gpt-with-a-key:
 - **Errors.** A prompt that Azure's content filter blocks, and a
   deployment that does not exist, fail the step without retries.
 - **Prices.** The shipped OpenAI prices apply, by `model`, and the shipped
-  table also has DeepSeek-V4-Pro, DeepSeek-V4-Flash, Kimi-K2.6, Kimi-K2.5
-  and MAI-Thinking-1. They are the prices of Global Standard deployments;
+  table also has DeepSeek-V4-Pro, DeepSeek-V4-Flash, Kimi-K2.6 and
+  Kimi-K2.5. They are the prices of Global Standard deployments;
   Data Zone and Regional deployments cost 10% more, so set them with
   `prices`. The Grok models and DeepSeek-V3.2 have no shipped price; set
   one with `prices`, or their calls count as free in the budgets.

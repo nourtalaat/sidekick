@@ -15,19 +15,21 @@ const (
 	output8K    = 8_192
 )
 
-// foundryModels are the models from other providers that Azure sells in
-// Microsoft Foundry and that can call tools, by the model ID Foundry gives
-// them, from the Foundry Models page as of 2026-10-28. They answer on Chat
-// Completions. Foundry does not say whether they honour a forced tool
-// choice, so none is assumed, the safe default: the investigation reminds
-// the model to submit its verdict instead. They take no effort setting.
+// foundryModels are models from other providers that Azure sells in
+// Microsoft Foundry, by the model ID Foundry gives them, from the Foundry
+// Models page as of 2026-10-28. They answer on Chat Completions on the v1
+// API. Foundry does not say whether they honour a forced tool choice, so
+// none is assumed, the safe default: the investigation reminds the model
+// to submit its verdict instead. They take no effort setting.
+//
+// MAI-Thinking-1 is not here: Foundry serves it under /mai/v1, not the v1
+// API this connector calls.
 var foundryModels = map[string]model.Capabilities{
-	"DeepSeek-V4-Pro":   foundryModel(context1M, output384K, true, true),
-	"DeepSeek-V4-Flash": foundryModel(context1M, output384K, true, true),
-	"DeepSeek-V3.2":     foundryModel(context128K, context128K, true, false),
+	"DeepSeek-V4-Pro":   withoutTools(foundryModel(context1M, output384K, true, true)),
+	"DeepSeek-V4-Flash": withoutTools(foundryModel(context1M, output384K, true, true)),
+	"DeepSeek-V3.2":     withoutTools(foundryModel(context128K, context128K, true, false)),
 	"Kimi-K2.6":         foundryModel(context262K, context262K, false, true),
 	"Kimi-K2.5":         foundryModel(context262K, context262K, false, true),
-	"MAI-Thinking-1":    foundryModel(context256K, output64K, false, true),
 	"grok-4.7":          foundryModel(context500K, context500K, true, true),
 	"grok-4.6":          foundryModel(context200K, context128K, true, true),
 	"grok-4.3":          foundryModel(context200K, output8K, false, true),
@@ -43,4 +45,15 @@ func foundryModel(contextTokens, outputTokens int, structuredOutput, promptCachi
 		ContextTokens:    contextTokens,
 		MaxOutputTokens:  outputTokens,
 	}
+}
+
+// withoutTools marks a model whose tool calls the connector cannot carry:
+// DeepSeek's thinking models answer a tool call turn with a 400 error
+// unless the reasoning_content of earlier turns is sent back, and Chat
+// Completions in this connector does not send reasoning back. Such a model
+// cannot be the investigate model; it can still triage or summarize.
+func withoutTools(caps model.Capabilities) model.Capabilities {
+	caps.ToolCalling = false
+
+	return caps
 }

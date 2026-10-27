@@ -22,7 +22,6 @@ var shippedFoundry = map[string]model.Price{
 	"DeepSeek-V4-Flash": perMTok(0.19, 0.51, 0.028, 0.19),
 	"Kimi-K2.6":         perMTok(0.95, 4, 0.16, 0.95),
 	"Kimi-K2.5":         perMTok(0.60, 3, 0.10, 0.60),
-	"MAI-Thinking-1":    perMTok(2, 8, 0.20, 2),
 }
 
 // init adds the Foundry prices to the shipped table.

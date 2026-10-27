@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -538,8 +539,9 @@ func TestAzureAPI(t *testing.T) {
 	}
 }
 
-// TestFoundryModels checks the table: every Foundry model can be the
-// investigate model and is not assumed to honour a forced tool choice.
+// TestFoundryModels checks the table: no Foundry model is assumed to
+// honour a forced tool choice, and only the DeepSeek models, whose tool
+// call turns need reasoning sent back, cannot be the investigate model.
 func TestFoundryModels(t *testing.T) {
 	t.Parallel()
 
@@ -547,7 +549,12 @@ func TestFoundryModels(t *testing.T) {
 		t.Run(id, func(t *testing.T) {
 			t.Parallel()
 
-			require.NoError(t, model.CheckRole(model.RoleInvestigate, caps))
+			if strings.HasPrefix(id, "DeepSeek-") {
+				require.ErrorIs(t, model.CheckRole(model.RoleInvestigate, caps), model.ErrNoToolCalling)
+			} else {
+				require.NoError(t, model.CheckRole(model.RoleInvestigate, caps))
+			}
+
 			require.False(t, caps.ToolChoice)
 			require.Positive(t, caps.ContextTokens)
 			require.Positive(t, caps.MaxOutputTokens)
