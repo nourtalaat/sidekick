@@ -105,7 +105,7 @@ func TestNewRoutesSettings(t *testing.T) {
 			wantConnectors: `{"investigate": {"connector": "big", "model": "big-model"}, "summarize": {"connector": "fake", "model": "fake-model"}}`,
 			// The route allows 35 tool calls and 5 minutes; the strategy
 			// 30 tool calls and 8 minutes.
-			wantBudget:   `{"max_tool_calls": 30, "max_wall_time_ms": 300000}`,
+			wantBudget:   `{"max_tokens": 400000, "max_tool_calls": 30, "max_wall_time_ms": 300000, "max_cost_micros": 1000000}`,
 			wantGrouping: grouper.Route{Name: "payments-latency", Window: config.DefaultGroupingWindow},
 		},
 		{
@@ -114,7 +114,7 @@ func TestNewRoutesSettings(t *testing.T) {
 			wantStrategy:   strategy.GenericAlert,
 			wantVersion:    generic.Version,
 			wantConnectors: `{"investigate": {"connector": "fake", "model": "fake-model"}, "summarize": {"connector": "fake", "model": "fake-model"}}`,
-			wantBudget:     `{"max_tool_calls": 40, "max_wall_time_ms": 600000}`,
+			wantBudget:     `{"max_tokens": 400000, "max_tool_calls": 40, "max_wall_time_ms": 600000, "max_cost_micros": 1000000}`,
 			wantGrouping:   grouper.Route{Name: "crashloop", Window: 30 * time.Minute, FingerprintLabels: []string{"service", "env"}},
 		},
 		{
@@ -132,7 +132,7 @@ func TestNewRoutesSettings(t *testing.T) {
 			wantStrategy:   strategy.GenericAlert,
 			wantVersion:    generic.Version,
 			wantConnectors: `{"investigate": {"connector": "fake", "model": "fake-model"}, "summarize": {"connector": "fake", "model": "fake-model"}}`,
-			wantBudget:     `{"max_tool_calls": 40, "max_wall_time_ms": 600000}`,
+			wantBudget:     `{"max_tokens": 400000, "max_tool_calls": 40, "max_wall_time_ms": 600000, "max_cost_micros": 1000000}`,
 			wantGrouping:   grouper.Route{Name: "default", Window: config.DefaultGroupingWindow},
 		},
 	}
@@ -232,6 +232,12 @@ func TestEffectiveBudget(t *testing.T) {
 			route:    config.Limits{MaxToolCalls: 10, MaxWallTime: time.Minute},
 			strategy: strategy.Budgets{MaxToolCalls: 20, MaxWallTime: 5 * time.Minute},
 			want:     investigator.Budget{MaxToolCalls: 10, MaxWallTime: time.Minute},
+		},
+		{
+			name:     "token and cost limits",
+			route:    config.Limits{MaxTokens: 400_000, MaxCostUSD: 1},
+			strategy: strategy.Budgets{MaxTokens: 100_000, MaxCostUSD: 2.5},
+			want:     investigator.Budget{MaxTokens: 100_000, MaxCostMicros: 1_000_000},
 		},
 		{
 			name:     "only the strategy sets a limit",

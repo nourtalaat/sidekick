@@ -26,9 +26,11 @@ const overBudgetText = "This call was not run: the investigation has used all of
 // no result yet. Source calls run in parallel, at most
 // maxParallelToolCalls at once and only as many as the tool call limit has
 // left; calls past the limit are answered without running. Built-in calls
-// are handled in turn, so they see every result saved before them.
-// Results are saved in call order, each as soon as it and every call
-// before it are done. When runCtx ends, no more results are saved.
+// are handled in turn, so they see every result saved before them. In the
+// final turn only submit_verdict runs, and every other call is answered
+// without running. Results are saved in call order, each as soon as it and
+// every call before it are done. When runCtx ends, no more results are
+// saved.
 func (r *run) runTools(ctx, runCtx context.Context, calls []model.ToolCall) error {
 	var wg sync.WaitGroup
 	defer wg.Wait()
@@ -36,12 +38,19 @@ func (r *run) runTools(ctx, runCtx context.Context, calls []model.ToolCall) erro
 	turnCtx, cancel := context.WithCancel(runCtx)
 	defer cancel()
 
-	pending := r.startSourceCalls(turnCtx, calls, &wg)
+	final := r.hist.finalTurnTaken()
+
+	var pending []chan newStep
+	if !final {
+		pending = r.startSourceCalls(turnCtx, calls, &wg)
+	}
 
 	for i, call := range calls {
 		var s newStep
 
 		switch {
+		case final && call.Name != report.SubmitVerdictTool:
+			s = finalTurnOnlyStep(call)
 		case isBuiltinName(call.Name):
 			s = r.builtin(call)
 		case pending[i] == nil:
@@ -188,6 +197,20 @@ func overBudgetStep(call model.ToolCall) newStep {
 		tool:      call.Name,
 		callID:    call.ID,
 		status:    statusOverBudget,
+		startedAt: time.Now(),
+	}
+}
+
+// finalTurnOnlyStep returns the step of a call to a tool other than
+// submit_verdict in the final turn.
+func finalTurnOnlyStep(call model.ToolCall) newStep {
+	return newStep{
+		kind:      kindToolResult,
+		parts:     []model.Part{model.ToolResult{CallID: call.ID, Content: finalTurnOnlyText, IsError: true}},
+		tool:      call.Name,
+		callID:    call.ID,
+		status:    statusRejected,
+		errText:   "not available in the final turn",
 		startedAt: time.Now(),
 	}
 }

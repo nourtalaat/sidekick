@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -62,6 +64,9 @@ type Options struct {
 	// Logger receives one line per routed event, with IDs and the route
 	// only, never event text. Nil logs nothing.
 	Logger *slog.Logger
+	// Metrics is where the router registers sidekick_events_skipped_total.
+	// Nil records nothing.
+	Metrics prometheus.Registerer
 	// TracerProvider makes the tracer of the router.route and
 	// grouper.group spans. Nil means the global tracer provider.
 	TracerProvider trace.TracerProvider
@@ -78,6 +83,13 @@ type Router struct {
 	grouper *grouper.Grouper
 	log     *slog.Logger
 	tracer  trace.Tracer
+	// globalRate is budgets.rateLimit, nil for none.
+	globalRate *config.RateLimit
+	// skippedEvents counts the events a rate limit skipped; nil counts
+	// none.
+	skippedEvents *prometheus.CounterVec
+	// now is the clock of the rate limits. Tests replace it.
+	now func() time.Time
 }
 
 var _ queue.Handler = (*Router)(nil)
@@ -105,18 +117,31 @@ func New(opts Options) (*Router, error) {
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	return &Router{
-		routes:  routes,
-		pool:    opts.Pool,
-		grouper: grouper.New(grouper.Options{Logger: log, TracerProvider: tp, Catalog: opts.Catalog}),
-		log:     log,
-		tracer:  tp.Tracer(tracerName),
-	}, nil
+	r := &Router{
+		routes:     routes,
+		pool:       opts.Pool,
+		grouper:    grouper.New(grouper.Options{Logger: log, TracerProvider: tp, Catalog: opts.Catalog}),
+		log:        log,
+		tracer:     tp.Tracer(tracerName),
+		globalRate: opts.Config.Budgets.RateLimit,
+		now:        time.Now,
+	}
+
+	if opts.Metrics != nil {
+		r.skippedEvents, err = investigator.NewSkippedEvents(opts.Metrics)
+		if err != nil {
+			return nil, fmt.Errorf("set up the router metrics: %w", err)
+		}
+	}
+
+	return r, nil
 }
 
 // Handle routes the event of one route_event job inside a router.route
-// span, a child of the span that enqueued the job. In one transaction it
-// sets the event to routed with its route and hands it to the grouper,
+// span, a child of the span that enqueued the job. After picking the
+// route, it checks the global and the route's rate limits, which can hold
+// the event as delayed or skipped. Then, in one transaction, it sets the
+// event to routed with its route and hands it to the grouper,
 // which joins it to the open group with its fingerprint or opens a new
 // one. For a new group it creates a queued investigation, enqueues its
 // investigate job and enqueues the first publish job for each output of
@@ -153,19 +178,21 @@ func (r *Router) Handle(ctx context.Context, job db.Job) (err error) {
 	}
 
 	switch {
-	case ev.Status != statusReceived:
+	case ev.Status != statusReceived && ev.Status != statusDelayed:
 		log.DebugContext(ctx, "event not routed: it is not waiting to be routed", "status", ev.Status)
 
 		return nil
 	case ev.Kind == string(event.KindResolved):
 		return r.handleRecovery(ctx, span, log, ev)
 	default:
-		return r.handleEvent(ctx, span, log, ev)
+		return r.handleEvent(ctx, span, log, job, ev)
 	}
 }
 
-// handleEvent picks the route of ev and routes it.
-func (r *Router) handleEvent(ctx context.Context, span trace.Span, log *slog.Logger, ev db.Event) error {
+// handleEvent picks the route of ev, checks the rate limits, and routes
+// it when they let it through. job is the event's route_event job, which
+// a delayed event moves to later.
+func (r *Router) handleEvent(ctx context.Context, span trace.Span, log *slog.Logger, job db.Job, ev db.Event) error {
 	rt, err := r.match(ev)
 	if err != nil {
 		return fmt.Errorf("event %s: %w", ev.ID, err)
@@ -173,6 +200,15 @@ func (r *Router) handleEvent(ctx context.Context, span trace.Span, log *slog.Log
 
 	span.SetAttributes(attribute.String(attrRoute, rt.name))
 	log = log.With("route", rt.name)
+
+	admitted, err := r.admit(ctx, job, ev, rt, log)
+	if err != nil {
+		return fmt.Errorf("event %s: %w", ev.ID, err)
+	}
+
+	if !admitted {
+		return nil
+	}
 
 	res, routed, err := r.route(ctx, ev, rt)
 	if err != nil {

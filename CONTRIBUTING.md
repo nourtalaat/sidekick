@@ -73,8 +73,8 @@ Run `make help` for the full list. The main ones:
 | `make build` | Builds `bin/sidekick` with the version and commit set. |
 | `make vulncheck` | govulncheck on the code and its dependencies. |
 | `make helm-lint` | `helm lint --strict` of the chart, which checks `values.schema.json`, with the quick-start values and each file in `charts/sidekick/ci/`. |
-| `make helm-test` | Compares `helm template` of the quick-start values with `charts/testdata/quickstart.golden.yaml`, and runs `sidekick config validate` on the `sidekick.yaml` each example values file renders. |
-| `make helm-golden` | Rewrites the golden file after a chart change you intend. |
+| `make helm-test` | Compares `helm template` of the quick-start values with `charts/testdata/quickstart.golden.yaml`, and runs `sidekick config validate` on the `sidekick.yaml` each example values file renders. Each `charts/testdata/<template>/<case>.values.yaml` is layered on the quick-start values and must render `templates/<template>.yaml` as `<case>.golden.yaml`, or fail with the message in `<case>.error`. |
+| `make helm-golden` | Rewrites the golden files after a chart change you intend. |
 | `make image` | Builds the container image for linux/amd64 and linux/arm64 with Docker, or Podman when Docker is missing. `IMAGE_PLATFORMS=linux/arm64` builds one platform. |
 
 To add a target to `make ci`, put `CI_TARGETS += <name>` above its rule. A new
@@ -219,8 +219,19 @@ lock while it runs. `sidekick serve` also migrates at start-up, unless
    `make verify-generated` (part of `make ci`) fails if you forget.
 3. Call it through `db.New(pool)`, and use the generated row and parameter
    types directly rather than copying them into types of your own.
-4. Put the query's `EXPLAIN ANALYZE` output, against realistic data, in the
-   pull request description.
+4. Add the query to the `TestQueryPlans` test of its package: run it
+   through `db.New(storetest.NewExplainer(t, tx))` against seeded data and
+   check that the plan uses the index you expect.
+5. Put the query's `EXPLAIN ANALYZE` output in the pull request
+   description. CI writes each plan the tests read to a file and uploads
+   them as the `query-plans` artifact of the `make ci` job: open the
+   workflow run from the pull request's checks, and download the artifact
+   from the run's summary page, which also lists the files. Each file is
+   named `<package directory>/<test name>.txt`, for example
+   `internal/queue/TestQueryPlans/ClaimJobs.txt`, and holds the query
+   followed by its plan. To write the files yourself, set
+   `SIDEKICK_PLANS_DIR` to a directory when you run the integration tests,
+   with `-count=1` so Go does not reuse a cached result that wrote nothing.
 
 ## Background jobs
 
@@ -269,6 +280,10 @@ Work that does not finish inside a request runs as a job from
 
   The tests of `internal/store/storetest` are a small example of this layout
   to copy.
+- The Postgres source's tests (`internal/source/postgres`) always start a
+  container of their own, even when `SIDEKICK_TEST_DATABASE_URL` is set,
+  because they need `pg_stat_statements` loaded at start-up and a standby
+  server, so they need Docker or Podman.
 
 ## Go style
 

@@ -18,11 +18,14 @@ Sidekick receives alerts from webhooks or Slack, investigates them with the LLM 
 - [Backstage source](docs/sources/backstage.md): the keys and tools of the Backstage service catalog source, and the token it needs.
 - [GitHub source](docs/sources/github.md): the GitHub App permissions the GitHub source needs, and how to set the app up.
 - [Kubernetes source](docs/sources/kubernetes.md): the keys and tools of the Kubernetes source, and the read-only RBAC it needs.
+- [Postgres source](docs/sources/postgres.md): the read-only role the Postgres source needs, the TLS rules for its URL, and how to turn on `pg_stat_statements`.
 - [Running Sidekick](docs/running.md): `sidekick serve`, `sidekick doctor`, start-up and shutdown, health and readiness probes, metrics, logs and traces.
 - [Sending alerts to Sidekick](docs/webhooks.md): webhook endpoints, the Alertmanager and generic adapters, how deliveries are authenticated, and `sidekick test-alert`.
 - [Setting up senders](docs/senders.md): pointing SigNoz, Datadog, Sentry and Grafana at Sidekick, and what each of their alerts becomes.
 - [How investigations run](docs/investigations.md): the agent loop, the report checks, how an investigation ends, its limits, and what happens on a restart.
 - [Investigations in Slack](docs/slack.md): the Slack output, what it posts while an investigation runs and when it finishes, and how to set up the Slack app.
+- [Results on tickets](docs/tickets.md): the Linear and Jira comment outputs, how it finds the ticket an alert is about, and how to set it up.
+- [Webhook callbacks](docs/webhook-callbacks.md): the signed JSON callback with each final result and watcher event, and how a receiver checks it.
 
 ## License
 

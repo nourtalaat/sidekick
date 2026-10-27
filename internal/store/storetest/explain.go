@@ -6,7 +6,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
+	"testing"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -17,14 +19,25 @@ import (
 var ErrExplained = errors.New("explained")
 
 // Explainer is a db.DBTX that runs EXPLAIN (ANALYZE, BUFFERS) on each query
-// instead of the query itself, keeps the plan in Plan, and returns
-// ErrExplained. EXPLAIN ANALYZE runs the query, so give it a transaction
-// that the test rolls back. Query plan tests run each generated query
+// instead of the query itself, keeps the plan in Plan, logs it on the test,
+// and returns ErrExplained. Query plan tests run each generated query
 // through db.New(explainer) and check the plan for the index it should
 // use.
+//
+// When the variable named by EnvPlansDir is set, the Explainer also writes
+// the query and its plan to a file in that directory.
 type Explainer struct {
-	Tx   pgx.Tx
 	Plan string
+
+	t  testing.TB
+	tx pgx.Tx
+}
+
+// NewExplainer returns an Explainer for the test t that explains queries in
+// tx. EXPLAIN ANALYZE runs the query, so give it a transaction that the
+// test rolls back.
+func NewExplainer(t testing.TB, tx pgx.Tx) *Explainer {
+	return &Explainer{t: t, tx: tx}
 }
 
 // Exec explains a query that returns no rows.
@@ -43,7 +56,7 @@ func (e *Explainer) QueryRow(ctx context.Context, sql string, args ...any) pgx.R
 }
 
 func (e *Explainer) explain(ctx context.Context, sql string, args []any) error {
-	rows, err := e.Tx.Query(ctx, "EXPLAIN (ANALYZE, BUFFERS) "+sql, args...)
+	rows, err := e.tx.Query(ctx, "EXPLAIN (ANALYZE, BUFFERS) "+sql, args...)
 	if err != nil {
 		return fmt.Errorf("explain: %w", err)
 	}
@@ -54,6 +67,13 @@ func (e *Explainer) explain(ctx context.Context, sql string, args []any) error {
 	}
 
 	e.Plan = strings.Join(lines, "\n")
+	e.t.Logf("EXPLAIN ANALYZE of %s:\n%s", e.t.Name(), e.Plan)
+
+	if dir := os.Getenv(EnvPlansDir); dir != "" {
+		if err := writePlan(dir, e.t.Name(), sql, e.Plan); err != nil {
+			return fmt.Errorf("save plan: %w", err)
+		}
+	}
 
 	return ErrExplained
 }

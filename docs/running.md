@@ -46,7 +46,7 @@ default `/etc/sidekick/sidekick.yaml`) and checks, in order:
 | `database` | Reads `database.urlSecret`, connects, and compares the schema with the migrations this release needs. |
 | `slack` | Calls Slack's `auth.test` with the bot token from `slack.botTokenSecret`, once for each Slack API address the `slack` outputs use. Nothing is posted. |
 | `model <name>` | Builds each model connector and checks its API key with a call that costs nothing: for `anthropic`, listing one model. |
-| `prices` | Warns about each connector whose model has no price, so its calls would show no cost. Add a `model.prices` entry to fix it. |
+| `prices` | Warns about each connector whose model has no price, so its calls would show no cost and count nothing toward the cost budgets and daily caps. Add a `model.prices` entry to fix it. |
 | `source <name>` | Builds each source, waits up to 15 seconds for it to connect and list its tools, and lists the tools the model will not see, with the reason. |
 
 It prints one line per check, with a fix below each problem, for example:
@@ -136,7 +136,9 @@ process (`process_*`) metrics, this release has:
 | `sidekick_investigations_running` | gauge | `route` | Investigations running on this replica. Sum it across replicas. |
 | `sidekick_investigation_duration_seconds` | histogram | `route` | Time from the start of an investigation to its end. |
 | `sidekick_time_to_first_finding_seconds` | histogram | `route` | Time from the start of an investigation to its first recorded finding. |
-| `sidekick_budget_exhausted_total` | counter | `route`, `budget` | Investigations that ended at a limit: `tool_calls` or `wall_time`. |
+| `sidekick_budget_exhausted_total` | counter | `route`, `budget` | Investigations that ended at a limit: `tokens`, `tool_calls`, `wall_time`, `cost` or `daily_cap`. See [Limits](investigations.md#limits). |
+| `sidekick_daily_spend_usd` | gauge | `route` | What each route has spent today on model calls, in US dollars. Read from the database at each scrape, so every replica reports the same numbers; combine replicas with `max`. |
+| `sidekick_events_skipped_total` | counter | `route`, `reason` | Events that are not investigated, by reason: `rate_limit` or `daily_cap`. See [Daily caps](configuration.md#daily-caps) and [Rate limits](configuration.md#rate-limits). |
 | `sidekick_model_calls_total` | counter | `connector`, `model`, `role`, `outcome` | Model calls, one per attempt, by outcome: `ok` or the error kind, such as `rate_limited`. |
 | `sidekick_model_call_duration_seconds` | histogram | `connector`, `model` | Duration of model calls. |
 | `sidekick_model_tokens_total` | counter | `connector`, `model`, `kind` | Tokens used, by kind: `input`, `output`, `cache_read` or `cache_write`. |
@@ -146,6 +148,7 @@ process (`process_*`) metrics, this release has:
 | `sidekick_source_up` | gauge | `source` | 1 when a source is connected and its circuit breaker is closed, 0 otherwise. |
 | `sidekick_guard_keys_full_total` | counter | none | Guarded calls that are not source tool calls, such as watcher HTTP checks, refused because the guard already held limits for 1024 targets, all in use. |
 | `sidekick_slack_api_errors_total` | counter | `method`, `error` | Failed Slack Web API calls by method, such as `chat.update`, and error: Slack's error code, such as `channel_not_found`, or `ratelimited`, `request_failed`, `http_status`, `bad_response` or `other`. See [Investigations in Slack](slack.md). |
+| `sidekick_output_api_errors_total` | counter | `type`, `operation`, `error` | Failed calls of the ticket and webhook outputs to the service they post to, by output type, such as `linear.comment` or `webhook`, operation, such as `comment_create`, and error: `rate_limited`, `request_failed`, `bad_response`, `api_error`, or `http_` and the status, such as `http_503`. See [Results on tickets](tickets.md) and [Webhook callbacks](webhook-callbacks.md). |
 
 ## Logs
 

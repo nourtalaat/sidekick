@@ -65,6 +65,11 @@ jobs:
       - name: Build and push
         id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        # Without these the action uploads a .dockerbuild build record as a
+        # workflow artifact, which then ended up among the release assets.
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: false
+          DOCKER_BUILD_SUMMARY: false
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -163,8 +168,13 @@ jobs:
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
+          name: sbom
           path: assets
-          merge-multiple: true
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: chart
+          path: assets
 
       - name: Make the release
         env:
@@ -192,6 +202,18 @@ jobs:
             echo "  --certificate-oidc-issuer $OIDC_ISSUER"
             echo '```'
           } > notes.md
+          release_assets=(
+            "assets/sidekick-$VERSION.tgz"
+            "assets/sidekick-$VERSION.spdx.json"
+          )
+          echo "Release assets:"
+          for asset in "${release_assets[@]}"; do
+            if [ ! -f "$asset" ]; then
+              echo "::error::$asset is missing"
+              exit 1
+            fi
+            echo "  $asset"
+          done
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag \
             --title "$GITHUB_REF_NAME" --notes-file notes.md --generate-notes \
-            assets/*
+            "${release_assets[@]}"

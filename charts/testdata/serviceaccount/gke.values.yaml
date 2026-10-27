@@ -1,0 +1,3 @@
+serviceAccount:
+  workloadIdentity:
+    gcpServiceAccount: sidekick@example-project.iam.gserviceaccount.com

@@ -20,8 +20,8 @@ import (
 const planFence = 1000 + 10000
 
 // TestQueryPlans runs EXPLAIN ANALYZE on each investigator query over
-// 20,000 investigations with 500,000 steps and checks that it uses the
-// index it is meant to. Run with -v to see the plans.
+// 20,000 investigations with 500,000 steps and a year of daily spend for
+// 20 routes, and checks that it uses the index it is meant to. Run with -v to see the plans.
 func TestQueryPlans(t *testing.T) {
 	t.Parallel()
 
@@ -38,6 +38,7 @@ func TestQueryPlans(t *testing.T) {
 	require.NoError(t, pool.QueryRow(t.Context(), "SELECT md5('evt' || 10000)::uuid").Scan(&busyEvent))
 
 	report := json.RawMessage(`{"verdict": "inconclusive"}`)
+	today := spendDay(time.Date(2026, 10, 26, 14, 0, 0, 0, time.UTC), time.UTC)
 
 	tests := []struct {
 		name      string
@@ -162,6 +163,35 @@ func TestQueryPlans(t *testing.T) {
 			},
 			wantIndex: []string{"investigations_pkey"},
 		},
+		{
+			name: "AddSpend",
+			run: func(ctx context.Context, q *db.Queries) error {
+				err := q.AddSpend(ctx, db.AddSpendParams{
+					Day: today, Route: "route-7", Connector: "claude", Model: "model-2", CostMicros: 10500, InputTokens: 1000, OutputTokens: 200,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"Insert on spend_daily", "Conflict Arbiter Indexes: spend_daily_pkey"},
+		},
+		{
+			name: "GetDailySpend",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.GetDailySpend(ctx, db.GetDailySpendParams{Route: "route-7", Day: today})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"spend_daily_pkey"},
+		},
+		{
+			name: "ListDailySpend",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListDailySpend(ctx, today)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"spend_daily_pkey"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -173,10 +203,9 @@ func TestQueryPlans(t *testing.T) {
 
 			defer func() { _ = tx.Rollback(t.Context()) }()
 
-			explain := &storetest.Explainer{Tx: tx}
+			explain := storetest.NewExplainer(t, tx)
 
 			require.ErrorIs(t, tt.run(t.Context(), db.New(explain)), storetest.ErrExplained)
-			t.Logf("EXPLAIN ANALYZE of %s:\n%s", tt.name, explain.Plan)
 
 			for _, index := range tt.wantIndex {
 				require.Contains(t, explain.Plan, index)
