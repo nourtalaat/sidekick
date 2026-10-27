@@ -31,14 +31,8 @@ import (
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
-// The values of events.status that intake writes.
-const (
-	StatusReceived = "received"
-	StatusSkipped  = "skipped"
-)
-
-// skipReasonResolved is why resolved events are not routed yet.
-const skipReasonResolved = "resolved events are linked in M1"
+// StatusReceived is the events.status that intake writes.
+const StatusReceived = "received"
 
 // maxKeyBytes is the longest key stored as it is. Longer keys are stored
 // as their hash, so the unique index on (intake, key) stays small.
@@ -87,7 +81,7 @@ type Stored struct {
 	// Key is the key as it is stored: redacted keys and long keys are
 	// hashed.
 	Key string
-	// Status is StatusReceived or StatusSkipped; empty for a duplicate.
+	// Status is StatusReceived; empty for a duplicate.
 	Status string
 	// Duplicate is true when the intake already had an event with the key.
 	Duplicate bool
@@ -101,10 +95,10 @@ func NewWriter(pool *pgxpool.Pool, redactor *redact.Redactor) *Writer {
 
 // Store writes the events of d in one transaction and returns what
 // happened to each, in order. Each event that is new gets a route_event
-// job in the same transaction, unless it is resolved, which is stored as
-// skipped. An event whose key the intake already has is left as it is and
-// reported as a duplicate. When Store returns without an error, every
-// event is committed.
+// job in the same transaction; a resolved event too, so the router can
+// link it to its group. An event whose key the intake already has is left
+// as it is and reported as a duplicate. When Store returns without an
+// error, every event is committed.
 func (w *Writer) Store(ctx context.Context, d Delivery) (stored []Stored, err error) {
 	tx, err := w.pool.Begin(ctx)
 	if err != nil {
@@ -137,10 +131,8 @@ func (w *Writer) Store(ctx context.Context, d Delivery) (stored []Stored, err er
 			return nil, fmt.Errorf("insert event %d: %w", i, err)
 		}
 
-		if params.Status == StatusReceived {
-			if err := enqueueRoute(ctx, tx, id); err != nil {
-				return nil, fmt.Errorf("event %d: %w", i, err)
-			}
+		if err := enqueueRoute(ctx, tx, id); err != nil {
+			return nil, fmt.Errorf("event %d: %w", i, err)
 		}
 
 		stored = append(stored, Stored{ID: id, Key: params.Key, Status: params.Status})
@@ -205,11 +197,6 @@ func (w *Writer) row(d Delivery, ev event.Event) (db.InsertEventParams, error) {
 		}
 
 		p.Slack = w.redactedJSON(slack)
-	}
-
-	if ev.Kind == event.KindResolved {
-		p.Status = StatusSkipped
-		p.SkipReason = optional(skipReasonResolved)
 	}
 
 	return p, nil

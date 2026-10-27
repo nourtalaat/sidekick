@@ -354,6 +354,7 @@ func (v *validator) checkRoute(path string, r Route) {
 
 	v.checkRouteBudgets(path+".budgets", r.Budgets)
 	v.checkRouteConcurrency(path+".concurrency", r.Concurrency)
+	v.checkGrouping(path+".grouping", r.Grouping)
 }
 
 func (v *validator) checkMatch(at string, m Match) {
@@ -408,6 +409,27 @@ func (v *validator) checkRouteConcurrency(path string, n int) {
 		v.errs.add(path, "must not be negative")
 	case global > 0 && n > global:
 		v.errs.add(path, "%d is above the global limit budgets.concurrency %d", n, global)
+	}
+}
+
+// checkGrouping checks that the window is positive and that each
+// fingerprint label is named once.
+func (v *validator) checkGrouping(path string, g Grouping) {
+	v.positiveDuration(path+".window", g.Window)
+
+	seen := map[string]bool{}
+
+	for i, label := range g.FingerprintLabels {
+		at := fmt.Sprintf("%s.fingerprintLabels[%d]", path, i)
+
+		switch {
+		case label == "":
+			v.errs.add(at, "must not be empty")
+		case seen[label]:
+			v.errs.add(at, "label %q is listed twice", label)
+		default:
+			seen[label] = true
+		}
 	}
 }
 

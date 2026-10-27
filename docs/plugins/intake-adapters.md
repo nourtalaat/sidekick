@@ -116,8 +116,10 @@ alert twice, as most senders do on a retry, creates one event.
 ## Step 4: kinds, trust and redaction
 
 - Set `Kind` to `alert`, or to `resolved` for a notification that an alert
-  has cleared. Resolved events are stored, and linked to their
-  investigation in a later release.
+  has cleared. Give a resolved event the same `Fingerprint` as the alert it
+  clears: Sidekick links it to the group of the newest event with that
+  fingerprint, and closes the group as resolved once every alert in it has
+  cleared.
 - Leave `Trust` and `Intake` alone. Trust comes from the endpoint's
   `trusted` setting, never from the payload, and Sidekick sets both.
 - Do not redact anything yourself. Sidekick redacts every text, label and

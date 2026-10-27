@@ -144,13 +144,13 @@ func TestRow(t *testing.T) {
 			},
 		},
 		{
-			name: "a resolved event is skipped",
+			name: "a resolved event is received like any other",
 			d:    Delivery{Intake: "alerts"},
 			ev:   event.Event{Key: "k", Kind: event.KindResolved},
 			check: func(t *testing.T, _ event.Event, got rowView) {
 				t.Helper()
-				require.Equal(t, StatusSkipped, got.status)
-				require.Equal(t, skipReasonResolved, got.skipReason)
+				require.Equal(t, StatusReceived, got.status)
+				require.Empty(t, got.skipReason)
 			},
 		},
 		{

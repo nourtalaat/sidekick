@@ -30,8 +30,9 @@ then serves webhooks at /hooks/<name> on server.listen, and /metrics,
 /healthz and /readyz on server.metricsListen. With the Slack app's app
 token it receives Slack messages over Socket Mode, or at /slack/events
 with slack.mode events. Each new event is routed
-to the first route that matches it, which opens an investigation for it
-and shows it in the route's outputs, such as a Slack thread. The
+to the first route that matches it and joins the open group of the same
+alert, or opens a new group with an investigation, which shows in the
+route's outputs, such as a Slack thread. The
 investigation asks the route's model, calls the sources it needs, and
 posts its verdict to the same outputs. Logs go to standard output as
 JSON.
@@ -84,6 +85,10 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 	}
 
 	if err := registerRouter(a); err != nil {
+		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
+	}
+
+	if err := registerGrouper(a); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 

@@ -77,13 +77,13 @@ func TestStore(t *testing.T) {
 			},
 		},
 		{
-			name: "a resolved event is stored as skipped without a job",
+			name: "a resolved event is received with a route_event job",
 			d:    Delivery{Intake: "alerts", ReceivedAt: at, Events: []event.Event{{Key: "r", Kind: event.KindResolved}}},
 			check: func(t *testing.T, h *harness, stored []Stored) {
 				t.Helper()
 
-				require.Equal(t, StatusSkipped, stored[0].Status)
-				require.Empty(t, h.routeJobs(t))
+				require.Equal(t, StatusReceived, stored[0].Status)
+				require.Equal(t, []string{stored[0].ID.String()}, h.routeJobs(t))
 			},
 		},
 		{
