@@ -32,6 +32,22 @@ const (
 // DefaultSlackMode is the mode of a slack section that sets none.
 const DefaultSlackMode = SlackModeSocket
 
+// SlackFollowUps says which replies in the Slack thread of an
+// investigation are follow-up questions (INV-6).
+type SlackFollowUps string
+
+// Follow-up settings.
+const (
+	// SlackFollowUpsMention takes only the replies that mention Sidekick.
+	SlackFollowUpsMention SlackFollowUps = "mention"
+	// SlackFollowUpsAny takes every reply a person writes in the thread.
+	SlackFollowUpsAny SlackFollowUps = "any"
+)
+
+// DefaultSlackFollowUps is the follow-up setting of a slack section that
+// sets none.
+const DefaultSlackFollowUps = SlackFollowUpsMention
+
 // The named groups of a listener's extract patterns that set event fields.
 // Any other named group sets a label of that name.
 const (
@@ -67,6 +83,9 @@ type Slack struct {
 	SigningSecret registry.SecretRef `yaml:"signingSecret"`
 	// Mode is socket or events.
 	Mode SlackMode `yaml:"mode"`
+	// FollowUps is mention or any: which replies in an investigation's
+	// thread are follow-up questions.
+	FollowUps SlackFollowUps `yaml:"followUps"`
 	// TrustedBots are the bot IDs whose messages count as trusted, in
 	// listeners marked trusted.
 	TrustedBots []string `yaml:"trustedBots"`
@@ -128,6 +147,7 @@ func (s *Slack) Connects() bool {
 
 func (s *Slack) setDefaults() {
 	s.Mode = DefaultSlackMode
+	s.FollowUps = DefaultSlackFollowUps
 }
 
 // checkSlack checks the slack section and the listeners, which need it.
@@ -159,6 +179,11 @@ func (v *validator) checkSlackSection(s *Slack) {
 		}
 	default:
 		v.errs.add("slack.mode", "expected socket or events, got %q%s", s.Mode, didYouMean(string(s.Mode), []string{string(SlackModeSocket), string(SlackModeEvents)}))
+	}
+
+	if s.FollowUps != SlackFollowUpsMention && s.FollowUps != SlackFollowUpsAny {
+		known := []string{string(SlackFollowUpsMention), string(SlackFollowUpsAny)}
+		v.errs.add("slack.followUps", "expected mention or any, got %q%s", s.FollowUps, didYouMean(string(s.FollowUps), known))
 	}
 
 	for i, id := range s.TrustedBots {

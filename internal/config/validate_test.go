@@ -150,6 +150,7 @@ func TestValidateFixtures(t *testing.T) {
 		{file: "slack-events-without-signing-secret", want: []string{"slack.signingSecret: required with mode events"}},
 		{file: "slack-bad-values", want: []string{
 			`slack.apiURL: expected an absolute http or https URL ending in "/", such as https://slack.com/api/, got "https://slack.com/api"`,
+			`slack.followUps: expected mention or any, got "mentions" (did you mean "mention"?)`,
 			`slack.trustedBots[0]: expected a bot ID such as B01ABCDEF, got "SigNoz"`,
 		}},
 		{file: "listeners-without-app-token", want: []string{listenersNeedSlack}},
