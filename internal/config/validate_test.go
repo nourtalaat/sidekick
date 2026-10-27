@@ -22,6 +22,8 @@ func TestValidateFixtures(t *testing.T) {
 
 	const readOnlyUntilM4 = "routes are read-only until action modes arrive in M4"
 
+	const listenersNeedSlack = "listeners: listeners need the Slack app to receive events: set slack.appTokenSecret, or slack.mode: events with slack.signingSecret"
+
 	tests := []struct {
 		file string
 		want []string
@@ -139,6 +141,34 @@ func TestValidateFixtures(t *testing.T) {
 		}},
 		{file: "slack-without-token", want: []string{"slack.botTokenSecret: required"}},
 		{file: "slack-output-without-slack", want: []string{"outputs.slack-thread: type slack needs slack.botTokenSecret"}},
+		// Slack app and listeners
+		{file: "slack-bad-mode", want: []string{`slack.mode: expected socket or events, got "sockets" (did you mean "socket"?)`}},
+		{file: "slack-events-without-signing-secret", want: []string{"slack.signingSecret: required with mode events"}},
+		{file: "slack-bad-values", want: []string{
+			`slack.apiURL: expected an absolute http or https URL ending in "/", such as https://slack.com/api/, got "https://slack.com/api"`,
+			`slack.trustedBots[0]: expected a bot ID such as B01ABCDEF, got "SigNoz"`,
+		}},
+		{file: "listeners-without-app-token", want: []string{listenersNeedSlack}},
+		{file: "listeners-without-slack", want: []string{listenersNeedSlack}},
+		{file: "listener-problems", want: []string{
+			`listeners.alerts.channel: expected a channel name such as "#alerts" or a channel ID such as C01ABCDEF, got "alerts"`,
+			"listeners.alerts.extract[0]: has no named group such as (?P<service>...); only named groups set fields",
+			"listeners.alerts.extract[1]: invalid regular expression: error parsing regexp: missing closing ]: `[a-z`",
+			`listeners.alerts.match.sender.bots[0]: expected a bot ID such as B01ABCDEF, got "SigNoz"`,
+			`listeners.alerts.match.sender.kind: expected human or bot, got "robot" (did you mean "bot"?)`,
+			`listeners.alerts.match.sender.users[0]: expected a user ID such as U01ABCDEF, got "bob"`,
+			"listeners.alerts.match.text: invalid regular expression: error parsing regexp: missing closing ): `(?i)alert(`",
+			"listeners.alerts.recovery: invalid regular expression: error parsing regexp: missing closing ): `resolved(`",
+			"listeners.alerts.trusted: has no effect without slack.trustedBots, the bots whose messages are trusted",
+		}},
+		{file: "intake-name-clash", want: []string{
+			`intake.webhooks.slack-mention: name "slack-mention" is reserved for events from mentions of Sidekick in Slack`,
+			`listeners.alertmanager: listener "alertmanager" has the name of a webhook endpoint; events of both would share one intake name`,
+			`listeners.slack-mention: listener "slack-mention" has the name of a webhook endpoint; events of both would share one intake name`,
+			`listeners.slack-mention: name "slack-mention" is reserved for events from mentions of Sidekick in Slack`,
+		}},
+		{file: "undefined-listener-intake", want: []string{`routes[0].match.intake[0]: intake "alerst" is not defined (did you mean "alerts"?)`}},
+		{file: "mention-without-slack", want: []string{`routes[0].match.intake[0]: intake "slack-mention" is not defined`}},
 		{file: "negative-price", want: []string{"model.prices.claude-opus-5-5.inputPerMTok: must not be negative"}},
 		// Watchers
 		{file: "watch-http", want: []string{
@@ -146,6 +176,24 @@ func TestValidateFixtures(t *testing.T) {
 			`watch.http.allowHosts[2]: host pattern "*": label "*": holds '*'; only letters, digits, - and _ are allowed; expected a host name, an IP address, or "*." and a host name`,
 			`watch.http.allowPrivate[1]: "10.20.0.0/33" is not an address range such as 10.20.0.0/16 or an IP address`,
 			`watch.http.allowPrivate[2]: "internal.example.com" is not an address range such as 10.20.0.0/16 or an IP address`,
+		}},
+		{file: "watchers-invalid", want: []string{
+			"routes[0].watcherDefaults.interval: 5s is below routes[0].watcherLimits.minInterval 15s",
+			"routes[0].watcherDefaults.interval: 5s is below watch.minInterval 10s",
+			`routes[0].watcherLimits.hosts[0]: host pattern "*.example.com" is not inside watch.http.allowHosts`,
+			"routes[0].watcherLimits.maxTimeout: 5h0m0s is above watch.maxTimeout 4h0m0s",
+			`routes[0].watcherLimits.tools[0]: "nosuch__tool" is not the qualified name of a tool of the route's sources, such as signoz__query_metrics`,
+			`routes[0].watcherLimits.types[1]: unknown check type "ping"; expected one of [http tool alert]`,
+			`routes[0].watchers[0].check.url: host "other.example.com" is not in watch.http.allowHosts`,
+			"routes[0].watchers[0].interval: 20m0s is above watch.maxInterval 15m0s",
+			`routes[0].watchers[1].check.source: source "signoz" is not one of the route's sources`,
+			`routes[0].watchers[1].name: watcher "health" is already defined at routes[0].watchers[0]`,
+			"watch.defaults.timeout: 5h0m0s is above watch.maxTimeout 4h0m0s",
+			"watch.maxPerGroup: must be positive",
+		}},
+		{file: "watcher-built-in-defaults", want: []string{
+			"the built-in default interval 30s is below routes[0].watcherLimits.minInterval 45s; set routes[0].watcherDefaults.interval or watch.defaults.interval",
+			"the built-in default timeout 1h0m0s is above watch.maxTimeout 30m0s; set watch.defaults.timeout",
 		}},
 		// Several problems, reported together and sorted by path.
 		{file: "three-errors", want: []string{

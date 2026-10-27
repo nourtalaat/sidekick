@@ -5,13 +5,14 @@ import (
 	"net/http"
 
 	"github.com/nourtalaat/sidekick/internal/app"
+	"github.com/nourtalaat/sidekick/internal/intake/ingest"
 	"github.com/nourtalaat/sidekick/internal/intake/webhook"
 )
 
 // registerWebhooks serves the configured webhook endpoints at
 // /hooks/{name} on the main listener.
 func registerWebhooks(a *app.App) error {
-	metrics, err := webhook.NewMetrics(a.Telemetry().Registry())
+	metrics, err := ingest.NewMetrics(a.Telemetry().Registry())
 	if err != nil {
 		return fmt.Errorf("set up intake metrics: %w", err)
 	}

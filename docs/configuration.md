@@ -596,10 +596,68 @@ senders](senders.md) shows how to set up each one.
 ```yaml
 slack:
   botTokenSecret: { name: sidekick-slack, key: botToken }   # required when the section is set
+  appTokenSecret: { name: sidekick-slack, key: appToken }   # Socket Mode
+  mode: socket                                              # or events
+  signingSecret: { name: sidekick-slack, key: signingSecret }   # required with mode: events
+  trustedBots: [B01SIGNOZ]                                  # bot IDs whose messages can be trusted
+  apiURL: https://slack.com/api/                            # optional
 ```
 
-The bot token of the Slack app. Every `slack` output posts with it, so the
-section is required when an output has `type: slack`.
+`botTokenSecret` is the bot token of the Slack app. Every `slack` output
+posts with it, so the section is required when an output has
+`type: slack`.
+
+The other keys let Sidekick receive messages, so that
+[listeners](#listeners) and mentions of `@Sidekick` start
+investigations:
+
+- `mode: socket`, the default, connects to Slack over Socket Mode with the
+  app-level token in `appTokenSecret`, so Sidekick needs no public URL.
+  Without `appTokenSecret`, Sidekick only posts, and says so in a log line
+  at start-up.
+- `mode: events` receives events at `POST /slack/events` on
+  `server.listen` instead, checked with the signing secret in
+  `signingSecret`. Slack must be able to reach that URL.
+- `trustedBots` lists the bot IDs (`B...`) whose messages are trusted in a
+  listener marked `trusted: true`. Every other message is untrusted.
+- `apiURL` is the Slack Web API base URL, ending in `/`. GovSlack
+  workspaces use `https://slack-gov.com/api/`.
+
+[Investigations in Slack](slack.md) describes how to set up the app.
+
+### `listeners`
+
+A listener picks the messages in one Slack channel that start an
+investigation. The listener's name is the event's intake, so a route can
+select its events with `match.intake`.
+
+```yaml
+listeners:
+  alerts:
+    channel: "#alerts"                  # a channel name or ID; required
+    match:                              # every field that is set must match
+      sender:
+        kind: bot                       # human or bot
+        names: [SigNoz]                 # bot names, compared without case
+        bots: [B01SIGNOZ]               # bot IDs
+        users: [U01ABCDEF]              # user IDs
+      text: "(?i)alert|firing"          # a regular expression
+    extract:                            # regular expressions with named groups
+      - "Alert: (?P<alert>[A-Za-z0-9]+)"
+      - "service=(?P<service>[a-z0-9-]+)"
+      - "(?i)severity: (?P<severity>[a-z]+)"
+      - "env=(?P<env>[a-z]+)"           # any other name sets a label
+    recovery: "(?i)resolved|recovered"  # turns a message into a recovery event
+    trusted: true                       # trust the bots in slack.trustedBots
+```
+
+When `names`, `bots` or `users` are set, the sender must be in one of
+them. `text`, `extract` and `recovery` run on the message text with the
+text of its attachments and blocks added, one part per line.
+[Listeners and mentions](slack.md#listeners-and-mentions) says which
+messages a listener sees and how events are built from them. Listeners
+need the Slack app to receive events, so `slack.appTokenSecret` (or
+`mode: events`) must be set.
 
 ### `outputs`
 
@@ -687,8 +745,12 @@ budgets:                           # where the route sets one too, the lower
   maxWallTime: 5m                  # maxTokens and maxCostUSD
 ```
 
-`watchers` and `watcherDefaults` are accepted and checked, but watchers are
-not started until a later release.
+A strategy can also define `watchers` and `watcherDefaults`, written as on
+a route (see [Watchers](#watchers)). A strategy's watchers start for the
+groups of every route that uses the strategy, and its `watcherDefaults`
+apply to them and to the watchers the model starts during its
+investigations. They are checked with the limits of each route that names
+the strategy, and a problem is reported at that route's `strategy` field.
 
 ### `routes`
 
@@ -703,7 +765,7 @@ routes:
   - name: payments-latency
     priority: 10                       # default 100
     match:                             # every field that is set must match
-      intake: [alertmanager]           # webhook endpoint names
+      intake: [alertmanager]           # webhook endpoint or listener names, or slack-mention
       labels: { team: payments }
       service: "checkout-*"            # a glob
       severity: [warning, critical]    # unknown, info, warning or critical
@@ -727,6 +789,7 @@ routes:
 ```
 
 A route without `strategy` uses the built-in `generic-alert` strategy.
+Events from mentions of `@Sidekick` have the intake `slack-mention`.
 
 The match runs on the event as it is stored, after
 [redaction](#redaction). `text` is matched against the event's title and
@@ -767,12 +830,68 @@ A group stays open for `grouping.window` after its newest event. When no
 event has arrived for that long, it closes as `window_ended`, and the next
 event with the same fingerprint opens a new group and a new investigation.
 A group also closes, as `resolved`, once every alert in it has recovered.
+A group with a running [watcher](#watchers) stays open after its window
+and closes when its last watcher ends.
 
 Recovery events, such as a resolved notification from Alertmanager, are not
 routed. Each one is linked to the newest group that has the same alert,
 and the investigation sees it before the model's next turn, as a sign that
 the alert may have cleared on its own. A recovery never stops a running
 investigation. A recovery whose alert is in no group is stored as skipped.
+
+#### Watchers
+
+A watcher is a periodic, read-only check that tells when a service is back
+up after an alert. A route's `watchers` start when one of its groups opens
+for an event that matches them, and each runs its first check at once. See
+[`watch`](#watch) for the global settings and the check types.
+
+```yaml
+routes:
+  - name: payments-latency
+    # ...
+    watcherDefaults:                   # defaults for this route's watchers,
+      interval: 20s                    # including those the model starts
+      timeout: 90m
+    watchers:
+      - name: checkout-health          # unique within the route
+        match: { alertName: ["*Down*", "*Unavailable*"] }   # globs; empty matches every event
+        check:
+          type: http
+          url: https://checkout.internal.example.com/healthz
+          expect: { status: [200], bodyRegex: '"status":\s*"ok"' }
+        interval: 15s                  # a watcher's own values win
+        passesToRecover: 3
+      - name: checkout-error-rate
+        match: { text: "(?i)error rate" }   # a regular expression on the event text
+        check:
+          type: tool
+          source: signoz               # one of the route's sources
+          tool: signoz_query_metrics   # the tool's name as the source names it
+          args: { query: "error_rate{service=\"checkout-api\"}", window: 5m }
+          condition: { jsonPath: "$.series[0].last", op: lt, value: 0.01 }
+      - name: alert-cleared
+        check: { type: alert, require: all }
+    watcherLimits:                     # what the start_watcher tool may use here
+      allowModel: true                 # false turns start_watcher off for this route
+      types: [http, tool]              # default: every type
+      tools: ["signoz__signoz_query_metrics"]   # qualified names; default: none
+      hosts: ["*.internal.example.com"]   # default: watch.http.allowHosts
+      minInterval: 15s                 # route bounds, inside the global ones
+      maxInterval: 5m
+      maxTimeout: 2h
+```
+
+Each setting of a watcher comes from the first of these that sets it: the
+watcher itself, the strategy's `watcherDefaults`, the route's
+`watcherDefaults`, then `watch.defaults`. The chosen value must be inside
+the route's `watcherLimits` bounds and the global bounds. The values are
+copied into the watcher when it starts, so a change to defaults or bounds
+applies to new watchers only.
+
+A route without `watcherLimits` lets the model start watchers of every
+check type, with no tool checks (the tool list is empty) and HTTP checks
+only to the hosts in `watch.http.allowHosts`.
 
 For now every route is `mode: read-only`, which is also the default, and
 `actions` must be empty. Modes that let Sidekick take actions come in a
@@ -917,15 +1036,65 @@ telemetry:
 ### `watch`
 
 Watchers are periodic, read-only checks that tell when a service is back
-up after an alert. This section holds the rules for their HTTP checks. Only
-this file sets them; neither the model nor runtime rules can change them.
+up after an alert. This section holds their global limits, defaults and
+bounds, and the rules for their HTTP checks. Only this file sets them;
+neither the model nor runtime rules can change them.
 
 ```yaml
 watch:
+  allowModel: false                  # offer the start_watcher tool; default false
+  maxPerGroup: 3                     # watchers one group may have
+  maxTotal: 100                      # watchers running at once in the deployment
+  defaults:                          # used when nothing more specific is set
+    interval: 30s                    # time between checks
+    timeout: 60m                     # how long a watcher may run without recovering
+    passesToRecover: 2               # passing checks in a row that count as recovered
+    checkTimeout: 10s                # time limit of one check
+  minInterval: 10s                   # global bounds
+  maxInterval: 15m
+  maxTimeout: 4h
   http:
     allowHosts: ["*.internal.example.com", "status.example.com"]
     allowPrivate: ["10.20.0.0/16"]   # private ranges are blocked unless listed
 ```
+
+A check is one of three types:
+
+- `http` passes when a `GET` of `url` returns one of `expect.status`
+  (default `[200]`), and the body matches `expect.bodyRegex` when it is set.
+  `headers` take their values only from secrets, as
+  `{ name: <secret>, key: <key> }`, and `timeout` overrides the check time
+  limit.
+- `tool` calls a source tool with the fixed `args` and passes when the
+  result meets `condition`: either `jsonPath`, `op` and `value` on the
+  structured result, or `textRegex` (with `negate: true` to pass when it
+  does not match) on its text. `noData: pass` passes a result without data;
+  the default is `fail`.
+- `alert` passes when the sender's recovery events have arrived for the
+  group's alerts: all of them with `require: all` (the default), or one with
+  `require: any`. One passing check recovers it.
+
+A watcher ends in one of these states:
+
+- `recovered`: `passesToRecover` checks in a row passed. A failed check, or
+  one that could not run, starts the count again.
+- `timed_out`: it ran for `timeout` without recovering.
+- `stopped`: every alert of the group recovered (`group_resolved`; an `alert`
+  watcher counts as recovered instead), or a config change no longer allows
+  its check, for example a host taken off `allowHosts` or a source removed
+  (`config_changed`).
+
+A group whose grouping window ends while one of its watchers runs stays
+open, so events with the same fingerprint still join it, and closes when
+its last watcher ends. When Sidekick itself was down, a watcher runs its
+next check once it is back; checks it missed are not made up.
+
+With `allowModel: true`, investigations can start watchers with the
+`start_watcher` tool, within each route's `watcherLimits` (see
+[Watchers](#watchers)). A request outside the limits or the bounds, or over
+`maxPerGroup` or `maxTotal`, gets an error that names the limit, and
+nothing starts. A route or strategy watcher over `maxPerGroup` or
+`maxTotal` is not started, and a line is logged.
 
 `allowHosts` lists the hosts an HTTP check may reach: exact host names or
 IP addresses, or `*.` and a name, which matches every name below it
@@ -978,6 +1147,8 @@ A refused request ends the check with an error and is counted in
 | `database.migrations` | `startup` |
 | `secrets.dir` | `/var/run/secrets/sidekick` |
 | `intake.webhooks.<name>.auth.tolerance` | `5m` |
+| `slack.mode` | `socket` |
+| `slack.apiURL` | `https://slack.com/api/` |
 | `routes[].priority` | `100` |
 | `routes[].strategy` | `generic-alert` |
 | `routes[].mode` | `read-only` |
@@ -1000,6 +1171,14 @@ A refused request ends the check with an error and is counted in
 | `report.minFalsePositiveConfidence` | `high` |
 | `redaction.builtIn` | every built-in rule except `ip_addresses` |
 | `telemetry.logLevel` | `info` |
+| `routes[].watcherLimits.types` | every check type: `http`, `tool` and `alert` |
+| `routes[].watcherLimits.tools` | none: the model cannot start tool checks |
+| `routes[].watcherLimits.hosts` | the hosts in `watch.http.allowHosts` |
+| `watch.allowModel` | `false` |
+| `watch.maxPerGroup` | `3` |
+| `watch.maxTotal` | `100` |
+| `watch.defaults` | `interval: 30s`, `timeout: 60m`, `passesToRecover: 2`, `checkTimeout: 10s` |
+| `watch.minInterval`, `watch.maxInterval`, `watch.maxTimeout` | `10s`, `15m`, `4h` |
 | `watch.http.allowHosts` | none: HTTP checks cannot reach any host |
 | `watch.http.allowPrivate` | none: every private and special range is blocked |
 
@@ -1007,9 +1186,11 @@ A refused request ends the check with an error and is counted in
 
 Besides unknown keys and values of the wrong type, Sidekick checks that:
 
-- Connector, source, output, webhook endpoint and route names are unique,
-  start with a lower-case letter, hold only lower-case letters, digits and
-  `-`, and are at most 24 characters long.
+- Connector, source, output, webhook endpoint, listener and route names
+  are unique, start with a lower-case letter, hold only lower-case
+  letters, digits and `-`, and are at most 24 characters long. No webhook
+  endpoint and listener share a name, and neither is named
+  `slack-mention`, which mentions use.
 - Every `provider`, source `type`, `adapter` and output `type` is one this
   version of Sidekick has, and its section passes that plugin's own checks.
 - `model.roles.investigate` is set, every role names a defined connector,
@@ -1021,8 +1202,14 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   `generic` endpoint sets `fields.title`, and each of its field paths
   parses.
 - There is exactly one `default` route, and it has no `match`. Every source,
-  output, webhook and strategy a route names is defined. Glob and regular
+  output, intake and strategy a route names is defined. Glob and regular
   expression matches parse.
+- `slack.mode` is `socket` or `events`, and `events` has `signingSecret`.
+  `trustedBots` are bot IDs, and listeners are set only when the Slack app
+  receives events. Each listener has a channel name or ID, a `sender.kind`
+  of `human` or `bot`, bot and user IDs of the right shape, regular
+  expressions that parse, `extract` patterns with at least one named
+  group, and `trusted: true` only when `slack.trustedBots` is set.
 - Every strategy file in `strategies.dir` is valid, and no two of them have
   the same name.
 - Every route is `read-only` with no `actions`, and its budgets, daily
@@ -1039,6 +1226,21 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
 - Every `watch.http.allowHosts` entry is a host name, an IP address, or
   `*.` and a host name, and every `watch.http.allowPrivate` entry is a range
   in CIDR form or an IP address.
+- `watch.maxPerGroup`, `watch.maxTotal` and the global bounds are
+  positive, no `watch.defaults` value is negative, and the defaults are
+  inside the global bounds. Each route's `watcherLimits` bounds are inside the global
+  ones, its `types` are known check types, its `tools` are qualified tool
+  names of its sources, and its `hosts` are inside `watch.http.allowHosts`.
+- Every default and watcher value, after the precedence above, is inside
+  the route's and the global bounds. The error names the field and the
+  bound, for example
+  `routes[0].watchers[0].interval: 5s is below routes[0].watcherLimits.minInterval 15s`.
+  When the value is a built-in default that the file does not set, the
+  error says so and names the fields that can override it, for example
+  `the built-in default interval 30s is below routes[0].watcherLimits.minInterval 45s; set routes[0].watcherDefaults.interval or watch.defaults.interval`.
+- Watcher names are unique within a route, each check passes its own
+  checks, an `http` check's host is in `watch.http.allowHosts`, and a `tool`
+  check's source is one of the route's.
 - `database.migrations`, `report.minFalsePositiveConfidence` and
   `telemetry.logLevel` are known values, URLs are absolute, and listen
   addresses have a port.

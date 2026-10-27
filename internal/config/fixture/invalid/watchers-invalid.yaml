@@ -1,0 +1,34 @@
+# Watcher defaults outside their bounds, route limits outside the global
+# ones, and route watchers with problems of their own.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: payments
+    match: { labels: { team: payments } }
+    watcherDefaults: { interval: 5s }
+    watchers:
+      - name: health
+        check: { type: http, url: "https://other.example.com/healthz" }
+        interval: 20m
+      - name: health
+        check: { type: tool, source: signoz, tool: query, condition: { textRegex: ok } }
+    watcherLimits:
+      types: [http, ping]
+      tools: [nosuch__tool]
+      hosts: ["*.example.com"]
+      minInterval: 15s
+      maxTimeout: 5h
+  - name: default
+
+watch:
+  maxPerGroup: 0
+  defaults: { timeout: 5h }
+  http:
+    allowHosts: ["*.internal.example.com"]
