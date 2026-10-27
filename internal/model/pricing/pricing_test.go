@@ -57,6 +57,13 @@ func TestTableCost(t *testing.T) {
 			wantOK: true,
 		},
 		{
+			name:   "Foundry model from another provider",
+			model:  "DeepSeek-V4-Pro",
+			usage:  model.Usage{InputTokens: 10_000, CacheReadTokens: 90_000, OutputTokens: 2_000},
+			want:   (10_000*1_740_000 + 90_000*145_000 + 2_000*3_480_000) / usd,
+			wantOK: true,
+		},
+		{
 			name:      "an override wins over the shipped price",
 			overrides: map[string]model.Price{"claude-opus-5-5": override},
 			model:     "claude-opus-5-5",
