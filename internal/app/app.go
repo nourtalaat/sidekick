@@ -3,8 +3,9 @@
 // instances, runs the job queue and serves HTTP, and stops all of it in the
 // reverse order.
 //
-// Features add themselves between New and Run, with RegisterRoutes and
-// RegisterJob, and take what they need from the App's accessors.
+// Features add themselves between New and Run, with RegisterRoutes,
+// RegisterJob and RegisterWorker, and take what they need from the App's
+// accessors.
 package app
 
 import (
@@ -75,10 +76,12 @@ type App struct {
 	runner    *queue.Runner
 	mux       *http.ServeMux
 
-	// mu guards running and jobKinds, which RegisterJob and Run touch.
+	// mu guards running, jobKinds and workers, which the Register methods
+	// and Run touch.
 	mu       sync.Mutex
 	running  bool
 	jobKinds int
+	workers  []worker
 
 	// started is closed once both listeners serve; listenAddr and
 	// metricsAddr are set before that.
@@ -88,6 +91,12 @@ type App struct {
 
 	closeOnce sync.Once
 	closeErr  error
+}
+
+// worker is a background loop that Run starts and shutdown stops.
+type worker struct {
+	name string
+	run  func(ctx context.Context)
 }
 
 // jobQueue is the job queue as Run started it. done receives the queue's
@@ -174,6 +183,22 @@ func (a *App) RegisterJob(kind string, handler queue.Handler, opts queue.KindOpt
 	return nil
 }
 
+// RegisterWorker adds a background loop named name. Run starts run in a
+// goroutine of its own once the listeners serve, and ends its context when
+// shutdown starts; run must return soon after that. Call it before Run.
+func (a *App) RegisterWorker(name string, run func(ctx context.Context)) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.running {
+		return fmt.Errorf("register worker %s: %w", name, errAlreadyRunning)
+	}
+
+	a.workers = append(a.workers, worker{name: name, run: run})
+
+	return nil
+}
+
 // Config returns the loaded config. It must not be changed.
 func (a *App) Config() *config.Config {
 	return a.cfg
@@ -245,8 +270,10 @@ func (a *App) Run(ctx context.Context) error {
 	if err != nil {
 		cancelStop()
 
-		return errors.Join(fmt.Errorf("start listeners: %w", err), a.shutdown(ctx, nil, jobs))
+		return errors.Join(fmt.Errorf("start listeners: %w", err), a.shutdown(ctx, nil, nil, jobs))
 	}
+
+	workers := a.startWorkers(stopCtx)
 
 	a.log.InfoContext(ctx, "sidekick started",
 		"listen", a.listenAddr.String(), "metrics_listen", a.metricsAddr.String(),
@@ -269,7 +296,7 @@ func (a *App) Run(ctx context.Context) error {
 
 	cancelStop()
 
-	return errors.Join(runErr, a.shutdown(ctx, servers, jobs))
+	return errors.Join(runErr, a.shutdown(ctx, servers, workers, jobs))
 }
 
 // Close releases what New opened: the plugin instances, the database pool
@@ -419,9 +446,32 @@ func (a *App) startJobs(ctx context.Context) jobQueue {
 	return jobQueue{stop: stop, done: done}
 }
 
-// shutdown stops the listeners, then the job queue, then closes the rest,
-// all within ShutdownGrace of now.
-func (a *App) shutdown(ctx context.Context, servers []*http.Server, jobs jobQueue) error {
+// startWorkers runs every registered worker with ctx, which Run ends when
+// shutdown starts. The returned channel is closed once all have returned.
+func (a *App) startWorkers(ctx context.Context) <-chan struct{} {
+	var wg sync.WaitGroup
+
+	for _, w := range a.workers {
+		wg.Go(func() {
+			a.log.DebugContext(ctx, "worker started", "worker", w.name)
+			w.run(ctx)
+		})
+	}
+
+	done := make(chan struct{})
+
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	return done
+}
+
+// shutdown stops the listeners, then waits for the workers, whose context
+// has ended, then stops the job queue and closes the rest, all within
+// ShutdownGrace of now. workers is nil when they never started.
+func (a *App) shutdown(ctx context.Context, servers []*http.Server, workers <-chan struct{}, jobs jobQueue) error {
 	graceCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ShutdownGrace)
 	defer cancel()
 
@@ -430,6 +480,14 @@ func (a *App) shutdown(ctx context.Context, servers []*http.Server, jobs jobQueu
 	for _, server := range servers {
 		if err := server.Shutdown(graceCtx); err != nil {
 			errs = append(errs, fmt.Errorf("stop listener %s: %w", server.Addr, err))
+		}
+	}
+
+	if workers != nil {
+		select {
+		case <-workers:
+		case <-graceCtx.Done():
+			errs = append(errs, fmt.Errorf("stop workers: %w", graceCtx.Err()))
 		}
 	}
 

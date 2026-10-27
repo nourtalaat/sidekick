@@ -224,6 +224,36 @@ func TestRegistered(t *testing.T) {
 			},
 		},
 		{
+			name: "registered workers run until shutdown",
+			check: func(t *testing.T) {
+				t.Helper()
+
+				started, stopped := make(chan struct{}), make(chan struct{})
+
+				r := startApp(t, storetest.NewURL(t), config.MigrationsStartup, func(a *App) {
+					require.NoError(t, a.RegisterWorker("test", func(ctx context.Context) {
+						close(started)
+						<-ctx.Done()
+						close(stopped)
+					}))
+				})
+
+				select {
+				case <-started:
+				case <-time.After(jobTimeout):
+					t.Fatal("the worker did not start")
+				}
+
+				require.NoError(t, r.stop())
+
+				select {
+				case <-stopped:
+				default:
+					t.Fatal("Run returned before the worker did")
+				}
+			},
+		},
+		{
 			name: "investigation kinds register with the configured concurrency limits",
 			check: func(t *testing.T) {
 				t.Helper()
@@ -242,6 +272,7 @@ func TestRegistered(t *testing.T) {
 
 				require.ErrorIs(t, r.app.RegisterRoutes(func(*http.ServeMux) {}), errAlreadyRunning)
 				require.ErrorIs(t, r.app.RegisterJob(testJobKind, queue.HandlerFunc(func(context.Context, db.Job) error { return nil }), queue.KindOptions{}), errAlreadyRunning)
+				require.ErrorIs(t, r.app.RegisterWorker("late", func(context.Context) {}), errAlreadyRunning)
 				require.ErrorIs(t, r.app.Run(t.Context()), errAlreadyRunning)
 			},
 		},
