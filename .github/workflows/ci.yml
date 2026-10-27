@@ -52,9 +52,23 @@ jobs:
           path: bin/tools
           key: tools-${{ runner.os }}-${{ hashFiles('Makefile') }}
 
+      - name: Cache the validator tools
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: bin/validator-tools
+          key: validator-tools-${{ runner.os }}-${{ hashFiles('scripts/validator-tools.sh') }}
+
+      # The validator tests run promtool, OpenTofu and the provider mirror
+      # from here. The tests themselves use no network: OpenTofu installs
+      # providers from the mirror only, behind a proxy that refuses every
+      # connection.
+      - name: Install the validator tools
+        run: make validator-tools
+
       - run: make ci
         env:
           SIDEKICK_PLANS_DIR: ${{ runner.temp }}/query-plans
+          SIDEKICK_VALIDATE_TOOLS: ${{ github.workspace }}/bin/validator-tools
 
       # The plan tests write each query and its EXPLAIN ANALYZE plan here, for
       # pull request descriptions.

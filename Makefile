@@ -89,12 +89,15 @@ sqlc-generate: $(SQLC) ## Generate internal/store/db from the queries and migrat
 	$(SQLC) generate
 
 # NOTICE lists the modules linked into the binary, so a dependency change
-# that does not regenerate it fails verify-generated.
+# that does not regenerate it fails verify-generated. The validator's
+# NOTICE gets its tools part when its image is built.
 GENERATE_TARGETS += notice
 .PHONY: notice
-notice: ## Write NOTICE, the third-party notices that ship with the binary and image
-	sh scripts/notice.sh > NOTICE.tmp
+notice: ## Write NOTICE and cmd/sidekick-validate/NOTICE, the third-party notices that ship with the binaries and images
+	sh scripts/notice.sh ./cmd/sidekick > NOTICE.tmp
 	mv NOTICE.tmp NOTICE
+	sh scripts/notice.sh ./cmd/sidekick-validate > cmd/sidekick-validate/NOTICE.tmp
+	mv cmd/sidekick-validate/NOTICE.tmp cmd/sidekick-validate/NOTICE
 
 CI_TARGETS += verify-generated
 .PHONY: verify-generated
@@ -107,8 +110,9 @@ migrate-new: ## Create the next goose migration: make migrate-new name=add_jobs
 
 CI_TARGETS += build
 .PHONY: build
-build: ## Build bin/sidekick with the version and commit set
+build: ## Build bin/sidekick and bin/sidekick-validate with the version and commit set
 	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/sidekick ./cmd/sidekick
+	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/sidekick-validate ./cmd/sidekick-validate
 
 # The image is built with Docker when it is installed, else with Podman. With
 # Podman the platforms go into one local manifest list named $(IMAGE); with
