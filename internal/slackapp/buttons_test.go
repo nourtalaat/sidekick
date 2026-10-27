@@ -43,7 +43,7 @@ func TestDecodeInteraction(t *testing.T) {
 	t.Parallel()
 
 	click := `{"type": "block_actions", "user": {"id": "U01ANA"}, "team": {"id": "T01"},
-		"actions": [{"type": "button", "action_id": "verdict_correct", "value": "0192d3a4-0000-7000-8000-0000000000c1"}]}`
+		"actions": [{"type": "button", "block_id": "feedback", "action_id": "verdict_correct", "value": "0192d3a4-0000-7000-8000-0000000000c1"}]}`
 
 	tests := []struct {
 		name    string
