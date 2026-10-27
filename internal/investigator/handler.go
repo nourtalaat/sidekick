@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -61,11 +62,14 @@ type Options struct {
 	Routes map[string]Route
 	// Rules are the checks a submitted report must pass.
 	Rules report.Rules
+	// Daily are the daily spending caps and their time zone.
+	Daily DailyCaps
 	// Logger receives a line when a run starts and ends, with IDs, the
 	// route, the verdict and the stop reason only, never event text, tool
 	// results or model output. Nil logs nothing.
 	Logger *slog.Logger
-	// Metrics records the investigation metrics. Nil records none.
+	// Metrics records the investigation metrics, and New registers the
+	// gauge of each route's spend today with them. Nil records none.
 	Metrics *Metrics
 	// Canceller stops the model or tool call in flight when a responder
 	// stops a run. Nil means a run sees a stop only at its next step.
@@ -88,6 +92,14 @@ type Route struct {
 	// Sources are the sources the investigation may use; nil means every
 	// source.
 	Sources []string
+	// Outputs are the route's outputs, which get its daily cap notice.
+	Outputs []string
+	// DailyMaxCostMicros is the route's daily cap. Zero means only the
+	// global cap holds it.
+	DailyMaxCostMicros int64
+	// DailySkip ends the route's new investigations at its daily cap
+	// instead of holding them until the next day.
+	DailySkip bool
 }
 
 // Handler runs investigate jobs. Make it with New, register it for
@@ -97,6 +109,8 @@ type Handler struct {
 	builtins builtins
 	log      *slog.Logger
 	tracer   trace.Tracer
+	// now is the clock of the soft limits. Tests replace it.
+	now func() time.Time
 }
 
 var _ queue.Handler = (*Handler)(nil)
@@ -127,18 +141,27 @@ func New(opts Options) (*Handler, error) {
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	return &Handler{
+	h := &Handler{
 		opts:     opts,
 		builtins: builtins{submitVerdict: submit, recordFinding: record},
 		log:      log,
 		tracer:   tp.Tracer(tracerName),
-	}, nil
+		now:      time.Now,
+	}
+
+	if err := opts.Metrics.register(newSpendCollector(h)); err != nil {
+		return nil, fmt.Errorf("new investigator: %w", err)
+	}
+
+	return h, nil
 }
 
 // Handle runs one investigate job inside an investigation.run span, a
 // child of the span that enqueued the job. It takes over the run with the
 // job's claim token as the fence, then runs the agent loop from the last
-// saved step until the investigation ends.
+// saved step until the investigation ends. Before an investigation's
+// first run, a daily cap that is reached holds it until the next day or
+// ends it unrun, as the cap says, and posts the cap's notice.
 //
 // It returns nil when the investigation ended, or had ended already. A
 // payload that does not decode, an investigation that does not exist, or
@@ -166,6 +189,15 @@ func (h *Handler) Handle(ctx context.Context, job db.Job) (err error) {
 
 	span.SetAttributes(attribute.String(attrInvestigationID, id.String()))
 
+	held, skip, err := h.holdForDailyCap(ctx, job, id)
+	if err != nil {
+		return fmt.Errorf("check the daily caps: %w", err)
+	}
+
+	if held {
+		return nil
+	}
+
 	inv, started, err := h.start(ctx, id, queue.ClaimToken(job))
 	if err != nil {
 		return fmt.Errorf("take over the run: %w", err)
@@ -182,6 +214,10 @@ func (h *Handler) Handle(ctx context.Context, job db.Job) (err error) {
 	)
 
 	log := h.log.With("investigation_id", id.String(), "job_id", job.ID, "route", inv.Route)
+
+	if skip != nil {
+		return h.skipForDailyCap(ctx, inv, *skip, log)
+	}
 
 	done := h.opts.Metrics.running(inv.Route)
 	defer done()
@@ -203,7 +239,7 @@ func (h *Handler) Handle(ctx context.Context, job db.Job) (err error) {
 func (h *Handler) start(ctx context.Context, id uuid.UUID, token int64) (db.Investigation, bool, error) {
 	queries := db.New(h.opts.Pool)
 
-	inv, err := queries.StartInvestigationRun(ctx, db.StartInvestigationRunParams{ID: id, Fence: token})
+	inv, err := queries.StartInvestigationRun(ctx, db.StartInvestigationRunParams{ID: id, Fence: token, Now: h.now()})
 	if err == nil {
 		return inv, true, nil
 	}

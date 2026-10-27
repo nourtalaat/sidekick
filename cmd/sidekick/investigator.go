@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/nourtalaat/sidekick/internal/app"
+	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/investigator"
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
 	"github.com/nourtalaat/sidekick/internal/model/instrument"
@@ -36,9 +37,19 @@ func registerInvestigator(a *app.App) error {
 		return fmt.Errorf("set up investigation metrics: %w", err)
 	}
 
+	loc, err := cfg.Budgets.Daily.Location()
+	if err != nil {
+		return fmt.Errorf("set up the daily caps: %w", err)
+	}
+
 	routes := make(map[string]investigator.Route, len(cfg.Routes))
 	for _, r := range cfg.Routes {
-		routes[r.Name] = investigator.Route{Sources: r.Sources}
+		routes[r.Name] = investigator.Route{
+			Sources:            r.Sources,
+			Outputs:            r.Outputs,
+			DailyMaxCostMicros: r.Budgets.Daily.MaxCostMicros(),
+			DailySkip:          r.Budgets.Daily.OnDailyCap == config.OnDailyCapSkip,
+		}
 	}
 
 	canceller := investigator.NewCanceller(a.Pool(), a.Logger().With("component", "investigator"))
@@ -48,13 +59,18 @@ func registerInvestigator(a *app.App) error {
 	}
 
 	h, err := investigator.New(investigator.Options{
-		Pool:           a.Pool(),
-		Guard:          guard,
-		Connectors:     connectors,
-		Prices:         prices,
-		Strategies:     cfg.StrategySet(),
-		Routes:         routes,
-		Rules:          cfg.Report.Rules(),
+		Pool:       a.Pool(),
+		Guard:      guard,
+		Connectors: connectors,
+		Prices:     prices,
+		Strategies: cfg.StrategySet(),
+		Routes:     routes,
+		Rules:      cfg.Report.Rules(),
+		Daily: investigator.DailyCaps{
+			Location:      loc,
+			MaxCostMicros: cfg.Budgets.Daily.MaxCostMicros(),
+			Skip:          cfg.Budgets.Daily.OnDailyCap == config.OnDailyCapSkip,
+		},
 		Logger:         a.Logger().With("component", "investigator"),
 		Metrics:        metrics,
 		Canceller:      canceller,

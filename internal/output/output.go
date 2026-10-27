@@ -23,6 +23,38 @@ type Sink interface {
 	Publish(ctx context.Context, update Update) (Ref, error)
 }
 
+// Noticer is a Sink that can also post a notice that belongs to no one
+// investigation, such as a daily cap being reached. Sinks that cannot are
+// skipped for notices.
+type Noticer interface {
+	// Notice posts n, for example as a message in a Slack output's channel.
+	Notice(ctx context.Context, n Notice) error
+}
+
+// Notice is a message about Sidekick itself for the people who watch a
+// route's outputs. Its text is Sidekick's own, holding config names such
+// as route names but never event text; sinks still escape it.
+type Notice struct {
+	// Kind says what the notice is about.
+	Kind NoticeKind `json:"kind"`
+	// Title is a few words, such as "Daily cap reached".
+	Title string `json:"title"`
+	// Text is one or two sentences that say what happened and what
+	// Sidekick does about it.
+	Text string `json:"text"`
+}
+
+// NoticeKind says what a notice is about.
+type NoticeKind string
+
+// Notice kinds.
+const (
+	// NoticeDailyCap is a daily spending cap that was reached.
+	NoticeDailyCap NoticeKind = "daily_cap"
+	// NoticeRateLimit is a rate limit that held back events.
+	NoticeRateLimit NoticeKind = "rate_limit"
+)
+
 // Phase is the stage of the investigation an update describes.
 type Phase string
 

@@ -22,5 +22,21 @@ func registerPublisher(a *app.App) error {
 		return fmt.Errorf("register the publisher: %w", err)
 	}
 
+	return registerNotices(a)
+}
+
+// registerNotices runs the notice jobs that tell a route's outputs about
+// a daily cap or a rate limit.
+func registerNotices(a *app.App) error {
+	h := publish.NewNoticeHandler(publish.Options{
+		Sinks:          a.Instances().Outputs,
+		Logger:         a.Logger().With("component", "publish"),
+		TracerProvider: a.Telemetry().TracerProvider(),
+	})
+
+	if err := a.RegisterJob(queue.KindNotice, h, queue.KindOptions{Concurrency: publish.NoticeConcurrency}); err != nil {
+		return fmt.Errorf("register the notices: %w", err)
+	}
+
 	return nil
 }

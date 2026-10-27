@@ -22,11 +22,12 @@ SELECT * FROM investigations WHERE id = @id;
 
 -- name: StartInvestigationRun :one
 -- StartInvestigationRun gives the run of an investigation to the job claim
--- with the token fence, and sets it running. It returns no row when a newer
+-- with the token fence, and sets it running; the first run sets started_at
+-- to now, from the caller's clock. It returns no row when a newer
 -- claim owns the run already, or when the investigation has ended; a failed
 -- investigation runs again when an admin retries its dead job.
 UPDATE investigations
-SET fence = @fence, status = 'running', started_at = coalesce(started_at, now())
+SET fence = @fence, status = 'running', started_at = coalesce(started_at, @now::timestamptz)
 WHERE id = @id AND fence < @fence AND status IN ('queued', 'running', 'failed')
 RETURNING *;
 

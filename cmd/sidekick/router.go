@@ -16,6 +16,7 @@ func registerRouter(a *app.App) error {
 		ModelSettings:  a.Instances().ModelSettings,
 		Pool:           a.Pool(),
 		Logger:         a.Logger().With("component", "router"),
+		Metrics:        a.Telemetry().Registry(),
 		TracerProvider: a.Telemetry().TracerProvider(),
 	})
 	if err != nil {

@@ -11,13 +11,6 @@ import (
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
-// Budgets an investigation can run out of, as the budget label of
-// sidekick_budget_exhausted_total names them.
-const (
-	budgetToolCalls = "tool_calls"
-	budgetWallTime  = "wall_time"
-)
-
 // cancelledReason is the reason of the report of a stopped run.
 const cancelledReason = "A responder stopped the investigation before it reached a verdict."
 
@@ -32,20 +25,6 @@ type ending struct {
 	status string
 	// budget names the budget that ran out, if one did.
 	budget string
-}
-
-// overBudget returns the ending of a run that reached a limit: an
-// inconclusive report built from the saved steps.
-func (r *run) overBudget(budget string) ending {
-	reason := fmt.Sprintf("The investigation used all of its %d tool calls before it reached a verdict.", r.budget.MaxToolCalls)
-	detail := fmt.Sprintf("maxToolCalls %d reached", r.budget.MaxToolCalls)
-
-	if budget == budgetWallTime {
-		reason = fmt.Sprintf("The investigation reached its time limit of %s before it reached a verdict.", r.budget.MaxWallTime)
-		detail = fmt.Sprintf("maxWallTime %s reached", r.budget.MaxWallTime)
-	}
-
-	return ending{report: r.hist.inconclusive(report.StopBudget, reason, detail), budget: budget}
 }
 
 // noVerdict returns the ending of a run whose model gave no report that

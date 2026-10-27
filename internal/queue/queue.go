@@ -42,6 +42,7 @@ const (
 	KindWatchTick       = "watch_tick"
 	KindRollup          = "rollup"
 	KindRetention       = "retention"
+	KindNotice          = "notice"
 )
 
 // The values of jobs.status.
