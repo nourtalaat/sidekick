@@ -404,6 +404,8 @@ func TestSourceCallInput(t *testing.T) {
 		{name: "a metric name with a comma", tool: toolQueryMetrics, input: `{"resource":"` + testSite + `","metrics":["a,b"]}`,
 			want: `metrics: "a,b" is not a metric name`},
 		{name: "no metric names", tool: toolQueryMetrics, input: `{"resource":"` + testSite + `","metrics":[]}`, want: "metrics: give 1 to 10"},
+		{name: "a query that reads another workspace", tool: toolQueryLogs, input: `{"query":"workspace(\"other\").AppRequests"}`,
+			want: "workspace() reads outside the workspace"},
 		{name: "a resource group and a resource", tool: toolListChanges, input: `{"resourceGroup":"shop","resource":"` + testSite + `"}`,
 			want: "give resourceGroup or resource, not both"},
 		{name: "a resource group with a quote", tool: toolListChanges, input: `{"resourceGroup":"shop' or 1 eq 1"}`,

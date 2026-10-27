@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,6 +15,17 @@ import (
 // defaultLogRange is the time range of query_logs when the call gives no
 // since.
 const defaultLogRange = time.Hour
+
+// outOfScope matches the KQL functions that read outside the workspace a
+// query runs on: other workspaces, Application Insights apps, Azure
+// resources, Azure Data Explorer clusters and databases, and Azure
+// Resource Graph. The name may be followed by spaces before its
+// parenthesis, and KQL names are matched in any case.
+var outOfScope = regexp.MustCompile(`(?i)\b(workspace|app|resource|adx|arg|cluster|database)\s*\(`)
+
+// externalData matches the externaldata operator, which makes Log
+// Analytics fetch a URL.
+var externalData = regexp.MustCompile(`(?i)\bexternaldata\b`)
 
 // logsAnswer is the answer of the Log Analytics query API.
 type logsAnswer struct {
@@ -71,6 +83,10 @@ func (s *Source) queryLogs(ctx context.Context, input json.RawMessage) (source.R
 		return source.Result{}, &source.ToolError{Message: "query: required"}
 	}
 
+	if err := checkScope(in.Query); err != nil {
+		return source.Result{}, fmt.Errorf("read the input: %w", err)
+	}
+
 	name := workspaceName(ws.ResourceID)
 	target := s.apis.logAnalytics + "/workspaces/" + url.PathEscape(ws.ID) + "/query"
 	body := map[string]string{"query": in.Query, "timespan": w.timespan()}
@@ -93,6 +109,23 @@ func (s *Source) queryLogs(ctx context.Context, input json.RawMessage) (source.R
 	empty := fmt.Sprintf("The query returned no rows in workspace %s between %s and %s.", name, timestamp(w.start), timestamp(w.end))
 
 	return structured(out, evidence, truncated, rowCount(out) == 0, empty)
+}
+
+// checkScope refuses a query that could read beyond the one workspace it
+// is sent to: a call of a cross-scope function, or the externaldata
+// operator. It does not parse KQL, so the name inside a string literal is
+// refused too; the model can write the query another way.
+func checkScope(query string) error {
+	if m := outOfScope.FindStringSubmatch(query); m != nil {
+		return &source.ToolError{Message: fmt.Sprintf("query: %s() reads outside the workspace; each call reads one configured "+
+			"workspace, so query the tables of that workspace directly", strings.ToLower(m[1]))}
+	}
+
+	if externalData.MatchString(query) {
+		return &source.ToolError{Message: "query: externaldata fetches data from outside the workspace; each call reads one configured workspace"}
+	}
+
+	return nil
 }
 
 // logRows returns the tables of an answer with at most limit rows in all,
