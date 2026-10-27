@@ -46,7 +46,7 @@ default `/etc/sidekick/sidekick.yaml`) and checks, in order:
 | `database` | Reads `database.urlSecret`, connects, and compares the schema with the migrations this release needs. |
 | `slack` | Calls Slack's `auth.test` with the bot token from `slack.botTokenSecret`, once for each Slack API address the `slack` outputs use. Nothing is posted. |
 | `model <name>` | Builds each model connector and checks its API key with a call that costs nothing: for `anthropic`, listing one model. |
-| `prices` | Warns about each connector whose model has no price, so its calls would show no cost. Add a `model.prices` entry to fix it. |
+| `prices` | Warns about each connector whose model has no price, so its calls would show no cost and count nothing toward the cost budgets and daily caps. Add a `model.prices` entry to fix it. |
 | `source <name>` | Builds each source, waits up to 15 seconds for it to connect and list its tools, and lists the tools the model will not see, with the reason. |
 
 It prints one line per check, with a fix below each problem, for example:
