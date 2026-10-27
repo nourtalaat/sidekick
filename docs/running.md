@@ -25,7 +25,8 @@ Helm chart mounts the file. At start-up Sidekick:
    replicas start at once, one migrates and the others wait for it.
 5. Builds the configured connectors, sources, webhook adapters and outputs.
 6. Starts the job queue, which routes events, runs
-   [investigations](investigations.md) and publishes them to the outputs.
+   [investigations](investigations.md), publishes them to the outputs and
+   runs the checks of [watchers](configuration.md#watch).
 7. Starts serving HTTP on both listeners.
 
 `sidekick migrate up` and `sidekick migrate status` take the same
@@ -147,6 +148,9 @@ process (`process_*`) metrics, this release has:
 | `sidekick_tool_call_duration_seconds` | histogram | `source` | Duration of source tool calls. |
 | `sidekick_source_up` | gauge | `source` | 1 when a source is connected and its circuit breaker is closed, 0 otherwise. |
 | `sidekick_guard_keys_full_total` | counter | none | Guarded calls that are not source tool calls, such as watcher HTTP checks, refused because the guard already held limits for 1024 targets, all in use. |
+| `sidekick_watcher_checks_total` | counter | `type`, `result` | [Watcher](configuration.md#watch) checks by type (`http`, `tool` or `alert`) and result (`pass`, `fail` or `error`). |
+| `sidekick_watcher_check_duration_seconds` | histogram | `type` | Duration of watcher checks. |
+| `sidekick_watch_http_blocked_total` | counter | `reason` | Watcher HTTP checks the safety rules refused, by reason: `host`, `private_ip` or `redirect`. |
 | `sidekick_slack_api_errors_total` | counter | `method`, `error` | Failed Slack Web API calls by method, such as `chat.update`, and error: Slack's error code, such as `channel_not_found`, or `ratelimited`, `request_failed`, `http_status`, `bad_response` or `other`. See [Investigations in Slack](slack.md). |
 
 ## Logs
