@@ -27,6 +27,7 @@ Sidekick receives alerts from webhooks or Slack, investigates them with the LLM 
 - [Results on tickets](docs/tickets.md): the Linear and Jira comment outputs, how it finds the ticket an alert is about, and how to set it up.
 - [Webhook callbacks](docs/webhook-callbacks.md): the signed JSON callback with each final result and watcher event, and how a receiver checks it.
 - [The monitor validator](docs/validator.md): the image that checks monitor files before a pull request, its formats, sidecar and Job modes, and network isolation.
+- [Benchmarks](docs/benchmark.md): `sidekick bench run`, scenario files, mock sources and their matchers, and the Postgres a benchmark runs on.
 
 ## License
 

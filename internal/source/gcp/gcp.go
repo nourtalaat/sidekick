@@ -17,9 +17,14 @@ import (
 // Type is the source type this package registers.
 const Type = "gcp"
 
-// loggingAPI is the root of the Cloud Logging REST API, with its pinned
-// API version.
-const loggingAPI = "https://logging.googleapis.com/v2"
+// The REST API roots the source calls, each with its pinned API version.
+const (
+	loggingAPI       = "https://logging.googleapis.com/v2"
+	monitoringAPI    = "https://monitoring.googleapis.com/v3"
+	prometheusAPI    = "https://monitoring.googleapis.com/v1"
+	containerAPI     = "https://container.googleapis.com/v1"
+	serviceHealthAPI = "https://servicehealth.googleapis.com/v1"
+)
 
 var (
 	// errNoSecrets is returned when credentialsSecret is set but the source
@@ -47,7 +52,11 @@ type Source struct {
 // endpoints are the API roots a source calls. Tests point them at a fake
 // server.
 type endpoints struct {
-	logging string
+	logging       string
+	monitoring    string
+	prometheus    string
+	container     string
+	serviceHealth string
 }
 
 var _ source.Source = (*Source)(nil)
@@ -81,8 +90,18 @@ func (s *Source) run(ctx context.Context, call source.Call) (source.Result, erro
 	switch call.Tool {
 	case toolQueryLogs:
 		return s.queryLogs(ctx, call.Input)
+	case toolQueryMetrics:
+		return s.queryMetrics(ctx, call.Input)
+	case toolQueryPromQL:
+		return s.queryPromQL(ctx, call.Input)
+	case toolListAlerts:
+		return s.listAlerts(ctx, call.Input)
 	case toolListChanges:
 		return s.listChanges(ctx, call.Input)
+	case toolGetGKECluster:
+		return s.getGKECluster(ctx, call.Input)
+	case toolListServiceHealthEvents:
+		return s.listServiceHealthEvents(ctx, call.Input)
 	default:
 		return source.Result{}, fmt.Errorf("tool %q: %w", call.Tool, errUnknownTool)
 	}
@@ -123,7 +142,13 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (source
 	return &Source{
 		cfg:    cfg,
 		client: c,
-		apis:   endpoints{logging: loggingAPI},
-		now:    time.Now,
+		apis: endpoints{
+			logging:       loggingAPI,
+			monitoring:    monitoringAPI,
+			prometheus:    prometheusAPI,
+			container:     containerAPI,
+			serviceHealth: serviceHealthAPI,
+		},
+		now: time.Now,
 	}, nil
 }

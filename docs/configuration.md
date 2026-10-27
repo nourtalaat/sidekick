@@ -307,6 +307,83 @@ claude-on-aws:
   21,333 tokens, as the default limit is, so long answers do not hit HTTP
   timeouts.
 
+#### The `google` provider
+
+The `google` provider calls Gemini models on the Gemini API (Google AI
+Studio) or on Vertex AI, which Google now calls Gemini Enterprise Agent
+Platform.
+
+```yaml
+gemini:
+  provider: google
+  model: gemini-3.8-flash                  # required
+  backend: gemini                          # gemini (the default) or vertex
+  apiKeySecret: { name: sidekick-gemini, key: apiKey }   # required with gemini
+  effort: medium                           # the model's own levels, see below
+  maxTokens: 32000                         # default: the model's own limit
+  timeout: 10m                             # per call, default 10m
+  retries: 3                               # retries of rate limits, overloads and timeouts
+
+gemini-on-gcp:
+  provider: google
+  backend: vertex
+  model: gemini-3.8-flash
+  project: my-project                      # required with vertex
+  location: global                         # default global; or a region such as europe-west4, or us or eu
+  baseURL: https://psc.example.internal    # optional, for a proxy or Private Service Connect; https, or http only to localhost
+```
+
+- **Credentials.** With `backend: gemini`, the key comes from the Secret;
+  it is read again on every call, so a rotated key is used without a
+  restart. With `backend: vertex` there is no key in the config: Sidekick
+  uses Application Default Credentials, which is GKE Workload Identity in
+  the cluster (see [Cloud credentials](install.md#cloud-credentials)), or
+  a credentials file named by `GOOGLE_APPLICATION_CREDENTIALS`, for example
+  for workload identity federation from another cloud. The Google service
+  account needs the Vertex AI User role (`roles/aiplatform.user`) on the
+  project. Other `GOOGLE_*` and `GEMINI_*` environment variables, such as
+  `GOOGLE_API_KEY`, are not used.
+- **Known models.** Sidekick knows Gemini 4 Argon, Gemini 3.8 Flash, Gemini
+  3.6 Flash, Gemini 3.5 Flash-Lite, Gemini 3.1 Flash-Lite, Gemini 3.1 Pro
+  Preview, Gemini 3 Flash Preview, Gemini 2.5 Pro, Gemini 2.5 Flash and
+  Gemini 2.5 Flash-Lite, under their model IDs (`gemini-3.8-flash` and so
+  on) on both backends. The preview models are served only from the
+  `global` location. For any other model, describe it in a `capabilities`
+  block with the same keys as for the `anthropic` provider. A Gemini model
+  takes either `effortLevels` or a `thinkingModes` list with `enabled`,
+  not both.
+- **Effort** sets the thinking level of Gemini 3 and later models, with
+  each model's own levels: Gemini 4 Argon, Gemini 3.8 Flash and Gemini 3.1
+  Pro take `low`, `medium` and `high`; the others also take `minimal`.
+  `xhigh`, `max` and `none` are not Gemini levels. The Gemini 2.5 models
+  take no effort.
+- **Thinking.** Gemini 3 and later models always think, so `mode: off` is
+  an error for them; lower `effort` instead, since `minimal` still thinks a
+  little. The Gemini 2.5 models take `adaptive`, where the model picks its
+  own budget, and `enabled` with `budgetTokens`: 128 to 32,768 on 2.5 Pro,
+  1 to 24,576 on 2.5 Flash and 512 to 24,576 on 2.5 Flash-Lite. `off` works
+  on 2.5 Flash and 2.5 Flash-Lite, not on 2.5 Pro. Gemini 2.5 Flash-Lite
+  does not think unless `thinking` is set.
+- **Reasoning.** The thought signatures Gemini returns are kept by
+  Sidekick and sent back in the part they came in, as Gemini 3 requires
+  for tool calls.
+- **Tool choice.** Every known model can be forced to call a tool, or any
+  tool, and tool choice `none` turns tools off for one call.
+- **Prompt caching** is automatic, so cache marks are not needed. Cache
+  reads are priced at their own rate, and Google charges nothing to write
+  the cache.
+- **Labels.** On Vertex AI, request metadata is sent as labels, which show
+  in Cloud Billing. Entries that are not valid labels are left out.
+- **Prices.** The shipped price table has the Standard paid prices of the
+  Gemini API, which are also the prices of Vertex AI's `global` location.
+  Regional and multi-region locations cost 10% more on Gemini 3 and later
+  models, and the Gemini API free tier costs nothing; set them with
+  `prices`.
+- **Free tier.** The Gemini API free tier works with a key from a project
+  without billing, with low rate limits. Google may use free-tier prompts
+  and answers to improve its products, and people may read them, so use it
+  with test data only.
+
 ### `sources`
 
 Sources give the investigation tools to call. Each one has a `type`, and the
@@ -499,8 +576,9 @@ How it behaves:
 #### Google Cloud sources (`type: gcp`)
 
 A Google Cloud source reads Google Cloud projects through the Cloud
-Logging REST API, with Application Default Credentials (Workload Identity
-on GKE). Its tools only read. [Google Cloud source](sources/gcp.md) lists the permissions the
+Logging, Cloud Monitoring, GKE and Personalized Service Health REST APIs,
+with Application Default Credentials (Workload Identity on GKE). Its tools
+only read. [Google Cloud source](sources/gcp.md) lists the permissions the
 identity needs and how to set it up.
 
 | Key | Meaning |
@@ -520,7 +598,12 @@ The tools, as the model sees them with the source name `gcp`:
 | Tool | Returns |
 |---|---|
 | `gcp__query_logs` | Cloud Logging entries that match a Logging query language filter, newest first. |
+| `gcp__query_metrics` | Cloud Monitoring time series for a monitoring filter, optionally aligned and reduced. |
+| `gcp__query_promql` | The series of a PromQL range query on Cloud Monitoring metrics. |
+| `gcp__list_alerts` | Cloud Monitoring alerts open at some time in a range, with their policy and severity. |
 | `gcp__list_changes` | Changes from the Admin Activity and System Event audit logs: deploys, config changes, upgrades. |
+| `gcp__get_gke_cluster` | A GKE cluster's status, versions, node pools and recent operations, or the list of clusters. |
+| `gcp__list_service_health_events` | Google Cloud incidents that Personalized Service Health says affect the project. |
 
 How it behaves:
 
@@ -532,14 +615,16 @@ How it behaves:
   `projects` lists one. A project not in `projects`, or input that does
   not fit, such as a range longer than 7 days, is a tool error, and
   nothing is sent.
-- **Queries.** The filter of `query_logs` goes to Cloud Logging as the
-  model wrote it, so the identity's roles are what limit what can be read.
-- **Results** are JSON with a link to the Logs Explorer query, which
-  becomes an evidence link in the report. Lists are capped as
+- **Queries.** The filter of `query_logs` and `query_metrics` and the
+  query of `query_promql` go to Google Cloud as the model wrote them, so
+  the identity's roles are what limit what can be read.
+- **Results** are JSON with links to the Logs Explorer query, Metrics
+  Explorer, the alert, the cluster or the Service Health page, which
+  become evidence links in the report. Lists are capped as
   [Google Cloud source](sources/gcp.md#limits) describes, and say when
   they were cut.
-- **No data.** A query that matches nothing, and a project Google Cloud
-  does not have, are reported as no data.
+- **No data.** A query that matches nothing, and a project or cluster
+  Google Cloud does not have, are reported as no data.
 - **Errors.** A refused request, such as a filter Google Cloud cannot
   parse or a permission the identity lacks, goes to the model as a tool
   error with Google Cloud's message. A refused token, rate limits, server
@@ -606,6 +691,14 @@ How it behaves:
   a missing privilege, goes to the model as a tool error with its message.
   A database that cannot be reached, a refused login and a refused URL
   count as failures of the source.
+
+#### Mock sources (`type: mock`)
+
+A mock source answers tool calls from fixtures instead of a real system.
+Benchmark scenarios use it for every source; [Benchmarks](benchmark.md#mock-sources)
+lists its keys: `tools.snapshot`, `fixtures`, `default` and `unavailable`.
+It can also go under `sources` in `sidekick.yaml`, for example to try a route
+without access to the real system.
 
 ### `intake.webhooks`
 

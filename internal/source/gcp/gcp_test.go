@@ -18,7 +18,14 @@ import (
 
 // Paths of the fake APIs.
 const (
-	entriesPath = "/logging/v2/entries:list"
+	entriesPath    = "/logging/v2/entries:list"
+	timeSeriesPath = "/monitoring/v3/projects/shop-prod/timeSeries"
+	promPath       = "/prometheus/v1/projects/shop-prod/location/global/prometheus/api/v1/query_range"
+	alertsPath     = "/monitoring/v3/projects/shop-prod/alerts"
+	clusterPath    = "/container/v1/projects/shop-prod/locations/europe-west1/clusters/prod"
+	operationsPath = "/container/v1/projects/shop-prod/locations/europe-west1/operations"
+	clustersPath   = "/container/v1/projects/shop-prod/locations/-/clusters"
+	eventsPath     = "/servicehealth/v1/projects/shop-prod/locations/global/events"
 )
 
 // The default windows of the tools at testNow.
@@ -156,6 +163,112 @@ func TestSourceCall(t *testing.T) {
 			wantErr: "decode the answer",
 		},
 		{
+			name:  "query_metrics aligns and reduces the series",
+			tool:  toolQueryMetrics,
+			input: `{"filter":"metric.type=\"run.googleapis.com/request_count\"","aligner":"ALIGN_RATE","reducer":"REDUCE_SUM","groupBy":["resource.labels.service_name"]}`,
+			routes: []route{{http.MethodGet, timeSeriesPath, []fakehttp.Response{body(`{"timeSeries":[{
+				"metric":{"type":"run.googleapis.com/request_count","labels":{"response_code_class":"5xx"}},
+				"resource":{"type":"cloud_run_revision","labels":{"service_name":"checkout"}},
+				"metricKind":"GAUGE","valueType":"DOUBLE",
+				"points":[{"interval":{"startTime":"2026-05-04T09:58:00Z","endTime":"2026-05-04T09:59:00Z"},"value":{"doubleValue":2.5}},
+					{"interval":{"endTime":"2026-05-04T09:58:00Z"},"value":{"int64Value":"7"}}]}]}`)}}},
+			wantQueries: []string{"aggregation.alignmentPeriod=60s&aggregation.crossSeriesReducer=REDUCE_SUM" +
+				"&aggregation.groupByFields=resource.labels.service_name&aggregation.perSeriesAligner=ALIGN_RATE" +
+				"&filter=metric.type%3D%22run.googleapis.com%2Frequest_count%22&interval.endTime=2026-05-04T10%3A00%3A00Z" +
+				"&interval.startTime=2026-05-04T09%3A00%3A00Z&pageSize=20"},
+			want: `{"project":"shop-prod","series":[{
+				"metric":{"type":"run.googleapis.com/request_count","labels":{"response_code_class":"5xx"}},
+				"resource":{"type":"cloud_run_revision","labels":{"service_name":"checkout"}},
+				"kind":"GAUGE DOUBLE",
+				"points":[{"t":"2026-05-04T09:59:00Z","v":2.5},{"t":"2026-05-04T09:58:00Z","v":7}]}]}`,
+			wantEvidence: []source.Evidence{{Kind: source.EvidenceMetric, Title: "Metrics Explorer in shop-prod",
+				URL: "https://console.cloud.google.com/monitoring/metrics-explorer?project=shop-prod", At: testNow}},
+		},
+		{
+			name:        "query_metrics reads raw points without an aligner, and says when series are left",
+			tool:        toolQueryMetrics,
+			input:       `{"filter":"metric.type=\"x\"","limit":1,"since":"2026-05-04T09:30:00Z"}`,
+			routes:      []route{{http.MethodGet, timeSeriesPath, []fakehttp.Response{body(`{"timeSeries":[{"metric":{"type":"x"},"resource":{"type":"global"},"points":[]}],"nextPageToken":"more"}`)}}},
+			wantQueries: []string{"filter=metric.type%3D%22x%22&interval.endTime=2026-05-04T10%3A00%3A00Z&interval.startTime=2026-05-04T09%3A30%3A00Z&pageSize=1"},
+			want:        `{"project":"shop-prod","series":[{"metric":{"type":"x"},"resource":{"type":"global"},"points":null}]}`,
+			wantEvidence: []source.Evidence{{Kind: source.EvidenceMetric, Title: "Metrics Explorer in shop-prod",
+				URL: "https://console.cloud.google.com/monitoring/metrics-explorer?project=shop-prod", At: testNow}},
+			wantTruncated: true,
+		},
+		{
+			name:       "query_metrics with no series is no data",
+			tool:       toolQueryMetrics,
+			input:      `{"filter":"metric.type=\"x\""}`,
+			routes:     []route{{http.MethodGet, timeSeriesPath, []fakehttp.Response{body(`{}`)}}},
+			wantNoData: true,
+			wantText:   "No time series in shop-prod matched between 2026-05-04T09:00:00Z and 2026-05-04T10:00:00Z.",
+			wantEvidence: []source.Evidence{{Kind: source.EvidenceMetric, Title: "Metrics Explorer in shop-prod",
+				URL: "https://console.cloud.google.com/monitoring/metrics-explorer?project=shop-prod", At: testNow}},
+		},
+		{
+			name:  "query_promql runs the range query with a step of about 120 points",
+			tool:  toolQueryPromQL,
+			input: `{"query":"sum(rate(http_requests_total[5m]))"}`,
+			routes: []route{{http.MethodGet, promPath, []fakehttp.Response{body(`{"status":"success","data":{"resultType":"matrix","result":[
+				{"metric":{"service":"checkout"},"values":[[1777885200,"0.5"],[1777885230.5,"NaN"]]}]},"warnings":["partial data"]}`)}}},
+			wantQueries: []string{"end=2026-05-04T10%3A00%3A00Z&query=sum%28rate%28http_requests_total%5B5m%5D%29%29&start=2026-05-04T09%3A00%3A00Z&step=30s"},
+			want: `{"project":"shop-prod","warnings":["partial data"],"series":[{"labels":{"service":"checkout"},
+				"points":[{"t":"2026-05-04T09:00:00Z","v":"0.5"},{"t":"2026-05-04T09:00:30.5Z","v":"NaN"}]}]}`,
+			wantEvidence: []source.Evidence{{Kind: source.EvidenceMetric, Title: "Metrics Explorer in shop-prod",
+				URL: "https://console.cloud.google.com/monitoring/metrics-explorer?project=shop-prod", At: testNow}},
+		},
+		{
+			name:  "a PromQL query that does not parse is a tool error",
+			tool:  toolQueryPromQL,
+			input: `{"query":"sum(","step":60}`,
+			routes: []route{{http.MethodGet, promPath, []fakehttp.Response{{Status: http.StatusBadRequest, Headers: jsonHeaders,
+				Body: []byte(`{"status":"error","errorType":"bad_data","error":"parse error: unclosed left parenthesis"}`)}}}},
+			wantQueries:   []string{"end=2026-05-04T10%3A00%3A00Z&query=sum%28&start=2026-05-04T09%3A00%3A00Z&step=60s"},
+			wantToolError: "Google Cloud answered 400: parse error: unclosed left parenthesis",
+		},
+		{
+			name:  "list_alerts keeps the alerts open at some time in the window",
+			tool:  toolListAlerts,
+			input: `{}`,
+			routes: []route{{http.MethodGet, alertsPath, []fakehttp.Response{body(`{"alerts":[
+				{"name":"projects/shop-prod/alerts/0.def","state":"CLOSED","openTime":"2026-05-04T08:00:00Z","closeTime":"2026-05-04T08:30:00Z",
+				 "policy":{"displayName":"Checkout latency","severity":"WARNING"},"resource":{"type":"cloud_run_revision"}},
+				{"name":"projects/shop-prod/alerts/0.abc","state":"OPEN","openTime":"2026-05-02T08:00:00Z",
+				 "policy":{"name":"projects/shop-prod/alertPolicies/1","displayName":"Checkout 5xx","severity":"CRITICAL","userLabels":{"team":"payments"}},
+				 "metric":{"type":"run.googleapis.com/request_count"},"resource":{"type":"cloud_run_revision","labels":{"service_name":"checkout"}}},
+				{"name":"projects/shop-prod/alerts/0.old","state":"CLOSED","openTime":"2026-05-01T00:00:00Z","closeTime":"2026-05-01T01:00:00Z",
+				 "policy":{"displayName":"Old"},"resource":{"type":"global"}}
+			]}`)}}},
+			wantQueries: []string{"pageSize=100"},
+			want: `{"project":"shop-prod","alerts":[
+				{"id":"0.def","state":"CLOSED","opened":"2026-05-04T08:00:00Z","closed":"2026-05-04T08:30:00Z","policy":"Checkout latency",
+				 "severity":"WARNING","resource":{"type":"cloud_run_revision"},
+				 "url":"https://console.cloud.google.com/monitoring/alerting/incidents/0.def?project=shop-prod"},
+				{"id":"0.abc","state":"OPEN","opened":"2026-05-02T08:00:00Z","policy":"Checkout 5xx","severity":"CRITICAL",
+				 "policyLabels":{"team":"payments"},"metric":"run.googleapis.com/request_count",
+				 "resource":{"type":"cloud_run_revision","labels":{"service_name":"checkout"}},
+				 "url":"https://console.cloud.google.com/monitoring/alerting/incidents/0.abc?project=shop-prod"}
+			]}`,
+			wantEvidence: []source.Evidence{
+				{Kind: source.EvidenceResource, Title: "Alert Checkout latency in shop-prod",
+					URL: "https://console.cloud.google.com/monitoring/alerting/incidents/0.def?project=shop-prod", At: at(8, 0)},
+				{Kind: source.EvidenceResource, Title: "Alert Checkout 5xx in shop-prod",
+					URL: "https://console.cloud.google.com/monitoring/alerting/incidents/0.abc?project=shop-prod", At: time.Date(2026, 5, 2, 8, 0, 0, 0, time.UTC)},
+			},
+		},
+		{
+			name:  "list_alerts with state open pages on and finds none",
+			tool:  toolListAlerts,
+			input: `{"state":"open"}`,
+			routes: []route{{http.MethodGet, alertsPath, []fakehttp.Response{
+				body(`{"alerts":[{"name":"projects/shop-prod/alerts/0.def","state":"CLOSED","openTime":"2026-05-04T08:00:00Z","closeTime":"2026-05-04T08:30:00Z"}],"nextPageToken":"p2"}`),
+				body(`{"alerts":[]}`),
+			}}},
+			wantQueries: []string{"pageSize=100", "pageSize=100&pageToken=p2"},
+			wantNoData:  true,
+			wantText:    "No alerts in shop-prod were open between 2026-05-03T10:00:00Z and 2026-05-04T10:00:00Z.",
+		},
+		{
 			name:  "list_changes reads the audit logs of one service",
 			tool:  toolListChanges,
 			input: `{"service":"run.googleapis.com"}`,
@@ -178,6 +291,69 @@ func TestSourceCall(t *testing.T) {
 				 "severity":"ERROR","error":"code 7: Permission denied"}
 			]}`,
 			wantEvidence: []source.Evidence{logsLink(source.EvidenceDeploy, "Audit log changes in shop-prod", changesFilter, lastDay)},
+		},
+		{
+			name:  "get_gke_cluster returns the cluster and its recent operations",
+			tool:  toolGetGKECluster,
+			input: `{"location":"europe-west1","cluster":"prod"}`,
+			routes: []route{
+				{http.MethodGet, clusterPath, []fakehttp.Response{body(`{"name":"prod","location":"europe-west1","status":"RUNNING",
+					"currentMasterVersion":"1.33.2-gke.100","currentNodeVersion":"1.33.1-gke.200","releaseChannel":{"channel":"REGULAR"},
+					"conditions":[{"code":"GCE_STOCKOUT","message":"no capacity"}],
+					"nodePools":[{"name":"default","status":"RUNNING","version":"1.33.1-gke.200","autoscaling":{"enabled":true,"minNodeCount":1,"maxNodeCount":5}}]}`)}},
+				{http.MethodGet, operationsPath, []fakehttp.Response{body(`{"operations":[
+					{"name":"op-2","operationType":"UPGRADE_MASTER","status":"DONE","targetLink":"https://container.googleapis.com/v1/projects/1/locations/europe-west1/clusters/prod","startTime":"2026-05-04T08:00:00Z"},
+					{"name":"op-1","operationType":"UPGRADE_NODES","status":"DONE","targetLink":"https://container.googleapis.com/v1/projects/1/locations/europe-west1/clusters/prod/nodePools/default","startTime":"2026-05-04T09:00:00Z","endTime":"2026-05-04T09:20:00Z"},
+					{"name":"op-3","operationType":"CREATE_CLUSTER","status":"DONE","targetLink":"https://container.googleapis.com/v1/projects/1/locations/europe-west1/clusters/prod-2","startTime":"2026-05-04T09:30:00Z"}
+				]}`)}},
+			},
+			want: `{"project":"shop-prod","cluster":{"name":"prod","location":"europe-west1","status":"RUNNING",
+				"currentMasterVersion":"1.33.2-gke.100","currentNodeVersion":"1.33.1-gke.200","releaseChannel":{"channel":"REGULAR"},
+				"conditions":[{"code":"GCE_STOCKOUT","message":"no capacity"}],
+				"nodePools":[{"name":"default","status":"RUNNING","version":"1.33.1-gke.200","autoscaling":{"enabled":true,"minNodeCount":1,"maxNodeCount":5}}]},
+				"operations":[
+					{"name":"op-1","operationType":"UPGRADE_NODES","status":"DONE","targetLink":"https://container.googleapis.com/v1/projects/1/locations/europe-west1/clusters/prod/nodePools/default","startTime":"2026-05-04T09:00:00Z","endTime":"2026-05-04T09:20:00Z"},
+					{"name":"op-2","operationType":"UPGRADE_MASTER","status":"DONE","targetLink":"https://container.googleapis.com/v1/projects/1/locations/europe-west1/clusters/prod","startTime":"2026-05-04T08:00:00Z"}
+				]}`,
+			wantEvidence: []source.Evidence{{Kind: source.EvidenceResource, Title: "GKE cluster prod in shop-prod",
+				URL: "https://console.cloud.google.com/kubernetes/clusters/details/europe-west1/prod/details?project=shop-prod"}},
+		},
+		{
+			name:  "get_gke_cluster without a cluster lists every location",
+			tool:  toolGetGKECluster,
+			input: `{}`,
+			routes: []route{{http.MethodGet, clustersPath, []fakehttp.Response{body(`{"clusters":[
+				{"name":"prod","location":"europe-west1","status":"RECONCILING","statusMessage":"upgrading","currentMasterVersion":"1.33.2-gke.100"}]}`)}}},
+			want: `{"project":"shop-prod","clusters":[{"name":"prod","location":"europe-west1","status":"RECONCILING","statusMessage":"upgrading","version":"1.33.2-gke.100"}]}`,
+			wantEvidence: []source.Evidence{{Kind: source.EvidenceResource, Title: "GKE clusters in shop-prod",
+				URL: "https://console.cloud.google.com/kubernetes/list/overview?project=shop-prod"}},
+		},
+		{
+			name:       "a cluster GKE does not have is no data",
+			tool:       toolGetGKECluster,
+			input:      `{"location":"europe-west1","cluster":"prod"}`,
+			routes:     []route{{http.MethodGet, clusterPath, []fakehttp.Response{failed(http.StatusNotFound, "NOT_FOUND", "cluster not found")}}},
+			wantNoData: true,
+			wantText:   notFoundText,
+		},
+		{
+			name:  "list_service_health_events filters by update time and state",
+			tool:  toolListServiceHealthEvents,
+			input: `{"state":"active"}`,
+			routes: []route{{http.MethodGet, eventsPath, []fakehttp.Response{body(`{"events":[{
+				"name":"projects/shop-prod/locations/global/events/ev-1","title":"Cloud Run errors in europe-west1",
+				"description":"Some requests fail.","category":"INCIDENT","state":"ACTIVE","detailedState":"CONFIRMED","relevance":"IMPACTED",
+				"startTime":"2026-05-04T09:05:00Z","updateTime":"2026-05-04T09:40:00Z",
+				"eventImpacts":[{"product":{"productName":"Cloud Run"},"location":{"locationName":"europe-west1"}},
+					{"product":{"productName":"Cloud Run"},"location":{"locationName":"europe-west4"}}],
+				"updates":[{"title":"Investigating","description":"We are looking into it."},{"title":"Mitigated","description":"A fix is rolling out."}]}]}`)}}},
+			wantQueries: []string{"filter=update_time%3E%3D2026-05-03T10%3A00%3A00Z+update_time%3C2026-05-04T10%3A00%3A00Z+state%3DACTIVE&pageSize=30"},
+			want: `{"project":"shop-prod","events":[{"id":"ev-1","title":"Cloud Run errors in europe-west1","category":"INCIDENT",
+				"state":"ACTIVE CONFIRMED","relevance":"IMPACTED","products":["Cloud Run"],"locations":["europe-west1","europe-west4"],
+				"started":"2026-05-04T09:05:00Z","updated":"2026-05-04T09:40:00Z","description":"Some requests fail.",
+				"lastUpdate":"Mitigated\nA fix is rolling out."}]}`,
+			wantEvidence: []source.Evidence{{Kind: source.EvidenceResource, Title: "Personalized Service Health of shop-prod",
+				URL: "https://console.cloud.google.com/servicehealth?project=shop-prod", At: testNow}},
 		},
 	}
 
@@ -249,14 +425,22 @@ func TestSourceCallInput(t *testing.T) {
 	}{
 		{name: "a project the config does not list", tool: toolQueryLogs, input: `{"project":"other"}`,
 			want: `project "other" is not one Sidekick may read; allowed: shop-prod`},
-		{name: "no project with several in the config", projects: []string{"shop-prod", "shop-staging"}, tool: toolListChanges, input: `{}`,
+		{name: "no project with several in the config", projects: []string{"shop-prod", "shop-staging"}, tool: toolListAlerts, input: `{}`,
 			want: "give project; allowed: shop-prod, shop-staging"},
 		{name: "a range longer than seven days", tool: toolQueryLogs, input: `{"since":"2026-04-01T00:00:00Z"}`,
 			want: "longer than the 168h0m0s one call may read"},
-		{name: "since after until", tool: toolQueryLogs, input: `{"since":"2026-05-04T11:00:00Z","until":"2026-05-04T10:00:00Z"}`,
+		{name: "since after until", tool: toolQueryMetrics, input: `{"filter":"x","since":"2026-05-04T11:00:00Z","until":"2026-05-04T10:00:00Z"}`,
 			want: "since must be before until"},
 		{name: "a time that does not parse", tool: toolListChanges, input: `{"since":"yesterday"}`,
 			want: `since: "yesterday" is not an RFC 3339 time`},
+		{name: "a metrics call without a filter", tool: toolQueryMetrics, input: `{}`, want: "filter: required"},
+		{name: "a reducer without an aligner", tool: toolQueryMetrics, input: `{"filter":"x","reducer":"REDUCE_SUM"}`, want: "reducer: needs an aligner"},
+		{name: "a PromQL call without a query", tool: toolQueryPromQL, input: `{"query":" "}`, want: "query: required"},
+		{name: "a cluster without a location", tool: toolGetGKECluster, input: `{"cluster":"prod"}`, want: "location: required with cluster"},
+		{name: "a cluster name that climbs out", tool: toolGetGKECluster, input: `{"location":"europe-west1","cluster":"../prod"}`,
+			want: `cluster: "../prod" is not a valid name`},
+		{name: "a location that is not a name", tool: toolGetGKECluster, input: `{"location":"Europe West"}`,
+			want: `location: "Europe West" is not a valid name`},
 		{name: "a service that is not a Google API", tool: toolListChanges, input: `{"service":"run\" OR true"}`,
 			want: "is not a Google API name"},
 		{name: "a resource with a quote", tool: toolListChanges, input: `{"resource":"checkout\" OR logName:\"x"}`,

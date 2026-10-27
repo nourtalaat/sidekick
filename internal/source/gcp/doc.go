@@ -2,7 +2,8 @@
 // source type "gcp".
 //
 // A source reads the Google Cloud projects its config lists through the
-// Cloud Logging REST API. It gets access tokens from Application
+// REST APIs of Cloud Logging, Cloud Monitoring, Google Kubernetes Engine
+// and Personalized Service Health. It gets access tokens from Application
 // Default Credentials, which on GKE come from Workload Identity, or from a
 // credential file in a secret that it reads again for each new token.
 // golang.org/x/oauth2 is used only for those tokens; the API calls are

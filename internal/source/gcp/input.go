@@ -3,6 +3,7 @@ package gcp
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -12,6 +13,9 @@ import (
 
 // maxRange is the longest time range one call may read.
 const maxRange = 7 * 24 * time.Hour
+
+// namePattern is the shape of a GKE location or cluster name.
+var namePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,98}[a-z0-9])?$`)
 
 // window is the time range of a call.
 type window struct {
@@ -104,6 +108,16 @@ func parseTime(key, value string) (time.Time, error) {
 	}
 
 	return t.UTC(), nil
+}
+
+// checkName checks a GKE location or cluster name, which goes into an API
+// path.
+func checkName(key, name string) error {
+	if !namePattern.MatchString(name) {
+		return &source.ToolError{Message: fmt.Sprintf("%s: %q is not a valid name", key, source.CutText(name, maxNameLen))}
+	}
+
+	return nil
 }
 
 // limitOf returns the limit a call gives, or def, within 1 and most.

@@ -1,0 +1,4 @@
+data: {"candidates": [{"content": {"parts": [{"text": "The checkout"}],"role": "model"},"index": 0}],"usageMetadata": {"promptTokenCount": 1290,"candidatesTokenCount": 2,"totalTokenCount": 1292},"modelVersion": "gemini-3.8-flash","responseId": "qXJbaZ_CL-621dkPnaHs4Qk"}
+
+data: {"error": {"code": 503,"message": "The model is overloaded. Please try again later.","status": "UNAVAILABLE"}}
+
