@@ -1,0 +1,2 @@
+data: {"candidates": [{"content": {"parts": [{"functionCall": {"id": "w2f9x1ka","name": "list_deploys","args": {"service": "checkout","since": "13:30"}},"thoughtSignature": "RXJnQ0Nyc0NBYjRDMnhaNXB4OFRrRXA="},{"functionCall": {"id": "q8z3m0pd","name": "search_logs","args": {"query": "level:error","limit": 20}}}],"role": "model"},"finishReason": "STOP","index": 0}],"usageMetadata": {"promptTokenCount": 2100,"candidatesTokenCount": 48,"totalTokenCount": 2410,"thoughtsTokenCount": 262},"modelVersion": "gemini-3.8-flash","responseId": "aXJbaY7RL6u21dkP8NGd6Q0"}
+
