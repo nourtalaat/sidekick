@@ -44,6 +44,11 @@ IMAGE_REPOSITORY ?= ghcr.io/nourtalaat/sidekick
 IMAGE_TAG ?= $(VERSION)
 IMAGE ?= $(IMAGE_REPOSITORY):$(IMAGE_TAG)
 IMAGE_PLATFORMS ?= linux/amd64,linux/arm64
+VALIDATOR_IMAGE_REPOSITORY ?= ghcr.io/nourtalaat/sidekick-validator
+VALIDATOR_IMAGE ?= $(VALIDATOR_IMAGE_REPOSITORY):$(IMAGE_TAG)
+# false leaves the Go modules linked into the validator's tools out of its
+# NOTICE, which saves downloading each of them in a test build.
+VALIDATOR_NOTICE_MODULES ?= true
 CONTAINER_TOOL ?= $(if $(shell command -v docker 2>/dev/null),docker,podman)
 comma := ,
 
@@ -89,12 +94,15 @@ sqlc-generate: $(SQLC) ## Generate internal/store/db from the queries and migrat
 	$(SQLC) generate
 
 # NOTICE lists the modules linked into the binary, so a dependency change
-# that does not regenerate it fails verify-generated.
+# that does not regenerate it fails verify-generated. The validator's
+# NOTICE gets its tools part when its image is built.
 GENERATE_TARGETS += notice
 .PHONY: notice
-notice: ## Write NOTICE, the third-party notices that ship with the binary and image
-	sh scripts/notice.sh > NOTICE.tmp
+notice: ## Write NOTICE and cmd/sidekick-validate/NOTICE, the third-party notices that ship with the binaries and images
+	sh scripts/notice.sh ./cmd/sidekick > NOTICE.tmp
 	mv NOTICE.tmp NOTICE
+	sh scripts/notice.sh ./cmd/sidekick-validate > cmd/sidekick-validate/NOTICE.tmp
+	mv cmd/sidekick-validate/NOTICE.tmp cmd/sidekick-validate/NOTICE
 
 CI_TARGETS += verify-generated
 .PHONY: verify-generated
@@ -107,8 +115,9 @@ migrate-new: ## Create the next goose migration: make migrate-new name=add_jobs
 
 CI_TARGETS += build
 .PHONY: build
-build: ## Build bin/sidekick with the version and commit set
+build: ## Build bin/sidekick and bin/sidekick-validate with the version and commit set
 	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/sidekick ./cmd/sidekick
+	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/sidekick-validate ./cmd/sidekick-validate
 
 # The image is built with Docker when it is installed, else with Podman. With
 # Podman the platforms go into one local manifest list named $(IMAGE); with
@@ -126,6 +135,19 @@ else
 		--build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) .
 endif
 
+# The validator image, built the same way as the Sidekick image.
+.PHONY: validator-image
+validator-image: ## Build the validator image for linux/amd64 and linux/arm64 (IMAGE_PLATFORMS=linux/arm64 for one)
+ifeq ($(CONTAINER_TOOL),podman)
+	-podman manifest rm $(VALIDATOR_IMAGE) 2>/dev/null
+	podman build -f Dockerfile.validator --platform $(IMAGE_PLATFORMS) --manifest $(VALIDATOR_IMAGE) \
+		--build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg NOTICE_MODULES=$(VALIDATOR_NOTICE_MODULES) .
+else
+	docker buildx build -f Dockerfile.validator --platform $(IMAGE_PLATFORMS) -t $(VALIDATOR_IMAGE) \
+		$(if $(findstring $(comma),$(IMAGE_PLATFORMS)),,--load) \
+		--build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg NOTICE_MODULES=$(VALIDATOR_NOTICE_MODULES) .
+endif
+
 CI_TARGETS += helm-lint
 .PHONY: helm-lint
 helm-lint: $(HELM) ## Lint the Helm chart, values schema included, with each example values file
@@ -136,6 +158,17 @@ CI_TARGETS += helm-test
 .PHONY: helm-test
 helm-test: $(HELM) ## Compare helm template of the quick-start values and of each charts/testdata case with its golden file, and validate each rendered sidekick.yaml
 	sh scripts/helm-test.sh $(HELM)
+
+# The tools of the validator image (promtool, OpenTofu and its provider
+# mirror) for Linux, which the validator tests run when
+# SIDEKICK_VALIDATE_TOOLS names this directory, as in CI.
+# scripts/validator-tools.sh pins their versions and checksums.
+VALIDATOR_TOOLS := $(BIN_DIR)/validator-tools
+VALIDATOR_ARCH ?= $(HOST_ARCH)
+
+.PHONY: validator-tools
+validator-tools: ## Install the validator image's tools for Linux in bin/validator-tools, for the validator tests
+	sh scripts/validator-tools.sh $(VALIDATOR_TOOLS) $(VALIDATOR_ARCH)
 
 .PHONY: helm-path
 helm-path: $(HELM) ## Install the pinned Helm and print its path, for scripts

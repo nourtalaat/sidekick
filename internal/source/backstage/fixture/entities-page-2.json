@@ -1,0 +1,15 @@
+{
+  "items": [
+    {
+      "kind": "Resource",
+      "metadata": {"name": "orders-db"},
+      "relations": [
+        {"type": "dependencyOf", "targetRef": "component:default/checkout-api"},
+        {"type": "dependsOn", "targetRef": "resource:default/orders-db"}
+      ]
+    },
+    {"kind": "Component", "metadata": {"name": "payments-api"}, "relations": []}
+  ],
+  "totalItems": 4,
+  "pageInfo": {}
+}

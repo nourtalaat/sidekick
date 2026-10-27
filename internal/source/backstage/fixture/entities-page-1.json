@@ -1,0 +1,26 @@
+{
+  "items": [
+    {
+      "kind": "Component",
+      "metadata": {"name": "checkout-api"},
+      "relations": [
+        {"type": "ownedBy", "targetRef": "group:default/payments"},
+        {"type": "dependsOn", "targetRef": "resource:default/orders-db"},
+        {"type": "dependsOn", "targetRef": "component:default/payments-api"},
+        {"type": "dependencyOf", "targetRef": "component:default/storefront"},
+        {"type": "consumesApi", "targetRef": "api:default/payments"}
+      ]
+    },
+    {
+      "kind": "Component",
+      "metadata": {"name": "storefront"},
+      "relations": [
+        {"type": "dependsOn", "targetRef": "component:default/checkout-api"},
+        {"type": "dependsOn", "targetRef": "api:default/search"},
+        {"type": "dependsOn", "targetRef": "not a ref"}
+      ]
+    }
+  ],
+  "totalItems": 4,
+  "pageInfo": {"nextCursor": "c2Vjb25k"}
+}

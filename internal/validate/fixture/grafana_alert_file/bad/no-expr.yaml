@@ -1,0 +1,16 @@
+apiVersion: 1
+groups:
+  - name: payments
+    folder: Payments alerts
+    interval: 1m
+    rules:
+      - uid: payments-errors
+        title: Payments errors
+        condition: A
+        for: 5m
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            model:
+              datasource: { type: prometheus, uid: prometheus }
+              refId: A

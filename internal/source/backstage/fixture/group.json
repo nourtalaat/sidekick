@@ -1,0 +1,13 @@
+{
+  "apiVersion": "backstage.io/v1alpha1",
+  "kind": "Group",
+  "metadata": {"name": "payments", "namespace": "default", "description": "The payments team."},
+  "spec": {"type": "team", "profile": {"displayName": "Payments", "email": "payments@example.com"}, "children": []},
+  "relations": [
+    {"type": "childOf", "targetRef": "group:default/engineering"},
+    {"type": "hasMember", "targetRef": "user:default/ada"},
+    {"type": "hasMember", "targetRef": "user:default/grace"},
+    {"type": "ownerOf", "targetRef": "component:default/checkout-api"},
+    {"type": "ownerOf", "targetRef": "system:default/shop"}
+  ]
+}

@@ -10,6 +10,14 @@
 // transactions open a group for one fingerprint at once, the second waits
 // for the first and then joins its group.
 //
+// A route with a related window also lets an event that finds no open
+// group with its fingerprint join the route's open group of the same
+// service, or of a service it depends on or that depends on it, when that
+// group's newest event is within the related window. The Catalog knows the
+// dependencies: it reads the sources that are service catalogs in the
+// background and keeps them in memory. Two such events that arrive at the
+// same moment, with no group open yet, may open a group each.
+//
 // A joined event counts toward the group's event count, moves the end of
 // its window forward, goes to the investigation's inbox, and refreshes what
 // the outputs show, so the message has the new count.

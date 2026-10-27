@@ -1,0 +1,22 @@
+{
+  "apiVersion": "backstage.io/v1alpha1",
+  "kind": "Component",
+  "metadata": {
+    "name": "checkout-api",
+    "namespace": "default",
+    "title": "Checkout API",
+    "description": "Takes orders and payments.",
+    "tags": ["go", "payments"],
+    "links": [{"url": "https://grafana.example.com/d/checkout", "title": "Dashboard"}]
+  },
+  "spec": {"type": "service", "lifecycle": "production", "owner": "payments", "system": "shop"},
+  "relations": [
+    {"type": "ownedBy", "targetRef": "group:default/payments"},
+    {"type": "partOf", "targetRef": "system:default/shop"},
+    {"type": "dependsOn", "targetRef": "resource:default/orders-db"},
+    {"type": "dependsOn", "targetRef": "component:default/payments-api"},
+    {"type": "dependencyOf", "targetRef": "component:default/storefront"},
+    {"type": "providesApi", "targetRef": "api:default/checkout"},
+    {"type": "consumesApi", "targetRef": "api:default/payments"}
+  ]
+}

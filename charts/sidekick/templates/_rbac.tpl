@@ -89,10 +89,11 @@ on pods/log for get_pod_logs, and "namespaced", which leaves out nodes.
 
 {{/*
 Whether the Sidekick pods mount a service account token: when
-serviceAccount.automountToken is set, or when a Kubernetes source reads
-the cluster with the pod's service account.
+serviceAccount.automountToken is set, when a Kubernetes source reads
+the cluster with the pod's service account, or when Sidekick creates the
+validator's Jobs.
 */}}
 {{- define "sidekick.automountToken" -}}
 {{- $access := include "sidekick.kubernetesSource.access" . | fromJson }}
-{{- or .Values.serviceAccount.automountToken $access.any }}
+{{- or .Values.serviceAccount.automountToken $access.any (eq (include "sidekick.validator.job" .) "true") }}
 {{- end }}

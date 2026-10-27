@@ -1,0 +1,4 @@
+# The values schema knows only sidecar and job.
+validator:
+  enabled: true
+  mode: daemonset

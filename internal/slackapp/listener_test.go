@@ -167,6 +167,11 @@ func TestCompileListeners(t *testing.T) {
 	}{
 		{name: "none"},
 		{name: "in name order", cfg: map[string]config.Listener{"zz": {}, "aa": {}, "mm": {}}, wantNames: []string{"aa", "mm", "zz"}},
+		{
+			name:      "Teams listeners are left out",
+			cfg:       map[string]config.Listener{"slack": {}, "also-slack": {Source: config.ListenerSourceSlack}, "teams": {Source: config.ListenerSourceTeams}},
+			wantNames: []string{"also-slack", "slack"},
+		},
 		{name: "a text pattern that does not parse", cfg: map[string]config.Listener{"a": {Match: config.ListenerMatch{Text: "("}}}, wantErr: "listener a: match.text"},
 		{name: "a recovery pattern that does not parse", cfg: map[string]config.Listener{"a": {Recovery: "("}}, wantErr: "listener a: recovery"},
 		{name: "an extract pattern that does not parse", cfg: map[string]config.Listener{"a": {Extract: []string{"("}}}, wantErr: "listener a: extract[0]"},
