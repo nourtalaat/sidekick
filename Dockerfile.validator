@@ -1,0 +1,81 @@
+# The validator image: sidekick-validate with promtool, OpenTofu and a
+# mirror of the OpenTofu providers it checks monitor files with, on
+# distroless, run as user 65532 with no shell. `make validator-image`
+# builds it for linux/amd64 and linux/arm64; the release workflow builds,
+# signs and pushes it.
+#
+# Every tool is a static Go binary, so the static base is enough. The
+# build stages run on the build machine's own platform: Go cross compiles
+# sidekick-validate, and the tools are downloaded for the target platform,
+# so a multi-platform build needs no emulation.
+
+# golang:1.26.10-trixie
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.26.10-trixie@sha256:909771fef53e3dcb0950255f0c9a8b4728c3b841e61509c7b29b098de7ee02d4 AS build
+
+ARG TARGETOS
+ARG TARGETARCH
+ARG VERSION=dev
+ARG COMMIT=unknown
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+
+COPY . .
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+	CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+	go build -trimpath \
+	-ldflags "-s -w -X github.com/nourtalaat/sidekick/internal/buildinfo.Version=$VERSION -X github.com/nourtalaat/sidekick/internal/buildinfo.Commit=$COMMIT" \
+	-o /out/sidekick-validate ./cmd/sidekick-validate
+
+# The pinned tools, checked against their checksums, for the target
+# platform. unzip reads the providers' license files.
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.26.10-trixie@sha256:909771fef53e3dcb0950255f0c9a8b4728c3b841e61509c7b29b098de7ee02d4 AS tools
+
+ARG TARGETARCH
+
+RUN apt-get update && apt-get install -y --no-install-recommends unzip && rm -rf /var/lib/apt/lists/*
+
+COPY scripts/validator-tools.sh /src/scripts/
+RUN sh /src/scripts/validator-tools.sh /tools "$TARGETARCH"
+
+# NOTICE: the Go modules part from the repository, then the tools part.
+# NOTICE_MODULES=false leaves out the Go modules linked into the tools,
+# which takes downloading each of them, for test builds.
+FROM tools AS notice
+
+ARG NOTICE_MODULES=true
+
+COPY scripts/notice-lib.sh scripts/validator-notice.sh /src/scripts/
+COPY cmd/sidekick-validate/NOTICE /src/NOTICE
+
+WORKDIR /tmp
+RUN --mount=type=cache,target=/go/pkg/mod \
+	mkdir -p /out && cp /src/NOTICE /out/NOTICE && \
+	GOFLAGS= sh /src/scripts/validator-notice.sh /tools "$NOTICE_MODULES" >>/out/NOTICE
+
+# gcr.io/distroless/static-debian13:nonroot
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:18f4cc26c9ffa7f20a359298be7deadac5c607c8e03a02b8119f1a5fc2f82c99
+
+ARG VERSION=dev
+ARG COMMIT=unknown
+
+LABEL org.opencontainers.image.title="Sidekick validator" \
+	org.opencontainers.image.description="Checks monitor definition files before Sidekick opens a pull request" \
+	org.opencontainers.image.source="https://github.com/nourtalaat/sidekick" \
+	org.opencontainers.image.licenses="Apache-2.0 AND MPL-2.0" \
+	org.opencontainers.image.version="$VERSION" \
+	org.opencontainers.image.revision="$COMMIT"
+
+COPY --from=build /out/sidekick-validate /usr/local/bin/sidekick-validate
+COPY --from=tools /tools/promtool /tools/tofu /usr/local/bin/
+COPY --from=tools /tools/providers /usr/local/share/sidekick-validate/providers
+COPY LICENSE /usr/share/doc/sidekick-validate/
+COPY --from=notice /out/NOTICE /usr/share/doc/sidekick-validate/NOTICE
+
+USER 65532:65532
+
+# The sidecar listens on 127.0.0.1:8200, which needs no exposed port.
+ENTRYPOINT ["/usr/local/bin/sidekick-validate"]
+CMD ["serve"]

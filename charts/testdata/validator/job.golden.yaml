@@ -1,0 +1,79 @@
+---
+# Source: sidekick/templates/validator.yaml
+# The validation Job pods take no connections, and make none unless
+# validator.allowDownloads lets OpenTofu reach registries over HTTPS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sidekick-validator
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: validator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: sidekick
+      app.kubernetes.io/instance: sidekick
+      app.kubernetes.io/component: validator
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress: []
+
+
+---
+# Source: sidekick/templates/validator.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sidekick-validator
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: validator
+rules:
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [create, get, list, watch, delete]
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create, get, delete]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+
+
+---
+# Source: sidekick/templates/validator.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sidekick-validator
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: validator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sidekick-validator
+subjects:
+  - kind: ServiceAccount
+    name: sidekick
+    namespace: sidekick
+
+
