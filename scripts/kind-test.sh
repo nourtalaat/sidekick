@@ -4,8 +4,9 @@
 # ready. Then it checks the pod's user and root filesystem, that the schema
 # is migrated, that an upgrade keeps the database password, and that the
 # Kubernetes source's RBAC allows exactly its reads, first in every
-# namespace and then in one. The Secrets hold fake values, so nothing
-# calls Slack or a model provider.
+# namespace and then in one. The Secrets hold fake values, so a model
+# provider is never called, and Slack refuses the tokens and Sidekick logs
+# that and tries again.
 # Usage: scripts/kind-test.sh <helm> <image repository> <image tag>
 set -eu
 
@@ -19,8 +20,8 @@ timeout=5m
 
 kubectl create namespace "$namespace"
 kubectl -n "$namespace" create secret generic sidekick-anthropic --from-literal=apiKey=ci-not-a-real-key
-kubectl -n "$namespace" create secret generic sidekick-slack --from-literal=botToken=xoxb-ci-not-a-real-token
-kubectl -n "$namespace" create secret generic sidekick-webhook --from-literal=token=ci-not-a-real-token
+kubectl -n "$namespace" create secret generic sidekick-slack \
+	--from-literal=botToken=xoxb-ci-not-a-real-token --from-literal=appToken=xapp-ci-not-a-real-token
 
 install() {
 	"$helm" "$@" "$release" charts/sidekick --namespace "$namespace" \
@@ -89,7 +90,7 @@ cannot get secrets -n "$namespace"
 echo "--- with an oidc section, the web UI is served from the pod"
 kubectl -n "$namespace" create secret generic sidekick-oidc --from-literal=clientSecret=ci-not-a-real-secret
 install upgrade --reuse-values \
-	--set 'secrets={sidekick-anthropic,sidekick-slack,sidekick-webhook,sidekick-oidc}' \
+	--set 'secrets={sidekick-anthropic,sidekick-slack,sidekick-oidc}' \
 	--set config.server.publicURL=https://sidekick.example.com \
 	--set config.oidc.issuer=https://idp.example.com \
 	--set config.oidc.clientID=sidekick \

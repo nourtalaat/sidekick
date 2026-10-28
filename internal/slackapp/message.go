@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	slackout "github.com/nourtalaat/sidekick/internal/output/slack"
 )
 
 // The Events API payload and event types the app handles.
@@ -140,6 +142,26 @@ func (m message) fromApp(appID, botUser string) bool {
 	default:
 		return false
 	}
+}
+
+// isTestAlert reports whether m is the sample alert of `sidekick test-alert
+// --channel`: posted by this app, with the test alert's block ID on its
+// first block. Only this app can post with its own app ID, so a person
+// cannot forge it.
+func (m message) isTestAlert(appID string) bool {
+	if appID == "" || m.AppID != appID {
+		return false
+	}
+
+	var blocks []struct {
+		BlockID string `json:"block_id"`
+	}
+
+	if err := json.Unmarshal(m.Blocks, &blocks); err != nil || len(blocks) == 0 {
+		return false
+	}
+
+	return blocks[0].BlockID == slackout.TestAlertBlockID
 }
 
 // botID returns the ID of the bot that posted m.

@@ -243,6 +243,21 @@ func TestEventsAPI(t *testing.T) {
 			check:      requireNoEvents,
 		},
 		{name: "Sidekick's own message is ignored", send: request{file: "own-message"}, wantStatus: http.StatusOK, check: requireNoEvents},
+		{name: "Sidekick's own message in a listener's channel is ignored", send: request{file: "own-message-quick"}, wantStatus: http.StatusOK, check: requireNoEvents},
+		{
+			name:       "the sample alert of test-alert is stored, and never trusted, though its listener trusts its bot",
+			send:       request{file: "test-alert"},
+			wantStatus: http.StatusOK,
+			check: func(t *testing.T, h *harness) {
+				t.Helper()
+
+				ev := onlyEvent(t, h)
+				require.Equal(t, "quick", ev.Intake)
+				require.Equal(t, string(event.KindAlert), ev.Kind)
+				require.False(t, ev.Trusted)
+				require.Contains(t, *ev.Body, "checkout-7d9f8b6c5-x2k4p keeps restarting")
+			},
+		},
 		{name: "an edit is ignored", send: request{file: "edit"}, wantStatus: http.StatusOK, check: requireNoEvents},
 		{name: "a thread reply is ignored", send: request{file: "thread-reply"}, wantStatus: http.StatusOK, check: requireNoEvents},
 		{name: "a message that mentions Sidekick is left to its app_mention", send: request{file: "mention-as-message"}, wantStatus: http.StatusOK, check: requireNoEvents},

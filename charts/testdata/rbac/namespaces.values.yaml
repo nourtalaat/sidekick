@@ -9,6 +9,9 @@ secrets:
   - sidekick-staging-cluster
 config:
   sources:
+    # The quick-start source, pointed at the other cluster too, so no source reads this one.
+    k8s:
+      kubeconfigSecret: { name: sidekick-staging-cluster, key: kubeconfig }
     apps:
       type: kubernetes
       namespaces: [prod, staging]

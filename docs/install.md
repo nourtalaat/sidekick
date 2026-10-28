@@ -13,44 +13,61 @@ bundled Postgres for evaluation, and then the changes for production.
 
 ## Quick start
 
-Write down how long the steps take; it helps us make the quick start
-shorter.
+Five steps, about 13 minutes by our estimate. The times assume the Slack and
+Anthropic accounts are ready; write down yours, it helps us make the quick
+start shorter.
 
-### 1. Create the Slack app
+### 1. Create the Slack app (3 minutes)
 
-Create a Slack app for your workspace, add the bot token scope
-`chat:write`, install the app, and copy its bot token (`xoxb-...`). Invite
-the app to the channel Sidekick will post in, such as `#alerts`.
-[Investigations in Slack](slack.md#set-up-the-slack-app) has the details.
+Create an internal Slack app from the manifest in
+[`deploy/slack/manifest.yaml`](../deploy/slack/manifest.yaml): in
+[api.slack.com/apps](https://api.slack.com/apps), choose **Create New App**,
+**From a manifest**, pick your workspace and paste the manifest. Install
+the app, copy its bot token (`xoxb-...`), and under **Basic Information**
+create an app-level token with the `connections:write` scope (`xapp-...`).
+Sidekick uses it to open a Socket Mode connection, so it needs no public
+URL. [Investigations in Slack](slack.md#set-up-the-slack-app) has the
+details.
 
-### 2. Create the Secrets
+### 2. Create the Secrets (2 minutes)
 
 ```sh
 kubectl create namespace sidekick
 kubectl -n sidekick create secret generic sidekick-anthropic --from-literal=apiKey='<Anthropic API key>'
-kubectl -n sidekick create secret generic sidekick-slack --from-literal=botToken='<xoxb-... bot token>'
-kubectl -n sidekick create secret generic sidekick-webhook --from-literal=token="$(openssl rand -hex 32)"
+kubectl -n sidekick create secret generic sidekick-slack \
+  --from-literal=botToken='<xoxb-... bot token>' --from-literal=appToken='<xapp-... app-level token>'
 ```
 
-`sidekick-webhook` holds the bearer token that senders such as
-Alertmanager must send to Sidekick's webhook endpoint.
-
-### 3. Install the chart
+### 3. Install the chart (4 minutes)
 
 ```sh
 helm install sidekick oci://ghcr.io/nourtalaat/charts/sidekick --version 0.1.0 \
   --namespace sidekick \
   -f https://raw.githubusercontent.com/nourtalaat/sidekick/v0.1.0/charts/sidekick/quickstart-values.yaml \
-  --set config.outputs.slack.channel='#alerts'
+  --set config.listeners.alerts.channel='#alerts'
 kubectl -n sidekick rollout status deploy/sidekick
 ```
 
 The [quick-start values](../charts/sidekick/quickstart-values.yaml) run
-one replica with the bundled Postgres, the `claude-opus-5-5` model, an
-Alertmanager webhook endpoint named `alertmanager`, and a `default` route
-that posts to the Slack channel.
+one replica with the bundled Postgres and the `claude-opus-5-5` model, and
+turn on:
 
-### 4. Check the install
+- a Kubernetes source that reads the cluster Sidekick runs in, with the
+  read-only roles the chart creates for it
+  ([the Kubernetes source](sources/kubernetes.md#with-the-helm-chart));
+- one Slack listener, `alerts`, on the channel you gave: every message that
+  a bot posts there starts an investigation, answered in its thread;
+- the `default` route, which uses the Kubernetes source and the `slack`
+  output.
+
+The `slack` output has a channel of its own, `#alerts`, which Sidekick uses
+only for alerts that do not come from Slack, such as webhooks (see
+[Next steps](#next-steps)); add `--set config.outputs.slack.channel=...`
+when you use another one.
+
+### 4. Invite the app and check the install (1 minute)
+
+In Slack, invite the app to the channel: `/invite @Sidekick`. Then:
 
 ```sh
 kubectl -n sidekick exec deploy/sidekick -c sidekick -- sidekick doctor
@@ -58,34 +75,78 @@ kubectl -n sidekick exec deploy/sidekick -c sidekick -- sidekick doctor
 
 [`sidekick doctor`](running.md#checking-an-install-with-sidekick-doctor)
 checks the database, the Slack token, the API key and every source, and
-prints a fix for anything wrong.
+prints a fix for anything wrong:
 
-### 5. Send a test alert
+```text
+ok    database: connected; the schema has every migration this release needs (33)
+ok    slack: the bot token works: it is the bot user sidekick in the workspace Acme
+ok    model claude: the anthropic API accepted the key
+ok    prices: every configured model has a price
+ok    source k8s: connected; 5 of 5 tools exposed
+```
+
+### 5. Send a test alert (3 minutes)
 
 ```sh
-kubectl -n sidekick exec deploy/sidekick -c sidekick -- sidekick test-alert
+kubectl -n sidekick exec deploy/sidekick -c sidekick -- sidekick test-alert --channel '#alerts'
 ```
 
-Sidekick answers `202 Accepted`, posts "Looking into it" in the channel
-within seconds, and edits the message with its verdict within minutes.
+The command posts a sample alert into the channel, as the bot, about a pod
+of your cluster (or a made-up pod, which the message says, when the
+Kubernetes source cannot list one), and prints which listener takes it:
+
+```text
+Posted a test alert in #alerts, about the pod shop/api-5d8c9b7f4-m2xkq.
+The listener alerts takes it. The reply appears in its thread within 30 seconds, and the verdict within a few minutes.
+```
+
+Sidekick answers in the alert's thread with "Looking into it" within
+seconds, then edits the message to show its steps and, within minutes, its
+verdict. The pod is probably fine, so a "False alarm" is the likely and
+right answer. You can also mention `@Sidekick` on any message.
 [Sending a test alert](webhooks.md#sending-a-test-alert) describes the
-alert and the flags.
+alert and the flags, and the form that sends it to a webhook endpoint.
 
-### 6. Send real alerts
+### Next steps
 
-Point an Alertmanager receiver at the endpoint, with the token from
-`sidekick-webhook` mounted into Alertmanager:
+- **Let your monitoring bot's alerts in.** The `alerts` listener takes
+  every bot message in its channel. Narrow it with `match.sender.names` or
+  `match.text`, and use `extract` to read the alert's name and service, as
+  [the `listeners` section](configuration.md#listeners) shows.
+- **Send alerts from Alertmanager.** Create a Secret with a bearer token,
+  add it to `secrets`, and add a webhook endpoint:
 
-```yaml
-receivers:
-  - name: sidekick
-    webhook_configs:
-      - url: http://sidekick.sidekick.svc:8080/hooks/alertmanager
-        send_resolved: true
-        http_config:
-          authorization:
-            credentials_file: /etc/alertmanager/secrets/sidekick-webhook/token
-```
+  ```sh
+  kubectl -n sidekick create secret generic sidekick-webhook --from-literal=token="$(openssl rand -hex 32)"
+  ```
+
+  ```yaml
+  secrets: [sidekick-anthropic, sidekick-slack, sidekick-webhook]
+  config:
+    intake:
+      webhooks:
+        alertmanager:
+          adapter: alertmanager
+          auth: { bearer: { name: sidekick-webhook, key: token } }
+  ```
+
+  Point an Alertmanager receiver at it, with the token mounted into
+  Alertmanager:
+
+  ```yaml
+  receivers:
+    - name: sidekick
+      webhook_configs:
+        - url: http://sidekick.sidekick.svc:8080/hooks/alertmanager
+          send_resolved: true
+          http_config:
+            authorization:
+              credentials_file: /etc/alertmanager/secrets/sidekick-webhook/token
+  ```
+
+- **Add more sources.** [The `sources` section](configuration.md#sources)
+  and the pages under `docs/sources` show how to add logs, metrics, code
+  and tickets.
 
 ## Verifying the image
 
