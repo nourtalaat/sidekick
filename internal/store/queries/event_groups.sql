@@ -54,3 +54,17 @@ FROM (
   WHERE group_id = @group_id::uuid AND kind IN ('alert', 'resolved')
   ORDER BY fingerprint, received_at DESC, id DESC
 ) AS newest;
+
+-- name: LockRelatedEventGroup :one
+-- LockRelatedEventGroup returns the open group of a route whose service is
+-- one of services and whose newest event is at or after since, the one
+-- with the newest event first, and locks it until the transaction ends. It
+-- returns no row when there is none.
+SELECT * FROM event_groups
+WHERE status = 'open'
+  AND service = ANY (@services::text[])
+  AND last_event_at >= @since
+  AND route = @route
+ORDER BY last_event_at DESC, id DESC
+LIMIT 1
+FOR UPDATE;

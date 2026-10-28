@@ -1,0 +1,5 @@
+# With downloads allowed, the Job pods may reach DNS and port 443.
+validator:
+  enabled: true
+  mode: job
+  allowDownloads: true

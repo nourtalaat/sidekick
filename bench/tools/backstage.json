@@ -1,0 +1,55 @@
+{
+  "tools": [
+    {
+      "name": "get_service",
+      "description": "Look up a service in the Backstage catalog: its owner, the system it is part of, its type and lifecycle, the services and resources it depends on, the ones that depend on it, the APIs it provides and consumes, and its links.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "description": "The service name, such as the service an alert names, or an entity ref such as component:default/checkout-api or resource:default/orders-db. A bare name is a component."
+          }
+        },
+        "required": [
+          "service"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_owner",
+      "description": "Look up a team or person in the Backstage catalog, such as the owner get_service returns: name, email, parent and child teams, members, and what it owns.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": "string",
+            "description": "The team name or an entity ref such as group:default/payments or user:default/ada. A bare name is a group."
+          }
+        },
+        "required": [
+          "owner"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_system",
+      "description": "Look up a system in the Backstage catalog: its owner, its domain, and the components, resources and APIs that are part of it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "system": {
+            "type": "string",
+            "description": "The system name, or an entity ref such as system:default/payments."
+          }
+        },
+        "required": [
+          "system"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

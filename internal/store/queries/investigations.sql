@@ -17,6 +17,15 @@ WHERE investigations.id = @id
 ORDER BY events.received_at, events.id
 LIMIT 1;
 
+-- name: GetEventInvestigation :one
+-- GetEventInvestigation returns the investigation of the group the event
+-- with event_id is in. It returns no row until the event is grouped.
+SELECT sqlc.embed(investigations)
+FROM events
+JOIN event_groups ON event_groups.id = events.group_id
+JOIN investigations ON investigations.id = event_groups.investigation_id
+WHERE events.id = @event_id;
+
 -- name: GetInvestigation :one
 SELECT * FROM investigations WHERE id = @id;
 

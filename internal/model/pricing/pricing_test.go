@@ -64,6 +64,20 @@ func TestTableCost(t *testing.T) {
 			wantOK: true,
 		},
 		{
+			name:   "Gemini model with cached input",
+			model:  "gemini-3.8-flash",
+			usage:  model.Usage{InputTokens: 266, CacheReadTokens: 1_024, OutputTokens: 138},
+			want:   (266*750_000 + 1_024*75_000 + 138*3_750_000) / usd,
+			wantOK: true,
+		},
+		{
+			name:   "Gemini model with a prompt above 200K tokens uses the long-context price",
+			model:  "gemini-3.1-pro-preview",
+			usage:  model.Usage{InputTokens: 150_000, CacheReadTokens: 50_001, OutputTokens: 2_000},
+			want:   (150_000*4_000_000 + 50_001*400_000 + 2_000*18_000_000) / usd,
+			wantOK: true,
+		},
+		{
 			name:      "an override wins over the shipped price",
 			overrides: map[string]model.Price{"claude-opus-5-5": override},
 			model:     "claude-opus-5-5",

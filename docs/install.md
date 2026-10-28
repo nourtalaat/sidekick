@@ -104,7 +104,9 @@ cosign verify-attestation ghcr.io/nourtalaat/sidekick:0.1.0 --type spdxjson \
 The image is built for linux/amd64 and linux/arm64 on a distroless base.
 It runs as user 65532 with no shell, and the chart runs it with a
 read-only root filesystem and an `emptyDir` at `/tmp`. `LICENSE` and
-`NOTICE` are in `/usr/share/doc/sidekick/`.
+`NOTICE` are in `/usr/share/doc/sidekick/`. The validator image,
+`ghcr.io/nourtalaat/sidekick-validator`, is signed the same way; see
+[The monitor validator](validator.md#verifying-the-image).
 
 ## Production
 
@@ -175,7 +177,8 @@ Sidekick needs no cloud keys in a Secret on EKS, GKE or AKS: the pod gets an
 identity through its service account, which the chart creates and names
 after the release (`sidekick` for a release named `sidekick`). The
 [Bedrock connector](configuration.md#the-bedrock-provider) uses the AWS
-identity. The identity applies to every container in the pod, so
+identity, and the [Google connector](configuration.md#the-google-provider)
+with `backend: vertex` uses the Google one. The identity applies to every container in the pod, so
 [MCP servers in sidecars](#mcp-servers-in-sidecars) can use it too.
 
 **EKS IRSA** (IAM roles for service accounts). The cluster needs an IAM
@@ -300,6 +303,7 @@ every one, and the chart rejects unknown keys.
 | `mcpSidecars` | `[]` | stdio MCP servers behind a bridge: `name`, `image`, `args`, `env`, `port`, `healthPath`, `resources`, `volumeMounts`. |
 | `networkPolicy.enabled` | `true` | Network policies for Sidekick and the bundled Postgres. |
 | `rbac.kubernetesSource` | `true` | Read-only roles for each Kubernetes source that reads this cluster, made from its `namespaces` and `logs`; see [The Kubernetes source](sources/kubernetes.md#with-the-helm-chart). |
+| `validator.enabled`, `validator.mode` | `false`, `sidecar` | The monitor validator, as a sidecar or as Jobs; see [The monitor validator](validator.md). |
 | `pdb.enabled` | `true` | A PodDisruptionBudget with `pdb.minAvailable`. |
 | `metrics.serviceMonitor.enabled` | `false` | A ServiceMonitor. |
 | `ingress.enabled`, `httpRoute.enabled` | `false` | Expose `/hooks/` outside the cluster. |

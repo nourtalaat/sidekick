@@ -67,6 +67,7 @@ type Config struct {
 	Sources    map[string]Section `yaml:"sources"`
 	Intake     Intake             `yaml:"intake"`
 	Slack      *Slack             `yaml:"slack"`
+	Teams      *Teams             `yaml:"teams"`
 	Outputs    map[string]Section `yaml:"outputs"`
 	Strategies Strategies         `yaml:"strategies"`
 	Routes     []Route            `yaml:"routes"`
@@ -77,7 +78,7 @@ type Config struct {
 	Watch      Watch              `yaml:"watch"`
 
 	// Listeners are the file listeners, by name. Their events go through
-	// the Slack app.
+	// the Slack app or the Teams bot.
 	Listeners map[string]Listener `yaml:"listeners"`
 
 	// strategySet holds the built-in and file strategies, loaded by Parse.
@@ -231,6 +232,11 @@ type Grouping struct {
 	// the alert name, make the fingerprint of an alert. Empty means the
 	// fingerprint the intake gave the alert, which covers all its labels.
 	FingerprintLabels []string `yaml:"fingerprintLabels"`
+	// RelatedWindow lets an event join an open group of the same service,
+	// or of a service it depends on or that depends on it, when that
+	// group's newest event is at most this old. Dependencies come from the
+	// service catalog sources. Zero, the default, turns it off.
+	RelatedWindow time.Duration `yaml:"relatedWindow"`
 }
 
 // Match selects events for a route. Every field that is set must match.
