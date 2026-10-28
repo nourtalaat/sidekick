@@ -9,6 +9,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/prompt"
@@ -213,9 +215,20 @@ func (r *run) savePrompt(ctx context.Context) error {
 }
 
 // loop runs the investigation until it ends, then stores and publishes
-// how it ended.
+// how it ended. A Stop that the Canceller hears ends the run's context, so
+// the model or tool call in flight returns at once.
 func (r *run) loop(ctx context.Context) error {
-	runCtx, cancel := r.withWallTime(ctx)
+	stopCtx, stop := context.WithCancelCause(ctx)
+	defer stop(nil)
+
+	unwatch := r.h.opts.Canceller.watch(r.inv.ID, r.inv.Fence, stop)
+	defer unwatch()
+
+	if err := r.checkStop(ctx); err != nil {
+		return fmt.Errorf("check for a stop: %w", err)
+	}
+
+	runCtx, cancel := r.withWallTime(stopCtx)
 	defer cancel()
 
 	end, err := r.untilEnd(ctx, runCtx)
@@ -236,12 +249,22 @@ func (r *run) loop(ctx context.Context) error {
 // model turn that have no result, ends the run if the steps say it is
 // over, gives the model its final turn when a budget is nearly used,
 // reminds the model when it called no tool, and otherwise delivers the
-// inbox and asks the model for a turn. ctx ends when the worker must stop;
-// runCtx also ends when the wall time does.
+// inbox and asks the model for a turn. A Stop ends the run as cancelled,
+// unless the steps show it was over already. ctx ends when the worker
+// must stop; runCtx also ends when the wall time does or a responder
+// stops the run.
 func (r *run) untilEnd(ctx, runCtx context.Context) (ending, error) {
 	for {
 		if ctx.Err() != nil {
 			return ending{}, fmt.Errorf("stop: %w", context.Cause(ctx))
+		}
+
+		if r.stopRequested(runCtx) {
+			if end, ok := r.ended(); ok {
+				return end, nil
+			}
+
+			return r.cancelled(), nil
 		}
 
 		if calls := r.hist.unanswered(); len(calls) > 0 && runCtx.Err() == nil {
@@ -321,6 +344,29 @@ func (r *run) untilEnd(ctx, runCtx context.Context) (ending, error) {
 	}
 }
 
+// checkStop looks up whether a stop was asked for, so a stop asked for
+// before the Canceller watched this run is not missed until the next
+// step.
+func (r *run) checkStop(ctx context.Context) error {
+	stopped, err := db.New(r.h.opts.Pool).ListCancelRequested(ctx, []uuid.UUID{r.inv.ID})
+	if err != nil {
+		return fmt.Errorf("look up the stop flag: %w", err)
+	}
+
+	if len(stopped) > 0 && r.inv.CancelRequestedAt == nil {
+		now := time.Now()
+		r.inv.CancelRequestedAt = &now
+	}
+
+	return nil
+}
+
+// stopRequested reports whether a responder asked to stop the run: the
+// last step saw the flag, or the Canceller ended runCtx.
+func (r *run) stopRequested(runCtx context.Context) bool {
+	return r.inv.CancelRequestedAt != nil || stopped(runCtx)
+}
+
 // withWallTime returns ctx with the run's wall time deadline, counted from
 // when the run first started, so time spent before a resume counts too.
 // The time left is measured with the handler's clock.
@@ -390,8 +436,8 @@ func (r *run) remind(ctx context.Context) error {
 // modelTurn asks the model for its next turn, the final one when final is
 // set, and saves it. It returns an ending when the model refuses the
 // request for good, and nil, with no error, when the run's wall time
-// ended during the call, which the loop then handles. Other failures
-// return an error, so the job is retried.
+// ended or a responder stopped the run during the call, which the loop
+// then handles. Other failures return an error, so the job is retried.
 func (r *run) modelTurn(ctx, runCtx context.Context, final bool) (*ending, error) {
 	if r.followUp() {
 		if err := r.compact(ctx, runCtx); err != nil {
@@ -419,7 +465,7 @@ func (r *run) modelTurn(ctx, runCtx context.Context, final bool) (*ending, error
 		switch {
 		case ctx.Err() != nil:
 			return nil, fmt.Errorf("model turn: %w", context.Cause(ctx))
-		case wallTimeOver(runCtx):
+		case wallTimeOver(runCtx) || stopped(runCtx):
 			return nil, nil
 		case errors.As(err, &merr) && (merr.Kind == model.ErrInvalid || merr.Kind == model.ErrContextLength):
 			r.log.ErrorContext(ctx, "the model refused the request", "connector", r.connector, "kind", merr.Kind)
@@ -463,6 +509,11 @@ func (r *run) modelTurn(ctx, runCtx context.Context, final bool) (*ending, error
 // wallTimeOver reports whether the run's wall time has ended.
 func wallTimeOver(runCtx context.Context) bool {
 	return errors.Is(context.Cause(runCtx), errWallTime)
+}
+
+// stopped reports whether a responder's Stop ended runCtx.
+func stopped(runCtx context.Context) bool {
+	return errors.Is(context.Cause(runCtx), errCancelled)
 }
 
 // isNote reports whether s is a reminder note, not the note that starts

@@ -75,7 +75,7 @@ func (c *Connector) streamChat(ctx context.Context, params openai.ChatCompletion
 	}()
 
 	if httpResp != nil {
-		requestID = httpResp.Header.Get(requestIDHeader)
+		requestID = requestIDOf(httpResp.Header)
 	}
 
 	var acc openai.ChatCompletionAccumulator
@@ -106,7 +106,7 @@ func (c *Connector) chatParams(req model.Request) (openai.ChatCompletionNewParam
 	}
 
 	p := openai.ChatCompletionNewParams{
-		Model:         c.cfg.Model,
+		Model:         c.model,
 		Messages:      messages,
 		StreamOptions: openai.ChatCompletionStreamOptionsParam{IncludeUsage: openai.Bool(true)},
 	}
@@ -126,7 +126,7 @@ func (c *Connector) chatParams(req model.Request) (openai.ChatCompletionNewParam
 		p.ToolChoice = chatToolChoice(req.ToolChoice)
 	}
 
-	if n := c.cfg.maxTokens(req.MaxTokens, c.caps); n > 0 {
+	if n := maxTokens(req.MaxTokens, c.settings.MaxTokens, c.caps); n > 0 {
 		c.setMaxTokens(&p, int64(n))
 	}
 
@@ -144,7 +144,7 @@ func (c *Connector) chatParams(req model.Request) (openai.ChatCompletionNewParam
 // setMaxTokens sets the output limit. OpenAI's own API wants
 // max_completion_tokens; compatible servers widely take only max_tokens.
 func (c *Connector) setMaxTokens(p *openai.ChatCompletionNewParams, n int64) {
-	if c.cfg.BaseURL == "" {
+	if c.maxCompletionTokens {
 		p.MaxCompletionTokens = openai.Int(n)
 
 		return

@@ -55,7 +55,7 @@ func (c *Connector) generateResponses(ctx context.Context, req model.Request, op
 		return model.Response{}, fmt.Errorf("response: %w", err)
 	}
 
-	out := fromResponse(resp)
+	out := fromResponse(resp, c.provider)
 	out.RequestID = requestID
 
 	return out, nil
@@ -75,7 +75,7 @@ func (c *Connector) streamResponse(ctx context.Context, params responses.Respons
 	}()
 
 	if httpResp != nil {
-		requestID = httpResp.Header.Get(requestIDHeader)
+		requestID = requestIDOf(httpResp.Header)
 	}
 
 	var final *responses.Response
@@ -109,7 +109,7 @@ func (c *Connector) streamResponse(ctx context.Context, params responses.Respons
 // with the reasoning items of earlier turns in their places, so no state
 // at OpenAI is needed to resume or replay a run.
 func (c *Connector) responseParams(req model.Request) (responses.ResponseNewParams, error) {
-	input, err := inputItems(req.Messages)
+	input, err := inputItems(req.Messages, c.provider)
 	if err != nil {
 		return responses.ResponseNewParams{}, fmt.Errorf("map input items: %w", err)
 	}
@@ -120,7 +120,7 @@ func (c *Connector) responseParams(req model.Request) (responses.ResponseNewPara
 	}
 
 	p := responses.ResponseNewParams{
-		Model:      c.cfg.Model,
+		Model:      c.model,
 		Input:      responses.ResponseNewParamsInputUnion{OfInputItemList: input},
 		Tools:      tools,
 		ToolChoice: responseToolChoice(req.ToolChoice),
@@ -131,7 +131,7 @@ func (c *Connector) responseParams(req model.Request) (responses.ResponseNewPara
 		p.Instructions = openai.String(systemText(req.System))
 	}
 
-	if n := c.cfg.maxTokens(req.MaxTokens, c.caps); n > 0 {
+	if n := maxTokens(req.MaxTokens, c.settings.MaxTokens, c.caps); n > 0 {
 		p.MaxOutputTokens = openai.Int(int64(n))
 	}
 
@@ -153,7 +153,7 @@ func (c *Connector) responseParams(req model.Request) (responses.ResponseNewPara
 // inputItems maps the conversation to input items, in order. Consecutive
 // text parts of one message become one message item; reasoning from
 // another provider is dropped.
-func inputItems(msgs []model.Message) (responses.ResponseInputParam, error) {
+func inputItems(msgs []model.Message, provider string) (responses.ResponseInputParam, error) {
 	var items responses.ResponseInputParam
 
 	for i, m := range msgs {
@@ -191,7 +191,7 @@ func inputItems(msgs []model.Message) (responses.ResponseInputParam, error) {
 					Output: responses.ResponseInputItemFunctionCallOutputOutputUnionParam{OfString: openai.String(p.Content)},
 				}})
 			case model.Reasoning:
-				if p.Provider != Provider {
+				if p.Provider != provider {
 					continue
 				}
 
@@ -275,7 +275,7 @@ func responseToolChoice(tc model.ToolChoice) responses.ResponseNewParamsToolChoi
 // become Reasoning parts that keep the item ID and encrypted content, so
 // they can be sent back unchanged. Item types the connector does not use
 // are left out.
-func fromResponse(r responses.Response) model.Response {
+func fromResponse(r responses.Response, provider string) model.Response {
 	var (
 		parts   []model.Part
 		calls   bool
@@ -285,7 +285,7 @@ func fromResponse(r responses.Response) model.Response {
 	for _, item := range r.Output {
 		switch item.Type {
 		case itemReasoning:
-			parts = append(parts, model.Reasoning{Provider: Provider, ID: item.ID, Text: summaryText(item.Summary), Signature: item.EncryptedContent})
+			parts = append(parts, model.Reasoning{Provider: provider, ID: item.ID, Text: summaryText(item.Summary), Signature: item.EncryptedContent})
 		case itemMessage:
 			for _, content := range item.Content {
 				switch content.Type {

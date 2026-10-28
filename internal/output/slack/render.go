@@ -12,10 +12,6 @@ import (
 	"github.com/nourtalaat/sidekick/internal/source"
 )
 
-// slackUserID matches a Slack user ID, such as U01ABCDEF, the only text
-// that becomes a mention.
-var slackUserID = regexp.MustCompile(`^[UW][A-Z0-9]{2,}$`)
-
 // Bar colors that are not a verdict's.
 const (
 	// colorRunning is brand orange, the bar while an investigation runs.
@@ -47,6 +43,24 @@ const (
 
 // noTitle names an event that has neither a title nor an alert name.
 const noTitle = "the alert"
+
+// The action IDs of the buttons on the main message. Each button's value
+// is the investigation ID; the Slack app reads both back from a click.
+const (
+	ActionVerdictCorrect = "verdict_correct"
+	ActionVerdictWrong   = "verdict_wrong"
+	ActionStop           = "stop_investigation"
+)
+
+// The block IDs of the button rows.
+const (
+	blockIDFeedback = "feedback"
+	blockIDRun      = "run"
+)
+
+// slackUserID is a Slack user ID. Only IDs of this form are shown as
+// mentions, so a stored value can never add other markup.
+var slackUserID = regexp.MustCompile(`^[UW][A-Z0-9]{2,}$`)
 
 // verdictStyle is how a verdict looks: an emoji and a label, always shown
 // together with the bar color, which is never the only signal.
@@ -212,6 +226,7 @@ func queuedView(u output.Update, title string) view {
 		attachment: attachment{Color: colorRunning, Blocks: []block{
 			section("*Looking into it* " + escape(title)),
 			contextBlock(runningContext(u)),
+			stopButtons(u),
 		}},
 	}
 }
@@ -234,7 +249,7 @@ func runningView(u output.Update, title string) view {
 		blocks = append(blocks, section(strings.Join(lines, "\n")))
 	}
 
-	blocks = append(blocks, contextBlock(runningContext(u)))
+	blocks = append(blocks, contextBlock(runningContext(u)), stopButtons(u))
 
 	return view{
 		text:       escape("Investigating: " + title),
@@ -244,7 +259,9 @@ func runningView(u output.Update, title string) view {
 
 // finalView shows the report, in the order of the design: the verdict and
 // confidence with the reason, the cause and impact, the findings, the
-// fixes, then what was checked.
+// fixes, what was checked, who rated the verdict, then the Correct and
+// Wrong buttons. A run a responder stopped says who stopped it instead of
+// asking for a rating.
 func finalView(u output.Update, title string) view {
 	r := u.Report
 	style, line := verdictLine(r)
@@ -263,8 +280,21 @@ func finalView(u output.Update, title string) view {
 		blocks = append(blocks, section("*Proposed fixes*\n"+strings.Join(fixes, "\n")))
 	}
 
-	if checked := checkedLine(r); checked != "" {
+	checked := checkedLine(r)
+	if r.StopReason == report.StopCancelled {
+		checked = joinParts(checked, stoppedLine(u.StoppedBy))
+	}
+
+	if checked != "" {
 		blocks = append(blocks, contextBlock(checked))
+	}
+
+	if r.StopReason != report.StopCancelled {
+		if line := feedbackLine(u.Feedback); line != "" {
+			blocks = append(blocks, contextBlock(line))
+		}
+
+		blocks = append(blocks, feedbackButtons(u))
 	}
 
 	return view{
@@ -448,6 +478,99 @@ func checkedLine(r *report.Report) string {
 	}
 
 	return strings.Join(parts, " · ")
+}
+
+// stopButtons is the row with the Stop button, which asks before it stops
+// the run.
+func stopButtons(u output.Update) block {
+	return block{Type: blockActions, BlockID: blockIDRun, Buttons: []button{{
+		Type:     elemButton,
+		ActionID: ActionStop,
+		Text:     plain("Stop"),
+		Value:    u.InvestigationID,
+		Style:    styleDanger,
+		Confirm: &confirmDialog{
+			Title:   plain("Stop the investigation?"),
+			Text:    plain("Sidekick stops now and reports what it found so far."),
+			Confirm: plain("Stop"),
+			Deny:    plain("Keep going"),
+			Style:   styleDanger,
+		},
+	}}}
+}
+
+// feedbackButtons is the row with the Correct and Wrong buttons.
+func feedbackButtons(u output.Update) block {
+	return block{Type: blockActions, BlockID: blockIDFeedback, Buttons: []button{
+		{Type: elemButton, ActionID: ActionVerdictCorrect, Text: plain(":thumbsup: Correct"), Value: u.InvestigationID},
+		{Type: elemButton, ActionID: ActionVerdictWrong, Text: plain(":thumbsdown: Wrong"), Value: u.InvestigationID},
+	}}
+}
+
+// feedbackLine says who rated the verdict, such as ":thumbsup: Marked
+// correct by <@U1>, <@U2> · :thumbsdown: Marked wrong by <@U3>". It is
+// empty when nobody has.
+func feedbackLine(feedback []output.Feedback) string {
+	var correct, wrong []string
+
+	for _, f := range feedback {
+		who := mention(f.By)
+		if who == "" {
+			continue
+		}
+
+		switch f.Rating {
+		case output.RatingCorrect:
+			correct = append(correct, who)
+		case output.RatingWrong:
+			wrong = append(wrong, who)
+		}
+	}
+
+	var parts []string
+	if len(correct) > 0 {
+		parts = append(parts, ":thumbsup: Marked correct by "+strings.Join(correct, ", "))
+	}
+
+	if len(wrong) > 0 {
+		parts = append(parts, ":thumbsdown: Marked wrong by "+strings.Join(wrong, ", "))
+	}
+
+	return strings.Join(parts, " · ")
+}
+
+// stoppedLine says who stopped the run.
+func stoppedLine(by *output.Person) string {
+	if by != nil {
+		if who := mention(*by); who != "" {
+			return "Stopped by " + who
+		}
+	}
+
+	return "Stopped by a responder"
+}
+
+// mention is the Slack mention of p, or "" when p has no valid Slack user
+// ID.
+func mention(p output.Person) string {
+	if !slackUserID.MatchString(p.SlackUserID) {
+		return ""
+	}
+
+	return "<@" + p.SlackUserID + ">"
+}
+
+// joinParts joins the parts of a context line that are not empty.
+func joinParts(parts ...string) string {
+	kept := make([]string, 0, len(parts))
+
+	for _, p := range parts {
+		if p != "" {
+			kept = append(kept, p)
+		}
+	}
+
+	return strings.Join(kept, " · ")
 }
 
 // runningContext is the context line while the investigation runs: when

@@ -40,11 +40,6 @@ SET fence = @fence, status = 'running', started_at = coalesce(started_at, @now::
 WHERE id = @id AND fence < @fence AND status IN ('queued', 'running', 'failed')
 RETURNING *;
 
--- name: LockInvestigation :one
--- LockInvestigation returns an investigation and locks its row until the
--- transaction ends, so its status cannot change in between.
-SELECT * FROM investigations WHERE id = @id FOR UPDATE;
-
 -- name: StartFollowUpRun :one
 -- StartFollowUpRun gives a follow-up run of an investigation to the job
 -- claim with the token fence. An investigation that has ended gets the next
@@ -81,7 +76,8 @@ LIMIT 1;
 -- AdvanceInvestigation takes the next step seq of a running investigation
 -- and adds the step's counters, when fence still owns the run. Run it in
 -- the transaction that inserts the step. It returns no row when the fence
--- is stale, so a worker that lost its lease writes nothing.
+-- is stale, so a worker that lost its lease writes nothing. It also
+-- returns cancel_requested_at, so the run sees a Stop at every step.
 UPDATE investigations
 SET next_seq = next_seq + 1,
     input_tokens = input_tokens + @input_tokens,
@@ -90,7 +86,7 @@ SET next_seq = next_seq + 1,
     tool_calls = tool_calls + @tool_calls,
     first_finding_at = CASE WHEN @finding::boolean THEN coalesce(first_finding_at, now()) ELSE first_finding_at END
 WHERE id = @id AND fence = @fence AND status = 'running'
-RETURNING next_seq - 1 AS seq, first_finding_at;
+RETURNING next_seq - 1 AS seq, first_finding_at, cancel_requested_at;
 
 -- name: FinishInvestigation :one
 -- FinishInvestigation stores the report of a running investigation and
@@ -111,3 +107,28 @@ SET status = 'failed', verdict = @verdict, confidence = @confidence, report = @r
     stop_reason = @stop_reason, finished_at = now()
 WHERE id = @id AND status IN ('queued', 'running')
 RETURNING *;
+
+-- name: RequestInvestigationCancel :one
+-- RequestInvestigationCancel records that a responder asked to stop a
+-- queued or running investigation. It returns no row when the
+-- investigation has ended or a stop was asked for already.
+UPDATE investigations
+SET cancel_requested_at = now(),
+    cancel_requested_by = @user_id,
+    cancel_requested_by_slack_user = @slack_user_id
+WHERE id = @id AND status IN ('queued', 'running') AND cancel_requested_at IS NULL
+RETURNING cancel_requested_at;
+
+-- name: NotifyInvestigationCancel :exec
+-- NotifyInvestigationCancel tells every replica, once the transaction
+-- commits, that a stop was asked for the investigation with id.
+SELECT pg_notify('investigation_cancel', @id::text);
+
+-- name: ListenInvestigationCancel :exec
+LISTEN investigation_cancel;
+
+-- name: ListCancelRequested :many
+-- ListCancelRequested returns which of the investigations with ids have a
+-- stop asked for.
+SELECT id FROM investigations
+WHERE id = ANY(@ids::uuid[]) AND cancel_requested_at IS NOT NULL;

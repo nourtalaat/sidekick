@@ -18,7 +18,8 @@ import (
 // registerInvestigator runs the investigate jobs that the router enqueues
 // for each new investigation, and the follow_up jobs of follow-up
 // questions, with every source behind guard, every model connector
-// wrapped with its span and metrics, and start_watcher through watchers.
+// wrapped with its span and metrics, and start_watcher through watchers,
+// and listens for Stops of the runs on this replica.
 func registerInvestigator(a *app.App, guard *tools.Guard, watchers *watch.ModelStarter) error {
 	cfg := a.Config()
 	prices := pricing.New(cfg.Model.PriceTable())
@@ -48,6 +49,12 @@ func registerInvestigator(a *app.App, guard *tools.Guard, watchers *watch.ModelS
 		}
 	}
 
+	canceller := investigator.NewCanceller(a.Pool(), a.Logger().With("component", "investigator"))
+
+	if err := a.RegisterTask("investigation-cancel", canceller.Run); err != nil {
+		return fmt.Errorf("register the listener for stopped investigations: %w", err)
+	}
+
 	h, err := investigator.New(investigator.Options{
 		Pool:       a.Pool(),
 		Guard:      guard,
@@ -64,6 +71,7 @@ func registerInvestigator(a *app.App, guard *tools.Guard, watchers *watch.ModelS
 		Watchers:       watchers,
 		Logger:         a.Logger().With("component", "investigator"),
 		Metrics:        metrics,
+		Canceller:      canceller,
 		TracerProvider: a.Telemetry().TracerProvider(),
 	})
 	if err != nil {

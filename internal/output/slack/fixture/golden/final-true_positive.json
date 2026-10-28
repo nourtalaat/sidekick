@@ -52,6 +52,32 @@
               "verbatim": true
             }
           ]
+        },
+        {
+          "type": "actions",
+          "block_id": "feedback",
+          "elements": [
+            {
+              "type": "button",
+              "action_id": "verdict_correct",
+              "text": {
+                "type": "plain_text",
+                "text": ":thumbsup: Correct",
+                "emoji": true
+              },
+              "value": "0192d3a4-0000-7000-8000-0000000000aa"
+            },
+            {
+              "type": "button",
+              "action_id": "verdict_wrong",
+              "text": {
+                "type": "plain_text",
+                "text": ":thumbsdown: Wrong",
+                "emoji": true
+              },
+              "value": "0192d3a4-0000-7000-8000-0000000000aa"
+            }
+          ]
         }
       ]
     }

@@ -1,0 +1,14 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "gpt-6.1-sol-2026-09-30",
+      "object": "model",
+      "created": 1790000000,
+      "owned_by": "system",
+      "status": "succeeded",
+      "capabilities": {"chat_completion": true, "completion": false, "embeddings": false, "fine_tune": false, "inference": true},
+      "lifecycle_status": "generally-available"
+    }
+  ]
+}

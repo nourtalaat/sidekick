@@ -151,6 +151,7 @@ func (r *run) account(s newStep, adv db.AdvanceInvestigationRow) {
 	}
 
 	r.inv.CostMicros += deref(s.cost)
+	r.inv.CancelRequestedAt = adv.CancelRequestedAt
 
 	if r.inv.FirstFindingAt == nil && adv.FirstFindingAt != nil {
 		r.inv.FirstFindingAt = adv.FirstFindingAt

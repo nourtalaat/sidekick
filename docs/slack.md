@@ -5,8 +5,9 @@ messages: alerts that bots post in the channels it listens to, and
 mentions of `@Sidekick`, each of which starts an investigation, and
 follow-up questions in the thread of an investigation. The `slack` output
 shows each investigation as one Slack message that is edited in place
-while the investigation runs, and answers the questions in its thread.
-Buttons, slash commands and a link to the web UI come in later releases.
+while the investigation runs, with buttons to stop the run and to rate
+its verdict, and answers the questions in its thread. Slash commands and
+a link to the web UI come in later releases.
 
 ## What it posts
 
@@ -49,6 +50,33 @@ Buttons, slash commands and a link to the web UI come in later releases.
 Text from the alert and from the model is escaped, so it cannot mention
 `@channel` or a person, or add links. The only links are to evidence that
 the sources returned.
+
+## Buttons
+
+- **Stop** is on the message while the investigation is queued or
+  running. Slack asks to confirm first. The run stops within a few
+  seconds, even in the middle of a slow model or tool call and whichever
+  replica runs it, and the message then shows "Not sure yet" with what was
+  found and checked so far, and who stopped it.
+- **Correct** and **Wrong** are on the final message, except after a Stop
+  or a run that could not finish. Each person has one rating per verdict:
+  clicking the same button again changes nothing, and clicking the other
+  one changes the rating. The message then says who marked the verdict
+  correct or wrong.
+
+A Correct confirms the verdict, which marks the investigation as one whose
+verdict people agree with. A later Wrong on a confirmed verdict takes the
+confirmation back.
+
+Every click is checked against the clicker's role at the time of the
+click: rating and stopping need the responder role. Until roles can be set
+for Slack users, every Slack user is a responder. When a click cannot do
+anything, for example a Correct before there is a verdict, or a Stop on an
+investigation that has ended, Sidekick says so in a note only the clicker
+sees.
+
+Ratings are counted in `sidekick_feedback_total`, by target (`verdict`)
+and rating (`correct` or `wrong`); a repeated click is not counted.
 
 ## Set up the Slack app
 
@@ -123,9 +151,15 @@ slack:
   mode: events
 ```
 
-Slash commands and buttons are not handled yet. Over Socket Mode they are
-acknowledged and do nothing; with the Events API, their URLs are not
-served yet.
+In events mode, button clicks go to `POST /slack/interactivity`, checked
+with the signing secret in the same way: enter
+`https://<your host>/slack/interactivity` as the **Request URL** under
+**Interactivity & Shortcuts**. Over Socket Mode, clicks arrive on the same
+connection as events.
+
+Slash commands are not handled yet. Over Socket Mode they are
+acknowledged and do nothing; with the Events API, their URL is not served
+yet.
 
 ## Listeners and mentions
 
