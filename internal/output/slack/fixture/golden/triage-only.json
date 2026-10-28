@@ -1,0 +1,65 @@
+{
+  "text": "Duplicate (high confidence): checkout-api p99 latency above 2s",
+  "attachments": [
+    {
+      "color": "#2C57CD",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": ":link: *Duplicate* · High confidence\nThe same alert as the open checkout-api latency incident.",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "Triage only · No full investigation ran",
+              "verbatim": true
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "block_id": "feedback",
+          "elements": [
+            {
+              "type": "button",
+              "action_id": "verdict_correct",
+              "text": {
+                "type": "plain_text",
+                "text": ":thumbsup: Correct",
+                "emoji": true
+              },
+              "value": "0192d3a4-0000-7000-8000-0000000000aa"
+            },
+            {
+              "type": "button",
+              "action_id": "verdict_wrong",
+              "text": {
+                "type": "plain_text",
+                "text": ":thumbsdown: Wrong",
+                "emoji": true
+              },
+              "value": "0192d3a4-0000-7000-8000-0000000000aa"
+            },
+            {
+              "type": "button",
+              "action_id": "investigate_anyway",
+              "text": {
+                "type": "plain_text",
+                "text": "Investigate anyway",
+                "emoji": true
+              },
+              "value": "0192d3a4-0000-7000-8000-0000000000aa",
+              "style": "primary"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

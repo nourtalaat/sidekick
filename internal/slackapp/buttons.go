@@ -43,12 +43,15 @@ const payloadField = "payload"
 
 // The notes the user who clicked sees, only to them.
 const (
-	noteDenied         = "Only responders can rate verdicts, stop investigations or stop watchers."
+	noteDenied         = "Only responders can rate verdicts, stop investigations or watchers, or start a full investigation."
 	noteNoVerdict      = "This investigation has no verdict to rate yet."
 	noteStopping       = "Stopping the investigation. The message shows what it found so far once it stops."
 	noteEnded          = "This investigation has ended already, or someone stopped it."
 	noteWatcherStopped = "Stopped watching. A reply in the thread says so in a moment."
 	noteWatcherEnded   = "This watcher has ended already, or someone stopped it."
+	noteAnyway         = "Starting a full investigation. The message shows its progress once it starts."
+	noteNotTriaged     = "This investigation is not a triage-only result, or its full investigation has started already."
+	noteBusy           = "The last run of this investigation is still finishing. Try again in a moment."
 	noteFailed         = "Sidekick could not record that click. Try again in a moment."
 )
 
@@ -91,9 +94,10 @@ type ButtonsOptions struct {
 }
 
 // Buttons handles clicks on the buttons of Sidekick's messages: Correct
-// and Wrong store a rating of the verdict, Stop stops the run, and Stop
-// watching stops a watcher. Every click needs the responder role at the
-// time of the click. It answers
+// and Wrong store a rating of the verdict, Stop stops the run, Stop
+// watching stops a watcher, and Investigate anyway starts a full
+// investigation after a triage-only result. Every click needs the
+// responder role at the time of the click. It answers
 // interactions from Socket Mode as an InteractionHandler, and at
 // POST /slack/interactivity in events mode.
 type Buttons struct {
@@ -229,6 +233,8 @@ func (b *Buttons) HandleInteraction(ctx context.Context, cb slack.InteractionCal
 		note, err = b.stopWatcher(ctx, log, id, cb.User.ID)
 	case action.ActionID == slackout.ActionStop:
 		note, err = b.stop(ctx, log, id, cb.User.ID)
+	case action.ActionID == slackout.ActionInvestigateAnyway:
+		note, err = b.investigateAnyway(ctx, log, id, cb.User.ID)
 	case action.ActionID == slackout.ActionVerdictCorrect:
 		note, err = b.rate(ctx, log, id, cb.User.ID, output.RatingCorrect)
 	default:
@@ -322,6 +328,40 @@ func (b *Buttons) stop(ctx context.Context, log *slog.Logger, id uuid.UUID, user
 	return noteStopping, nil
 }
 
+// investigateAnyway starts a full investigation of a triage-only result
+// and returns the note for the user.
+func (b *Buttons) investigateAnyway(ctx context.Context, log *slog.Logger, id uuid.UUID, userID string) (string, error) {
+	var started bool
+
+	err := pgx.BeginFunc(ctx, b.pool, func(tx pgx.Tx) error {
+		var err error
+
+		started, err = investigator.InvestigateAnyway(ctx, tx, id, investigator.Requester{SlackUserID: userID})
+		if err != nil {
+			return fmt.Errorf("start the full investigation: %w", err)
+		}
+
+		return nil
+	})
+	if errors.Is(err, investigator.ErrBusy) {
+		log.InfoContext(ctx, "full investigation not started: the last run is still finishing")
+
+		return noteBusy, nil
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("investigate anyway: %w", err)
+	}
+
+	log.InfoContext(ctx, "full investigation asked for", "started", started)
+
+	if !started {
+		return noteNotTriaged, nil
+	}
+
+	return noteAnyway, nil
+}
+
 // stopWatcher stops the watcher with id for the user who clicked and
 // returns the note for the user.
 func (b *Buttons) stopWatcher(ctx context.Context, log *slog.Logger, id uuid.UUID, userID string) (string, error) {
@@ -398,7 +438,8 @@ func ourAction(actions []*slack.BlockAction) (*slack.BlockAction, bool) {
 	for _, a := range actions {
 		switch {
 		case a.ActionID == slackout.ActionVerdictCorrect, a.ActionID == slackout.ActionVerdictWrong,
-			a.ActionID == slackout.ActionStop, slackout.IsStopWatcher(a.ActionID):
+			a.ActionID == slackout.ActionStop, a.ActionID == slackout.ActionInvestigateAnyway,
+			slackout.IsStopWatcher(a.ActionID):
 			return a, true
 		}
 	}

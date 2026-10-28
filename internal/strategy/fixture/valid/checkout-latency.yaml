@@ -1,4 +1,4 @@
-name: latency-alert
+name: checkout-latency
 description: A latency monitor fired for an HTTP or RPC service.
 match:
   alertNames: ["*Latency*", "*p99*"]
