@@ -1,0 +1,66 @@
+.sk-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sk-space-2);
+  min-height: var(--sk-size-control-md);
+  padding: 0 var(--sk-space-5);
+  border: 1px solid transparent;
+  border-radius: var(--sk-radius-full);
+  font: var(--sk-type-label);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--sk-duration-fast) var(--sk-easing-standard),
+    transform var(--sk-duration-fast) var(--sk-easing-standard);
+}
+
+.sk-button:disabled {
+  color: var(--sk-text-disabled);
+  cursor: not-allowed;
+}
+
+.sk-button--primary {
+  background: var(--sk-action-primary-bg);
+  color: var(--sk-action-primary-text);
+}
+
+.sk-button--primary:hover:not(:disabled) {
+  background: var(--sk-action-primary-bg-hover);
+}
+
+.sk-button--secondary {
+  background: var(--sk-action-secondary-bg);
+  border-color: var(--sk-action-secondary-border);
+  color: var(--sk-action-secondary-text);
+}
+
+.sk-button--secondary:hover:not(:disabled) {
+  background: var(--sk-action-secondary-bg-hover);
+}
+
+.sk-button--destructive {
+  background: var(--sk-action-danger-bg);
+  color: var(--sk-action-danger-text);
+}
+
+.sk-button--destructive:hover:not(:disabled) {
+  background: var(--sk-action-danger-bg-hover);
+}
+
+.sk-button--brand {
+  background: var(--sk-gradient-brand);
+  color: var(--sk-action-brand-text);
+  box-shadow: var(--sk-shadow-brand);
+}
+
+.sk-button--brand:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 var(--sk-action-brand-shadow);
+}
+
+@media (forced-colors: active) {
+  .sk-button {
+    border-color: ButtonText;
+  }
+}

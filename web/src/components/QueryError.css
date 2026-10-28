@@ -1,0 +1,18 @@
+.sk-query-error {
+  display: flex;
+  gap: var(--sk-space-3);
+  padding: var(--sk-space-4);
+  color: var(--sk-status-warning-fg);
+  background: var(--sk-status-warning-bg);
+  border: 1px solid var(--sk-status-warning-border);
+  border-radius: var(--sk-radius-md);
+}
+
+.sk-query-error__title {
+  margin: 0;
+  font: var(--sk-type-h3);
+}
+
+.sk-query-error__text {
+  margin: var(--sk-space-1) 0 var(--sk-space-3);
+}
