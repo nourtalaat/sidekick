@@ -1,0 +1,77 @@
+# The logs source is down during the investigation. The report must still find
+# the cause from the other sources and must list the logs source as unavailable.
+# Error rate strategy, true positive.
+id: source-failure-logs-unavailable
+title: Payments webhook errors after a feature flag change, with the logs source down
+tags: [error-rate, source-failure, feature-flag, true-positive]
+strategy: error-rate-alert
+now: 2026-09-25T11:30:00Z
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="PaymentsWebhookErrorRatioHigh"}'
+    alerts:
+      - status: firing
+        labels: { alertname: PaymentsWebhookErrorRatioHigh, service: payments-webhooks, env: prod, severity: critical }
+        annotations:
+          summary: payments-webhooks error ratio above 5% for 10m
+          description: 31% of the webhook deliveries of payments-webhooks failed in the last 10 minutes.
+        startsAt: 2026-09-25T11:12:00Z
+        fingerprint: a3c58f2e1d07b946
+sources:
+  elasticsearch:
+    unavailable: true
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: query_range
+        respond:
+          text: |
+            Failed share of webhook deliveries of payments-webhooks, 10:50 to 11:30
+            10:50 0.01, 11:00 0.01, 11:05 0.02, 11:10 0.28, 11:20 0.31, 11:30 0.31
+            Retries per delivery: 10:50 1.0, 11:00 1.0, 11:10 3.4, 11:30 3.6
+          evidence:
+            - { kind: metric, title: payments-webhooks failed deliveries, url: "https://prometheus.quillcart.example/graph?g0.expr=webhook_failed_share" }
+  launchdarkly:
+    tools: { snapshot: bench/tools/launchdarkly.json }
+    fixtures:
+      - tool: list_flag_changes
+        respond:
+          text: |
+            Project payments, environment production, 10:30 to 11:30, newest first
+            11:08:21 payments-new-retry-policy turned on for everyone by jules, comment "Enable the new retry policy for all merchants"
+          evidence:
+            - { kind: other, title: payments-new-retry-policy change, url: "https://launchdarkly.example.com/payments/production/features/payments-new-retry-policy/history" }
+      - tool: get_flag
+        respond:
+          text: |
+            payments-new-retry-policy, production: on, serves "exponential", fallthrough "exponential", off variation "fixed"
+            Last changed 2026-09-25T11:08:21Z. 0 targeting rules, 0 individual targets.
+          evidence:
+            - { kind: other, title: payments-new-retry-policy, url: "https://launchdarkly.example.com/payments/production/features/payments-new-retry-policy" }
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: "No commits since the requested time."
+          noData: true
+      - tool: list_workflow_runs
+        respond:
+          text: 'run 8804 deploy payments-webhooks 2026-09-24T14:25:33Z success. No deploy since.'
+default: no_data
+expected:
+  verdict: true_positive
+  rootCause:
+    summary: At 11:08 jules turned on the payments-new-retry-policy flag for all merchants. Failed deliveries went from 2% to about 30% two minutes later, and the retries per delivery tripled.
+    rubric:
+      - { id: flag, text: "Names the payments-new-retry-policy flag, turned on at about 11:08, as the cause", weight: 2, required: true }
+      - { id: timing, text: "Links the rise in failed deliveries at about 11:10 to the flag change", weight: 2, required: true }
+      - { id: fix, text: "Proposes turning the flag off first", weight: 1 }
+  evidence:
+    - { calledTool: launchdarkly__list_flag_changes }
+  unavailableReported: [elasticsearch]
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }
