@@ -18,13 +18,17 @@ Sidekick receives alerts from webhooks or Slack, investigates them with the LLM 
 - [AWS source](docs/sources/aws.md): the read-only IAM policy the AWS source needs, and how to give Sidekick its AWS identity in each account.
 - [Azure source](docs/sources/azure.md): the read-only role the Azure source needs, and how to give Sidekick its Azure identity.
 - [Backstage source](docs/sources/backstage.md): the keys and tools of the Backstage service catalog source, and the token it needs.
+- [Datadog source](docs/sources/datadog.md): how to reach Datadog's managed MCP server, the access its token needs, and the config that allows only its read tools.
 - [Elasticsearch and OpenSearch source](docs/sources/elasticsearch.md): the keys and tools of the logs source for Elasticsearch and OpenSearch, the read-only role it needs, and links to Kibana or OpenSearch Dashboards.
 - [GitHub source](docs/sources/github.md): the GitHub App permissions the GitHub source needs, and how to set the app up.
 - [Google Cloud source](docs/sources/gcp.md): the permissions the Google Cloud source needs, and how to give Sidekick its Google Cloud identity.
 - [Kubernetes source](docs/sources/kubernetes.md): the keys and tools of the Kubernetes source, and the read-only RBAC it needs.
 - [LaunchDarkly source](docs/sources/launchdarkly.md): the keys and tools of the LaunchDarkly feature flag source, and the read-only access token it needs.
+- [Linear source](docs/sources/linear.md): how to reach Linear's read-only MCP endpoint, the API key it needs, and the config that allows only its read tools.
 - [Postgres source](docs/sources/postgres.md): the read-only role the Postgres source needs, the TLS rules for its URL, and how to turn on `pg_stat_statements`.
 - [Prometheus source](docs/sources/prometheus.md): the keys and tools of the source for Prometheus, Thanos, Mimir and other compatible servers, their credentials, and the API paths it reads.
+- [Sentry source](docs/sources/sentry.md): how to reach the Sentry MCP server, the token scopes it needs, and the config that allows only its read tools.
+- [SigNoz source](docs/sources/signoz.md): how to reach the SigNoz MCP server, the read-only service account it needs, and the config that allows only its read tools.
 - [Unleash source](docs/sources/unleash.md): the keys and tools of the Unleash feature flag source, and the read-only service account token it needs.
 - [Running Sidekick](docs/running.md): `sidekick serve`, `sidekick doctor`, start-up and shutdown, health and readiness probes, metrics, logs and traces.
 - [Sending alerts to Sidekick](docs/webhooks.md): webhook endpoints, the Alertmanager and generic adapters, how deliveries are authenticated, and `sidekick test-alert`.
