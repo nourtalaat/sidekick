@@ -966,6 +966,60 @@ How it behaves:
   stops waiting for response headers after 60 seconds; `sidekick config
   validate` rejects a longer one.
 
+#### Unleash sources (`type: unleash`)
+
+An Unleash source reads feature flag changes from the Unleash event log and
+the current state of flags, with a service account token, so investigations
+can see that someone changed a flag. Its tools only read.
+[The Unleash source](sources/unleash.md) lists its limits and how to make a
+token with the Viewer role.
+
+| Key | Meaning |
+|---|---|
+| `baseURL` | The root of the Unleash instance, such as `https://unleash.example.com`. It must use `https`; plain `http` is accepted only for `localhost` and loopback addresses. Required. |
+| `tokenSecret` | `{ name, key }` of the Secret that holds the service account token. Required. |
+| `projects` | The projects the tools may read, each with its `key` (Unleash's default project is `default`) and the `environments` in it they may read. Required; a call for any other project or environment fails before anything is sent. |
+
+```yaml
+sources:
+  flags:
+    type: unleash
+    baseURL: https://unleash.example.com
+    tokenSecret: { name: sidekick-unleash, key: token }
+    projects:
+      - key: default
+        environments: [production, development]
+```
+
+The tools, as the model sees them with the source name `flags`:
+
+| Tool | Returns |
+|---|---|
+| `flags__list_flag_changes` | Events for the flags of one project and environment in a time range of at most 7 days, or for one flag: who, when, what was done, Unleash's summary and a link. |
+| `flags__get_flag` | One flag's state in one environment: on or off, the number of strategies and dependencies, and when it last changed. |
+
+How it behaves:
+
+- **Start-up never waits for Unleash.** The token is read from its Secret
+  for each request, so a rotated token needs no restart.
+- **Scope.** Both tools take `project` and `environment`, which may be
+  left out when the config lists only one. Anything outside `projects`, a
+  key that is not one, or a range longer than 7 days is a tool error, and
+  nothing is sent.
+- **Results** are JSON with links to the flags' pages in the Unleash UI,
+  which become evidence links in the report. Lists are capped as
+  [The Unleash source](sources/unleash.md#limits) describes, and say when
+  they were cut.
+- **No data.** A range without changes, and a project or flag Unleash does
+  not have, are reported as no data.
+- **Errors.** A request Unleash refuses as invalid, such as a 400, goes to
+  the model as a tool error with Unleash's message. A refused token (401),
+  a token that may not read (403), rate limits and server errors count as
+  failures of the source.
+- **Timeout.** `timeout` may be at most `60s`, because the HTTP client
+  stops waiting for response headers after 60 seconds; `sidekick config
+  validate` rejects a longer one.
+
 #### Mock sources (`type: mock`)
 
 A mock source answers tool calls from fixtures instead of a real system.
