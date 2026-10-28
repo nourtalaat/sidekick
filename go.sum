@@ -51,6 +51,10 @@ github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.7 h1:wYu55QUHARwu9YzeuY5yEJUTsIu8
 github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.7/go.mod h1:OteEkhFAgFwQtZft/3myWo3tVWxdAo7cwV+7AbcpAtQ=
 github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.63.7 h1:tS3R/Xe//HU0efheFkFCi/TwDXVF7Jg4EWHlzERr19A=
 github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.63.7/go.mod h1:3BAxcan/uEE1w6RrhXKsJMFb8wFN+phVYKuGHJ0KpdU=
+github.com/aws/aws-sdk-go-v2/service/cloudtrail v1.65.5 h1:wJ4YnKFjOrMRBCuI5E7fxgwTVmCNi+dXwJJd93XuLxk=
+github.com/aws/aws-sdk-go-v2/service/cloudtrail v1.65.5/go.mod h1:VU2PgU7YTdvw3xr65f7PWgCT2oWNIBZE7zj2M5rW2Ic=
+github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.90.0 h1:+/+sJwVqsSAnjIRO/Ax4Lx0K9nidaQQCdKa+pmLgncg=
+github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.90.0/go.mod h1:EPgYb5ANskWf9TqjokpS+1yEMgClBO15HdGU29JiiSM=
 github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.22 h1:qHfXn1Tm2Rh8kic/DvdKaiSVlHQRSr5C+rMuBR29D44=
 github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.22/go.mod h1:D4ytxJbGXu82l+2XF0q60bibysf+KkIbWfAOldAQwf8=
 github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.7 h1:6MSlRo7aiUVBftQ8XmW7XIh3EZqCbkN9zI0YlGW8nl0=

@@ -33,7 +33,7 @@ const embedContentType = "application/json"
 // inputTokenCountHeader is the response header in which Bedrock reports the
 // input tokens of an InvokeModel call. The InvokeModel reference does not
 // list it, so a missing header only means the usage is unknown.
-const inputTokenCountHeader = "X-Amzn-Bedrock-Input-Token-Count"
+const inputTokenCountHeader = "X-Amzn-Bedrock-Input-Token-Count" //nolint:gosec // G101: a header name, not a credential.
 
 // cohereDocumentInput is the input type Cohere gets for every text. The
 // Embedder interface does not tell a stored text from a search query, so
