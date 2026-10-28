@@ -57,6 +57,11 @@ func (e Role) Valid() bool {
 
 // Me defines model for Me.
 type Me struct {
+	// CsrfToken The session's CSRF token. Requests made with the session that
+	// change anything send it in the X-CSRF-Token header. Absent for
+	// an API token.
+	CsrfToken *string `json:"csrfToken,omitempty"`
+
 	// Email The user's email, when the identity provider sent a verified one.
 	Email *string `json:"email,omitempty"`
 

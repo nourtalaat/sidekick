@@ -201,6 +201,14 @@ type Route struct {
 	UpdatedAt time.Time
 }
 
+type Session struct {
+	IDHash    []byte
+	UserID    uuid.UUID
+	CsrfToken string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+}
+
 type SlackIdentity struct {
 	SlackUserID string
 	TeamID      *string
@@ -243,6 +251,18 @@ type Step struct {
 	StartedAt        time.Time
 	DurationMs       int32
 	Budget           *string
+}
+
+type User struct {
+	ID          uuid.UUID
+	OidcIssuer  string
+	OidcSubject string
+	Email       *string
+	Name        string
+	Groups      []string
+	Role        string
+	CreatedAt   time.Time
+	LastLoginAt time.Time
 }
 
 type Watcher struct {

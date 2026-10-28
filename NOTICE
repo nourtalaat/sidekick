@@ -557,6 +557,20 @@ LICENSE: Apache License, Version 2.0 (text in LICENSE)
 Copyright The containerd Authors
 
 ================================================================================
+github.com/coreos/go-oidc/v3 v3.20.0
+================================================================================
+
+LICENSE: Apache License, Version 2.0 (text in LICENSE)
+
+NOTICE:
+
+CoreOS Project
+Copyright 2014 CoreOS, Inc
+
+This product includes software developed at CoreOS, Inc.
+(http://www.coreos.com/).
+
+================================================================================
 github.com/cpuguy83/dockercfg v0.3.2
 ================================================================================
 
@@ -706,6 +720,12 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+================================================================================
+github.com/go-jose/go-jose/v4 v4.1.6
+================================================================================
+
+LICENSE: Apache License, Version 2.0 (text in LICENSE)
+
 ================================================================================
 github.com/go-logr/logr v1.4.4
 ================================================================================

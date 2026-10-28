@@ -201,6 +201,29 @@ func TestValidateFixtures(t *testing.T) {
 			`listeners.teams-mention: name "teams-mention" is reserved for events from mentions of Sidekick in Teams`,
 		}},
 		{file: "teams-listeners-without-teams", want: []string{"listeners: listeners with source teams need the teams section, the Teams bot that receives their messages"}},
+		// OIDC
+		{file: "oidc-problems", want: []string{
+			"oidc.clientID: required",
+			"oidc.clientSecret: required",
+			"oidc.groupsClaim: must not be empty",
+			`oidc.issuer: expected an https URL, or http on a loopback address, got "http://acme.okta.com"`,
+			`oidc.roles.admn: unknown role "admn", expected one of viewer, responder, approver, admin (did you mean "admin"?)`,
+			"oidc.roles.responder[0]: must not be empty",
+			`oidc.roles.viewer: list at least one group, or "*" for everyone`,
+			"oidc.scopes[0]: must not be empty",
+			`server.publicURL: expected an https URL with the oidc section, or http on a loopback address, since the session cookie is only sent over https, got "http://sidekick.example.com"`,
+		}},
+		{file: "oidc-any-group", want: []string{
+			`oidc.roles.admin[0]: "*" would give every user of the provider the admin role; list the groups that should have it ("*" is allowed only for viewer)`,
+			`oidc.roles.responder[1]: "*" would give every user of the provider the responder role; list the groups that should have it ("*" is allowed only for viewer)`,
+		}},
+		{file: "oidc-google-any-group", want: []string{
+			`oidc.roles.viewer[0]: "*" is not allowed with https://accounts.google.com, which anyone with a Google account can sign in to; list groups instead, sent in a custom claim`,
+		}},
+		{file: "oidc-without-public-url", want: []string{
+			"oidc.roles: map at least one role to groups, or nobody can sign in",
+			"server.publicURL: required with the oidc section: the provider sends users back to <publicURL>/auth/callback",
+		}},
 		{file: "teams-mention-without-teams", want: []string{`routes[0].match.intake[0]: intake "teams-mention" is not defined`}},
 		{file: "teams-output-without-teams", want: []string{"outputs.teams-thread: type teams needs the teams section, the bot it posts as"}},
 		{file: "negative-price", want: []string{"model.prices.claude-opus-5-5.inputPerMTok: must not be negative"}},
@@ -267,6 +290,7 @@ func TestValidateValidFixtures(t *testing.T) {
 		{name: "minimal", data: func(t *testing.T) []byte { t.Helper(); return readFixture(t, "valid/minimal.yaml") }},
 		{name: "example", data: exampleYAML},
 		{name: "teams", data: func(t *testing.T) []byte { t.Helper(); return readFixture(t, "valid/teams.yaml") }},
+		{name: "oidc", data: func(t *testing.T) []byte { t.Helper(); return readFixture(t, "valid/oidc.yaml") }},
 	}
 
 	for _, tt := range tests {

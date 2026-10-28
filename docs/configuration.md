@@ -986,6 +986,44 @@ With the section set, Sidekick serves the bot's messaging endpoint at
 [Investigations in Microsoft Teams](teams.md) describes how to set up the
 bot.
 
+### `oidc`
+
+```yaml
+oidc:
+  issuer: https://acme.okta.com                         # required
+  clientID: sidekick                                    # required
+  clientSecret: { name: sidekick-oidc, key: clientSecret }   # required
+  groupsClaim: groups                                   # the ID token claim with the user's groups
+  scopes: [groups]                                      # asked for besides openid, email and profile
+  roles:                                                # role to groups; the highest match wins
+    admin: [sre-admins]
+    approver: [oncall-leads]
+    responder: [engineering]
+    viewer: ["*"]                                       # "*" matches everyone
+```
+
+The section turns on the web UI login and the JSON API under `/api/v1`.
+Without it, neither is served. [Web UI and API](web-ui.md) says how to
+register Sidekick with your identity provider.
+
+- `issuer` is the provider's issuer URL. It must be https, except on a
+  loopback address for local testing.
+- `clientID` and `clientSecret` are those of the app you register for
+  Sidekick at the provider. The redirect URI to register is
+  `<server.publicURL>/auth/callback`, so `server.publicURL` is required
+  and must be https.
+- `groupsClaim` names the ID token claim that lists the user's groups.
+  Some providers send groups only when a scope asks for them; list it in
+  `scopes`.
+- `roles` maps each role to the groups that give it. A user gets the
+  highest role any of their groups gives, and the role is read again at
+  every login. A user no group matches cannot sign in, so map `viewer` to
+  `"*"` to let everyone in with read access. `"*"` is allowed only for
+  `viewer`, so a typo cannot make every user an admin, and not at all
+  with `https://accounts.google.com`, which anyone with a Google account
+  can sign in to. Google sends no groups claim of its own; send groups
+  in a custom claim and name it in `groupsClaim`.
+
 ### `listeners`
 
 A listener picks the messages in one Slack or Teams channel that start an
@@ -1616,6 +1654,7 @@ with access to the database, who can turn the guard off.
 | `slack.mode` | `socket` |
 | `slack.followUps` | `mention` |
 | `slack.apiURL` | `https://slack.com/api/` |
+| `oidc.groupsClaim` | `groups` |
 | `routes[].priority` | `100` |
 | `routes[].strategy` | `generic-alert` |
 | `routes[].mode` | `read-only` |
@@ -1689,6 +1728,13 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   `source` is `slack` or `teams`; listeners with `source: teams` need the
   `teams` section, a Teams channel ID, Teams bot IDs and Microsoft Entra
   object IDs, and `trusted: true` only with `teams.trustedBots`.
+- `oidc` has an `issuer` that is https (or http on a loopback address), a
+  `clientID`, a `clientSecret`, a non-empty `groupsClaim` and `scopes`,
+  and at least one known role in `roles`, each with at least one group.
+  `"*"` is used only for `viewer`, and never with
+  `https://accounts.google.com`.
+  With `oidc` set, `server.publicURL` is required and must be https (or
+  http on a loopback address).
 - Every strategy file in `strategies.dir` is valid, and no two of them have
   the same name.
 - Every route is `read-only` with no `actions`, and its budgets, daily

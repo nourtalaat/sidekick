@@ -32,5 +32,9 @@ func (s *server) GetMe(ctx context.Context, _ apigen.GetMeRequestObject) (apigen
 		me.Email = &p.Email
 	}
 
+	if p.CSRFToken != "" {
+		me.CsrfToken = &p.CSRFToken
+	}
+
 	return me, nil
 }

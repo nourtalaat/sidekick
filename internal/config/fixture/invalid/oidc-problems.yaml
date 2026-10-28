@@ -1,0 +1,26 @@
+# An http issuer off loopback, no client ID or secret, an empty groups
+# claim and scope, an unknown role, a role without groups and an empty
+# group, and a public URL on plain http.
+server:
+  publicURL: http://sidekick.example.com
+
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default
+
+oidc:
+  issuer: http://acme.okta.com
+  groupsClaim: ""
+  scopes: [""]
+  roles:
+    admn: [sre-admins]
+    viewer: []
+    responder: [""]

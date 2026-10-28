@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/app"
+	"github.com/nourtalaat/sidekick/internal/auth/authtest"
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
 	"github.com/nourtalaat/sidekick/internal/store/storetest"
 )
@@ -225,6 +226,42 @@ func TestServeWebhooks(t *testing.T) {
 			stopServe(t, cmd, lines, syscall.SIGTERM)
 		})
 	}
+}
+
+// TestServeAPI runs `sidekick serve` with an oidc section and checks that
+// it serves the API, which needs a session, and the login, which sends the
+// browser to the provider.
+func TestServeAPI(t *testing.T) {
+	t.Parallel()
+
+	provider := authtest.NewProvider(t, "sidekick")
+
+	content := strings.Replace(serveConfig(fakeAnthropic(t).URL()), "server: { listen:", `server: { publicURL: "http://127.0.0.1", listen:`, 1) + `
+oidc:
+  issuer: "` + provider.Issuer() + `"
+  clientID: sidekick
+  clientSecret: { name: oidc, key: clientSecret }
+  roles: { viewer: ["*"] }
+`
+
+	cmd, lines, started := startServe(t, writeConfig(t, content, storetest.NewURL(t), "oidc/clientSecret"))
+
+	status, body := getURL(t, "http://"+started.Listen+"/api/v1/me")
+	require.Equal(t, http.StatusUnauthorized, status)
+	require.Contains(t, body, `"status":401`)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+started.Listen+"/auth/login", nil)
+	require.NoError(t, err)
+
+	noRedirects := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+
+	resp, err := noRedirects.Do(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Equal(t, http.StatusFound, resp.StatusCode)
+	require.True(t, strings.HasPrefix(resp.Header.Get("Location"), provider.Issuer()+authtest.AuthorizePath+"?"))
+
+	stopServe(t, cmd, lines, syscall.SIGTERM)
 }
 
 // TestServeEndToEnd runs `sidekick serve` with an Alertmanager webhook, an

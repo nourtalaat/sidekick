@@ -1,20 +1,12 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 
-	"github.com/nourtalaat/sidekick/internal/api/apigen"
+	"github.com/nourtalaat/sidekick/internal/problem"
 )
-
-// problemType is the problem type of every error: the status and the
-// detail say what went wrong.
-const problemType = "about:blank"
-
-// internalDetail is the detail of a 500, which never shows the cause.
-const internalDetail = "Something went wrong on the server. The logs have the details."
 
 // Error is an error a handler returns to answer with problem details of
 // its status. Any other error a handler returns answers 500.
@@ -35,41 +27,23 @@ func problemf(status int, format string, args ...any) *Error {
 // requestError answers a request whose parameters or body do not decode.
 func (h *handler) requestError(w http.ResponseWriter, r *http.Request, err error) {
 	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-		writeProblem(w, r, http.StatusRequestEntityTooLarge, fmt.Sprintf("The body is larger than %d bytes.", maxBodyBytes))
+		problem.Write(w, r, http.StatusRequestEntityTooLarge, fmt.Sprintf("The body is larger than %d bytes.", maxBodyBytes))
 
 		return
 	}
 
-	writeProblem(w, r, http.StatusBadRequest, err.Error())
+	problem.Write(w, r, http.StatusBadRequest, err.Error())
 }
 
 // responseError answers a request whose handler failed: with the status of
 // an Error, or with 500.
 func (h *handler) responseError(w http.ResponseWriter, r *http.Request, err error) {
 	if e, ok := errors.AsType[*Error](err); ok {
-		writeProblem(w, r, e.Status, e.Detail)
+		problem.Write(w, r, e.Status, e.Detail)
 
 		return
 	}
 
 	h.log.ErrorContext(r.Context(), "an API request failed", "method", r.Method, "path", r.URL.Path, "error", err)
-	writeProblem(w, r, http.StatusInternalServerError, internalDetail)
-}
-
-// writeProblem answers r with problem details of status.
-func writeProblem(w http.ResponseWriter, r *http.Request, status int, detail string) {
-	instance := r.URL.Path
-
-	body, err := json.Marshal(apigen.Problem{
-		Type: problemType, Title: http.StatusText(status), Status: status, Detail: &detail, Instance: &instance,
-	})
-	if err != nil {
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(status)
-	_, _ = w.Write(body)
+	problem.Write(w, r, http.StatusInternalServerError, problem.InternalDetail)
 }
