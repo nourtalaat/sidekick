@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -82,7 +83,9 @@ type Options struct {
 // Handler turns Events API payloads into stored events. Socket Mode and
 // the Events API both use it. It is safe for concurrent use.
 type Handler struct {
-	listeners     []listener
+	// listeners are the listeners in effect, in name order. SetListeners
+	// replaces them while messages are handled.
+	listeners     atomic.Pointer[[]listener]
 	trustedBots   []string
 	secrets       registry.Secrets
 	signingSecret registry.SecretRef
@@ -134,8 +137,7 @@ func New(opts Options) (*Handler, error) {
 		tp = otel.GetTracerProvider()
 	}
 
-	return &Handler{
-		listeners:     listeners,
+	h := &Handler{
 		trustedBots:   cfg.TrustedBots,
 		secrets:       opts.Secrets,
 		signingSecret: cfg.SigningSecret,
@@ -146,7 +148,29 @@ func New(opts Options) (*Handler, error) {
 		tracer:        tp.Tracer(tracerName),
 		now:           time.Now,
 		ackBudget:     AckBudget,
-	}, nil
+	}
+	h.listeners.Store(&listeners)
+
+	return h, nil
+}
+
+// SetListeners replaces the listeners in effect, for example with the file
+// and runtime listeners rules.Effective lists. Messages handled after it
+// returns use the new listeners. On an error the listeners stay as they
+// were.
+func (h *Handler) SetListeners(cfg map[string]config.Listener) error {
+	listeners, err := compileListeners(cfg)
+	if err != nil {
+		return fmt.Errorf("compile the listeners: %w", err)
+	}
+
+	for _, l := range listeners {
+		h.metrics.Init(l.Name)
+	}
+
+	h.listeners.Store(&listeners)
+
+	return nil
 }
 
 // Handle stores the event in one Events API payload, if it is one Sidekick
@@ -264,8 +288,9 @@ func (h *Handler) firstListener(ctx context.Context, m message, text string) (*l
 		looked  bool
 	)
 
-	for i := range h.listeners {
-		l := &h.listeners[i]
+	listeners := *h.listeners.Load()
+	for i := range listeners {
+		l := &listeners[i]
 		if !l.matches(m, text) {
 			continue
 		}

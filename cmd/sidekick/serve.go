@@ -82,7 +82,12 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
-	if err := registerSlackApp(ctx, a); err != nil {
+	cache, err := registerRules(ctx, a)
+	if err != nil {
+		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
+	}
+
+	if err := registerSlackApp(ctx, a, cache); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
@@ -90,7 +95,7 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
-	if err := registerRouter(a); err != nil {
+	if err := registerRouter(a, cache); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
