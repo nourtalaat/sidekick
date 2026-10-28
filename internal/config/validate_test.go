@@ -120,6 +120,8 @@ func TestValidateFixtures(t *testing.T) {
 		{file: "global-concurrency-zero", want: []string{"budgets.concurrency: must be positive"}},
 		// Report
 		{file: "unknown-confidence", want: []string{`report.minFalsePositiveConfidence: unknown confidence "hgh" (did you mean "high"?)`}},
+		// Memory
+		{file: "memory-examples", want: []string{"memory.examples: must be between 1 and 10, got 11; set memory.enabled to false for none"}},
 		// Intake
 		{file: "webhook-two-auth", want: []string{"intake.webhooks.ci.auth: set exactly one of bearer and hmac, not both"}},
 		{file: "webhook-bad-name", want: []string{`intake.webhooks["alerts/prod"]: name "alerts/prod" ` + nameRule}},

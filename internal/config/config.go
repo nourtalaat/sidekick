@@ -20,6 +20,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/intake"
+	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/output"
 	"github.com/nourtalaat/sidekick/internal/registry"
@@ -76,6 +77,7 @@ type Config struct {
 	Redaction  Redaction          `yaml:"redaction"`
 	Telemetry  Telemetry          `yaml:"telemetry"`
 	Watch      Watch              `yaml:"watch"`
+	Memory     Memory             `yaml:"memory"`
 
 	// Listeners are the file listeners, by name. Their events go through
 	// the Slack app or the Teams bot.
@@ -286,6 +288,26 @@ type Report struct {
 	// MinFalsePositiveConfidence is the lowest confidence a false_positive
 	// verdict may have. Empty means report.DefaultMinFalsePositiveConfidence.
 	MinFalsePositiveConfidence report.Confidence `yaml:"minFalsePositiveConfidence"`
+}
+
+// Memory says how prompts use memory: the investigations people
+// confirmed.
+type Memory struct {
+	// Enabled shows similar confirmed investigations in each prompt. It is
+	// on unless set to false.
+	Enabled bool `yaml:"enabled"`
+	// Examples is the most similar investigations a prompt shows.
+	Examples int `yaml:"examples"`
+}
+
+// PromptExamples returns how many examples a prompt shows: zero when
+// memory is off.
+func (m Memory) PromptExamples() int {
+	if !m.Enabled {
+		return 0
+	}
+
+	return m.Examples
 }
 
 // Redaction configures what is removed from event text and tool results.
@@ -557,6 +579,7 @@ func (c *Config) setDefaults() {
 	c.Budgets.setDefaults()
 	c.Telemetry.setDefaults()
 	c.Watch.setDefaults()
+	c.Memory.setDefaults()
 }
 
 // resolveBudgets fills each route's unset limits with the global ones.
@@ -608,6 +631,11 @@ func (w *Watch) setDefaults() {
 	w.MinInterval = watch.DefaultMinInterval
 	w.MaxInterval = watch.DefaultMaxInterval
 	w.MaxTimeout = watch.DefaultMaxTimeout
+}
+
+func (m *Memory) setDefaults() {
+	m.Enabled = true
+	m.Examples = memory.DefaultExamples
 }
 
 // parseDocument parses data as exactly one YAML document.

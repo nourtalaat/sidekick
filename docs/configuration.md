@@ -1349,6 +1349,23 @@ A false positive verdict below this confidence is not accepted. Lower it
 only if you accept that a real incident may be reported as a false positive
 more often.
 
+### `memory`
+
+```yaml
+memory:
+  enabled: true   # default true
+  examples: 3     # 1 to 10; default 3
+```
+
+Sidekick remembers every investigation whose verdict a responder marked
+correct, and shows the model up to `examples` of them that look like the
+alert it investigates, as hints about where to look. It picks those with
+the same fingerprint first, then those with the same service and alert
+name, then those whose summary shares words with the alert. A Wrong that
+takes the confirmation back takes the investigation out of memory again,
+so investigations nobody confirmed are never shown. With
+`enabled: false`, prompts show none.
+
 ### `redaction`
 
 Redaction removes secrets and personal data from event text, raw webhook
@@ -1545,6 +1562,8 @@ A refused request ends the check with an error and is counted in
 | `routes[].grouping.window` | `30m` |
 | `routes[].grouping.fingerprintLabels` | none: the intake's own fingerprint |
 | `report.minFalsePositiveConfidence` | `high` |
+| `memory.enabled` | `true` |
+| `memory.examples` | `3` |
 | `redaction.builtIn` | every built-in rule except `ip_addresses` |
 | `telemetry.logLevel` | `info` |
 | `routes[].watcherLimits.types` | every check type: `http`, `tool` and `alert` |

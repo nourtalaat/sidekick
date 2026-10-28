@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
+	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/prompt"
 	"github.com/nourtalaat/sidekick/internal/queue"
@@ -117,8 +118,9 @@ func (r *run) settings() error {
 	return nil
 }
 
-// savePrompt builds the first request from the strategy, the tools and the
-// event that opened the group, and saves it as the prompt step.
+// savePrompt builds the first request from the strategy, the tools, the
+// similar confirmed investigations and the event that opened the group,
+// and saves it as the prompt step.
 func (r *run) savePrompt(ctx context.Context) error {
 	name := deref(r.inv.Strategy)
 
@@ -149,11 +151,17 @@ func (r *run) savePrompt(ctx context.Context) error {
 		specs = append(specs, spec)
 	}
 
+	examples, err := memory.Examples(ctx, r.h.opts.Pool, memory.MatchOf(r.inv.ID, ev), r.h.opts.MemoryExamples)
+	if err != nil {
+		return fmt.Errorf("find similar confirmed investigations: %w", err)
+	}
+
 	req := prompt.Build(prompt.Input{
 		Strategy: st,
 		Tools:    append(specs, r.tools.Tools()...),
 		Group:    prompt.Group{First: ev, Count: int(first.EventCount)},
 		Route:    prompt.RouteContext{Name: r.inv.Route},
+		Memory:   examples,
 	})
 
 	if _, err := r.save(ctx, newStep{kind: kindPrompt, prompt: &req, status: statusOK, startedAt: time.Now()}); err != nil {

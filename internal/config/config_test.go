@@ -33,7 +33,7 @@ func TestParseFileProblems(t *testing.T) {
 		{name: "two documents", yaml: "server: {}\n---\nserver: {}\n", want: "parse YAML: the file must hold one YAML document"},
 		{name: "top level is a list", yaml: "- a\n", want: "expected a mapping, got a list"},
 		{name: "unknown top-level key", yaml: minimal + "servr: {}\n", want: `servr: unknown key (did you mean "server"?)`},
-		{name: "a later section", yaml: minimal + "memory: {}\n", want: "memory: unknown key"},
+		{name: "a later section", yaml: minimal + "lessons: {}\n", want: "lessons: unknown key"},
 	}
 
 	for _, tt := range tests {
@@ -73,6 +73,8 @@ func TestParseDefaults(t *testing.T) {
 				require.Empty(t, cfg.RouteConcurrency())
 				require.Equal(t, LogLevelInfo, cfg.Telemetry.LogLevel)
 				require.Nil(t, cfg.Slack)
+				require.Equal(t, Memory{Enabled: true, Examples: 3}, cfg.Memory)
+				require.Equal(t, 3, cfg.Memory.PromptExamples())
 				require.Equal(t, []Route{{
 					Name:     "default",
 					Priority: DefaultRoutePriority,
@@ -88,6 +90,7 @@ func TestParseDefaults(t *testing.T) {
 			yaml: baseYAML + `
 server: {listen: ":1"}
 budgets: {perInvestigation: {maxToolCalls: 10}, concurrency: 4}
+memory: {enabled: false}
 routes:
   - {name: a, priority: 0, budgets: {maxWallTime: 1m}, concurrency: 2, grouping: {window: 5m, relatedWindow: 2m, fingerprintLabels: [service, env]}}
   - {name: default}
@@ -102,6 +105,8 @@ routes:
 				require.Equal(t, map[string]int{"a": 2}, cfg.RouteConcurrency())
 				require.Equal(t, Grouping{Window: 5 * time.Minute, FingerprintLabels: []string{"service", "env"}, RelatedWindow: 2 * time.Minute}, cfg.Routes[0].Grouping)
 				require.Equal(t, Grouping{Window: DefaultGroupingWindow}, cfg.Routes[1].Grouping)
+				require.Equal(t, Memory{Examples: 3}, cfg.Memory)
+				require.Zero(t, cfg.Memory.PromptExamples(), "no examples when memory is off")
 			},
 		},
 		{

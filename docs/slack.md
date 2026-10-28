@@ -60,8 +60,10 @@ the sources returned.
   correct or wrong.
 
 A Correct confirms the verdict, which marks the investigation as one whose
-verdict people agree with. A later Wrong on a confirmed verdict takes the
-confirmation back.
+verdict people agree with, and puts it in memory, so later investigations
+of similar alerts see it as an example (see
+[`memory`](configuration.md#memory)). A later Wrong on a confirmed verdict
+takes the confirmation back, and the investigation out of memory.
 
 Every click is checked against the clicker's role at the time of the
 click: rating and stopping need the responder role. Until roles can be set

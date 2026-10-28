@@ -65,6 +65,9 @@ type Options struct {
 	Rules report.Rules
 	// Daily are the daily spending caps and their time zone.
 	Daily DailyCaps
+	// MemoryExamples is the most similar confirmed investigations the
+	// prompt shows. Zero shows none.
+	MemoryExamples int
 	// Watchers starts the watchers the model asks for with start_watcher.
 	// Nil offers the tool to no investigation.
 	Watchers *watch.ModelStarter
