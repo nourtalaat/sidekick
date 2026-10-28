@@ -4,6 +4,9 @@ import "errors"
 
 // Exit codes besides 0 for success and 1 for any other failure.
 const (
+	// exitThresholdFailed is a benchmark score below one of its
+	// thresholds. It is the code of any other failure too.
+	exitThresholdFailed = 1
 	// exitBadInput is a bad flag, config file or scenario file.
 	exitBadInput = 2
 	// exitInfrastructure is a failure of what a command runs on rather

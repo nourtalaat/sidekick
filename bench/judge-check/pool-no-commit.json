@@ -1,0 +1,28 @@
+{
+  "id": "pool-no-commit",
+  "rootCause": {
+    "summary": "The DB connection pool ran out after commit abc123 lowered the pool size to 5.",
+    "rubric": [
+      {"id": "pool", "text": "Names connection pool exhaustion as the cause", "weight": 2, "required": true},
+      {"id": "commit", "text": "Links the cause to commit abc123 or the 10:05 deploy", "weight": 2, "required": true},
+      {"id": "fix", "text": "Proposes restoring the pool size or rolling back", "weight": 1}
+    ]
+  },
+  "report": {
+    "verdict": "true_positive",
+    "confidence": "medium",
+    "reason": "The logs show timeouts acquiring a DB connection from 10:10, when p99 latency rose above 2s.",
+    "summary": "Checkout is slow because it runs out of DB connections.",
+    "cause": "The DB connection pool is exhausted, so requests wait for a connection and time out. Why it started is not clear; traffic looks normal.",
+    "impact": "Checkout p99 latency is above 2s.",
+    "findings": [
+      {"id": "f1", "claim": "From 10:10 the logs show timeouts acquiring a connection from the pool.", "evidence": [{"kind": "log_query", "title": "pool timeouts"}]}
+    ],
+    "fixes": [
+      {"id": "x1", "title": "Raise the pool size", "detail": "Raise the DB pool size until the timeouts stop."}
+    ],
+    "checked": [],
+    "stopReason": "submitted"
+  },
+  "grades": {"pool": true, "commit": false, "fix": true}
+}

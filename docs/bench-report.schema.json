@@ -1,0 +1,236 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sidekick benchmark report, schema version 1",
+  "description": "The report.json that `sidekick bench run --out` writes. A share is a number from 0 to 1, or null when it has nothing to count.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "sidekickVersion", "gitSHA", "configHash", "scenarioSet", "triggeredBy",
+    "connectors", "strategies", "promptVersion", "judgePromptVersion", "startedAt", "finishedAt",
+    "repeat", "seed", "resamples", "confidenceLevel", "weights", "metrics", "intervals", "thresholds", "scenarios"
+  ],
+  "properties": {
+    "schemaVersion": {"type": "integer", "minimum": 1, "maximum": 1},
+    "label": {"type": "string"},
+    "sidekickVersion": {"type": "string"},
+    "gitSHA": {"type": "string"},
+    "configHash": {"type": "string"},
+    "scenarioSet": {"type": "string"},
+    "triggeredBy": {"enum": ["cli", "ci", "gate"]},
+    "connectors": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/connector"}
+    },
+    "strategies": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    },
+    "promptVersion": {"type": "string"},
+    "judgePromptVersion": {"type": "string"},
+    "startedAt": {"type": "string"},
+    "finishedAt": {"type": "string"},
+    "repeat": {"type": "integer", "minimum": 1},
+    "seed": {"type": "integer", "minimum": 0},
+    "resamples": {"type": "integer", "minimum": 0},
+    "confidenceLevel": {"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1},
+    "weights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verdict", "rootCause", "evidence"],
+      "properties": {
+        "verdict": {"type": "number", "minimum": 0},
+        "rootCause": {"type": "number", "minimum": 0},
+        "evidence": {"type": "number", "minimum": 0}
+      }
+    },
+    "metrics": {"$ref": "#/$defs/metrics"},
+    "intervals": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/interval"}
+    },
+    "thresholds": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/threshold"}
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/scenario"}
+    }
+  },
+  "$defs": {
+    "share": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "count": {"type": "integer", "minimum": 0},
+    "threshold": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "limit", "value", "passed"],
+      "properties": {
+        "name": {"enum": ["verdictAccuracy", "fpPrecision", "rootCauseMatch", "maxCostPerRunUSD", "baseline"]},
+        "limit": {"type": "number"},
+        "value": {"type": ["number", "null"]},
+        "passed": {"type": "boolean"},
+        "detail": {"type": "string"}
+      }
+    },
+    "connector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["connector", "provider"],
+      "properties": {
+        "connector": {"type": "string"},
+        "provider": {"type": "string"},
+        "model": {"type": "string"},
+        "maxTokens": {"type": "integer"},
+        "temperature": {"type": "number"},
+        "thinking": {"type": "string"},
+        "effort": {"type": "string"}
+      }
+    },
+    "interval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lower", "upper"],
+      "properties": {
+        "lower": {"type": "number"},
+        "upper": {"type": "number"}
+      }
+    },
+    "class": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["precision", "recall", "predicted", "expected", "hits"],
+      "properties": {
+        "precision": {"$ref": "#/$defs/share"},
+        "recall": {"$ref": "#/$defs/share"},
+        "predicted": {"$ref": "#/$defs/count"},
+        "expected": {"$ref": "#/$defs/count"},
+        "hits": {"$ref": "#/$defs/count"}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runs", "verdictAccuracy", "falsePositive", "truePositive", "rootCauseMatch", "rootCauseScore",
+        "evidence", "sourceFailuresReported", "overall", "judgeErrors", "toolCalls", "inputTokens",
+        "outputTokens", "costMicros", "judgeCostMicros", "meanCostPerRunUSD", "meanDurationMs"
+      ],
+      "properties": {
+        "runs": {"$ref": "#/$defs/count"},
+        "verdictAccuracy": {"$ref": "#/$defs/share"},
+        "falsePositive": {"$ref": "#/$defs/class"},
+        "truePositive": {"$ref": "#/$defs/class"},
+        "rootCauseMatch": {"$ref": "#/$defs/share"},
+        "rootCauseScore": {"$ref": "#/$defs/share"},
+        "evidence": {"$ref": "#/$defs/share"},
+        "sourceFailuresReported": {"$ref": "#/$defs/share"},
+        "overall": {"$ref": "#/$defs/share"},
+        "judgeErrors": {"$ref": "#/$defs/count"},
+        "toolCalls": {"$ref": "#/$defs/count"},
+        "inputTokens": {"$ref": "#/$defs/count"},
+        "outputTokens": {"$ref": "#/$defs/count"},
+        "costMicros": {"$ref": "#/$defs/count"},
+        "judgeCostMicros": {"$ref": "#/$defs/count"},
+        "meanCostPerRunUSD": {"type": ["number", "null"], "minimum": 0},
+        "meanDurationMs": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min", "median", "max"],
+      "properties": {
+        "min": {"type": "number"},
+        "median": {"type": "number"},
+        "max": {"type": "number"}
+      }
+    },
+    "spread": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runs", "correct", "rootCauseMean", "rootCauseSD", "costUSD", "durationMs"],
+      "properties": {
+        "runs": {"$ref": "#/$defs/count"},
+        "correct": {"$ref": "#/$defs/count"},
+        "rootCauseMean": {"$ref": "#/$defs/share"},
+        "rootCauseSD": {"type": ["number", "null"], "minimum": 0},
+        "costUSD": {"$ref": "#/$defs/range"},
+        "durationMs": {"$ref": "#/$defs/range"}
+      }
+    },
+    "itemGrade": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "met", "reason"],
+      "properties": {
+        "id": {"type": "string"},
+        "met": {"type": "boolean"},
+        "reason": {"type": "string"}
+      }
+    },
+    "rootCause": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["score", "requiredMet", "match", "items", "costMicros"],
+      "properties": {
+        "score": {"type": "number", "minimum": 0, "maximum": 1},
+        "requiredMet": {"type": "boolean"},
+        "match": {"type": "boolean"},
+        "items": {"type": ["array", "null"], "items": {"$ref": "#/$defs/itemGrade"}},
+        "error": {"type": "string"},
+        "costMicros": {"$ref": "#/$defs/count"}
+      }
+    },
+    "evidenceCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed"],
+      "properties": {
+        "calledTool": {"type": "string"},
+        "citedURL": {"type": "string"},
+        "passed": {"type": "boolean"}
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run", "investigationId", "status", "verdict", "stopReason", "verdictCorrect", "rootCause",
+        "evidenceScore", "sourcesReported", "toolCalls", "inputTokens", "outputTokens", "costMicros", "durationMs"
+      ],
+      "properties": {
+        "run": {"type": "integer", "minimum": 1},
+        "investigationId": {"type": "string"},
+        "status": {"type": "string"},
+        "verdict": {"type": "string"},
+        "confidence": {"type": "string"},
+        "stopReason": {"type": "string"},
+        "verdictCorrect": {"type": "boolean"},
+        "rootCause": {"$ref": "#/$defs/rootCause"},
+        "evidence": {"type": "array", "items": {"$ref": "#/$defs/evidenceCheck"}},
+        "evidenceScore": {"$ref": "#/$defs/share"},
+        "sourcesReported": {"type": ["boolean", "null"]},
+        "missingSources": {"type": "array", "items": {"type": "string"}},
+        "toolCalls": {"$ref": "#/$defs/count"},
+        "inputTokens": {"$ref": "#/$defs/count"},
+        "outputTokens": {"$ref": "#/$defs/count"},
+        "costMicros": {"$ref": "#/$defs/count"},
+        "durationMs": {"$ref": "#/$defs/count"}
+      }
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "expectedVerdict", "spread", "runs"],
+      "properties": {
+        "id": {"type": "string"},
+        "title": {"type": "string"},
+        "path": {"type": "string"},
+        "expectedVerdict": {"type": "string"},
+        "acceptable": {"type": "array", "items": {"type": "string"}},
+        "spread": {"$ref": "#/$defs/spread"},
+        "runs": {"type": "array", "items": {"$ref": "#/$defs/run"}}
+      }
+    }
+  }
+}
