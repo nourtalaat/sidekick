@@ -501,7 +501,7 @@ func TestAddFollowUp(t *testing.T) {
 			require.Equal(t, tt.wantAdded, h.ask(t, "Ev1", askDeploy))
 			require.Equal(t, tt.wantJob, h.pendingFollowUps(t) == 1)
 
-			var want []string
+			want := []string{}
 			if tt.wantAdded {
 				want = []string{"user U01ANA"}
 			}

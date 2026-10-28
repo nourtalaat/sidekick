@@ -377,14 +377,14 @@ func (h *harness) tryAnyway(t *testing.T) (bool, error) {
 	return started, nil
 }
 
-// auditRows returns each audit entry of the test investigation as "actor
-// action details".
+// auditRows returns each audit entry of a request for a full investigation
+// of the test investigation as "actor action details".
 func (h *harness) auditRows(t *testing.T) []string {
 	t.Helper()
 
 	rows, err := h.pool.Query(t.Context(),
-		"SELECT actor_kind || ' ' || actor_id || ' ' || action || ' ' || details::text FROM audit_log WHERE investigation_id = $1 ORDER BY id",
-		testInvestigation)
+		"SELECT actor_kind || ' ' || actor_id || ' ' || action || ' ' || details::text FROM audit_log WHERE investigation_id = $1 AND action = $2 ORDER BY id",
+		testInvestigation, auditInvestigateAnyway)
 	require.NoError(t, err)
 
 	out, err := pgx.CollectRows(rows, pgx.RowTo[string])
