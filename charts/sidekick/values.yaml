@@ -68,6 +68,17 @@ postgres:
     repository: docker.io/library/postgres
     tag: "18.6"
     pullPolicy: IfNotPresent
+    # Vector memory (memory.vector.enabled in the config) needs a Postgres
+    # with the pgvector extension, which this image does not have. For
+    # evaluation, use an image that has it, pinned by digest. The chart
+    # joins the repository and the tag with a colon, so a digest goes
+    # after the tag:
+    #   repository: docker.io/pgvector/pgvector
+    #   tag: "pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d"
+    # Pick the digest of the current image when you install, and keep it
+    # until you upgrade on purpose. A data volume that an image of another
+    # Postgres major version wrote does not start with this one. In
+    # production, use a managed Postgres that has pgvector.
   storage: 10Gi
   # storageClassName empty means the cluster's default storage class.
   storageClassName: ""
