@@ -229,6 +229,39 @@ func TestMergeListeners(t *testing.T) {
 	}
 }
 
+func TestEffectiveLayer(t *testing.T) {
+	t.Parallel()
+
+	e := rules.Merge(t.Context(), fileConfig(), rules.Runtime{
+		Listeners: []rules.Listener{runtimeListener("ops", "#ops"), runtimeListener("alerts", "#other")},
+		Routes:    []rules.Route{runtimeRoute("checkout", 10, nil), runtimeRoute("payments", 1, nil)},
+	})
+
+	tests := []struct {
+		name string
+		kind string
+		rule string
+		want rules.Layer
+	}{
+		{name: "a file listener", kind: rules.KindListener, rule: "alerts", want: rules.LayerFile},
+		{name: "a runtime listener", kind: rules.KindListener, rule: "ops", want: rules.LayerRuntime},
+		{name: "no such listener", kind: rules.KindListener, rule: "nope", want: ""},
+		{name: "a file route that a runtime route shadows", kind: rules.KindRoute, rule: "payments", want: rules.LayerFile},
+		{name: "a runtime route", kind: rules.KindRoute, rule: "checkout", want: rules.LayerRuntime},
+		{name: "no such route", kind: rules.KindRoute, rule: "nope", want: ""},
+		{name: "a name in the other kind", kind: rules.KindRoute, rule: "ops", want: ""},
+		{name: "an unknown kind", kind: "other", rule: "ops", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tt.want, e.Layer(tt.kind, tt.rule))
+		})
+	}
+}
+
 func skippedNames(skipped []rules.Skipped) []string {
 	var names []string
 	for _, s := range skipped {

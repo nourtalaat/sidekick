@@ -328,7 +328,7 @@ shown only to the person who sent the command.
 | Command | Role | Does |
 |---|---|---|
 | `/sidekick listen #channel [bot:<name or ID>] [pattern:<regex>] [name:<name>]` | responder | Adds a listener for the channel. `bot:` takes a bot name such as `Grafana` or a bot ID such as `B01ABCDEF`, and can be given more than once; `pattern:` is a regular expression over the message text, in double quotes when it holds spaces. The listener is named after the channel unless `name:` is given. |
-| `/sidekick unlisten <name>` | responder | Removes a listener added with `listen`. |
+| `/sidekick unlisten <name>` | responder | Removes a listener added with `listen`, including one that a listener of the config file with the same name shadows. |
 | `/sidekick listeners` | viewer | Lists the listeners in effect. |
 | `/sidekick routes` | viewer | Lists the routes, in the order they are tried. |
 | `/sidekick route set <name> <field> <value>` | admin | Changes one field of a route added from Slack, or adds the route. `/sidekick route set` lists the fields. |

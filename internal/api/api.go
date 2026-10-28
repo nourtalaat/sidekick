@@ -44,8 +44,8 @@ type Options struct {
 	Tokens TokenManager
 	// Config is the loaded config file, for GET /config.
 	Config *config.Config
-	// Rules reads the runtime listeners and routes, for GET /config.
-	Rules RuntimeRules
+	// Rules reads and changes the runtime listeners and routes.
+	Rules RuleStore
 	// Redactor redacts the strings GET /config and GET /jobs show. Nil
 	// shows them as they are.
 	Redactor *redact.Redactor

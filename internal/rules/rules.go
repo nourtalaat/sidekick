@@ -132,6 +132,23 @@ func (e *Effective) RouteConfigs() []config.Route {
 	return out
 }
 
+// Layer returns the layer of the rule in effect of kind, KindListener or
+// KindRoute, named name, or "" when none is in effect.
+func (e *Effective) Layer(kind, name string) Layer {
+	switch kind {
+	case KindListener:
+		if i := slices.IndexFunc(e.Listeners, func(l EffectiveListener) bool { return l.Name == name }); i >= 0 {
+			return e.Listeners[i].Layer
+		}
+	case KindRoute:
+		if i := slices.IndexFunc(e.Routes, func(r EffectiveRoute) bool { return r.Config.Name == name }); i >= 0 {
+			return e.Routes[i].Layer
+		}
+	}
+
+	return ""
+}
+
 // Listener returns the listener in effect named name.
 func (e *Effective) Listener(name string) (EffectiveListener, bool) {
 	i := slices.IndexFunc(e.Listeners, func(l EffectiveListener) bool { return l.Name == name })

@@ -19,6 +19,33 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AuditEntryActorKind.
+const (
+	AuditEntryActorKindPolicy   AuditEntryActorKind = "policy"
+	AuditEntryActorKindSidekick AuditEntryActorKind = "sidekick"
+	AuditEntryActorKindSystem   AuditEntryActorKind = "system"
+	AuditEntryActorKindToken    AuditEntryActorKind = "token"
+	AuditEntryActorKindUser     AuditEntryActorKind = "user"
+)
+
+// Valid indicates whether the value is a known member of the AuditEntryActorKind enum.
+func (e AuditEntryActorKind) Valid() bool {
+	switch e {
+	case AuditEntryActorKindPolicy:
+		return true
+	case AuditEntryActorKindSidekick:
+		return true
+	case AuditEntryActorKindSystem:
+		return true
+	case AuditEntryActorKindToken:
+		return true
+	case AuditEntryActorKindUser:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for Confidence.
 const (
 	High   Confidence = "high"
@@ -205,6 +232,63 @@ func (e Role) Valid() bool {
 	}
 }
 
+// Defines values for RouteMode.
+const (
+	ReadOnly RouteMode = "read-only"
+)
+
+// Valid indicates whether the value is a known member of the RouteMode enum.
+func (e RouteMode) Valid() bool {
+	switch e {
+	case ReadOnly:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RuleLayer.
+const (
+	File    RuleLayer = "file"
+	Runtime RuleLayer = "runtime"
+)
+
+// Valid indicates whether the value is a known member of the RuleLayer enum.
+func (e RuleLayer) Valid() bool {
+	switch e {
+	case File:
+		return true
+	case Runtime:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RuleStatus.
+const (
+	Active   RuleStatus = "active"
+	Disabled RuleStatus = "disabled"
+	Invalid  RuleStatus = "invalid"
+	Shadowed RuleStatus = "shadowed"
+)
+
+// Valid indicates whether the value is a known member of the RuleStatus enum.
+func (e RuleStatus) Valid() bool {
+	switch e {
+	case Active:
+		return true
+	case Disabled:
+		return true
+	case Invalid:
+		return true
+	case Shadowed:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RunKind.
 const (
 	RunKindFollowUp    RunKind = "follow_up"
@@ -225,19 +309,19 @@ func (e RunKind) Valid() bool {
 
 // Defines values for SenderKind.
 const (
-	Bot    SenderKind = "bot"
-	Human  SenderKind = "human"
-	System SenderKind = "system"
+	SenderKindBot    SenderKind = "bot"
+	SenderKindHuman  SenderKind = "human"
+	SenderKindSystem SenderKind = "system"
 )
 
 // Valid indicates whether the value is a known member of the SenderKind enum.
 func (e SenderKind) Valid() bool {
 	switch e {
-	case Bot:
+	case SenderKindBot:
 		return true
-	case Human:
+	case SenderKindHuman:
 		return true
-	case System:
+	case SenderKindSystem:
 		return true
 	default:
 		return false
@@ -457,6 +541,41 @@ func (e ListJobsParamsStatus) Valid() bool {
 	}
 }
 
+// AuditEntry defines model for AuditEntry.
+type AuditEntry struct {
+	// Action What happened, such as route.updated.
+	Action string `json:"action"`
+
+	// ActorId A user ID, an API token ID or a Slack user ID. Absent for sidekick, policy and system.
+	ActorId   *string             `json:"actorId,omitempty"`
+	ActorKind AuditEntryActorKind `json:"actorKind"`
+
+	// ActorName The name of the user or token, when it is still known.
+	ActorName       *string             `json:"actorName,omitempty"`
+	At              time.Time           `json:"at"`
+	Id              int64               `json:"id"`
+	InvestigationId *openapi_types.UUID `json:"investigationId,omitempty"`
+
+	// New The value after the change, of any JSON type. Absent when there was none.
+	New interface{} `json:"new,omitempty"`
+
+	// Old The value before the change, of any JSON type. Absent when there was none.
+	Old        interface{} `json:"old,omitempty"`
+	TargetId   *string     `json:"targetId,omitempty"`
+	TargetKind *string     `json:"targetKind,omitempty"`
+}
+
+// AuditEntryActorKind defines model for AuditEntry.ActorKind.
+type AuditEntryActorKind string
+
+// AuditList defines model for AuditList.
+type AuditList struct {
+	Entries []AuditEntry `json:"entries"`
+
+	// NextCursor Pass it as cursor to get the next page. Absent on the last page.
+	NextCursor *string `json:"nextCursor,omitempty"`
+}
+
 // CancelResult defines model for CancelResult.
 type CancelResult struct {
 	// Requested False when the investigation had ended or a stop was asked for already.
@@ -554,6 +673,15 @@ type FeedbackSummary struct {
 // FeedbackSummarySummary correct or wrong when every rating says so, mixed when both
 // kinds exist, and none when nobody rated.
 type FeedbackSummarySummary string
+
+// FieldError defines model for FieldError.
+type FieldError struct {
+	// Field The path of the field in the request body, such as
+	// budgets.maxTokens or match.sender.bots[0]. Empty for a problem
+	// with the whole body.
+	Field   string `json:"field"`
+	Message string `json:"message"`
+}
 
 // Finding defines model for Finding.
 type Finding struct {
@@ -735,6 +863,105 @@ type JobList struct {
 	NextCursor *string `json:"nextCursor,omitempty"`
 }
 
+// Listener defines model for Listener.
+type Listener struct {
+	// Channel A channel name such as "#alerts" or a channel ID.
+	Channel string `json:"channel"`
+	Enabled bool   `json:"enabled"`
+
+	// Extract Regular expressions with named groups that set the alert's fields.
+	Extract *[]string `json:"extract,omitempty"`
+
+	// Layer Where the rule is defined. A rule of the file layer is read-only.
+	Layer RuleLayer      `json:"layer"`
+	Match *ListenerMatch `json:"match,omitempty"`
+	Name  string         `json:"name"`
+
+	// ReadOnly True for a listener of the config file.
+	ReadOnly bool `json:"readOnly"`
+
+	// Recovery A regular expression. A message it matches is a recovery.
+	Recovery *string `json:"recovery,omitempty"`
+
+	// Source The chat app, slack or teams. Empty means slack.
+	Source *string `json:"source,omitempty"`
+
+	// Status active: in effect. shadowed: a rule of the config file has the same
+	// name and is used instead. invalid: it no longer passes the config
+	// checks. disabled: turned off.
+	Status RuleStatus `json:"status"`
+
+	// StatusReason Why the rule is not active.
+	StatusReason *string `json:"statusReason,omitempty"`
+
+	// Trusted Whether its senders are trusted. Runtime listeners are never trusted.
+	Trusted   bool       `json:"trusted"`
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
+	UpdatedBy *string    `json:"updatedBy,omitempty"`
+
+	// Version The version of a runtime listener; it grows with every change.
+	Version *int `json:"version,omitempty"`
+}
+
+// ListenerList defines model for ListenerList.
+type ListenerList struct {
+	Listeners []Listener `json:"listeners"`
+}
+
+// ListenerMatch defines model for ListenerMatch.
+type ListenerMatch struct {
+	Sender *ListenerSender `json:"sender,omitempty"`
+
+	// Text A regular expression over the message text.
+	Text *string `json:"text,omitempty"`
+}
+
+// ListenerSender defines model for ListenerSender.
+type ListenerSender struct {
+	Bots *[]string `json:"bots,omitempty"`
+
+	// Kind human or bot; empty matches both.
+	Kind  *string   `json:"kind,omitempty"`
+	Names *[]string `json:"names,omitempty"`
+	Users *[]string `json:"users,omitempty"`
+}
+
+// ListenerSpec The parts of a listener that a person sets, with the keys they have in sidekick.yaml.
+type ListenerSpec struct {
+	// Channel A channel name such as "#alerts" or a channel ID.
+	Channel string `json:"channel"`
+
+	// Extract Regular expressions with named groups that set the alert's fields.
+	Extract *[]string      `json:"extract,omitempty"`
+	Match   *ListenerMatch `json:"match,omitempty"`
+
+	// Recovery A regular expression. A message it matches is a recovery.
+	Recovery *string `json:"recovery,omitempty"`
+
+	// Source The chat app, slack or teams. Empty means slack.
+	Source *string `json:"source,omitempty"`
+}
+
+// ListenerUpdate defines model for ListenerUpdate.
+type ListenerUpdate struct {
+	// Channel A channel name such as "#alerts" or a channel ID.
+	Channel string `json:"channel"`
+	Enabled bool   `json:"enabled"`
+
+	// Extract Regular expressions with named groups that set the alert's fields.
+	Extract *[]string      `json:"extract,omitempty"`
+	Match   *ListenerMatch `json:"match,omitempty"`
+
+	// Recovery A regular expression. A message it matches is a recovery.
+	Recovery *string `json:"recovery,omitempty"`
+
+	// Source The chat app, slack or teams. Empty means slack.
+	Source *string `json:"source,omitempty"`
+
+	// Version The version of the listener that was read.
+	Version int `json:"version"`
+}
+
 // Me defines model for Me.
 type Me struct {
 	// CsrfToken The session's CSRF token. Requests made with the session that
@@ -758,6 +985,41 @@ type Me struct {
 
 // MeKind Whether the caller is a signed-in user or an API token.
 type MeKind string
+
+// NewListener defines model for NewListener.
+type NewListener struct {
+	// Channel A channel name such as "#alerts" or a channel ID.
+	Channel string `json:"channel"`
+
+	// Extract Regular expressions with named groups that set the alert's fields.
+	Extract *[]string      `json:"extract,omitempty"`
+	Match   *ListenerMatch `json:"match,omitempty"`
+	Name    string         `json:"name"`
+
+	// Recovery A regular expression. A message it matches is a recovery.
+	Recovery *string `json:"recovery,omitempty"`
+
+	// Source The chat app, slack or teams. Empty means slack.
+	Source *string `json:"source,omitempty"`
+}
+
+// NewRoute defines model for NewRoute.
+type NewRoute struct {
+	// Budgets Limits of one investigation. Zero or empty uses the global value.
+	Budgets  *RouteBudgets  `json:"budgets,omitempty"`
+	Grouping *RouteGrouping `json:"grouping,omitempty"`
+	Match    *RouteMatch    `json:"match,omitempty"`
+
+	// Mode The action mode. Only read-only exists until action modes arrive.
+	Mode    *RouteMode `json:"mode,omitempty"`
+	Name    string     `json:"name"`
+	Outputs *[]string  `json:"outputs,omitempty"`
+
+	// Priority Lower is tried first. Defaults to 100.
+	Priority *int      `json:"priority,omitempty"`
+	Sources  *[]string `json:"sources,omitempty"`
+	Strategy *string   `json:"strategy,omitempty"`
+}
 
 // NewToken defines model for NewToken.
 type NewToken struct {
@@ -794,8 +1056,16 @@ type Prevention struct {
 
 // Problem Problem details, as RFC 9457 describes.
 type Problem struct {
+	// Code Names the kind of problem for a program. Only some answers have
+	// it: validation (422), file_rule, exists, stale, conflict
+	// (409) and not_found (404) on listeners and routes.
+	Code *string `json:"code,omitempty"`
+
 	// Detail What went wrong with this request.
 	Detail *string `json:"detail,omitempty"`
+
+	// Errors The fields of the request that were refused, when code is validation.
+	Errors *[]FieldError `json:"errors,omitempty"`
 
 	// Instance The path of the request.
 	Instance *string `json:"instance,omitempty"`
@@ -843,6 +1113,138 @@ type ResolveResult struct {
 
 // Role defines model for Role.
 type Role string
+
+// Route defines model for Route.
+type Route struct {
+	// Budgets Limits of one investigation. Zero or empty uses the global value.
+	Budgets  *RouteBudgets  `json:"budgets,omitempty"`
+	Enabled  bool           `json:"enabled"`
+	Grouping *RouteGrouping `json:"grouping,omitempty"`
+
+	// Layer Where the rule is defined. A rule of the file layer is read-only.
+	Layer RuleLayer   `json:"layer"`
+	Match *RouteMatch `json:"match,omitempty"`
+
+	// Mode The action mode. Only read-only exists until action modes arrive.
+	Mode    *RouteMode `json:"mode,omitempty"`
+	Name    string     `json:"name"`
+	Outputs *[]string  `json:"outputs,omitempty"`
+
+	// Position The place of a route in effect in the order routes are tried, from 1.
+	Position *int `json:"position,omitempty"`
+
+	// Priority Lower is tried first. Defaults to 100.
+	Priority *int `json:"priority,omitempty"`
+
+	// ReadOnly True for a route of the config file.
+	ReadOnly bool      `json:"readOnly"`
+	Sources  *[]string `json:"sources,omitempty"`
+
+	// Status active: in effect. shadowed: a rule of the config file has the same
+	// name and is used instead. invalid: it no longer passes the config
+	// checks. disabled: turned off.
+	Status RuleStatus `json:"status"`
+
+	// StatusReason Why the rule is not active.
+	StatusReason *string    `json:"statusReason,omitempty"`
+	Strategy     *string    `json:"strategy,omitempty"`
+	UpdatedAt    *time.Time `json:"updatedAt,omitempty"`
+	UpdatedBy    *string    `json:"updatedBy,omitempty"`
+
+	// Version The version of a runtime route; it grows with every change.
+	Version *int `json:"version,omitempty"`
+}
+
+// RouteBudgets Limits of one investigation. Zero or empty uses the global value.
+type RouteBudgets struct {
+	MaxCostUSD   *float64 `json:"maxCostUSD,omitempty"`
+	MaxTokens    *int     `json:"maxTokens,omitempty"`
+	MaxToolCalls *int     `json:"maxToolCalls,omitempty"`
+
+	// MaxWallTime A duration such as 5m.
+	MaxWallTime *string `json:"maxWallTime,omitempty"`
+}
+
+// RouteGrouping defines model for RouteGrouping.
+type RouteGrouping struct {
+	FingerprintLabels *[]string `json:"fingerprintLabels,omitempty"`
+
+	// RelatedWindow A duration such as 15m. Empty turns it off.
+	RelatedWindow *string `json:"relatedWindow,omitempty"`
+
+	// Window A duration such as 30m.
+	Window *string `json:"window,omitempty"`
+}
+
+// RouteList defines model for RouteList.
+type RouteList struct {
+	Routes []Route `json:"routes"`
+}
+
+// RouteMatch defines model for RouteMatch.
+type RouteMatch struct {
+	// Intake Names of webhook endpoints and listeners.
+	Intake *[]string          `json:"intake,omitempty"`
+	Labels *map[string]string `json:"labels,omitempty"`
+
+	// Service A glob.
+	Service *string `json:"service,omitempty"`
+
+	// Severity unknown, info, warning or critical.
+	Severity *[]string `json:"severity,omitempty"`
+
+	// Text A regular expression over the event text.
+	Text *string `json:"text,omitempty"`
+}
+
+// RouteMode The action mode. Only read-only exists until action modes arrive.
+type RouteMode string
+
+// RouteSpec The parts of a route that a person sets, with the keys they have in sidekick.yaml.
+type RouteSpec struct {
+	// Budgets Limits of one investigation. Zero or empty uses the global value.
+	Budgets  *RouteBudgets  `json:"budgets,omitempty"`
+	Grouping *RouteGrouping `json:"grouping,omitempty"`
+	Match    *RouteMatch    `json:"match,omitempty"`
+
+	// Mode The action mode. Only read-only exists until action modes arrive.
+	Mode    *RouteMode `json:"mode,omitempty"`
+	Outputs *[]string  `json:"outputs,omitempty"`
+
+	// Priority Lower is tried first. Defaults to 100.
+	Priority *int      `json:"priority,omitempty"`
+	Sources  *[]string `json:"sources,omitempty"`
+	Strategy *string   `json:"strategy,omitempty"`
+}
+
+// RouteUpdate defines model for RouteUpdate.
+type RouteUpdate struct {
+	// Budgets Limits of one investigation. Zero or empty uses the global value.
+	Budgets  *RouteBudgets  `json:"budgets,omitempty"`
+	Enabled  bool           `json:"enabled"`
+	Grouping *RouteGrouping `json:"grouping,omitempty"`
+	Match    *RouteMatch    `json:"match,omitempty"`
+
+	// Mode The action mode. Only read-only exists until action modes arrive.
+	Mode    *RouteMode `json:"mode,omitempty"`
+	Outputs *[]string  `json:"outputs,omitempty"`
+
+	// Priority Lower is tried first. Defaults to 100.
+	Priority *int      `json:"priority,omitempty"`
+	Sources  *[]string `json:"sources,omitempty"`
+	Strategy *string   `json:"strategy,omitempty"`
+
+	// Version The version of the route that was read.
+	Version int `json:"version"`
+}
+
+// RuleLayer Where the rule is defined. A rule of the file layer is read-only.
+type RuleLayer string
+
+// RuleStatus active: in effect. shadowed: a rule of the config file has the same
+// name and is used instead. invalid: it no longer passes the config
+// checks. disabled: turned off.
+type RuleStatus string
 
 // RunKind What the current run does: a full investigation, or the answer to follow-up questions.
 type RunKind string
@@ -1047,6 +1449,33 @@ type WatcherSummary struct {
 // InvestigationID defines model for InvestigationID.
 type InvestigationID = openapi_types.UUID
 
+// RuleName defines model for RuleName.
+type RuleName = string
+
+// ListAuditParams defines parameters for ListAudit.
+type ListAuditParams struct {
+	// From Only entries made at or after this time.
+	From *time.Time `form:"from,omitempty" json:"from,omitempty"`
+
+	// To Only entries made before this time.
+	To *time.Time `form:"to,omitempty" json:"to,omitempty"`
+
+	// Actor The ID of the user, API token or Slack user that made the change.
+	// sidekick, policy and system select the entries Sidekick made on
+	// its own.
+	Actor *string `form:"actor,omitempty" json:"actor,omitempty"`
+
+	// Action The action, such as route.updated or job.retried.
+	Action *string `form:"action,omitempty" json:"action,omitempty"`
+
+	// Investigation Only entries of this investigation.
+	Investigation *openapi_types.UUID `form:"investigation,omitempty" json:"investigation,omitempty"`
+
+	// Cursor The nextCursor of the page before.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // ListInvestigationsParams defines parameters for ListInvestigations.
 type ListInvestigationsParams struct {
 	// From Only investigations created at or after this time.
@@ -1106,11 +1535,26 @@ type ListJobsParamsStatus string
 // AskFollowUpJSONRequestBody defines body for AskFollowUp for application/json ContentType.
 type AskFollowUpJSONRequestBody = FollowUpRequest
 
+// CreateListenerJSONRequestBody defines body for CreateListener for application/json ContentType.
+type CreateListenerJSONRequestBody = NewListener
+
+// UpdateListenerJSONRequestBody defines body for UpdateListener for application/json ContentType.
+type UpdateListenerJSONRequestBody = ListenerUpdate
+
+// CreateRouteJSONRequestBody defines body for CreateRoute for application/json ContentType.
+type CreateRouteJSONRequestBody = NewRoute
+
+// UpdateRouteJSONRequestBody defines body for UpdateRoute for application/json ContentType.
+type UpdateRouteJSONRequestBody = RouteUpdate
+
 // CreateTokenJSONRequestBody defines body for CreateToken for application/json ContentType.
 type CreateTokenJSONRequestBody = NewToken
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// ListAudit The audit log, newest first, a page at a time
+	// (GET /audit)
+	ListAudit(w http.ResponseWriter, r *http.Request, params ListAuditParams)
 	// GetConfig The effective config, with secrets shown only as references
 	// (GET /config)
 	GetConfig(w http.ResponseWriter, r *http.Request)
@@ -1144,9 +1588,33 @@ type ServerInterface interface {
 	// RetryJob Retry a dead job
 	// (POST /jobs/{id}/retry)
 	RetryJob(w http.ResponseWriter, r *http.Request, id int64)
+	// ListListeners The listeners, from the config file and from runtime, with their status
+	// (GET /listeners)
+	ListListeners(w http.ResponseWriter, r *http.Request)
+	// CreateListener Add a runtime listener
+	// (POST /listeners)
+	CreateListener(w http.ResponseWriter, r *http.Request)
+	// DeleteListener Delete a runtime listener
+	// (DELETE /listeners/{name})
+	DeleteListener(w http.ResponseWriter, r *http.Request, name RuleName)
+	// UpdateListener Replace a runtime listener
+	// (PUT /listeners/{name})
+	UpdateListener(w http.ResponseWriter, r *http.Request, name RuleName)
 	// GetMe The signed-in user or API token, and its role
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
+	// ListRoutes The routes, from the config file and from runtime, with their status
+	// (GET /routes)
+	ListRoutes(w http.ResponseWriter, r *http.Request)
+	// CreateRoute Add a runtime route
+	// (POST /routes)
+	CreateRoute(w http.ResponseWriter, r *http.Request)
+	// DeleteRoute Delete a runtime route
+	// (DELETE /routes/{name})
+	DeleteRoute(w http.ResponseWriter, r *http.Request, name RuleName)
+	// UpdateRoute Replace a runtime route
+	// (PUT /routes/{name})
+	UpdateRoute(w http.ResponseWriter, r *http.Request, name RuleName)
 	// ListTokens Every API token, revoked and expired ones included, newest first
 	// (GET /tokens)
 	ListTokens(w http.ResponseWriter, r *http.Request)
@@ -1169,6 +1637,117 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// ListAudit operation middleware
+func (siw *ServerInterfaceWrapper) ListAudit(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAuditParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "actor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "actor", r.URL.Query(), &params.Actor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "actor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "actor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "action" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "action", r.URL.Query(), &params.Action, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "action"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "action", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "investigation" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "investigation", r.URL.Query(), &params.Investigation, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "investigation"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAudit(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // GetConfig operation middleware
 func (siw *ServerInterfaceWrapper) GetConfig(w http.ResponseWriter, r *http.Request) {
@@ -1680,11 +2259,171 @@ func (siw *ServerInterfaceWrapper) RetryJob(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// ListListeners operation middleware
+func (siw *ServerInterfaceWrapper) ListListeners(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListListeners(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateListener operation middleware
+func (siw *ServerInterfaceWrapper) CreateListener(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateListener(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteListener operation middleware
+func (siw *ServerInterfaceWrapper) DeleteListener(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "name" -------------
+	var name RuleName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteListener(w, r, name)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateListener operation middleware
+func (siw *ServerInterfaceWrapper) UpdateListener(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "name" -------------
+	var name RuleName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateListener(w, r, name)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetMe operation middleware
 func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListRoutes operation middleware
+func (siw *ServerInterfaceWrapper) ListRoutes(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRoutes(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateRoute operation middleware
+func (siw *ServerInterfaceWrapper) CreateRoute(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateRoute(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteRoute operation middleware
+func (siw *ServerInterfaceWrapper) DeleteRoute(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "name" -------------
+	var name RuleName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteRoute(w, r, name)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateRoute operation middleware
+func (siw *ServerInterfaceWrapper) UpdateRoute(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "name" -------------
+	var name RuleName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateRoute(w, r, name)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1901,6 +2640,15 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tokens", wrapper.ListTokens)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/tokens", wrapper.CreateToken)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/tokens/{id}", wrapper.RevokeToken)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/listeners", wrapper.ListListeners)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/listeners", wrapper.CreateListener)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/listeners/{name}", wrapper.DeleteListener)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/listeners/{name}", wrapper.UpdateListener)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/routes", wrapper.ListRoutes)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/routes", wrapper.CreateRoute)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/routes/{name}", wrapper.DeleteRoute)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/routes/{name}", wrapper.UpdateRoute)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/audit", wrapper.ListAudit)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations", wrapper.ListInvestigations)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}", wrapper.GetInvestigation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}/steps", wrapper.ListInvestigationSteps)
@@ -1915,6 +2663,45 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 }
 
 type ProblemApplicationProblemPlusJSONResponse Problem
+
+type ListAuditRequestObject struct {
+	Params ListAuditParams
+}
+
+type ListAuditResponseObject interface {
+	VisitListAuditResponse(w http.ResponseWriter) error
+}
+
+type ListAudit200JSONResponse AuditList
+
+func (response ListAudit200JSONResponse) VisitListAuditResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAuditdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListAuditdefaultApplicationProblemPlusJSONResponse) VisitListAuditResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type GetConfigRequestObject struct {
 }
@@ -2370,6 +3157,156 @@ func (response RetryJobdefaultApplicationProblemPlusJSONResponse) VisitRetryJobR
 	return err
 }
 
+type ListListenersRequestObject struct {
+}
+
+type ListListenersResponseObject interface {
+	VisitListListenersResponse(w http.ResponseWriter) error
+}
+
+type ListListeners200JSONResponse ListenerList
+
+func (response ListListeners200JSONResponse) VisitListListenersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListListenersdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListListenersdefaultApplicationProblemPlusJSONResponse) VisitListListenersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateListenerRequestObject struct {
+	Body *CreateListenerJSONRequestBody
+}
+
+type CreateListenerResponseObject interface {
+	VisitCreateListenerResponse(w http.ResponseWriter) error
+}
+
+type CreateListener201JSONResponse Listener
+
+func (response CreateListener201JSONResponse) VisitCreateListenerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateListenerdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateListenerdefaultApplicationProblemPlusJSONResponse) VisitCreateListenerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteListenerRequestObject struct {
+	Name RuleName `json:"name"`
+}
+
+type DeleteListenerResponseObject interface {
+	VisitDeleteListenerResponse(w http.ResponseWriter) error
+}
+
+type DeleteListener204Response struct {
+}
+
+func (response DeleteListener204Response) VisitDeleteListenerResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteListenerdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteListenerdefaultApplicationProblemPlusJSONResponse) VisitDeleteListenerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateListenerRequestObject struct {
+	Name RuleName `json:"name"`
+	Body *UpdateListenerJSONRequestBody
+}
+
+type UpdateListenerResponseObject interface {
+	VisitUpdateListenerResponse(w http.ResponseWriter) error
+}
+
+type UpdateListener200JSONResponse Listener
+
+func (response UpdateListener200JSONResponse) VisitUpdateListenerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateListenerdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UpdateListenerdefaultApplicationProblemPlusJSONResponse) VisitUpdateListenerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetMeRequestObject struct {
 }
 
@@ -2397,6 +3334,156 @@ type GetMedefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetMedefaultApplicationProblemPlusJSONResponse) VisitGetMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRoutesRequestObject struct {
+}
+
+type ListRoutesResponseObject interface {
+	VisitListRoutesResponse(w http.ResponseWriter) error
+}
+
+type ListRoutes200JSONResponse RouteList
+
+func (response ListRoutes200JSONResponse) VisitListRoutesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRoutesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListRoutesdefaultApplicationProblemPlusJSONResponse) VisitListRoutesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRouteRequestObject struct {
+	Body *CreateRouteJSONRequestBody
+}
+
+type CreateRouteResponseObject interface {
+	VisitCreateRouteResponse(w http.ResponseWriter) error
+}
+
+type CreateRoute201JSONResponse Route
+
+func (response CreateRoute201JSONResponse) VisitCreateRouteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRoutedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateRoutedefaultApplicationProblemPlusJSONResponse) VisitCreateRouteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteRouteRequestObject struct {
+	Name RuleName `json:"name"`
+}
+
+type DeleteRouteResponseObject interface {
+	VisitDeleteRouteResponse(w http.ResponseWriter) error
+}
+
+type DeleteRoute204Response struct {
+}
+
+func (response DeleteRoute204Response) VisitDeleteRouteResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteRoutedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteRoutedefaultApplicationProblemPlusJSONResponse) VisitDeleteRouteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateRouteRequestObject struct {
+	Name RuleName `json:"name"`
+	Body *UpdateRouteJSONRequestBody
+}
+
+type UpdateRouteResponseObject interface {
+	VisitUpdateRouteResponse(w http.ResponseWriter) error
+}
+
+type UpdateRoute200JSONResponse Route
+
+func (response UpdateRoute200JSONResponse) VisitUpdateRouteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateRoutedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UpdateRoutedefaultApplicationProblemPlusJSONResponse) VisitUpdateRouteResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -2559,6 +3646,9 @@ func (response StopWatcherdefaultApplicationProblemPlusJSONResponse) VisitStopWa
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// ListAudit The audit log, newest first, a page at a time
+	// (GET /audit)
+	ListAudit(ctx context.Context, request ListAuditRequestObject) (ListAuditResponseObject, error)
 	// GetConfig The effective config, with secrets shown only as references
 	// (GET /config)
 	GetConfig(ctx context.Context, request GetConfigRequestObject) (GetConfigResponseObject, error)
@@ -2592,9 +3682,33 @@ type StrictServerInterface interface {
 	// RetryJob Retry a dead job
 	// (POST /jobs/{id}/retry)
 	RetryJob(ctx context.Context, request RetryJobRequestObject) (RetryJobResponseObject, error)
+	// ListListeners The listeners, from the config file and from runtime, with their status
+	// (GET /listeners)
+	ListListeners(ctx context.Context, request ListListenersRequestObject) (ListListenersResponseObject, error)
+	// CreateListener Add a runtime listener
+	// (POST /listeners)
+	CreateListener(ctx context.Context, request CreateListenerRequestObject) (CreateListenerResponseObject, error)
+	// DeleteListener Delete a runtime listener
+	// (DELETE /listeners/{name})
+	DeleteListener(ctx context.Context, request DeleteListenerRequestObject) (DeleteListenerResponseObject, error)
+	// UpdateListener Replace a runtime listener
+	// (PUT /listeners/{name})
+	UpdateListener(ctx context.Context, request UpdateListenerRequestObject) (UpdateListenerResponseObject, error)
 	// GetMe The signed-in user or API token, and its role
 	// (GET /me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
+	// ListRoutes The routes, from the config file and from runtime, with their status
+	// (GET /routes)
+	ListRoutes(ctx context.Context, request ListRoutesRequestObject) (ListRoutesResponseObject, error)
+	// CreateRoute Add a runtime route
+	// (POST /routes)
+	CreateRoute(ctx context.Context, request CreateRouteRequestObject) (CreateRouteResponseObject, error)
+	// DeleteRoute Delete a runtime route
+	// (DELETE /routes/{name})
+	DeleteRoute(ctx context.Context, request DeleteRouteRequestObject) (DeleteRouteResponseObject, error)
+	// UpdateRoute Replace a runtime route
+	// (PUT /routes/{name})
+	UpdateRoute(ctx context.Context, request UpdateRouteRequestObject) (UpdateRouteResponseObject, error)
 	// ListTokens Every API token, revoked and expired ones included, newest first
 	// (GET /tokens)
 	ListTokens(ctx context.Context, request ListTokensRequestObject) (ListTokensResponseObject, error)
@@ -2646,6 +3760,32 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// ListAudit operation middleware
+func (sh *strictHandler) ListAudit(w http.ResponseWriter, r *http.Request, params ListAuditParams) {
+	var request ListAuditRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAudit(ctx, request.(ListAuditRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAudit")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAuditResponseObject); ok {
+		if err := validResponse.VisitListAuditResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // GetConfig operation middleware
@@ -2941,6 +4081,120 @@ func (sh *strictHandler) RetryJob(w http.ResponseWriter, r *http.Request, id int
 	}
 }
 
+// ListListeners operation middleware
+func (sh *strictHandler) ListListeners(w http.ResponseWriter, r *http.Request) {
+	var request ListListenersRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListListeners(ctx, request.(ListListenersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListListeners")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListListenersResponseObject); ok {
+		if err := validResponse.VisitListListenersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateListener operation middleware
+func (sh *strictHandler) CreateListener(w http.ResponseWriter, r *http.Request) {
+	var request CreateListenerRequestObject
+
+	var body CreateListenerJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateListener(ctx, request.(CreateListenerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateListener")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateListenerResponseObject); ok {
+		if err := validResponse.VisitCreateListenerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteListener operation middleware
+func (sh *strictHandler) DeleteListener(w http.ResponseWriter, r *http.Request, name RuleName) {
+	var request DeleteListenerRequestObject
+
+	request.Name = name
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteListener(ctx, request.(DeleteListenerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteListener")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteListenerResponseObject); ok {
+		if err := validResponse.VisitDeleteListenerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateListener operation middleware
+func (sh *strictHandler) UpdateListener(w http.ResponseWriter, r *http.Request, name RuleName) {
+	var request UpdateListenerRequestObject
+
+	request.Name = name
+
+	var body UpdateListenerJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateListener(ctx, request.(UpdateListenerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateListener")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateListenerResponseObject); ok {
+		if err := validResponse.VisitUpdateListenerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetMe operation middleware
 func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	var request GetMeRequestObject
@@ -2958,6 +4212,120 @@ func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetMeResponseObject); ok {
 		if err := validResponse.VisitGetMeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListRoutes operation middleware
+func (sh *strictHandler) ListRoutes(w http.ResponseWriter, r *http.Request) {
+	var request ListRoutesRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListRoutes(ctx, request.(ListRoutesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListRoutes")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListRoutesResponseObject); ok {
+		if err := validResponse.VisitListRoutesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateRoute operation middleware
+func (sh *strictHandler) CreateRoute(w http.ResponseWriter, r *http.Request) {
+	var request CreateRouteRequestObject
+
+	var body CreateRouteJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateRoute(ctx, request.(CreateRouteRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateRoute")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateRouteResponseObject); ok {
+		if err := validResponse.VisitCreateRouteResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteRoute operation middleware
+func (sh *strictHandler) DeleteRoute(w http.ResponseWriter, r *http.Request, name RuleName) {
+	var request DeleteRouteRequestObject
+
+	request.Name = name
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteRoute(ctx, request.(DeleteRouteRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteRoute")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteRouteResponseObject); ok {
+		if err := validResponse.VisitDeleteRouteResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateRoute operation middleware
+func (sh *strictHandler) UpdateRoute(w http.ResponseWriter, r *http.Request, name RuleName) {
+	var request UpdateRouteRequestObject
+
+	request.Name = name
+
+	var body UpdateRouteJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateRoute(ctx, request.(UpdateRouteRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateRoute")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateRouteResponseObject); ok {
+		if err := validResponse.VisitUpdateRouteResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
