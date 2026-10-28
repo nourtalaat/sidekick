@@ -208,7 +208,7 @@ func (r *run) savePrompt(ctx context.Context) error {
 		specs = append(specs, spec)
 	}
 
-	examples, err := memory.Examples(ctx, r.h.opts.Pool, memory.MatchOf(r.inv.ID, group.First), r.h.opts.MemoryExamples)
+	examples, err := memory.Examples(ctx, r.h.opts.Pool, memory.MatchOf(r.inv.ID, group.First), r.h.opts.MemoryExamples, r.h.opts.MemoryVectors)
 	if err != nil {
 		return fmt.Errorf("find similar confirmed investigations: %w", err)
 	}

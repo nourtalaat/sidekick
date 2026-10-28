@@ -88,8 +88,8 @@ func SchemaVersion(ctx context.Context, pool *pgxpool.Pool) (current, target int
 
 // migrate applies the migrations in fsys under the migration lock lockID.
 // Tests call it with their own migrations.
-func migrate(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, lockID int64) (err error) {
-	provider, err := newProvider(pool, fsys, lockID)
+func migrate(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, lockID int64, opts ...goose.ProviderOption) (err error) {
+	provider, err := newProvider(pool, fsys, lockID, opts...)
 	if err != nil {
 		return fmt.Errorf("set up goose: %w", err)
 	}
@@ -105,7 +105,7 @@ func migrate(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, lockID int64) 
 	return nil
 }
 
-func newProvider(pool *pgxpool.Pool, fsys fs.FS, lockID int64) (*goose.Provider, error) {
+func newProvider(pool *pgxpool.Pool, fsys fs.FS, lockID int64, opts ...goose.ProviderOption) (*goose.Provider, error) {
 	locker, err := lock.NewPostgresSessionLocker(lock.WithLockID(lockID), lock.WithLockTimeout(lockRetrySeconds, lockRetries))
 	if err != nil {
 		return nil, fmt.Errorf("create migration lock: %w", err)
@@ -114,7 +114,7 @@ func newProvider(pool *pgxpool.Pool, fsys fs.FS, lockID int64) (*goose.Provider,
 	// Closing this *sql.DB leaves the pool open.
 	sqlDB := stdlib.OpenDBFromPool(pool)
 
-	provider, err := goose.NewProvider(goose.DialectPostgres, sqlDB, fsys, goose.WithSessionLocker(locker))
+	provider, err := goose.NewProvider(goose.DialectPostgres, sqlDB, fsys, append([]goose.ProviderOption{goose.WithSessionLocker(locker)}, opts...)...)
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("load migrations: %w", err), sqlDB.Close())
 	}

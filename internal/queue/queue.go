@@ -44,6 +44,7 @@ const (
 	KindRetention       = "retention"
 	KindBackfill        = "backfill"
 	KindNotice          = "notice"
+	KindEmbedMemory     = "embed_memory"
 )
 
 // The values of jobs.status.

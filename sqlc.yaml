@@ -2,7 +2,10 @@ version: "2"
 sql:
   - engine: postgresql
     # sqlc reads the goose migrations as the schema and skips the Down parts.
-    schema: internal/store/migrations
+    # The vector migrations are a second set, run only with vector memory.
+    schema:
+      - internal/store/migrations
+      - internal/store/migrations/vector
     queries: internal/store/queries
     gen:
       go:
@@ -25,6 +28,10 @@ sql:
               import: github.com/google/uuid
               type: UUID
               pointer: true
+          # pgx sends a Go string as text to the vector type, which pgvector
+          # reads as "[1,2,3]", so no pgvector Go module is needed.
+          - db_type: vector
+            go_type: string
           - db_type: timestamptz
             go_type:
               import: time

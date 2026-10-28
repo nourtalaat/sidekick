@@ -115,7 +115,11 @@ Start from the quick-start values and change these:
 - **Database.** The bundled Postgres is one pod with no backups. Use a
   managed Postgres 15 or newer, put its URL in a Secret, list the Secret
   under `secrets`, and set `config.database.urlSecret`. Leave
-  `postgres.enabled` off.
+  `postgres.enabled` off. Vector memory (`config.memory.vector`) is
+  optional and needs a Postgres with the pgvector extension; the bundled
+  Postgres image does not have it, and
+  [`memory.vector`](configuration.md#vector-memory-memoryvector) says what
+  to prepare.
 - **Replicas.** Run 2 or more (`replicaCount`, the default is 2) and keep
   `pdb.enabled`, so a node drain always leaves one running.
 - **Migrations.** `migrations.mode` is `startup` by default: each replica

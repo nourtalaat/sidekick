@@ -122,7 +122,7 @@ func TestExamples(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := Examples(t.Context(), pool, tt.match, tt.limit)
+			got, err := Examples(t.Context(), pool, tt.match, tt.limit, nil)
 			require.NoError(t, err)
 
 			var ids []chosen
@@ -166,7 +166,7 @@ func TestExamplesFields(t *testing.T) {
 			m := checkoutLatency
 			m.Investigation = entrySameFingerprintNew
 
-			got, err := Examples(t.Context(), pool, m, 1)
+			got, err := Examples(t.Context(), pool, m, 1, nil)
 			require.NoError(t, err)
 			require.Len(t, got, 1)
 

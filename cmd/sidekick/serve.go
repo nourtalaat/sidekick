@@ -13,6 +13,8 @@ import (
 	"github.com/nourtalaat/sidekick/internal/app"
 	"github.com/nourtalaat/sidekick/internal/buildinfo"
 	"github.com/nourtalaat/sidekick/internal/config"
+	"github.com/nourtalaat/sidekick/internal/memory"
+	"github.com/nourtalaat/sidekick/internal/model/instrument"
 )
 
 // newServeCmd builds `sidekick serve`, which runs Sidekick until SIGTERM or
@@ -97,7 +99,17 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
-	if err := registerSlackApp(ctx, a, cache); err != nil {
+	modelMetrics, err := instrument.NewMetrics(a.Telemetry().Registry())
+	if err != nil {
+		return errors.Join(fmt.Errorf("start: set up model metrics: %w", err), a.Close())
+	}
+
+	vectors, err := registerMemoryVectors(a, modelMetrics)
+	if err != nil {
+		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
+	}
+
+	if err := registerSlackApp(ctx, a, cache, memory.SyncOptions{Embed: vectors != nil}); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
@@ -135,7 +147,7 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
-	if err := registerInvestigator(a, guard, watchers); err != nil {
+	if err := registerInvestigator(a, guard, watchers, modelMetrics, vectors); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 

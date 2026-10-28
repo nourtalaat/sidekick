@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
+	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/model/pricing"
 	"github.com/nourtalaat/sidekick/internal/prompt"
@@ -69,6 +70,9 @@ type Options struct {
 	// MemoryExamples is the most similar confirmed investigations the
 	// prompt shows. Zero shows none.
 	MemoryExamples int
+	// MemoryVectors adds the entries nearest in meaning to the examples,
+	// with vector memory on. Nil means full-text matches only.
+	MemoryVectors *memory.Vectors
 	// Watchers starts the watchers the model asks for with start_watcher.
 	// Nil offers the tool to no investigation.
 	Watchers *watch.ModelStarter
