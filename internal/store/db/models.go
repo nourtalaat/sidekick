@@ -12,6 +12,41 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type BenchResult struct {
+	RunID           uuid.UUID
+	ScenarioID      string
+	Repeat          int32
+	Verdict         *string
+	ExpectedVerdict string
+	VerdictCorrect  bool
+	RootCauseScore  *float32
+	RequiredMet     *bool
+	JudgeReason     *string
+	EvidenceScore   *float32
+	CostMicros      int64
+	DurationMs      int32
+	InputTokens     int64
+	OutputTokens    int64
+	ToolCalls       int32
+}
+
+type BenchRun struct {
+	ID              uuid.UUID
+	Label           *string
+	StartedAt       time.Time
+	FinishedAt      time.Time
+	SidekickVersion string
+	GitSha          string
+	ConfigHash      string
+	Connectors      json.RawMessage
+	Strategies      json.RawMessage
+	ScenarioSet     string
+	Repeats         int32
+	Summary         json.RawMessage
+	Status          string
+	TriggeredBy     string
+}
+
 type Event struct {
 	ID          uuid.UUID
 	Intake      string
