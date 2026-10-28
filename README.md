@@ -21,6 +21,7 @@ Sidekick receives alerts from webhooks or Slack, investigates them with the LLM 
 - [Google Cloud source](docs/sources/gcp.md): the permissions the Google Cloud source needs, and how to give Sidekick its Google Cloud identity.
 - [Kubernetes source](docs/sources/kubernetes.md): the keys and tools of the Kubernetes source, and the read-only RBAC it needs.
 - [Postgres source](docs/sources/postgres.md): the read-only role the Postgres source needs, the TLS rules for its URL, and how to turn on `pg_stat_statements`.
+- [Prometheus source](docs/sources/prometheus.md): the keys and tools of the source for Prometheus, Thanos, Mimir and other compatible servers, their credentials, and the API paths it reads.
 - [Running Sidekick](docs/running.md): `sidekick serve`, `sidekick doctor`, start-up and shutdown, health and readiness probes, metrics, logs and traces.
 - [Sending alerts to Sidekick](docs/webhooks.md): webhook endpoints, the Alertmanager and generic adapters, how deliveries are authenticated, and `sidekick test-alert`.
 - [Setting up senders](docs/senders.md): pointing SigNoz, Datadog, Sentry and Grafana at Sidekick, and what each of their alerts becomes.

@@ -852,6 +852,68 @@ How it behaves:
   stops waiting for response headers after 60 seconds; `sidekick config
   validate` rejects a longer one.
 
+#### Prometheus sources (`type: prometheus`)
+
+A Prometheus source reads Prometheus or a server that shares its HTTP API,
+such as Thanos, Mimir, Cortex or VictoriaMetrics, and optionally an
+Alertmanager, with a bearer token, basic auth or a client certificate from
+Secrets, or none. Its tools only read. [Prometheus
+source](sources/prometheus.md) lists every key, the access it needs and
+its limits.
+
+| Key | Meaning |
+|---|---|
+| `baseURL` | The root of the Prometheus HTTP API, the part before `/api/v1`. Required. It must use `https` when credentials are sent, except for `localhost` and loopback addresses. |
+| `alertmanagerURL` | The root of an Alertmanager API, the part before `/api/v2`. When set, `list_alerts` reads Alertmanager, with silences. |
+| `bearerTokenSecret` | `{ name, key }` of the Secret that holds a bearer token. |
+| `basicAuth` | `username`, and `passwordSecret`, the `{ name, key }` of the Secret that holds the password. Not with `bearerTokenSecret`. |
+| `tls` | `certSecret` and `keySecret` for a client certificate, and `caSecret` for the CAs to trust, each a `{ name, key }`. |
+| `headers` | Extra headers for every request, such as `X-Scope-OrgID`. Never credentials. |
+| `links` | `prometheusURL`, the web UI for evidence links (default: `baseURL`), or `grafanaURL` and `grafanaDatasource` for links to Grafana Explore. |
+
+```yaml
+sources:
+  prometheus:
+    type: prometheus
+    baseURL: http://prometheus-operated.monitoring:9090
+    alertmanagerURL: http://alertmanager-operated.monitoring:9093
+```
+
+The tools, as the model sees them with the source name `prometheus`:
+
+| Tool | Returns |
+|---|---|
+| `prometheus__query` | An instant PromQL query: each series' labels and value. |
+| `prometheus__query_range` | A PromQL range query with a step picked for at most 250 points per series: the min, max, average and last of each series, and its points. |
+| `prometheus__list_alerts` | The firing and pending alerts, or the Alertmanager alerts with their silences. |
+| `prometheus__get_rules` | The alerting rules with one name: expression, `for`, labels, health and last error. |
+| `prometheus__list_series` | The series that match a series selector. |
+| `prometheus__list_label_values` | The values of one label. |
+| `prometheus__list_targets` | The scrape targets that are not up. |
+
+How it behaves:
+
+- **Start-up never waits for Prometheus.** The first tool call is the
+  first request. Secrets are read again for each request, so a rotated
+  one needs no restart.
+- **Queries.** Every PromQL query and series selector is parsed with the
+  Prometheus parser before it is sent; one that does not parse is a tool
+  error, and nothing is sent.
+- **Results** are JSON with links to the query in the Prometheus web UI or
+  Grafana Explore, or to the alerts or targets page, which become evidence
+  links in the report. Lists are capped as
+  [Prometheus source](sources/prometheus.md#limits) describes, and say
+  when they were cut.
+- **No data.** A query with no series, an empty list, and an API the
+  server does not have, are reported as no data.
+- **Errors.** A query the server refuses or cannot run, a `403`, and an
+  answer larger than 16 MiB go to the model as a tool error with the
+  server's message. A refused credential, rate limits, server errors and
+  secrets that cannot be read count as failures of the source.
+- **Timeout.** `timeout` may be at most `60s`, because the HTTP client
+  stops waiting for response headers after 60 seconds; `sidekick config
+  validate` rejects a longer one.
+
 #### Mock sources (`type: mock`)
 
 A mock source answers tool calls from fixtures instead of a real system.
