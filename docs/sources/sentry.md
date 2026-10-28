@@ -20,10 +20,10 @@ Pick one.
 - **Self-hosted Sentry.** Run the stdio server `@sentry/mcp-server` in a
   [sidecar behind a bridge](../install.md#mcp-servers-in-sidecars), with
   the address of your Sentry and a token, and point a source with
-  `transport: http` at the sidecar. The server's command is:
+  `transport: http` at the sidecar. Pin a version. The server's command is:
 
   ```sh
-  npx @sentry/mcp-server@latest --access-token="$SENTRY_ACCESS_TOKEN" \
+  npx @sentry/mcp-server@<version> --access-token="$SENTRY_ACCESS_TOKEN" \
     --host=sentry.example.com --skills=inspect
   ```
 

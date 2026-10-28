@@ -111,7 +111,7 @@ The hosted Sentry server takes a Sentry user auth token with the prefix
 sources:
   sentry:
     type: mcp
-    url: https://mcp.sentry.dev/mcp
+    url: https://mcp.sentry.dev/mcp?skills=inspect
     headers:
       Authorization: { secret: { name: sentry-mcp, key: token }, prefix: "Sentry-Bearer " }
 ```
