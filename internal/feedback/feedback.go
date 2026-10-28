@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/ids"
 	"github.com/nourtalaat/sidekick/internal/output"
 	"github.com/nourtalaat/sidekick/internal/report"
@@ -27,6 +28,16 @@ import (
 
 // TargetVerdict is the target kind of a rating of the verdict.
 const TargetVerdict = "verdict"
+
+// The audit log names of a change to a confirmed verdict: the action is
+// auditActionPrefix and the Change, such as verdict.withdrawn.
+const (
+	auditTarget       = "investigation"
+	auditActionPrefix = "verdict."
+)
+
+// auditor writes the audit rows of changes to confirmed verdicts.
+var auditor = audit.NewWriter()
 
 // statusFinal is the status of an investigation that ended with a report
 // people can rate. It is investigator.StatusFinal; this package does not
@@ -107,7 +118,7 @@ func RateVerdict(ctx context.Context, q db.DBTX, r VerdictRating) (Result, error
 		return Result{}, fmt.Errorf("store the rating of investigation %s: %w", inv.ID, err)
 	}
 
-	change, err := confirm(ctx, queries, inv, r)
+	change, err := confirm(ctx, q, inv, r)
 	if err != nil {
 		return Result{}, fmt.Errorf("investigation %s: %w", inv.ID, err)
 	}
@@ -140,18 +151,34 @@ func VerdictRef(run int32) string {
 	return fmt.Sprintf("run:%d/%s", run, TargetVerdict)
 }
 
-// confirm applies the confirmation that r leads to and returns how it
-// changed.
-func confirm(ctx context.Context, queries *db.Queries, inv db.Investigation, r VerdictRating) (Change, error) {
-	next, change := nextConfirmation(current(inv), r.Rating, *inv.Verdict, causeOf(inv.Report), r.SlackUserID, time.Now())
+// confirm applies the confirmation that r leads to, through q, and
+// returns how it changed. A change to a verdict confirmed before is
+// written to the audit log in the same transaction.
+func confirm(ctx context.Context, q db.DBTX, inv db.Investigation, r VerdictRating) (Change, error) {
+	queries := db.New(q)
+	before := current(inv)
+	next, change := nextConfirmation(before, r.Rating, *inv.Verdict, causeOf(inv.Report), r.SlackUserID, time.Now())
 
 	switch change {
 	case Unchanged:
 		return Unchanged, nil
 	case Revised, Withdrawn:
-		// TODO: [SK-18] Write an audit row when feedback changes a confirmed verdict
 		if err := setConfirmation(ctx, queries, inv.ID, next); err != nil {
 			return Unchanged, fmt.Errorf("change the confirmed verdict: %w", err)
+		}
+
+		err := auditor.Write(ctx, q, audit.Entry{
+			ActorKind:       audit.ActorUser,
+			ActorID:         r.SlackUserID,
+			Action:          auditActionPrefix + string(change),
+			TargetKind:      auditTarget,
+			TargetID:        inv.ID.String(),
+			InvestigationID: &inv.ID,
+			Old:             before.view(),
+			New:             next.view(),
+		})
+		if err != nil {
+			return Unchanged, fmt.Errorf("audit the change of the confirmed verdict: %w", err)
 		}
 	default:
 		if err := setConfirmation(ctx, queries, inv.ID, next); err != nil {

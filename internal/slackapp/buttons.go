@@ -51,6 +51,13 @@ const (
 	noteFailed     = "Sidekick could not record that click. Try again in a moment."
 )
 
+// refresher is a role lookup that can read a user's role again, for a
+// user it would refuse, such as one just added to a Slack user group.
+// slackroles.Lookup is one.
+type refresher interface {
+	Refresh(ctx context.Context, teamID, userID string) (roles.Role, error)
+}
+
 // errBadResponseURL is returned for a response URL that is not Slack's.
 var errBadResponseURL = errors.New("the response URL is not a Slack URL")
 
@@ -62,7 +69,8 @@ type ButtonsOptions struct {
 	// Pool is the database the investigations and feedback are in.
 	Pool *pgxpool.Pool
 	// Roles finds the role of the user who clicked, at the time of the
-	// click.
+	// click. When it also has a Refresh method, a user it would refuse
+	// has their role read again first.
 	Roles roles.Lookup
 	// Metrics counts stored ratings. Nil counts nothing.
 	Metrics *feedback.Metrics
@@ -183,7 +191,7 @@ func (b *Buttons) HandleInteraction(ctx context.Context, cb slack.InteractionCal
 
 	log = log.With("investigation_id", id.String())
 
-	role, err := b.roles.Role(ctx, cb.Team.ID, cb.User.ID)
+	role, err := b.role(ctx, cb.Team.ID, cb.User.ID)
 	if err != nil {
 		b.note(ctx, log, cb, noteFailed)
 
@@ -221,6 +229,28 @@ func (b *Buttons) HandleInteraction(ctx context.Context, cb slack.InteractionCal
 	}
 
 	return nil, nil
+}
+
+// role returns the role of the user who clicked. A user below responder
+// has their role read again when the lookup can do that, so a user just
+// given a higher role is not refused.
+func (b *Buttons) role(ctx context.Context, teamID, userID string) (roles.Role, error) {
+	role, err := b.roles.Role(ctx, teamID, userID)
+	if err != nil {
+		return 0, fmt.Errorf("look up the role: %w", err)
+	}
+
+	r, ok := b.roles.(refresher)
+	if role.Has(roles.Responder) || !ok {
+		return role, nil
+	}
+
+	role, err = r.Refresh(ctx, teamID, userID)
+	if err != nil {
+		return 0, fmt.Errorf("look up the role again: %w", err)
+	}
+
+	return role, nil
 }
 
 // rate stores a rating of the verdict and shows it in the outputs, in one

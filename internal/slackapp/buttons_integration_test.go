@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
 	"github.com/nourtalaat/sidekick/internal/feedback"
 	"github.com/nourtalaat/sidekick/internal/investigator"
@@ -34,6 +35,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/roles"
+	"github.com/nourtalaat/sidekick/internal/slackroles"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 	"github.com/nourtalaat/sidekick/internal/store/storetest"
 	"github.com/nourtalaat/sidekick/internal/strategy"
@@ -256,6 +258,40 @@ func TestInteractivity(t *testing.T) {
 	}
 }
 
+// TestInteractivityRoles presses Stop with the roles of slack.roleUsers,
+// as sidekick serve looks them up.
+func TestInteractivityRoles(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		user          string
+		wantNotes     []string
+		wantStoppedBy *string
+	}{
+		{name: "a viewer is refused", user: "U01VIEW", wantNotes: []string{noteDenied}},
+		{name: "a responder stops the run", user: "U01ANA", wantNotes: []string{noteStopping}, wantStoppedBy: new("U01ANA")},
+		{name: "an admin stops the run", user: "U01ADMIN", wantNotes: []string{noteStopping}, wantStoppedBy: new("U01ADMIN")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := config.Slack{RoleUsers: map[string]config.RoleName{"U01VIEW": config.RoleViewer, "U01ADMIN": config.RoleAdmin}}
+
+			lookup, err := slackroles.New(slackroles.Options{Slack: &cfg})
+			require.NoError(t, err)
+
+			b := setupButtonsWith(t, lookup)
+
+			require.Equal(t, http.StatusOK, b.click(t, clickBy{user: tt.user, action: slackout.ActionStop, id: queuedInvestigation}, false))
+			require.Equal(t, tt.wantNotes, b.notes(t))
+			require.Equal(t, tt.wantStoppedBy, b.investigation(t, queuedInvestigation).CancelRequestedBySlackUser)
+		})
+	}
+}
+
 // TestStopAcrossReplicas presses Stop on one replica while the run waits
 // for a slow model call on another, and checks that the run ends as
 // cancelled within a few seconds.
@@ -344,6 +380,13 @@ func (r fixedRole) Role(context.Context, string, string) (roles.Role, error) {
 func setupButtons(t *testing.T, role roles.Role) *buttonsHarness {
 	t.Helper()
 
+	return setupButtonsWith(t, fixedRole(role))
+}
+
+// setupButtonsWith is setupButtons with lookup finding the roles.
+func setupButtonsWith(t *testing.T, lookup roles.Lookup) *buttonsHarness {
+	t.Helper()
+
 	h := setup(t)
 	storetest.LoadFixture(t, h.pool, "fixture/investigations.sql")
 
@@ -356,7 +399,7 @@ func setupButtons(t *testing.T, role roles.Role) *buttonsHarness {
 	b.buttons = NewButtons(ButtonsOptions{
 		Handler: h.handler,
 		Pool:    h.pool,
-		Roles:   fixedRole(role),
+		Roles:   lookup,
 		Metrics: metrics,
 		HTTP:    b.responses.Client(),
 		Logger:  slog.New(slog.DiscardHandler),

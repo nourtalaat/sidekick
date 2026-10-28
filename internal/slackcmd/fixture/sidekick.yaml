@@ -1,0 +1,41 @@
+# The config the /sidekick command tests load. The secrets under
+# fixture/secrets are test values only. The model connector is a fake the
+# tests register. The tests set slack.apiURL to their fake Slack Web API.
+database:
+  urlSecret: { name: db, key: url }
+
+secrets:
+  dir: fixture/secrets
+
+model:
+  connectors:
+    fake: { provider: fake }
+  roles:
+    investigate: fake
+
+slack:
+  botTokenSecret: { name: slack, key: botToken }
+  appTokenSecret: { name: slack, key: appToken }
+  signingSecret: { name: slack, key: signingSecret }
+  mode: events
+  roleUsers:
+    U01ADMIN: admin
+    U01VIEWER: viewer
+
+listeners:
+  alerts:
+    channel: "#alerts"
+    match:
+      sender: { kind: bot, names: [SigNoz] }
+
+routes:
+  - name: payments
+    priority: 50
+    match: { service: "payments-*" }
+  - name: default
+
+budgets:
+  perInvestigation: { maxToolCalls: 40, maxWallTime: 10m }
+
+redaction:
+  hashKeySecret: { name: redaction, key: hash-key }

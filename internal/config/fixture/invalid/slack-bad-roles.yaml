@@ -1,0 +1,21 @@
+# A user group given by its handle, a user ID that is a bot ID, and a role
+# name that is not a role.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default
+
+slack:
+  botTokenSecret: { name: sidekick-slack, key: botToken }
+  roleGroups:
+    oncall: responder
+    S01ADMINS: admn
+  roleUsers:
+    B01SIGNOZ: viewer

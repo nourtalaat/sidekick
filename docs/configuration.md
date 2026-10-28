@@ -908,6 +908,11 @@ slack:
   signingSecret: { name: sidekick-slack, key: signingSecret }   # required with mode: events
   trustedBots: [B01SIGNOZ]                                  # bot IDs whose messages can be trusted
   apiURL: https://slack.com/api/                            # optional
+  roleGroups:                                               # Slack user group ID to role
+    S01ONCALL: responder
+    S01SRE: admin
+  roleUsers:                                                # Slack user ID to role
+    U01LEAD: approver
 ```
 
 `botTokenSecret` is the bot token of the Slack app. Every `slack` output
@@ -929,6 +934,12 @@ investigations:
   listener marked `trusted: true`. Every other message is untrusted.
 - `apiURL` is the Slack Web API base URL, ending in `/`. GovSlack
   workspaces use `https://slack-gov.com/api/`.
+- `roleGroups` and `roleUsers` give Slack users their Sidekick role, one
+  of `viewer`, `responder`, `approver` and `admin`. `roleGroups` maps
+  Slack user group IDs (`S...`) to roles, and `roleUsers` maps user IDs
+  (`U...` or `W...`) to roles, for teams without user groups. A user gets
+  the highest role from either map; a user in neither is a `responder`.
+  [Roles](slack.md#roles) says what each role may do.
 
 [Investigations in Slack](slack.md) describes how to set up the app.
 
@@ -997,7 +1008,8 @@ text of its attachments and blocks added, one part per line.
 [Listeners and mentions](slack.md#listeners-and-mentions) says which
 messages a listener sees and how events are built from them. Listeners
 need the Slack app to receive events, so `slack.appTokenSecret` (or
-`mode: events`) must be set.
+`mode: events`) must be set. Listeners can also be added from Slack with
+[`/sidekick listen`](slack.md#the-sidekick-command).
 
 `source: teams` makes a listener watch a Teams channel instead, through
 the bot in the [`teams`](#teams) section. Its keys are the same, with
@@ -1595,9 +1607,11 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   output, intake and strategy a route names is defined. Glob and regular
   expression matches parse.
 - `slack.mode` is `socket` or `events`, and `events` has `signingSecret`.
-  `trustedBots` are bot IDs, and listeners are set only when the Slack app
-  receives events. Each listener has a channel name or ID, a `sender.kind`
-  of `human` or `bot`, bot and user IDs of the right shape, regular
+  `trustedBots` are bot IDs, `roleGroups` keys are user group IDs,
+  `roleUsers` keys are user IDs, every role is a known role, and listeners
+  are set only when the Slack app receives events. Each listener has a
+  channel name or ID, a `sender.kind` of `human` or `bot`, bot and user
+  IDs of the right shape, regular
   expressions that parse, `extract` patterns with at least one named
   group, and `trusted: true` only when `slack.trustedBots` is set.
 - `teams` has an `appID` and a `tenantID` of the right shape and exactly
