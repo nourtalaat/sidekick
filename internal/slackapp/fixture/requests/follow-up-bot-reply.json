@@ -1,0 +1,26 @@
+{
+  "token": "unused-verification-token",
+  "team_id": "T01TEAM",
+  "api_app_id": "A01SIDEKICK",
+  "type": "event_callback",
+  "event_id": "Ev15BOTREPLY",
+  "event_time": 1761473320,
+  "authorizations": [
+    {
+      "team_id": "T01TEAM",
+      "user_id": "U01SIDEKICK",
+      "is_bot": true
+    }
+  ],
+  "event": {
+    "type": "message",
+    "subtype": "bot_message",
+    "channel": "C01OPS",
+    "team": "T01TEAM",
+    "bot_id": "B01SIGNOZ",
+    "username": "SigNoz",
+    "text": "[FIRING] HighErrorRate again",
+    "ts": "1761473320.001400",
+    "thread_ts": "1761472960.000500"
+  }
+}

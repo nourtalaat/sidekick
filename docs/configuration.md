@@ -905,6 +905,7 @@ slack:
   appTokenSecret: { name: sidekick-slack, key: appToken }   # Socket Mode
   mode: socket                                              # or events
   signingSecret: { name: sidekick-slack, key: signingSecret }   # required with mode: events
+  followUps: mention                                        # or any
   trustedBots: [B01SIGNOZ]                                  # bot IDs whose messages can be trusted
   apiURL: https://slack.com/api/                            # optional
   roleGroups:                                               # Slack user group ID to role
@@ -929,6 +930,11 @@ investigations:
 - `mode: events` receives events at `POST /slack/events` on
   `server.listen` instead, checked with the signing secret in
   `signingSecret`. Slack must be able to reach that URL.
+- `followUps` says which replies in the thread of an investigation are
+  follow-up questions: `mention`, the default, takes only replies that
+  mention `@Sidekick`, and `any` takes every reply a person writes there.
+  [Follow-up questions](slack.md#follow-up-questions) describes how they
+  are answered.
 - `trustedBots` lists the bot IDs (`B...`) whose messages are trusted in a
   listener marked `trusted: true`. Every other message is untrusted.
 - `apiURL` is the Slack Web API base URL, ending in `/`. GovSlack
@@ -1313,7 +1319,9 @@ the investigation first started, including time lost to a restart.
 `maxCostUSD` is the cost of the model calls, in US dollars, from the
 [price table](#model). Near any of them, the model gets one last turn to
 report what it found; an investigation that runs out ends as "Not sure yet"
-with what it found. See [Limits](investigations.md#limits).
+with what it found. See [Limits](investigations.md#limits). Each
+[follow-up run](investigations.md#follow-up-questions) gets half of each
+of the investigation's limits; there is no key to change that yet.
 
 #### Daily caps
 
@@ -1549,6 +1557,7 @@ A refused request ends the check with an error and is counted in
 | `secrets.dir` | `/var/run/secrets/sidekick` |
 | `intake.webhooks.<name>.auth.tolerance` | `5m` |
 | `slack.mode` | `socket` |
+| `slack.followUps` | `mention` |
 | `slack.apiURL` | `https://slack.com/api/` |
 | `routes[].priority` | `100` |
 | `routes[].strategy` | `generic-alert` |

@@ -18,6 +18,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/output"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/report"
+	"github.com/nourtalaat/sidekick/internal/source"
 )
 
 // The Web API paths of the fake Slack server.
@@ -88,7 +89,7 @@ func TestPublishFirstPost(t *testing.T) {
 
 			require.Equal(t, output.Ref{
 				Sink:     "slack-thread",
-				External: mainChannel + ":" + mainTS,
+				External: mainChannel + ":" + tt.wantRefTS,
 				Data: map[string]string{
 					dataChannel:  mainChannel,
 					dataTS:       mainTS,
@@ -416,6 +417,134 @@ func TestPublishFailures(t *testing.T) {
 	}
 }
 
+func TestPublishFollowUpAnswers(t *testing.T) {
+	t.Parallel()
+
+	asked := []report.FollowUpQuestion{
+		{Author: "Ana", Text: "Which pods?"},
+		{Author: "Bo <!channel>", Text: "Since when?"},
+		{Author: "Ana", Text: "And now?"},
+		{AuthorID: "U01CARLA", Text: "Is it fixed?"},
+		{AuthorID: "<!here>", Text: "Hello?"},
+	}
+	first := report.FollowUp{Run: 2, Questions: asked, Answered: true, Answer: "Only checkout-api pods, since 14:02.", Evidence: []source.Evidence{
+		{Kind: source.EvidenceLogQuery, Title: "Logs", URL: "https://signoz.example.com/l/1"},
+	}}
+	changed := report.FollowUp{Run: 3, Questions: []report.FollowUpQuestion{{Author: "Bo", Text: "Is it OPS-12?"}}, Answered: true,
+		Answer: "Yes, it is OPS-12.", PreviousVerdict: report.TruePositive}
+	unanswered := report.FollowUp{Run: 2, Questions: asked[:1], Answer: "Sidekick could not answer."}
+
+	tests := []struct {
+		name    string
+		phase   output.Phase
+		verdict report.Verdict
+		// follow-ups are the report's; posted is how many the thread has.
+		followUps []report.FollowUp
+		posted    string
+		// want are the first block of each reply, in order.
+		want        []string
+		wantContext string
+		wantAnswers string
+	}{
+		{
+			name:      "a new answer goes in the thread",
+			phase:     output.PhaseFollowUp,
+			verdict:   report.TruePositive,
+			followUps: []report.FollowUp{first},
+			want: []string{":speech_balloon: *Answer* for Ana, Bo &lt;!channel&gt;, <@U01CARLA>\n" +
+				"Only checkout-api pods, since 14:02.\n<https://signoz.example.com/l/1|Logs>"},
+			wantAnswers: "1",
+		},
+		{
+			name:        "an answer posted before is not posted again",
+			phase:       output.PhaseFollowUp,
+			verdict:     report.TruePositive,
+			followUps:   []report.FollowUp{first},
+			posted:      "1",
+			wantAnswers: "1",
+		},
+		{
+			name:        "a run that could not answer says so",
+			phase:       output.PhaseFollowUp,
+			verdict:     report.TruePositive,
+			followUps:   []report.FollowUp{unanswered},
+			want:        []string{":warning: *No answer* for Ana\nSidekick could not answer."},
+			wantAnswers: "1",
+		},
+		{
+			name:      "a changed verdict posts the answer, then the new verdict",
+			phase:     output.PhaseFinal,
+			verdict:   report.KnownIssue,
+			followUps: []report.FollowUp{first, changed},
+			posted:    "1",
+			want: []string{
+				":speech_balloon: *Answer* for Bo\nYes, it is OPS-12.",
+				":pushpin: *Known issue* · High confidence · <" + permalinkOK + "|See the full report>",
+			},
+			wantContext: "Verdict changed from :rotating_light: Real issue to :pushpin: *Known issue* · High confidence",
+			wantAnswers: "2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			api := fakehttp.New(t)
+			api.Handle(http.MethodPost, pathUpdate, postedResponse(mainTS))
+
+			if tt.phase == output.PhaseFinal {
+				api.Handle(http.MethodGet, pathPermalink, fakehttp.Response{Body: []byte(`{"ok":true,"permalink":"` + permalinkOK + `"}`)})
+			}
+
+			for range tt.want {
+				api.Handle(http.MethodPost, pathPost, postedResponse("1793023399.000001"))
+			}
+
+			api.ExpectAllCalled()
+
+			s, _ := testSink(t, api)
+
+			prev := shownRef(1, string(report.TruePositive))
+			if tt.posted != "" {
+				prev.Data[dataAnswers] = tt.posted
+			}
+
+			rep := verdictReport(tt.verdict)
+			rep.FollowUps = tt.followUps
+
+			u := testUpdate(tt.phase, rep)
+			u.Seq, u.Previous = 2, &prev
+
+			got, err := s.Publish(t.Context(), u)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantAnswers, got.Data[dataAnswers])
+
+			edit := decodeMessage(t, api.Requests()[0].Body)
+			require.Equal(t, mainTS, edit.TS, "the main message shows the report")
+
+			var replies []message
+
+			for _, req := range api.Requests()[1:] {
+				if req.Path == pathPost {
+					replies = append(replies, decodeMessage(t, req.Body))
+				}
+			}
+
+			require.Len(t, replies, len(tt.want))
+
+			for i, want := range tt.want {
+				require.Equal(t, mainTS, replies[i].ThreadTS)
+				require.Equal(t, want, replies[i].Attachments[0].Blocks[0].Text.Text)
+			}
+
+			if tt.wantContext != "" {
+				require.Equal(t, tt.wantContext, replies[0].Attachments[0].Blocks[1].Elements[0].Text)
+			}
+		})
+	}
+}
+
 func TestAccepts(t *testing.T) {
 	t.Parallel()
 
@@ -426,7 +555,7 @@ func TestAccepts(t *testing.T) {
 		{phase: output.PhaseQueued, want: true},
 		{phase: output.PhaseRunning, want: true},
 		{phase: output.PhaseFinal, want: true},
-		{phase: output.PhaseFollowUp},
+		{phase: output.PhaseFollowUp, want: true},
 		{phase: output.PhaseProposal},
 		{phase: output.PhaseResolved},
 		{phase: output.PhaseCancelled},

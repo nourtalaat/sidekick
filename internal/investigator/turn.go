@@ -28,7 +28,7 @@ const overBudgetText = "This call was not run: the investigation has used all of
 // maxParallelToolCalls at once and only as many as the tool call limit has
 // left; calls past the limit are answered without running. Built-in calls
 // are handled in turn, so they see every result saved before them. In the
-// final turn only submit_verdict runs, and every other call is answered
+// final turn only the final tool runs, and every other call is answered
 // without running. Results are saved in call order, each as soon as it and
 // every call before it are done. When runCtx ends, no more results are
 // saved.
@@ -53,8 +53,8 @@ func (r *run) runTools(ctx, runCtx context.Context, calls []model.ToolCall) erro
 		)
 
 		switch {
-		case final && call.Name != report.SubmitVerdictTool:
-			s = finalTurnOnlyStep(call)
+		case final && call.Name != r.finalTool():
+			s = finalTurnOnlyStep(call, r.finalTool())
 		case isBuiltinName(call.Name):
 			s, err = r.builtin(ctx, call)
 			if err != nil {
@@ -85,7 +85,7 @@ func (r *run) runTools(ctx, runCtx context.Context, calls []model.ToolCall) erro
 func (r *run) startSourceCalls(ctx context.Context, calls []model.ToolCall, wg *sync.WaitGroup) []chan newStep {
 	left := -1
 	if r.budget.MaxToolCalls > 0 {
-		left = max(r.budget.MaxToolCalls-int(r.inv.ToolCalls), 0)
+		left = max(r.budget.MaxToolCalls-int(r.toolCallsUsed()), 0)
 	}
 
 	slots := make(chan struct{}, maxParallelToolCalls)
@@ -135,10 +135,18 @@ func (r *run) builtin(ctx context.Context, call model.ToolCall) (newStep, error)
 		content = "The report was accepted. The investigation is over."
 
 		if len(problems) > 0 {
-			rejected := r.hist.count(func(s db.Step) bool {
-				return isBuiltin(s, report.SubmitVerdictTool) && s.Status == statusRejected
-			})
-			content = rejectedText("report", problems) + fmt.Sprintf("\nTries left for submit_verdict: %d.", maxReportTries-1-rejected)
+			content = rejectedText("report", problems) + fmt.Sprintf("\nTries left for submit_verdict: %d.", maxReportTries-1-r.hist.count(isRejectedEnd))
+		}
+	case report.AnswerFollowUpTool:
+		_, _, problems = r.h.builtins.answer(r.hist, call)
+		if !r.followUp() {
+			problems = []string{notFollowUpText}
+		}
+
+		content = "The answer was accepted and goes to the thread. The follow-up is over."
+
+		if len(problems) > 0 {
+			content = rejectedText("answer", problems) + fmt.Sprintf("\nTries left: %d.", maxReportTries-1-r.hist.count(isRejectedEnd))
 		}
 	case RecordFindingTool:
 		var f report.Finding
@@ -247,17 +255,32 @@ func overBudgetStep(call model.ToolCall) newStep {
 }
 
 // finalTurnOnlyStep returns the step of a call to a tool other than
-// submit_verdict in the final turn.
-func finalTurnOnlyStep(call model.ToolCall) newStep {
+// finalTool in the final turn.
+func finalTurnOnlyStep(call model.ToolCall, finalTool string) newStep {
 	return newStep{
 		kind:      kindToolResult,
-		parts:     []model.Part{model.ToolResult{CallID: call.ID, Content: finalTurnOnlyText, IsError: true}},
+		parts:     []model.Part{model.ToolResult{CallID: call.ID, Content: fmt.Sprintf(finalTurnOnlyText, finalTool), IsError: true}},
 		tool:      call.Name,
 		callID:    call.ID,
 		status:    statusRejected,
-		errText:   "not available in the final turn",
+		errText:   finalTurnOnlyError,
 		startedAt: time.Now(),
 	}
+}
+
+// isRejectedEnd reports whether s is a report or a follow-up answer that
+// failed its checks.
+func isRejectedEnd(s db.Step) bool {
+	return (isBuiltin(s, report.SubmitVerdictTool) || isBuiltin(s, report.AnswerFollowUpTool)) && s.Status == statusRejected
+}
+
+// countsAsToolCall reports whether s is the result of a source call that
+// counted toward the tool call limit: a call that went to the guard, as
+// opposed to a built-in call, a call past the limit, or a call refused in
+// the final turn.
+func countsAsToolCall(s db.Step) bool {
+	return s.Kind == kindToolResult && s.Status != statusOverBudget && !isBuiltinName(deref(s.Tool)) &&
+		deref(s.Error) != finalTurnOnlyError
 }
 
 // stepStatus returns the step status of a source call's result.
