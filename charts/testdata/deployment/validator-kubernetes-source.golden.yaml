@@ -29,7 +29,7 @@ spec:
     metadata:
       annotations:
         # A config change rolls the pods.
-        checksum/config: e0faf38eda9ad9f38dce97cea037ab918db737821671ce6bd90cf5771e2a1bf2
+        checksum/config: f73c1f7b1f2466fbd409dfde99b2263529b63a3ab2de3531b8d9d9d75f546bfd
         azure.workload.identity/skip-containers: validator
         eks.amazonaws.com/skip-containers: validator
       labels:
@@ -128,9 +128,6 @@ spec:
               mountPath: /var/run/secrets/sidekick/sidekick-slack
               readOnly: true
             - name: secret-2
-              mountPath: /var/run/secrets/sidekick/sidekick-webhook
-              readOnly: true
-            - name: secret-3
               mountPath: /var/run/secrets/sidekick/sidekick-postgres
               readOnly: true
         - name: validator
@@ -181,9 +178,6 @@ spec:
           secret:
             secretName: sidekick-slack
         - name: secret-2
-          secret:
-            secretName: sidekick-webhook
-        - name: secret-3
           secret:
             secretName: sidekick-postgres
         - name: validator-tmp

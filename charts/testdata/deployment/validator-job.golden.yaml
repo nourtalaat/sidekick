@@ -29,7 +29,7 @@ spec:
     metadata:
       annotations:
         # A config change rolls the pods.
-        checksum/config: 11484d43f67ee3747dc0dc7dc1f7785262bff4e44fac47d37ed9cafdb17e48a7
+        checksum/config: f73c1f7b1f2466fbd409dfde99b2263529b63a3ab2de3531b8d9d9d75f546bfd
       labels:
         app.kubernetes.io/name: sidekick
         app.kubernetes.io/instance: sidekick
@@ -126,9 +126,6 @@ spec:
               mountPath: /var/run/secrets/sidekick/sidekick-slack
               readOnly: true
             - name: secret-2
-              mountPath: /var/run/secrets/sidekick/sidekick-webhook
-              readOnly: true
-            - name: secret-3
               mountPath: /var/run/secrets/sidekick/sidekick-postgres
               readOnly: true
       volumes:
@@ -144,9 +141,6 @@ spec:
           secret:
             secretName: sidekick-slack
         - name: secret-2
-          secret:
-            secretName: sidekick-webhook
-        - name: secret-3
           secret:
             secretName: sidekick-postgres
 

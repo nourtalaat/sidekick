@@ -1,9 +1,10 @@
 # Quick-start values: one replica, the bundled Postgres (for evaluation
-# only), the Anthropic API, one Alertmanager webhook endpoint and one Slack
-# channel. docs/install.md walks through them. Before installing, create
-# the three Secrets listed under secrets, and set the channel:
+# only), the Anthropic API, a read-only Kubernetes source for this cluster,
+# and one Slack channel that Sidekick listens to over Socket Mode.
+# docs/install.md walks through them. Before installing, create the two
+# Secrets listed under secrets, and give the channel:
 #   helm install sidekick oci://ghcr.io/nourtalaat/charts/sidekick \
-#     -f quickstart-values.yaml --set config.outputs.slack.channel='#alerts'
+#     -f quickstart-values.yaml --set config.listeners.alerts.channel='#alerts'
 
 replicaCount: 1
 
@@ -18,7 +19,6 @@ postgres:
 secrets:
   - sidekick-anthropic
   - sidekick-slack
-  - sidekick-webhook
 
 config:
   model:
@@ -30,20 +30,33 @@ config:
     roles:
       investigate: claude
 
+  # Socket Mode: Sidekick opens the connection to Slack, so it needs no
+  # public URL.
   slack:
     botTokenSecret: { name: sidekick-slack, key: botToken }
+    appTokenSecret: { name: sidekick-slack, key: appToken }
 
+  # Reads the cluster Sidekick runs in. The chart grants the read-only
+  # roles it needs (docs/sources/kubernetes.md).
+  sources:
+    k8s:
+      type: kubernetes
+
+  # Every message that a bot posts in this channel starts an investigation.
+  listeners:
+    alerts:
+      channel: "#alerts"
+      match:
+        sender: { kind: bot }
+
+  # An alert posted in Slack is answered in its thread. This channel is
+  # where alerts that do not come from Slack, such as webhooks, are posted.
   outputs:
     slack:
       type: slack
       channel: "#alerts"
 
-  intake:
-    webhooks:
-      alertmanager:
-        adapter: alertmanager
-        auth: { bearer: { name: sidekick-webhook, key: token } }
-
   routes:
     - name: default
+      sources: [k8s]
       outputs: [slack]
