@@ -51,7 +51,8 @@ fits the first event, and answers with one tool call, `submit_triage`:
   triage's verdict, which can only be `duplicate`, `known_issue` or
   `flapping`, marked "triage only". In Slack, the message has an
   **Investigate anyway** button that starts the full investigation (see
-  [Buttons](slack.md#buttons)).
+  [Buttons](slack.md#buttons)). That investigation has the whole budget:
+  it counts only its own tokens, tool calls, cost and time.
 
 Triage never calls an alert a real issue or a false alarm. An answer that
 gives any other verdict, names a strategy that does not exist, or is no
@@ -180,7 +181,8 @@ the same tools, and `answer_follow_up` to answer without changing the
 verdict; it calls `submit_verdict` with a full new report when the answer
 changes the verdict. Questions are what to look at: they cannot change the
 tools, the action mode or the verdict rules. Questions that arrive while a
-run is going on wait for the next run.
+run is going on wait for the next run. A triage-only result takes no
+questions until **Investigate anyway** has started a full investigation.
 
 Each follow-up run has half of each of the investigation's limits, at
 least 1 of a limit that is set, and counts only its own use: its tokens,

@@ -250,6 +250,11 @@ everything the first run saw:
   stopped it, posts a reply that says so, and the report stays as it was.
 - An investigation that was stopped still answers questions; the Stop
   applies only to the run it was pressed for.
+- A triage-only result has no investigation to ask about. A question to
+  it is not sent; the asker gets a note only they see that says so and
+  points to **Investigate anyway**. A question asked while triage was
+  still running waits, and is answered after a full investigation, if
+  someone asks for one.
 
 A question is redacted like event text before it is stored, and the model
 reads it as a request about what to look at: it cannot change the

@@ -146,7 +146,8 @@ func TestTriage(t *testing.T) {
 
 // TestInvestigateAnyway ends a run with a triage-only result, confirms its
 // verdict, asks for a full investigation, runs it with the whole budget
-// although earlier runs used it all, and answers a follow-up question.
+// although earlier runs used it all, and answers a follow-up question
+// asked while triage ran. A question to the triage-only result is refused.
 func TestInvestigateAnyway(t *testing.T) {
 	t.Parallel()
 
@@ -170,12 +171,19 @@ func TestInvestigateAnyway(t *testing.T) {
 				},
 			})
 
+			require.True(t, h.ask(t, "Ev0", askPods), "a question while triage runs waits")
+
 			first := h.claim(t)
 			require.NoError(t, h.handler.Handle(t.Context(), first))
 			h.complete(t, first)
+			require.Zero(t, h.pendingFollowUps(t), "a triage-only result starts no follow-up run")
+
+			_, err := AddFollowUp(t.Context(), h.pool, testInvestigation, Question{Key: "Ev1", AuthorID: "U01ANA", Text: askDeploy})
+			require.ErrorIs(t, err, ErrTriageOnly)
+			require.Zero(t, h.pendingFollowUps(t))
 
 			// Earlier runs used the whole budget; the full run has its own.
-			_, err := h.pool.Exec(t.Context(), `UPDATE investigations SET confirmed_verdict = 'duplicate', confirmed_by_slack_user = 'U01ANA',
+			_, err = h.pool.Exec(t.Context(), `UPDATE investigations SET confirmed_verdict = 'duplicate', confirmed_by_slack_user = 'U01ANA',
 				confirmed_at = now(), cost_micros = 1000000, tool_calls = 40 WHERE id = $1`, testInvestigation)
 			require.NoError(t, err)
 
@@ -224,7 +232,7 @@ func TestInvestigateAnyway(t *testing.T) {
 				"Checked signoz (search_logs)",
 			}, progressTexts(body))
 
-			require.True(t, h.ask(t, "Ev1", askPods), "the full investigation takes follow-up questions")
+			require.Equal(t, 1, h.pendingFollowUps(t), "the question asked while triage ran is answered now")
 			require.NoError(t, h.runFollowUp(t))
 
 			inv = h.investigation(t)
