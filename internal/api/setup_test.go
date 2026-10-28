@@ -172,8 +172,10 @@ func (s server) replica(t *testing.T, tune func(*api.Options)) server {
 	return s
 }
 
-// startHub starts a hub that runs until ctx ends, waits until it listens,
-// and returns it with the process ID of its connection.
+// startHub starts a hub that runs until ctx ends, waits until it listens and
+// has woken its subscriptions, and returns it with the process ID of its
+// connection. A stream opened after that gets no wake-up for the hub's
+// start, which would send an unexpected watchers event.
 func startHub(t *testing.T, ctx context.Context, pool *pgxpool.Pool, opts api.HubOptions) (*api.Hub, int) {
 	t.Helper()
 
@@ -191,6 +193,12 @@ func startHub(t *testing.T, ctx context.Context, pool *pgxpool.Pool, opts api.Hu
 
 		return len(added) == 1
 	}, testWait, testPoll, "the hub never listened")
+
+	select {
+	case <-hub.Listening():
+	case <-time.After(testWait):
+		require.FailNow(t, "the hub never woke its subscriptions")
+	}
 
 	return hub, added[0]
 }
