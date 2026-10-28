@@ -164,8 +164,3 @@ var stsDenied = xmlAnswer(403, `<ErrorResponse xmlns="https://sts.amazonaws.com/
   <Error><Type>Sender</Type><Code>AccessDenied</Code><Message>not authorized to perform sts:AssumeRole</Message></Error>
   <RequestId>r-3</RequestId>
 </ErrorResponse>`)
-
-// at returns a time on the test day.
-func at(hour, minute int) time.Time {
-	return time.Date(2026, 5, 4, hour, minute, 0, 0, time.UTC)
-}

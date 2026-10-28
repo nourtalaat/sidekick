@@ -12,6 +12,12 @@ import (
 // maxLogGroupLen is the longest log group name CloudWatch Logs allows.
 const maxLogGroupLen = 512
 
+// The shortest and longest external ID STS accepts.
+const (
+	minExternalIDLen = 2
+	maxExternalIDLen = 1224
+)
+
 var (
 	// accountPattern is the shape of an AWS account ID.
 	accountPattern = regexp.MustCompile(`^[0-9]{12}$`)
@@ -21,8 +27,9 @@ var (
 	// roleARNPattern is the shape of an IAM role ARN. The group is the
 	// role's account.
 	roleARNPattern = regexp.MustCompile(`^arn:aws(-[a-z]+)*:iam::([0-9]{12}):role/[\w+=,.@/-]{1,512}$`)
-	// externalIDPattern is the shape of an external ID STS accepts.
-	externalIDPattern = regexp.MustCompile(`^[\w+=,.@:/-]{2,1224}$`)
+	// externalIDPattern is the characters an external ID STS accepts may
+	// hold.
+	externalIDPattern = regexp.MustCompile(`^[\w+=,.@:/-]+$`)
 	// logGroupPattern is the shape of a log group name, or the start of
 	// one.
 	logGroupPattern = regexp.MustCompile(`^[\w./#-]{1,512}$`)
@@ -123,8 +130,9 @@ func (c *Config) checkAccounts() []error {
 			errs = append(errs, fmt.Errorf("%s.roleARN: the role is in account %s, not %s", key, m[2], a.ID))
 		}
 
-		if a.ExternalID != "" && !externalIDPattern.MatchString(a.ExternalID) {
-			errs = append(errs, fmt.Errorf("%s.externalID: must be 2 to 1224 letters, digits or the characters _ + = , . @ : / -", key))
+		if n := len(a.ExternalID); n > 0 && (n < minExternalIDLen || n > maxExternalIDLen || !externalIDPattern.MatchString(a.ExternalID)) {
+			errs = append(errs, fmt.Errorf("%s.externalID: must be %d to %d letters, digits or the characters _ + = , . @ : / -",
+				key, minExternalIDLen, maxExternalIDLen))
 		}
 	}
 
