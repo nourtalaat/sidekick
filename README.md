@@ -15,6 +15,7 @@ Sidekick receives alerts from webhooks or Slack, investigates them with the LLM 
 
 - [Installing Sidekick](docs/install.md): the Helm chart, the quick start, verifying the image, production settings, upgrades.
 - [Configuration](docs/configuration.md): the `sidekick.yaml` sections, the checks Sidekick runs on them, and `sidekick config validate`.
+- [AWS source](docs/sources/aws.md): the read-only IAM policy the AWS source needs, and how to give Sidekick its AWS identity in each account.
 - [Azure source](docs/sources/azure.md): the read-only role the Azure source needs, and how to give Sidekick its Azure identity.
 - [Backstage source](docs/sources/backstage.md): the keys and tools of the Backstage service catalog source, and the token it needs.
 - [Elasticsearch and OpenSearch source](docs/sources/elasticsearch.md): the keys and tools of the logs source for Elasticsearch and OpenSearch, the read-only role it needs, and links to Kibana or OpenSearch Dashboards.

@@ -80,6 +80,11 @@ type Capabilities struct {
 	PromptCaching    bool
 	ContextTokens    int
 	MaxOutputTokens  int
+	// Temperature is true when the model takes a sampling temperature.
+	// The Anthropic API and the reasoning models of OpenAI reject one, so
+	// it is false for them, and callers such as the benchmark judge leave
+	// the temperature to the provider.
+	Temperature bool
 }
 
 // SupportsThinking reports whether mode is accepted. An empty mode, which is
@@ -345,12 +350,12 @@ func (p Price) Cost(u Usage) int64 {
 }
 
 // ErrNoToolCalling is returned when a model without tool calling is given
-// the investigate or triage role, which both end by calling a tool.
+// the investigate, triage or judge role, which all end by calling a tool.
 var ErrNoToolCalling = errors.New("model cannot call tools")
 
 // CheckRole validates that a connector with caps can fill role.
 func CheckRole(role Role, caps Capabilities) error {
-	if (role == RoleInvestigate || role == RoleTriage) && !caps.ToolCalling {
+	if (role == RoleInvestigate || role == RoleTriage || role == RoleJudge) && !caps.ToolCalling {
 		return fmt.Errorf("role %s: %w", role, ErrNoToolCalling)
 	}
 

@@ -1,0 +1,29 @@
+{
+  "id": "pool-full",
+  "rootCause": {
+    "summary": "The DB connection pool ran out after commit abc123 lowered the pool size to 5.",
+    "rubric": [
+      {"id": "pool", "text": "Names connection pool exhaustion as the cause", "weight": 2, "required": true},
+      {"id": "commit", "text": "Links the cause to commit abc123 or the 10:05 deploy", "weight": 2, "required": true},
+      {"id": "fix", "text": "Proposes restoring the pool size or rolling back", "weight": 1}
+    ]
+  },
+  "report": {
+    "verdict": "true_positive",
+    "confidence": "high",
+    "reason": "p99 latency rose from 190ms to 2.4s at 10:10, right after commit abc123 lowered the DB pool size to 5, and the logs show timeouts acquiring a connection from the pool.",
+    "summary": "Checkout is slow because its DB connection pool runs out since commit abc123.",
+    "cause": "Commit abc123, deployed at 10:05, lowered the DB pool size from 20 to 5, so requests wait for a free connection and time out.",
+    "impact": "Checkout p99 latency is above 2s, so payments are slow or fail.",
+    "findings": [
+      {"id": "f1", "claim": "Commit abc123 at 10:05 lowered the pool size to 5.", "evidence": [{"kind": "commit", "title": "abc123", "url": "https://github.com/acme/checkout/commit/abc123"}]},
+      {"id": "f2", "claim": "From 10:10 the logs show timeouts acquiring a connection from the pool.", "evidence": [{"kind": "log_query", "title": "pool timeouts"}]}
+    ],
+    "fixes": [
+      {"id": "x1", "title": "Roll back abc123", "detail": "Revert the commit, or set the pool size back to 20."}
+    ],
+    "checked": [],
+    "stopReason": "submitted"
+  },
+  "grades": {"pool": true, "commit": true, "fix": true}
+}

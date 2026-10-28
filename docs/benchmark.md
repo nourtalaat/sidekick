@@ -18,15 +18,25 @@ sidekick bench run --scenarios bench/scenarios/sample --config sidekick.yaml --r
 | `--config`, `-c` | `/etc/sidekick/sidekick.yaml` | The config file. Runs use its model connectors, roles and prices, its strategies, its report rules, its redaction settings and its per-investigation limits. They do not use its sources, outputs, webhooks, routes, rate limits or daily caps. |
 | `--repeat`, `-n` | `3` | How many times each scenario runs. |
 | `--db` | off | Run on the database of `database.urlSecret` instead of a temporary Postgres; see below. |
+| `--bench-config` | none | A `bench.yaml` with the weights of the overall score and the thresholds; see below. |
+| `--seed` | `1` | Seeds the resampling of the 95% intervals, so the same results always give the same intervals. |
+| `--label` | none | A name for the run, kept in `report.json`. |
+| `--out` | none | Write the results to this `report.json`. |
+| `--junit` | none | Write the results as JUnit XML, for CI systems that show test results. |
+| `--markdown` | none | Write a Markdown summary, for a pull request comment. |
 
 Every scenario is checked before anything runs, and every problem is printed
 with its file and field. Then each scenario runs `--repeat` times, one run
 at a time, and the command prints one line per run:
 
 ```
-SCENARIO            RUN  STATUS  VERDICT        EXPECTED       STOP       TOOL CALLS  TOKENS  COST     TIME
-checkout-pool-size  1/3  final   true_positive  true_positive  submitted  4           3600    $0.0215  4.1s
+SCENARIO            RUN  STATUS  VERDICT        EXPECTED       CORRECT  ROOT CAUSE  EVIDENCE  STOP       TOOL CALLS  TOKENS  COST     TIME
+checkout-pool-size  1/3  final   true_positive  true_positive  yes      0.80        1.00      submitted  4           3600    $0.0215  4.1s
 ```
+
+Once every run has finished, the judge grades each run's root cause and
+the command prints the spread of each scenario and the run totals, then
+the thresholds, if `--bench-config` sets any.
 
 Each run takes the path an alert takes in `sidekick serve`: the payload goes
 through the scenario's intake adapter and is stored, the router opens a
@@ -49,19 +59,114 @@ Benchmarks always run on Postgres, with the same code as `serve`.
   schema is dropped, with everything in it, when the runs end, also after
   Ctrl-C or an error, so nothing is left behind. A Sidekick that serves from
   the same database never sees the runs' events and jobs, and the runs keep
-  their locks apart from its own. The database role needs `CREATE` on the
-  database. The schema's name is logged when it is created; if the process
-  is killed before it can drop it, drop it by hand with
-  `DROP SCHEMA sidekick_bench_<random> CASCADE`.
+  their locks apart from its own. The schema's name is logged when it is
+  created; if the process is killed before it can drop it, drop it by hand
+  with `DROP SCHEMA sidekick_bench_<random> CASCADE`.
+
+  Once the runs are scored, the results are stored in the database's
+  default schema, the one `sidekick serve` uses, so the web UI can show
+  them: one `bench_runs` row for the run, with its settings, totals and
+  thresholds, and one `bench_results` row per run of a scenario. They are
+  written in one transaction, through a connection of their own, apart
+  from the runs' schema. The default schema must have every migration of
+  this Sidekick: if it does not, the command exits with `2` before any run
+  and asks you to run `sidekick migrate` first. It never migrates the
+  default schema itself. A run that fails stores nothing.
+
+  The database role needs `CREATE` on the database, for the runs' schema,
+  and `INSERT` on `bench_runs` and `bench_results` in the default schema.
 
 ### Exit status
 
 | Status | Means |
 |---|---|
-| `0` | Every run finished. |
-| `1` | Something else failed. |
-| `2` | A bad flag, config file or scenario file, or, with `--db`, a database secret that cannot be read or a role that may not create the schema. |
-| `3` | The model provider is unreachable after the connector's retries, or Docker or the database failed. |
+| `0` | Every run finished and every threshold is met. |
+| `1` | A threshold failed, or something else failed. |
+| `2` | A bad flag, config file, `bench.yaml`, baseline or scenario file, or, with `--db`, a database secret that cannot be read, a role that may not create the schema, or a default schema that needs `sidekick migrate`. |
+| `3` | The model provider is unreachable after the connector's retries, for the runs or for the judge, or Docker or the database failed. |
+
+When a run fails, the command prints the runs that finished before it,
+unscored, and writes no output files.
+
+## Scores
+
+Each run gets these scores:
+
+| Score | How |
+|---|---|
+| Verdict correct | The verdict is `expected.verdict` or one of `expected.acceptable`. |
+| Root cause | The judge grades each rubric item as met or not met, with a one-line reason. The score is the weight of the items met over the weight of all items. The root cause matches when the score is at least 0.7 and every `required` item is met. A run that ended without a report is not sent to the judge, and scores 0. |
+| Evidence | The share of `expected.evidence` checks that pass, checked in code: a `calledTool` check passes when the run called the tool, a `citedURL` check when a finding of the report cites the URL. |
+| Source failures reported | Whether every source in `expected.unavailableReported` is listed as unavailable under checked. |
+| Cost, time, tokens, tool calls | From the investigation's steps. The judge's own cost is counted apart. |
+
+Each scenario shows its spread over its runs: how many of them got the
+verdict right (k of N), the mean and standard deviation of the root-cause
+score, and the smallest, median and largest cost and time.
+
+The run totals are:
+
+| Total | How |
+|---|---|
+| Verdict accuracy | The share of runs whose verdict is correct. |
+| Precision and recall | For the false positive and the true positive class, by expected verdict, over all runs. False positive precision comes first, because a wrong false positive hides a real incident. A class no run gave, or no scenario expects, has no value (`-`). |
+| Root cause match | The share of graded runs whose root cause matches, and the mean root-cause score. |
+| Evidence | The mean evidence score of the runs with evidence checks. |
+| Overall score | `0.5 × verdict accuracy + 0.3 × root cause match + 0.2 × evidence`, with the weights of `bench.yaml`. A part with nothing to score is left out and the other weights count for its share. |
+
+Each share has a 95% interval, from resampling the scenarios with
+replacement 1,000 times. When two runs' intervals of a metric overlap,
+the difference between them may be chance: `sidekick bench compare` flags
+it as `no clear difference`.
+
+### The judge
+
+The judge is the model of `model.roles.judge`, or of
+`model.roles.investigate` when no judge role is set. It gets the expected
+root cause, the rubric and the final report, never the transcript, and
+answers with a `submit_grades` tool call. It is forced to call the tool
+where the connector can force one, and grades at temperature 0 where the
+model takes a temperature (not on the Anthropic API or OpenAI's reasoning
+models, which reject one). Grades that miss an item or name an unknown
+one go back to it to fix, up to three times; a run the judge gives no
+grades for counts as a judge error and does not match. The judge's prompt
+has a version, which each `report.json` records.
+
+## bench.yaml
+
+```yaml
+weights: { verdict: 0.5, rootCause: 0.3, evidence: 0.2 }   # the defaults
+thresholds:
+  verdictAccuracy: 0.8      # the lowest share allowed
+  fpPrecision: 0.95
+  rootCauseMatch: 0.7
+  maxCostPerRunUSD: 0.5     # the highest mean cost of a run, in US dollars
+  baseline: bench/baseline.json   # a report.json to compare with
+  maxDrop: 0.02             # how far the overall score may fall below the baseline's
+```
+
+Every key is optional, and a threshold that is not set is not checked. A
+metric with nothing to count, such as false positive precision when no run
+gave a false positive verdict, passes. The baseline check fails when the
+overall score is more than `maxDrop` (0.02 by default) below the
+baseline's, and says whether the two intervals show a clear difference.
+Paths are read from the directory `sidekick bench run` runs in.
+
+## Output files
+
+- `--out report.json` holds what the run used (Sidekick version and
+  commit, a hash of the config file, the scenario set, the connector and
+  model settings of each role, the strategy versions, and the prompt and
+  judge prompt versions), the run totals with their intervals, the
+  thresholds, and each scenario with its spread and runs. Its schema is
+  [bench-report.schema.json](bench-report.schema.json); `schemaVersion`
+  changes whenever the report changes in a way an older reader would
+  misread.
+- `--junit junit.xml` has one test suite per scenario, with one test case
+  per run, and a suite of the thresholds. A run fails when its verdict is
+  wrong or its root cause does not match.
+- `--markdown summary.md` is a summary for a pull request comment: the
+  thresholds, the run totals and one row per scenario.
 
 ## Scenario files
 
@@ -171,3 +276,75 @@ Each entry under `sources` is a mock source, named as the model sees it:
 | `within: <duration>` | is an RFC 3339 time no further than the duration, such as `2h`, from `now`, before or after it. |
 
 One matcher can set several operators, and all of them must hold.
+
+## Comparing two runs
+
+`sidekick bench compare a.json b.json` shows two `report.json` files of
+`sidekick bench run --out` side by side: what each run used (Sidekick
+version and commit, the scenario set, the connector and model of each
+role, the prompt and judge prompt versions and the strategy versions),
+each metric with the change from the first run to the second, and each
+scenario's runs.
+
+```
+METRIC                    A        B        CHANGE    DIFFERENCE
+overall score             0.55     0.87     +0.32     clear difference
+verdict accuracy          0.50     0.83     +0.33     no clear difference
+```
+
+A share whose 95% intervals overlap in the two runs is flagged
+`no clear difference`: the change may be chance, and more scenarios or
+more repeats would tell. The command exits with `2` when a report cannot be
+read or has another schema version, and `0` otherwise.
+
+## Checking the judge
+
+`sidekick bench judge-check` has the judge grade a set of reports that a
+person graded by hand, and shows how far its grades agree, item by item.
+Run it when you change the judge model, to see how far its grades move.
+
+```sh
+sidekick bench judge-check --config sidekick.yaml
+```
+
+| Flag | Default | Does |
+|---|---|---|
+| `--cases` | `bench/judge-check` | A case file, or a directory: every `.json` file under it is a case. |
+| `--config`, `-c` | `/etc/sidekick/sidekick.yaml` | The config file whose judge model grades the cases. |
+| `--min-agreement` | `0` | The share of items, from 0 to 1, the judge must grade as the hand grades do. Below it the command exits with `1`. |
+
+The judge is the model of `model.roles.judge`, or of
+`model.roles.investigate` when no judge role is set. Pick a judge from a
+different model family than the investigate model when you have one, so
+the judge does not share the blind spots of the model it grades. The
+judge must be able to call tools.
+
+Each case holds an expected root cause with its rubric, a report, and the
+hand grade of each rubric item:
+
+```json
+{
+  "id": "pool-no-commit",
+  "rootCause": {
+    "summary": "The DB connection pool ran out after commit abc123 lowered the pool size to 5.",
+    "rubric": [
+      {"id": "pool", "text": "Names connection pool exhaustion as the cause", "weight": 2, "required": true},
+      {"id": "commit", "text": "Links the cause to commit abc123 or the 10:05 deploy", "weight": 2, "required": true}
+    ]
+  },
+  "report": {"verdict": "true_positive", "confidence": "medium", "summary": "...", "reason": "...", "cause": "...", "findings": []},
+  "grades": {"pool": true, "commit": false}
+}
+```
+
+The command prints one line per case, with the items the judge graded
+otherwise, then the share of items it agreed on and the mean difference
+between its root-cause scores and the hand-graded ones.
+
+| Status | Means |
+|---|---|
+| `0` | The judge graded every case and agreed with at least `--min-agreement` of the items. |
+| `1` | It agreed with fewer. |
+| `2` | A bad flag, config file or case file. |
+| `3` | The model provider is unreachable after the connector's retries. |
+

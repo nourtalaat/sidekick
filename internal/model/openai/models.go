@@ -99,13 +99,15 @@ var presets = []preset{
 }
 
 // capabilities returns the preset's capabilities on a server. Only
-// servers known to honour a forced tool choice get ToolChoice.
+// servers known to honour a forced tool choice get ToolChoice. Every
+// OpenAI-compatible server takes a temperature.
 func (p *preset) capabilities(s Server) model.Capabilities {
 	return model.Capabilities{
 		ToolCalling:   true,
 		ToolChoice:    s == ServerVLLM,
 		EffortLevels:  p.effort,
 		ContextTokens: presetContextTokens,
+		Temperature:   true,
 	}
 }
 

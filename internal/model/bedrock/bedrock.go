@@ -22,6 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 
+	"github.com/nourtalaat/sidekick/internal/awsauth"
 	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/registry"
@@ -42,10 +43,6 @@ const streamAbove = 21_333
 // errUnknownModel is returned by New for a model that is neither known nor
 // declared. Validate reports the same problem with more detail.
 var errUnknownModel = errors.New("not a known model and no capabilities block")
-
-// errNoCredentials is returned by New when the AWS config has no credential
-// provider at all.
-var errNoCredentials = errors.New("the AWS config has no credential provider")
 
 // errIncomplete is returned when the stream ended before the message did.
 var errIncomplete = errors.New("stream ended before the message was complete")
@@ -194,12 +191,9 @@ func New(ctx context.Context, name string, cfg Config, deps registry.Deps) (mode
 	return build(ctx, name, cfg, deps, config.LoadDefaultConfig)
 }
 
-// awsConfigLoader loads the AWS config, as config.LoadDefaultConfig does.
-type awsConfigLoader func(ctx context.Context, optFns ...func(*config.LoadOptions) error) (aws.Config, error)
-
 // build is New with the AWS config loader to use. Tests give one with fixed
 // credentials, so they never read the environment or call AWS.
-func build(ctx context.Context, name string, cfg Config, deps registry.Deps, load awsConfigLoader) (*Connector, error) {
+func build(ctx context.Context, name string, cfg Config, deps registry.Deps, load awsauth.Loader) (*Connector, error) {
 	m, ok := cfg.known()
 	if !ok {
 		return nil, fmt.Errorf("model %q: %w", cfg.Model, errUnknownModel)
@@ -210,13 +204,9 @@ func build(ctx context.Context, name string, cfg Config, deps registry.Deps, loa
 		httpClient = httpclient.New()
 	}
 
-	awsCfg, err := load(ctx, config.WithRegion(cfg.Region), config.WithHTTPClient(httpClient))
+	awsCfg, err := awsauth.Load(ctx, load, cfg.Region, httpClient)
 	if err != nil {
-		return nil, fmt.Errorf("load AWS config: %w", err)
-	}
-
-	if awsCfg.Credentials == nil {
-		return nil, errNoCredentials
+		return nil, fmt.Errorf("set up AWS credentials: %w", err)
 	}
 
 	client := bedrockruntime.NewFromConfig(awsCfg, func(o *bedrockruntime.Options) {

@@ -1,0 +1,28 @@
+{
+  "id": "pool-no-fix",
+  "rootCause": {
+    "summary": "The DB connection pool ran out after commit abc123 lowered the pool size to 5.",
+    "rubric": [
+      {"id": "pool", "text": "Names connection pool exhaustion as the cause", "weight": 2, "required": true},
+      {"id": "commit", "text": "Links the cause to commit abc123 or the 10:05 deploy", "weight": 2, "required": true},
+      {"id": "fix", "text": "Proposes restoring the pool size or rolling back", "weight": 1}
+    ]
+  },
+  "report": {
+    "verdict": "true_positive",
+    "confidence": "high",
+    "reason": "The 10:05 deploy shrank the DB pool, and from 10:10 requests time out waiting for a connection.",
+    "summary": "The 10:05 deploy made checkout run out of DB connections.",
+    "cause": "The deploy at 10:05 lowered the DB pool size, and the pool now runs out under normal traffic.",
+    "impact": "Checkout p99 latency is above 2s.",
+    "findings": [
+      {"id": "f1", "claim": "The 10:05 deploy lowered the pool size.", "evidence": [{"kind": "deploy", "title": "run 991"}]}
+    ],
+    "fixes": [
+      {"id": "x1", "title": "Add more checkout replicas", "detail": "Scale checkout-api out to spread the load."}
+    ],
+    "checked": [],
+    "stopReason": "submitted"
+  },
+  "grades": {"pool": true, "commit": true, "fix": false}
+}

@@ -217,7 +217,12 @@ func (c *Config) checkEndpoint() []error {
 // baseURL, since api.openai.com does not serve them.
 func (c *Config) known(server Server) (model.Capabilities, bool) {
 	if c.Declared != nil {
-		return c.Declared.capabilities(), true
+		caps := c.Declared.capabilities()
+		// OpenAI-compatible servers take a temperature; an unknown model on
+		// api.openai.com may be a reasoning model, which rejects one.
+		caps.Temperature = c.BaseURL != ""
+
+		return caps, true
 	}
 
 	if caps, ok := knownModels[c.Model]; ok {

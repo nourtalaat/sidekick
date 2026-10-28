@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "sidekickVersion": "v0.1.0",
+  "gitSHA": "abc1234",
+  "configHash": "c0ffee",
+  "scenarioSet": "bench/scenarios/sample",
+  "triggeredBy": "ci",
+  "connectors": {
+    "investigate": {
+      "connector": "claude",
+      "provider": "anthropic",
+      "model": "claude-opus-5-5"
+    },
+    "judge": {
+      "connector": "claude",
+      "provider": "anthropic",
+      "model": "claude-opus-5-5"
+    }
+  },
+  "strategies": {
+    "generic-alert": "1a2b3c4d"
+  },
+  "promptVersion": "2",
+  "judgePromptVersion": "1",
+  "startedAt": "2026-10-28T09:00:00Z",
+  "finishedAt": "2026-10-28T09:10:00Z",
+  "repeat": 3,
+  "seed": 1,
+  "resamples": 1000,
+  "confidenceLevel": 0.95,
+  "weights": {
+    "verdict": 0.5,
+    "rootCause": 0.3,
+    "evidence": 0.2
+  },
+  "metrics": {
+    "runs": 6,
+    "verdictAccuracy": 0.5,
+    "falsePositive": {
+      "precision": 0.5,
+      "recall": 0.3333333333333333,
+      "predicted": 2,
+      "expected": 3,
+      "hits": 1
+    },
+    "truePositive": {
+      "precision": 0.6666666666666666,
+      "recall": 0.6666666666666666,
+      "predicted": 3,
+      "expected": 3,
+      "hits": 2
+    },
+    "rootCauseMatch": 0.5,
+    "rootCauseScore": 0.7,
+    "evidence": 0.75,
+    "sourceFailuresReported": 1,
+    "overall": 0.55,
+    "judgeErrors": 0,
+    "toolCalls": 24,
+    "inputTokens": 60000,
+    "outputTokens": 6000,
+    "costMicros": 120000,
+    "judgeCostMicros": 6000,
+    "meanCostPerRunUSD": 0.02,
+    "meanDurationMs": 4000
+  },
+  "intervals": {
+    "overall": {
+      "lower": 0.4,
+      "upper": 0.7
+    },
+    "verdictAccuracy": {
+      "lower": 0.3333333333333333,
+      "upper": 0.6666666666666666
+    },
+    "fpPrecision": {
+      "lower": 0,
+      "upper": 1
+    },
+    "rootCauseMatch": {
+      "lower": 0.25,
+      "upper": 0.75
+    },
+    "evidence": {
+      "lower": 0.5,
+      "upper": 1
+    }
+  },
+  "thresholds": [],
+  "scenarios": [
+    {
+      "id": "pool",
+      "expectedVerdict": "true_positive",
+      "spread": {
+        "runs": 3,
+        "correct": 2,
+        "rootCauseMean": 0.7,
+        "rootCauseSD": 0.1,
+        "costUSD": {
+          "min": 0.01,
+          "median": 0.02,
+          "max": 0.03
+        },
+        "durationMs": {
+          "min": 3000,
+          "median": 4000,
+          "max": 5000
+        }
+      },
+      "runs": []
+    },
+    {
+      "id": "noise",
+      "expectedVerdict": "true_positive",
+      "spread": {
+        "runs": 3,
+        "correct": 1,
+        "rootCauseMean": null,
+        "rootCauseSD": null,
+        "costUSD": {
+          "min": 0.01,
+          "median": 0.02,
+          "max": 0.03
+        },
+        "durationMs": {
+          "min": 3000,
+          "median": 4000,
+          "max": 5000
+        }
+      },
+      "runs": []
+    }
+  ]
+}
