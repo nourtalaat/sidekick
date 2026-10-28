@@ -136,7 +136,7 @@ func New(opts Options) (*Handler, error) {
 	metrics.Init(config.SlackMentionIntake)
 
 	for _, l := range listeners {
-		metrics.Init(l.name)
+		metrics.Init(l.Name)
 	}
 
 	tp := opts.TracerProvider
@@ -173,7 +173,7 @@ func (h *Handler) SetListeners(cfg map[string]config.Listener) error {
 	}
 
 	for _, l := range listeners {
-		h.metrics.Init(l.name)
+		h.metrics.Init(l.Name)
 	}
 
 	h.listeners.Store(&listeners)
@@ -252,9 +252,9 @@ func (h *Handler) handleMessage(ctx context.Context, env envelope, m message) er
 	}
 
 	ev := buildEvent(env.EventID, env.TeamID, m, text, l, env.Event)
-	trusted := l.trusted && m.isBot() && slices.Contains(h.trustedBots, m.botID())
+	trusted := l.Trusted && m.isBot() && slices.Contains(h.trustedBots, m.botID())
 
-	return h.store(ctx, l.name, trusted, ev)
+	return h.store(ctx, l.Name, trusted, ev)
 }
 
 // handleMention stores a mention of Sidekick. In the thread of an
@@ -349,10 +349,10 @@ func (h *Handler) firstListener(ctx context.Context, m message, text string) (*l
 	if len(matched) > 1 {
 		others := make([]string, 0, len(matched)-1)
 		for _, l := range matched[1:] {
-			others = append(others, l.name)
+			others = append(others, l.Name)
 		}
 
-		h.log.DebugContext(ctx, "Slack message matches more than one listener; the first one takes it", "listener", matched[0].name, "also_matched", others)
+		h.log.DebugContext(ctx, "Slack message matches more than one listener; the first one takes it", "listener", matched[0].Name, "also_matched", others)
 	}
 
 	return matched[0], nil

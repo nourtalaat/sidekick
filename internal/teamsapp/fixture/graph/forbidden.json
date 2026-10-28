@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "Forbidden",
+    "message": "Missing role permissions on the request."
+  }
+}

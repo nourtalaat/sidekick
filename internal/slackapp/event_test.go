@@ -9,6 +9,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/event"
+	"github.com/nourtalaat/sidekick/internal/listen"
 )
 
 func TestBuildEvent(t *testing.T) {
@@ -94,7 +95,7 @@ func TestBuildEvent(t *testing.T) {
 			msg:  message{Channel: "C1", TS: "4.1", User: "U1", Text: strings.Repeat("x", 300) + " <https://grafana.example.com/d/1|board>"},
 			check: func(t *testing.T, ev event.Event) {
 				t.Helper()
-				require.Len(t, ev.Title, maxTitleBytes)
+				require.Len(t, ev.Title, listen.MaxTitleBytes)
 				require.Equal(t, []event.Link{{Title: "board", URL: "https://grafana.example.com/d/1"}}, ev.Links)
 			},
 		},
