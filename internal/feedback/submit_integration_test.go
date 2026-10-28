@@ -38,14 +38,17 @@ func TestSubmitStoresOneOpinionPerAuthorAndTarget(t *testing.T) {
 		// changed is RatingChanged of each submission.
 		changed []bool
 		want    []feedbackRow
+		// confirms is whether the submissions confirm the investigation.
+		confirms bool
 	}{
 		{
 			name: "a rating of the verdict by a user",
 			submissions: []Submission{
 				{Target: verdict, Rating: output.RatingCorrect, Author: webAna},
 			},
-			changed: []bool{true},
-			want:    []feedbackRow{{Kind: "verdict", Ref: "run:1/verdict", Rating: "correct", Channel: "ui"}},
+			changed:  []bool{true},
+			want:     []feedbackRow{{Kind: "verdict", Ref: "run:1/verdict", Rating: "correct", Channel: "ui"}},
+			confirms: true,
 		},
 		{
 			name: "a wrong finding with a reason by a Slack user",
@@ -114,7 +117,13 @@ func TestSubmitStoresOneOpinionPerAuthorAndTarget(t *testing.T) {
 			}
 
 			require.Equal(t, tt.want, feedbackRows(t, pool, finalInvestigation))
-			require.Nil(t, investigation(t, pool, finalInvestigation).ConfirmedVerdict, "only a verdict rating or a real verdict confirms")
+
+			confirmed := investigation(t, pool, finalInvestigation).ConfirmedVerdict
+			if tt.confirms {
+				require.NotNil(t, confirmed)
+			} else {
+				require.Nil(t, confirmed, "only a verdict rating or a real verdict confirms")
+			}
 		})
 	}
 }

@@ -620,6 +620,10 @@ components:
     FeedbackTargetKind:
       type: string
       enum: [verdict, finding, fix, tool_call]
+    FeedbackRating:
+      type: string
+      enum: [correct, wrong]
+      x-enum-varnames: [RatingCorrect, RatingWrong]
     NewFeedback:
       type: object
       required: [targetKind, targetRef, rating]
@@ -633,8 +637,7 @@ components:
             `run:N/verdict`, `run:N/finding:ID` or `run:N/fix:ID` for the
             current run N, or the ID of a tool call.
         rating:
-          type: string
-          description: correct or wrong. Anything else answers 400.
+          $ref: "#/components/schemas/FeedbackRating"
         reason:
           type: string
           maxLength: 2000
@@ -658,8 +661,7 @@ components:
         targetRef:
           type: string
         rating:
-          type: string
-          description: correct or wrong.
+          $ref: "#/components/schemas/FeedbackRating"
         reason:
           type: string
         correctVerdict:
