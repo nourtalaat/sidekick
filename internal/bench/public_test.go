@@ -166,7 +166,7 @@ func loadPublic(t *testing.T) []Scenario {
 func readSnapshotNames(t *testing.T, name string) snapshotFile {
 	t.Helper()
 
-	raw, err := os.ReadFile(filepath.Join(repoRoot, "bench", "tools", name+".json"))
+	raw, err := os.ReadFile(filepath.Join(repoRoot, "bench", "tools", name+".json")) //nolint:gosec // A fixture path chosen by the test.
 	require.NoError(t, err)
 
 	var file struct {
@@ -188,7 +188,7 @@ func readSnapshotNames(t *testing.T, name string) snapshotFile {
 func docsAllowList(t *testing.T, name string) []string {
 	t.Helper()
 
-	raw, err := os.ReadFile(filepath.Join(repoRoot, "docs", "sources", name+".md"))
+	raw, err := os.ReadFile(filepath.Join(repoRoot, "docs", "sources", name+".md")) //nolint:gosec // A fixture path chosen by the test.
 	require.NoError(t, err)
 
 	match := allowBlock.FindSubmatch(raw)
