@@ -201,6 +201,7 @@ func TestValidateFixtures(t *testing.T) {
 		}},
 		{file: "teams-listeners-without-teams", want: []string{"listeners: listeners with source teams need the teams section, the Teams bot that receives their messages"}},
 		{file: "teams-mention-without-teams", want: []string{`routes[0].match.intake[0]: intake "teams-mention" is not defined`}},
+		{file: "teams-output-without-teams", want: []string{"outputs.teams-thread: type teams needs the teams section, the bot it posts as"}},
 		{file: "negative-price", want: []string{"model.prices.claude-opus-5-5.inputPerMTok: must not be negative"}},
 		// Watchers
 		{file: "watch-http", want: []string{
