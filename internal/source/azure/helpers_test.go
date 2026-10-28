@@ -105,3 +105,8 @@ func withARM(r fakehttp.Response, root string) fakehttp.Response {
 
 	return r
 }
+
+// at returns a time on the test day.
+func at(hour, minute int) time.Time {
+	return time.Date(2026, 5, 4, hour, minute, 0, 0, time.UTC)
+}

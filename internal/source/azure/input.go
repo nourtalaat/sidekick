@@ -21,6 +21,8 @@ var (
 		`(?i)^/subscriptions/([0-9a-f-]{36})/resourceGroups/[-\w.()]{1,90}/providers/[a-z0-9.]+/[-\w.()/]+$`)
 	// groupPattern is the shape of a resource group name.
 	groupPattern = regexp.MustCompile(`^[-\w.()]{1,89}[-\w()]$`)
+	// clusterPattern is the shape of an AKS cluster name.
+	clusterPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$`)
 )
 
 // window is the time range of a call.
