@@ -246,7 +246,8 @@ func (s *Source) resolveLogGroups(ctx context.Context, client *cloudwatchlogs.Cl
 // runQuery starts a query, polls it every pollEvery until it ends, and
 // returns its results. When the call is about to run out of time, or a
 // poll fails, it stops the query, so it does not keep scanning logs for
-// nobody.
+// nobody. A poll in flight is let finish: the wait ends between polls,
+// before the call's own deadline.
 func (s *Source) runQuery(ctx context.Context, client *cloudwatchlogs.Client, in *cloudwatchlogs.StartQueryInput) (*cloudwatchlogs.GetQueryResultsOutput, error) {
 	started, err := client.StartQuery(ctx, in)
 	if err != nil {
@@ -256,20 +257,20 @@ func (s *Source) runQuery(ctx context.Context, client *cloudwatchlogs.Client, in
 	id := awssdk.ToString(started.QueryId)
 	wait := queryWait(ctx)
 
-	waitCtx, cancel := context.WithTimeout(ctx, wait)
-	defer cancel()
+	stopAt := time.NewTimer(wait)
+	defer stopAt.Stop()
 
 	ticker := time.NewTicker(s.pollEvery)
 	defer ticker.Stop()
 
 	for {
-		out, err := client.GetQueryResults(waitCtx, &cloudwatchlogs.GetQueryResultsInput{QueryId: awssdk.String(id)})
+		out, err := client.GetQueryResults(ctx, &cloudwatchlogs.GetQueryResultsInput{QueryId: awssdk.String(id)})
 
 		switch {
-		case err != nil && waitCtx.Err() == nil:
-			return nil, stopQuery(ctx, client, id, fmt.Errorf("read the results of query %s: %w", id, err))
-		case err != nil:
+		case err != nil && ctx.Err() != nil:
 			return nil, stopQuery(ctx, client, id, timedOut(ctx, wait))
+		case err != nil:
+			return nil, stopQuery(ctx, client, id, fmt.Errorf("read the results of query %s: %w", id, err))
 		}
 
 		switch out.Status {
@@ -280,7 +281,9 @@ func (s *Source) runQuery(ctx context.Context, client *cloudwatchlogs.Client, in
 		}
 
 		select {
-		case <-waitCtx.Done():
+		case <-ctx.Done():
+			return nil, stopQuery(ctx, client, id, timedOut(ctx, wait))
+		case <-stopAt.C:
 			return nil, stopQuery(ctx, client, id, timedOut(ctx, wait))
 		case <-ticker.C:
 		}

@@ -444,8 +444,8 @@ func TestQueryLogsStopsTheQueryInTime(t *testing.T) {
 			require.Greater(t, len(sent), 2)
 			require.Equal(t, targetStartQuery, sent[0].Header.Get("X-Amz-Target"))
 
-			// A poll cut short by the deadline can reach the server after the
-			// stop, so the stop is looked for anywhere.
+			require.Equal(t, targetStopQuery, sent[len(sent)-1].Header.Get("X-Amz-Target"), "the stop follows the last poll")
+
 			stops := 0
 
 			for _, req := range sent {
