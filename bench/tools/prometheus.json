@@ -1,0 +1,53 @@
+{
+  "tools": [
+    {
+      "name": "query",
+      "description": "Run an instant PromQL query at one time, by default now, for example sum by (service) (rate(http_requests_total{code=~\"5..\"}[5m])). Returns each series' labels and value, at most 50 series. A range selector such as up[10m] returns each series' points instead, as [unix seconds, value].",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The PromQL query. It is checked with the Prometheus parser before it is sent."
+          },
+          "time": {
+            "type": "string",
+            "description": "The time to evaluate the query at, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "query_range",
+      "description": "Run a PromQL range query, for example sum by (service) (rate(http_requests_total{code=~\"5..\"}[5m])). The step is picked so each series has at most 250 points. Returns at most 50 series, each with its labels, the min, max, avg and last of its values, and its points as [unix seconds, value], oldest first. Narrow a query that matches more series with label matchers, sum by or topk.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The PromQL query. It must return an instant vector or a scalar, not a range vector such as x[5m]."
+          },
+          "since": {
+            "type": "string",
+            "description": "The start of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: one hour before until.",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "description": "The end of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}
