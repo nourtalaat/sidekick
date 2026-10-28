@@ -26,10 +26,14 @@ const maxBodyBytes = 1 << 20
 // errNoAuthenticator is returned by New without Options.Auth.
 var errNoAuthenticator = errors.New("an authenticator is required")
 
-// Options set up the API handler. Auth is required.
+// Options set up the API handler. Auth is required; each other field is
+// required by the operations that use it, and sidekick serve sets them
+// all.
 type Options struct {
 	// Auth finds the caller of each request.
 	Auth Authenticator
+	// Tokens creates, lists and revokes API tokens.
+	Tokens TokenManager
 	// Logger gets the errors that answer 500. Nil logs nothing.
 	Logger *slog.Logger
 }
@@ -62,7 +66,7 @@ func New(opts Options) (http.Handler, error) {
 
 	h := &handler{auth: opts.Auth, routes: http.NewServeMux(), log: log}
 
-	strict := apigen.NewStrictHandlerWithOptions(&server{}, []apigen.StrictMiddlewareFunc{requireRoles(need)},
+	strict := apigen.NewStrictHandlerWithOptions(&server{tokens: opts.Tokens}, []apigen.StrictMiddlewareFunc{requireRoles(need)},
 		apigen.StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  h.requestError,
 			ResponseErrorHandlerFunc: h.responseError,

@@ -36,7 +36,7 @@ func registerAPI(ctx context.Context, a *app.App) error {
 		return fmt.Errorf("set up login: %w", err)
 	}
 
-	handler, err := api.New(api.Options{Auth: sessions, Logger: log})
+	handler, err := api.New(api.Options{Auth: sessions, Tokens: sessions, Logger: log})
 	if err != nil {
 		return fmt.Errorf("set up the API: %w", err)
 	}

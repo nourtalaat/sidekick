@@ -27,13 +27,17 @@ import (
 const sessionCookie = "__Host-sidekick_session"
 
 // The sessions of fixture/sessions.sql, as cookie values, and the CSRF
-// token of the live one.
+// tokens of the live ones.
 var (
 	viSession        = sessionValue(0x01)
 	viExpiredSession = sessionValue(0x02)
+	adSession        = sessionValue(0x03)
 )
 
-const viCSRF = "csrf-vi"
+const (
+	viCSRF = "csrf-vi"
+	adCSRF = "csrf-ad"
+)
 
 // TestMain runs the tests, then lets storetest stop the Postgres container
 // it may have started.
@@ -73,7 +77,7 @@ func setup(t *testing.T) server {
 	})
 	require.NoError(t, err)
 
-	handler, err := api.New(api.Options{Auth: sessions})
+	handler, err := api.New(api.Options{Auth: sessions, Tokens: sessions})
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
@@ -96,6 +100,20 @@ func (s server) do(t *testing.T, method, path, session, csrf string, body io.Rea
 	if csrf != "" {
 		req.Header.Set(auth.CSRFHeader, csrf)
 	}
+
+	rec := httptest.NewRecorder()
+	s.mux.ServeHTTP(rec, req)
+
+	return rec
+}
+
+// doWithToken sends a request with the API token in the Authorization
+// header.
+func (s server) doWithToken(t *testing.T, method, path, token string, body io.Reader) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := httptest.NewRequestWithContext(t.Context(), method, path, body)
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	rec := httptest.NewRecorder()
 	s.mux.ServeHTTP(rec, req)

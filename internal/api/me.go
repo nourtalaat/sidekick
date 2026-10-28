@@ -10,7 +10,9 @@ import (
 )
 
 // server implements the API operations.
-type server struct{}
+type server struct {
+	tokens TokenManager
+}
 
 var _ apigen.StrictServerInterface = (*server)(nil)
 

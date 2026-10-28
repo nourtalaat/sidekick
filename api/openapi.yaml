@@ -191,7 +191,7 @@ components:
           $ref: "#/components/schemas/Token"
         secret:
           type: string
-          description: The token to send as "Authorization: Bearer <secret>". It is shown only here.
+          description: 'The token, sent as "Authorization: Bearer <secret>". It is shown only here.'
     Problem:
       type: object
       description: Problem details, as RFC 9457 describes.
