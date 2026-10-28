@@ -43,7 +43,7 @@ import (
 const (
 	testAppID      = "00000000-1111-2222-3333-444444444444"
 	testTenantID   = "55555555-6666-7777-8888-999999999999"
-	testTeamID     = "66666666-7777-8888-9999-000000000000"
+	testTeamID     = "6b6b6b6b-7777-8888-9999-000000000000"
 	testServiceURL = "https://smba.trafficmanager.net/emea/"
 	testKeyID      = "test-key"
 	// testAckBudget replaces AckBudget in the tests.
