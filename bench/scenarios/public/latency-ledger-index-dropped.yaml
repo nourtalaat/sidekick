@@ -1,0 +1,101 @@
+# A p99 latency alert after a migration swapped a full index for a partial one.
+# Latency alert strategy, true positive.
+id: latency-ledger-index-dropped
+title: Ledger API p99 latency after a migration replaced an index with a partial one
+tags: [latency, database, deploy, true-positive]
+strategy: latency-alert
+now: 2026-09-14T14:35:00Z
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="LedgerApiLatencyP99High"}'
+    alerts:
+      - status: firing
+        labels: { alertname: LedgerApiLatencyP99High, service: ledger-api, env: prod, severity: critical }
+        annotations:
+          summary: ledger-api p99 latency above 1.5s for 10m
+          description: The p99 latency of GET /v1/accounts/{id}/entries is 2.6s. The threshold is 1.5s.
+        startsAt: 2026-09-14T14:21:00Z
+        fingerprint: 3a9d51c07e2b64f8
+sources:
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: query_range
+        match:
+          args:
+            query: { regex: "(?i)duration|latency|histogram_quantile" }
+        respond:
+          text: |
+            p99 latency in seconds of ledger-api, GET /v1/accounts/{id}/entries, 14:00 to 14:35
+            14:00 0.21, 14:05 0.22, 14:10 0.21, 14:15 0.23, 14:20 0.24, 14:21 1.60, 14:25 2.30, 14:30 2.60, 14:35 2.70
+            min 0.21, max 2.70, last 2.70
+          evidence:
+            - { kind: metric, title: ledger-api p99 latency, url: "https://prometheus.quillcart.example/graph?g0.expr=ledger_p99" }
+      - tool: query_range
+        match:
+          args:
+            query: { regex: "(?i)requests_total|request_rate|rate\\(" }
+        respond:
+          text: |
+            Requests per second of ledger-api, 14:00 to 14:35
+            14:00 410, 14:10 418, 14:20 421, 14:30 415, 14:35 417
+            min 405, max 421, last 417. Traffic is steady.
+          evidence:
+            - { kind: metric, title: ledger-api request rate, url: "https://prometheus.quillcart.example/graph?g0.expr=ledger_rps" }
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: |
+            9c41e7d 2026-09-14T14:02:11Z "Migration 0087: swap the account_id index on ledger_entries for a partial index" by dana
+            b72a1fe 2026-09-14T09:40:03Z "Bump the logging library to 4.2.1" by omar
+          evidence:
+            - { kind: commit, title: 9c41e7d, url: "https://github.example.com/quillcart/ledger-api/commit/9c41e7d" }
+      - tool: get_commit
+        match:
+          args:
+            ref: { regex: "^9c41e7d" }
+        respond:
+          text: |
+            9c41e7d "Migration 0087: swap the account_id index on ledger_entries for a partial index"
+            db/migrations/0087_entries_index.sql (+2 -0)
+              DROP INDEX idx_ledger_entries_account_id;
+              CREATE INDEX idx_ledger_entries_open ON ledger_entries (account_id) WHERE status = 'open';
+          evidence:
+            - { kind: commit, title: 9c41e7d, url: "https://github.example.com/quillcart/ledger-api/commit/9c41e7d" }
+      - tool: list_workflow_runs
+        respond:
+          text: 'run 5521 deploy ledger-api 2026-09-14T14:18:40Z success, commit 9c41e7d, runs migrations before the rollout'
+          evidence:
+            - { kind: deploy, title: deploy ledger-api 5521, url: "https://github.example.com/quillcart/ledger-api/actions/runs/5521" }
+  postgres:
+    tools: { snapshot: bench/tools/postgres.json }
+    fixtures:
+      - tool: slow_queries
+        respond:
+          text: |
+            database ledger, statistics reset 2026-09-14T14:19:02Z
+            1. calls 81234, mean 1480.2 ms, max 5120.7 ms, shared hits 120, reads 98211
+               SELECT id, amount, posted_at FROM ledger_entries WHERE account_id = $1 AND status = 'settled' ORDER BY posted_at DESC LIMIT 100
+            2. calls 3310, mean 4.1 ms, max 21.0 ms
+               SELECT id FROM ledger_entries WHERE account_id = $1 AND status = 'open'
+          evidence:
+            - { kind: resource, title: ledger slow queries, url: "https://db.quillcart.example/ledger/statements" }
+default: no_data
+expected:
+  verdict: true_positive
+  rootCause:
+    summary: Migration 0087, deployed at 14:18, dropped the full account_id index on ledger_entries and added one only for open entries, so queries for settled entries scan the table.
+    rubric:
+      - { id: index, text: "Names the replaced or missing account_id index on ledger_entries, with queries for settled entries scanning the table, as the cause", weight: 2, required: true }
+      - { id: change, text: "Links the cause to commit 9c41e7d or migration 0087 deployed at about 14:18", weight: 2, required: true }
+      - { id: fix, text: "Proposes recreating a full index on account_id or rolling back the migration", weight: 1 }
+  evidence:
+    - { calledTool: github__list_commits }
+    - { citedURL: "https://github.example.com/quillcart/ledger-api/commit/9c41e7d" }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }

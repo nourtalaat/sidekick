@@ -1,0 +1,100 @@
+# A Sentry issue alert for a new exception that appeared with one release.
+# Sentry is reached through its MCP server. Generic alert strategy, true positive.
+id: sentry-regression-after-release
+title: Invoice API exception that first appeared in a release that made billing addresses optional
+tags: [sentry, mcp, exception, deploy, true-positive]
+strategy: generic-alert
+now: 2026-09-18T10:05:00Z
+event:
+  adapter: sentry
+  payload:
+    action: triggered
+    actor: { id: sentry, name: Sentry, type: application }
+    data:
+      triggered_rule: New invoice-api errors in production
+      event:
+        event_id: 5f0e8c2a9b7d41e3a6c4d8b1f2e09a73
+        issue_id: "4821937"
+        project: 1204
+        title: "TypeError: Cannot read properties of undefined (reading 'taxId')"
+        culprit: renderInvoice(src/invoice/render.ts)
+        level: error
+        datetime: "2026-09-18T09:58:12Z"
+        tags:
+          - [environment, prod]
+          - [release, "invoice-api@2026.9.18+3c7d9b2"]
+          - [service, invoice-api]
+        web_url: https://sentry.example.com/organizations/quillcart/issues/4821937/events/5f0e8c2a9b7d41e3a6c4d8b1f2e09a73/
+sources:
+  sentry:
+    tools: { snapshot: bench/tools/sentry.json }
+    fixtures:
+      - tool: search_issues
+        respond:
+          text: |
+            Issues in quillcart, last 30 days, 1 matching
+            INVOICE-API-4F "TypeError: Cannot read properties of undefined (reading 'taxId')"
+              culprit renderInvoice(src/invoice/render.ts), status unresolved, first seen 2026-09-18T09:41:30Z, last seen 2026-09-18T10:03:55Z
+              1,284 events, 412 users, release invoice-api@2026.9.18+3c7d9b2, new issue
+          evidence:
+            - { kind: ticket, title: INVOICE-API-4F, url: "https://sentry.example.com/organizations/quillcart/issues/4821937/" }
+      - tool: get_sentry_resource
+        respond:
+          text: |
+            INVOICE-API-4F "TypeError: Cannot read properties of undefined (reading 'taxId')"
+            First seen 2026-09-18T09:41:30Z in release invoice-api@2026.9.18+3c7d9b2. No event in earlier releases.
+            Stack trace, most recent call first:
+              renderInvoice  src/invoice/render.ts:88   const tax = customer.billing.taxId
+              buildInvoice   src/invoice/build.ts:41    return renderInvoice(order, customer)
+              handler        src/http/invoices.ts:23
+            Tags: customer.plan=free on 1,198 of 1,284 events
+          evidence:
+            - { kind: ticket, title: INVOICE-API-4F, url: "https://sentry.example.com/organizations/quillcart/issues/4821937/" }
+      - tool: search_errors
+        respond:
+          text: |
+            Errors of invoice-api by release, last 24 hours
+            invoice-api@2026.9.17+8e1a40c: 3 events (unrelated timeouts), invoice-api@2026.9.18+3c7d9b2: 1,291 events, 1,284 of them TypeError reading 'taxId'
+            Release 2026.9.18 was first seen at 2026-09-18T09:38:00Z.
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: |
+            3c7d9b2 2026-09-18T09:20:44Z "Make the billing address optional for free plan customers" by lena
+            8e1a40c 2026-09-17T14:03:12Z "Fix rounding of tax lines" by lena
+          evidence:
+            - { kind: commit, title: 3c7d9b2, url: "https://github.example.com/quillcart/invoice-api/commit/3c7d9b2" }
+      - tool: get_commit
+        match:
+          args:
+            ref: { regex: "^3c7d9b2" }
+        respond:
+          text: |
+            3c7d9b2 "Make the billing address optional for free plan customers"
+            src/customer/model.ts (+3 -1)
+              -  billing: BillingAddress;
+              +  billing?: BillingAddress;
+            src/customer/signup.ts (+6 -2)
+            src/invoice/render.ts is not changed.
+          evidence:
+            - { kind: commit, title: 3c7d9b2, url: "https://github.example.com/quillcart/invoice-api/commit/3c7d9b2" }
+      - tool: list_workflow_runs
+        respond:
+          text: 'run 7019 deploy invoice-api 2026-09-18T09:38:20Z success, commit 3c7d9b2'
+          evidence:
+            - { kind: deploy, title: deploy invoice-api 7019, url: "https://github.example.com/quillcart/invoice-api/actions/runs/7019" }
+default: no_data
+expected:
+  verdict: true_positive
+  rootCause:
+    summary: Release 2026.9.18 (commit 3c7d9b2) made the billing address optional, but renderInvoice still reads customer.billing.taxId, so invoices fail for customers without one.
+    rubric:
+      - { id: cause, text: "Names the TypeError reading taxId of a customer without a billing address, in renderInvoice, as the cause", weight: 2, required: true }
+      - { id: release, text: "Ties it to release 2026.9.18 or commit 3c7d9b2, which made the billing address optional", weight: 2, required: true }
+      - { id: fix, text: "Proposes a null-safe read of the billing address in renderInvoice, or rolling back the release", weight: 1 }
+  evidence:
+    - { citedURL: "https://sentry.example.com/organizations/quillcart/issues/4821937/" }
+    - { citedURL: "https://github.example.com/quillcart/invoice-api/commit/3c7d9b2" }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }

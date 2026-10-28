@@ -1,0 +1,108 @@
+# A service is down because its pods are killed for using too much memory after
+# a deploy lowered the memory limit. Service down strategy, true positive.
+id: service-down-oom-after-limit-change
+title: Media resizer down after a deploy cut its memory limit to 256Mi
+tags: [service-down, kubernetes, oom, deploy, true-positive]
+strategy: service-down
+now: 2026-09-19T08:20:00Z
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="MediaResizerDown"}'
+    alerts:
+      - status: firing
+        labels: { alertname: MediaResizerDown, service: media-resizer, env: prod, severity: critical }
+        annotations:
+          summary: media-resizer has no healthy instance
+          description: The health check of media-resizer failed on all 4 instances for 5m.
+        startsAt: 2026-09-19T08:09:00Z
+        fingerprint: 41e7a0c9d2b85f36
+sources:
+  k8s:
+    tools: { snapshot: bench/tools/kubernetes.json }
+    fixtures:
+      - tool: list_pod_problems
+        respond:
+          text: |
+            Namespace media, 4 pods with problems
+            media-resizer-6d9c7f5b8-2xk4p  OOMKilled, last state terminated reason OOMKilled exit code 137, 14 restarts, now CrashLoopBackOff
+            media-resizer-6d9c7f5b8-8vq7t  OOMKilled, 13 restarts, now CrashLoopBackOff
+            media-resizer-6d9c7f5b8-m5n2c  OOMKilled, 14 restarts, now CrashLoopBackOff
+            media-resizer-6d9c7f5b8-wz9hd  OOMKilled, 12 restarts, now CrashLoopBackOff
+          evidence:
+            - { kind: resource, title: media-resizer pods, url: "https://k8s.quillcart.example/media/pods?app=media-resizer" }
+      - tool: list_events
+        respond:
+          text: |
+            Namespace media, newest first
+            08:18:41 Warning BackOff pod media-resizer-6d9c7f5b8-2xk4p Back-off restarting failed container resizer
+            08:17:02 Warning OOMKilling node worker-31 Memory cgroup out of memory: Killed process 28841 (resizer), memory limit 256Mi
+            08:09:12 Normal Killing pod media-resizer-6d9c7f5b8-m5n2c Container resizer failed liveness probe
+          evidence:
+            - { kind: resource, title: media events, url: "https://k8s.quillcart.example/media/events" }
+      - tool: get_workload
+        respond:
+          text: |
+            Deployment media/media-resizer, 0 of 4 replicas ready
+            image quillcart/media-resizer:2026.09.19-1, container resizer, memory request 128Mi, memory limit 256Mi
+            strategy RollingUpdate, no horizontal pod autoscaler
+      - tool: get_rollout_history
+        respond:
+          text: |
+            Deployment media/media-resizer, newest first
+            revision 9, 2026-09-19T07:58:20Z, image quillcart/media-resizer:2026.09.19-1
+              changed: resizer memory limit 1Gi -> 256Mi, memory request 512Mi -> 128Mi
+            revision 8, 2026-09-16T12:31:44Z, image quillcart/media-resizer:2026.09.16-2
+          evidence:
+            - { kind: deploy, title: media-resizer revision 9, url: "https://k8s.quillcart.example/media/deployments/media-resizer/revisions/9" }
+      - tool: get_pod_logs
+        respond:
+          text: |
+            media-resizer-6d9c7f5b8-2xk4p, container resizer, previous instance, last lines
+            08:16:40 INFO decoding image 9f3c.jpg (6240x4160)
+            08:16:41 INFO resizing to 1600x1067
+            (the log ends here; the container was killed)
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: list_targets
+        respond:
+          text: "4 scrape targets down for job media-resizer, last error: Get http://10.12.4.18:9102/metrics: connection refused"
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: |
+            f3b8a21 2026-09-19T07:41:09Z "Right-size media-resizer resources from the last month of usage" by omar
+          evidence:
+            - { kind: commit, title: f3b8a21, url: "https://github.example.com/quillcart/media-resizer/commit/f3b8a21" }
+      - tool: get_commit
+        match:
+          args:
+            ref: { regex: "^f3b8a21" }
+        respond:
+          text: |
+            f3b8a21 "Right-size media-resizer resources from the last month of usage"
+            deploy/values.yaml (+2 -2)
+              -  memory: 1Gi
+              +  memory: 256Mi
+            The commit message says the average use was 90Mi. Large images were not counted.
+          evidence:
+            - { kind: commit, title: f3b8a21, url: "https://github.example.com/quillcart/media-resizer/commit/f3b8a21" }
+default: no_data
+expected:
+  verdict: true_positive
+  rootCause:
+    summary: Revision 9 at 07:58 (commit f3b8a21) lowered the memory limit from 1Gi to 256Mi, and the pods are killed for running out of memory when they resize large images.
+    rubric:
+      - { id: oom, text: "Names pods killed for running out of memory (OOMKilled, crash loop) as why the service is down", weight: 2, required: true }
+      - { id: limit, text: "Links it to the lowered memory limit (1Gi to 256Mi) in revision 9 or commit f3b8a21", weight: 2, required: true }
+      - { id: fix, text: "Proposes restoring the memory limit or rolling back to revision 8 first", weight: 1 }
+  evidence:
+    - { calledTool: k8s__list_pod_problems }
+    - { citedURL: "https://github.example.com/quillcart/media-resizer/commit/f3b8a21" }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }

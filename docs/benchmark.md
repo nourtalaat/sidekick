@@ -106,6 +106,48 @@ for its strategies and model connectors, so the secrets of the connectors
 must be readable; nothing is sent to a provider. It exits with `0` when every
 scenario is valid and `2` for a bad flag, config file or scenario file.
 
+## The public scenarios
+
+`bench/scenarios/public` is the set that the project's own benchmark runs:
+13 scenarios about invented companies, services and data, so nothing in them
+comes from a real system. Together they cover every verdict, each of the four
+built-in strategies, triage skipping a duplicate, a source that is down, and
+the first MCP sources (SigNoz, Datadog, Sentry and Linear). Each has a
+rubric for the judge and, except the triage one, checks of the run made in
+code.
+
+| Scenario | Expected verdict | Strategy | Sources |
+|---|---|---|---|
+| `latency-ledger-index-dropped` | `true_positive` | `latency-alert` | `prometheus`, `github`, `postgres` |
+| `latency-low-traffic-false-positive` | `false_positive` | `latency-alert` | `prometheus`, `github` |
+| `error-rate-signoz-bad-secret-reference` | `true_positive` | `error-rate-alert` | `signoz` (MCP), `k8s`, `github` |
+| `error-rate-scanner-traffic-false-positive` | `false_positive` | `error-rate-alert` | `elasticsearch`, `prometheus`, `github` |
+| `error-rate-datadog-duplicate-of-incident` | `duplicate` | `error-rate-alert` | `datadog` (MCP), `github` |
+| `source-failure-logs-unavailable` | `true_positive` | `error-rate-alert` | `elasticsearch` (down), `prometheus`, `launchdarkly`, `github` |
+| `service-down-oom-after-limit-change` | `true_positive` | `service-down` | `k8s`, `prometheus`, `github` |
+| `service-down-planned-maintenance` | `false_positive` | `service-down` | `k8s`, `github` |
+| `sentry-regression-after-release` | `true_positive` | `generic-alert` | `sentry` (MCP), `github` |
+| `known-issue-linear-export-timeout` | `known_issue` | `generic-alert` | `linear` (MCP), `github`, `prometheus` |
+| `flapping-disk-usage-threshold` | `flapping` | `generic-alert` | `prometheus`, `k8s` |
+| `triage-duplicate-second-monitor` | `duplicate` | `generic-alert` | `linear` (MCP), `prometheus` |
+| `inconclusive-metrics-gap` | `inconclusive` | `generic-alert` | `prometheus`, `k8s`, `github` |
+
+- Every scenario runs with the strategy it names, but when the config sets a
+  `model.roles.triage` role, triage runs first and may choose another
+  strategy. `triage-duplicate-second-monitor` is the scenario for triage: its
+  alert says that an incident already covers it, so triage can end the run
+  with `duplicate` and no tool call. It has no evidence checks, because a run
+  that triage ends calls no tool. Without a triage role, a full investigation
+  finds the incident in Linear.
+- `source-failure-logs-unavailable` marks its `elasticsearch` source as
+  unavailable, and the report must still name the cause and list that source
+  under checked as unavailable.
+- Each MCP source's scenario uses the tool snapshot that
+  [its docs page](sources/signoz.md) describes: `bench/tools/signoz.json`,
+  `datadog.json`, `sentry.json` and `linear.json`.
+- The scenario files are validated by a unit test on every pull request, and
+  by `sidekick bench validate`.
+
 ## Scores
 
 Each run gets these scores:
