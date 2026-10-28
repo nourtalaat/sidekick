@@ -133,7 +133,8 @@ func NewScheduler(opts SchedulerOptions) *Scheduler {
 
 // Run enqueues the job at once when rows need it and then returns nil, or
 // tries again after the retry interval when the check fails, until ctx
-// ends. A new row never needs the job, so there is nothing to check later.
+// ends, which it reports as an error, as the app ignores at shutdown. A
+// new row never needs the job, so there is nothing to check later.
 func (s *Scheduler) Run(ctx context.Context) error {
 	for {
 		_, err := s.Schedule(ctx)
@@ -141,15 +142,11 @@ func (s *Scheduler) Run(ctx context.Context) error {
 			return nil
 		}
 
-		if ctx.Err() != nil {
-			return nil
-		}
-
 		s.log.WarnContext(ctx, "scheduling the investigation list backfill failed; trying again later", "error", err)
 
 		select {
 		case <-ctx.Done():
-			return nil
+			return fmt.Errorf("stop: %w", context.Cause(ctx))
 		case <-time.After(s.retry):
 		}
 	}

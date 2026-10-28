@@ -69,7 +69,7 @@ type streamStatus struct {
 // events itself, until the client leaves, the stream's lifetime is over or
 // the hub stops.
 type streamResponse struct {
-	ctx       context.Context //nolint:containedctx // The request's context, for the stream that runs in Visit.
+	ctx       context.Context
 	pool      *pgxpool.Pool
 	sub       *Subscription
 	log       *slog.Logger
@@ -294,7 +294,7 @@ func streamStart(p apigen.StreamInvestigationParams) (int32, error) {
 			return 0, problemf(http.StatusBadRequest, "Last-Event-ID must be the seq of a step.")
 		}
 
-		return int32(seq), nil
+		return int32(seq), nil //nolint:gosec // ParseInt was told the value fits 32 bits.
 	}
 
 	if p.After == nil {

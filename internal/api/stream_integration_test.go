@@ -76,12 +76,11 @@ func openStream(t *testing.T, srv *httptest.Server, path, session string, header
 	resp, err := srv.Client().Do(req)
 	require.NoError(t, err)
 
-	t.Cleanup(func() { _ = resp.Body.Close() })
-
 	stream := &sseStream{status: resp.StatusCode, header: resp.Header, events: make(chan sseEvent, 1000), cancel: cancel}
 
 	go func() {
 		defer close(stream.events)
+		defer func() { _ = resp.Body.Close() }()
 
 		var ev sseEvent
 
@@ -233,7 +232,9 @@ func TestStreamSendsTheStepsThenTheStatus(t *testing.T) {
 
 	status := stream.requireStatus(t, "running")
 	require.EqualValues(t, 2, status["run"])
-	require.Equal(t, false, status["confirmed"])
+	confirmed, ok := status["confirmed"].(bool)
+	require.True(t, ok)
+	require.False(t, confirmed)
 	require.EqualValues(t, 500, status["costMicros"])
 	stream.requireQuiet(t)
 }
@@ -344,7 +345,7 @@ func TestStreamSendsWatcherChanges(t *testing.T) {
 
 	ev := stream.nextEvent(t)
 	require.Equal(t, "watchers", ev.Name)
-	require.Equal(t, "{}", ev.Data)
+	require.JSONEq(t, "{}", ev.Data)
 }
 
 func TestStreamSendsAStopRequest(t *testing.T) {
