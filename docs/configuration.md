@@ -1065,6 +1065,9 @@ The types:
 - `slack` posts one message per investigation and edits it as the
   investigation runs. [Investigations in Slack](slack.md) describes its
   keys, what it posts and how to set up the Slack app.
+- `teams` does the same in a Microsoft Teams thread, as the bot of the
+  [`teams`](#teams) section, which it needs. [Investigations in Microsoft
+  Teams](teams.md#what-it-posts) describes its one key, `channel`.
 - `linear.comment` and `jira.comment` post the result as a comment on the
   Linear or Jira issue the alert names. [Results on tickets](tickets.md)
   describes their keys and how they find the issue.
