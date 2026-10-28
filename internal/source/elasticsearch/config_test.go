@@ -52,7 +52,7 @@ func TestConfigValidate(t *testing.T) {
 			want: []string{`flavor: "solr" must be elasticsearch or opensearch`}},
 		{name: "a plain http base URL on the network", cfg: Config{BaseURL: "http://logs.example.com:9200", BasicAuth: basic, IndexPatterns: patterns},
 			want: []string{`baseURL: "http://logs.example.com:9200" must use https; plain http is only allowed for localhost`}},
-		{name: "a base URL with a user", cfg: Config{BaseURL: "https://admin:pw@logs.example.com", BasicAuth: basic, IndexPatterns: patterns},
+		{name: "a base URL with a user", cfg: Config{BaseURL: "https://admin@logs.example.com", BasicAuth: basic, IndexPatterns: patterns},
 			want: []string{"must be an absolute https URL, without a query or user"}},
 		{name: "a base URL that is not absolute", cfg: Config{BaseURL: "logs.example.com", BasicAuth: basic, IndexPatterns: patterns},
 			want: []string{`baseURL: "logs.example.com" must be an absolute https URL`}},
