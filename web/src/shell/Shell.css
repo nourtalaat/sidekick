@@ -1,0 +1,304 @@
+.sk-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.sk-shell__body {
+  display: flex;
+  flex: 1;
+}
+
+.sk-shell__main {
+  flex: 1;
+  min-width: 0;
+  max-width: 1200px;
+  padding: var(--sk-space-8) var(--sk-space-6);
+}
+
+.sk-shell__main:focus-visible {
+  outline-offset: -2px;
+}
+
+/* The header is a plain surface; the 4px brand gradient runs along its top edge. */
+.sk-header {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sk-space-3) var(--sk-space-4);
+  padding: var(--sk-space-4) var(--sk-space-6) var(--sk-space-3);
+  background: var(--sk-bg-surface);
+  border-bottom: 1px solid var(--sk-border-subtle);
+}
+
+.sk-header::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: var(--sk-gradient-brand);
+}
+
+.sk-header__brand {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--sk-radius-sm);
+}
+
+.sk-header__menu {
+  display: none;
+  align-items: center;
+  gap: var(--sk-space-2);
+  min-height: var(--sk-size-control-md);
+  padding: 0 var(--sk-space-3);
+  background: none;
+  color: inherit;
+  border: 1px solid var(--sk-border-strong);
+  border-radius: var(--sk-radius-full);
+  font: var(--sk-type-label);
+  cursor: pointer;
+}
+
+/* The lockup for the light theme shows unless the page is dark. */
+.sk-lockup--dark {
+  display: none;
+}
+
+:root[data-theme="dark"] .sk-lockup--light {
+  display: none;
+}
+
+:root[data-theme="dark"] .sk-lockup--dark {
+  display: inline;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .sk-lockup--light {
+    display: none;
+  }
+
+  :root:not([data-theme="light"]) .sk-lockup--dark {
+    display: inline;
+  }
+}
+
+.sk-search {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--sk-space-2);
+  min-width: 12rem;
+  max-width: 28rem;
+  padding: 0 var(--sk-space-3);
+  background: var(--sk-bg-sunken);
+  color: var(--sk-text-disabled);
+  border: 1px solid var(--sk-border-subtle);
+  border-radius: var(--sk-radius-full);
+}
+
+.sk-search input {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--sk-size-control-md);
+  background: none;
+  border: 0;
+  font: var(--sk-type-body);
+  cursor: not-allowed;
+}
+
+.sk-theme {
+  display: flex;
+  gap: var(--sk-space-1);
+  margin: 0 0 0 auto;
+  padding: var(--sk-space-1);
+  border: 1px solid var(--sk-border-subtle);
+  border-radius: var(--sk-radius-full);
+}
+
+.sk-theme__option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sk-space-1);
+  min-height: var(--sk-size-control-sm);
+  padding: 0 var(--sk-space-3);
+  border-radius: var(--sk-radius-full);
+  font: var(--sk-type-label);
+  cursor: pointer;
+}
+
+.sk-theme__option input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.sk-theme__option:has(input:checked) {
+  background: var(--sk-bg-selected);
+}
+
+.sk-theme__option:has(input:focus-visible) {
+  outline: 2px solid var(--sk-border-focus);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  .sk-theme__option:has(input:checked) {
+    outline: 2px solid Highlight;
+  }
+}
+
+.sk-user {
+  position: relative;
+}
+
+.sk-user__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sk-space-2);
+  min-height: var(--sk-size-control-md);
+  padding: 0 var(--sk-space-4);
+  background: var(--sk-action-secondary-bg);
+  color: var(--sk-action-secondary-text);
+  border: 1px solid var(--sk-action-secondary-border);
+  border-radius: var(--sk-radius-full);
+  font: var(--sk-type-label);
+  cursor: pointer;
+}
+
+.sk-user__name {
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sk-user__panel {
+  position: absolute;
+  top: calc(100% + var(--sk-space-2));
+  right: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sk-space-2);
+  min-width: 14rem;
+  padding: var(--sk-space-4);
+  background: var(--sk-bg-raised);
+  border: 1px solid var(--sk-border-subtle);
+  border-radius: var(--sk-radius-md);
+  box-shadow: var(--sk-shadow-raised-lg);
+}
+
+.sk-user__who {
+  margin: 0;
+  font: var(--sk-type-label);
+}
+
+.sk-user__role,
+.sk-user__error {
+  margin: 0;
+  font: var(--sk-type-caption);
+}
+
+.sk-user__role {
+  color: var(--sk-text-secondary);
+}
+
+.sk-user__error {
+  color: var(--sk-status-danger-fg);
+}
+
+.sk-nav {
+  flex: none;
+  width: 15rem;
+  padding: var(--sk-space-4);
+  border-right: 1px solid var(--sk-border-subtle);
+}
+
+.sk-nav__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sk-nav__link {
+  display: flex;
+  align-items: center;
+  gap: var(--sk-space-3);
+  min-height: var(--sk-size-control-md);
+  padding: 0 var(--sk-space-3);
+  color: var(--sk-text-primary);
+  border-radius: var(--sk-radius-md);
+  font: var(--sk-type-label);
+  text-decoration: none;
+}
+
+.sk-nav__link:hover {
+  background: var(--sk-bg-hover);
+}
+
+.sk-nav__link[aria-current="page"] {
+  background: var(--sk-bg-selected);
+}
+
+@media (forced-colors: active) {
+  .sk-nav__link[aria-current="page"] {
+    outline: 2px solid Highlight;
+  }
+}
+
+/* Below 768px the navigation is a menu, which the header's Menu button opens. */
+@media (max-width: 767px) {
+  .sk-header {
+    padding-inline: var(--sk-space-4);
+  }
+
+  .sk-header__menu {
+    display: inline-flex;
+  }
+
+  .sk-search {
+    order: 10;
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .sk-theme__text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .sk-theme__option {
+    padding: 0 var(--sk-space-2);
+  }
+
+  .sk-shell__body {
+    flex-direction: column;
+  }
+
+  .sk-shell__main {
+    padding: var(--sk-space-6) var(--sk-space-4);
+  }
+
+  .sk-nav {
+    display: none;
+    width: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--sk-border-subtle);
+  }
+
+  .sk-nav--open {
+    display: block;
+  }
+}
