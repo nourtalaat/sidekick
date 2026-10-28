@@ -8,9 +8,11 @@ import (
 	"github.com/nourtalaat/sidekick/internal/app"
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/feedback"
+	"github.com/nourtalaat/sidekick/internal/roles"
 	"github.com/nourtalaat/sidekick/internal/rules"
 	"github.com/nourtalaat/sidekick/internal/slackapp"
 	"github.com/nourtalaat/sidekick/internal/slackcmd"
+	"github.com/nourtalaat/sidekick/internal/slackroles"
 )
 
 // registerSlackApp receives Slack events when the slack section lets the
@@ -55,12 +57,19 @@ func registerSlackApp(ctx context.Context, a *app.App, cache *rules.Cache) error
 		return nil
 	})
 
-	commands, err := newSlackCommands(a, h, cache)
+	lookup, err := slackroles.New(slackroles.Options{
+		Slack:   cfg.Slack,
+		Secrets: a.Secrets(),
+		Pool:    a.Pool(),
+		Logger:  a.Logger().With("component", "slackroles"),
+	})
 	if err != nil {
-		return fmt.Errorf("set up the /sidekick commands: %w", err)
+		return fmt.Errorf("set up Slack roles: %w", err)
 	}
 
-	buttons, err := newButtons(a, h)
+	commands := newSlackCommands(a, h, cache, lookup)
+
+	buttons, err := newButtons(a, h, lookup)
 	if err != nil {
 		return fmt.Errorf("set up the Slack buttons: %w", err)
 	}
@@ -99,7 +108,7 @@ func registerSlackApp(ctx context.Context, a *app.App, cache *rules.Cache) error
 // newButtons handles clicks on the buttons of Sidekick's messages, with
 // sidekick_feedback_total. Every Slack user is a responder until roles
 // can be set for Slack users.
-func newButtons(a *app.App, h *slackapp.Handler) (*slackapp.Buttons, error) {
+func newButtons(a *app.App, h *slackapp.Handler, lookup roles.Lookup) (*slackapp.Buttons, error) {
 	metrics, err := feedback.NewMetrics(a.Telemetry().Registry())
 	if err != nil {
 		return nil, fmt.Errorf("set up feedback metrics: %w", err)
@@ -108,7 +117,7 @@ func newButtons(a *app.App, h *slackapp.Handler) (*slackapp.Buttons, error) {
 	return slackapp.NewButtons(slackapp.ButtonsOptions{
 		Handler: h,
 		Pool:    a.Pool(),
-		Roles:   slackapp.EveryoneResponds{},
+		Roles:   lookup,
 		Metrics: metrics,
 		Logger:  a.Logger().With("component", "slackapp"),
 	}), nil

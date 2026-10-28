@@ -64,8 +64,12 @@ verdict people agree with. A later Wrong on a confirmed verdict takes the
 confirmation back.
 
 Every click is checked against the clicker's role at the time of the
-click: rating and stopping need the responder role. Until roles can be set
-for Slack users, every Slack user is a responder. When a click cannot do
+click: **Stop**, **Correct** and **Wrong** need the `responder` role, so a
+`viewer` cannot press them. Roles come from `slack.roleGroups` and
+`slack.roleUsers`, and a Slack user in neither is a `responder`; see
+[Roles](#roles). A refused user's groups are read again before the click
+is refused, so someone just added to a group can press at once. When a
+click cannot do
 anything, for example a Correct before there is a verdict, or a Stop on an
 investigation that has ended, Sidekick says so in a note only the clicker
 sees.
