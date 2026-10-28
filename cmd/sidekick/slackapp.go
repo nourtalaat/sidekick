@@ -8,14 +8,12 @@ import (
 	"github.com/nourtalaat/sidekick/internal/app"
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/feedback"
-	"github.com/nourtalaat/sidekick/internal/grouper"
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/roles"
 	"github.com/nourtalaat/sidekick/internal/rules"
 	"github.com/nourtalaat/sidekick/internal/slackapp"
 	"github.com/nourtalaat/sidekick/internal/slackcmd"
 	"github.com/nourtalaat/sidekick/internal/slackroles"
-	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // registerSlackApp receives Slack events when the slack section lets the
@@ -123,12 +121,7 @@ func newButtons(a *app.App, h *slackapp.Handler, lookup roles.Lookup, memorySync
 		return nil, fmt.Errorf("set up feedback metrics: %w", err)
 	}
 
-	recorder, err := newWatchRecorder(a)
-	if err != nil {
-		return nil, fmt.Errorf("set up Stop watching: %w", err)
-	}
-
-	stopper, err := watch.NewStopper(watch.StopperOptions{Pool: a.Pool(), CloseGroup: grouper.EnqueueClose, Recorder: recorder})
+	stopper, _, err := newWatchStopper(a)
 	if err != nil {
 		return nil, fmt.Errorf("set up Stop watching: %w", err)
 	}

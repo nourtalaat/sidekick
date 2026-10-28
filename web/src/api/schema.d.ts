@@ -242,6 +242,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations/{id}/follow-ups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask a follow-up question about an investigation
+         * @description Adds the question to the investigation's inbox. A running
+         *     investigation reads it before its next model turn; one that has
+         *     ended answers it in a new follow-up run. The text is redacted
+         *     before it is stored. The answer shows up in the investigation's
+         *     report, and the stream tells the page when a run starts.
+         *     The answer is 409 for a triage-only result, which takes no
+         *     questions until a full investigation has run, and for an
+         *     investigation that failed.
+         */
+        post: operations["AskFollowUp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop the run of an investigation
+         * @description Asks the run to stop. The worker that owns it cancels the call in
+         *     flight, and the run ends as cancelled with a report built from its
+         *     steps. Asking again, or asking for an investigation that has ended,
+         *     changes nothing and answers with `requested` false.
+         */
+        post: operations["CancelInvestigation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark the investigation's group as resolved
+         * @description Closes the group as resolved and ends its running watchers, as a
+         *     recovery does. A group that is resolved already changes nothing and
+         *     answers with `resolved` false. A group that closed for another
+         *     reason, such as the end of its window, answers 409.
+         */
+        post: operations["ResolveInvestigation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/watchers/{id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop a running watcher
+         * @description Stops the watcher with reason `responder`. A watcher that has ended
+         *     already changes nothing and answers with `stopped` false.
+         */
+        post: operations["StopWatcher"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -426,6 +520,13 @@ export interface components {
             id: string;
             /** Format: uuid */
             groupId: string;
+            /**
+             * @description Whether the group of events is still open. Only an open group, or one closed as resolved, can be resolved.
+             * @enum {string}
+             */
+            groupStatus: "open" | "closed";
+            /** @description For a closed group, resolved or window_ended. */
+            groupClosedReason?: string;
             title?: string;
             service?: string;
             route: string;
@@ -692,6 +793,25 @@ export interface components {
             /** Format: int64 */
             outputTokens: number;
             toolCalls: number;
+        };
+        FollowUpRequest: {
+            /** @description The question, at most 4000 bytes after trimming. */
+            text: string;
+        };
+        FollowUpAccepted: {
+            added: boolean;
+        };
+        CancelResult: {
+            /** @description False when the investigation had ended or a stop was asked for already. */
+            requested: boolean;
+        };
+        ResolveResult: {
+            /** @description False when the group was resolved already. */
+            resolved: boolean;
+        };
+        StopWatcherResult: {
+            /** @description False when the watcher had ended already. */
+            stopped: boolean;
         };
         WatcherList: {
             watchers: components["schemas"]["Watcher"][];
@@ -1076,6 +1196,102 @@ export interface operations {
                 };
                 content: {
                     "text/event-stream": string;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AskFollowUp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["InvestigationID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FollowUpRequest"];
+            };
+        };
+        responses: {
+            /** @description The question was stored. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowUpAccepted"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CancelInvestigation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["InvestigationID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Whether this request asked for the stop. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CancelResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ResolveInvestigation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["InvestigationID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Whether this request resolved the group. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolveResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    StopWatcher: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Whether this request stopped the watcher. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StopWatcherResult"];
                 };
             };
             default: components["responses"]["Problem"];

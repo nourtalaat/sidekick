@@ -88,6 +88,24 @@ func (e FeedbackSummarySummary) Valid() bool {
 	}
 }
 
+// Defines values for InvestigationGroupStatus.
+const (
+	Closed InvestigationGroupStatus = "closed"
+	Open   InvestigationGroupStatus = "open"
+)
+
+// Valid indicates whether the value is a known member of the InvestigationGroupStatus enum.
+func (e InvestigationGroupStatus) Valid() bool {
+	switch e {
+	case Closed:
+		return true
+	case Open:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for InvestigationStatus.
 const (
 	InvestigationStatusCancelled InvestigationStatus = "cancelled"
@@ -439,6 +457,12 @@ func (e ListJobsParamsStatus) Valid() bool {
 	}
 }
 
+// CancelResult defines model for CancelResult.
+type CancelResult struct {
+	// Requested False when the investigation had ended or a stop was asked for already.
+	Requested bool `json:"requested"`
+}
+
 // Confidence defines model for Confidence.
 type Confidence string
 
@@ -560,10 +584,21 @@ type FollowUp struct {
 	Run             int                `json:"run"`
 }
 
+// FollowUpAccepted defines model for FollowUpAccepted.
+type FollowUpAccepted struct {
+	Added bool `json:"added"`
+}
+
 // FollowUpQuestion defines model for FollowUpQuestion.
 type FollowUpQuestion struct {
 	Author *string `json:"author,omitempty"`
 	Text   string  `json:"text"`
+}
+
+// FollowUpRequest defines model for FollowUpRequest.
+type FollowUpRequest struct {
+	// Text The question, at most 4000 bytes after trimming.
+	Text string `json:"text"`
 }
 
 // Investigation defines model for Investigation.
@@ -585,12 +620,18 @@ type Investigation struct {
 	EventCount int `json:"eventCount"`
 
 	// Events The first 50 events of the group, oldest first.
-	Events         []Event            `json:"events"`
-	FinishedAt     *time.Time         `json:"finishedAt,omitempty"`
-	FirstFindingAt *time.Time         `json:"firstFindingAt,omitempty"`
-	GroupId        openapi_types.UUID `json:"groupId"`
-	Id             openapi_types.UUID `json:"id"`
-	InputTokens    int64              `json:"inputTokens"`
+	Events         []Event    `json:"events"`
+	FinishedAt     *time.Time `json:"finishedAt,omitempty"`
+	FirstFindingAt *time.Time `json:"firstFindingAt,omitempty"`
+
+	// GroupClosedReason For a closed group, resolved or window_ended.
+	GroupClosedReason *string            `json:"groupClosedReason,omitempty"`
+	GroupId           openapi_types.UUID `json:"groupId"`
+
+	// GroupStatus Whether the group of events is still open. Only an open group, or one closed as resolved, can be resolved.
+	GroupStatus InvestigationGroupStatus `json:"groupStatus"`
+	Id          openapi_types.UUID       `json:"id"`
+	InputTokens int64                    `json:"inputTokens"`
 
 	// Mode The action mode in effect, such as read-only.
 	Mode string `json:"mode"`
@@ -624,6 +665,9 @@ type Investigation struct {
 	ToolCalls       int      `json:"toolCalls"`
 	Verdict         *Verdict `json:"verdict,omitempty"`
 }
+
+// InvestigationGroupStatus Whether the group of events is still open. Only an open group, or one closed as resolved, can be resolved.
+type InvestigationGroupStatus string
 
 // InvestigationList defines model for InvestigationList.
 type InvestigationList struct {
@@ -791,6 +835,12 @@ type Report struct {
 // ReportStopReason defines model for Report.StopReason.
 type ReportStopReason string
 
+// ResolveResult defines model for ResolveResult.
+type ResolveResult struct {
+	// Resolved False when the group was resolved already.
+	Resolved bool `json:"resolved"`
+}
+
 // Role defines model for Role.
 type Role string
 
@@ -906,6 +956,12 @@ type StepTokens struct {
 	CacheWrite *int64 `json:"cacheWrite,omitempty"`
 	Input      int64  `json:"input"`
 	Output     int64  `json:"output"`
+}
+
+// StopWatcherResult defines model for StopWatcherResult.
+type StopWatcherResult struct {
+	// Stopped False when the watcher had ended already.
+	Stopped bool `json:"stopped"`
 }
 
 // Token defines model for Token.
@@ -1047,6 +1103,9 @@ type ListJobsParams struct {
 // ListJobsParamsStatus defines parameters for ListJobs.
 type ListJobsParamsStatus string
 
+// AskFollowUpJSONRequestBody defines body for AskFollowUp for application/json ContentType.
+type AskFollowUpJSONRequestBody = FollowUpRequest
+
 // CreateTokenJSONRequestBody defines body for CreateToken for application/json ContentType.
 type CreateTokenJSONRequestBody = NewToken
 
@@ -1061,6 +1120,15 @@ type ServerInterface interface {
 	// GetInvestigation One investigation, with its report and the events of its group
 	// (GET /investigations/{id})
 	GetInvestigation(w http.ResponseWriter, r *http.Request, id InvestigationID)
+	// CancelInvestigation Stop the run of an investigation
+	// (POST /investigations/{id}/cancel)
+	CancelInvestigation(w http.ResponseWriter, r *http.Request, id InvestigationID)
+	// AskFollowUp Ask a follow-up question about an investigation
+	// (POST /investigations/{id}/follow-ups)
+	AskFollowUp(w http.ResponseWriter, r *http.Request, id InvestigationID)
+	// ResolveInvestigation Mark the investigation's group as resolved
+	// (POST /investigations/{id}/resolve)
+	ResolveInvestigation(w http.ResponseWriter, r *http.Request, id InvestigationID)
 	// ListInvestigationSteps The steps of an investigation, in order, a page at a time
 	// (GET /investigations/{id}/steps)
 	ListInvestigationSteps(w http.ResponseWriter, r *http.Request, id InvestigationID, params ListInvestigationStepsParams)
@@ -1088,6 +1156,9 @@ type ServerInterface interface {
 	// RevokeToken Revoke an API token
 	// (DELETE /tokens/{id})
 	RevokeToken(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// StopWatcher Stop a running watcher
+	// (POST /watchers/{id}/stop)
+	StopWatcher(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -1280,6 +1351,84 @@ func (siw *ServerInterfaceWrapper) GetInvestigation(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetInvestigation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CancelInvestigation operation middleware
+func (siw *ServerInterfaceWrapper) CancelInvestigation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id InvestigationID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelInvestigation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AskFollowUp operation middleware
+func (siw *ServerInterfaceWrapper) AskFollowUp(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id InvestigationID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AskFollowUp(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResolveInvestigation operation middleware
+func (siw *ServerInterfaceWrapper) ResolveInvestigation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id InvestigationID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResolveInvestigation(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1599,6 +1748,32 @@ func (siw *ServerInterfaceWrapper) RevokeToken(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// StopWatcher operation middleware
+func (siw *ServerInterfaceWrapper) StopWatcher(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StopWatcher(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -1731,6 +1906,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}/steps", wrapper.ListInvestigationSteps)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}/watchers", wrapper.ListInvestigationWatchers)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}/stream", wrapper.StreamInvestigation)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{id}/follow-ups", wrapper.AskFollowUp)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{id}/cancel", wrapper.CancelInvestigation)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{id}/resolve", wrapper.ResolveInvestigation)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/watchers/{id}/stop", wrapper.StopWatcher)
 
 	return m
 }
@@ -1842,6 +2021,124 @@ type GetInvestigationdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetInvestigationdefaultApplicationProblemPlusJSONResponse) VisitGetInvestigationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelInvestigationRequestObject struct {
+	Id InvestigationID `json:"id"`
+}
+
+type CancelInvestigationResponseObject interface {
+	VisitCancelInvestigationResponse(w http.ResponseWriter) error
+}
+
+type CancelInvestigation200JSONResponse CancelResult
+
+func (response CancelInvestigation200JSONResponse) VisitCancelInvestigationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelInvestigationdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CancelInvestigationdefaultApplicationProblemPlusJSONResponse) VisitCancelInvestigationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AskFollowUpRequestObject struct {
+	Id   InvestigationID `json:"id"`
+	Body *AskFollowUpJSONRequestBody
+}
+
+type AskFollowUpResponseObject interface {
+	VisitAskFollowUpResponse(w http.ResponseWriter) error
+}
+
+type AskFollowUp202JSONResponse FollowUpAccepted
+
+func (response AskFollowUp202JSONResponse) VisitAskFollowUpResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AskFollowUpdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response AskFollowUpdefaultApplicationProblemPlusJSONResponse) VisitAskFollowUpResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ResolveInvestigationRequestObject struct {
+	Id InvestigationID `json:"id"`
+}
+
+type ResolveInvestigationResponseObject interface {
+	VisitResolveInvestigationResponse(w http.ResponseWriter) error
+}
+
+type ResolveInvestigation200JSONResponse ResolveResult
+
+func (response ResolveInvestigation200JSONResponse) VisitResolveInvestigationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ResolveInvestigationdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ResolveInvestigationdefaultApplicationProblemPlusJSONResponse) VisitResolveInvestigationResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -2221,6 +2518,45 @@ func (response RevokeTokendefaultApplicationProblemPlusJSONResponse) VisitRevoke
 	return err
 }
 
+type StopWatcherRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type StopWatcherResponseObject interface {
+	VisitStopWatcherResponse(w http.ResponseWriter) error
+}
+
+type StopWatcher200JSONResponse StopWatcherResult
+
+func (response StopWatcher200JSONResponse) VisitStopWatcherResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StopWatcherdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response StopWatcherdefaultApplicationProblemPlusJSONResponse) VisitStopWatcherResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// GetConfig The effective config, with secrets shown only as references
@@ -2232,6 +2568,15 @@ type StrictServerInterface interface {
 	// GetInvestigation One investigation, with its report and the events of its group
 	// (GET /investigations/{id})
 	GetInvestigation(ctx context.Context, request GetInvestigationRequestObject) (GetInvestigationResponseObject, error)
+	// CancelInvestigation Stop the run of an investigation
+	// (POST /investigations/{id}/cancel)
+	CancelInvestigation(ctx context.Context, request CancelInvestigationRequestObject) (CancelInvestigationResponseObject, error)
+	// AskFollowUp Ask a follow-up question about an investigation
+	// (POST /investigations/{id}/follow-ups)
+	AskFollowUp(ctx context.Context, request AskFollowUpRequestObject) (AskFollowUpResponseObject, error)
+	// ResolveInvestigation Mark the investigation's group as resolved
+	// (POST /investigations/{id}/resolve)
+	ResolveInvestigation(ctx context.Context, request ResolveInvestigationRequestObject) (ResolveInvestigationResponseObject, error)
 	// ListInvestigationSteps The steps of an investigation, in order, a page at a time
 	// (GET /investigations/{id}/steps)
 	ListInvestigationSteps(ctx context.Context, request ListInvestigationStepsRequestObject) (ListInvestigationStepsResponseObject, error)
@@ -2259,6 +2604,9 @@ type StrictServerInterface interface {
 	// RevokeToken Revoke an API token
 	// (DELETE /tokens/{id})
 	RevokeToken(ctx context.Context, request RevokeTokenRequestObject) (RevokeTokenResponseObject, error)
+	// StopWatcher Stop a running watcher
+	// (POST /watchers/{id}/stop)
+	StopWatcher(ctx context.Context, request StopWatcherRequestObject) (StopWatcherResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -2369,6 +2717,91 @@ func (sh *strictHandler) GetInvestigation(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetInvestigationResponseObject); ok {
 		if err := validResponse.VisitGetInvestigationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CancelInvestigation operation middleware
+func (sh *strictHandler) CancelInvestigation(w http.ResponseWriter, r *http.Request, id InvestigationID) {
+	var request CancelInvestigationRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CancelInvestigation(ctx, request.(CancelInvestigationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CancelInvestigation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CancelInvestigationResponseObject); ok {
+		if err := validResponse.VisitCancelInvestigationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AskFollowUp operation middleware
+func (sh *strictHandler) AskFollowUp(w http.ResponseWriter, r *http.Request, id InvestigationID) {
+	var request AskFollowUpRequestObject
+
+	request.Id = id
+
+	var body AskFollowUpJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AskFollowUp(ctx, request.(AskFollowUpRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AskFollowUp")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AskFollowUpResponseObject); ok {
+		if err := validResponse.VisitAskFollowUpResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ResolveInvestigation operation middleware
+func (sh *strictHandler) ResolveInvestigation(w http.ResponseWriter, r *http.Request, id InvestigationID) {
+	var request ResolveInvestigationRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ResolveInvestigation(ctx, request.(ResolveInvestigationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ResolveInvestigation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ResolveInvestigationResponseObject); ok {
+		if err := validResponse.VisitResolveInvestigationResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -2606,6 +3039,32 @@ func (sh *strictHandler) RevokeToken(w http.ResponseWriter, r *http.Request, id 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RevokeTokenResponseObject); ok {
 		if err := validResponse.VisitRevokeTokenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// StopWatcher operation middleware
+func (sh *strictHandler) StopWatcher(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request StopWatcherRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.StopWatcher(ctx, request.(StopWatcherRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "StopWatcher")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(StopWatcherResponseObject); ok {
+		if err := validResponse.VisitStopWatcherResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

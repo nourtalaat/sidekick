@@ -160,6 +160,36 @@ Every role from `viewer` up can read investigations:
   and answers 429 above that. The session or token is checked when the
   stream opens, so a revoked one can keep a stream for up to 30 minutes.
 
+## Actions on investigations
+
+These need the `responder` role or higher, and a session's CSRF token
+(an API token needs none). A token can call them too; the audit log then
+names the token. Each action writes its audit row in the same transaction
+as the change.
+
+- `POST /api/v1/investigations/{id}/follow-ups` with `{"text": "..."}`
+  asks a follow-up question, as a thread reply does in Slack. The text
+  is trimmed, redacted and at most 4000 bytes. The answer is 202. A
+  triage-only result and an investigation that failed take no questions
+  and answer 409; for a triage-only result, start a full investigation
+  with **Investigate anyway** in Slack first. The audit row keeps the
+  question's length, never its text.
+- `POST /api/v1/investigations/{id}/cancel` asks the run to stop, as the
+  Stop button does in Slack. `requested` in the answer is `false` when
+  the investigation has ended or a stop was asked for already.
+- `POST /api/v1/investigations/{id}/resolve` marks the investigation's
+  group as resolved and ends its watchers, as a recovery does: watchers
+  that wait for the alert to clear count as recovered, the others stop.
+  `resolved` in the answer is `false` when the group was resolved
+  already. A group that closed because its window ended answers 409.
+  `groupStatus` and `groupClosedReason` in the investigation say which
+  groups are still open.
+- `POST /api/v1/watchers/{id}/stop` stops a running watcher, as **Stop
+  watching** does in Slack. `stopped` in the answer is `false` when the
+  watcher had ended already. The watchers of an investigation name who
+  stopped one in `stoppedBy`: the user's or token's ID and name, or the
+  Slack user's ID.
+
 The list's service, model and title columns are filled when an
 investigation is created. Investigations from before they existed (older
 than this version) are filled in the background in batches of 5,000 when

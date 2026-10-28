@@ -13,6 +13,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/auth"
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/redact"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // server implements the API operations.
@@ -25,6 +26,12 @@ type server struct {
 	audit    *audit.Writer
 	hub      *Hub
 	log      *slog.Logger
+
+	// stopper stops watchers and watchers records the changes that
+	// resolving a group makes to them; now is the clock.
+	stopper  *watch.Stopper
+	watchers *watch.Recorder
+	now      func() time.Time
 
 	streamHeartbeat time.Duration
 	streamLifetime  time.Duration
