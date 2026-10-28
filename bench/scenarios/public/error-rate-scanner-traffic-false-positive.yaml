@@ -1,0 +1,83 @@
+# An error ratio alert that counts 4xx answers to scanner requests as errors.
+# Error rate strategy, false positive.
+id: error-rate-scanner-traffic-false-positive
+title: Gateway error ratio caused by 404 answers to a vulnerability scanner
+tags: [error-rate, scanner, false-positive]
+strategy: error-rate-alert
+now: 2026-09-16T19:45:00Z
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="EdgeGatewayErrorRatioHigh"}'
+    alerts:
+      - status: firing
+        labels: { alertname: EdgeGatewayErrorRatioHigh, service: edge-gateway, env: prod, severity: warning }
+        annotations:
+          summary: edge-gateway error ratio above 10% for 10m
+          description: 13% of the responses of edge-gateway had a status of 400 or more in the last 10 minutes.
+        startsAt: 2026-09-16T19:31:00Z
+        fingerprint: 0d47e9b2c5a8f163
+sources:
+  elasticsearch:
+    tools: { snapshot: bench/tools/elasticsearch.json }
+    fixtures:
+      - tool: count_logs
+        respond:
+          text: |
+            edge-gateway access logs, 19:20 to 19:45, 5 minute buckets, split by status
+            404: 19:30 38, 19:35 612, 19:40 655
+            400: 19:30 4, 19:35 90, 19:40 101
+            5xx: 19:30 2, 19:35 1, 19:40 3
+            200: 19:30 4980, 19:35 5040, 19:40 5010
+          evidence:
+            - { kind: log_query, title: edge-gateway status counts, url: "https://kibana.quillcart.example/app/discover#/?q=service:edge-gateway" }
+      - tool: search_logs
+        respond:
+          text: |
+            edge-gateway access logs with status 404, 19:35 to 19:45, newest first, 5 of 1,267 shown
+            19:44:57 GET /wp-login.php 404 client 203.0.113.41 user-agent "Mozilla/5.0 (compatible; scanbot)"
+            19:44:57 GET /.env 404 client 203.0.113.41 user-agent "Mozilla/5.0 (compatible; scanbot)"
+            19:44:56 GET /phpmyadmin/index.php 404 client 203.0.113.41 user-agent "Mozilla/5.0 (compatible; scanbot)"
+            19:44:56 GET /.git/config 404 client 203.0.113.41 user-agent "Mozilla/5.0 (compatible; scanbot)"
+            19:44:55 GET /actuator/env 404 client 203.0.113.58 user-agent "Mozilla/5.0 (compatible; scanbot)"
+            1,241 of the 1,267 matches come from the clients 203.0.113.41 and 203.0.113.58.
+          evidence:
+            - { kind: log_query, title: edge-gateway 404 responses, url: "https://kibana.quillcart.example/app/discover#/?q=service:edge-gateway%20AND%20status:404" }
+      - tool: list_fields
+        respond:
+          text: "Fields of edge-gateway-*: @timestamp (date), status (integer, searchable, aggregatable), path (keyword), client.ip (ip), user_agent (text), service.name (keyword)"
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: query_range
+        respond:
+          text: |
+            Requests per second of edge-gateway, 19:15 to 19:45
+            19:15 17, 19:25 18, 19:35 19, 19:45 19
+            Share of 5xx responses: 0.0003 to 0.0006 for the whole range.
+            min 0.0003, max 0.0006, last 0.0004 (5xx share)
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: "No commits since the requested time."
+          noData: true
+      - tool: list_workflow_runs
+        respond:
+          text: 'run 9120 deploy edge-gateway 2026-09-15T11:20:41Z success. No deploy since.'
+default: no_data
+expected:
+  verdict: false_positive
+  rootCause:
+    summary: A scanner at two addresses sends about 1,200 probes in 10 minutes, and the monitor counts the 404 and 400 answers as errors. 5xx answers stay at 0.05% and real traffic is fine.
+    rubric:
+      - { id: scanner, text: "Finds that the errors are 404 and 400 answers to probe requests, such as /wp-login.php or /.env, from a few client addresses, not server errors", weight: 2, required: true }
+      - { id: users, text: "Says real user requests are not failing, because 5xx answers stay near zero", weight: 2, required: true }
+      - { id: fix, text: "Proposes counting only 5xx responses, or leaving out the scanner or its paths, in the monitor", weight: 1 }
+  evidence:
+    - { calledTool: elasticsearch__count_logs }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }

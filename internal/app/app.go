@@ -363,13 +363,49 @@ func (a *App) migrate(ctx context.Context) error {
 	if a.cfg.Database.Migrations == config.MigrationsManual {
 		a.log.InfoContext(ctx, "not migrating the database: database.migrations is manual")
 
-		return nil
+		return a.checkVectorDimensions(ctx)
 	}
 
 	a.log.InfoContext(ctx, "migrating the database")
 
 	if err := store.Migrate(ctx, a.pool); err != nil {
 		return fmt.Errorf("apply migrations: %w", err)
+	}
+
+	if !a.cfg.Memory.Vector.Enabled {
+		return nil
+	}
+
+	a.log.InfoContext(ctx, "migrating the vector memory tables")
+
+	if err := store.MigrateVector(ctx, a.pool, a.cfg.Memory.Vector.Dimensions); err != nil {
+		return fmt.Errorf("apply vector migrations: %w", err)
+	}
+
+	return nil
+}
+
+// checkVectorDimensions makes the start fail when vector memory is on and
+// the embeddings table holds vectors of another length than the config
+// says. It only reads, so it serves a replica that does not migrate. A
+// database whose vector migrations are not applied yet is not checked;
+// /readyz reports it.
+func (a *App) checkVectorDimensions(ctx context.Context) error {
+	if !a.cfg.Memory.Vector.Enabled {
+		return nil
+	}
+
+	current, target, err := store.VectorSchemaVersion(ctx, a.pool)
+	if err != nil {
+		return fmt.Errorf("read the vector schema version: %w", err)
+	}
+
+	if current < target {
+		return nil
+	}
+
+	if err := store.CheckVectorDimensions(ctx, a.pool, a.cfg.Memory.Vector.Dimensions); err != nil {
+		return fmt.Errorf("check the embedding length: %w", err)
 	}
 
 	return nil

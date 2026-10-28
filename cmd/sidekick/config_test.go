@@ -62,6 +62,32 @@ func (*fakeModelConfig) Capabilities() model.Capabilities {
 	return model.Capabilities{ToolCalling: true}
 }
 
+// fakeEmbeddingConfig is the config of the fake voyage provider, which
+// embeds text.
+type fakeEmbeddingConfig struct {
+	model.Settings `yaml:",inline"`
+
+	Dimensions int `yaml:"dimensions"`
+}
+
+// Embedding implements model.EmbeddingConfigured.
+func (c *fakeEmbeddingConfig) Embedding() (dimensions int, ok bool) {
+	return c.Dimensions, true
+}
+
+// fakeEmbedder is the connector built from a fakeEmbeddingConfig.
+type fakeEmbedder struct {
+	fakeConnector
+
+	dimensions int
+}
+
+func (fakeEmbedder) Embed(context.Context, []string) (model.EmbedResult, error) {
+	return model.EmbedResult{}, errFakeBuild
+}
+
+func (f fakeEmbedder) Dimensions() int { return f.dimensions }
+
 type fakeConnector struct{}
 
 func (fakeConnector) Capabilities() model.Capabilities { return model.Capabilities{ToolCalling: true} }
@@ -70,7 +96,8 @@ func (fakeConnector) Generate(context.Context, model.Request) (model.Response, e
 	return model.Response{}, errFakeBuild
 }
 
-// registerFakes registers a fake anthropic provider in r.
+// registerFakes registers a fake anthropic provider and a fake voyage
+// provider, which embeds, in r.
 func registerFakes(r *registry.Registry[model.Connector]) {
 	r.Register("anthropic", registry.Typed(func(_ context.Context, _ string, cfg fakeModelConfig, _ registry.Deps) (model.Connector, error) {
 		if cfg.FailBuild {
@@ -78,6 +105,9 @@ func registerFakes(r *registry.Registry[model.Connector]) {
 		}
 
 		return fakeConnector{}, nil
+	}))
+	r.Register("voyage", registry.Typed(func(_ context.Context, _ string, cfg fakeEmbeddingConfig, _ registry.Deps) (model.Connector, error) {
+		return fakeEmbedder{dimensions: cfg.Dimensions}, nil
 	}))
 }
 

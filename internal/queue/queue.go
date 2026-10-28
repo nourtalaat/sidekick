@@ -43,6 +43,7 @@ const (
 	KindRollup          = "rollup"
 	KindRetention       = "retention"
 	KindNotice          = "notice"
+	KindEmbedMemory     = "embed_memory"
 )
 
 // The values of jobs.status.

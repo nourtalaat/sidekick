@@ -1,0 +1,214 @@
+{
+  "tools": [
+    {
+      "name": "list_issues",
+      "description": "List issues in the user's Linear workspace. For my issues, use \"me\" as the assignee.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "number",
+            "maximum": 250,
+            "default": 50,
+            "description": "The number of results to return (Max is 250)"
+          },
+          "before": {
+            "type": "string",
+            "description": "An ID to end at"
+          },
+          "after": {
+            "type": "string",
+            "description": "An ID to start from"
+          },
+          "orderBy": {
+            "type": "string",
+            "enum": [
+              "createdAt",
+              "updatedAt"
+            ],
+            "default": "updatedAt",
+            "description": "The order in which to return results"
+          },
+          "query": {
+            "type": "string",
+            "description": "Search for content in the issue title or description"
+          },
+          "team": {
+            "type": "string",
+            "description": "The team name or ID to filter by"
+          },
+          "state": {
+            "type": "string",
+            "description": "The state name or ID to filter by"
+          },
+          "cycle": {
+            "type": "string",
+            "description": "The cycle name or ID to filter by"
+          },
+          "label": {
+            "type": "string",
+            "description": "A label name or ID to filter by"
+          },
+          "assignee": {
+            "type": "string",
+            "description": "The assignee to filter by (User ID, name, email, or \"me\")"
+          },
+          "delegate": {
+            "type": "string",
+            "description": "An agent name or ID to filter by"
+          },
+          "project": {
+            "type": "string",
+            "description": "The project name or ID to filter by"
+          },
+          "parentId": {
+            "type": "string",
+            "description": "The parent issue ID to filter by"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "Return only issues created on or after this ISO-8601 date-time or duration. e.g. -P1D to get issues created in the last day"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "Return only issues updated on or after this ISO-8601 date-time or duration. e.g. -P1D to get issues updated in the last day"
+          },
+          "includeArchived": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to include archived issues"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_issue",
+      "description": "Retrieve detailed information about an issue by ID, including attachments and git branch name",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The issue ID"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "list_comments",
+      "description": "List comments for a specific Linear issue",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "issueId": {
+            "type": "string",
+            "description": "The issue ID"
+          }
+        },
+        "required": [
+          "issueId"
+        ]
+      }
+    },
+    {
+      "name": "list_projects",
+      "description": "List projects in the user's Linear workspace",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "number",
+            "maximum": 250,
+            "default": 50,
+            "description": "The number of results to return (Max is 250)"
+          },
+          "before": {
+            "type": "string",
+            "description": "An ID to end at"
+          },
+          "after": {
+            "type": "string",
+            "description": "An ID to start from"
+          },
+          "orderBy": {
+            "type": "string",
+            "enum": [
+              "createdAt",
+              "updatedAt"
+            ],
+            "default": "updatedAt",
+            "description": "The order in which to return results"
+          },
+          "query": {
+            "type": "string",
+            "description": "Search for content in the project name"
+          },
+          "state": {
+            "type": "string",
+            "description": "The state name or ID to filter by"
+          },
+          "initiative": {
+            "type": "string",
+            "description": "The initiative name or ID to filter by"
+          },
+          "team": {
+            "type": "string",
+            "description": "The team name or ID to filter by"
+          },
+          "member": {
+            "type": "string",
+            "description": "A team member to filter by (User ID, name, email, or \"me\")"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "Return only projects created on or after this ISO-8601 date-time or duration. e.g. -P1D to get projects created in the last day"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "Return only projects updated on or after this ISO-8601 date-time or duration. e.g. -P1D to get projects updated in the last day"
+          },
+          "includeArchived": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether to include archived projects"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_project",
+      "description": "Retrieve details of a specific project in Linear",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The ID or name of the project to retrieve"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "list_issue_statuses",
+      "description": "List available issue statuses in a Linear team",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "team": {
+            "type": "string",
+            "description": "The team name or ID"
+          }
+        },
+        "required": [
+          "team"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+# A disk alert that fires and clears again and again while usage hovers at its
+# threshold. Generic alert strategy, flapping.
+id: flapping-disk-usage-threshold
+title: Node disk alert that fires and clears around its 85% threshold
+tags: [flapping, disk, kubernetes]
+strategy: generic-alert
+now: 2026-09-22T16:30:00Z
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="NodeFilesystemUsageHigh"}'
+    alerts:
+      - status: firing
+        labels: { alertname: NodeFilesystemUsageHigh, service: worker-17, instance: worker-17, mountpoint: /var/lib/containerd, env: prod, severity: warning }
+        annotations:
+          summary: Disk usage on worker-17 is above 85%
+          description: /var/lib/containerd on worker-17 is 86% full. This alert has fired and cleared 11 times in the last 4 hours.
+        startsAt: 2026-09-22T16:24:00Z
+        fingerprint: e51b08a7c34d92f6
+sources:
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: query_range
+        respond:
+          text: |
+            Filesystem usage of worker-17 /var/lib/containerd, last 4 hours, 10 minute points
+            12:30 0.83, 12:40 0.86, 12:50 0.84, 13:00 0.86, 13:10 0.83, 13:20 0.87, 13:30 0.84, 13:40 0.86, 13:50 0.83, 14:00 0.87,
+            14:10 0.84, 14:20 0.86, 14:30 0.83, 14:40 0.86, 14:50 0.84, 15:00 0.87, 15:10 0.83, 15:20 0.86, 15:30 0.84, 15:40 0.86,
+            15:50 0.83, 16:00 0.87, 16:10 0.84, 16:20 0.86, 16:30 0.86
+            min 0.83, max 0.87, avg 0.85, last 0.86. Usage rises to about 0.87 and falls to about 0.83 every 20 minutes.
+          evidence:
+            - { kind: metric, title: worker-17 filesystem usage, url: "https://prometheus.quillcart.example/graph?g0.expr=node_fs_usage_worker17" }
+      - tool: list_alerts
+        respond:
+          text: |
+            1 alert firing: NodeFilesystemUsageHigh on worker-17, since 16:24, severity warning
+            In the last 4 hours the alert changed between firing and resolved 22 times.
+      - tool: get_rules
+        respond:
+          text: |
+            group node-disk, alert NodeFilesystemUsageHigh, for 0m
+            expr: 1 - node_filesystem_avail_bytes / node_filesystem_size_bytes > 0.85
+            health ok, last evaluation 16:29:50
+  k8s:
+    tools: { snapshot: bench/tools/kubernetes.json }
+    fixtures:
+      - tool: list_nodes
+        respond:
+          text: |
+            Node worker-17, Ready, no cordon, no taints
+            conditions: MemoryPressure False, DiskPressure False, PIDPressure False
+          evidence:
+            - { kind: resource, title: worker-17, url: "https://k8s.quillcart.example/nodes/worker-17" }
+      - tool: list_events
+        respond:
+          text: |
+            Node worker-17, newest first
+            16:20:12 Normal ImageGarbageCollected Removed 6 unused images, freed 2.1GiB
+            16:00:09 Normal ImageGarbageCollected Removed 5 unused images, freed 1.9GiB
+            15:40:11 Normal ImageGarbageCollected Removed 6 unused images, freed 2.0GiB
+            No eviction events and no DiskPressure events.
+      - tool: list_pod_problems
+        respond:
+          text: "No pods have problems on node worker-17."
+          noData: true
+default: no_data
+expected:
+  verdict: flapping
+  rootCause:
+    summary: Usage of worker-17 moves between 83% and 87% every 20 minutes, because image garbage collection frees space after each rise, so it crosses the 85% threshold again and again. The node has no disk pressure.
+    rubric:
+      - { id: hover, text: "Finds that disk usage crosses the 85% threshold up and down again and again, staying between about 83% and 87%", weight: 2, required: true }
+      - { id: pressure, text: "Finds no lasting disk pressure on the node, such as evictions or a DiskPressure condition", weight: 1 }
+      - { id: fix, text: "Proposes a longer for duration, a gap between the firing and clearing levels, or a higher threshold", weight: 1 }
+  evidence:
+    - { calledTool: prometheus__query_range }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }

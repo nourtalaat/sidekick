@@ -1,0 +1,97 @@
+# A Datadog monitor for a service whose errors come from an outage that an open
+# incident already covers. Datadog is reached through its MCP server.
+# Error rate strategy, duplicate.
+id: error-rate-datadog-duplicate-of-incident
+title: Cart service error rate caused by an auth gateway outage that has an open incident
+tags: [error-rate, datadog, mcp, incident, duplicate]
+strategy: error-rate-alert
+now: 2026-09-17T11:12:00Z
+event:
+  adapter: datadog
+  payload:
+    id: "7802335911728437215"
+    title: "[P2] [Triggered on {env:prod,service:cart-service}] cart-service error rate is high"
+    body: "The error rate of cart-service is above 5% over the last 5 minutes. @webhook-sidekick"
+    date: "1789643520000"
+    last_updated: "1789643520000"
+    event_type: query_alert_monitor
+    org: { id: "11023", name: Quillcart }
+    alert_id: "48213977"
+    alert_title: "[Triggered on {env:prod,service:cart-service}] cart-service error rate is high"
+    alert_transition: Triggered
+    alert_type: error
+    alert_priority: P2
+    alert_scope: "env:prod,service:cart-service"
+    alert_metric: trace.http.request.errors
+    tags: "env:prod, monitor, service:cart-service, team:storefront"
+    link: https://app.datadoghq.example/event/jump_to?event_id=7802335911728437215
+sources:
+  datadog:
+    tools: { snapshot: bench/tools/datadog.json }
+    fixtures:
+      - tool: search_datadog_incidents
+        respond:
+          text: |
+            1 active incident
+            INC-2417 SEV-2 "auth-gateway fails to validate tokens", state active, started 2026-09-17T11:02:00Z, commander Rhea
+              customer impact: logins and checkout calls fail for part of the users
+              affected services: auth-gateway, cart-service, checkout-api
+          evidence:
+            - { kind: ticket, title: INC-2417, url: "https://app.datadoghq.example/incidents/2417" }
+      - tool: get_datadog_incident
+        respond:
+          text: |
+            INC-2417 SEV-2 "auth-gateway fails to validate tokens", active
+            Started 2026-09-17T11:02:00Z. Cause under investigation: the signing key rotation at 11:00 did not reach all auth-gateway pods.
+            Linked monitors: auth-gateway error rate, cart-service error rate, checkout-api error rate
+            Responders: Rhea (commander), Tomas (auth-gateway)
+          evidence:
+            - { kind: ticket, title: INC-2417, url: "https://app.datadoghq.example/incidents/2417" }
+      - tool: search_datadog_monitors
+        respond:
+          text: |
+            3 monitors alerting
+            auth-gateway error rate (alert since 11:03), cart-service error rate (alert since 11:08), checkout-api error rate (alert since 11:09)
+      - tool: search_datadog_spans
+        respond:
+          text: |
+            cart-service error spans, 11:05 to 11:12, 3 of 861 shown
+            POST /v1/cart/items status 502, child span http.client GET auth-gateway /v1/tokens/validate status 503
+            POST /v1/cart/items status 502, child span http.client GET auth-gateway /v1/tokens/validate status 503
+            GET /v1/cart status 502, child span http.client GET auth-gateway /v1/tokens/validate timeout after 2000ms
+            All 861 error spans have a failed call to auth-gateway.
+      - tool: search_datadog_logs
+        respond:
+          text: |
+            cart-service ERROR logs, 11:05 to 11:12
+            11:11:48 upstream auth-gateway returned 503 for token validation, user request failed
+            11:11:47 upstream auth-gateway returned 503 for token validation, user request failed
+      - tool: aggregate_spans
+        respond:
+          text: |
+            cart-service error spans by child service, 11:00 to 11:12
+            auth-gateway 861, other 0. Errors started at 11:04. Before 11:04: 0.
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: "No commits since the requested time."
+          noData: true
+      - tool: list_workflow_runs
+        respond:
+          text: 'run 3377 deploy cart-service 2026-09-16T15:41:09Z success. No deploy since.'
+default: no_data
+expected:
+  verdict: duplicate
+  acceptable: [duplicate, known_issue]
+  rootCause:
+    summary: The cart-service errors are failed calls to auth-gateway, which incident INC-2417 already covers, and the incident lists the cart-service monitor.
+    rubric:
+      - { id: incident, text: "Names incident INC-2417 as already covering this problem", weight: 2, required: true }
+      - { id: upstream, text: "Finds that the cart-service errors come from failed calls to auth-gateway, not from cart-service itself", weight: 2, required: true }
+      - { id: nochange, text: "Points the responder to the open incident and proposes no separate fix for cart-service", weight: 1 }
+  evidence:
+    - { calledTool: datadog__search_datadog_incidents }
+    - { citedURL: "https://app.datadoghq.example/incidents/2417" }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }

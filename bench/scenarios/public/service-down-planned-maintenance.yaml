@@ -1,0 +1,80 @@
+# A service is down on purpose during a planned maintenance window, and the
+# monitor does not know. Service down strategy, false positive.
+id: service-down-planned-maintenance
+title: Search indexer down because it was scaled to zero for a planned reindex
+tags: [service-down, kubernetes, maintenance, false-positive]
+strategy: service-down
+now: 2026-09-20T02:12:00Z
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="SearchIndexerDown"}'
+    alerts:
+      - status: firing
+        labels: { alertname: SearchIndexerDown, service: search-indexer, env: prod, severity: critical }
+        annotations:
+          summary: search-indexer has no running instance
+          description: No instance of search-indexer reported for 10m.
+        startsAt: 2026-09-20T02:01:00Z
+        fingerprint: 7c2d95e03a1b4f68
+sources:
+  k8s:
+    tools: { snapshot: bench/tools/kubernetes.json }
+    fixtures:
+      - tool: get_workload
+        respond:
+          text: |
+            Deployment search/search-indexer, 0 of 0 replicas ready, desired replicas 0
+            image quillcart/search-indexer:2026.09.12-1
+            annotations: quillcart.example/maintenance "2026-09-20T02:00Z to 2026-09-20T04:00Z, full reindex of catalog-v3"
+          evidence:
+            - { kind: resource, title: search-indexer deployment, url: "https://k8s.quillcart.example/search/deployments/search-indexer" }
+      - tool: get_rollout_history
+        respond:
+          text: |
+            Deployment search/search-indexer, newest first
+            revision 17, 2026-09-12T10:05:31Z, image quillcart/search-indexer:2026.09.12-1
+            Replica count changed 3 -> 0 at 2026-09-20T01:58:03Z by the user maintenance-bot (a scale change, not a new revision).
+          evidence:
+            - { kind: deploy, title: search-indexer scale to 0, url: "https://k8s.quillcart.example/search/deployments/search-indexer/history" }
+      - tool: list_pod_problems
+        respond:
+          text: "No pods have problems in namespace search. The deployment search-indexer has no pods."
+          noData: true
+      - tool: list_events
+        respond:
+          text: |
+            Namespace search, newest first
+            01:58:04 Normal ScalingReplicaSet deployment search-indexer Scaled down replica set search-indexer-5b8f6d7c4 to 0 from 3
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_pull_requests
+        respond:
+          text: |
+            #318 merged 2026-09-19T16:44:10Z by tomas "Scale search-indexer to zero during the reindex window (02:00 to 04:00 UTC on 2026-09-20)"
+              The reindex job writes catalog-v3. The indexer must not write to catalog-v2 meanwhile. Scale back to 3 at 04:00.
+          evidence:
+            - { kind: commit, title: "PR 318", url: "https://github.example.com/quillcart/search-indexer/pull/318" }
+      - tool: list_commits
+        respond:
+          text: |
+            d8e41b7 2026-09-19T16:44:09Z "Scale search-indexer to zero during the reindex window" by tomas
+          evidence:
+            - { kind: commit, title: d8e41b7, url: "https://github.example.com/quillcart/search-indexer/commit/d8e41b7" }
+default: no_data
+expected:
+  verdict: false_positive
+  rootCause:
+    summary: search-indexer was scaled to zero on purpose at 01:58 for the 02:00 to 04:00 reindex window planned in pull request 318, so the alert fired for a planned stop.
+    rubric:
+      - { id: intent, text: "Finds that the service was scaled to zero on purpose for a planned maintenance window, not that it crashed", weight: 2, required: true }
+      - { id: source, text: "Cites pull request 318 or the scale change at 01:58 as the reason", weight: 2, required: true }
+      - { id: fix, text: "Proposes silencing the alert or adding a maintenance window for planned stops", weight: 1 }
+  evidence:
+    - { calledTool: k8s__get_workload }
+    - { citedURL: "https://github.example.com/quillcart/search-indexer/pull/318" }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }

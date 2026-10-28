@@ -1794,6 +1794,29 @@ message that names the setting. The `retries`, `timeout` and
 entries, which are redacted already, and are cut to 8,000 bytes, at most 64
 to a call.
 
+Vector memory needs a Postgres with the
+[pgvector](https://github.com/pgvector/pgvector) extension, version 0.5 or
+newer, which has the HNSW index. With `enabled: true`, `sidekick serve`
+(unless `database.migrations` is `manual`) and `sidekick migrate up` run a
+second set of migrations, which creates the extension, the
+`memory_embeddings` table, the column with the length `dimensions` gives
+and an HNSW index by cosine distance. The role that migrates must be allowed
+to create the extension; managed Postgres services usually let you enable
+it once, and Amazon RDS, Cloud SQL, Azure Database for PostgreSQL and
+Supabase all offer it. Sidekick keeps that set's progress in its own table,
+`goose_db_version_vector`. With vector memory off, the extension, the table
+and the queries are never touched, so any Postgres 15 or newer works.
+
+Changing `dimensions` later makes Sidekick refuse to start until you run
+`sidekick migrate vector-reset`, which empties the vectors so they are made
+again; see [the memory source](sources/memory.md#changing-the-length-of-the-vectors).
+Changing only the model, to one with the same `dimensions`, needs no reset:
+the start-up backfill embeds the entries again. Searches compare vectors of
+the current model only, so until an entry is embedded again by the new
+model, it is found by full text alone. The Postgres that the
+bundled chart runs does not have pgvector; see `postgres.image` in the
+chart's `values.yaml` for an image that does.
+
 | Provider | Models | `dimensions` | Notes |
 |---|---|---|---|
 | `openai` | `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002` | Up to 1536 or 3072 for the `3` models, which Sidekick asks the API to shorten; 1536 for `ada-002` | `apiKeySecret`, or `baseURL` for an OpenAI-compatible server such as Ollama or vLLM. For a model Sidekick does not know, set `dimensions` to what the server returns; Sidekick does not ask the server to shorten the vectors. |
