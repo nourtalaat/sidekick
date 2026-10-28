@@ -356,6 +356,62 @@ func (q *Queries) HandBackJob(ctx context.Context, arg HandBackJobParams) (int64
 	return result.RowsAffected(), nil
 }
 
+const listDeadJobs = `-- name: ListDeadJobs :many
+SELECT id, kind, route, attempts, max_attempts, last_error, created_at, finished_at
+FROM jobs
+WHERE status = 'dead' AND (finished_at, id) < ($1::timestamptz, $2::bigint)
+ORDER BY finished_at DESC, id DESC
+LIMIT $3
+`
+
+type ListDeadJobsParams struct {
+	BeforeFinishedAt time.Time
+	BeforeID         int64
+	PageSize         int32
+}
+
+type ListDeadJobsRow struct {
+	ID          int64
+	Kind        string
+	Route       *string
+	Attempts    int32
+	MaxAttempts int32
+	LastError   *string
+	CreatedAt   time.Time
+	FinishedAt  *time.Time
+}
+
+// ListDeadJobs returns up to page_size dead jobs that died before the job
+// (before_finished_at, before_id), newest first.
+func (q *Queries) ListDeadJobs(ctx context.Context, arg ListDeadJobsParams) ([]ListDeadJobsRow, error) {
+	rows, err := q.db.Query(ctx, listDeadJobs, arg.BeforeFinishedAt, arg.BeforeID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDeadJobsRow
+	for rows.Next() {
+		var i ListDeadJobsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.Route,
+			&i.Attempts,
+			&i.MaxAttempts,
+			&i.LastError,
+			&i.CreatedAt,
+			&i.FinishedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listenJobsReady = `-- name: ListenJobsReady :exec
 LISTEN jobs_ready
 `

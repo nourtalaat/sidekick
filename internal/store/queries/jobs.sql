@@ -145,6 +145,15 @@ SET status = 'pending', attempts = 0, run_at = now(), finished_at = NULL,
 WHERE id = @id AND status = 'dead'
 RETURNING kind;
 
+-- name: ListDeadJobs :many
+-- ListDeadJobs returns up to page_size dead jobs that died before the job
+-- (before_finished_at, before_id), newest first.
+SELECT id, kind, route, attempts, max_attempts, last_error, created_at, finished_at
+FROM jobs
+WHERE status = 'dead' AND (finished_at, id) < (@before_finished_at::timestamptz, @before_id::bigint)
+ORDER BY finished_at DESC, id DESC
+LIMIT @page_size;
+
 -- name: GetJob :one
 SELECT * FROM jobs WHERE id = @id;
 

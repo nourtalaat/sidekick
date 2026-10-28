@@ -5,7 +5,9 @@ package queue
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
@@ -17,6 +19,8 @@ import (
 // planBatch is the claim batch size in the query plan tests.
 const (
 	planBatch = 8
+	// planDeadPage is the page size of the dead jobs list.
+	planDeadPage = 50
 	// planGlobalLimit is above the 500 investigations running in the busy
 	// queue, so the limited claim can take one.
 	planGlobalLimit = 1000
@@ -149,6 +153,17 @@ func TestQueryPlans(t *testing.T) {
 				return fmt.Errorf("run query: %w", err)
 			},
 			wantIndex: "jobs_active_key",
+		},
+		{
+			name: "ListDeadJobs",
+			run: func(ctx context.Context, q *db.Queries, _ planRows) error {
+				_, err := q.ListDeadJobs(ctx, db.ListDeadJobsParams{
+					BeforeFinishedAt: time.Now().Add(time.Hour), BeforeID: math.MaxInt64, PageSize: planDeadPage,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "jobs_dead",
 		},
 		{
 			name: "RetryDeadJob",
