@@ -1562,6 +1562,31 @@ retention:
 because deleting an investigation deletes its steps and its watchers with
 their checks.
 
+Every replica checks once an hour, and at start-up, that the retention
+job of the day (in UTC) is queued; however many replicas there are, it
+runs once a day. It deletes at most 5,000 rows at a time, oldest first,
+each batch in a short transaction of its own, so it does not hold locks
+for long. It also deletes finished background jobs: done jobs after 1
+day, and dead jobs after 30 days. `sidekick_retention_deleted_rows_total`
+counts what it deleted, by table.
+
+Deleting an investigation also deletes its steps, its inbox, its
+published message references, its feedback, its watchers with their
+checks, and its event group. An investigation whose event group is
+still open is kept until the group closes.
+
+With the defaults, an investigation outlives its events and its steps.
+An investigation older than `events` and `steps` keeps its verdict,
+report, costs and feedback, but no longer has the alert or message that
+started it, nor the full record of its tool calls and model turns.
+Responders can still rate it, and its message is still updated; it then
+names its subject "the alert", since the alert's title is gone.
+
+The audit log can be deleted only by the retention job: the database
+rejects any other `DELETE` or `TRUNCATE` of it, as it rejects every
+`UPDATE`. This guards against bugs and stray queries, not against someone
+with access to the database, who can turn the guard off.
+
 ## Defaults
 
 | Setting | Default |
