@@ -1066,8 +1066,16 @@ strategies:
   dir: /etc/sidekick/strategies   # extra strategy files, read-only
 ```
 
-Sidekick ships with built-in strategies; this release has `generic-alert`,
-which fits any alert. `dir` adds your own: every `*.yaml` or `*.yml` file at
+Sidekick ships with these built-in strategies:
+
+| Strategy | For |
+|---|---|
+| `generic-alert` | Any alert or event that no more specific strategy covers. |
+| `latency-alert` | A latency monitor, such as p95 or p99 response time, for an HTTP or RPC service. |
+| `error-rate-alert` | An error rate monitor, such as the share of failed requests or 5xx responses. |
+| `service-down` | A service, host or endpoint that stopped answering, such as a failed health check or uptime probe. |
+
+`dir` adds your own: every `*.yaml` or `*.yml` file at
 the top of the directory is one strategy. Hidden files and other files are
 skipped. A `dir` that is not set, or does not exist, adds none; one that
 exists but cannot be read stops Sidekick from starting.

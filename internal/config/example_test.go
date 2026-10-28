@@ -93,7 +93,7 @@ func TestExampleConfig(t *testing.T) {
 			name: "built-in and file strategies",
 			check: func(t *testing.T, cfg *Config) {
 				t.Helper()
-				require.Equal(t, []string{"generic-alert", "latency-alert"}, cfg.StrategySet().Names())
+				require.Equal(t, []string{"error-rate-alert", "generic-alert", "latency-alert", "service-down"}, cfg.StrategySet().Names())
 
 				st, ok := cfg.StrategySet().Get("latency-alert")
 				require.True(t, ok)
