@@ -40,7 +40,7 @@ func TestNewWatchPolicy(t *testing.T) {
 
 			var got []string
 
-			for _, rt := range r.routes {
+			for _, rt := range *r.routes.Load() {
 				if rt.name != "service-down" {
 					continue
 				}
@@ -50,6 +50,60 @@ func TestNewWatchPolicy(t *testing.T) {
 				}
 			}
 
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestSetRoutesKeepsWatchers(t *testing.T) {
+	t.Parallel()
+
+	runtime := config.NewRoute("runtime-checkout")
+	runtime.Priority = 1
+	runtime.Match = &config.Match{Service: "checkout-*"}
+
+	tests := []struct {
+		name  string
+		route string
+		want  []string
+	}{
+		{name: "a file route keeps the watchers of the policy", route: "service-down", want: []string{"checkout-health", "checkout-latency"}},
+		{name: "a runtime route gets its strategy's watchers, here none", route: "runtime-checkout"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			data, err := os.ReadFile("fixture/watchers.yaml")
+			require.NoError(t, err)
+
+			cfg, err := config.Parse(t.Context(), []byte(strings.ReplaceAll(string(data), "HEALTH_URL", "http://127.0.0.1/healthz")),
+				config.LoadOptions{Registries: config.Registries{Models: fakeModels()}})
+			require.NoError(t, err)
+
+			r, err := New(Options{Config: cfg})
+			require.NoError(t, err)
+			require.NoError(t, r.SetRoutes(append([]config.Route{runtime}, cfg.RoutesInOrder()...)))
+
+			var (
+				got   []string
+				found bool
+			)
+
+			for _, rt := range *r.routes.Load() {
+				if rt.name != tt.route {
+					continue
+				}
+
+				found = true
+
+				for _, d := range rt.watchers {
+					got = append(got, d.Name)
+				}
+			}
+
+			require.True(t, found)
 			require.Equal(t, tt.want, got)
 		})
 	}

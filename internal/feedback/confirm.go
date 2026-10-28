@@ -35,6 +35,37 @@ type confirmation struct {
 	at          *time.Time
 }
 
+// confirmationView is what the audit log records of a confirmed verdict.
+type confirmationView struct {
+	Verdict     string `json:"verdict,omitempty"`
+	Cause       string `json:"cause,omitempty"`
+	BySlackUser string `json:"by_slack_user,omitempty"`
+	At          string `json:"at,omitempty"`
+}
+
+// view returns c for the audit log, or nil when nothing is confirmed, so
+// the audit row leaves that side out.
+func (c confirmation) view() any {
+	if c.verdict == nil {
+		return nil
+	}
+
+	v := &confirmationView{Verdict: *c.verdict}
+	if c.cause != nil {
+		v.Cause = *c.cause
+	}
+
+	if c.bySlackUser != nil {
+		v.BySlackUser = *c.bySlackUser
+	}
+
+	if c.at != nil {
+		v.At = c.at.UTC().Format(time.RFC3339)
+	}
+
+	return v
+}
+
 // current returns the confirmed verdict of inv.
 func current(inv db.Investigation) confirmation {
 	return confirmation{

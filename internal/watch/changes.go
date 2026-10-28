@@ -15,12 +15,16 @@ import (
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
+// discard logs nothing.
+var discard = slog.New(slog.DiscardHandler)
+
 // Recorder records the state changes of watchers. Every change is written
 // to the inbox of the watcher's investigation, so a running investigation
-// sees it at its next turn, and shown in the investigation's outputs. The
-// Recorder also logs each change, with IDs and names only, and counts it
-// in MetricStateChanges. Make it with NewRecorder; a nil *Recorder still
-// writes and shows every change, but logs and counts nothing.
+// sees it at its next turn, shown in the investigation's outputs and
+// audited. The Recorder also logs each change, with IDs and names only,
+// and counts it in MetricStateChanges. Make it with NewRecorder; a nil
+// *Recorder still writes, shows and audits every change, but logs and
+// counts nothing.
 type Recorder struct {
 	log     *slog.Logger
 	changes *prometheus.CounterVec
@@ -39,7 +43,7 @@ func NewRecorder(log *slog.Logger, reg prometheus.Registerer) (*Recorder, error)
 	}
 
 	if log == nil {
-		log = slog.New(slog.DiscardHandler)
+		log = discard
 	}
 
 	return &Recorder{log: log, changes: changes}, nil
@@ -47,9 +51,10 @@ func NewRecorder(log *slog.Logger, reg prometheus.Registerer) (*Recorder, error)
 
 // changed records that watcher w changed state from old, nil for a
 // watcher that just started; the watcher row holds the new state already.
-// It writes the change to the inbox of the watcher's investigation and
-// shows it in the investigation's outputs, in q, then logs and counts it.
-// A watcher without an investigation is only logged and counted.
+// In q it writes the change to the inbox of the watcher's investigation,
+// shows it in the investigation's outputs and writes its audit row, then
+// logs and counts it. A watcher without an investigation gets only the
+// audit row, the log line and the count.
 func (r *Recorder) changed(ctx context.Context, q db.DBTX, old *db.Watcher, w db.Watcher) error {
 	if w.InvestigationID != nil {
 		if err := writeChange(ctx, q, *w.InvestigationID, w); err != nil {
@@ -57,21 +62,18 @@ func (r *Recorder) changed(ctx context.Context, q db.DBTX, old *db.Watcher, w db
 		}
 	}
 
-	if r == nil {
-		return nil
+	log := discard
+	if r != nil {
+		log = r.log
 	}
 
-	// TODO: [SK-18] Write an audit row for watcher state changes
-	from := ""
-	if old != nil {
-		from = old.Status
+	if err := stateChanged(ctx, q, log, old, w); err != nil {
+		return fmt.Errorf("watcher %s: %w", w.ID, err)
 	}
 
-	r.log.InfoContext(ctx, "watcher state changed",
-		"watcher_id", w.ID.String(), "group_id", w.GroupID.String(), "watcher", w.Name,
-		"from", from, "status", w.Status, "stop_reason", deref(w.StopReason))
-
-	r.changes.WithLabelValues(statusLabel(w.Status)).Inc()
+	if r != nil {
+		r.changes.WithLabelValues(statusLabel(w.Status)).Inc()
+	}
 
 	return nil
 }

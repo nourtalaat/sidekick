@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "type": "message",
+      "user": "U01ANA",
+      "team": "T01TEAM",
+      "text": "checkout is slow for everyone since 10:40",
+      "ts": "1761572520.123456"
+    }
+  ],
+  "has_more": false
+}
