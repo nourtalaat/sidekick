@@ -89,6 +89,14 @@ To add a target to `make ci`, put `CI_TARGETS += <name>` above its rule. A new
 code generator adds itself to `make generate` the same way, with
 `GENERATE_TARGETS += <name>`.
 
+CI runs `make ci` as four jobs at the same time: `make ci-lint`,
+`make ci-unit`, `make ci-integration` and `make ci-checks`. The first three
+run the targets named in `CI_LINT_TARGETS`, `CI_UNIT_TARGETS` and
+`CI_INTEGRATION_TARGETS` at the end of the Makefile, and `ci-checks` runs
+every other target of `CI_TARGETS`, so a new target needs no change to the
+workflow. Put a target in one of the three lists only when it is slow enough
+to want its own job.
+
 ## Branches, commits and pull requests
 
 Work is tracked as issues with IDs of the form `SK-<n>`. The repository turns
@@ -236,7 +244,7 @@ lock while it runs. `sidekick serve` also migrates at start-up, unless
    check that the plan uses the index you expect.
 5. Put the query's `EXPLAIN ANALYZE` output in the pull request
    description. CI writes each plan the tests read to a file and uploads
-   them as the `query-plans` artifact of the `make ci` job: open the
+   them as the `query-plans` artifact of the `make ci-integration` job: open the
    workflow run from the pull request's checks, and download the artifact
    from the run's summary page, which also lists the files. Each file is
    named `<package directory>/<test name>.txt`, for example

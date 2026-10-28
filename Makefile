@@ -249,3 +249,23 @@ generate: $(GENERATE_TARGETS) ## Run every code generator
 
 .PHONY: ci
 ci: $(CI_TARGETS) ## Run everything CI runs; run it before every push
+
+# CI runs the targets of `ci` in four parallel jobs, so the slow ones do not
+# add up. The three lists name the targets of the first three jobs; every
+# other target of CI_TARGETS, including one added later, runs in ci-checks.
+# So the four jobs together run exactly what `ci` runs.
+CI_LINT_TARGETS := lint
+CI_UNIT_TARGETS := ui-test test
+CI_INTEGRATION_TARGETS := test-integration
+
+.PHONY: ci-lint
+ci-lint: $(CI_LINT_TARGETS) ## Run the lint part of ci, as the CI lint job does
+
+.PHONY: ci-unit
+ci-unit: $(CI_UNIT_TARGETS) ## Run the unit test part of ci, as the CI unit job does
+
+.PHONY: ci-integration
+ci-integration: $(CI_INTEGRATION_TARGETS) ## Run the integration test part of ci, as the CI integration job does
+
+.PHONY: ci-checks
+ci-checks: $(filter-out $(CI_LINT_TARGETS) $(CI_UNIT_TARGETS) $(CI_INTEGRATION_TARGETS),$(CI_TARGETS)) ## Run the rest of ci, as the CI checks job does
