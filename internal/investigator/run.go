@@ -17,7 +17,6 @@ import (
 	"github.com/nourtalaat/sidekick/internal/prompt"
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/report"
-	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
@@ -71,6 +70,11 @@ type run struct {
 	// job is the follow_up job of a follow-up run, whose unique key the
 	// run gives up when it ends.
 	job db.Job
+
+	// withTriage is set when the investigation's route has a triage role,
+	// and triageRole names its connector.
+	withTriage bool
+	triageRole RoleConnector
 }
 
 // usage is what runs used of the counted budgets.
@@ -108,12 +112,18 @@ func (h *Handler) newRun(ctx context.Context, inv db.Investigation, log *slog.Lo
 
 	if r.followUp() {
 		r.budget = r.budget.FollowUp()
+	}
+
+	// A follow-up run, and the full investigation that a responder asked
+	// for after a triage-only result, count their use from their own
+	// first step.
+	if r.followUp() || r.hist.runFrom > 0 {
 		r.runStart, r.before = r.hist.runUse(h.now(), inv)
 	}
 
 	r.tools = h.opts.Guard.Start(ctx, inv.ID.String(), h.opts.Routes[inv.Route].Sources)
 
-	if len(steps) == 0 {
+	if len(steps) == 0 && !r.withTriage {
 		if err := r.savePrompt(ctx); err != nil {
 			return nil, fmt.Errorf("start the conversation: %w", err)
 		}
@@ -159,6 +169,7 @@ func (r *run) settings() error {
 
 	r.conn, r.connector, r.modelID = conn, rc.Connector, rc.Model
 	r.summarize, r.summarizer, r.summaryModel = conn, rc.Connector, rc.Model
+	r.triageRole, r.withTriage = conns[model.RoleTriage]
 
 	if sc, ok := conns[model.RoleSummarize]; ok {
 		if summarize, ok := r.h.opts.Connectors[sc.Connector]; ok {
@@ -187,14 +198,9 @@ func (r *run) savePrompt(ctx context.Context) error {
 			"strategy", name, "stored_version", deref(r.inv.StrategyVersion), "loaded_version", st.Version)
 	}
 
-	first, err := db.New(r.h.opts.Pool).GetFirstEvent(ctx, r.inv.GroupID)
+	group, err := r.group(ctx)
 	if err != nil {
-		return fmt.Errorf("load the first event of group %s: %w", r.inv.GroupID, err)
-	}
-
-	ev, err := store.EventOf(first.Event)
-	if err != nil {
-		return fmt.Errorf("read event %s: %w", first.Event.ID, err)
+		return fmt.Errorf("load the event group: %w", err)
 	}
 
 	specs := r.h.builtins.specs()
@@ -202,7 +208,7 @@ func (r *run) savePrompt(ctx context.Context) error {
 		specs = append(specs, spec)
 	}
 
-	examples, err := memory.Examples(ctx, r.h.opts.Pool, memory.MatchOf(r.inv.ID, ev), r.h.opts.MemoryExamples)
+	examples, err := memory.Examples(ctx, r.h.opts.Pool, memory.MatchOf(r.inv.ID, group.First), r.h.opts.MemoryExamples)
 	if err != nil {
 		return fmt.Errorf("find similar confirmed investigations: %w", err)
 	}
@@ -210,7 +216,7 @@ func (r *run) savePrompt(ctx context.Context) error {
 	req := prompt.Build(prompt.Input{
 		Strategy: st,
 		Tools:    append(specs, r.tools.Tools()...),
-		Group:    prompt.Group{First: ev, Count: int(first.EventCount)},
+		Group:    group,
 		Route:    prompt.RouteContext{Name: r.inv.Route},
 		Memory:   examples,
 	})
@@ -239,7 +245,7 @@ func (r *run) loop(ctx context.Context) error {
 	runCtx, cancel := r.withWallTime(stopCtx)
 	defer cancel()
 
-	end, err := r.untilEnd(ctx, runCtx)
+	end, err := r.triageThenUntilEnd(ctx, runCtx)
 	if err != nil {
 		return fmt.Errorf("run: %w", err)
 	}

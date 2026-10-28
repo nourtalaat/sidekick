@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"testing"
@@ -31,31 +32,41 @@ func TestLoad(t *testing.T) {
 	}{
 		{
 			name: "built-in strategies only",
-			want: map[string]Origin{GenericAlert: BuiltIn},
+			want: withBuiltIns(nil),
 			check: func(t *testing.T, set *Set) {
 				t.Helper()
 
-				st, _ := set.Get(GenericAlert)
-				require.Equal(t, "generic-alert.yaml", st.Path)
-				require.NotEmpty(t, st.First)
-				require.Len(t, st.Version, versionLength)
+				for _, name := range builtInNames {
+					st, _ := set.Get(name)
+					require.Equal(t, name+".yaml", st.Path)
+					require.NotEmpty(t, st.Description, name)
+					require.NotEmpty(t, st.First, name)
+					require.NotEmpty(t, st.CommonCauses, name)
+					require.NotEmpty(t, st.FalsePositiveSigns, name)
+					require.Len(t, st.Version, versionLength)
+
+					if name != GenericAlert {
+						require.NotEmpty(t, st.Match.AlertNames, "%s needs a match, so triage can pick it", name)
+						require.NotEmpty(t, st.Match.TextPattern, "%s needs a match, so triage can pick it", name)
+					}
+				}
 			},
 		},
 		{
 			name: "a dir that does not exist adds nothing",
 			dir:  filepath.Join("fixture", "missing"),
-			want: map[string]Origin{GenericAlert: BuiltIn},
+			want: withBuiltIns(nil),
 		},
 		{
 			name: "a valid file strategy",
 			dir:  filepath.Join("fixture", "valid"),
-			want: map[string]Origin{GenericAlert: BuiltIn, "latency-alert": File},
+			want: withBuiltIns(map[string]Origin{"checkout-latency": File}),
 			check: func(t *testing.T, set *Set) {
 				t.Helper()
 
-				st, ok := set.Get("latency-alert")
+				st, ok := set.Get("checkout-latency")
 				require.True(t, ok)
-				require.Equal(t, filepath.Join("fixture", "valid", "latency-alert.yaml"), st.Path)
+				require.Equal(t, filepath.Join("fixture", "valid", "checkout-latency.yaml"), st.Path)
 				require.Equal(t, fileVersion(t, st.Path), st.Version)
 				require.Equal(t, Match{AlertNames: []string{"*Latency*", "*p99*"}, TextPattern: "(?i)latency|slow"}, st.Match)
 				require.Equal(t, []string{"signoz", "k8s"}, st.Sources.Prefer)
@@ -74,7 +85,7 @@ func TestLoad(t *testing.T) {
 		{
 			name:    "a file strategy overrides the built-in one with its name and logs it",
 			dir:     filepath.Join("fixture", "override"),
-			want:    map[string]Origin{GenericAlert: File},
+			want:    withBuiltIns(map[string]Origin{GenericAlert: File}),
 			wantLog: `level=INFO msg="file strategy overrides built-in strategy" strategy=generic-alert file=` + filepath.Join("fixture", "override", "generic-alert.yaml"),
 			check: func(t *testing.T, set *Set) {
 				t.Helper()
@@ -86,7 +97,7 @@ func TestLoad(t *testing.T) {
 		{
 			name: "hidden files and other extensions are skipped",
 			dir:  filepath.Join("fixture", "skipped"),
-			want: map[string]Origin{GenericAlert: BuiltIn, "disk-full": File},
+			want: withBuiltIns(map[string]Origin{"disk-full": File}),
 		},
 		{
 			name:    "an empty built-in set",
@@ -217,8 +228,8 @@ func TestLoadUnreadableDir(t *testing.T) {
 	}{
 		{
 			name:    "the dir is a file",
-			dir:     filepath.Join("fixture", "valid", "latency-alert.yaml"),
-			wantErr: "load file strategies: read strategies dir " + filepath.Join("fixture", "valid", "latency-alert.yaml") + ": list files:",
+			dir:     filepath.Join("fixture", "valid", "checkout-latency.yaml"),
+			wantErr: "load file strategies: read strategies dir " + filepath.Join("fixture", "valid", "checkout-latency.yaml") + ": list files:",
 		},
 	}
 
@@ -233,6 +244,22 @@ func TestLoadUnreadableDir(t *testing.T) {
 			require.NotErrorAs(t, err, &problems)
 		})
 	}
+}
+
+// builtInNames are the strategies that ship in the binary.
+var builtInNames = []string{"error-rate-alert", GenericAlert, "latency-alert", "service-down"}
+
+// withBuiltIns returns the origin of every built-in strategy, with the
+// origins in files added or put in their place.
+func withBuiltIns(files map[string]Origin) map[string]Origin {
+	out := map[string]Origin{}
+	for _, name := range builtInNames {
+		out[name] = BuiltIn
+	}
+
+	maps.Copy(out, files)
+
+	return out
 }
 
 // builtInOr returns fsys, or the real built-in strategies when it is nil.

@@ -12,6 +12,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ApiToken struct {
+	ID         uuid.UUID
+	Name       string
+	TokenHash  []byte
+	Role       string
+	CreatedBy  uuid.UUID
+	CreatedAt  time.Time
+	ExpiresAt  time.Time
+	LastUsedAt *time.Time
+	RevokedAt  *time.Time
+}
+
 type AuditLog struct {
 	ID              int64
 	At              time.Time
@@ -221,6 +233,14 @@ type ServiceNote struct {
 	UpdatedAt time.Time
 }
 
+type Session struct {
+	IDHash    []byte
+	UserID    uuid.UUID
+	CsrfToken string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+}
+
 type SlackIdentity struct {
 	SlackUserID string
 	TeamID      *string
@@ -263,6 +283,18 @@ type Step struct {
 	StartedAt        time.Time
 	DurationMs       int32
 	Budget           *string
+}
+
+type User struct {
+	ID          uuid.UUID
+	OidcIssuer  string
+	OidcSubject string
+	Email       *string
+	Name        string
+	Groups      []string
+	Role        string
+	CreatedAt   time.Time
+	LastLoginAt time.Time
 }
 
 type Watcher struct {

@@ -1,0 +1,26 @@
+name: service-down
+description: A service, host or endpoint stopped answering, such as a failed health check, an uptime probe or a scrape target that is down.
+match:
+  alertNames: ["*Down*", "*down*", "*Unavailable*", "*unavailable*", "*Unreachable*", "*unreachable*", "*HealthCheck*", "*Probe*"]
+  textPattern: "(?i)\\bdown\\b|unavailable|unreachable|not responding|health ?check|probe failed|crash ?loop"
+sources:
+  prefer: [k8s, signoz, github]
+first:
+  - Find what is down, the service, the host or the endpoint, which check found it, and when it started.
+  - Check whether it is still down now, or whether it already recovered.
+  - Look at the pods, containers or hosts behind it, such as restarts, crash loops, failed scheduling, out of memory kills and failed probes.
+  - Check what changed shortly before the alert started, such as deploys, config changes, feature flags and infrastructure changes.
+  - Check whether only the check fails or users are affected too, for example from the traffic and errors of the service.
+commonCauses:
+  - A deploy that does not start, such as a bad image, a missing setting or a failing start-up check.
+  - Pods killed for using too much memory, or nodes that ran out of resources.
+  - A failing dependency the service needs to start or to pass its health check.
+  - A network, DNS, load balancer or certificate problem between the check and the service.
+  - The service was scaled to zero or removed on purpose, and the monitor was not changed.
+falsePositiveSigns:
+  - The check itself failed, for example the probe's own network or region had a problem, while the service kept serving traffic.
+  - It recovered within one check interval and has done the same before without users noticing.
+  - The service was taken down on purpose, for example during planned maintenance.
+verdictHints:
+  truePositive: Say what is down and since when, and put the fix that brings it back fastest first, such as a rollback or a restart.
+  falsePositive: Propose more failed checks in a row before it fires, checks from more than one place, or silencing it during maintenance.

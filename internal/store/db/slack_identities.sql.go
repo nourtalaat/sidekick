@@ -8,7 +8,27 @@ package db
 import (
 	"context"
 	"time"
+
+	"github.com/google/uuid"
 )
+
+const findUserByEmail = `-- name: FindUserByEmail :one
+SELECT id, role FROM users WHERE lower(email) = lower($1::text)
+`
+
+type FindUserByEmailRow struct {
+	ID   uuid.UUID
+	Role string
+}
+
+// FindUserByEmail returns the web UI user who holds an email, compared
+// without case.
+func (q *Queries) FindUserByEmail(ctx context.Context, email string) (FindUserByEmailRow, error) {
+	row := q.db.QueryRow(ctx, findUserByEmail, email)
+	var i FindUserByEmailRow
+	err := row.Scan(&i.ID, &i.Role)
+	return i, err
+}
 
 const getSlackIdentity = `-- name: GetSlackIdentity :one
 SELECT slack_user_id, team_id, email, user_id, groups, role, refreshed_at FROM slack_identities WHERE slack_user_id = $1
@@ -29,27 +49,62 @@ func (q *Queries) GetSlackIdentity(ctx context.Context, slackUserID string) (Sla
 	return i, err
 }
 
+const getSlackIdentityWithUser = `-- name: GetSlackIdentityWithUser :one
+SELECT si.groups, si.email, si.user_id, si.refreshed_at, u.role AS user_role
+FROM slack_identities si
+LEFT JOIN users u ON u.id = si.user_id
+WHERE si.slack_user_id = $1
+`
+
+type GetSlackIdentityWithUserRow struct {
+	Groups      []string
+	Email       *string
+	UserID      *uuid.UUID
+	RefreshedAt time.Time
+	UserRole    *string
+}
+
+// GetSlackIdentityWithUser returns what is stored for a Slack user, with
+// the current role of the web UI user their email matched, if any.
+func (q *Queries) GetSlackIdentityWithUser(ctx context.Context, slackUserID string) (GetSlackIdentityWithUserRow, error) {
+	row := q.db.QueryRow(ctx, getSlackIdentityWithUser, slackUserID)
+	var i GetSlackIdentityWithUserRow
+	err := row.Scan(
+		&i.Groups,
+		&i.Email,
+		&i.UserID,
+		&i.RefreshedAt,
+		&i.UserRole,
+	)
+	return i, err
+}
+
 const saveSlackIdentity = `-- name: SaveSlackIdentity :exec
-INSERT INTO slack_identities (slack_user_id, team_id, groups, role, refreshed_at)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO slack_identities (slack_user_id, team_id, email, user_id, groups, role, refreshed_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (slack_user_id) DO UPDATE
-SET team_id = EXCLUDED.team_id, groups = EXCLUDED.groups, role = EXCLUDED.role, refreshed_at = EXCLUDED.refreshed_at
+SET team_id = EXCLUDED.team_id, email = EXCLUDED.email, user_id = EXCLUDED.user_id, groups = EXCLUDED.groups,
+    role = EXCLUDED.role, refreshed_at = EXCLUDED.refreshed_at
 `
 
 type SaveSlackIdentityParams struct {
 	SlackUserID string
 	TeamID      *string
+	Email       *string
+	UserID      *uuid.UUID
 	Groups      []string
 	Role        *string
 	RefreshedAt time.Time
 }
 
-// SaveSlackIdentity stores the user groups and role found for a Slack
-// user, replacing what was stored before.
+// SaveSlackIdentity stores the user groups, email, matched web UI user and
+// role found for a Slack user, replacing what was stored before.
 func (q *Queries) SaveSlackIdentity(ctx context.Context, arg SaveSlackIdentityParams) error {
 	_, err := q.db.Exec(ctx, saveSlackIdentity,
 		arg.SlackUserID,
 		arg.TeamID,
+		arg.Email,
+		arg.UserID,
 		arg.Groups,
 		arg.Role,
 		arg.RefreshedAt,

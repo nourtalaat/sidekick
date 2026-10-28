@@ -69,6 +69,7 @@ type Config struct {
 	Intake     Intake             `yaml:"intake"`
 	Slack      *Slack             `yaml:"slack"`
 	Teams      *Teams             `yaml:"teams"`
+	OIDC       *OIDC              `yaml:"oidc"`
 	Outputs    map[string]Section `yaml:"outputs"`
 	Strategies Strategies         `yaml:"strategies"`
 	Routes     []Route            `yaml:"routes"`

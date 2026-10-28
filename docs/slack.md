@@ -39,6 +39,10 @@ thread. Slash commands and a link to the web UI come in later releases.
   link to the full report, because Slack does not notify anyone when a
   message is edited. This happens for every investigation, including "Not
   sure yet".
+- **A triage-only result**, when [triage](investigations.md#triage)
+  found that no full investigation is needed, shows the triage's verdict
+  (Duplicate, Known issue or Flapping) with "Triage only · No full
+  investigation ran".
 - **A run that could not finish** shows "Could not finish" with a yellow
   bar and what was checked, and gets a short reply too, so no message is
   left on "Investigating".
@@ -86,21 +90,29 @@ the sources returned.
   one changes the rating. The message then says who marked the verdict
   correct or wrong.
 
+- **Investigate anyway** is on a triage-only result, next to Correct and
+  Wrong. It starts the full investigation, with the strategy triage chose,
+  and the same message then shows its progress and its verdict. It works
+  once: a second click, or one on any other result, changes nothing.
+
 A Correct confirms the verdict, which marks the investigation as one whose
 verdict people agree with, and puts it in memory, so later investigations
 of similar alerts see it as an example (see
 [`memory`](configuration.md#memory)). A later Wrong on a confirmed verdict
 takes the confirmation back, and the investigation out of memory.
+Investigate anyway clears the confirmation of the triage verdict, and so
+takes it out of memory too, since the full investigation gives a verdict
+of its own; the ratings of the triage verdict are kept.
 
 Every click is checked against the clicker's role at the time of the
-click: **Stop**, **Correct**, **Wrong** and **Stop watching** need the
-`responder` role, so a `viewer` cannot press them. Roles come from
-`slack.roleGroups` and `slack.roleUsers`, and a Slack user in neither is a
-`responder`; see [Roles](#roles). A refused user's groups are read again
-before the click is refused, so someone just added to a group can press at
-once. When a click cannot do anything, for example a Correct before there is a verdict, or a Stop on an
-investigation that has ended, Sidekick says so in a note only the clicker
-sees.
+click: **Stop**, **Correct**, **Wrong**, **Stop watching** and
+**Investigate anyway** need the `responder` role, so a `viewer` cannot
+press them. Roles come from `slack.roleGroups` and `slack.roleUsers`, and
+a Slack user in neither is a `responder`; see [Roles](#roles). A refused
+user's groups are read again before the click is refused, so someone just
+added to a group can press at once. When a click cannot do anything, for
+example a Correct before there is a verdict, or a Stop on an investigation
+that has ended, Sidekick says so in a note only the clicker sees.
 
 Ratings are counted in `sidekick_feedback_total`, by target (`verdict`)
 and rating (`correct` or `wrong`); a repeated click is not counted.
@@ -263,6 +275,11 @@ everything the first run saw:
   stopped it, posts a reply that says so, and the report stays as it was.
 - An investigation that was stopped still answers questions; the Stop
   applies only to the run it was pressed for.
+- A triage-only result has no investigation to ask about. A question to
+  it is not sent; the asker gets a note only they see that says so and
+  points to **Investigate anyway**. A question asked while triage was
+  still running waits, and is answered after a full investigation, if
+  someone asks for one.
 
 A question is redacted like event text before it is stored, and the model
 reads it as a request about what to look at: it cannot change the
@@ -326,12 +343,24 @@ outputs and credentials, is set only in the file.
 
 ### Roles
 
-Until web UI login arrives, roles come from the `slack` section:
-`roleGroups` maps Slack user groups to roles, and `roleUsers` maps single
-users, for teams without user groups. A user gets the highest role from
-either; anyone else is a `responder`. Each role can do everything the
-roles below it can: `viewer`, then `responder`, then `approver`, then
-`admin`.
+A Slack user's role comes from up to three places, and the highest one
+wins:
+
+- `roleGroups` in the `slack` section maps Slack user groups to roles.
+- `roleUsers` maps single users, for teams without user groups.
+- With [web UI login](web-ui.md) on (the `oidc` section), Sidekick reads
+  the user's email from Slack and, when a web UI user with the same email
+  has signed in at least once, that user's role applies in Slack too.
+  This needs the `users:read.email` scope, which the manifest asks for;
+  without it, Sidekick logs a warning and matches nobody by email.
+
+A user none of these gives a role is a `responder`. A user matched by
+email gets the web UI user's role even when it is `viewer`: a Slack user
+who signs in to the web UI as a viewer loses the `responder` default in
+Slack, and can no longer give feedback or ask follow-ups there, unless
+`roleGroups` or `roleUsers` gives them more. Each role can
+do everything the roles below it can: `viewer`, then `responder`, then
+`approver`, then `admin`.
 
 ```yaml
 slack:
@@ -342,9 +371,11 @@ slack:
 ```
 
 Sidekick reads a user's groups with `usergroups.users.list`, one call per
-group in `roleGroups`, and keeps them for a day. When someone is refused
-for their role, it reads their groups again at once, so a person just
-added to a group does not wait.
+group in `roleGroups`, and their email with `users.info`, and keeps both
+for a day; the matched web UI user's role is read fresh every time. When
+someone is refused for their role, it reads their groups and email again
+at once, so a person just added to a group, or who just signed in to the
+web UI, does not wait.
 
 ## Output keys
 

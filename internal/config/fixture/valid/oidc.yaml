@@ -1,0 +1,26 @@
+# Web UI login through an OIDC provider.
+server:
+  publicURL: https://sidekick.example.com
+
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default
+
+oidc:
+  issuer: https://acme.okta.com
+  clientID: sidekick
+  clientSecret: { name: sidekick-oidc, key: clientSecret }
+  scopes: [groups]
+  roles:
+    admin: [sre-admins]
+    approver: [oncall-leads]
+    responder: [engineering]
+    viewer: ["*"]

@@ -2,9 +2,13 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
+	"github.com/google/uuid"
+
 	"github.com/nourtalaat/sidekick/internal/auth"
+	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
 // Authenticator finds the caller of an API request.
@@ -14,4 +18,12 @@ type Authenticator interface {
 	// they are not valid, and auth.ErrCSRF when a request that changes
 	// something lacks the session's CSRF token.
 	Authenticate(r *http.Request) (auth.Principal, error)
+}
+
+// TokenManager creates, lists and revokes API tokens. *auth.Service is
+// one.
+type TokenManager interface {
+	CreateToken(ctx context.Context, by auth.Principal, nt auth.NewToken) (string, db.ApiToken, error)
+	ListTokens(ctx context.Context) ([]db.ApiToken, error)
+	RevokeToken(ctx context.Context, by auth.Principal, id uuid.UUID) (db.ApiToken, error)
 }

@@ -1,0 +1,26 @@
+name: error-rate-alert
+description: An error rate monitor, such as the share of failed requests or 5xx responses, fired for a service.
+match:
+  alertNames: ["*Error*", "*error*", "*5xx*", "*5XX*", "*Failure*", "*failure*", "*Exception*", "*exception*"]
+  textPattern: "(?i)error rate|errors|5xx|exceptions|failure rate|failed requests"
+sources:
+  prefer: [signoz, k8s, github]
+first:
+  - Find the service, the endpoints and the status codes or error types that rose, and when the rise started.
+  - Check what changed in the 2 hours before the alert started, such as deploys, config changes and feature flags.
+  - Read the most common error messages in the logs, and find where they come from, the service itself or a dependency.
+  - Compare the error count with the request rate. A rate over very few requests is not a real rise.
+  - Check whether the errors are still rising now, or whether they already stopped.
+commonCauses:
+  - A deploy or config change with a bug, a missing setting or a wrong secret.
+  - A failing dependency, such as a database, a queue or a third-party API, often seen as timeouts or connection errors.
+  - Expired or changed credentials or certificates.
+  - Exhausted resources, such as memory, file handles or connection pools, or pods that restart.
+  - Bad input from a client, such as a new client version that sends requests the service rejects.
+falsePositiveSigns:
+  - Very few requests in the window, so a handful of errors gives a high rate.
+  - The errors are client errors, such as 4xx answers to bots or scanners, that the monitor counts as failures.
+  - The errors come from one known noisy client or a health check, and users are not affected.
+verdictHints:
+  truePositive: Name the error that rose and where it comes from, and put a rollback first when a change caused it.
+  falsePositive: Propose a minimum request count, counting only server errors, or leaving out the noisy client or endpoint.

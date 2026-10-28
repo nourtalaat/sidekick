@@ -1,0 +1,25 @@
+# Anyone with a Google account can sign in through Google's issuer, so "*"
+# is refused there even for viewer.
+server:
+  publicURL: https://sidekick.example.com
+
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default
+
+oidc:
+  issuer: https://accounts.google.com
+  clientID: sidekick.apps.googleusercontent.com
+  clientSecret: { name: sidekick-oidc, key: clientSecret }
+  groupsClaim: sidekick_groups
+  roles:
+    admin: [sre-admins@example.com]
+    viewer: ["*"]

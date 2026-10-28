@@ -1,0 +1,17 @@
+# Login needs server.publicURL for the callback, and at least one role.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default
+
+oidc:
+  issuer: http://127.0.0.1:5556/dex
+  clientID: sidekick
+  clientSecret: { name: sidekick-oidc, key: clientSecret }
