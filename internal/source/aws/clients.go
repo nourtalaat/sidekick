@@ -5,11 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudtrail"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/service/eks"
+	"github.com/aws/aws-sdk-go-v2/service/health"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/nourtalaat/sidekick/internal/awsauth"
@@ -141,6 +146,45 @@ func (s *Source) cloudTrail(t target) *cloudtrail.Client {
 	})
 }
 
+// cloudWatch returns a CloudWatch client for the call's account and
+// Region.
+func (s *Source) cloudWatch(t target) *cloudwatch.Client {
+	return cloudwatch.NewFromConfig(s.base, func(o *cloudwatch.Options) {
+		o.Region = t.region
+		o.Credentials = t.account.creds
+		o.BaseEndpoint = endpoint(s.apis.cloudWatch)
+	})
+}
+
+// eks returns an EKS client for the call's account and Region.
+func (s *Source) eks(t target) *eks.Client {
+	return eks.NewFromConfig(s.base, func(o *eks.Options) {
+		o.Region = t.region
+		o.Credentials = t.account.creds
+		o.BaseEndpoint = endpoint(s.apis.eks)
+	})
+}
+
+// ecs returns an ECS client for the call's account and Region.
+func (s *Source) ecs(t target) *ecs.Client {
+	return ecs.NewFromConfig(s.base, func(o *ecs.Options) {
+		o.Region = t.region
+		o.Credentials = t.account.creds
+		o.BaseEndpoint = endpoint(s.apis.ecs)
+	})
+}
+
+// health returns an AWS Health client for the call's account. The Health
+// API is global: it answers in one Region of each partition, for every
+// Region.
+func (s *Source) health(t target) *health.Client {
+	return health.NewFromConfig(s.base, func(o *health.Options) {
+		o.Region = healthRegion(t.region)
+		o.Credentials = t.account.creds
+		o.BaseEndpoint = endpoint(s.apis.health)
+	})
+}
+
 // newAccounts returns the accounts of the config by ID: an account with a
 // role gets that role's credentials, assumed through client with
 // Sidekick's own; any other gets Sidekick's own.
@@ -159,4 +203,17 @@ func newAccounts(accounts []Account, own awssdk.CredentialsProvider, client *sts
 	}
 
 	return out
+}
+
+// healthRegion returns the Region the AWS Health API of region's partition
+// answers in.
+func healthRegion(region string) string {
+	switch {
+	case strings.HasPrefix(region, "cn-"):
+		return "cn-northwest-1"
+	case strings.HasPrefix(region, "us-gov-"):
+		return "us-gov-west-1"
+	default:
+		return "us-east-1"
+	}
 }
