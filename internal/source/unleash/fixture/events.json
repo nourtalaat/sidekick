@@ -1,0 +1,45 @@
+{
+  "events": [
+    {
+      "id": 40112,
+      "createdAt": "2026-05-04T09:58:00.000Z",
+      "type": "feature-environment-enabled",
+      "createdBy": "ada@example.com",
+      "createdByUserId": 7,
+      "environment": "production",
+      "project": "shop",
+      "featureName": "new-checkout",
+      "data": null,
+      "preData": null,
+      "tags": [{ "type": "simple", "value": "checkout" }],
+      "label": "Flag enabled",
+      "summary": "**ada@example.com** enabled **[new-checkout](https://unleash.example.com/projects/shop/features/new-checkout)** in *production*"
+    },
+    {
+      "id": 40107,
+      "createdAt": "2026-05-04T09:30:00.000Z",
+      "type": "feature-strategy-update",
+      "createdBy": "deploy-bot",
+      "createdByUserId": null,
+      "environment": "production",
+      "project": "shop",
+      "featureName": "dark-mode",
+      "data": {
+        "id": "8a6c1a0e-2e61-4f3c-9a3f-0a2f5c9d1e11",
+        "name": "flexibleRollout",
+        "constraints": [],
+        "parameters": { "rollout": "50", "stickiness": "default", "groupId": "dark-mode" }
+      },
+      "preData": {
+        "id": "8a6c1a0e-2e61-4f3c-9a3f-0a2f5c9d1e11",
+        "name": "flexibleRollout",
+        "constraints": [],
+        "parameters": { "rollout": "10", "stickiness": "default", "groupId": "dark-mode" }
+      },
+      "tags": [],
+      "label": "Strategy updated",
+      "summary": "**deploy-bot** updated the strategy *flexibleRollout* of **[dark-mode](https://elsewhere.example.com/dark-mode)** in *production*"
+    }
+  ],
+  "total": 2
+}

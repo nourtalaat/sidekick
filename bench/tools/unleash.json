@@ -1,0 +1,70 @@
+{
+  "tools": [
+    {
+      "name": "list_flag_changes",
+      "description": "List the changes to feature flags in one Unleash project and environment in a time range, newest first, from Unleash's audit log: when, which flag, what was done, who did it, the summary of the change, the comment left with it, and a link. Use it to check whether someone turned a flag on or off, changed its targeting or rolled it out around the time a problem started. Give flag to see one flag only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "environment": {
+            "type": "string",
+            "description": "The environment key, for example production. It may be left out when Sidekick reads only one environment of the project."
+          },
+          "flag": {
+            "type": "string",
+            "description": "Only changes to the flag with this key. Leave it out for every flag."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most changes to return, 1 to 100. Default 20.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "project": {
+            "type": "string",
+            "description": "The project key. It may be left out when Sidekick reads only one project."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only changes at or after this time. The range may be at most 7 days long. In RFC 3339 form, for example 2026-05-04T10:00:00Z.",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "description": "Only changes before this time. Default: now. In RFC 3339 form, for example 2026-05-04T10:00:00Z.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "since"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_flag",
+      "description": "Get one feature flag's current state in one Unleash environment: whether it is on, how many targeting rules and individual targets it has, what it serves when on and no rule matches, what it serves when off, and when it last changed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "environment": {
+            "type": "string",
+            "description": "The environment key, for example production. It may be left out when Sidekick reads only one environment of the project."
+          },
+          "flag": {
+            "type": "string",
+            "description": "The flag key, for example new-checkout."
+          },
+          "project": {
+            "type": "string",
+            "description": "The project key. It may be left out when Sidekick reads only one project."
+          }
+        },
+        "required": [
+          "flag"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}
