@@ -22,9 +22,6 @@ const (
 	pathEventDetails = "/service/AWSHealth_20160804/operation/DescribeEventDetails"
 )
 
-// targetDescribeServices is the X-Amz-Target of ECS DescribeServices.
-const targetDescribeServices = "AmazonEC2ContainerServiceV20141113.DescribeServices"
-
 // Console links of the tests.
 const (
 	cloudWatchConsole = "https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#"
