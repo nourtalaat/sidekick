@@ -69,8 +69,10 @@ func New(opts Options) *Handler {
 }
 
 // Handle fills the list's columns of every investigation that lacks them,
-// oldest first, one batch at a time. A run that stops part way leaves only
-// fewer rows behind, so running the job again is safe.
+// oldest first, one batch at a time. A batch can fill fewer rows than its
+// size, because a row updated while the batch ran is left for the next one,
+// so the job stops only when a batch fills no row. A run that stops part
+// way leaves only fewer rows behind, so running the job again is safe.
 func (h *Handler) Handle(ctx context.Context, job db.Job) error {
 	queries := db.New(h.pool)
 
@@ -88,7 +90,7 @@ func (h *Handler) Handle(ctx context.Context, job db.Job) error {
 
 		total += n
 
-		if n < int64(h.batch) {
+		if n == 0 {
 			break
 		}
 	}

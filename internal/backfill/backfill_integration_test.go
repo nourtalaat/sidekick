@@ -3,9 +3,11 @@
 package backfill
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -53,6 +55,57 @@ func TestHandleFillsEveryBatch(t *testing.T) {
 			require.False(t, unlisted)
 
 			require.NoError(t, h.Handle(t.Context(), db.Job{}), "a second run changes nothing")
+			require.Equal(t, wantFilled, columns(t, pool))
+		})
+	}
+}
+
+func TestHandleKeepsGoingAfterAShortBatch(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		batch int32
+	}{
+		{name: "batches of two", batch: 2},
+		{name: "batches of three", batch: 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			pool := setup(t)
+
+			// A transaction that updates the oldest unfilled row and stays open
+			// makes the first batch wait on that row. When the transaction
+			// commits, the batch skips the row, so it fills fewer rows than its
+			// size while rows are still unfilled.
+			tx, err := pool.Begin(t.Context())
+			require.NoError(t, err)
+
+			t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+
+			_, err = tx.Exec(t.Context(), "UPDATE investigations SET status = status WHERE right(id::text, 2) = 'c1'")
+			require.NoError(t, err)
+
+			done := make(chan error, 1)
+
+			go func() {
+				done <- New(Options{Pool: pool, BatchSize: tt.batch}).Handle(t.Context(), db.Job{})
+			}()
+
+			require.Eventually(t, func() bool {
+				var waiting int
+
+				err := pool.QueryRow(t.Context(), "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'").Scan(&waiting)
+
+				return err == nil && waiting > 0
+			}, 10*time.Second, 20*time.Millisecond, "the first batch waits on the updated row")
+
+			require.NoError(t, tx.Commit(t.Context()))
+			require.NoError(t, <-done)
+
 			require.Equal(t, wantFilled, columns(t, pool))
 		})
 	}
