@@ -1,0 +1,100 @@
+.sk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sk-space-1);
+  padding: 0 var(--sk-space-3);
+  border: 1px solid;
+  border-radius: var(--sk-radius-full);
+  font: var(--sk-type-badge);
+  white-space: nowrap;
+}
+
+.sk-badge--verdict-real {
+  color: var(--sk-verdict-real-fg);
+  background: var(--sk-verdict-real-bg);
+  border-color: var(--sk-verdict-real-border);
+}
+
+.sk-badge--verdict-false {
+  color: var(--sk-verdict-false-fg);
+  background: var(--sk-verdict-false-bg);
+  border-color: var(--sk-verdict-false-border);
+}
+
+.sk-badge--verdict-unsure {
+  color: var(--sk-verdict-unsure-fg);
+  background: var(--sk-verdict-unsure-bg);
+  border-color: var(--sk-verdict-unsure-border);
+}
+
+.sk-badge--verdict-duplicate {
+  color: var(--sk-verdict-duplicate-fg);
+  background: var(--sk-verdict-duplicate-bg);
+  border-color: var(--sk-verdict-duplicate-border);
+}
+
+.sk-badge--verdict-known {
+  color: var(--sk-verdict-known-fg);
+  background: var(--sk-verdict-known-bg);
+  border-color: var(--sk-verdict-known-border);
+}
+
+.sk-badge--verdict-flapping {
+  color: var(--sk-verdict-flapping-fg);
+  background: var(--sk-verdict-flapping-bg);
+  border-color: var(--sk-verdict-flapping-border);
+}
+
+.sk-badge--status-success {
+  color: var(--sk-status-success-fg);
+  background: var(--sk-status-success-bg);
+  border-color: var(--sk-status-success-border);
+}
+
+.sk-badge--status-info {
+  color: var(--sk-status-info-fg);
+  background: var(--sk-status-info-bg);
+  border-color: var(--sk-status-info-border);
+}
+
+.sk-badge--status-warning {
+  color: var(--sk-status-warning-fg);
+  background: var(--sk-status-warning-bg);
+  border-color: var(--sk-status-warning-border);
+}
+
+.sk-badge--status-danger {
+  color: var(--sk-status-danger-fg);
+  background: var(--sk-status-danger-bg);
+  border-color: var(--sk-status-danger-border);
+}
+
+.sk-badge--status-neutral {
+  color: var(--sk-status-neutral-fg);
+  background: var(--sk-status-neutral-bg);
+  border-color: var(--sk-status-neutral-border);
+}
+
+.sk-spin {
+  animation: sk-spin 1s linear infinite;
+}
+
+@keyframes sk-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The label already says "Running"; with reduced motion the icon stops. */
+@media (prefers-reduced-motion: reduce) {
+  .sk-spin {
+    animation: none;
+  }
+}
+
+/* The border and the icon carry the badge without color. */
+@media (forced-colors: active) {
+  .sk-badge {
+    border-color: CanvasText;
+  }
+}

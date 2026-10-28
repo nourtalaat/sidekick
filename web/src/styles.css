@@ -11,12 +11,71 @@ body {
   font: var(--sk-type-body);
 }
 
-h1 {
-  margin: 0 0 var(--sk-space-2);
+h1,
+h2,
+h3 {
+  margin: 0;
+}
+
+a {
+  color: var(--sk-text-link);
+}
+
+/* One focus style for every interactive element, in both themes. */
+:focus-visible {
+  outline: 2px solid var(--sk-border-focus);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
+  }
+}
+
+.sk-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.sk-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-4);
+}
+
+.sk-page > p {
+  margin: 0;
+}
+
+/* The page title: the one Nunito heading of a screen. */
+.sk-page__title {
   font: var(--sk-type-h1);
   letter-spacing: var(--sk-tracking-h1);
 }
 
-.page {
+.sk-loading {
   padding: var(--sk-space-8) var(--sk-space-6);
+}
+
+.sk-skip-link {
+  position: absolute;
+  left: var(--sk-space-2);
+  top: var(--sk-space-2);
+  padding: var(--sk-space-2) var(--sk-space-4);
+  background: var(--sk-bg-surface);
+  border-radius: var(--sk-radius-full);
+  transform: translateY(-200%);
+}
+
+.sk-skip-link:focus {
+  transform: none;
+  z-index: 1;
 }
