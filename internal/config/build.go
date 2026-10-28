@@ -125,7 +125,7 @@ func buildEmbedder(ctx context.Context, reg *registry.Registry[model.Connector],
 	return embedder, settings[EmbeddingsName]
 }
 
-// Close closes thesources, the only instances that hold connections or
+// Close closes the sources, the only instances that hold connections or
 // child processes.
 func (in *Instances) Close() error {
 	var errs []error

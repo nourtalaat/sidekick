@@ -128,6 +128,17 @@ func NewEmptyURL(t testing.TB) string {
 	return server.createDatabase(t, "template0")
 }
 
+// NewVectorEmptyURL returns the URL of a new database on the Postgres with
+// pgvector that has no migrations applied, for tests of the migrate
+// commands with vector memory. The database is dropped when the test ends.
+func NewVectorEmptyURL(t testing.TB) string {
+	t.Helper()
+
+	vectorServer.setup(t, vectorKind)
+
+	return vectorServer.createDatabase(t, "template0")
+}
+
 // LoadFixture runs the SQL file at path, relative to the test's package
 // directory, for example "fixture/jobs.sql". A file may hold several
 // statements.

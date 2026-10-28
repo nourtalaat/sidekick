@@ -631,7 +631,11 @@ func (v *validator) checkVector() {
 
 	if dims > memory.MaxEmbeddingDimensions {
 		v.errs.add(joinPath(path, "dimensions"), "must be at most %d, the most pgvector's HNSW index holds; use a model that returns shorter vectors, or ask it for fewer dimensions", memory.MaxEmbeddingDimensions)
+
+		return
 	}
+
+	v.cfg.Memory.Vector.Dimensions = dims
 }
 
 // rejectEmbeddingConnector records that a connector under model.connectors
