@@ -110,3 +110,32 @@ LISTEN investigation_cancel;
 -- stop asked for.
 SELECT id FROM investigations
 WHERE id = ANY(@ids::uuid[]) AND cancel_requested_at IS NOT NULL;
+
+-- name: SetInvestigationStrategy :one
+-- SetInvestigationStrategy records the strategy triage chose for a running
+-- investigation, with its version and the budget that follows from it,
+-- when fence still owns the run. It returns no row when the fence is
+-- stale.
+UPDATE investigations
+SET strategy = @strategy, strategy_version = @strategy_version, budget = @budget
+WHERE id = @id AND fence = @fence AND status = 'running'
+RETURNING id;
+
+-- name: RestartTriagedInvestigation :one
+-- RestartTriagedInvestigation sets an investigation whose run ended with a
+-- triage-only result back to queued for a full run. The run number goes
+-- up, and how the last run ended is cleared: the verdict, the report, the
+-- stop flag and the confirmation of the triage verdict, so none of them
+-- carries over to the full run. started_at is cleared too, so the full
+-- run's wall time counts from when it starts. Feedback rows stay, as
+-- history of the earlier run. It returns no row for any other
+-- investigation, so a second click changes nothing.
+UPDATE investigations
+SET status = 'queued', run = run + 1,
+    verdict = NULL, confidence = NULL, report = NULL, stop_reason = NULL,
+    started_at = NULL, finished_at = NULL,
+    cancel_requested_at = NULL, cancel_requested_by = NULL, cancel_requested_by_slack_user = NULL,
+    confirmed_verdict = NULL, confirmed_cause = NULL, confirmed_by = NULL, confirmed_by_slack_user = NULL,
+    confirmed_at = NULL
+WHERE id = @id AND status = 'final' AND stop_reason = 'triage'
+RETURNING *;

@@ -43,6 +43,10 @@ const testModel = "claude-opus-5-5"
 // stoppedAt is when the clock stands still for options.stoppedTime.
 var stoppedAt = time.Date(2026, 10, 26, 14, 2, 5, 0, time.UTC)
 
+// testTriageConnector names the connector of the triage role, when a test
+// sets one.
+const testTriageConnector = "cheap"
+
 // testWorker is the locked_by value of jobs the tests claim by hand.
 const testWorker = "test-worker"
 
@@ -78,6 +82,9 @@ type options struct {
 	// route is the payments route's settings, and daily the daily caps.
 	route Route
 	daily DailyCaps
+	// triageTurns, when set, give the investigation a triage role filled
+	// by a scripted connector of its own, cheap, that answers with them.
+	triageTurns []modeltest.Turn
 }
 
 // harness is a Handler with a scripted connector and a fake signoz source
@@ -89,6 +96,8 @@ type harness struct {
 	conn     *modeltest.Connector
 	spans    *tracetest.SpanRecorder
 	registry *prometheus.Registry
+	// triage is the triage connector, when options.triageTurns are set.
+	triage *modeltest.Connector
 }
 
 func setup(t *testing.T, o options) *harness {
@@ -124,6 +133,17 @@ func setup(t *testing.T, o options) *harness {
 
 	if o.stoppedTime {
 		h.handler.now = func() time.Time { return stoppedAt }
+	}
+
+	if len(o.triageTurns) > 0 {
+		h.triage = modeltest.New(t, model.Capabilities{ToolCalling: true}, o.triageTurns...)
+		h.triage.ExpectAllUsed()
+		h.handler.opts.Connectors[testTriageConnector] = Connector{Connector: h.triage}
+
+		_, err = pool.Exec(t.Context(),
+			`UPDATE investigations SET connectors = connectors || jsonb_build_object('triage', jsonb_build_object('connector', $1::text)) WHERE id = $2`,
+			testTriageConnector, testInvestigation)
+		require.NoError(t, err)
 	}
 
 	return h

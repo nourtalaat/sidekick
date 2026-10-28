@@ -36,6 +36,34 @@ The model uses the connector that `model.roles.investigate` names, or the
 route's own `roles.investigate`. A call that fails because the provider is
 busy or rate limited is repeated up to the connector's `retries`.
 
+## Triage
+
+When the route has a `triage` role, in `model.roles` or the route's own
+`roles`, a cheaper model takes a first look before the investigation. It
+sees the event group, the list of strategies and which strategies' `match`
+fits the first event, and answers with one tool call, `submit_triage`:
+
+- **`investigate: true`** with a strategy: the investigation runs with
+  that strategy instead of the route's. Where the strategy sets a lower
+  budget than the investigation has, the lower one applies; choosing a
+  strategy never raises a budget.
+- **`investigate: false`**: the investigation ends at once with the
+  triage's verdict, which can only be `duplicate`, `known_issue` or
+  `flapping`, marked "triage only". In Slack, the message has an
+  **Investigate anyway** button that starts the full investigation (see
+  [Buttons](slack.md#buttons)).
+
+Triage never calls an alert a real issue or a false alarm. An answer that
+gives any other verdict, names a strategy that does not exist, or is no
+`submit_triage` call at all is not used: the full investigation runs with
+the route's strategy, and the steps record why. The same happens when the
+triage connector is no longer configured or the model refuses the request.
+The triage model's tokens and cost count toward the investigation's
+budgets, and the connector must be able to call tools.
+
+Without a `triage` role, investigations start with the route's strategy, as
+before.
+
 ## Tools
 
 The model sees the built-in tools and the tools of the route's sources:
@@ -92,9 +120,10 @@ either.
 | `budget` | A budget ran out: tokens, tool calls, time or cost, or a daily cap was reached. | Not sure yet |
 | `error` | The model refused the request for good, for example because it was too long, or the job failed on every attempt. | Could not finish |
 | `cancelled` | A responder pressed Stop. | Not sure yet |
+| `triage` | Triage found that no full investigation is needed. | Triage's: Duplicate, Known issue or Flapping |
 
-The first three end in status `final`, `error` ends in status `failed`, and
-`cancelled` in status `cancelled`.
+`submitted`, `no_verdict`, `budget` and `triage` end in status `final`,
+`error` ends in status `failed`, and `cancelled` in status `cancelled`.
 When the investigation ends without an accepted report, its report holds
 the findings recorded with `record_finding` and what was checked.
 
@@ -110,7 +139,8 @@ every step, so a restarted investigation goes on counting.
 - **`maxToolCalls`** counts the calls to source tools. A call past the
   limit is not run, and the model is told so.
 - **`maxWallTime`** counts from when the investigation first started,
-  including any time a restart took.
+  including any time a restart took. After **Investigate anyway** it
+  counts from when the full investigation starts.
 - **`maxCostUSD`** counts the cost of the model calls, from the price
   table.
 

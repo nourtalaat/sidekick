@@ -25,6 +25,17 @@ const (
 	// kindInbox delivers what arrived while the investigation ran, such as
 	// new events in its group and recoveries.
 	kindInbox = "inbox"
+	// kindTriagePrompt is the request of triage, kindTriageTurn the triage
+	// model's answer, and kindTriageResult what Sidekick made of it: a full
+	// investigation with a strategy, or a triage-only result. They come
+	// before the prompt and are not part of the investigation's
+	// conversation.
+	kindTriagePrompt = "triage_prompt"
+	kindTriageTurn   = "triage_turn"
+	kindTriageResult = "triage_result"
+	// kindTriageOverride records that a responder asked for a full
+	// investigation after a triage-only result.
+	kindTriageOverride = "triage_override"
 )
 
 // The values of steps.status.
@@ -108,14 +119,26 @@ type history struct {
 	// turn, or -1, and finalBudget the budget it names.
 	finalNote   int
 	finalBudget string
+	// prompt is the index in steps of the prompt, or -1 before it.
+	prompt int
+	// triage holds the triage steps.
+	triage triageSteps
 }
 
 // add appends a saved step and adds it to the conversation.
 func (h *history) add(s db.Step) error {
 	switch s.Kind {
+	case kindTriagePrompt, kindTriageTurn, kindTriageResult, kindTriageOverride:
+		if h.prompt >= 0 {
+			return fmt.Errorf("step %d: a triage step after the prompt", s.Seq)
+		}
+
+		if err := h.triage.add(len(h.steps), s); err != nil {
+			return fmt.Errorf("step %d: %w", s.Seq, err)
+		}
 	case kindPrompt:
-		if len(h.steps) > 0 {
-			return fmt.Errorf("step %d: a prompt after the first step", s.Seq)
+		if h.prompt >= 0 {
+			return fmt.Errorf("step %d: a second prompt", s.Seq)
 		}
 
 		var p storedPrompt
@@ -129,8 +152,9 @@ func (h *history) add(s db.Step) error {
 		}
 
 		h.req = req
+		h.prompt = len(h.steps)
 	default:
-		if len(h.steps) == 0 {
+		if h.prompt < 0 {
 			return errNoPrompt
 		}
 
@@ -245,13 +269,18 @@ func (h *history) finalTurnTaken() bool {
 	return h.finalNote >= 0 && h.lastTurn > h.finalNote
 }
 
-// tokens returns the tokens of every model turn: input, including those
-// read from or written to the prompt cache, and output.
+// prompted reports whether the prompt of the investigation is saved.
+func (h *history) prompted() bool {
+	return h.prompt >= 0
+}
+
+// tokens returns the tokens of every model turn, triage's included: input,
+// including those read from or written to the prompt cache, and output.
 func (h *history) tokens() int64 {
 	var n int64
 
 	for _, s := range h.steps {
-		if s.Kind != kindModelTurn {
+		if s.Kind != kindModelTurn && s.Kind != kindTriageTurn {
 			continue
 		}
 
@@ -276,7 +305,10 @@ func (h *history) count(match func(db.Step) bool) int {
 
 // newHistory returns the history of the saved steps, in seq order.
 func newHistory(steps []db.Step) (*history, error) {
-	h := &history{calls: map[string]model.ToolCall{}, results: map[string]db.Step{}, lastTurn: -1, finalNote: -1}
+	h := &history{
+		calls: map[string]model.ToolCall{}, results: map[string]db.Step{}, lastTurn: -1, finalNote: -1, prompt: -1,
+		triage: triageSteps{prompt: -1, turn: -1, result: -1, override: -1},
+	}
 
 	for _, s := range steps {
 		if int(s.Seq) != len(h.steps) {

@@ -105,7 +105,7 @@ func (r *run) save(ctx context.Context, s newStep) (db.Step, error) {
 			return fmt.Errorf("insert step %d: %w", step.Seq, err)
 		}
 
-		if s.kind == kindModelTurn {
+		if s.kind == kindModelTurn || s.kind == kindTriageTurn {
 			if err := r.addSpend(ctx, tx, s); err != nil {
 				return fmt.Errorf("step %d: %w", step.Seq, err)
 			}
@@ -115,7 +115,7 @@ func (r *run) save(ctx context.Context, s newStep) (db.Step, error) {
 			return fmt.Errorf("step %d: %w", step.Seq, err)
 		}
 
-		if s.kind != kindPrompt && !hasLine {
+		if s.kind != kindPrompt && s.kind != kindTriagePrompt && !hasLine {
 			return nil
 		}
 

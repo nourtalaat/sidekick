@@ -1094,8 +1094,8 @@ A strategy file looks like this. Unknown keys are errors, as in
 ```yaml
 name: latency-alert                # required; lower-case letters, digits and "-"
 description: A latency monitor fired for an HTTP or RPC service.   # required
-match:                             # the events the strategy fits; used to pick
-  alertNames: ["*Latency*"]        # a strategy in a later release
+match:                             # the events the strategy fits; triage is
+  alertNames: ["*Latency*"]        # told which strategies fit an event
   textPattern: "(?i)latency|slow"  # a regular expression
 sources:
   prefer: [signoz, k8s]            # sources to try first; unknown names are skipped
