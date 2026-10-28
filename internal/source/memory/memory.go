@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
+	mem "github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/source"
 	"github.com/nourtalaat/sidekick/internal/store/db"
@@ -58,9 +60,19 @@ type Config struct {
 // Source reads Sidekick's memory. It is safe for concurrent use.
 type Source struct {
 	db db.DBTX
+	// vectors adds the entries nearest in meaning to a search. It is set
+	// when vector memory is on, and nil otherwise.
+	vectors atomic.Pointer[mem.Vectors]
 }
 
 var _ source.Source = (*Source)(nil)
+
+// UseVectors makes searches merge the entries nearest in meaning with the
+// full-text matches. Call it once vector memory is set up; with nil, or
+// never, a search is full text only.
+func (s *Source) UseVectors(v *mem.Vectors) {
+	s.vectors.Store(v)
+}
 
 // Tools returns the source's tools. They never change, and every one only
 // reads.
@@ -109,12 +121,11 @@ func (s *Source) search(ctx context.Context, input json.RawMessage) (source.Resu
 	}
 
 	// TODO: [SK-41] search the active lessons too
-	rows, err := db.New(s.db).SearchMemory(ctx, db.SearchMemoryParams{
+	rows, err := mem.Search(ctx, s.db, mem.SearchParams{
 		Query:   in.Query,
 		Service: nonEmpty(in.Service),
 		Verdict: nonEmpty(in.Verdict),
-		MaxRows: maxResults,
-	})
+	}, maxResults, s.vectors.Load())
 	if err != nil {
 		return source.Result{}, fmt.Errorf("search memory: %w", err)
 	}

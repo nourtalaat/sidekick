@@ -1,0 +1,84 @@
+# An alert for a problem that a Linear issue already tracks, with no recent
+# change behind it. Linear is reached through its MCP server.
+# Generic alert strategy, known issue.
+id: known-issue-linear-export-timeout
+title: Report export timeouts that a Linear issue already tracks
+tags: [known-issue, linear, mcp]
+strategy: generic-alert
+now: 2026-09-21T13:40:00Z
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="ReportExportTimeouts"}'
+    alerts:
+      - status: firing
+        labels: { alertname: ReportExportTimeouts, service: report-exporter, env: prod, severity: warning }
+        annotations:
+          summary: report-exporter jobs time out
+          description: 6 export jobs of report-exporter hit the 10 minute limit in the last hour.
+        startsAt: 2026-09-21T13:12:00Z
+        fingerprint: b94a17d3e60c2f85
+sources:
+  linear:
+    tools: { snapshot: bench/tools/linear.json }
+    fixtures:
+      - tool: list_issues
+        respond:
+          text: |
+            1 issue matching
+            QC-1182 "Report exports over 50k rows time out", status Backlog, priority Medium (P3), label known-issue, team Platform
+              created 2026-08-27, updated 2026-09-18, assignee Mia
+              Planned fix: streaming export, scheduled for Q4.
+          evidence:
+            - { kind: ticket, title: QC-1182, url: "https://linear.example.com/quillcart/issue/QC-1182" }
+      - tool: get_issue
+        respond:
+          text: |
+            QC-1182 "Report exports over 50k rows time out"
+            Status Backlog, priority Medium (P3), labels known-issue, reports. Assignee Mia. Created 2026-08-27.
+            Description: Exports of more than about 50,000 rows build the whole file in memory and hit the 10 minute job limit.
+            Workaround: ask the customer to narrow the date range, or use the CSV export from the API. Fix: a streaming export, planned for Q4.
+          evidence:
+            - { kind: ticket, title: QC-1182, url: "https://linear.example.com/quillcart/issue/QC-1182" }
+      - tool: list_comments
+        respond:
+          text: |
+            3 comments on QC-1182
+            2026-09-02 Mia: Seen again for a large customer. Workaround sent.
+            2026-09-11 Omar: The alert fires about twice a week, always for exports over 50k rows.
+            2026-09-18 Mia: Streaming export design is reviewed, work starts in October.
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: "No commits since the requested time."
+          noData: true
+      - tool: list_workflow_runs
+        respond:
+          text: 'run 2208 deploy report-exporter 2026-09-09T10:14:51Z success. No deploy since.'
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: query_range
+        respond:
+          text: |
+            Export jobs of report-exporter, last hour
+            jobs finished 41, jobs timed out 6. The 6 timed out jobs each had between 52,000 and 140,000 rows. Jobs under 50,000 rows: 0 failed.
+          evidence:
+            - { kind: metric, title: report-exporter jobs, url: "https://prometheus.quillcart.example/graph?g0.expr=export_jobs" }
+default: no_data
+expected:
+  verdict: known_issue
+  rootCause:
+    summary: Exports of more than 50,000 rows hit the 10 minute limit. Issue QC-1182 tracks it, and nothing changed recently.
+    rubric:
+      - { id: ticket, text: "Names Linear issue QC-1182 as already tracking this problem", weight: 2, required: true }
+      - { id: size, text: "Says the failing exports are the large ones, over about 50,000 rows", weight: 1 }
+      - { id: nochange, text: "Says no recent deploy or change explains the alert", weight: 1 }
+  evidence:
+    - { citedURL: "https://linear.example.com/quillcart/issue/QC-1182" }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }

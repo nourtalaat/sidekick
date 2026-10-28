@@ -32,8 +32,26 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # The tests of vector memory run against this Postgres, which has the
+      # pgvector extension. Every other test uses the plain one above, so the
+      # suite keeps proving that Sidekick needs no extension with vector
+      # memory off. The image is pinned by digest.
+      pgvector:
+        image: pgvector/pgvector:pg16@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a
+        env:
+          POSTGRES_USER: sidekick
+          POSTGRES_PASSWORD: sidekick
+          POSTGRES_DB: sidekick_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U sidekick -d sidekick_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       SIDEKICK_TEST_DATABASE_URL: postgres://sidekick:sidekick@localhost:5432/sidekick_test?sslmode=disable
+      SIDEKICK_TEST_VECTOR_DATABASE_URL: postgres://sidekick:sidekick@localhost:5433/sidekick_test?sslmode=disable
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

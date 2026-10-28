@@ -122,7 +122,7 @@ func TestSync(t *testing.T) {
 			}
 
 			err := pgx.BeginFunc(t.Context(), pool, func(tx pgx.Tx) error {
-				return Sync(t.Context(), tx, tt.id)
+				return Sync(t.Context(), tx, tt.id, SyncOptions{})
 			})
 			require.NoError(t, err)
 

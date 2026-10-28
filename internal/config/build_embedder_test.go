@@ -37,10 +37,12 @@ func TestBuildEmbedder(t *testing.T) {
 			if !tt.wantEmbedder {
 				require.Nil(t, in.Embedder)
 				require.Zero(t, in.EmbedderSettings)
+				require.Zero(t, cfg.Memory.Vector.Dimensions)
 
 				return
 			}
 
+			require.Equal(t, 1024, cfg.Memory.Vector.Dimensions, "validation reads the dimensions for the migrations")
 			require.NotNil(t, in.Embedder)
 			require.Equal(t, 1024, in.Embedder.Dimensions())
 			require.Equal(t, tt.wantSettings, in.EmbedderSettings)

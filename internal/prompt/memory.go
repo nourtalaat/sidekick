@@ -31,6 +31,9 @@ const (
 	MatchServiceAlert MemoryMatch = "service_alert"
 	// MatchText: the alert's words were like this one's.
 	MatchText MemoryMatch = "text"
+	// MatchSimilar: vector memory found it near the alert in meaning, with
+	// few words in common.
+	MatchSimilar MemoryMatch = "similar"
 )
 
 // matchText is how the prompt describes each match.
@@ -38,6 +41,7 @@ var matchText = map[MemoryMatch]string{
 	MatchFingerprint:  "the same alert fingerprint",
 	MatchServiceAlert: "the same service and alert name",
 	MatchText:         "similar words",
+	MatchSimilar:      "a similar description",
 }
 
 // Example is a confirmed past investigation the prompt shows as an

@@ -42,7 +42,7 @@ Each header is either a plain value or a secret with an optional prefix:
 sources:
   linear:
     type: mcp
-    url: https://mcp.linear.app/mcp
+    url: https://mcp.linear.app/mcp/readonly
     headers:
       Authorization: { secret: { name: linear-mcp, key: apiKey }, prefix: "Bearer " }
 ```
@@ -69,7 +69,7 @@ sources:
 SigNoz Cloud and the self-hosted SigNoz MCP server both accept an API key
 in the `SIGNOZ-API-KEY` header. Create it under **Settings > Service
 Accounts** (only admins can). The Cloud server also needs your SigNoz
-instance URL in `X-SigNoz-URL`.
+instance URL in `X-SigNoz-URL`. [The SigNoz source](signoz.md) has the rest.
 
 ```yaml
 sources:
@@ -85,15 +85,16 @@ sources:
 
 Datadog's MCP server accepts a personal or service access token as a bearer
 token; use a service access token for Sidekick. Use the endpoint for your
-Datadog site; the one below is for US1. The service account needs the
-`mcp_read` permission, and an admin must turn on MCP access for the
-organization.
+Datadog site; the one below is for US1, and
+[The Datadog source](datadog.md) lists the others. The service account
+needs the `mcp_read` permission, and an admin must turn on MCP access for
+the organization.
 
 ```yaml
 sources:
   datadog:
     type: mcp
-    url: https://mcp.datadoghq.com/api/unstable/mcp-server/mcp
+    url: https://mcp.datadoghq.com/v1/mcp
     headers:
       Authorization: { secret: { name: datadog-mcp, key: token }, prefix: "Bearer " }
 ```
@@ -117,18 +118,20 @@ sources:
 
 For self-hosted Sentry, run `@sentry/mcp-server` with `--access-token` and
 `--host` in a sidecar that serves it over HTTP, and point a source with
-`transport: http` at the sidecar.
+`transport: http` at the sidecar. [The Sentry source](sentry.md) has the
+scopes and the rest.
 
 ### Linear
 
 Linear's server accepts a Linear API key, or an OAuth token you got some
-other way, as a bearer token.
+other way, as a bearer token. The `/mcp/readonly` path makes the server
+list only tools that read. [The Linear source](linear.md) has the details.
 
 ```yaml
 sources:
   linear:
     type: mcp
-    url: https://mcp.linear.app/mcp
+    url: https://mcp.linear.app/mcp/readonly
     headers:
       Authorization: { secret: { name: linear-mcp, key: apiKey }, prefix: "Bearer " }
 ```

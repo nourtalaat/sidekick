@@ -7,6 +7,10 @@
 // confirmation is taken back, all in the transaction that changes the
 // confirmation, so an investigation nobody confirmed never appears in
 // memory. An admin can disable an entry; a disabled entry never matches.
+//
+// With vector memory (memory.vector.enabled), each entry is also embedded,
+// by a job outside that transaction, and a search merges the entries
+// nearest in meaning with the full-text matches by reciprocal rank fusion.
 package memory
 
 import (
@@ -46,7 +50,8 @@ type Match struct {
 	Fingerprint   string
 	Service       string
 	AlertName     string
-	// Text holds the words of the event for the full-text tier.
+	// Text holds the words of the event for the full-text tier, and is
+	// what the vector tier embeds.
 	Text string
 }
 
@@ -63,14 +68,24 @@ func MatchOf(investigation uuid.UUID, e event.Event) Match {
 	}
 }
 
+// SyncOptions say what Sync does besides writing the entry.
+type SyncOptions struct {
+	// Embed enqueues an embed_memory job for the entry that is written, in
+	// the same transaction, so vector memory embeds it. Set it only when
+	// memory.vector.enabled is true.
+	Embed bool
+}
+
 // Sync makes the memory entry of the investigation with id match its
 // confirmation: a confirmed investigation gets its entry written or
 // updated, and the entry of one that is not confirmed is deleted. Both
 // queries decide by the investigation's confirmed verdict, so an entry is
 // never deleted while its investigation is confirmed, even when the
 // group's events are gone. Call it in the transaction that changes the
-// confirmation.
-func Sync(ctx context.Context, q db.DBTX, id uuid.UUID) error {
+// confirmation. With opts.Embed, a written entry also gets an embed_memory
+// job in that transaction, which embeds it outside the transaction; a
+// deleted entry takes its embedding with it, by cascade.
+func Sync(ctx context.Context, q db.DBTX, id uuid.UUID, opts SyncOptions) error {
 	queries := db.New(q)
 
 	written, err := queries.UpsertMemoryEntry(ctx, id)
@@ -79,6 +94,12 @@ func Sync(ctx context.Context, q db.DBTX, id uuid.UUID) error {
 	}
 
 	if written > 0 {
+		if opts.Embed {
+			if err := enqueueEmbed(ctx, q, id); err != nil {
+				return fmt.Errorf("embed the memory entry of investigation %s: %w", id, err)
+			}
+		}
+
 		return nil
 	}
 
@@ -94,7 +115,12 @@ func Sync(ctx context.Context, q db.DBTX, id uuid.UUID) error {
 // and alert name, then entries that share words with the event's text.
 // Within a tier, the newest confirmation comes first, or for the text tier
 // the best text-search rank. No entry appears twice.
-func Examples(ctx context.Context, q db.DBTX, m Match, limit int) ([]prompt.Example, error) {
+//
+// With vec, the text tier also has the entries nearest in meaning to the
+// event's text, and the two lists are merged by reciprocal rank fusion.
+// When the embeddings call fails, the tier is the full-text list alone and
+// a warning is logged; examples never fail because of vectors.
+func Examples(ctx context.Context, q db.DBTX, m Match, limit int, vec *Vectors) ([]prompt.Example, error) {
 	c := &collector{
 		left:    int32(min(max(limit, 0), MaxExamples)), //nolint:gosec // Capped at MaxExamples.
 		exclude: []uuid.UUID{m.Investigation},
@@ -125,12 +151,9 @@ func Examples(ctx context.Context, q db.DBTX, m Match, limit int) ([]prompt.Exam
 	}
 
 	if m.Text != "" && c.left > 0 {
-		rows, err := queries.ListSimilarMemory(ctx, db.ListSimilarMemoryParams{Text: m.Text, Exclude: c.exclude, MaxRows: c.left})
-		if err != nil {
-			return nil, fmt.Errorf("list entries with similar text: %w", err)
+		if err := c.textTier(ctx, q, m, vec); err != nil {
+			return nil, fmt.Errorf("list entries for the text tier: %w", err)
 		}
-
-		add(c, prompt.MatchText, rows)
 	}
 
 	return c.examples, nil
@@ -139,7 +162,7 @@ func Examples(ctx context.Context, q db.DBTX, m Match, limit int) ([]prompt.Exam
 // entryRow is a row of one of the memory list queries. They all select
 // the same columns.
 type entryRow interface {
-	db.ListMemoryByFingerprintRow | db.ListMemoryByServiceAlertRow | db.ListSimilarMemoryRow
+	db.ListMemoryByFingerprintRow | db.ListMemoryByServiceAlertRow | db.ListSimilarMemoryRow | db.ListNearestMemoryRow | db.SearchMemoryRow
 }
 
 // collector gathers the examples of each tier in turn.
@@ -152,24 +175,76 @@ type collector struct {
 	exclude []uuid.UUID
 }
 
+// textTier adds the entries that share words with the event's text, merged
+// with the entries nearest in meaning when vec is set.
+func (c *collector) textTier(ctx context.Context, q db.DBTX, m Match, vec *Vectors) error {
+	queries := db.New(q)
+
+	if vec == nil {
+		rows, err := queries.ListSimilarMemory(ctx, db.ListSimilarMemoryParams{Text: m.Text, Exclude: c.exclude, MaxRows: c.left})
+		if err != nil {
+			return fmt.Errorf("list entries with similar text: %w", err)
+		}
+
+		add(c, prompt.MatchText, rows)
+
+		return nil
+	}
+
+	rows, err := queries.ListSimilarMemory(ctx, db.ListSimilarMemoryParams{Text: m.Text, Exclude: c.exclude, MaxRows: fusionDepth})
+	if err != nil {
+		return fmt.Errorf("list entries with similar text: %w", err)
+	}
+
+	nearest := vec.Nearest(ctx, q, m.Text, NearestFilter{Exclude: c.exclude}, fusionDepth)
+
+	for _, f := range fuse(entriesOf(rows), entriesOf(nearest)) {
+		if c.left == 0 {
+			break
+		}
+
+		match := prompt.MatchSimilar
+		if f.inFirst {
+			match = prompt.MatchText
+		}
+
+		c.addEntry(match, f.row)
+	}
+
+	return nil
+}
+
+// addEntry adds one entry to c.
+func (c *collector) addEntry(match prompt.MemoryMatch, row matchRow) {
+	c.examples = append(c.examples, prompt.Example{
+		InvestigationID: row.InvestigationID.String(),
+		Match:           match,
+		Verdict:         row.Verdict,
+		Service:         deref(row.Service),
+		AlertName:       deref(row.AlertName),
+		Summary:         row.Summary,
+		Cause:           deref(row.Cause),
+		ConfirmedAt:     row.ConfirmedAt,
+	})
+	c.exclude = append(c.exclude, row.InvestigationID)
+	c.left--
+}
+
 // add adds the rows of one tier to c.
 func add[R entryRow](c *collector, match prompt.MemoryMatch, rows []R) {
 	for _, r := range rows {
-		row := db.ListMemoryByFingerprintRow(r)
-
-		c.examples = append(c.examples, prompt.Example{
-			InvestigationID: row.InvestigationID.String(),
-			Match:           match,
-			Verdict:         row.Verdict,
-			Service:         deref(row.Service),
-			AlertName:       deref(row.AlertName),
-			Summary:         row.Summary,
-			Cause:           deref(row.Cause),
-			ConfirmedAt:     row.ConfirmedAt,
-		})
-		c.exclude = append(c.exclude, row.InvestigationID)
-		c.left--
+		c.addEntry(match, matchRow(r))
 	}
+}
+
+// entriesOf returns rows of one of the list queries as a ranked list.
+func entriesOf[R entryRow](rows []R) ranked {
+	out := make(ranked, len(rows))
+	for i, r := range rows {
+		out[i] = matchRow(r)
+	}
+
+	return out
 }
 
 func deref[T any](p *T) T {

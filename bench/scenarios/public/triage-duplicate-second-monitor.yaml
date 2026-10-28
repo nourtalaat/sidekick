@@ -1,0 +1,63 @@
+# A second monitor for a problem that an open incident already covers. The event
+# says so, so triage can skip the full investigation; without triage, a full
+# investigation finds the incident in Linear. Generic alert strategy, duplicate.
+id: triage-duplicate-second-monitor
+title: Second checkout monitor that an open incident already covers
+tags: [triage, duplicate, incident, linear]
+strategy: generic-alert
+now: 2026-09-23T09:55:00Z
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="CheckoutErrorRatioHigh"}'
+    alerts:
+      - status: firing
+        labels: { alertname: CheckoutErrorRatioHigh, service: checkout-api, env: prod, severity: critical, incident: INC-3318 }
+        annotations:
+          summary: checkout-api error ratio above 5% for 5m
+          description: >-
+            Second monitor on the same signal as CheckoutApiErrorRateHigh. Incident INC-3318
+            (checkout payment errors) was opened at 09:48 for the same errors, and an
+            investigation of CheckoutApiErrorRateHigh is already running.
+        startsAt: 2026-09-23T09:52:00Z
+        fingerprint: 2fa6c18e94b05d73
+sources:
+  linear:
+    tools: { snapshot: bench/tools/linear.json }
+    fixtures:
+      - tool: list_issues
+        respond:
+          text: |
+            1 issue matching
+            INC-3318 "Checkout payment errors", status In Progress, priority Urgent, label incident, opened 2026-09-23T09:48:00Z, assignee Rhea
+              linked alerts: CheckoutApiErrorRateHigh, CheckoutErrorRatioHigh
+          evidence:
+            - { kind: ticket, title: INC-3318, url: "https://linear.example.com/quillcart/issue/INC-3318" }
+      - tool: get_issue
+        respond:
+          text: |
+            INC-3318 "Checkout payment errors", In Progress, Urgent, opened 2026-09-23T09:48:00Z, assignee Rhea
+            The payment provider returns 5xx for card payments. Linked alerts: CheckoutApiErrorRateHigh (09:46), CheckoutErrorRatioHigh (09:52).
+          evidence:
+            - { kind: ticket, title: INC-3318, url: "https://linear.example.com/quillcart/issue/INC-3318" }
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: query_range
+        respond:
+          text: |
+            Error ratio of checkout-api, 09:40 to 09:55
+            09:40 0.00, 09:45 0.02, 09:50 0.09, 09:55 0.11
+            All errors are on POST /v1/payments.
+default: no_data
+expected:
+  verdict: duplicate
+  rootCause:
+    summary: This monitor watches the same errors as CheckoutApiErrorRateHigh, and incident INC-3318 already covers them.
+    rubric:
+      - { id: incident, text: "Names incident INC-3318 as already covering this alert", weight: 2, required: true }
+      - { id: same, text: "Says this alert is a second monitor for the same problem as CheckoutApiErrorRateHigh", weight: 1 }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }

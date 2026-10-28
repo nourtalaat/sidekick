@@ -27,6 +27,12 @@ const compareArgs = 2
 // `sidekick bench judge-check` reads by default.
 const defaultJudgeCases = "bench/judge-check"
 
+// validateFlags are the flags of `sidekick bench validate`.
+type validateFlags struct {
+	configPath string
+	scenarios  string
+}
+
 // judgeCheckFlags are the flags of `sidekick bench judge-check`.
 type judgeCheckFlags struct {
 	configPath   string
@@ -60,6 +66,7 @@ func newBenchCmd(regs config.Registries) *cobra.Command {
 	}
 
 	cmd.AddCommand(newBenchRunCmd(regs))
+	cmd.AddCommand(newBenchValidateCmd(regs))
 	cmd.AddCommand(newBenchJudgeCheckCmd(regs))
 	cmd.AddCommand(newBenchCompareCmd())
 
@@ -122,6 +129,40 @@ or Docker or the database fails, and 1 for anything else.`,
 	cmd.Flags().StringVar(&flags.out, "out", "", "write the results to this report.json")
 	cmd.Flags().StringVar(&flags.junit, "junit", "", "write the results to this JUnit XML file")
 	cmd.Flags().StringVar(&flags.markdown, "markdown", "", "write a Markdown summary, for a pull request comment, to this file")
+
+	if err := cmd.MarkFlagRequired("scenarios"); err != nil {
+		panic(fmt.Sprintf("mark flag required: %v", err))
+	}
+
+	return cmd
+}
+
+// newBenchValidateCmd builds `sidekick bench validate`.
+func newBenchValidateCmd(regs config.Registries) *cobra.Command {
+	var flags validateFlags
+
+	cmd := &cobra.Command{
+		Use:   "validate --scenarios <file or directory>",
+		Short: "Check benchmark scenario files without running them",
+		Long: `Check each benchmark scenario the way bench run checks them before it runs
+anything: the file format, the strategy, the intake adapter and its payload,
+and each mock source with its tool snapshot and fixtures. It prints every
+problem with its file and field.
+
+It calls no model, and needs neither Postgres nor Docker. The config file
+is read for its strategies and its model connectors, so it needs the
+secrets the connectors read, but nothing is sent to a provider.
+
+Exit status: 0 when every scenario is valid, 2 for bad flags, a bad config
+file or a bad scenario file.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return benchValidate(cmd, regs, flags)
+		},
+	}
+
+	addConfigFlag(cmd, &flags.configPath)
+	cmd.Flags().StringVarP(&flags.scenarios, "scenarios", "s", "", "a scenario file, or a directory of them (required)")
 
 	if err := cmd.MarkFlagRequired("scenarios"); err != nil {
 		panic(fmt.Sprintf("mark flag required: %v", err))
@@ -298,6 +339,36 @@ func benchRun(ctx context.Context, cmd *cobra.Command, regs config.Registries, f
 
 	if failed := bench.Failed(thresholds); len(failed) > 0 {
 		return &exitError{code: exitThresholdFailed, err: fmt.Errorf("%d of %d thresholds failed: %s", len(failed), len(thresholds), thresholdNames(failed))}
+	}
+
+	return nil
+}
+
+// benchValidate loads the scenarios and the config and runs the checks that
+// bench run makes before its first run, without a database or a model call.
+func benchValidate(cmd *cobra.Command, regs config.Registries, flags validateFlags) error {
+	ctx := cmd.Context()
+
+	scenarios, err := bench.LoadScenarios(flags.scenarios, bench.LoadOptions{})
+	if err != nil {
+		return &exitError{code: exitBadInput, err: fmt.Errorf("load the scenarios: %w", err)}
+	}
+
+	cfg, err := config.Load(ctx, flags.configPath, config.LoadOptions{Registries: regs})
+	if err != nil {
+		return configProblems(cmd, err)
+	}
+
+	if _, err := bench.New(ctx, scenarios, bench.Options{Config: cfg, Registries: regs}); err != nil {
+		if errors.Is(err, bench.ErrInvalidScenario) {
+			return &exitError{code: exitBadInput, err: err}
+		}
+
+		return configProblems(cmd, err)
+	}
+
+	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "scenarios checked: %d, problems: 0\n", len(scenarios)); err != nil {
+		return fmt.Errorf("print the result: %w", err)
 	}
 
 	return nil
