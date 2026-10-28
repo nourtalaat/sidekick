@@ -57,6 +57,13 @@ func TestTableCost(t *testing.T) {
 			wantOK: true,
 		},
 		{
+			name:   "Foundry model from another provider",
+			model:  "DeepSeek-V4-Pro",
+			usage:  model.Usage{InputTokens: 10_000, CacheReadTokens: 90_000, OutputTokens: 2_000},
+			want:   (10_000*1_740_000 + 90_000*145_000 + 2_000*3_480_000) / usd,
+			wantOK: true,
+		},
+		{
 			name:   "Gemini model with cached input",
 			model:  "gemini-3.8-flash",
 			usage:  model.Usage{InputTokens: 266, CacheReadTokens: 1_024, OutputTokens: 138},

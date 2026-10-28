@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -100,6 +101,14 @@ func TestAzureGenerate(t *testing.T) {
 			response: recorded{status: http.StatusOK, file: "chat_text.sse"},
 			wantBody: map[string]string{"model": `"prod-gpt"`, "max_completion_tokens": `2000`},
 			absent:   []string{"max_tokens"},
+		},
+		{
+			name:     "Foundry model on chat completions with max_tokens",
+			cfg:      changedAzure(azureKeyConfig("DeepSeek-V4-Flash"), func(c *AzureConfig) { c.MaxTokens = 4000 }),
+			path:     azureChatPath,
+			response: recorded{status: http.StatusOK, file: "chat_text.sse"},
+			wantBody: map[string]string{"model": `"prod-gpt"`, "max_tokens": `4000`},
+			absent:   []string{"max_completion_tokens", "tool_choice"},
 		},
 		{
 			name:     "deployment named after the model",
@@ -438,9 +447,15 @@ func TestAzureConfigValidate(t *testing.T) {
 		{
 			name:     "unknown model",
 			cfg:      azureKeyConfig("llama-4-maverick"),
-			wantErrs: []string{`model: "llama-4-maverick" is not an OpenAI model the azure provider knows`},
+			wantErrs: []string{`model: "llama-4-maverick" is not a model the azure provider knows`},
 		},
 		{name: "no model", cfg: azureKeyConfig(""), wantErrs: []string{"model: required"}},
+		{name: "Foundry model", cfg: azureKeyConfig("DeepSeek-V4-Pro")},
+		{
+			name:     "effort on a Foundry model",
+			cfg:      changedAzure(azureKeyConfig("grok-4.7"), func(c *AzureConfig) { c.Effort = model.EffortHigh }),
+			wantErrs: []string{`effort: "high" is not supported by grok-4.7`},
+		},
 		{
 			name: "declared model",
 			cfg: changedAzure(azureKeyConfig("my-fine-tune"), func(c *AzureConfig) {
@@ -476,6 +491,74 @@ func TestAzureConfigValidate(t *testing.T) {
 			for _, want := range tt.wantErrs {
 				require.ErrorContains(t, err, want)
 			}
+		})
+	}
+}
+
+// TestAzureForcedToolChoiceOnFoundry checks that a Foundry model, which
+// is not known to honour a forced tool choice, rejects one before sending.
+func TestAzureForcedToolChoiceOnFoundry(t *testing.T) {
+	t.Parallel()
+
+	api := serve(t, azureChatPath)
+	c := newAzureTestConnector(t, api, azureKeyConfig("Kimi-K2.6"))
+
+	req := userText("hi")
+	req.ToolChoice = model.ToolChoice{Mode: model.ToolChoiceRequired, Name: "submit_verdict"}
+
+	_, err := c.Generate(t.Context(), req)
+	requireKind(t, err, model.ErrInvalid, 0)
+	require.ErrorIs(t, err, errForcedToolChoice)
+	require.Empty(t, api.Requests())
+}
+
+func TestAzureAPI(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		cfg  AzureConfig
+		want API
+	}{
+		{name: "OpenAI model", cfg: azureKeyConfig("gpt-6.1-sol"), want: APIResponses},
+		{name: "Foundry model", cfg: azureKeyConfig("grok-4.7"), want: APIChatCompletions},
+		{
+			name: "declared model",
+			cfg:  changedAzure(azureKeyConfig("my-model"), func(c *AzureConfig) { c.Declared = &DeclaredCapabilities{ToolCalling: true} }),
+			want: APIChatCompletions,
+		},
+		{name: "set", cfg: changedAzure(azureKeyConfig("grok-4.7"), func(c *AzureConfig) { c.API = APIResponses }), want: APIResponses},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tt.want, tt.cfg.api())
+		})
+	}
+}
+
+// TestFoundryModels checks the table: no Foundry model is assumed to
+// honour a forced tool choice, and only the DeepSeek models, whose tool
+// call turns need reasoning sent back, cannot be the investigate model.
+func TestFoundryModels(t *testing.T) {
+	t.Parallel()
+
+	for id, caps := range foundryModels {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+
+			if strings.HasPrefix(id, "DeepSeek-") {
+				require.ErrorIs(t, model.CheckRole(model.RoleInvestigate, caps), model.ErrNoToolCalling)
+			} else {
+				require.NoError(t, model.CheckRole(model.RoleInvestigate, caps))
+			}
+
+			require.False(t, caps.ToolChoice)
+			require.Positive(t, caps.ContextTokens)
+			require.Positive(t, caps.MaxOutputTokens)
+			require.NotContains(t, knownModels, id)
 		})
 	}
 }

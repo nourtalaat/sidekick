@@ -38,6 +38,129 @@
       }
     },
     {
+      "name": "query_metrics",
+      "description": "Read Azure Monitor platform metrics of one resource over a time range, such as Requests or CpuPercentage, optionally split by a dimension filter. Returns each series' dimensions and points, oldest first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "aggregation": {
+            "type": "string",
+            "description": "How points are aggregated. Default Average.",
+            "enum": [
+              "Average",
+              "Total",
+              "Minimum",
+              "Maximum",
+              "Count"
+            ]
+          },
+          "filter": {
+            "type": "string",
+            "description": "An OData dimension filter, passed to Azure Monitor as given, for example \"Instance eq '*'\" to split by instance."
+          },
+          "interval": {
+            "type": "string",
+            "description": "The time grain of the points. Default: the smallest that gives at most 120 points.",
+            "enum": [
+              "PT1M",
+              "PT5M",
+              "PT15M",
+              "PT30M",
+              "PT1H",
+              "PT6H",
+              "PT12H",
+              "P1D"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 50. Default 10.",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The metric names, for example [\"Requests\", \"Http5xx\"].",
+            "minItems": 1,
+            "maxItems": 10
+          },
+          "namespace": {
+            "type": "string",
+            "description": "The metric namespace, for example Microsoft.Web/sites. Default: the resource's own."
+          },
+          "resource": {
+            "type": "string",
+            "description": "The resource whose metrics to read. Its full resource ID, for example /subscriptions/\u003cid\u003e/resourceGroups/shop/providers/Microsoft.Web/sites/checkout."
+          },
+          "since": {
+            "type": "string",
+            "description": "The start of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: one hour before until.",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "description": "The end of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "resource",
+          "metrics"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_alerts",
+      "description": "List the Azure Monitor alerts of a subscription that started in a time range, newest first: severity, state, condition, rule, target resource, times and a portal link.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 100. Default 30.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "resource": {
+            "type": "string",
+            "description": "Only alerts on this resource. Its full resource ID, for example /subscriptions/\u003cid\u003e/resourceGroups/shop/providers/Microsoft.Web/sites/checkout."
+          },
+          "resourceGroup": {
+            "type": "string",
+            "description": "Only alerts on resources in this resource group."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only alerts that started at or after this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: 24 hours before until.",
+            "format": "date-time"
+          },
+          "state": {
+            "type": "string",
+            "description": "Only alerts whose condition is fired or resolved. Default any.",
+            "enum": [
+              "fired",
+              "resolved",
+              "any"
+            ]
+          },
+          "subscription": {
+            "type": "string",
+            "description": "The subscription ID. It may be left out when Sidekick reads only one subscription."
+          },
+          "until": {
+            "type": "string",
+            "description": "Only alerts that started before this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "list_changes",
       "description": "List what changed in a subscription in a time range, newest first, from its Activity Log: deployments, writes, deletes and actions on resources, with who made them and whether they failed.",
       "inputSchema": {
@@ -70,6 +193,56 @@
             "type": "string",
             "description": "Only changes before this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
             "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_resource_health",
+      "description": "Get the Resource Health of one resource: available, degraded or unavailable, why, and since when. Without resource, list the resources of the subscription that are not available, and the Azure service health events that affect it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "resource": {
+            "type": "string",
+            "description": "The resource to check. Leave it out to check the whole subscription. Its full resource ID, for example /subscriptions/\u003cid\u003e/resourceGroups/shop/providers/Microsoft.Web/sites/checkout."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only service health events updated at or after this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: 24 hours before until.",
+            "format": "date-time"
+          },
+          "subscription": {
+            "type": "string",
+            "description": "The subscription ID. It may be left out when Sidekick reads only one subscription."
+          },
+          "until": {
+            "type": "string",
+            "description": "Only service health events updated before this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_aks_cluster",
+      "description": "Get an AKS cluster: provisioning and power state, Kubernetes version, upgrade channel, and its node pools with their state, version, size and autoscaling. Without cluster, list the subscription's clusters with their state.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cluster": {
+            "type": "string",
+            "description": "The cluster's name. Leave it out to list the clusters."
+          },
+          "resourceGroup": {
+            "type": "string",
+            "description": "The cluster's resource group. Required with cluster."
+          },
+          "subscription": {
+            "type": "string",
+            "description": "The subscription ID. It may be left out when Sidekick reads only one subscription."
           }
         },
         "additionalProperties": false

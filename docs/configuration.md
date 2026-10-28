@@ -286,19 +286,36 @@ gpt-with-a-key:
   for local runs. The identity needs the Cognitive Services OpenAI User
   role on the resource. Otherwise the key in `apiKeySecret` is sent in the
   `api-key` header, read again on every call.
-- **Known models** are the OpenAI models of the `openai` provider, named by
-  their model ID in `model`, whatever the deployment is called. For any
-  other model, add a `capabilities` block like the `openai` one.
-- **API.** The Responses API is the default, as Microsoft recommends for
-  Azure OpenAI models; set `api: chat_completions` to use Chat Completions.
+- **Known models** are named by their model ID in `model`, whatever the
+  deployment is called:
+  - the OpenAI models of the `openai` provider;
+  - these Foundry models from other providers: `Kimi-K2.6`, `Kimi-K2.5`,
+    `grok-4.7`, `grok-4.6` and `grok-4.3`, which call tools, and
+    `DeepSeek-V4-Pro`, `DeepSeek-V4-Flash` and `DeepSeek-V3.2`, which
+    cannot be the `investigate` model. DeepSeek's thinking models fail a
+    tool call turn unless the reasoning of earlier turns is sent back, which
+    Sidekick does not do on Chat Completions; use them for `triage` or
+    `summarize`. Foundry does not say whether these models honour a forced
+    tool choice, so Sidekick does not force one; when the model ends a turn
+    without calling a tool, the investigation reminds it to call
+    `submit_verdict`. They take no `effort`. MAI-Thinking-1 is served under
+    another path (`/mai/v1`) and does not work with this provider.
+
+  For any other model, add a `capabilities` block like the `openai` one.
+- **API.** OpenAI models use the Responses API by default, as Microsoft
+  recommends; every other model uses Chat Completions. Set `api` to choose.
   Reasoning is kept by Sidekick, as for the `openai` provider, and is not
-  shared with OpenAI's own API.
+  shared with OpenAI's own API. Chat Completions does not carry reasoning
+  back, so models that return reasoning there start each turn without it.
 - **Thinking** is not accepted; use `effort`.
 - **Errors.** A prompt that Azure's content filter blocks, and a
   deployment that does not exist, fail the step without retries.
-- **Prices.** The shipped OpenAI prices apply, by `model`. They are the
-  prices of Global Standard deployments; Data Zone and Regional
-  deployments cost 10% more, so set them with `prices`.
+- **Prices.** The shipped OpenAI prices apply, by `model`, and the shipped
+  table also has DeepSeek-V4-Pro, DeepSeek-V4-Flash, Kimi-K2.6 and
+  Kimi-K2.5. They are the prices of Global Standard deployments;
+  Data Zone and Regional deployments cost 10% more, so set them with
+  `prices`. The Grok models and DeepSeek-V3.2 have no shipped price; set
+  one with `prices`, or their calls count as free in the budgets.
 
 #### The `bedrock` provider
 
@@ -798,7 +815,11 @@ The tools, as the model sees them with the source name `azure`:
 | Tool | Returns |
 |---|---|
 | `azure__query_logs` | The tables and rows of a KQL query on a Log Analytics workspace. |
+| `azure__query_metrics` | Azure Monitor platform metrics of one resource, optionally split by dimension. |
+| `azure__list_alerts` | Azure Monitor alerts that started in a range, with severity, state and target. |
 | `azure__list_changes` | Activity Log writes, deletes and actions: deployments and config changes, with who made them. |
+| `azure__get_resource_health` | The Resource Health of one resource, or the subscription's unavailable resources and Azure service health events. |
+| `azure__get_aks_cluster` | An AKS cluster's state, versions, upgrade channel and node pools, or the list of clusters. |
 
 How it behaves:
 
@@ -810,17 +831,19 @@ How it behaves:
   `subscriptions` lists one, a full `resource` ID, or a `workspace`. Any
   of them outside the config, or input that does not fit, such as a range
   longer than 7 days, is a tool error, and nothing is sent.
-- **Queries.** The KQL of `query_logs` goes to Log Analytics as the model
-  wrote it, so the identity's role assignments are what limit what can be
-  read. A query that calls `workspace()`, `app()`, `resource()`, `adx()`,
-  `arg()`, `cluster()` or `database()`, or uses `externaldata`, is refused
-  before it is sent, because those reach beyond the workspace.
-- **Results** are JSON with links to the workspace's logs or the Activity
-  Log in the Azure portal, which become evidence links in the report. Lists are
+- **Queries.** The KQL of `query_logs` and the dimension filter of
+  `query_metrics` go to Azure as the model wrote them, so the identity's
+  role assignments are what limit what can be read. A query that calls
+  `workspace()`, `app()`, `resource()`, `adx()`, `arg()`, `cluster()` or
+  `database()`, or uses `externaldata`, is refused before it is sent,
+  because those reach beyond the workspace.
+- **Results** are JSON with links to the workspace's logs, the resource's
+  metrics or health page, the alert, the Activity Log or the cluster in
+  the Azure portal, which become evidence links in the report. Lists are
   capped as [Azure source](sources/azure.md#limits) describes, and say
   when they were cut.
-- **No data.** A query that returns no rows, an empty list, and a
-  workspace Azure does not have, are reported as no data.
+- **No data.** A query that returns no rows, metrics without values, an
+  empty list, and a resource Azure does not have, are reported as no data.
 - **Errors.** A refused request, such as a query Log Analytics cannot
   parse or a permission the identity lacks, goes to the model as a tool
   error with Azure's message. A refused token, rate limits, server errors
@@ -1389,6 +1412,11 @@ In a JSON payload, every string is redacted, object keys included, and the
 result is still valid JSON. A string value under a key that names a secret,
 such as `password` or `Authorization`, is redacted as a whole. Text and tool
 results longer than 256 KiB are cut and marked as truncated.
+
+The IDs that locate a Slack or Teams message (the team, tenant, channel,
+message and thread IDs or timestamps, the sender's user ID and the Teams
+service URL) are stored as received, even when a rule matches them, because
+replies are sent to them. The message text is redacted like any other.
 
 ### `telemetry`
 
