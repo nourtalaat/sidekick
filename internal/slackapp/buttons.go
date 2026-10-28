@@ -42,11 +42,13 @@ const payloadField = "payload"
 
 // The notes the user who clicked sees, only to them.
 const (
-	noteDenied    = "Only responders can rate verdicts or stop investigations."
-	noteNoVerdict = "This investigation has no verdict to rate yet."
-	noteStopping  = "Stopping the investigation. The message shows what it found so far once it stops."
-	noteEnded     = "This investigation has ended already, or someone stopped it."
-	noteFailed    = "Sidekick could not record that click. Try again in a moment."
+	noteDenied     = "Only responders can rate verdicts, stop investigations or start a full investigation."
+	noteNoVerdict  = "This investigation has no verdict to rate yet."
+	noteStopping   = "Stopping the investigation. The message shows what it found so far once it stops."
+	noteEnded      = "This investigation has ended already, or someone stopped it."
+	noteAnyway     = "Starting a full investigation. The message shows its progress once it starts."
+	noteNotTriaged = "This investigation is not a triage-only result, or its full investigation has started already."
+	noteFailed     = "Sidekick could not record that click. Try again in a moment."
 )
 
 // errBadResponseURL is returned for a response URL that is not Slack's.
@@ -72,8 +74,9 @@ type ButtonsOptions struct {
 }
 
 // Buttons handles clicks on the buttons of Sidekick's messages: Correct
-// and Wrong store a rating of the verdict, and Stop stops the run. Every
-// click needs the responder role at the time of the click. It answers
+// and Wrong store a rating of the verdict, Stop stops the run, and
+// Investigate anyway starts a full investigation after a triage-only
+// result. Every click needs the responder role at the time of the click. It answers
 // interactions from Socket Mode as an InteractionHandler, and at
 // POST /slack/interactivity in events mode.
 type Buttons struct {
@@ -199,6 +202,8 @@ func (b *Buttons) HandleInteraction(ctx context.Context, cb slack.InteractionCal
 	switch action.ActionID {
 	case slackout.ActionStop:
 		note, err = b.stop(ctx, log, id, cb.User.ID)
+	case slackout.ActionInvestigateAnyway:
+		note, err = b.investigateAnyway(ctx, log, id)
 	case slackout.ActionVerdictCorrect:
 		note, err = b.rate(ctx, log, id, cb.User.ID, output.RatingCorrect)
 	default:
@@ -285,6 +290,36 @@ func (b *Buttons) stop(ctx context.Context, log *slog.Logger, id uuid.UUID, user
 	return noteStopping, nil
 }
 
+// investigateAnyway starts a full investigation of a triage-only result
+// and returns the note for the user.
+func (b *Buttons) investigateAnyway(ctx context.Context, log *slog.Logger, id uuid.UUID) (string, error) {
+	var started bool
+
+	err := pgx.BeginFunc(ctx, b.pool, func(tx pgx.Tx) error {
+		var err error
+
+		started, err = investigator.InvestigateAnyway(ctx, tx, id)
+		if err != nil {
+			return fmt.Errorf("start the full investigation: %w", err)
+		}
+
+		// TODO: [SK-18] audit the investigate-anyway click
+
+		return nil
+	})
+	if err != nil {
+		return "", fmt.Errorf("investigate anyway: %w", err)
+	}
+
+	log.InfoContext(ctx, "full investigation asked for", "started", started)
+
+	if !started {
+		return noteNotTriaged, nil
+	}
+
+	return noteAnyway, nil
+}
+
 // note posts text to the user who clicked, visible only to them, through
 // the interaction's response URL. A note that cannot be posted is logged
 // and dropped: the click itself has been handled.
@@ -339,7 +374,7 @@ func (b *Buttons) postNote(ctx context.Context, responseURL, text string) error 
 func ourAction(actions []*slack.BlockAction) (*slack.BlockAction, bool) {
 	for _, a := range actions {
 		switch a.ActionID {
-		case slackout.ActionVerdictCorrect, slackout.ActionVerdictWrong, slackout.ActionStop:
+		case slackout.ActionVerdictCorrect, slackout.ActionVerdictWrong, slackout.ActionStop, slackout.ActionInvestigateAnyway:
 			return a, true
 		}
 	}

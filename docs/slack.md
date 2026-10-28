@@ -38,6 +38,10 @@ thread and a link to the web UI come in later releases.
   link to the full report, because Slack does not notify anyone when a
   message is edited. This happens for every investigation, including "Not
   sure yet".
+- **A triage-only result**, when [triage](investigations.md#triage)
+  found that no full investigation is needed, shows the triage's verdict
+  (Duplicate, Known issue or Flapping) with "Triage only · No full
+  investigation ran".
 - **A run that could not finish** shows "Could not finish" with a yellow
   bar and what was checked, and gets a short reply too, so no message is
   left on "Investigating".
@@ -59,16 +63,23 @@ the sources returned.
   one changes the rating. The message then says who marked the verdict
   correct or wrong.
 
+- **Investigate anyway** is on a triage-only result, next to Correct and
+  Wrong. It starts the full investigation, with the strategy triage chose,
+  and the same message then shows its progress and its verdict. It works
+  once: a second click, or one on any other result, changes nothing.
+
 A Correct confirms the verdict, which marks the investigation as one whose
 verdict people agree with. A later Wrong on a confirmed verdict takes the
-confirmation back.
+confirmation back. Investigate anyway clears the confirmation of the triage
+verdict, since the full investigation gives a verdict of its own; the
+ratings of the triage verdict are kept.
 
 Every click is checked against the clicker's role at the time of the
-click: rating and stopping need the responder role. Until roles can be set
-for Slack users, every Slack user is a responder. When a click cannot do
-anything, for example a Correct before there is a verdict, or a Stop on an
-investigation that has ended, Sidekick says so in a note only the clicker
-sees.
+click: rating, stopping and Investigate anyway need the responder role.
+Until roles can be set for Slack users, every Slack user is a responder.
+When a click cannot do anything, for example a Correct before there is a
+verdict, or a Stop on an investigation that has ended, Sidekick says so in
+a note only the clicker sees.
 
 Ratings are counted in `sidekick_feedback_total`, by target (`verdict`)
 and rating (`correct` or `wrong`); a repeated click is not counted.

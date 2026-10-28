@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -41,8 +42,9 @@ import (
 
 // The investigations in fixture/investigations.sql.
 var (
-	finalInvestigation  = uuid.MustParse("0192d3a4-0000-7000-8000-0000000000c1")
-	queuedInvestigation = uuid.MustParse("0192d3a4-0000-7000-8000-0000000000c2")
+	finalInvestigation   = uuid.MustParse("0192d3a4-0000-7000-8000-0000000000c1")
+	queuedInvestigation  = uuid.MustParse("0192d3a4-0000-7000-8000-0000000000c2")
+	triagedInvestigation = uuid.MustParse("0192d3a4-0000-7000-8000-0000000000c3")
 )
 
 // stopWithin is how soon a stopped run must end.
@@ -143,6 +145,65 @@ func TestInteractivity(t *testing.T) {
 				t.Helper()
 
 				require.Equal(t, "U01STOP", *b.investigation(t, queuedInvestigation).CancelRequestedBySlackUser, "the first Stop is kept")
+			},
+		},
+		{
+			name:       "Investigate anyway starts a full investigation of a triage-only result",
+			send:       clickBy{user: "U01BEN", action: slackout.ActionInvestigateAnyway, id: triagedInvestigation},
+			wantStatus: http.StatusOK,
+			wantNotes:  []string{noteAnyway},
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				inv := b.investigation(t, triagedInvestigation)
+				require.Equal(t, investigator.StatusQueued, inv.Status)
+				require.EqualValues(t, 2, inv.Run)
+				require.Nil(t, inv.Verdict)
+				require.Nil(t, inv.StopReason)
+				require.Nil(t, inv.ConfirmedVerdict, "the confirmation of the triage verdict does not carry over")
+				require.Nil(t, inv.ConfirmedBySlackUser)
+				require.Nil(t, inv.ConfirmedAt)
+				require.Equal(t, 1, b.feedbackRows(t, triagedInvestigation), "the rating of the triage verdict stays as history")
+				require.Equal(t, []string{"investigate:0192d3a4-0000-7000-8000-0000000000b3"}, b.pendingInvestigateKeys(t, triagedInvestigation))
+			},
+		},
+		{
+			name:       "a second Investigate anyway changes nothing",
+			before:     []clickBy{{user: "U01BEN", action: slackout.ActionInvestigateAnyway, id: triagedInvestigation}},
+			send:       clickBy{user: "U01ANA", action: slackout.ActionInvestigateAnyway, id: triagedInvestigation},
+			wantStatus: http.StatusOK,
+			wantNotes:  []string{noteAnyway, noteNotTriaged},
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				require.EqualValues(t, 2, b.investigation(t, triagedInvestigation).Run)
+				require.Len(t, b.pendingInvestigateKeys(t, triagedInvestigation), 1)
+			},
+		},
+		{
+			name:       "Investigate anyway on a full investigation",
+			send:       clickBy{user: "U01BEN", action: slackout.ActionInvestigateAnyway, id: finalInvestigation},
+			wantStatus: http.StatusOK,
+			wantNotes:  []string{noteNotTriaged},
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				inv := b.investigation(t, finalInvestigation)
+				require.Equal(t, investigator.StatusFinal, inv.Status)
+				require.EqualValues(t, 1, inv.Run)
+			},
+		},
+		{
+			name:       "a viewer cannot start a full investigation",
+			role:       roles.Viewer,
+			send:       clickBy{user: "U01VIEW", action: slackout.ActionInvestigateAnyway, id: triagedInvestigation},
+			wantStatus: http.StatusOK,
+			wantNotes:  []string{noteDenied},
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				require.Equal(t, investigator.StatusFinal, b.investigation(t, triagedInvestigation).Status)
+				require.Empty(t, b.pendingInvestigateKeys(t, triagedInvestigation))
 			},
 		},
 		{
@@ -421,6 +482,31 @@ func (b *buttonsHarness) publishSeq(t *testing.T, id uuid.UUID) int64 {
 	require.NoError(t, b.pool.QueryRow(t.Context(), "SELECT seq FROM publish_states WHERE investigation_id = $1", id).Scan(&seq))
 
 	return seq
+}
+
+// feedbackRows counts the feedback rows of id.
+func (b *buttonsHarness) feedbackRows(t *testing.T, id uuid.UUID) int {
+	t.Helper()
+
+	var n int
+	require.NoError(t, b.pool.QueryRow(t.Context(), "SELECT count(*) FROM feedback WHERE investigation_id = $1", id).Scan(&n))
+
+	return n
+}
+
+// pendingInvestigateKeys returns the unique keys of the pending
+// investigate jobs of id.
+func (b *buttonsHarness) pendingInvestigateKeys(t *testing.T, id uuid.UUID) []string {
+	t.Helper()
+
+	rows, err := b.pool.Query(t.Context(),
+		"SELECT unique_key FROM jobs WHERE kind = 'investigate' AND status = 'pending' AND payload->>'investigation_id' = $1", id.String())
+	require.NoError(t, err)
+
+	keys, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	require.NoError(t, err)
+
+	return keys
 }
 
 // publishJobs counts the publish jobs.
