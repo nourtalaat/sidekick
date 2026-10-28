@@ -17,6 +17,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/event"
+	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/registry"
@@ -107,6 +108,7 @@ func (v *validator) run() {
 	v.checkRoutes()
 	v.checkBudgets()
 	v.checkReport()
+	v.checkMemory()
 	v.checkRedaction()
 	v.checkTelemetry()
 	v.checkWatch()
@@ -574,6 +576,12 @@ func (v *validator) checkReport() {
 	c := v.cfg.Report.MinFalsePositiveConfidence
 	if c != "" && !slices.Contains(knownConfidence, c) {
 		v.errs.add("report.minFalsePositiveConfidence", "unknown confidence %q%s", c, didYouMean(string(c), asStrings(knownConfidence)))
+	}
+}
+
+func (v *validator) checkMemory() {
+	if n := v.cfg.Memory.Examples; n < 1 || n > memory.MaxExamples {
+		v.errs.add("memory.examples", "must be between 1 and %d, got %d; set memory.enabled to false for none", memory.MaxExamples, n)
 	}
 }
 

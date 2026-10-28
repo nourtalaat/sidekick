@@ -91,6 +91,14 @@ VALUES
   ('2026-10-07 12:00:00+00', 'system', 'audit-2'),
   ('2026-10-23 12:00:00+00', 'system', 'audit-3');
 
+-- Memory entries: e1 and the disabled e2 are old; the newer one belongs to
+-- c1, an old investigation, and outlives it.
+INSERT INTO memory_entries (investigation_id, fingerprint, verdict, summary, confirmed_at, disabled)
+VALUES
+  ('0192d3a4-0000-7000-8000-0000000000e1', 'fp-1', 'true_positive', 'Old.', '2026-10-03 12:00:00+00', false),
+  ('0192d3a4-0000-7000-8000-0000000000e2', 'fp-2', 'false_positive', 'Old and disabled.', '2026-10-07 12:00:00+00', true),
+  ('0192d3a4-0000-7000-8000-0000000000c1', 'fp-1', 'true_positive', 'New.', '2026-10-23 12:00:00+00', false);
+
 -- Jobs: done jobs are kept 1 day and dead jobs 30 days.
 INSERT INTO jobs (kind, payload, unique_key, status, finished_at)
 VALUES

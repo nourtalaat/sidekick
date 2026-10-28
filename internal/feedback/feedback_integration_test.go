@@ -112,6 +112,13 @@ func TestRateVerdict(t *testing.T) {
 				require.NotNil(t, inv.ConfirmedAt)
 			}
 
+			entry := memoryEntry(t, pool, finalInvestigation)
+			if tt.confirmedBy == "" {
+				require.Nil(t, entry, "an unconfirmed investigation is not in memory")
+			} else {
+				require.Equal(t, &memoryRow{verdict: "true_positive", summary: "Errors after a deploy.", cause: "Deploy 4f2c1a"}, entry)
+			}
+
 			got, err := Verdicts(t.Context(), pool, inv)
 			require.NoError(t, err)
 			require.Equal(t, tt.ratings, got)

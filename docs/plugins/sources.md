@@ -95,8 +95,10 @@ func New(ctx context.Context, name string, cfg Config, deps registry.Deps) (sour
 send requests with, and `deps.Logger` is the structured logger.
 `deps.Metrics` is where the plugin registers its own Prometheus metrics,
 through `registry.RegisterOrExisting`, so several instances of the type
-share one collector; it is nil in tests that do not set it. Register the
-type in the package's `init` function:
+share one collector; it is nil in tests that do not set it. `deps.DB` is
+Sidekick's own database, for built-in sources that read Sidekick's data,
+such as the memory source; it is nil when `sidekick config validate`
+builds the source. Register the type in the package's `init` function:
 
 ```go
 func init() {

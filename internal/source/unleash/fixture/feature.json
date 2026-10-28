@@ -1,0 +1,71 @@
+{
+  "name": "new-checkout",
+  "type": "release",
+  "description": "Turns on the new checkout page.",
+  "project": "shop",
+  "stale": false,
+  "favorite": false,
+  "impressionData": false,
+  "enabled": true,
+  "createdAt": "2026-04-20T08:00:00.000Z",
+  "archived": false,
+  "archivedAt": null,
+  "lastSeenAt": "2026-05-04T09:59:30.000Z",
+  "createdBy": { "id": 7, "name": "Ada Lovelace", "imageUrl": "https://example.com/ada.png" },
+  "environments": [
+    {
+      "name": "development",
+      "enabled": true,
+      "type": "development",
+      "sortOrder": 100,
+      "variantCount": 0,
+      "strategies": [],
+      "variants": [],
+      "hasStrategies": false,
+      "hasEnabledStrategies": false
+    },
+    {
+      "name": "production",
+      "enabled": true,
+      "type": "production",
+      "sortOrder": 300,
+      "variantCount": 0,
+      "lastSeenAt": "2026-05-04T09:59:30.000Z",
+      "hasStrategies": true,
+      "hasEnabledStrategies": true,
+      "strategies": [
+        {
+          "id": "6d4f5a40-6b7c-4c3a-8d5e-4d2f7b8a9c01",
+          "name": "flexibleRollout",
+          "title": "Gradual rollout",
+          "disabled": false,
+          "featureName": "new-checkout",
+          "sortOrder": 0,
+          "segments": [],
+          "constraints": [],
+          "variants": [],
+          "parameters": { "rollout": "25", "stickiness": "default", "groupId": "new-checkout" }
+        },
+        {
+          "id": "6d4f5a40-6b7c-4c3a-8d5e-4d2f7b8a9c02",
+          "name": "userWithId",
+          "title": null,
+          "disabled": false,
+          "featureName": "new-checkout",
+          "sortOrder": 1,
+          "segments": [3],
+          "constraints": [],
+          "variants": [],
+          "parameters": { "userIds": "user-1,user-2,user-3" }
+        }
+      ],
+      "variants": []
+    }
+  ],
+  "tags": [{ "type": "simple", "value": "checkout" }],
+  "variants": [],
+  "dependencies": [{ "feature": "payments-v2", "enabled": true }],
+  "children": [],
+  "lifecycle": { "stage": "live", "enteredStageAt": "2026-04-28T10:00:00.000Z" },
+  "collaborators": { "users": [{ "id": 7, "name": "Ada Lovelace", "imageUrl": "https://example.com/ada.png" }] }
+}
