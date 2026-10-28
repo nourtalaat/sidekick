@@ -6,6 +6,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/nourtalaat/sidekick/internal/output"
+	"github.com/nourtalaat/sidekick/internal/registry"
 )
 
 // MetricFeedback counts stored ratings.
@@ -22,22 +23,23 @@ type Metrics struct {
 	feedback *prometheus.CounterVec
 }
 
-// NewMetrics makes the feedback metrics and registers them with reg.
+// NewMetrics makes the feedback metrics and registers them with reg. Called
+// again with the same reg, it returns metrics that count into the same
+// counter, as the Slack app and the API both need.
 func NewMetrics(reg prometheus.Registerer) (*Metrics, error) {
-	m := &Metrics{feedback: prometheus.NewCounterVec(prometheus.CounterOpts{
+	counter, err := registry.RegisterOrExisting(reg, prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: MetricFeedback,
 		Help: "Ratings responders stored, by target kind and rating. A repeated click is not counted.",
-	}, []string{labelTarget, labelRating})}
-
-	if err := reg.Register(m.feedback); err != nil {
+	}, []string{labelTarget, labelRating}))
+	if err != nil {
 		return nil, fmt.Errorf("register feedback metrics: %w", err)
 	}
 
 	for _, r := range []output.Rating{output.RatingCorrect, output.RatingWrong} {
-		m.feedback.WithLabelValues(TargetVerdict, string(r))
+		counter.WithLabelValues(TargetVerdict, string(r))
 	}
 
-	return m, nil
+	return &Metrics{feedback: counter}, nil
 }
 
 // Stored counts one stored rating of target.
