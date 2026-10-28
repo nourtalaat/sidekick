@@ -1,0 +1,28 @@
+{
+  "text": "Back up alerts-cleared: checkout-api p99 latency above 2s",
+  "attachments": [
+    {
+      "color": "#1F8A4C",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": ":white_check_mark: *Back up* alerts-cleared · at <!date^1793024070^{time}|14:14 UTC>, watched for 12 min",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "checkout-api p99 latency above 2s · Checked every 30s, 25 checks · Last check: 1 of 1 alerts recovered · <https://example.slack.com/archives/C123/p1793023321000200|See the investigation>",
+              "verbatim": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

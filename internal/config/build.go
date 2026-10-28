@@ -36,7 +36,8 @@ type Instances struct {
 // checks the roles against the capabilities the built connectors report,
 // for connectors whose config did not declare them. When deps.Secrets is nil
 // it reads the files under the config's secrets.dir. deps.SlackBotToken is
-// set from slack.botTokenSecret. On problems it closes what it built and
+// set from slack.botTokenSecret and deps.TeamsBot from the teams section.
+// On problems it closes what it built and
 // returns Errors.
 func Build(ctx context.Context, cfg *Config, regs Registries, deps registry.Deps) (*Instances, error) {
 	regs = regs.WithDefaults()
@@ -46,6 +47,10 @@ func Build(ctx context.Context, cfg *Config, regs Registries, deps registry.Deps
 
 	if cfg.Slack != nil {
 		deps.SlackBotToken = cfg.Slack.BotTokenSecret
+	}
+
+	if t := cfg.Teams; t != nil {
+		deps.TeamsBot = t.Bot()
 	}
 
 	var errs errorList

@@ -1,6 +1,6 @@
 -- Two investigations of one alert for the button tests: one that ended
 -- with a true positive verdict and whose message is posted, and one that
--- waits for its investigate job.
+-- waits for its investigate job. A watcher of the first one still runs.
 INSERT INTO event_groups (id, fingerprint, route, service, status, event_count, opened_at, last_event_at)
 VALUES
   ('0192d3a4-0000-7000-8000-0000000000b1', 'fp-checkout', 'default', 'checkout-api', 'open', 1,
@@ -39,3 +39,10 @@ INSERT INTO jobs (kind, route, payload, unique_key)
 VALUES ('investigate', 'default',
         '{"investigation_id": "0192d3a4-0000-7000-8000-0000000000c2", "group_id": "0192d3a4-0000-7000-8000-0000000000b1"}',
         'investigate:0192d3a4-0000-7000-8000-0000000000b1');
+
+INSERT INTO watchers (id, group_id, investigation_id, name, origin, check_type, spec, interval_s, passes_to_recover,
+                      check_timeout_s, status, checks, started_at, deadline)
+VALUES ('0192d3a4-0000-7000-8000-0000000000d1', '0192d3a4-0000-7000-8000-0000000000b1',
+        '0192d3a4-0000-7000-8000-0000000000c1', 'checkout-health', 'route', 'http',
+        '{"url": "https://status.example.com/health"}', 30, 2, 10, 'running', 3, '2026-10-26 14:02:05+00',
+        '2100-01-01 00:00:00+00');

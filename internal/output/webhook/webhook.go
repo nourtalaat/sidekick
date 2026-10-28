@@ -18,6 +18,9 @@ package webhook
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -32,6 +35,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/output"
 	"github.com/nourtalaat/sidekick/internal/output/sinkhttp"
 	"github.com/nourtalaat/sidekick/internal/registry"
+	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/secrets"
 )
 
@@ -59,6 +63,8 @@ const userAgent = "Sidekick-Webhook/1"
 const (
 	dataSeq         = "seq"
 	dataDeliveredAt = "delivered_at"
+	// dataReport is a digest of the last final result delivered.
+	dataReport = "report"
 )
 
 var (
@@ -123,10 +129,12 @@ func (s *Sink) Accepts(phase output.Phase) bool {
 }
 
 // Publish sends the callback of u. An update whose Seq is not newer than
-// the last one delivered is dropped, and so is a watcher update that does
-// not say which watcher changed. A failed delivery, a status outside 2xx
-// included, returns an error, so the publish job tries again with the
-// same delivery ID and a fresh signature.
+// the last one delivered is dropped, and so are a watcher update that does
+// not say which watcher changed and a final result that was delivered
+// already, which the outputs get again when something else about the
+// investigation changes, such as a watcher or a rating. A failed delivery,
+// a status outside 2xx included, returns an error, so the publish job
+// tries again with the same delivery ID and a fresh signature.
 func (s *Sink) Publish(ctx context.Context, u output.Update) (output.Ref, error) {
 	if u.Previous != nil {
 		if seq, err := strconv.ParseInt(u.Previous.Data[dataSeq], 10, 64); err == nil && u.Seq <= seq {
@@ -149,6 +157,20 @@ func (s *Sink) Publish(ctx context.Context, u output.Update) (output.Ref, error)
 		return output.Ref{}, fmt.Errorf("encode the callback: %w", err)
 	}
 
+	digest := previousReport(u)
+	if u.Phase != output.PhaseWatcher {
+		digest, err = reportDigest(p)
+		if err != nil {
+			return output.Ref{}, fmt.Errorf("encode the report: %w", err)
+		}
+
+		if digest == previousReport(u) {
+			s.log.DebugContext(ctx, "final result dropped: it was delivered already", "investigation_id", u.InvestigationID, "seq", u.Seq)
+
+			return s.skipped(u), nil
+		}
+	}
+
 	secret, err := s.secret(ctx)
 	if err != nil {
 		return output.Ref{}, fmt.Errorf("read the HMAC secret: %w", err)
@@ -167,14 +189,20 @@ func (s *Sink) Publish(ctx context.Context, u output.Update) (output.Ref, error)
 
 	s.log.DebugContext(ctx, "callback delivered", "investigation_id", u.InvestigationID, "delivery", p.DeliveryID, "status", resp.Status)
 
-	return output.Ref{
+	ref := output.Ref{
 		Sink:     s.name,
 		External: p.DeliveryID,
 		Data: map[string]string{
 			dataSeq:         strconv.FormatInt(u.Seq, 10),
 			dataDeliveredAt: strconv.FormatInt(s.now().UnixMilli(), 10),
 		},
-	}, nil
+	}
+
+	if digest != "" {
+		ref.Data[dataReport] = digest
+	}
+
+	return ref, nil
 }
 
 // skipped returns the ref of an update that sent nothing: the previous
@@ -279,4 +307,30 @@ func sameHostRedirect(req *http.Request, via []*http.Request) error {
 	default:
 		return nil
 	}
+}
+
+// previousReport returns the digest of the final result delivered before
+// u, or "" when none was.
+func previousReport(u output.Update) string {
+	if u.Previous == nil {
+		return ""
+	}
+
+	return u.Previous.Data[dataReport]
+}
+
+// reportDigest returns a digest of the status and report of the final
+// result p, which tells a final result that changed from one sent again.
+func reportDigest(p payload) (string, error) {
+	data, err := json.Marshal(struct {
+		Status string         `json:"status"`
+		Report *report.Report `json:"report"`
+	}{Status: p.Status, Report: p.Report})
+	if err != nil {
+		return "", fmt.Errorf("encode: %w", err)
+	}
+
+	sum := sha256.Sum256(data)
+
+	return hex.EncodeToString(sum[:]), nil
 }

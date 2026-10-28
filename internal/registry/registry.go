@@ -67,10 +67,26 @@ type Deps struct {
 	// value when the config has no slack section. Read it through Secrets
 	// on each use, so a rotated token is used without a restart.
 	SlackBotToken SecretRef
+	// TeamsBot is the identity of the Teams bot, from the teams section,
+	// for plugins that post to Teams. It is the zero value when the config
+	// has no teams section.
+	TeamsBot TeamsBot
 	// Metrics is where plugins register their Prometheus metrics, with
 	// RegisterOrExisting so that several instances of one plugin type share
 	// one collector. Nil means no metrics.
 	Metrics prometheus.Registerer
+}
+
+// TeamsBot is who the Teams bot is and how it gets tokens, as the teams
+// section sets it. Read ClientSecret through Deps.Secrets on each use.
+type TeamsBot struct {
+	AppID            string
+	TenantID         string
+	ClientSecret     SecretRef
+	WorkloadIdentity bool
+	// ServiceURL is the Bot Framework service URL for posts that answer no
+	// Teams message; empty means the public cloud's.
+	ServiceURL string
 }
 
 // Factory builds one named instance of a plugin from its config section.

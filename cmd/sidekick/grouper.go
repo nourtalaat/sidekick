@@ -11,9 +11,15 @@ import (
 // registerGrouper registers the close_group jobs, which close each event
 // group when its window ends.
 func registerGrouper(a *app.App) error {
+	recorder, err := newWatchRecorder(a)
+	if err != nil {
+		return fmt.Errorf("set up the group closer: %w", err)
+	}
+
 	closer := grouper.NewCloser(grouper.CloserOptions{
-		Pool:   a.Pool(),
-		Logger: a.Logger().With("component", "grouper"),
+		Pool:     a.Pool(),
+		Logger:   a.Logger().With("component", "grouper"),
+		Watchers: recorder,
 	})
 
 	if err := a.RegisterJob(queue.KindCloseGroup, closer, queue.KindOptions{}); err != nil {

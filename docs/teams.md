@@ -1,14 +1,64 @@
 # Investigations in Microsoft Teams
 
-Sidekick receives Microsoft Teams messages through a Teams bot: alerts
-that bots post in the channels it is in, and mentions of `@Sidekick`, each
-of which starts an investigation. Posting results back in Teams threads
-comes in a later release.
+Sidekick works in Microsoft Teams in two directions. The Teams bot
+receives messages: alerts that bots post in the channels it is in, and
+mentions of `@Sidekick`, each of which starts an investigation. The
+`teams` output shows each investigation as one Teams message that is
+edited in place while the investigation runs. Buttons and follow-up
+questions in the thread come in later releases.
 
 The bot is your organization's own Azure Bot, which the Bot Framework
 connects to Sidekick's messaging endpoint, `POST /teams/messages`. That
 endpoint must be reachable from the internet over https; see
 [Reaching the messaging endpoint](#reaching-the-messaging-endpoint).
+
+## What it posts
+
+- **When the investigation is created**, it posts "Looking into it" with
+  the alert's title. For an alert posted in Teams, the message is a reply
+  in that message's thread. For any other alert, such as one from a
+  webhook, it starts a new thread in the output's `channel`.
+- **While the investigation runs**, it edits the message with the steps
+  done so far, at most once every 3 seconds. The top of the message is
+  yellow.
+- **When the investigation finishes**, it edits the message to show the
+  verdict, the confidence, the reason, the likely cause and impact (for a
+  false alarm, why it fired and how to stop it), up to 5 findings with
+  links to their evidence, up to 3 proposed fixes, and which sources were
+  checked. The top takes the verdict's color, and the verdict is always
+  shown with its icon and label too, so the color is never the only sign:
+
+  | Verdict | Icon | Color |
+  |---|---|---|
+  | Real issue | 🚨 | red |
+  | False alarm | 🔕 | green |
+  | Not sure yet | ❔ | gray |
+  | Duplicate | 🔗 | blue |
+  | Known issue | 📌 | blue |
+  | Flapping | 🔁 | blue |
+
+  A longer report continues in a reply in the thread.
+- **Every final verdict also gets a short new reply** in the thread,
+  because Teams does not notify anyone when a message is edited.
+- **A run that could not finish** shows "Could not finish" with a yellow
+  top and what was checked, and gets a short reply too.
+
+With `server.publicURL` set, each message has an **Open in Sidekick**
+button. All text from the alert and from the model is shown as plain
+text, so it cannot mention anyone, add links or change the formatting.
+The only links are to evidence that the sources returned.
+
+```yaml
+outputs:
+  teams-thread: { type: teams, channel: "19:alerts@thread.tacv2" }
+```
+
+| Key | Required | Meaning |
+|---|---|---|
+| `channel` | yes | The ID of the channel where messages for alerts that did not come from Teams start a new thread. |
+
+The bot posts as itself, so it must be installed in the team of every
+channel it posts in.
 
 ## Set up the bot
 
@@ -96,8 +146,9 @@ public network.
 
 With `networkPolicy.httpFrom` set, allow the ingress controller to reach
 the port. With `networkPolicy.restrictEgress`, allow
-`login.botframework.com`, `login.microsoftonline.com` and
-`graph.microsoft.com` on port 443.
+`login.botframework.com`, `login.microsoftonline.com`,
+`graph.microsoft.com` and the Bot Framework service hosts, such as
+`smba.trafficmanager.net`, on port 443.
 
 ## Receiving messages
 
@@ -199,6 +250,15 @@ The endpoint answers:
 | 403 | The activity is from another tenant, for another bot, or not from Teams. |
 | 413 | The body is larger than 1 MiB. |
 | 500 | The event could not be stored, the thread's first message could not be read, or the Bot Framework's keys could not be fetched. |
+
+The output waits at least 3 seconds between edits of one message, limits
+its calls in each thread on each replica, and retries the answers Teams
+asks bots to retry (`429`, `412`, `502` and `504`) after their
+`Retry-After` or with backoff; after a `401` it gets a new token once. A
+deleted message is posted again. The bot's token is sent only to Bot
+Framework hosts and the host of `teams.serviceURL`. Failed calls count in
+`sidekick_teams_api_errors_total`; see
+[Running Sidekick](running.md#metrics).
 
 Received Teams events count in `sidekick_events_received_total` with the
 listener's name, or `teams-mention`, as the intake. Activities turned away

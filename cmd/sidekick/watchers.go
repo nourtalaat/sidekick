@@ -12,23 +12,33 @@ import (
 )
 
 // registerWatchers runs the watch_tick jobs of every watcher, with HTTP
-// checks through the safe client and tool checks through guard, and
-// returns the starter of the start_watcher tool.
+// checks through the safe client and tool checks through guard, reports
+// sidekick_watchers_running, and returns the starter of the start_watcher
+// tool.
 func registerWatchers(a *app.App, guard *tools.Guard) (*watch.ModelStarter, error) {
 	checker, err := newChecker(a, guard)
 	if err != nil {
 		return nil, fmt.Errorf("set up the watcher checks: %w", err)
 	}
 
+	recorder, err := newWatchRecorder(a)
+	if err != nil {
+		return nil, fmt.Errorf("watchers: %w", err)
+	}
+
+	if err := watch.RegisterRunning(a.Telemetry().Registry(), a.Pool(), a.Logger().With("component", "watch")); err != nil {
+		return nil, fmt.Errorf("set up the running watchers metric: %w", err)
+	}
+
 	policy := a.Config().WatchPolicy()
-	log := a.Logger().With("component", "watch")
 
 	ticker, err := watch.NewTicker(watch.TickerOptions{
 		Pool:       a.Pool(),
 		Checker:    checker,
 		Policy:     policy,
 		CloseGroup: grouper.EnqueueClose,
-		Logger:     log,
+		Recorder:   recorder,
+		Logger:     a.Logger().With("component", "watch"),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("set up the watcher ticks: %w", err)
@@ -39,16 +49,28 @@ func registerWatchers(a *app.App, guard *tools.Guard) (*watch.ModelStarter, erro
 	}
 
 	starter, err := watch.NewModelStarter(watch.ModelStarterOptions{
-		Pool:    a.Pool(),
-		Checker: checker,
-		Policy:  policy,
-		Logger:  log,
+		Pool:     a.Pool(),
+		Checker:  checker,
+		Policy:   policy,
+		Recorder: recorder,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("set up start_watcher: %w", err)
 	}
 
 	return starter, nil
+}
+
+// newWatchRecorder returns the recorder of watcher state changes, which
+// counts them in sidekick_watcher_state_changes_total. Every recorder of
+// the app shares the counter.
+func newWatchRecorder(a *app.App) (*watch.Recorder, error) {
+	recorder, err := watch.NewRecorder(a.Logger().With("component", "watch"), a.Telemetry().Registry())
+	if err != nil {
+		return nil, fmt.Errorf("set up the watcher state changes: %w", err)
+	}
+
+	return recorder, nil
 }
 
 // newChecker builds the watcher check runner with the safe HTTP client of

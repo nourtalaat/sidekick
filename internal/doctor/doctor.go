@@ -190,6 +190,10 @@ func (d *doctor) deps() registry.Deps {
 		deps.SlackBotToken = d.cfg.Slack.BotTokenSecret
 	}
 
+	if d.cfg.Teams != nil {
+		deps.TeamsBot = d.cfg.Teams.Bot()
+	}
+
 	return deps
 }
 
