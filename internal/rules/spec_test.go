@@ -64,6 +64,7 @@ func TestListenerMatchRoundTrip(t *testing.T) {
 		{
 			name: "every field",
 			listener: config.Listener{
+				Source:  config.ListenerSourceSlack,
 				Channel: "C01OPS",
 				Match: config.ListenerMatch{
 					Sender: config.ListenerSender{Kind: event.SenderBot, Names: []string{"Grafana"}, Bots: []string{"B01GRAFANA"}, Users: []string{"U01ME"}},

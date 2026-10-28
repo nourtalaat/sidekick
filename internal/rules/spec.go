@@ -14,6 +14,8 @@ import (
 // listenerMatch is the match column of a runtime listener: every part of a
 // file listener except its channel and trust.
 type listenerMatch struct {
+	// Source is the chat app; empty is Slack.
+	Source   string     `json:"source,omitempty"`
 	Sender   senderSpec `json:"sender,omitzero"`
 	Text     string     `json:"text,omitempty"`
 	Extract  []string   `json:"extract,omitempty"`
@@ -96,6 +98,7 @@ func listenerOfRow(row db.Listener) (Listener, error) {
 	return Listener{
 		Name: row.Name,
 		Config: config.Listener{
+			Source:  config.ListenerSource(m.Source),
 			Channel: row.SlackChannel,
 			Match: config.ListenerMatch{
 				Sender: config.ListenerSender{
@@ -174,6 +177,7 @@ func matchOfListener(l config.Listener) listenerMatch {
 	s := l.Match.Sender
 
 	return listenerMatch{
+		Source:   string(l.Source),
 		Sender:   senderSpec{Kind: string(s.Kind), Names: s.Names, Bots: s.Bots, Users: s.Users},
 		Text:     l.Match.Text,
 		Extract:  l.Extract,

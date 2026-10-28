@@ -117,7 +117,6 @@ type Slack struct {
 // investigation (IN-5, IN-8). Every field of Match that is set must match.
 type Listener struct {
 	// Source is the chat app of the channel: slack, the default, or teams.
-	// TODO: [SK-18] Add source to the runtime listeners once they land.
 	Source ListenerSource `yaml:"source"`
 	// Channel is a Slack channel name such as "#alerts" or channel ID, or
 	// a Teams channel ID such as 19:abc123@thread.tacv2.
