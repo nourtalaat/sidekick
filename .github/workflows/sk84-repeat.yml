@@ -1,0 +1,80 @@
+# Temporary (SK-84): runs the two flaky tests many times in a row. Removed
+# before review.
+name: SK-84 repeat
+
+on:
+  push:
+    branches:
+      - fix/SK-84/flaky-ci
+    paths:
+      - .github/workflows/sk84-repeat.yml
+
+permissions:
+  contents: read
+
+jobs:
+  repeat:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: stream test x50
+            pkg: ./internal/api/
+            run: ^TestStreamSendsTheStepsThenTheStatus$
+          - name: all stream tests x50
+            pkg: ./internal/api/
+            run: ^TestStream
+          - name: slack app test x50
+            pkg: ./cmd/sidekick/
+            run: ^TestServeSlackApp$
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sidekick
+          POSTGRES_PASSWORD: sidekick
+          POSTGRES_DB: sidekick_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sidekick -d sidekick_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SIDEKICK_TEST_DATABASE_URL: postgres://sidekick:sidekick@localhost:5432/sidekick_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26"
+          check-latest: true
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: make ui-build
+
+      - name: Run the tests 50 times in a row
+        shell: bash
+        env:
+          SIDEKICK_UI_BUILT: "true"
+          RUN: ${{ matrix.run }}
+          PKG: ${{ matrix.pkg }}
+        run: go test -race -tags integration -count=50 -timeout 35m -v -run "$RUN" "$PKG" 2>&1 | tee "$RUNNER_TEMP/out.txt"
+
+      - name: Count the results
+        if: always()
+        shell: bash
+        run: |
+          echo "top-level PASS lines: $(grep -cE '^--- PASS' "$RUNNER_TEMP/out.txt" || true)"
+          echo "FAIL lines: $(grep -cE -- '--- FAIL' "$RUNNER_TEMP/out.txt" || true)"
