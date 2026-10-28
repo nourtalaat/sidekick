@@ -74,6 +74,12 @@ it. One user holds an email at a time; when a newer login has an email
 another user holds, the email moves to the newer user and Sidekick logs
 a warning with both user IDs.
 
+## Slack users
+
+With the `oidc` section set, a Slack user whose email a web UI user has
+gets that user's role in Slack too, once the web UI user has signed in at
+least once. [Roles in Slack](slack.md#roles) has the details.
+
 ## Sessions
 
 A login starts a session that lasts 12 hours and is not extended by use;
@@ -85,6 +91,50 @@ Every request made with a session that can change something (any method
 but `GET`, `HEAD` and `OPTIONS`), logout included, must send the
 session's CSRF token in the `X-CSRF-Token` header. `GET /api/v1/me`
 returns it as `csrfToken`.
+
+## API tokens
+
+Automation, such as a CI job that uploads benchmark results, calls the
+API with an API token instead of a session:
+
+```sh
+curl -H "Authorization: Bearer $SIDEKICK_TOKEN" https://sidekick.example.com/api/v1/me
+```
+
+An admin signed in to the web UI creates tokens with
+`POST /api/v1/tokens`, giving a name, a role and an expiry:
+
+```json
+{"name": "nightly bench", "role": "viewer", "expiresAt": "2027-04-01T00:00:00Z"}
+```
+
+- The answer holds the token itself (it starts with `skt_`) in `secret`.
+  It is shown only once; Sidekick keeps only a hash of it.
+- The role is at most the admin's own, and the expiry at most a year
+  away.
+- Only a signed-in user can create or revoke tokens; a token cannot,
+  even an admin one.
+- `GET /api/v1/tokens` lists every token with when it was last used, to
+  the minute, and `DELETE /api/v1/tokens/{id}` revokes one at once.
+- Requests with a token need no CSRF token.
+- Creating and revoking a token are written to the audit log.
+
+## Admin operations
+
+- `GET /api/v1/config` returns the config Sidekick runs with: `file`, the
+  config file with its defaults, which only a config change can alter,
+  and `runtime`, the listeners and routes changed at runtime, with their
+  version and who changed them last. Secrets appear only as references
+  to a Secret's name and key, never as values, and strings the
+  [redaction](configuration.md#redaction) rules match are redacted.
+- `GET /api/v1/jobs?status=dead` lists dead jobs, the background jobs
+  that gave up, newest first, 50 at a time (`limit` takes up to 100);
+  pass the answer's `nextCursor` as `cursor` for the next page. Each
+  job's last error is redacted.
+- `POST /api/v1/jobs/{id}/retry` sets a dead job back to pending with its
+  attempts reset. The retry is written to the audit log. A job that is
+  not dead, or whose unique key a pending or running job holds, answers
+  409.
 
 ## The JSON API
 
@@ -99,6 +149,8 @@ role that may call it in `x-sidekick-role`. Errors are problem details
 
 | Status | Means |
 |---|---|
-| 401 | No session, or the session expired. |
+| 400 | A parameter or body that is not valid. |
+| 401 | No session or API token, or one that expired or was revoked. |
 | 403 | A change without the CSRF token, or a role below the one the operation needs. |
+| 409 | The change conflicts with the current state, such as retrying a job that is not dead. |
 | 404, 405 | No operation has this path, or this method on it. |
