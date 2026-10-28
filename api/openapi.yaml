@@ -30,6 +30,60 @@ paths:
                 $ref: "#/components/schemas/Me"
         default:
           $ref: "#/components/responses/Problem"
+  /tokens:
+    get:
+      operationId: ListTokens
+      summary: Every API token, revoked and expired ones included, newest first
+      x-sidekick-role: admin
+      responses:
+        "200":
+          description: The tokens. The tokens themselves are never shown again.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenList"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: CreateToken
+      summary: Create an API token
+      description: |
+        Only a signed-in admin can create a token, never another token. The
+        token's role is at most the creator's, and its expiry at most a year
+        away. The answer holds the token itself, which is never shown again.
+      x-sidekick-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewToken"
+      responses:
+        "201":
+          description: The new token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedToken"
+        default:
+          $ref: "#/components/responses/Problem"
+  /tokens/{id}:
+    delete:
+      operationId: RevokeToken
+      summary: Revoke an API token
+      x-sidekick-role: admin
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: The token is revoked.
+        default:
+          $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
     session:
@@ -80,6 +134,64 @@ components:
             The session's CSRF token. Requests made with the session that
             change anything send it in the X-CSRF-Token header. Absent for
             an API token.
+    Token:
+      type: object
+      required: [id, name, role, createdBy, createdAt, expiresAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        role:
+          $ref: "#/components/schemas/Role"
+        createdBy:
+          type: string
+          format: uuid
+          description: The ID of the user who created the token.
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+          description: When the token was last used, to the minute.
+        revokedAt:
+          type: string
+          format: date-time
+    TokenList:
+      type: object
+      required: [tokens]
+      properties:
+        tokens:
+          type: array
+          items:
+            $ref: "#/components/schemas/Token"
+    NewToken:
+      type: object
+      required: [name, role, expiresAt]
+      properties:
+        name:
+          type: string
+          description: What the token is for, 1 to 100 characters.
+        role:
+          $ref: "#/components/schemas/Role"
+        expiresAt:
+          type: string
+          format: date-time
+          description: When the token stops working, at most a year away.
+    CreatedToken:
+      type: object
+      required: [token, secret]
+      properties:
+        token:
+          $ref: "#/components/schemas/Token"
+        secret:
+          type: string
+          description: The token to send as "Authorization: Bearer <secret>". It is shown only here.
     Problem:
       type: object
       description: Problem details, as RFC 9457 describes.
