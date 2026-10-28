@@ -14,7 +14,7 @@ import (
 	_ "github.com/nourtalaat/sidekick/internal/model/anthropic"     // Model provider "anthropic".
 	_ "github.com/nourtalaat/sidekick/internal/model/bedrock"       // Model provider "bedrock".
 	_ "github.com/nourtalaat/sidekick/internal/model/google"        // Model provider "google".
-	_ "github.com/nourtalaat/sidekick/internal/model/openai"        // Model provider "openai".
+	_ "github.com/nourtalaat/sidekick/internal/model/openai"        // Model providers "openai" and "azure".
 	_ "github.com/nourtalaat/sidekick/internal/output/jira"         // Output type "jira.comment".
 	_ "github.com/nourtalaat/sidekick/internal/output/linear"       // Output type "linear.comment".
 	_ "github.com/nourtalaat/sidekick/internal/output/slack"        // Output type "slack".

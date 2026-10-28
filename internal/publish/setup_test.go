@@ -215,6 +215,8 @@ type slackCall struct {
 	TS       string `json:"ts"`
 	ThreadTS string `json:"thread_ts"`
 	Text     string `json:"text"`
+	// Attachments are kept as sent, for the tests that read the blocks.
+	Attachments json.RawMessage `json:"attachments"`
 }
 
 // fakeSlack is the Slack Web API for one test. Each post gets the next

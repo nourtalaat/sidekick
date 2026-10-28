@@ -294,9 +294,9 @@ func TestGenerateChatOpenAI(t *testing.T) {
 
 	cfg := Config{Settings: model.Settings{Model: "gpt-5.4", MaxTokens: 2000}, APIKeySecret: keyRef, API: APIChatCompletions}
 	c := newTestConnector(t, api, cfg)
-	// The test connector always has a base URL; clear it to take the path
-	// of OpenAI's own API.
-	c.cfg.BaseURL = ""
+	// The test connector always has a base URL; take the path of OpenAI's
+	// own API.
+	c.maxCompletionTokens = true
 
 	_, err := c.Generate(t.Context(), userText("hi"))
 	require.NoError(t, err)
