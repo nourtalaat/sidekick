@@ -68,8 +68,8 @@ func TestConfigValidate(t *testing.T) {
 			want: []string{`must be an absolute https URL`},
 		},
 		{
-			name: "a base URL with credentials",
-			cfg:  Config{BaseURL: "https://admin:secret@unleash.example.com", TokenSecret: testTokenRef, Projects: testProjects},
+			name: "a base URL with a user",
+			cfg:  Config{BaseURL: "https://admin@unleash.example.com", TokenSecret: testTokenRef, Projects: testProjects},
 			want: []string{`must be an absolute https URL`},
 		},
 		{
