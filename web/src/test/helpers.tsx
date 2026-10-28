@@ -1,4 +1,4 @@
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
 import axe from "axe-core";
 import type { ReactElement } from "react";
@@ -57,14 +57,15 @@ export function fakeServer(me: Me | null = VIEWER, handler?: Handler) {
 }
 
 /** Renders ui inside the providers of the app, at route. */
-export function renderWithProviders(ui: ReactElement, options: { api?: Api; route?: string } = {}) {
+export function renderWithProviders(ui: ReactElement, options: { api?: Api; route?: string; queryClient?: QueryClient } = {}) {
   const api = options.api ?? fakeServer().api;
+  const queryClient = options.queryClient ?? createQueryClient();
 
   return {
     api,
     ...render(
       <ApiProvider api={api}>
-        <QueryClientProvider client={createQueryClient()}>
+        <QueryClientProvider client={queryClient}>
           <ThemeProvider>
             <MemoryRouter initialEntries={[options.route ?? "/"]}>{ui}</MemoryRouter>
           </ThemeProvider>
@@ -75,10 +76,10 @@ export function renderWithProviders(ui: ReactElement, options: { api?: Api; rout
 }
 
 /** Renders the whole app at route, with a fake server that knows me (no session when null). */
-export function renderApp(options: { me?: Me | null; route?: string; handler?: Handler } = {}) {
+export function renderApp(options: { me?: Me | null; route?: string; handler?: Handler; queryClient?: QueryClient } = {}) {
   const server = fakeServer(options.me, options.handler);
 
-  return { ...server, ...renderWithProviders(<App />, { api: server.api, route: options.route }) };
+  return { ...server, ...renderWithProviders(<App />, { api: server.api, route: options.route, queryClient: options.queryClient }) };
 }
 
 /**
