@@ -31,6 +31,7 @@
     "checks": 9,
     "endedAt": "2026-10-26T10:10:00Z",
     "id": "0199c9d2-8a00-7000-8000-000000000002",
+    "intervalSeconds": 30,
     "lastCheckAt": "2026-10-26T10:10:00Z",
     "lastResult": "HTTP 200",
     "name": "checkout-health",

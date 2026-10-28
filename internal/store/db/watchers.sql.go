@@ -46,7 +46,7 @@ SET status = CASE WHEN check_type = 'alert' THEN 'recovered' ELSE 'stopped' END,
     ended_at = $1::timestamptz,
     recovered_at = CASE WHEN check_type = 'alert' THEN coalesce(passing_since, $1::timestamptz) END
 WHERE group_id = $2 AND status = 'running'
-RETURNING id, group_id, investigation_id, name, origin, started_by_seq, check_type, spec, interval_s, passes_to_recover, check_timeout_s, status, stop_reason, passes_in_a_row, checks, started_at, deadline, last_check_at, passing_since, recovered_at, ended_at, stopped_by
+RETURNING id, group_id, investigation_id, name, origin, started_by_seq, check_type, spec, interval_s, passes_to_recover, check_timeout_s, status, stop_reason, passes_in_a_row, checks, started_at, deadline, last_check_at, passing_since, recovered_at, ended_at, stopped_by, stopped_by_slack_user
 `
 
 type EndGroupWatchersResolvedParams struct {
@@ -90,6 +90,7 @@ func (q *Queries) EndGroupWatchersResolved(ctx context.Context, arg EndGroupWatc
 			&i.RecoveredAt,
 			&i.EndedAt,
 			&i.StoppedBy,
+			&i.StoppedBySlackUser,
 		); err != nil {
 			return nil, err
 		}
@@ -105,26 +106,30 @@ const endWatcher = `-- name: EndWatcher :one
 UPDATE watchers
 SET status = $1::text,
     stop_reason = $2::text,
-    ended_at = $3::timestamptz,
-    recovered_at = CASE WHEN $1::text = 'recovered' THEN coalesce(passing_since, $3::timestamptz) END
-WHERE id = $4 AND status = 'running'
-RETURNING id, group_id, investigation_id, name, origin, started_by_seq, check_type, spec, interval_s, passes_to_recover, check_timeout_s, status, stop_reason, passes_in_a_row, checks, started_at, deadline, last_check_at, passing_since, recovered_at, ended_at, stopped_by
+    stopped_by_slack_user = $3::text,
+    ended_at = $4::timestamptz,
+    recovered_at = CASE WHEN $1::text = 'recovered' THEN coalesce(passing_since, $4::timestamptz) END
+WHERE id = $5 AND status = 'running'
+RETURNING id, group_id, investigation_id, name, origin, started_by_seq, check_type, spec, interval_s, passes_to_recover, check_timeout_s, status, stop_reason, passes_in_a_row, checks, started_at, deadline, last_check_at, passing_since, recovered_at, ended_at, stopped_by, stopped_by_slack_user
 `
 
 type EndWatcherParams struct {
-	Status     string
-	StopReason *string
-	At         time.Time
-	ID         uuid.UUID
+	Status             string
+	StopReason         *string
+	StoppedBySlackUser *string
+	At                 time.Time
+	ID                 uuid.UUID
 }
 
-// EndWatcher sets a running watcher to a final status. A recovered watcher
-// records when its run of passes started. It returns no row for a watcher
+// EndWatcher sets a running watcher to a final status, with the Slack
+// user who stopped it, if one did. A recovered watcher records when its
+// run of passes started. It returns no row for a watcher
 // that has ended already.
 func (q *Queries) EndWatcher(ctx context.Context, arg EndWatcherParams) (Watcher, error) {
 	row := q.db.QueryRow(ctx, endWatcher,
 		arg.Status,
 		arg.StopReason,
+		arg.StoppedBySlackUser,
 		arg.At,
 		arg.ID,
 	)
@@ -152,12 +157,13 @@ func (q *Queries) EndWatcher(ctx context.Context, arg EndWatcherParams) (Watcher
 		&i.RecoveredAt,
 		&i.EndedAt,
 		&i.StoppedBy,
+		&i.StoppedBySlackUser,
 	)
 	return i, err
 }
 
 const getWatcher = `-- name: GetWatcher :one
-SELECT id, group_id, investigation_id, name, origin, started_by_seq, check_type, spec, interval_s, passes_to_recover, check_timeout_s, status, stop_reason, passes_in_a_row, checks, started_at, deadline, last_check_at, passing_since, recovered_at, ended_at, stopped_by FROM watchers WHERE id = $1
+SELECT id, group_id, investigation_id, name, origin, started_by_seq, check_type, spec, interval_s, passes_to_recover, check_timeout_s, status, stop_reason, passes_in_a_row, checks, started_at, deadline, last_check_at, passing_since, recovered_at, ended_at, stopped_by, stopped_by_slack_user FROM watchers WHERE id = $1
 `
 
 func (q *Queries) GetWatcher(ctx context.Context, id uuid.UUID) (Watcher, error) {
@@ -186,12 +192,13 @@ func (q *Queries) GetWatcher(ctx context.Context, id uuid.UUID) (Watcher, error)
 		&i.RecoveredAt,
 		&i.EndedAt,
 		&i.StoppedBy,
+		&i.StoppedBySlackUser,
 	)
 	return i, err
 }
 
 const getWatcherByName = `-- name: GetWatcherByName :one
-SELECT id, group_id, investigation_id, name, origin, started_by_seq, check_type, spec, interval_s, passes_to_recover, check_timeout_s, status, stop_reason, passes_in_a_row, checks, started_at, deadline, last_check_at, passing_since, recovered_at, ended_at, stopped_by FROM watchers WHERE group_id = $1 AND name = $2
+SELECT id, group_id, investigation_id, name, origin, started_by_seq, check_type, spec, interval_s, passes_to_recover, check_timeout_s, status, stop_reason, passes_in_a_row, checks, started_at, deadline, last_check_at, passing_since, recovered_at, ended_at, stopped_by, stopped_by_slack_user FROM watchers WHERE group_id = $1 AND name = $2
 `
 
 type GetWatcherByNameParams struct {
@@ -225,12 +232,13 @@ func (q *Queries) GetWatcherByName(ctx context.Context, arg GetWatcherByNamePara
 		&i.RecoveredAt,
 		&i.EndedAt,
 		&i.StoppedBy,
+		&i.StoppedBySlackUser,
 	)
 	return i, err
 }
 
 const getWatcherForTick = `-- name: GetWatcherForTick :one
-SELECT w.id, w.group_id, w.investigation_id, w.name, w.origin, w.started_by_seq, w.check_type, w.spec, w.interval_s, w.passes_to_recover, w.check_timeout_s, w.status, w.stop_reason, w.passes_in_a_row, w.checks, w.started_at, w.deadline, w.last_check_at, w.passing_since, w.recovered_at, w.ended_at, w.stopped_by, g.route
+SELECT w.id, w.group_id, w.investigation_id, w.name, w.origin, w.started_by_seq, w.check_type, w.spec, w.interval_s, w.passes_to_recover, w.check_timeout_s, w.status, w.stop_reason, w.passes_in_a_row, w.checks, w.started_at, w.deadline, w.last_check_at, w.passing_since, w.recovered_at, w.ended_at, w.stopped_by, w.stopped_by_slack_user, g.route
 FROM watchers w
 JOIN event_groups g ON g.id = w.group_id
 WHERE w.id = $1
@@ -268,7 +276,54 @@ func (q *Queries) GetWatcherForTick(ctx context.Context, id uuid.UUID) (GetWatch
 		&i.Watcher.RecoveredAt,
 		&i.Watcher.EndedAt,
 		&i.Watcher.StoppedBy,
+		&i.Watcher.StoppedBySlackUser,
 		&i.Route,
+	)
+	return i, err
+}
+
+const getWatcherWithLastCheck = `-- name: GetWatcherWithLastCheck :one
+SELECT w.id, w.group_id, w.investigation_id, w.name, w.origin, w.started_by_seq, w.check_type, w.spec, w.interval_s, w.passes_to_recover, w.check_timeout_s, w.status, w.stop_reason, w.passes_in_a_row, w.checks, w.started_at, w.deadline, w.last_check_at, w.passing_since, w.recovered_at, w.ended_at, w.stopped_by, w.stopped_by_slack_user, c.detail AS last_detail
+FROM watchers w
+LEFT JOIN watcher_checks c ON c.watcher_id = w.id AND c.seq = w.checks
+WHERE w.id = $1
+`
+
+type GetWatcherWithLastCheckRow struct {
+	Watcher    Watcher
+	LastDetail *string
+}
+
+// GetWatcherWithLastCheck returns a watcher with the detail of its last
+// check.
+func (q *Queries) GetWatcherWithLastCheck(ctx context.Context, id uuid.UUID) (GetWatcherWithLastCheckRow, error) {
+	row := q.db.QueryRow(ctx, getWatcherWithLastCheck, id)
+	var i GetWatcherWithLastCheckRow
+	err := row.Scan(
+		&i.Watcher.ID,
+		&i.Watcher.GroupID,
+		&i.Watcher.InvestigationID,
+		&i.Watcher.Name,
+		&i.Watcher.Origin,
+		&i.Watcher.StartedBySeq,
+		&i.Watcher.CheckType,
+		&i.Watcher.Spec,
+		&i.Watcher.IntervalS,
+		&i.Watcher.PassesToRecover,
+		&i.Watcher.CheckTimeoutS,
+		&i.Watcher.Status,
+		&i.Watcher.StopReason,
+		&i.Watcher.PassesInARow,
+		&i.Watcher.Checks,
+		&i.Watcher.StartedAt,
+		&i.Watcher.Deadline,
+		&i.Watcher.LastCheckAt,
+		&i.Watcher.PassingSince,
+		&i.Watcher.RecoveredAt,
+		&i.Watcher.EndedAt,
+		&i.Watcher.StoppedBy,
+		&i.Watcher.StoppedBySlackUser,
+		&i.LastDetail,
 	)
 	return i, err
 }
@@ -304,7 +359,7 @@ VALUES (
   $9, $10, $11, 'running', $12, $13
 )
 ON CONFLICT ON CONSTRAINT watchers_group_name DO NOTHING
-RETURNING id, group_id, investigation_id, name, origin, started_by_seq, check_type, spec, interval_s, passes_to_recover, check_timeout_s, status, stop_reason, passes_in_a_row, checks, started_at, deadline, last_check_at, passing_since, recovered_at, ended_at, stopped_by
+RETURNING id, group_id, investigation_id, name, origin, started_by_seq, check_type, spec, interval_s, passes_to_recover, check_timeout_s, status, stop_reason, passes_in_a_row, checks, started_at, deadline, last_check_at, passing_since, recovered_at, ended_at, stopped_by, stopped_by_slack_user
 `
 
 type InsertWatcherParams struct {
@@ -365,6 +420,7 @@ func (q *Queries) InsertWatcher(ctx context.Context, arg InsertWatcherParams) (W
 		&i.RecoveredAt,
 		&i.EndedAt,
 		&i.StoppedBy,
+		&i.StoppedBySlackUser,
 	)
 	return i, err
 }
@@ -429,8 +485,68 @@ func (q *Queries) ListGroupAlertStates(ctx context.Context, groupID uuid.UUID) (
 	return items, nil
 }
 
+const listGroupWatchers = `-- name: ListGroupWatchers :many
+SELECT w.id, w.group_id, w.investigation_id, w.name, w.origin, w.started_by_seq, w.check_type, w.spec, w.interval_s, w.passes_to_recover, w.check_timeout_s, w.status, w.stop_reason, w.passes_in_a_row, w.checks, w.started_at, w.deadline, w.last_check_at, w.passing_since, w.recovered_at, w.ended_at, w.stopped_by, w.stopped_by_slack_user, c.detail AS last_detail
+FROM watchers w
+LEFT JOIN watcher_checks c ON c.watcher_id = w.id AND c.seq = w.checks
+WHERE w.group_id = $1
+ORDER BY w.started_at, w.id
+`
+
+type ListGroupWatchersRow struct {
+	Watcher    Watcher
+	LastDetail *string
+}
+
+// ListGroupWatchers returns every watcher of a group, oldest first, with
+// the detail of its last check.
+func (q *Queries) ListGroupWatchers(ctx context.Context, groupID uuid.UUID) ([]ListGroupWatchersRow, error) {
+	rows, err := q.db.Query(ctx, listGroupWatchers, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListGroupWatchersRow
+	for rows.Next() {
+		var i ListGroupWatchersRow
+		if err := rows.Scan(
+			&i.Watcher.ID,
+			&i.Watcher.GroupID,
+			&i.Watcher.InvestigationID,
+			&i.Watcher.Name,
+			&i.Watcher.Origin,
+			&i.Watcher.StartedBySeq,
+			&i.Watcher.CheckType,
+			&i.Watcher.Spec,
+			&i.Watcher.IntervalS,
+			&i.Watcher.PassesToRecover,
+			&i.Watcher.CheckTimeoutS,
+			&i.Watcher.Status,
+			&i.Watcher.StopReason,
+			&i.Watcher.PassesInARow,
+			&i.Watcher.Checks,
+			&i.Watcher.StartedAt,
+			&i.Watcher.Deadline,
+			&i.Watcher.LastCheckAt,
+			&i.Watcher.PassingSince,
+			&i.Watcher.RecoveredAt,
+			&i.Watcher.EndedAt,
+			&i.Watcher.StoppedBy,
+			&i.Watcher.StoppedBySlackUser,
+			&i.LastDetail,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockWatcher = `-- name: LockWatcher :one
-SELECT id, group_id, investigation_id, name, origin, started_by_seq, check_type, spec, interval_s, passes_to_recover, check_timeout_s, status, stop_reason, passes_in_a_row, checks, started_at, deadline, last_check_at, passing_since, recovered_at, ended_at, stopped_by FROM watchers WHERE id = $1 FOR UPDATE
+SELECT id, group_id, investigation_id, name, origin, started_by_seq, check_type, spec, interval_s, passes_to_recover, check_timeout_s, status, stop_reason, passes_in_a_row, checks, started_at, deadline, last_check_at, passing_since, recovered_at, ended_at, stopped_by, stopped_by_slack_user FROM watchers WHERE id = $1 FOR UPDATE
 `
 
 // LockWatcher returns the watcher with id and locks it until the
@@ -461,6 +577,7 @@ func (q *Queries) LockWatcher(ctx context.Context, id uuid.UUID) (Watcher, error
 		&i.RecoveredAt,
 		&i.EndedAt,
 		&i.StoppedBy,
+		&i.StoppedBySlackUser,
 	)
 	return i, err
 }
@@ -483,7 +600,7 @@ SET checks = checks + 1,
     passes_in_a_row = CASE WHEN $2::boolean THEN passes_in_a_row + 1 ELSE 0 END,
     passing_since = CASE WHEN $2::boolean THEN coalesce(passing_since, $1::timestamptz) END
 WHERE id = $3 AND status = 'running'
-RETURNING id, group_id, investigation_id, name, origin, started_by_seq, check_type, spec, interval_s, passes_to_recover, check_timeout_s, status, stop_reason, passes_in_a_row, checks, started_at, deadline, last_check_at, passing_since, recovered_at, ended_at, stopped_by
+RETURNING id, group_id, investigation_id, name, origin, started_by_seq, check_type, spec, interval_s, passes_to_recover, check_timeout_s, status, stop_reason, passes_in_a_row, checks, started_at, deadline, last_check_at, passing_since, recovered_at, ended_at, stopped_by, stopped_by_slack_user
 `
 
 type RecordWatcherCheckParams struct {
@@ -522,6 +639,7 @@ func (q *Queries) RecordWatcherCheck(ctx context.Context, arg RecordWatcherCheck
 		&i.RecoveredAt,
 		&i.EndedAt,
 		&i.StoppedBy,
+		&i.StoppedBySlackUser,
 	)
 	return i, err
 }

@@ -28,6 +28,17 @@
 // than before, whichever is higher, and a Refresh by one. So a refresh is
 // shown like any other change, and an update after it still counts as
 // newer.
+//
+// A watcher's state change is not a state: it must not replace a final
+// result that waits to be shown, and every output that takes watcher
+// changes must get each one, not only the newest. WatcherChanged stores
+// the change in its own row, with the seq just below the state's new seq,
+// and leaves the state as it is. A job first sends the changes its sink
+// has not been sent, oldest first, as output.PhaseWatcher updates, and
+// then the state, which shows the live state of every watcher of the
+// group. A burst of changes is still one edit of a message that updates
+// in place, and a sink that orders updates by Seq gets each change before
+// the state that shows it.
 package publish
 
 import (
@@ -198,6 +209,45 @@ func Refresh(ctx context.Context, q db.DBTX, investigationID uuid.UUID) error {
 	}
 
 	return enqueueJobs(ctx, q, investigationID, sinks)
+}
+
+// WatcherChanged shows a watcher's state change in the outputs of the
+// investigation with investigationID. It records the change for the
+// investigation's sinks, raises the state's seq by two, the change taking
+// the first and the state the second, and enqueues a publish job for each
+// sink. Each output that accepts output.PhaseWatcher gets the change once,
+// before the state that shows it; the state itself is not replaced, so a
+// final result that waits to be published still is. An investigation that
+// Open was not called for changes nothing. Call it in the transaction that
+// changes the watcher.
+//
+// It locks the state row before it touches any job row, as Enqueue does.
+func WatcherChanged(ctx context.Context, q db.DBTX, investigationID uuid.UUID, state output.WatcherState) error {
+	queries := db.New(q)
+
+	reserved, err := queries.ReserveWatcherChangeSeq(ctx, investigationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("reserve a seq for the watcher change: %w", err)
+	}
+
+	raw, err := json.Marshal(state)
+	if err != nil {
+		return fmt.Errorf("encode the watcher state: %w", err)
+	}
+
+	if err := queries.InsertWatcherChange(ctx, db.InsertWatcherChangeParams{
+		InvestigationID: investigationID,
+		Seq:             reserved.ChangeSeq,
+		State:           raw,
+	}); err != nil {
+		return fmt.Errorf("store the watcher change: %w", err)
+	}
+
+	return enqueueJobs(ctx, q, investigationID, reserved.Sinks)
 }
 
 // enqueueJobs adds the publish job of each sink. A job that is already

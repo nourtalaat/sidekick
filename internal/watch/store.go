@@ -113,11 +113,11 @@ type tickPayload struct {
 }
 
 // Start starts a watcher in tx, which must hold the lock of the
-// watcher's group: it checks the counts, stores the watcher and enqueues
-// its first watch_tick job to run at once. It returns a *LimitError when a
-// count is full, and ErrNameTaken when the group has a watcher with the
-// name; tx stays usable after both.
-func Start(ctx context.Context, tx pgx.Tx, p Policy, w NewWatcher, now time.Time, log *slog.Logger) (db.Watcher, error) {
+// watcher's group: it checks the counts, stores the watcher, enqueues its
+// first watch_tick job to run at once and records the start with rec. It
+// returns a *LimitError when a count is full, and ErrNameTaken when the
+// group has a watcher with the name; tx stays usable after both.
+func Start(ctx context.Context, tx pgx.Tx, p Policy, w NewWatcher, now time.Time, rec *Recorder) (db.Watcher, error) {
 	queries := db.New(tx)
 
 	if err := queries.LockWatcherStarts(ctx, startLockKey); err != nil {
@@ -146,7 +146,7 @@ func Start(ctx context.Context, tx pgx.Tx, p Policy, w NewWatcher, now time.Time
 		return db.Watcher{}, fmt.Errorf("watcher %s: %w", w.Name, err)
 	}
 
-	if err := stateChanged(ctx, tx, log, nil, started); err != nil {
+	if err := rec.changed(ctx, tx, nil, started); err != nil {
 		return db.Watcher{}, fmt.Errorf("watcher %s: %w", w.Name, err)
 	}
 
@@ -155,8 +155,9 @@ func Start(ctx context.Context, tx pgx.Tx, p Policy, w NewWatcher, now time.Time
 
 // EndGroupResolved ends the running watchers of a group whose alerts have
 // all recovered, in tx: alert watchers have recovered, and every other one
-// stops with group_resolved. It returns the watchers it ended.
-func EndGroupResolved(ctx context.Context, tx pgx.Tx, groupID uuid.UUID, now time.Time, log *slog.Logger) ([]db.Watcher, error) {
+// stops with group_resolved. It records each change with rec and returns
+// the watchers it ended.
+func EndGroupResolved(ctx context.Context, tx pgx.Tx, groupID uuid.UUID, now time.Time, rec *Recorder) ([]db.Watcher, error) {
 	ended, err := db.New(tx).EndGroupWatchersResolved(ctx, db.EndGroupWatchersResolvedParams{At: now, GroupID: groupID})
 	if err != nil {
 		return nil, fmt.Errorf("end the watchers of group %s: %w", groupID, err)
@@ -166,8 +167,8 @@ func EndGroupResolved(ctx context.Context, tx pgx.Tx, groupID uuid.UUID, now tim
 		before := w
 		before.Status = StatusRunning
 
-		if err := stateChanged(ctx, tx, log, &before, w); err != nil {
-			return nil, fmt.Errorf("end watcher %s: %w", w.Name, err)
+		if err := rec.changed(ctx, tx, &before, w); err != nil {
+			return nil, fmt.Errorf("group %s: %w", groupID, err)
 		}
 	}
 
@@ -331,8 +332,9 @@ func stateChanged(ctx context.Context, q db.DBTX, log *slog.Logger, old *db.Watc
 }
 
 // auditEntry is the audit row of a watcher's change from old, nil for a
-// start, to w. Sidekick starts watchers; a person who stopped one is the
-// actor of that change, and Sidekick's checks and limits end the others.
+// start, to w. Sidekick starts watchers; a person who stopped one, by
+// Sidekick user ID or else by Slack user ID, is the actor of that change,
+// and Sidekick's checks and limits end the others.
 // The check itself is left out, since an HTTP check can carry headers.
 func auditEntry(old *db.Watcher, w db.Watcher) audit.Entry {
 	e := audit.Entry{
@@ -349,6 +351,8 @@ func auditEntry(old *db.Watcher, w db.Watcher) audit.Entry {
 		e.ActorKind, e.Action = audit.ActorSidekick, auditActionStarted
 	case w.StoppedBy != nil:
 		e.ActorKind, e.ActorID = audit.ActorUser, w.StoppedBy.String()
+	case w.StoppedBySlackUser != nil:
+		e.ActorKind, e.ActorID = audit.ActorUser, *w.StoppedBySlackUser
 	}
 
 	if old != nil {

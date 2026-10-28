@@ -3,6 +3,7 @@
 package router
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
 	"github.com/nourtalaat/sidekick/internal/grouper"
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
+	"github.com/nourtalaat/sidekick/internal/output"
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/registry"
@@ -86,21 +88,80 @@ func TestServiceDownAlertStartsItsWatcher(t *testing.T) {
 
 			h.closeGroups(t, afterTheWindow)
 			require.Equal(t, "closed", groupStatus(t, h, groupID), "the group closes once its last watcher ended")
+
+			var statuses []output.WatcherStatus
+
+			for _, item := range watcherItems(t, h) {
+				statuses = append(statuses, item.State.Status)
+			}
+
+			require.Equal(t, []output.WatcherStatus{output.WatcherRunning, output.WatcherRecovered}, statuses,
+				"the start and the recovery reach the investigation's inbox")
 		})
 	}
 }
 
+// TestAWatcherOverTheLimitIsNotedInTheInbox gives the route two watchers
+// that match with watch.maxPerGroup 1: the second does not start, and the
+// investigation's inbox says why.
+func TestAWatcherOverTheLimitIsNotedInTheInbox(t *testing.T) {
+	t.Parallel()
+
+	cfg, instances := loadWatcherConfig(t, "http://127.0.0.1/healthz",
+		`alertName: ["*Latency*"]`, `alertName: ["*Down*"]`,
+		"watch:\n", "watch:\n  maxPerGroup: 1\n")
+	h := setupWith(t, cfg, instances)
+
+	h.deliver(t, checkoutDown)
+	h.routeAll(t)
+
+	watchers := collect[db.Watcher](t, h.pool, "SELECT * FROM watchers")
+	require.Len(t, watchers, 1)
+	require.Equal(t, "checkout-health", watchers[0].Name)
+
+	items := watcherItems(t, h)
+	require.Len(t, items, 2)
+	require.Equal(t, output.WatcherRunning, items[0].State.Status)
+	require.Equal(t, watch.InboxItem{
+		State:      output.WatcherState{Name: "checkout-latency", CheckType: string(watch.TypeAlert)},
+		NotStarted: "watch.maxPerGroup is 1, and the group has 1 watchers",
+	}, items[1])
+}
+
+// watcherItems returns the bodies of the watcher items in the inbox,
+// oldest first.
+func watcherItems(t *testing.T, h *harness) []watch.InboxItem {
+	t.Helper()
+
+	var out []watch.InboxItem
+
+	for _, item := range h.inbox(t) {
+		if item.Kind != watch.InboxKind {
+			continue
+		}
+
+		var body watch.InboxItem
+		require.NoError(t, json.Unmarshal(item.Body, &body))
+
+		out = append(out, body)
+	}
+
+	return out
+}
+
 // loadWatcherConfig loads fixture/watchers.yaml with healthURL as the URL
-// of its HTTP check, and builds its plugins.
-func loadWatcherConfig(t *testing.T, healthURL string) (*config.Config, *config.Instances) {
+// of its HTTP check, and builds its plugins. edits are pairs of old and
+// new text to replace in the file first.
+func loadWatcherConfig(t *testing.T, healthURL string, edits ...string) (*config.Config, *config.Instances) {
 	t.Helper()
 
 	data, err := os.ReadFile("fixture/watchers.yaml")
 	require.NoError(t, err)
 
+	text := strings.NewReplacer(append(edits, "HEALTH_URL", healthURL)...).Replace(string(data))
 	regs := config.Registries{Models: fakeModels()}
 
-	cfg, err := config.Parse(t.Context(), []byte(strings.ReplaceAll(string(data), "HEALTH_URL", healthURL)), config.LoadOptions{Registries: regs})
+	cfg, err := config.Parse(t.Context(), []byte(text), config.LoadOptions{Registries: regs})
 	require.NoError(t, err)
 
 	in, err := config.Build(t.Context(), cfg, regs, registry.Deps{})
