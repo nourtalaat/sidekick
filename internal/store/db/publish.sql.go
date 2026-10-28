@@ -12,10 +12,33 @@ import (
 	"github.com/google/uuid"
 )
 
+const findInvestigationByExternal = `-- name: FindInvestigationByExternal :one
+SELECT investigation_id FROM output_refs
+WHERE sink = ANY ($1::text[]) AND external = $2
+ORDER BY published_at DESC
+LIMIT 1
+`
+
+type FindInvestigationByExternalParams struct {
+	Sinks    []string
+	External string
+}
+
+// FindInvestigationByExternal returns the investigation that one of sinks
+// published at external, such as the Slack thread a reply is in. When
+// several did, it returns the one published to last.
+func (q *Queries) FindInvestigationByExternal(ctx context.Context, arg FindInvestigationByExternalParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, findInvestigationByExternal, arg.Sinks, arg.External)
+	var investigation_id uuid.UUID
+	err := row.Scan(&investigation_id)
+	return investigation_id, err
+}
+
 const getPublishState = `-- name: GetPublishState :one
 SELECT
   publish_states.seq,
   publish_states.phase,
+  investigations.group_id,
   publish_states.body,
   event_groups.event_count,
   output_refs.ref AS previous_ref,
@@ -36,6 +59,7 @@ type GetPublishStateParams struct {
 type GetPublishStateRow struct {
 	Seq         int64
 	Phase       string
+	GroupID     uuid.UUID
 	Body        json.RawMessage
 	EventCount  int32
 	PreviousRef []byte
@@ -43,14 +67,15 @@ type GetPublishStateRow struct {
 }
 
 // GetPublishState returns the state of an investigation for one sink: the
-// newest update, the number of events in its group, and what the sink
-// published last, if anything.
+// newest update, its group and the number of events in it, and what the
+// sink published last, if anything.
 func (q *Queries) GetPublishState(ctx context.Context, arg GetPublishStateParams) (GetPublishStateRow, error) {
 	row := q.db.QueryRow(ctx, getPublishState, arg.Sink, arg.InvestigationID)
 	var i GetPublishStateRow
 	err := row.Scan(
 		&i.Seq,
 		&i.Phase,
+		&i.GroupID,
 		&i.Body,
 		&i.EventCount,
 		&i.PreviousRef,
@@ -90,6 +115,62 @@ func (q *Queries) InsertPublishState(ctx context.Context, arg InsertPublishState
 	return result.RowsAffected(), nil
 }
 
+const insertWatcherChange = `-- name: InsertWatcherChange :exec
+INSERT INTO watcher_changes (investigation_id, seq, state, created_at)
+VALUES ($1, $2, $3, now())
+`
+
+type InsertWatcherChangeParams struct {
+	InvestigationID uuid.UUID
+	Seq             int64
+	State           json.RawMessage
+}
+
+func (q *Queries) InsertWatcherChange(ctx context.Context, arg InsertWatcherChangeParams) error {
+	_, err := q.db.Exec(ctx, insertWatcherChange, arg.InvestigationID, arg.Seq, arg.State)
+	return err
+}
+
+const listUnsentWatcherChanges = `-- name: ListUnsentWatcherChanges :many
+SELECT id, seq, state FROM watcher_changes
+WHERE investigation_id = $1 AND seq <= $2::bigint AND NOT ($3::text = ANY (sent_to))
+ORDER BY seq
+`
+
+type ListUnsentWatcherChangesParams struct {
+	InvestigationID uuid.UUID
+	MaxSeq          int64
+	Sink            string
+}
+
+type ListUnsentWatcherChangesRow struct {
+	ID    int64
+	Seq   int64
+	State json.RawMessage
+}
+
+// ListUnsentWatcherChanges returns the watcher changes of an investigation
+// up to max_seq that have not been sent to sink, oldest first.
+func (q *Queries) ListUnsentWatcherChanges(ctx context.Context, arg ListUnsentWatcherChangesParams) ([]ListUnsentWatcherChangesRow, error) {
+	rows, err := q.db.Query(ctx, listUnsentWatcherChanges, arg.InvestigationID, arg.MaxSeq, arg.Sink)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUnsentWatcherChangesRow
+	for rows.Next() {
+		var i ListUnsentWatcherChangesRow
+		if err := rows.Scan(&i.ID, &i.Seq, &i.State); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockPublishSeq = `-- name: LockPublishSeq :one
 SELECT seq FROM publish_states WHERE investigation_id = $1 FOR SHARE
 `
@@ -102,6 +183,23 @@ func (q *Queries) LockPublishSeq(ctx context.Context, investigationID uuid.UUID)
 	var seq int64
 	err := row.Scan(&seq)
 	return seq, err
+}
+
+const markWatcherChangeSent = `-- name: MarkWatcherChangeSent :exec
+UPDATE watcher_changes
+SET sent_to = array_append(sent_to, $1::text)
+WHERE id = $2 AND NOT ($1::text = ANY (sent_to))
+`
+
+type MarkWatcherChangeSentParams struct {
+	Sink string
+	ID   int64
+}
+
+// MarkWatcherChangeSent records that a watcher change was sent to sink.
+func (q *Queries) MarkWatcherChangeSent(ctx context.Context, arg MarkWatcherChangeSentParams) error {
+	_, err := q.db.Exec(ctx, markWatcherChangeSent, arg.Sink, arg.ID)
+	return err
 }
 
 const refreshPublishState = `-- name: RefreshPublishState :one
@@ -120,6 +218,30 @@ func (q *Queries) RefreshPublishState(ctx context.Context, investigationID uuid.
 	var sinks []string
 	err := row.Scan(&sinks)
 	return sinks, err
+}
+
+const reserveWatcherChangeSeq = `-- name: ReserveWatcherChangeSeq :one
+UPDATE publish_states
+SET seq = seq + 2, update_seq = coalesce(update_seq, seq), updated_at = now()
+WHERE investigation_id = $1
+RETURNING (seq - 1)::bigint AS change_seq, sinks
+`
+
+type ReserveWatcherChangeSeqRow struct {
+	ChangeSeq int64
+	Sinks     []string
+}
+
+// ReserveWatcherChangeSeq raises the seq of an investigation's state by two
+// without changing what it holds: a watcher's change takes the first of
+// the two, and the state, shown again with the change, the second. It
+// returns the change's seq and the sinks, or no row when the investigation
+// has no state.
+func (q *Queries) ReserveWatcherChangeSeq(ctx context.Context, investigationID uuid.UUID) (ReserveWatcherChangeSeqRow, error) {
+	row := q.db.QueryRow(ctx, reserveWatcherChangeSeq, investigationID)
+	var i ReserveWatcherChangeSeqRow
+	err := row.Scan(&i.ChangeSeq, &i.Sinks)
+	return i, err
 }
 
 const saveOutputRef = `-- name: SaveOutputRef :exec

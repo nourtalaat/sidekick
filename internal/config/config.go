@@ -78,6 +78,7 @@ type Config struct {
 	Telemetry  Telemetry          `yaml:"telemetry"`
 	Watch      Watch              `yaml:"watch"`
 	Memory     Memory             `yaml:"memory"`
+	Retention  Retention          `yaml:"retention"`
 
 	// Listeners are the file listeners, by name. Their events go through
 	// the Slack app or the Teams bot.
@@ -580,6 +581,7 @@ func (c *Config) setDefaults() {
 	c.Telemetry.setDefaults()
 	c.Watch.setDefaults()
 	c.Memory.setDefaults()
+	c.Retention.setDefaults()
 }
 
 // resolveBudgets fills each route's unset limits with the global ones.

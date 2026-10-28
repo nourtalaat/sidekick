@@ -3,6 +3,7 @@ package slack
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -98,14 +99,17 @@ type view struct {
 }
 
 // mainView renders the main message for u: "Looking into it" while
-// queued, the progress while running, and the report once final.
+// queued, the progress while running, and the report once final, also
+// after a follow-up answer.
 func mainView(u output.Update) view {
 	title := eventTitle(u)
 
+	ended := u.Phase == output.PhaseFinal || u.Phase == output.PhaseFollowUp
+
 	switch {
-	case u.Phase == output.PhaseFinal && failed(u.Report):
+	case ended && failed(u.Report):
 		return failedView(u, title)
-	case u.Phase == output.PhaseFinal:
+	case ended:
 		return finalView(u, title)
 	case u.Phase == output.PhaseRunning:
 		return runningView(u, title)
@@ -159,16 +163,70 @@ func continuationView(u output.Update) (view, bool) {
 	}, true
 }
 
+// answerView renders the thread reply with one follow-up answer: who
+// asked, the answer with links to its evidence, and, when the run changed
+// the verdict, the old and the new verdict. An answer the run could not
+// give shows why, with the warning style.
+func answerView(u output.Update, f report.FollowUp) view {
+	style := styleOf(u.Report.Verdict)
+	heading := ":speech_balloon: *Answer*"
+
+	if !f.Answered {
+		style, heading = failedStyle, failedStyle.emoji+" *No answer*"
+	}
+
+	if askers := askerNames(f.Questions); askers != "" {
+		heading += " for " + askers
+	}
+
+	text := escape(cut(f.Answer, maxReasonChars))
+	if links := evidenceLinks(f.Evidence); len(links) > 0 {
+		text += "\n" + strings.Join(links, " · ")
+	}
+
+	blocks := []block{section(heading + "\n" + text)}
+
+	if f.VerdictChanged() {
+		_, now := verdictLine(u.Report)
+		was := styleOf(f.PreviousVerdict)
+		blocks = append(blocks, contextBlock("Verdict changed from "+was.emoji+" "+was.label+" to "+now))
+	}
+
+	return view{
+		text:       escape("Answer: " + cut(f.Answer, maxTitleChars)),
+		attachment: attachment{Color: style.color, Blocks: blocks},
+	}
+}
+
+// askerNames returns who asked the questions, each once, in the order
+// they asked, escaped: their names, or a mention of a Slack user known
+// only by ID, which also lets them know of the answer.
+func askerNames(questions []report.FollowUpQuestion) string {
+	var names []string
+
+	for _, q := range questions {
+		name := escape(q.Author)
+		if name == "" && slackUserID.MatchString(q.AuthorID) {
+			name = "<@" + q.AuthorID + ">"
+		}
+
+		if name != "" && !slices.Contains(names, name) {
+			names = append(names, name)
+		}
+	}
+
+	return strings.Join(names, ", ")
+}
+
 // queuedView is the first message, posted when the investigation is
 // created.
 func queuedView(u output.Update, title string) view {
 	return view{
 		text: escape("Looking into it: " + title),
-		attachment: attachment{Color: colorRunning, Blocks: []block{
+		attachment: attachment{Color: colorRunning, Blocks: slices.Concat([]block{
 			section("*Looking into it* " + escape(title)),
 			contextBlock(runningContext(u)),
-			stopButtons(u),
-		}},
+		}, watcherContext(u), []block{stopButtons(u)}, watcherButtons(u))},
 	}
 }
 
@@ -190,7 +248,8 @@ func runningView(u output.Update, title string) view {
 		blocks = append(blocks, section(strings.Join(lines, "\n")))
 	}
 
-	blocks = append(blocks, contextBlock(runningContext(u)), stopButtons(u))
+	blocks = append(blocks, contextBlock(runningContext(u)))
+	blocks = slices.Concat(blocks, watcherContext(u), []block{stopButtons(u)}, watcherButtons(u))
 
 	return view{
 		text:       escape("Investigating: " + title),
@@ -200,8 +259,8 @@ func runningView(u output.Update, title string) view {
 
 // finalView shows the report, in the order of the design: the verdict and
 // confidence with the reason, the cause and impact, the findings, the
-// fixes, what was checked, who rated the verdict, then the Correct and
-// Wrong buttons. A run a responder stopped says who stopped it instead of
+// fixes, what was checked, the watchers, who rated the verdict, then the
+// Correct and Wrong buttons and the Stop watching buttons. A run a responder stopped says who stopped it instead of
 // asking for a rating.
 func finalView(u output.Update, title string) view {
 	r := u.Report
@@ -230,6 +289,8 @@ func finalView(u output.Update, title string) view {
 		blocks = append(blocks, contextBlock(checked))
 	}
 
+	blocks = append(blocks, watcherContext(u)...)
+
 	if r.StopReason != report.StopCancelled {
 		if line := feedbackLine(u.Feedback); line != "" {
 			blocks = append(blocks, contextBlock(line))
@@ -237,6 +298,8 @@ func finalView(u output.Update, title string) view {
 
 		blocks = append(blocks, feedbackButtons(u))
 	}
+
+	blocks = append(blocks, watcherButtons(u)...)
 
 	return view{
 		text:       escape(notificationText(r, title)),
@@ -256,6 +319,8 @@ func failedView(u output.Update, title string) view {
 	if checked := checkedLine(u.Report); checked != "" {
 		blocks = append(blocks, contextBlock(checked))
 	}
+
+	blocks = slices.Concat(blocks, watcherContext(u), watcherButtons(u))
 
 	return view{
 		text:       escape(failedStyle.label + ": " + title),

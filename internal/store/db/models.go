@@ -116,6 +116,7 @@ type Investigation struct {
 	ConfirmedBy                *uuid.UUID
 	ConfirmedBySlackUser       *string
 	ConfirmedAt                *time.Time
+	RunKind                    string
 }
 
 type InvestigationInbox struct {
@@ -126,6 +127,7 @@ type InvestigationInbox struct {
 	Author          *uuid.UUID
 	CreatedAt       time.Time
 	DeliveredSeq    *int32
+	Key             *string
 }
 
 type Job struct {
@@ -264,28 +266,38 @@ type Step struct {
 }
 
 type Watcher struct {
-	ID              uuid.UUID
-	GroupID         uuid.UUID
-	InvestigationID *uuid.UUID
-	Name            string
-	Origin          string
-	StartedBySeq    *int32
-	CheckType       string
-	Spec            json.RawMessage
-	IntervalS       int32
-	PassesToRecover int32
-	CheckTimeoutS   int32
-	Status          string
-	StopReason      *string
-	PassesInARow    int32
-	Checks          int32
-	StartedAt       time.Time
-	Deadline        time.Time
-	LastCheckAt     *time.Time
-	PassingSince    *time.Time
-	RecoveredAt     *time.Time
-	EndedAt         *time.Time
-	StoppedBy       *uuid.UUID
+	ID                 uuid.UUID
+	GroupID            uuid.UUID
+	InvestigationID    *uuid.UUID
+	Name               string
+	Origin             string
+	StartedBySeq       *int32
+	CheckType          string
+	Spec               json.RawMessage
+	IntervalS          int32
+	PassesToRecover    int32
+	CheckTimeoutS      int32
+	Status             string
+	StopReason         *string
+	PassesInARow       int32
+	Checks             int32
+	StartedAt          time.Time
+	Deadline           time.Time
+	LastCheckAt        *time.Time
+	PassingSince       *time.Time
+	RecoveredAt        *time.Time
+	EndedAt            *time.Time
+	StoppedBy          *uuid.UUID
+	StoppedBySlackUser *string
+}
+
+type WatcherChange struct {
+	ID              int64
+	InvestigationID uuid.UUID
+	Seq             int64
+	State           json.RawMessage
+	SentTo          []string
+	CreatedAt       time.Time
 }
 
 type WatcherCheck struct {

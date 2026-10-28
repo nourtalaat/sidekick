@@ -8,11 +8,13 @@ import (
 	"github.com/nourtalaat/sidekick/internal/app"
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/feedback"
+	"github.com/nourtalaat/sidekick/internal/grouper"
 	"github.com/nourtalaat/sidekick/internal/roles"
 	"github.com/nourtalaat/sidekick/internal/rules"
 	"github.com/nourtalaat/sidekick/internal/slackapp"
 	"github.com/nourtalaat/sidekick/internal/slackcmd"
 	"github.com/nourtalaat/sidekick/internal/slackroles"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // registerSlackApp receives Slack events when the slack section lets the
@@ -32,6 +34,18 @@ func registerSlackApp(ctx context.Context, a *app.App, cache *rules.Cache) error
 		return nil
 	}
 
+	// One lookup finds the roles of everyone who acts in Slack: buttons,
+	// commands and follow-up questions.
+	lookup, err := slackroles.New(slackroles.Options{
+		Slack:   cfg.Slack,
+		Secrets: a.Secrets(),
+		Pool:    a.Pool(),
+		Logger:  a.Logger().With("component", "slackroles"),
+	})
+	if err != nil {
+		return fmt.Errorf("set up Slack roles: %w", err)
+	}
+
 	h, err := slackapp.New(slackapp.Options{
 		Config:         cfg,
 		Secrets:        a.Secrets(),
@@ -40,6 +54,7 @@ func registerSlackApp(ctx context.Context, a *app.App, cache *rules.Cache) error
 		Logger:         log,
 		Metrics:        a.Telemetry().Registry(),
 		TracerProvider: a.Telemetry().TracerProvider(),
+		Roles:          lookup,
 	})
 	if err != nil {
 		return fmt.Errorf("set up the Slack app: %w", err)
@@ -56,16 +71,6 @@ func registerSlackApp(ctx context.Context, a *app.App, cache *rules.Cache) error
 
 		return nil
 	})
-
-	lookup, err := slackroles.New(slackroles.Options{
-		Slack:   cfg.Slack,
-		Secrets: a.Secrets(),
-		Pool:    a.Pool(),
-		Logger:  a.Logger().With("component", "slackroles"),
-	})
-	if err != nil {
-		return fmt.Errorf("set up Slack roles: %w", err)
-	}
 
 	commands := newSlackCommands(a, h, cache, lookup)
 
@@ -106,19 +111,30 @@ func registerSlackApp(ctx context.Context, a *app.App, cache *rules.Cache) error
 }
 
 // newButtons handles clicks on the buttons of Sidekick's messages, with
-// sidekick_feedback_total. Each click checks the clicker's role with
-// lookup.
+// sidekick_feedback_total, and stops watchers for Stop watching. Each
+// click checks the clicker's role with lookup.
 func newButtons(a *app.App, h *slackapp.Handler, lookup roles.Lookup) (*slackapp.Buttons, error) {
 	metrics, err := feedback.NewMetrics(a.Telemetry().Registry())
 	if err != nil {
 		return nil, fmt.Errorf("set up feedback metrics: %w", err)
 	}
 
+	recorder, err := newWatchRecorder(a)
+	if err != nil {
+		return nil, fmt.Errorf("set up Stop watching: %w", err)
+	}
+
+	stopper, err := watch.NewStopper(watch.StopperOptions{Pool: a.Pool(), CloseGroup: grouper.EnqueueClose, Recorder: recorder})
+	if err != nil {
+		return nil, fmt.Errorf("set up Stop watching: %w", err)
+	}
+
 	return slackapp.NewButtons(slackapp.ButtonsOptions{
-		Handler: h,
-		Pool:    a.Pool(),
-		Roles:   lookup,
-		Metrics: metrics,
-		Logger:  a.Logger().With("component", "slackapp"),
+		Handler:  h,
+		Pool:     a.Pool(),
+		Roles:    lookup,
+		Metrics:  metrics,
+		Watchers: stopper,
+		Logger:   a.Logger().With("component", "slackapp"),
 	}), nil
 }

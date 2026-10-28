@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/feedback"
 	"github.com/nourtalaat/sidekick/internal/output"
 	"github.com/nourtalaat/sidekick/internal/queue"
@@ -52,15 +53,19 @@ type Options struct {
 	// TracerProvider makes the tracer of the output.publish spans. Nil
 	// means the global tracer provider.
 	TracerProvider trace.TracerProvider
+	// Watchers returns the state of every watcher of a group, for the live
+	// display in every update. Nil shows no watchers.
+	Watchers func(ctx context.Context, q db.DBTX, groupID uuid.UUID) ([]output.WatcherState, error)
 }
 
 // Handler runs publish jobs. Make it with New and register it for
 // queue.KindPublish.
 type Handler struct {
-	pool   *pgxpool.Pool
-	sinks  map[string]output.Sink
-	log    *slog.Logger
-	tracer trace.Tracer
+	pool     *pgxpool.Pool
+	sinks    map[string]output.Sink
+	log      *slog.Logger
+	tracer   trace.Tracer
+	watchers func(ctx context.Context, q db.DBTX, groupID uuid.UUID) ([]output.WatcherState, error)
 }
 
 var _ queue.Handler = (*Handler)(nil)
@@ -77,14 +82,15 @@ func New(opts Options) *Handler {
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	return &Handler{pool: opts.Pool, sinks: opts.Sinks, log: log, tracer: tp.Tracer(tracerName)}
+	return &Handler{pool: opts.Pool, sinks: opts.Sinks, log: log, tracer: tp.Tracer(tracerName), watchers: opts.Watchers}
 }
 
 // Handle shows the newest state of one investigation in one sink, inside
 // an output.publish span that is a child of the span that enqueued the
-// job. It publishes when the state is newer than what the sink shows and
-// the sink accepts its phase, then finishes the run as the package doc
-// describes.
+// job. It first sends the watcher changes the sink has not been sent, when
+// the sink accepts them, then publishes the state when it is newer than
+// what the sink shows and the sink accepts its phase, and finishes the run
+// as the package doc describes.
 //
 // A failed publish returns the error, so the job is retried with backoff
 // and keeps its unique key meanwhile. A payload that does not decode, a
@@ -143,19 +149,46 @@ func (h *Handler) Handle(ctx context.Context, job db.Job) (err error) {
 	return nil
 }
 
-// publish sends state to sink and returns the ref the sink returned. It
-// returns nil, and sends nothing, when the sink shows this state already or
-// does not accept its phase.
+// publish sends sink the watcher changes it has not been sent, then state,
+// and returns the ref the sink returned for state. It returns nil, and
+// sends no state, when the sink shows this state already or does not
+// accept its phase.
 func (h *Handler) publish(ctx context.Context, p Payload, sink output.Sink, state db.GetPublishStateRow) (*output.Ref, error) {
 	phase := output.Phase(state.Phase)
+	shown := state.PreviousSeq
 
-	if (state.PreviousSeq != nil && state.Seq <= *state.PreviousSeq) || !sink.Accepts(phase) {
+	var changes []db.ListUnsentWatcherChangesRow
+
+	if sink.Accepts(output.PhaseWatcher) {
+		var err error
+
+		changes, err = db.New(h.pool).ListUnsentWatcherChanges(ctx, db.ListUnsentWatcherChangesParams{
+			InvestigationID: p.InvestigationID,
+			MaxSeq:          state.Seq,
+			Sink:            p.Sink,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list the watcher changes to send: %w", err)
+		}
+	}
+
+	showState := (shown == nil || state.Seq > *shown) && sink.Accepts(phase)
+	if len(changes) == 0 && !showState {
 		return nil, nil
 	}
 
 	u, err := h.update(ctx, p.InvestigationID, state)
 	if err != nil {
 		return nil, fmt.Errorf("build the update: %w", err)
+	}
+
+	u.Previous, shown, err = h.sendChanges(ctx, p, sink, u, changes, shown)
+	if err != nil {
+		return nil, fmt.Errorf("watcher changes: %w", err)
+	}
+
+	if !showState || (shown != nil && state.Seq <= *shown) {
+		return nil, nil
 	}
 
 	ref, err := sink.Publish(ctx, u)
@@ -166,17 +199,82 @@ func (h *Handler) publish(ctx context.Context, p Payload, sink output.Sink, stat
 	return &ref, nil
 }
 
-// update builds what the sink gets: the state, the event that opened the
-// investigation's group, and the ref of what the sink published before.
-func (h *Handler) update(ctx context.Context, investigationID uuid.UUID, state db.GetPublishStateRow) (output.Update, error) {
-	loaded, err := db.New(h.pool).GetInvestigationWithEvent(ctx, investigationID)
-	if err != nil {
-		return output.Update{}, fmt.Errorf("load the investigation and its event: %w", err)
+// sendChanges sends sink the watcher changes, oldest first, each as an
+// output.PhaseWatcher update built on u with the change's seq. After each
+// one it stores the ref the sink returned and marks the change sent, so a
+// retry sends only the rest. It returns the newest ref and the seq it
+// shows, or u.Previous and shown when there are no changes.
+func (h *Handler) sendChanges(ctx context.Context, p Payload, sink output.Sink, u output.Update, changes []db.ListUnsentWatcherChangesRow, shown *int64) (*output.Ref, *int64, error) {
+	prev := u.Previous
+
+	for _, c := range changes {
+		var state output.WatcherState
+		if err := json.Unmarshal(c.State, &state); err != nil {
+			return nil, nil, fmt.Errorf("decode watcher change %d: %w", c.ID, err)
+		}
+
+		cu := u
+		cu.Phase = output.PhaseWatcher
+		cu.Watcher = &state
+		cu.Seq = c.Seq
+		cu.Previous = prev
+
+		ref, err := sink.Publish(ctx, cu)
+		if err != nil {
+			return nil, nil, fmt.Errorf("send watcher change %d: %w", c.ID, err)
+		}
+
+		if err := h.markSent(ctx, p, c, ref); err != nil {
+			return nil, nil, fmt.Errorf("watcher change %d: %w", c.ID, err)
+		}
+
+		prev, shown = &ref, &c.Seq
 	}
 
-	ev, err := store.EventOf(loaded.Event)
+	return prev, shown, nil
+}
+
+// markSent stores the ref a sink returned for watcher change c and marks
+// the change sent to the sink, in one transaction.
+func (h *Handler) markSent(ctx context.Context, p Payload, c db.ListUnsentWatcherChangesRow, ref output.Ref) error {
+	raw, err := json.Marshal(ref)
 	if err != nil {
-		return output.Update{}, fmt.Errorf("read event %s: %w", loaded.Event.ID, err)
+		return fmt.Errorf("encode the ref: %w", err)
+	}
+
+	err = pgx.BeginFunc(ctx, h.pool, func(tx pgx.Tx) error {
+		queries := db.New(tx)
+
+		if err := queries.SaveOutputRef(ctx, db.SaveOutputRefParams{
+			InvestigationID: p.InvestigationID,
+			Sink:            p.Sink,
+			External:        ref.External,
+			Ref:             raw,
+			LastSeq:         c.Seq,
+		}); err != nil {
+			return fmt.Errorf("store the ref: %w", err)
+		}
+
+		if err := queries.MarkWatcherChangeSent(ctx, db.MarkWatcherChangeSentParams{Sink: p.Sink, ID: c.ID}); err != nil {
+			return fmt.Errorf("mark it sent: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("record the watcher change as sent: %w", err)
+	}
+
+	return nil
+}
+
+// update builds what the sink gets: the state, the event that opened the
+// investigation's group, the state of the group's watchers, and the ref of
+// what the sink published before.
+func (h *Handler) update(ctx context.Context, investigationID uuid.UUID, state db.GetPublishStateRow) (output.Update, error) {
+	inv, ev, err := h.load(ctx, investigationID)
+	if err != nil {
+		return output.Update{}, fmt.Errorf("load the investigation: %w", err)
 	}
 
 	var stored body
@@ -197,8 +295,15 @@ func (h *Handler) update(ctx context.Context, investigationID uuid.UUID, state d
 		u.Progress = append(u.Progress, output.Progress(line))
 	}
 
+	if h.watchers != nil {
+		u.Watchers, err = h.watchers(ctx, h.pool, state.GroupID)
+		if err != nil {
+			return output.Update{}, fmt.Errorf("load the watchers of group %s: %w", state.GroupID, err)
+		}
+	}
+
 	if u.Phase == output.PhaseFinal {
-		if err := h.addResponders(ctx, &u, loaded.Investigation); err != nil {
+		if err := h.addResponders(ctx, &u, inv); err != nil {
 			return output.Update{}, fmt.Errorf("load what responders did: %w", err)
 		}
 	}
@@ -213,6 +318,38 @@ func (h *Handler) update(ctx context.Context, investigationID uuid.UUID, state d
 	}
 
 	return u, nil
+}
+
+// load returns the investigation with the event that opened its group.
+// The retention job deletes events sooner than investigations by default,
+// so an old investigation can have no events left; it is then published
+// with an empty event, and the sinks fall back to their wording for an
+// event without a title, while the report comes from the publish state.
+func (h *Handler) load(ctx context.Context, id uuid.UUID) (db.Investigation, event.Event, error) {
+	queries := db.New(h.pool)
+
+	loaded, err := queries.GetInvestigationWithEvent(ctx, id)
+	if err == nil {
+		ev, err := store.EventOf(loaded.Event)
+		if err != nil {
+			return db.Investigation{}, event.Event{}, fmt.Errorf("read event %s: %w", loaded.Event.ID, err)
+		}
+
+		return loaded.Investigation, ev, nil
+	}
+
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return db.Investigation{}, event.Event{}, fmt.Errorf("with its event: %w", err)
+	}
+
+	inv, err := queries.GetInvestigation(ctx, id)
+	if err != nil {
+		return db.Investigation{}, event.Event{}, fmt.Errorf("without its event: %w", err)
+	}
+
+	h.log.DebugContext(ctx, "publishing an investigation whose events were deleted", "investigation_id", id.String())
+
+	return inv, event.Event{}, nil
 }
 
 // addResponders adds to a final update who rated the verdict and who

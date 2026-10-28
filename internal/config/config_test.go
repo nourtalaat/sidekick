@@ -72,6 +72,13 @@ func TestParseDefaults(t *testing.T) {
 				require.Equal(t, DefaultConcurrency, cfg.Budgets.Concurrency)
 				require.Empty(t, cfg.RouteConcurrency())
 				require.Equal(t, LogLevelInfo, cfg.Telemetry.LogLevel)
+				require.Equal(t, Retention{
+					Events:         Period(90 * Day),
+					Investigations: Period(365 * Day),
+					Steps:          Period(90 * Day),
+					AuditLog:       Period(730 * Day),
+					WatcherChecks:  Period(30 * Day),
+				}, cfg.Retention)
 				require.Nil(t, cfg.Slack)
 				require.Equal(t, Memory{Enabled: true, Examples: 3}, cfg.Memory)
 				require.Equal(t, 3, cfg.Memory.PromptExamples())
@@ -91,6 +98,7 @@ func TestParseDefaults(t *testing.T) {
 server: {listen: ":1"}
 budgets: {perInvestigation: {maxToolCalls: 10}, concurrency: 4}
 memory: {enabled: false}
+retention: {events: 7d, watcherChecks: 36h}
 routes:
   - {name: a, priority: 0, budgets: {maxWallTime: 1m}, concurrency: 2, grouping: {window: 5m, relatedWindow: 2m, fingerprintLabels: [service, env]}}
   - {name: default}
@@ -98,6 +106,9 @@ routes:
 			check: func(t *testing.T, cfg *Config) {
 				t.Helper()
 				require.Equal(t, Server{Listen: ":1", MetricsListen: ":9090"}, cfg.Server)
+				require.Equal(t, Period(7*Day), cfg.Retention.Events)
+				require.Equal(t, Period(36*time.Hour), cfg.Retention.WatcherChecks)
+				require.Equal(t, Period(365*Day), cfg.Retention.Investigations)
 				require.Equal(t, Limits{MaxTokens: 400_000, MaxToolCalls: 10, MaxWallTime: 10 * time.Minute, MaxCostUSD: 1}, cfg.Budgets.PerInvestigation)
 				require.Equal(t, 0, cfg.Routes[0].Priority)
 				require.Equal(t, RouteBudgets{Limits: Limits{MaxTokens: 400_000, MaxToolCalls: 10, MaxWallTime: time.Minute, MaxCostUSD: 1}, Daily: RouteDaily{OnDailyCap: OnDailyCapWait}}, cfg.Routes[0].Budgets)

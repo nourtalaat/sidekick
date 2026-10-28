@@ -3,16 +3,10 @@ package slackapp
 import (
 	"cmp"
 	"encoding/json"
-	"maps"
-	"slices"
-	"strings"
 
 	"github.com/nourtalaat/sidekick/internal/event"
-	"github.com/nourtalaat/sidekick/internal/source"
+	"github.com/nourtalaat/sidekick/internal/listen"
 )
-
-// maxTitleBytes is the longest title taken from a message's first line.
-const maxTitleBytes = 200
 
 // messageSenderType is the fingerprint's sender type for messages that no
 // extract pattern gave an alert name or labels.
@@ -35,7 +29,7 @@ func buildEvent(key, team string, m message, text string, l *listener, raw json.
 	ev := event.Event{
 		Key:      key,
 		Kind:     event.KindMessage,
-		Title:    title(text),
+		Title:    listen.Title(text),
 		Text:     text,
 		Severity: event.SeverityUnknown,
 		Slack: &event.SlackRef{
@@ -64,28 +58,7 @@ func buildEvent(key, team string, m message, text string, l *listener, raw json.
 		return ev
 	}
 
-	f := l.fields(text)
-	ev.AlertName, ev.Service, ev.Severity, ev.Labels = f.alert, f.service, f.severity, f.labels
-
-	if f.alert != "" || len(f.labels) > 0 {
-		ev.Fingerprint = event.Fingerprint(l.name, f.alert, f.labels, slices.Collect(maps.Keys(f.labels)))
-	}
-
-	if l.isRecovery(text) {
-		ev.Kind = event.KindResolved
-	}
+	l.Apply(&ev, text)
 
 	return ev
-}
-
-// title returns the first line of text that is not blank, cut to
-// maxTitleBytes.
-func title(text string) string {
-	for line := range strings.SplitSeq(text, "\n") {
-		if line = strings.TrimSpace(line); line != "" {
-			return source.CutText(line, maxTitleBytes)
-		}
-	}
-
-	return ""
 }

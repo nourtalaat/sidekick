@@ -176,6 +176,9 @@ func testRegistries() Registries {
 	regs.Outputs.Register("slack", registry.Typed(func(context.Context, string, fakeSlackConfig, registry.Deps) (output.Sink, error) {
 		return fakeSink{}, nil
 	}))
+	regs.Outputs.Register("teams", registry.Typed(func(context.Context, string, fakeSlackConfig, registry.Deps) (output.Sink, error) {
+		return fakeSink{}, nil
+	}))
 	regs.Outputs.Register("webhook", registry.Typed(func(context.Context, string, fakeWebhookOutputConfig, registry.Deps) (output.Sink, error) {
 		return fakeSink{}, nil
 	}))

@@ -91,12 +91,16 @@ func init() {
 
 An update's `Phase` is the stage it describes: `queued` when the
 investigation is created, `running` while it runs, and `final` once it has
-a result. Later releases add phases for follow-up answers, action
-proposals and watchers. `Accepts` returns true for the phases your output
-shows; the publish job skips the others without calling `Publish`. A
-webhook callback, for example, accepts only `final`; a chat message that
-updates in place accepts all three, so people see that an investigation
-started within seconds.
+a result. After a follow-up question, `follow_up` carries the report with
+the new answer last in `Report.FollowUps`; an answer that changes the
+verdict comes as a new `final` instead. `watcher` reports a change of a
+watcher's state; see [Watcher changes](#watcher-changes). Later releases
+add a phase for action proposals. `Accepts` returns true for the phases
+your output shows; the publish job skips the others without calling
+`Publish`. A webhook callback, for example, accepts `final` and
+`watcher`; a chat message that updates in place accepts all of them, so
+people see that an investigation started within seconds, and the answers
+to their questions.
 
 ## Step 3: publishing and editing
 
@@ -109,6 +113,8 @@ started within seconds.
 - `Report`, set with `final`. A final update without a report, or with
   `Report.StopReason` `error`, is a run that could not finish; show that
   too, so nothing stays on "investigating" forever;
+- `Watchers`, the state of every watcher of the investigation's group,
+  oldest first, in every phase;
 - `Previous`, the `Ref` your sink returned last time, or nil the first
   time;
 - `Seq`, which increases with every state of the investigation.
@@ -130,6 +136,19 @@ Editing a message does not notify anyone in most chat tools. If people
 should hear about the verdict, send a short new message when the final
 verdict arrives, once per verdict, and record that in `Ref.Data` so a
 retried final does not send it twice.
+
+### Watcher changes
+
+An output that accepts `watcher` gets one update per change of a
+watcher's state, oldest first, before the update of the state that shows
+it. `Watcher` says which watcher changed and holds its new state. The
+publish job sends each change once, apart from a retry after a failed
+`Publish`, so do not compare its `Seq` with the one your message shows:
+each change has a `Seq` of its own, below that of the state that follows.
+A message that updates in place shows `Watchers` with the other updates,
+and can post a short new message about the change, as the Slack output
+does in the thread. A watcher change never replaces the state, so a final
+result that waits to be shown still arrives.
 
 ## Step 4: untrusted text
 

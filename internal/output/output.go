@@ -128,7 +128,7 @@ type Feedback struct {
 // Person is someone who acted on an investigation.
 type Person struct {
 	// SlackUserID is set for someone who acted in Slack, such as U01ABCDEF.
-	SlackUserID string
+	SlackUserID string `json:"slackUserId,omitempty"`
 }
 
 // WatcherStatus is the state of one watcher (WT-4).
@@ -150,14 +150,18 @@ type WatcherState struct {
 	Status          WatcherStatus `json:"status"`
 	PassesInARow    int           `json:"passesInARow"`
 	PassesToRecover int           `json:"passesToRecover"`
-	Checks          int           `json:"checks"`
-	LastCheckAt     time.Time     `json:"lastCheckAt,omitzero"`
+	// IntervalSeconds is the time between two checks.
+	IntervalSeconds int       `json:"intervalSeconds"`
+	Checks          int       `json:"checks"`
+	LastCheckAt     time.Time `json:"lastCheckAt,omitzero"`
 	// LastResult is a short, redacted summary such as "HTTP 503".
 	LastResult string    `json:"lastResult,omitempty"`
 	StartedAt  time.Time `json:"startedAt"`
 	EndedAt    time.Time `json:"endedAt,omitzero"`
 	// StopReason is set for WatcherStopped: group_resolved, responder or config_changed.
 	StopReason string `json:"stopReason,omitempty"`
+	// StoppedBy is the responder who stopped the watcher, when one did.
+	StoppedBy *Person `json:"stoppedBy,omitempty"`
 }
 
 // EventName is the webhook callback event for a state change (WT-6), for

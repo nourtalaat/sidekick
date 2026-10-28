@@ -2,11 +2,12 @@
 
 Sidekick works in Slack in two directions. The Slack app receives
 messages: alerts that bots post in the channels it listens to, and
-mentions of `@Sidekick`, each of which starts an investigation. The
-`slack` output shows each investigation as one Slack message that is
-edited in place while the investigation runs, with buttons to stop the
-run and to rate its verdict. Slash commands, follow-up questions in the
-thread and a link to the web UI come in later releases.
+mentions of `@Sidekick`, each of which starts an investigation, and
+follow-up questions in the thread of an investigation. The `slack` output
+shows each investigation as one Slack message that is edited in place
+while the investigation runs, with buttons to stop the run, to rate its
+verdict and to stop its watchers, and answers the questions in its
+thread. Slash commands and a link to the web UI come in later releases.
 
 ## What it posts
 
@@ -41,6 +42,28 @@ thread and a link to the web UI come in later releases.
 - **A run that could not finish** shows "Could not finish" with a yellow
   bar and what was checked, and gets a short reply too, so no message is
   left on "Investigating".
+- **Each follow-up answer** is a new reply in the thread, which mentions
+  the people who asked. An answer that changes the verdict also updates
+  the message and gets a new verdict reply. See
+  [Follow-up questions](#follow-up-questions).
+- **When the group has [watchers](configuration.md#watch)**, the message
+  shows a line for each one, in every state of the investigation, and is
+  edited when a watcher changes state:
+
+  | State | Line |
+  |---|---|
+  | Running | `:eyes: *Watching* checkout-health · checking every 30s since 14:02` |
+  | Recovered | `:white_check_mark: *Back up* checkout-health · at 14:14, watched for 12 min` |
+  | Timed out | `:hourglass: *Stopped watching* checkout-health · after 60 min, still down` |
+  | Stopped | `:black_square_for_stop: *Stopped watching* checkout-health · stopped by @ana at 14:08`, or why it stopped: every alert recovered, or the config no longer allows its check |
+
+  The lines show times of day, in each reader's time zone, rather than
+  how long ago something happened, so they stay true between edits.
+- **Every change of a watcher's state also gets a short new reply** in the
+  thread, when it starts and when it ends, with how often it checked, the
+  result of its last check and a link to the message. The bar is blue
+  while it watches, green when the service is back up, yellow when it
+  timed out and gray when it was stopped.
 
 Text from the alert and from the model is escaped, so it cannot mention
 `@channel` or a person, or add links. The only links are to evidence that
@@ -53,6 +76,10 @@ the sources returned.
   seconds, even in the middle of a slow model or tool call and whichever
   replica runs it, and the message then shows "Not sure yet" with what was
   found and checked so far, and who stopped it.
+- **Stop watching** is on the message for each running watcher, in every
+  state of the investigation. Slack asks to confirm first. The watcher
+  stops with the stop reason `responder`, the thread gets a short reply,
+  and the investigation and its verdict stay as they are.
 - **Correct** and **Wrong** are on the final message, except after a Stop
   or a run that could not finish. Each person has one rating per verdict:
   clicking the same button again changes nothing, and clicking the other
@@ -66,13 +93,12 @@ of similar alerts see it as an example (see
 takes the confirmation back, and the investigation out of memory.
 
 Every click is checked against the clicker's role at the time of the
-click: **Stop**, **Correct** and **Wrong** need the `responder` role, so a
-`viewer` cannot press them. Roles come from `slack.roleGroups` and
-`slack.roleUsers`, and a Slack user in neither is a `responder`; see
-[Roles](#roles). A refused user's groups are read again before the click
-is refused, so someone just added to a group can press at once. When a
-click cannot do
-anything, for example a Correct before there is a verdict, or a Stop on an
+click: **Stop**, **Correct**, **Wrong** and **Stop watching** need the
+`responder` role, so a `viewer` cannot press them. Roles come from
+`slack.roleGroups` and `slack.roleUsers`, and a Slack user in neither is a
+`responder`; see [Roles](#roles). A refused user's groups are read again
+before the click is refused, so someone just added to a group can press at
+once. When a click cannot do anything, for example a Correct before there is a verdict, or a Stop on an
 investigation that has ended, Sidekick says so in a note only the clicker
 sees.
 
@@ -209,8 +235,45 @@ Mentioning `@Sidekick` asks it to investigate a message:
   the mention.
 
 Events from mentions have the intake `slack-mention` and are never
-trusted. A mention in a thread that Sidekick started itself is left alone;
-follow-up questions there come in a later release.
+trusted. A mention in a thread that Sidekick started itself is left alone,
+and a mention in the thread of an investigation is a follow-up question.
+
+### Follow-up questions
+
+A reply in the thread of an investigation's message is a follow-up
+question: with `slack.followUps: mention`, the default, only a reply that
+mentions `@Sidekick`, and with `followUps: any`, every reply a person
+writes there. Replies from bots never are. Sidekick finds the
+investigation from the thread, so the question goes to that investigation
+rather than starting a new one.
+
+Sidekick answers in a new run of the same investigation, which starts from
+everything the first run saw:
+
+- Questions that arrive close together, or while the investigation still
+  runs, are answered together in one run, after the investigation's own
+  verdict.
+- The run has the same tools as the first, and half of its limits: half the
+  tokens, tool calls, time and cost. See [Limits](investigations.md#limits).
+- When the answer does not change the verdict, it is posted as a reply.
+  When it does, the model gives a new report, which replaces the old one,
+  and the message shows the new verdict. The report keeps every earlier
+  answer either way.
+- A run that cannot answer, for example at its limits or because someone
+  stopped it, posts a reply that says so, and the report stays as it was.
+- An investigation that was stopped still answers questions; the Stop
+  applies only to the run it was pressed for.
+
+A question is redacted like event text before it is stored, and the model
+reads it as a request about what to look at: it cannot change the
+investigation's tools, its action mode or the verdict rules.
+
+Asking needs the `responder` role, like the buttons (see [Roles](#roles)).
+A `viewer`'s question is not sent: Sidekick starts no run for it and
+replies in the thread with a note only that person sees, "Only responders
+can ask Sidekick follow-up questions, so this one was not sent." As with
+the buttons, a refused user's groups are read again first, so someone just
+added to a group can ask at once.
 
 ## The /sidekick command
 

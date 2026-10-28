@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/queue"
@@ -44,10 +45,12 @@ func TestMain(m *testing.M) {
 // fixture/groups.sql, with a clock the test moves and a record of the
 // groups whose close_group the watchers asked for.
 type harness struct {
-	pool    *pgxpool.Pool
-	policy  Policy
-	checker *Checker
-	now     time.Time
+	pool     *pgxpool.Pool
+	policy   Policy
+	checker  *Checker
+	reg      *prometheus.Registry
+	recorder *Recorder
+	now      time.Time
 
 	mu     sync.Mutex
 	closes []uuid.UUID
@@ -59,11 +62,18 @@ func setup(t *testing.T) *harness {
 	pool := storetest.New(t)
 	storetest.LoadFixture(t, pool, "fixture/groups.sql")
 
+	reg := prometheus.NewRegistry()
+
+	recorder, err := NewRecorder(slog.New(slog.DiscardHandler), reg)
+	require.NoError(t, err)
+
 	return &harness{
-		pool:    pool,
-		policy:  testPolicy(),
-		checker: newChecker(t, testDeps{allowHosts: []string{loopback}, allowPrivate: []string{loopback}, opts: Options{Alerts: StoreAlerts{DB: pool}}}),
-		now:     time.Now().UTC().Truncate(time.Second),
+		pool:     pool,
+		policy:   testPolicy(),
+		checker:  newChecker(t, testDeps{allowHosts: []string{loopback}, allowPrivate: []string{loopback}, opts: Options{Alerts: StoreAlerts{DB: pool}}}),
+		reg:      reg,
+		recorder: recorder,
+		now:      time.Now().UTC().Truncate(time.Second),
 	}
 }
 
@@ -90,23 +100,28 @@ func (h *harness) ticker(t *testing.T) *Ticker {
 	t.Helper()
 
 	tk, err := NewTicker(TickerOptions{
-		Pool:    h.pool,
-		Checker: h.checker,
-		Policy:  h.policy,
-		CloseGroup: func(_ context.Context, _ db.DBTX, groupID uuid.UUID) error {
-			h.mu.Lock()
-			defer h.mu.Unlock()
-
-			h.closes = append(h.closes, groupID)
-
-			return nil
-		},
-		Logger: slog.New(slog.DiscardHandler),
-		Now:    func() time.Time { return h.now },
+		Pool:       h.pool,
+		Checker:    h.checker,
+		Policy:     h.policy,
+		CloseGroup: h.closeGroup,
+		Recorder:   h.recorder,
+		Logger:     slog.New(slog.DiscardHandler),
+		Now:        func() time.Time { return h.now },
 	})
 	require.NoError(t, err)
 
 	return tk
+}
+
+// closeGroup records that a watcher asked for the close_group of the
+// group with groupID.
+func (h *harness) closeGroup(_ context.Context, _ db.DBTX, groupID uuid.UUID) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.closes = append(h.closes, groupID)
+
+	return nil
 }
 
 // start starts w in a transaction that locks its group, as the router and
@@ -120,7 +135,7 @@ func (h *harness) start(t *testing.T, w NewWatcher) (db.Watcher, error) {
 		_, err := db.New(tx).LockEventGroup(t.Context(), w.GroupID)
 		require.NoError(t, err)
 
-		started, err = Start(t.Context(), tx, h.policy, w, h.now, slog.New(slog.DiscardHandler))
+		started, err = Start(t.Context(), tx, h.policy, w, h.now, h.recorder)
 
 		return err
 	})

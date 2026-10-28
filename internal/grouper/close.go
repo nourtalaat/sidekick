@@ -42,6 +42,9 @@ type CloserOptions struct {
 	// Logger receives one line per closed group, with IDs and the reason
 	// only. Nil logs nothing.
 	Logger *slog.Logger
+	// Watchers records the watchers a resolved group ends. Nil writes and
+	// shows the changes, but logs and counts nothing.
+	Watchers *watch.Recorder
 	// Now returns the current time. Nil means time.Now.
 	Now func() time.Time
 }
@@ -49,9 +52,10 @@ type CloserOptions struct {
 // Closer runs close_group jobs. Make it with NewCloser and register it for
 // queue.KindCloseGroup.
 type Closer struct {
-	pool *pgxpool.Pool
-	log  *slog.Logger
-	now  func() time.Time
+	pool     *pgxpool.Pool
+	log      *slog.Logger
+	watchers *watch.Recorder
+	now      func() time.Time
 }
 
 var _ queue.Handler = (*Closer)(nil)
@@ -68,7 +72,7 @@ func NewCloser(opts CloserOptions) *Closer {
 		now = time.Now
 	}
 
-	return &Closer{pool: opts.Pool, log: log, now: now}
+	return &Closer{pool: opts.Pool, log: log, watchers: opts.Watchers, now: now}
 }
 
 // Handle runs one close_group job. The job is enqueued for the time a
@@ -128,7 +132,7 @@ func (c *Closer) decide(ctx context.Context, tx pgx.Tx, job db.Job, id uuid.UUID
 	}
 
 	if recovered {
-		if _, err := watch.EndGroupResolved(ctx, tx, grp.ID, c.now(), c.log); err != nil {
+		if _, err := watch.EndGroupResolved(ctx, tx, grp.ID, c.now(), c.watchers); err != nil {
 			return fmt.Errorf("end the watchers: %w", err)
 		}
 

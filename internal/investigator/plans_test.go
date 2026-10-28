@@ -19,6 +19,9 @@ import (
 // planFence is the fence of busy in fixture/plans.sql.
 const planFence = 1000 + 10000
 
+// endedFence is the fence of ended in fixture/plans.sql.
+const endedFence = 1000 + 10005
+
 // TestQueryPlans runs EXPLAIN ANALYZE on each investigator query over
 // 20,000 investigations with 500,000 steps and a year of daily spend for
 // 20 routes, and checks that it uses the index it is meant to. Run with -v to see the plans.
@@ -32,6 +35,11 @@ func TestQueryPlans(t *testing.T) {
 	// group its group.
 	var busy, group uuid.UUID
 	require.NoError(t, pool.QueryRow(t.Context(), "SELECT md5('inv' || 10000)::uuid, md5('grp' || 10000)::uuid").Scan(&busy, &group))
+
+	// ended is an investigation that has ended, with follow-up questions
+	// in its inbox.
+	var ended uuid.UUID
+	require.NoError(t, pool.QueryRow(t.Context(), "SELECT md5('inv' || 10005)::uuid").Scan(&ended))
 
 	// busyEvent is the event of busy's group.
 	var busyEvent uuid.UUID
@@ -53,6 +61,73 @@ func TestQueryPlans(t *testing.T) {
 				return fmt.Errorf("run query: %w", err)
 			},
 			wantIndex: []string{"Insert on investigation_inbox"},
+		},
+		{
+			name: "InsertKeyedInboxItem",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.InsertKeyedInboxItem(ctx, db.InsertKeyedInboxItemParams{
+					InvestigationID: ended, Kind: InboxFollowUp, Body: json.RawMessage(`{}`), Key: "Ev10005-1",
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"Insert on investigation_inbox", "Conflict Arbiter Indexes: investigation_inbox_key"},
+		},
+		{
+			name: "HasWaitingInbox",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.HasWaitingInbox(ctx, db.HasWaitingInboxParams{InvestigationID: busy, Kind: InboxFollowUp})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"investigation_inbox_waiting"},
+		},
+		{
+			name: "ListDeliveredKeyedInbox",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListDeliveredKeyedInbox(ctx, db.ListDeliveredKeyedInboxParams{InvestigationID: ended, FromSeq: 21})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"investigation_inbox_key"},
+		},
+		{
+			name: "LockInvestigation",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.LockInvestigation(ctx, ended)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"investigations_pkey", "LockRows"},
+		},
+		{
+			name: "StartFollowUpRun",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.StartFollowUpRun(ctx, db.StartFollowUpRunParams{ID: ended, Fence: endedFence + 1})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"investigations_pkey"},
+		},
+		{
+			name: "EndFollowUpRun",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.EndFollowUpRun(ctx, db.EndFollowUpRunParams{ID: busy, Report: report})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"investigations_pkey"},
+		},
+		{
+			name: "FindInvestigationByExternal",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.FindInvestigationByExternal(ctx, db.FindInvestigationByExternalParams{
+					Sinks: []string{"slack-thread", "slack-incidents"}, External: "C0123ALERTS:1793010005.000100",
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"output_refs_external"},
 		},
 		{
 			name: "ListWaitingInbox",
@@ -121,6 +196,15 @@ func TestQueryPlans(t *testing.T) {
 			name: "ListSteps",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.ListSteps(ctx, busy)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"steps_pkey"},
+		},
+		{
+			name: "CountSteps",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.CountSteps(ctx, busy)
 
 				return fmt.Errorf("run query: %w", err)
 			},

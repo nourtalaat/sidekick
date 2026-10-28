@@ -56,6 +56,15 @@ func TestRecover(t *testing.T) {
 			wantStatus:  "grouped",
 		},
 		{
+			// The alert's event names a group that the retention job
+			// deleted with its investigation; events have no foreign key
+			// to their group.
+			name:        "the alert's group was deleted",
+			prepare:     "DELETE FROM investigations; DELETE FROM event_groups",
+			fingerprint: "fp-disk",
+			wantStatus:  "skipped",
+		},
+		{
 			name:        "no group has the alert",
 			fingerprint: "fp-none",
 			wantStatus:  "skipped",
