@@ -37,6 +37,12 @@ func registerAPI(ctx context.Context, a *app.App) error {
 		return fmt.Errorf("set up login: %w", err)
 	}
 
+	hub := api.NewHub(api.HubOptions{Pool: a.Pool(), Logger: log})
+
+	if err := a.RegisterTask("investigation-updates", hub.Run); err != nil {
+		return fmt.Errorf("register the listener for investigation updates: %w", err)
+	}
+
 	handler, err := api.New(api.Options{
 		Auth:     sessions,
 		Tokens:   sessions,
@@ -45,6 +51,7 @@ func registerAPI(ctx context.Context, a *app.App) error {
 		Redactor: a.Redactor(),
 		Pool:     a.Pool(),
 		Audit:    audit.NewWriter(),
+		Hub:      hub,
 		Logger:   log,
 	})
 	if err != nil {

@@ -139,6 +139,52 @@ func (q *Queries) GetInvestigationGroup(ctx context.Context, id uuid.UUID) (uuid
 	return group_id, err
 }
 
+const getInvestigationStatus = `-- name: GetInvestigationStatus :one
+SELECT status, run, run_kind, verdict, confidence, stop_reason, finished_at, cancel_requested_at,
+       confirmed_verdict, cost_micros, input_tokens, output_tokens, tool_calls
+FROM investigations
+WHERE id = $1
+`
+
+type GetInvestigationStatusRow struct {
+	Status            string
+	Run               int32
+	RunKind           string
+	Verdict           *string
+	Confidence        *string
+	StopReason        *string
+	FinishedAt        *time.Time
+	CancelRequestedAt *time.Time
+	ConfirmedVerdict  *string
+	CostMicros        int64
+	InputTokens       int64
+	OutputTokens      int64
+	ToolCalls         int32
+}
+
+// GetInvestigationStatus returns what the event stream shows of an
+// investigation's status, without its report.
+func (q *Queries) GetInvestigationStatus(ctx context.Context, id uuid.UUID) (GetInvestigationStatusRow, error) {
+	row := q.db.QueryRow(ctx, getInvestigationStatus, id)
+	var i GetInvestigationStatusRow
+	err := row.Scan(
+		&i.Status,
+		&i.Run,
+		&i.RunKind,
+		&i.Verdict,
+		&i.Confidence,
+		&i.StopReason,
+		&i.FinishedAt,
+		&i.CancelRequestedAt,
+		&i.ConfirmedVerdict,
+		&i.CostMicros,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.ToolCalls,
+	)
+	return i, err
+}
+
 const listGroupEvents = `-- name: ListGroupEvents :many
 SELECT id, intake, key, kind, sender_kind, sender_id, sender_name, trusted, alert_name, title, body, service, severity, labels, links, fingerprint, slack, raw, status, skip_reason, route, group_id, starts_at, ends_at, received_at, teams FROM events WHERE group_id = $1 ORDER BY received_at, id LIMIT $2
 `
@@ -470,4 +516,13 @@ func (q *Queries) ListStepsPage(ctx context.Context, arg ListStepsPageParams) ([
 		return nil, err
 	}
 	return items, nil
+}
+
+const listenInvestigationUpdates = `-- name: ListenInvestigationUpdates :exec
+LISTEN investigation_updates
+`
+
+func (q *Queries) ListenInvestigationUpdates(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, listenInvestigationUpdates)
+	return err
 }

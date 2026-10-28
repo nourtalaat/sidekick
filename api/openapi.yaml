@@ -306,6 +306,54 @@ paths:
                 $ref: "#/components/schemas/WatcherList"
         default:
           $ref: "#/components/responses/Problem"
+  /investigations/{id}/stream:
+    get:
+      operationId: StreamInvestigation
+      summary: A stream of server-sent events about one investigation
+      description: |
+        Server-sent events (text/event-stream) while the investigation
+        changes. Any replica serves the stream, not only the one that runs
+        the investigation. The events are:
+
+        - `step`, with the seq as its id and a Step as its data, for each
+          step saved after the one the client has.
+        - `status`, with no id and a StreamStatus as its data, once when
+          the stream starts and again whenever the status, the run, the
+          stop request or the confirmed verdict changes.
+        - `watchers`, with `{}` as its data, when a watcher of the
+          investigation started, ran a check or ended; get the watchers
+          again.
+
+        A comment line every 15 seconds keeps the connection open. The
+        stream ends after 30 minutes, and the browser's EventSource then
+        reconnects with the Last-Event-ID header, which resumes after that
+        step. A client that connects the first time can pass `after`, the
+        last seq it has, instead. At most 100 streams are open on a
+        replica; above that the answer is 429.
+      x-sidekick-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/InvestigationID"
+        - name: after
+          in: query
+          description: The last seq the client has. Last-Event-ID wins when both are given.
+          schema:
+            type: integer
+            format: int32
+            minimum: -1
+        - name: Last-Event-ID
+          in: header
+          description: The seq of the last step the client received, sent by EventSource when it reconnects.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The event stream.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        default:
+          $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
     session:
@@ -1046,6 +1094,46 @@ components:
         truncated:
           type: boolean
           description: Set when text or content was cut.
+    StreamStatus:
+      type: object
+      required: [status, run, runKind, confirmed, costMicros, inputTokens, outputTokens, toolCalls]
+      description: |
+        The data of a `status` event of the stream: what changes while the
+        investigation runs. When it differs from the page, get the
+        investigation again for the report.
+      properties:
+        status:
+          $ref: "#/components/schemas/InvestigationStatus"
+        run:
+          type: integer
+        runKind:
+          $ref: "#/components/schemas/RunKind"
+        verdict:
+          $ref: "#/components/schemas/Verdict"
+        confidence:
+          $ref: "#/components/schemas/Confidence"
+        stopReason:
+          type: string
+        finishedAt:
+          type: string
+          format: date-time
+        cancelRequestedAt:
+          type: string
+          format: date-time
+        confirmed:
+          type: boolean
+          description: Whether people confirmed the verdict.
+        costMicros:
+          type: integer
+          format: int64
+        inputTokens:
+          type: integer
+          format: int64
+        outputTokens:
+          type: integer
+          format: int64
+        toolCalls:
+          type: integer
     WatcherList:
       type: object
       required: [watchers]

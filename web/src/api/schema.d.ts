@@ -204,6 +204,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations/{id}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A stream of server-sent events about one investigation
+         * @description Server-sent events (text/event-stream) while the investigation
+         *     changes. Any replica serves the stream, not only the one that runs
+         *     the investigation. The events are:
+         *
+         *     - `step`, with the seq as its id and a Step as its data, for each
+         *       step saved after the one the client has.
+         *     - `status`, with no id and a StreamStatus as its data, once when
+         *       the stream starts and again whenever the status, the run, the
+         *       stop request or the confirmed verdict changes.
+         *     - `watchers`, with `{}` as its data, when a watcher of the
+         *       investigation started, ran a check or ended; get the watchers
+         *       again.
+         *
+         *     A comment line every 15 seconds keeps the connection open. The
+         *     stream ends after 30 minutes, and the browser's EventSource then
+         *     reconnects with the Last-Event-ID header, which resumes after that
+         *     step. A client that connects the first time can pass `after`, the
+         *     last seq it has, instead. At most 100 streams are open on a
+         *     replica; above that the answer is 429.
+         */
+        get: operations["StreamInvestigation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -629,6 +667,32 @@ export interface components {
             /** @description Set when text or content was cut. */
             truncated?: boolean;
         };
+        /**
+         * @description The data of a `status` event of the stream: what changes while the
+         *     investigation runs. When it differs from the page, get the
+         *     investigation again for the report.
+         */
+        StreamStatus: {
+            status: components["schemas"]["InvestigationStatus"];
+            run: number;
+            runKind: components["schemas"]["RunKind"];
+            verdict?: components["schemas"]["Verdict"];
+            confidence?: components["schemas"]["Confidence"];
+            stopReason?: string;
+            /** Format: date-time */
+            finishedAt?: string;
+            /** Format: date-time */
+            cancelRequestedAt?: string;
+            /** @description Whether people confirmed the verdict. */
+            confirmed: boolean;
+            /** Format: int64 */
+            costMicros: number;
+            /** Format: int64 */
+            inputTokens: number;
+            /** Format: int64 */
+            outputTokens: number;
+            toolCalls: number;
+        };
         WatcherList: {
             watchers: components["schemas"]["Watcher"][];
         };
@@ -978,6 +1042,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WatcherList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    StreamInvestigation: {
+        parameters: {
+            query?: {
+                /** @description The last seq the client has. Last-Event-ID wins when both are given. */
+                after?: number;
+            };
+            header?: {
+                /** @description The seq of the last step the client received, sent by EventSource when it reconnects. */
+                "Last-Event-ID"?: string;
+            };
+            path: {
+                id: components["parameters"]["InvestigationID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The event stream. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
                 };
             };
             default: components["responses"]["Problem"];

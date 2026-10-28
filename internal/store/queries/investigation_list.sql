@@ -83,6 +83,17 @@ ORDER BY i.created_at DESC, i.id DESC;
 -- It returns no row for an investigation that does not exist.
 SELECT group_id FROM investigations WHERE id = @id;
 
+-- name: GetInvestigationStatus :one
+-- GetInvestigationStatus returns what the event stream shows of an
+-- investigation's status, without its report.
+SELECT status, run, run_kind, verdict, confidence, stop_reason, finished_at, cancel_requested_at,
+       confirmed_verdict, cost_micros, input_tokens, output_tokens, tool_calls
+FROM investigations
+WHERE id = @id;
+
+-- name: ListenInvestigationUpdates :exec
+LISTEN investigation_updates;
+
 -- name: GetInvestigationDetail :one
 -- GetInvestigationDetail returns an investigation with the number of
 -- events in its group.

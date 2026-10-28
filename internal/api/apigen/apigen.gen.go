@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -1020,6 +1021,15 @@ type ListInvestigationStepsParams struct {
 	Limit *int   `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// StreamInvestigationParams defines parameters for StreamInvestigation.
+type StreamInvestigationParams struct {
+	// After The last seq the client has. Last-Event-ID wins when both are given.
+	After *int32 `form:"after,omitempty" json:"after,omitempty"`
+
+	// LastEventID The seq of the last step the client received, sent by EventSource when it reconnects.
+	LastEventID *string `json:"Last-Event-ID,omitempty"`
+}
+
 // ListJobsParams defines parameters for ListJobs.
 type ListJobsParams struct {
 	// Status Only dead jobs are listed.
@@ -1050,6 +1060,9 @@ type ServerInterface interface {
 	// ListInvestigationSteps The steps of an investigation, in order, a page at a time
 	// (GET /investigations/{id}/steps)
 	ListInvestigationSteps(w http.ResponseWriter, r *http.Request, id InvestigationID, params ListInvestigationStepsParams)
+	// StreamInvestigation A stream of server-sent events about one investigation
+	// (GET /investigations/{id}/stream)
+	StreamInvestigation(w http.ResponseWriter, r *http.Request, id InvestigationID, params StreamInvestigationParams)
 	// ListInvestigationWatchers The watchers of the investigation's group, with their last checks
 	// (GET /investigations/{id}/watchers)
 	ListInvestigationWatchers(w http.ResponseWriter, r *http.Request, id InvestigationID)
@@ -1331,6 +1344,69 @@ func (siw *ServerInterfaceWrapper) ListInvestigationSteps(w http.ResponseWriter,
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListInvestigationSteps(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StreamInvestigation operation middleware
+func (siw *ServerInterfaceWrapper) StreamInvestigation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id InvestigationID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StreamInvestigationParams
+
+	// ------------- Optional query parameter "after" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "after", r.URL.Query(), &params.After, runtime.BindQueryParameterOptions{Type: "integer", Format: "int32"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Last-Event-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Last-Event-ID")]; found {
+		var LastEventID string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Last-Event-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Last-Event-ID", valueList[0], &LastEventID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Last-Event-ID", Err: err})
+			return
+		}
+
+		params.LastEventID = &LastEventID
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StreamInvestigation(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1650,6 +1726,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}", wrapper.GetInvestigation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}/steps", wrapper.ListInvestigationSteps)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}/watchers", wrapper.ListInvestigationWatchers)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}/stream", wrapper.StreamInvestigation)
 
 	return m
 }
@@ -1801,6 +1878,75 @@ type ListInvestigationStepsdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ListInvestigationStepsdefaultApplicationProblemPlusJSONResponse) VisitListInvestigationStepsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StreamInvestigationRequestObject struct {
+	Id     InvestigationID `json:"id"`
+	Params StreamInvestigationParams
+}
+
+type StreamInvestigationResponseObject interface {
+	VisitStreamInvestigationResponse(w http.ResponseWriter) error
+}
+
+type StreamInvestigation200TexteventStreamResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response StreamInvestigation200TexteventStreamResponse) VisitStreamInvestigationResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		// If w doesn't support flushing, fall back to io.Copy.
+		_, err := io.Copy(w, response.Body)
+		return err
+	}
+	// text/event-stream messages are typically small; use a
+	// modest buffer and flush after each chunk so clients see
+	// events immediately instead of waiting on OS buffering.
+	buf := make([]byte, 4096)
+	for {
+		n, err := response.Body.Read(buf)
+		if n > 0 {
+			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+				return writeErr
+			}
+			flusher.Flush()
+		}
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+	}
+}
+
+type StreamInvestigationdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response StreamInvestigationdefaultApplicationProblemPlusJSONResponse) VisitStreamInvestigationResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -2085,6 +2231,9 @@ type StrictServerInterface interface {
 	// ListInvestigationSteps The steps of an investigation, in order, a page at a time
 	// (GET /investigations/{id}/steps)
 	ListInvestigationSteps(ctx context.Context, request ListInvestigationStepsRequestObject) (ListInvestigationStepsResponseObject, error)
+	// StreamInvestigation A stream of server-sent events about one investigation
+	// (GET /investigations/{id}/stream)
+	StreamInvestigation(ctx context.Context, request StreamInvestigationRequestObject) (StreamInvestigationResponseObject, error)
 	// ListInvestigationWatchers The watchers of the investigation's group, with their last checks
 	// (GET /investigations/{id}/watchers)
 	ListInvestigationWatchers(ctx context.Context, request ListInvestigationWatchersRequestObject) (ListInvestigationWatchersResponseObject, error)
@@ -2243,6 +2392,33 @@ func (sh *strictHandler) ListInvestigationSteps(w http.ResponseWriter, r *http.R
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListInvestigationStepsResponseObject); ok {
 		if err := validResponse.VisitListInvestigationStepsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// StreamInvestigation operation middleware
+func (sh *strictHandler) StreamInvestigation(w http.ResponseWriter, r *http.Request, id InvestigationID, params StreamInvestigationParams) {
+	var request StreamInvestigationRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.StreamInvestigation(ctx, request.(StreamInvestigationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "StreamInvestigation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(StreamInvestigationResponseObject); ok {
+		if err := validResponse.VisitStreamInvestigationResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

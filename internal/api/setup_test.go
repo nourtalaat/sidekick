@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -43,6 +44,15 @@ const (
 	adCSRF = "csrf-ad"
 )
 
+const (
+	// testListenRetry is how long a hub waits before it listens again.
+	testListenRetry = 50 * time.Millisecond
+	// testWait is how long a test waits for something that happens in the
+	// background, and testPoll how often it looks.
+	testWait = 10 * time.Second
+	testPoll = 20 * time.Millisecond
+)
+
 // sourceYAML is a source section with credentials written in by mistake:
 // a URL with a user and password, and a header value the email rule
 // matches. GET /config must mask both.
@@ -67,9 +77,22 @@ type server struct {
 	mux      *http.ServeMux
 	provider *authtest.Provider
 	pool     *pgxpool.Pool
+
+	// What replica needs to make another app instance on the same
+	// database.
+	cfg      *config.Config
+	redactor *redact.Redactor
+	sessions *auth.Service
 }
 
 func setup(t *testing.T) server {
+	t.Helper()
+
+	return setupWith(t, nil)
+}
+
+// setupWith is setup with tune, when not nil, changing the API's options.
+func setupWith(t *testing.T, tune func(*api.Options)) server {
 	t.Helper()
 
 	pool := storetest.New(t)
@@ -111,17 +134,57 @@ func setup(t *testing.T) server {
 	})
 	require.NoError(t, err)
 
-	handler, err := api.New(api.Options{
-		Auth: sessions, Tokens: sessions, Config: cfg, Rules: rules.NewStore(pool, cfg), Redactor: redactor,
-		Pool: pool, Audit: audit.NewWriter(),
-	})
+	s := server{provider: provider, pool: pool, cfg: cfg, redactor: redactor, sessions: sessions}
+
+	return s.replica(t, tune)
+}
+
+// replica returns an app instance on the same database as s: its own
+// handler, with its own hub and its own connection that listens, as
+// another replica of sidekick serve has.
+func (s server) replica(t *testing.T, tune func(*api.Options)) server {
+	t.Helper()
+
+	listening := listeners(t, s.pool)
+	hub := api.NewHub(api.HubOptions{Pool: s.pool, ListenRetry: testListenRetry})
+
+	go func() { _ = hub.Run(t.Context()) }()
+
+	require.Eventually(t, func() bool { return listeners(t, s.pool) > listening }, testWait, testPoll, "the hub never listened")
+
+	opts := api.Options{
+		Auth: s.sessions, Tokens: s.sessions, Config: s.cfg, Rules: rules.NewStore(s.pool, s.cfg), Redactor: s.redactor,
+		Pool: s.pool, Audit: audit.NewWriter(), Hub: hub,
+	}
+
+	if tune != nil {
+		tune(&opts)
+	}
+
+	handler, err := api.New(opts)
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
-	sessions.Register(mux)
+	s.sessions.Register(mux)
 	mux.Handle(api.BasePath+"/", handler)
 
-	return server{mux: mux, provider: provider, pool: pool}
+	s.mux = mux
+
+	return s
+}
+
+// listeners returns how many connections of the test's database listen for
+// investigation updates, which is one for each hub that runs.
+func listeners(t *testing.T, pool *pgxpool.Pool) int {
+	t.Helper()
+
+	var n int
+
+	require.NoError(t, pool.QueryRow(t.Context(),
+		`SELECT count(*) FROM pg_stat_activity
+		 WHERE datname = current_database() AND pid <> pg_backend_pid() AND query LIKE '%LISTEN investigation_updates%'`).Scan(&n))
+
+	return n
 }
 
 // do sends a request with the session cookie, when it is set, and the CSRF
