@@ -13,6 +13,7 @@ GOLANGCI_LINT_VERSION := v2.12.2
 MOCKGEN_VERSION := v0.6.0
 GOVULNCHECK_VERSION := v1.9.0
 SQLC_VERSION := v1.31.1
+OAPI_CODEGEN_VERSION := v2.8.0
 
 # Helm is not a Go module install, so the Makefile downloads the release
 # archive and checks it against these checksums, from
@@ -31,6 +32,7 @@ MOCKGEN_DIR := $(TOOLS_DIR)/mockgen-$(MOCKGEN_VERSION)
 MOCKGEN := $(MOCKGEN_DIR)/mockgen
 GOVULNCHECK := $(TOOLS_DIR)/govulncheck-$(GOVULNCHECK_VERSION)/govulncheck
 SQLC := $(TOOLS_DIR)/sqlc-$(SQLC_VERSION)/sqlc
+OAPI_CODEGEN := $(TOOLS_DIR)/oapi-codegen-$(OAPI_CODEGEN_VERSION)/oapi-codegen
 
 # golangci-lint keeps one cache per user by default, so worktrees that lint
 # at the same time can get each other's results. Each checkout gets its own.
@@ -82,6 +84,13 @@ CI_TARGETS += test-integration
 .PHONY: test-integration
 test-integration: ## Run unit and integration tests against Postgres
 	$(GO) test -race -tags integration ./...
+
+# Runs before generate-mocks, since mocks can be made of the generated
+# interfaces.
+GENERATE_TARGETS += openapi-generate
+.PHONY: openapi-generate
+openapi-generate: $(OAPI_CODEGEN) ## Generate the API server code in internal/api/apigen from api/openapi.yaml
+	$(OAPI_CODEGEN) -config api/oapi-codegen.yaml api/openapi.yaml
 
 GENERATE_TARGETS += generate-mocks
 .PHONY: generate-mocks
@@ -196,6 +205,9 @@ $(GOVULNCHECK):
 
 $(SQLC):
 	GOBIN="$(dir $@)" $(GO) install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
+
+$(OAPI_CODEGEN):
+	GOBIN="$(dir $@)" $(GO) install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION)
 
 .PHONY: generate
 generate: $(GENERATE_TARGETS) ## Run every code generator
