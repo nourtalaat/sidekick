@@ -5,6 +5,8 @@ package api_test
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,7 +36,10 @@ const (
 // with each filter, over a database with 100,000 investigations, and checks
 // that it reads the page through the index of the filter, never scans the
 // investigations whole, and finds the feedback and the watcher of each row
-// through their indexes. Run with -v to see the plans.
+// through their indexes. A page of the list without a filter, or with only
+// a time range or a cursor, may also read the older index on created_at,
+// which Postgres sorts by ID incrementally, and which reads as few rows.
+// Run with -v to see the plans.
 func TestListQueryPlans(t *testing.T) {
 	t.Parallel()
 
@@ -47,23 +52,23 @@ func TestListQueryPlans(t *testing.T) {
 		name string
 		// params sets the filters; the page size is set for every case.
 		params    func(p *db.ListInvestigationsParams)
-		wantIndex string
+		wantIndex []string
 	}{
-		{name: "NoFilter", params: func(*db.ListInvestigationsParams) {}, wantIndex: "investigations_list"},
+		{name: "NoFilter", params: func(*db.ListInvestigationsParams) {}, wantIndex: []string{"investigations_list"}},
 		{
 			name: "TimeRange",
 			params: func(p *db.ListInvestigationsParams) {
 				from, to := now.Add(-30*24*time.Hour), now.Add(-20*24*time.Hour)
 				p.CreatedFrom, p.CreatedTo = &from, &to
 			},
-			wantIndex: "investigations_list",
+			wantIndex: []string{"investigations_list", "investigations_created"},
 		},
-		{name: "Route", params: func(p *db.ListInvestigationsParams) { p.Route = new("route-7") }, wantIndex: "investigations_list_route"},
-		{name: "Service", params: func(p *db.ListInvestigationsParams) { p.Service = new("svc-7") }, wantIndex: "investigations_list_service"},
-		{name: "Model", params: func(p *db.ListInvestigationsParams) { p.Model = new("model-7") }, wantIndex: "investigations_list_model"},
-		{name: "Verdict", params: func(p *db.ListInvestigationsParams) { p.Verdict = new("flapping") }, wantIndex: "investigations_list_verdict"},
-		{name: "Status", params: func(p *db.ListInvestigationsParams) { p.Status = new("failed") }, wantIndex: "investigations_list_status"},
-		{name: "Text", params: func(p *db.ListInvestigationsParams) { p.Search = new("zebra") }, wantIndex: "investigations_list_title"},
+		{name: "Route", params: func(p *db.ListInvestigationsParams) { p.Route = new("route-7") }, wantIndex: []string{"investigations_list_route"}},
+		{name: "Service", params: func(p *db.ListInvestigationsParams) { p.Service = new("svc-7") }, wantIndex: []string{"investigations_list_service"}},
+		{name: "Model", params: func(p *db.ListInvestigationsParams) { p.Model = new("model-7") }, wantIndex: []string{"investigations_list_model"}},
+		{name: "Verdict", params: func(p *db.ListInvestigationsParams) { p.Verdict = new("flapping") }, wantIndex: []string{"investigations_list_verdict"}},
+		{name: "Status", params: func(p *db.ListInvestigationsParams) { p.Status = new("failed") }, wantIndex: []string{"investigations_list_status"}},
+		{name: "Text", params: func(p *db.ListInvestigationsParams) { p.Search = new("zebra") }, wantIndex: []string{"investigations_list_title"}},
 		{
 			name: "RouteWithACursor",
 			params: func(p *db.ListInvestigationsParams) {
@@ -71,7 +76,7 @@ func TestListQueryPlans(t *testing.T) {
 				p.CursorAt = new(now.Add(-planMiddleRow * time.Minute))
 				p.CursorID = new(uuid.New())
 			},
-			wantIndex: "investigations_list_route",
+			wantIndex: []string{"investigations_list_route"},
 		},
 		{
 			name: "CursorFromTheMiddle",
@@ -79,7 +84,7 @@ func TestListQueryPlans(t *testing.T) {
 				p.CursorAt = new(now.Add(-planMiddleRow * time.Minute))
 				p.CursorID = new(uuid.New())
 			},
-			wantIndex: "investigations_list",
+			wantIndex: []string{"investigations_list", "investigations_created"},
 		},
 	}
 
@@ -100,7 +105,8 @@ func TestListQueryPlans(t *testing.T) {
 			_, err = db.New(explain).ListInvestigations(t.Context(), params)
 			require.ErrorIs(t, err, storetest.ErrExplained)
 
-			require.Contains(t, explain.Plan, tt.wantIndex)
+			require.True(t, slices.ContainsFunc(tt.wantIndex, func(index string) bool { return strings.Contains(explain.Plan, index) }),
+				"the plan uses none of %v", tt.wantIndex)
 			require.Contains(t, explain.Plan, "feedback_investigation")
 			require.Contains(t, explain.Plan, "watchers_group_name")
 			require.NotContains(t, explain.Plan, "Seq Scan on investigations")

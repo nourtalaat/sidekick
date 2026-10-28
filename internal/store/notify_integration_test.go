@@ -137,6 +137,12 @@ func TestInvestigationUpdateNotifications(t *testing.T) {
 				got = got[:len(got)-1]
 			}
 
+			if len(tt.want) == 0 {
+				require.Empty(t, got)
+
+				return
+			}
+
 			require.Equal(t, tt.want, got)
 		})
 	}

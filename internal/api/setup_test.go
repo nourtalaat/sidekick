@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
@@ -145,20 +147,17 @@ func setupWith(t *testing.T, tune func(*api.Options)) server {
 func (s server) replica(t *testing.T, tune func(*api.Options)) server {
 	t.Helper()
 
-	listening := listeners(t, s.pool)
-	hub := api.NewHub(api.HubOptions{Pool: s.pool, ListenRetry: testListenRetry})
-
-	go func() { _ = hub.Run(t.Context()) }()
-
-	require.Eventually(t, func() bool { return listeners(t, s.pool) > listening }, testWait, testPoll, "the hub never listened")
-
 	opts := api.Options{
 		Auth: s.sessions, Tokens: s.sessions, Config: s.cfg, Rules: rules.NewStore(s.pool, s.cfg), Redactor: s.redactor,
-		Pool: s.pool, Audit: audit.NewWriter(), Hub: hub,
+		Pool: s.pool, Audit: audit.NewWriter(),
 	}
 
 	if tune != nil {
 		tune(&opts)
+	}
+
+	if opts.Hub == nil {
+		opts.Hub, _ = startHub(t, t.Context(), s.pool, api.HubOptions{ListenRetry: testListenRetry})
 	}
 
 	handler, err := api.New(opts)
@@ -173,18 +172,45 @@ func (s server) replica(t *testing.T, tune func(*api.Options)) server {
 	return s
 }
 
-// listeners returns how many connections of the test's database listen for
-// investigation updates, which is one for each hub that runs.
-func listeners(t *testing.T, pool *pgxpool.Pool) int {
+// startHub starts a hub that runs until ctx ends, waits until it listens,
+// and returns it with the process ID of its connection.
+func startHub(t *testing.T, ctx context.Context, pool *pgxpool.Pool, opts api.HubOptions) (*api.Hub, int) {
 	t.Helper()
 
-	var n int
+	before := listenerPIDs(t, pool)
 
-	require.NoError(t, pool.QueryRow(t.Context(),
-		`SELECT count(*) FROM pg_stat_activity
-		 WHERE datname = current_database() AND pid <> pg_backend_pid() AND query LIKE '%LISTEN investigation_updates%'`).Scan(&n))
+	opts.Pool = pool
+	hub := api.NewHub(opts)
 
-	return n
+	go func() { _ = hub.Run(ctx) }()
+
+	var added []int
+
+	require.Eventually(t, func() bool {
+		added = slices.DeleteFunc(listenerPIDs(t, pool), func(pid int) bool { return slices.Contains(before, pid) })
+
+		return len(added) == 1
+	}, testWait, testPoll, "the hub never listened")
+
+	return hub, added[0]
+}
+
+// listenerPIDs returns the process IDs of the connections of the test's
+// database that listen for investigation updates, one for each hub that
+// runs.
+func listenerPIDs(t *testing.T, pool *pgxpool.Pool) []int {
+	t.Helper()
+
+	rows, err := pool.Query(t.Context(),
+		`SELECT pid FROM pg_stat_activity
+		 WHERE datname = current_database() AND pid <> pg_backend_pid() AND query LIKE '%LISTEN investigation_updates%'
+		 ORDER BY pid`)
+	require.NoError(t, err)
+
+	pids, err := pgx.CollectRows(rows, pgx.RowTo[int])
+	require.NoError(t, err)
+
+	return pids
 }
 
 // do sends a request with the session cookie, when it is set, and the CSRF

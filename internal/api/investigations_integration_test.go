@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/nourtalaat/sidekick/internal/api"
 	"github.com/nourtalaat/sidekick/internal/store/storetest"
 )
 
@@ -59,7 +60,15 @@ type investigationList struct {
 func setupInvestigations(t *testing.T) server {
 	t.Helper()
 
-	s := setup(t)
+	return setupInvestigationsWith(t, nil)
+}
+
+// setupInvestigationsWith is setupInvestigations with tune, when not nil,
+// changing the API's options.
+func setupInvestigationsWith(t *testing.T, tune func(*api.Options)) server {
+	t.Helper()
+
+	s := setupWith(t, tune)
 	storetest.LoadFixture(t, s.pool, "fixture/investigations.sql")
 
 	return s

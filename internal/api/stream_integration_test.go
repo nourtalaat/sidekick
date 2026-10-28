@@ -366,7 +366,7 @@ func TestStreamSendsAStopRequest(t *testing.T) {
 func TestStreamHeartbeat(t *testing.T) {
 	t.Parallel()
 
-	s := setupWith(t, func(o *api.Options) { o.StreamHeartbeat = fastHeartbeat })
+	s := setupInvestigationsWith(t, func(o *api.Options) { o.StreamHeartbeat = fastHeartbeat })
 	stream := openStream(t, s.serve(t), streamPath+"?after=4", viSession, nil)
 	stream.requireStatus(t, "running")
 
@@ -381,7 +381,7 @@ func TestStreamHeartbeat(t *testing.T) {
 func TestStreamReadsWhatANotificationMissed(t *testing.T) {
 	t.Parallel()
 
-	s := setupWith(t, func(o *api.Options) { o.StreamHeartbeat = fastHeartbeat })
+	s := setupInvestigationsWith(t, func(o *api.Options) { o.StreamHeartbeat = fastHeartbeat })
 	stream := openStream(t, s.serve(t), streamPath+"?after=4", viSession, nil)
 	stream.requireStatus(t, "running")
 
@@ -399,7 +399,7 @@ func TestStreamReadsWhatANotificationMissed(t *testing.T) {
 func TestStreamEndsAfterItsLifetime(t *testing.T) {
 	t.Parallel()
 
-	s := setupWith(t, func(o *api.Options) { o.StreamLifetime = 300 * time.Millisecond })
+	s := setupInvestigationsWith(t, func(o *api.Options) { o.StreamLifetime = 300 * time.Millisecond })
 	stream := openStream(t, s.serve(t), streamPath+"?after=4", viSession, nil)
 	stream.requireStatus(t, "running")
 	stream.requireEnded(t)
@@ -413,48 +413,44 @@ func TestStreamEndsWhenTheHubStops(t *testing.T) {
 
 	s := setupInvestigations(t)
 
-	hub := api.NewHub(api.HubOptions{Pool: s.pool})
 	ctx, stop := context.WithCancel(t.Context())
+	defer stop()
 
-	done := make(chan struct{})
-
-	go func() {
-		defer close(done)
-
-		_ = hub.Run(ctx)
-	}()
-
+	hub, _ := startHub(t, ctx, s.pool, api.HubOptions{})
 	replica := s.replica(t, func(o *api.Options) { o.Hub = hub })
 	stream := openStream(t, replica.serve(t), streamPath+"?after=4", viSession, nil)
 	stream.requireStatus(t, "running")
 
 	stop()
 	stream.requireEnded(t)
-
-	<-done
 }
 
 // TestStreamListensAgainAfterTheConnectionFails ends the hub's listening
-// connection, saves a step while it is down, and checks that the stream
-// gets the step once the hub listens again.
+// connection, saves a step while the hub waits to listen again, and checks
+// that the stream gets the step once it does, and the one after it.
 func TestStreamListensAgainAfterTheConnectionFails(t *testing.T) {
 	t.Parallel()
 
 	s := setupInvestigations(t)
-	stream := openStream(t, s.serve(t), streamPath+"?after=4", viSession, nil)
+
+	const retry = time.Second
+
+	hub, pid := startHub(t, t.Context(), s.pool, api.HubOptions{ListenRetry: retry})
+	replica := s.replica(t, func(o *api.Options) { o.Hub = hub })
+	stream := openStream(t, replica.serve(t), streamPath+"?after=4", viSession, nil)
 	stream.requireStatus(t, "running")
 
-	var killed int
+	var ended bool
 
-	require.NoError(t, s.pool.QueryRow(t.Context(),
-		`SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity
-		 WHERE datname = current_database() AND pid <> pg_backend_pid() AND query LIKE '%LISTEN investigation_updates%'`).Scan(&killed))
-	require.Equal(t, 1, killed)
+	require.NoError(t, s.pool.QueryRow(t.Context(), "SELECT pg_terminate_backend($1)", pid).Scan(&ended))
+	require.True(t, ended)
 
 	addStep(t, s, 5, "model_turn")
 	stream.requireStep(t, "5", "model_turn")
 
-	require.Eventually(t, func() bool { return listeners(t, s.pool) == 1 }, testWait, testPoll, "the hub listens again")
+	// The hub says everything may have changed when it listens again, so
+	// the watchers are read again too.
+	require.Equal(t, "watchers", stream.nextEvent(t).Name)
 
 	addStep(t, s, 6, "note")
 	stream.requireStep(t, "6", "note")
@@ -465,10 +461,7 @@ func TestStreamLimit(t *testing.T) {
 
 	s := setupInvestigations(t)
 
-	hub := api.NewHub(api.HubOptions{Pool: s.pool, MaxStreams: 2})
-
-	go func() { _ = hub.Run(t.Context()) }()
-
+	hub, _ := startHub(t, t.Context(), s.pool, api.HubOptions{MaxStreams: 2})
 	replica := s.replica(t, func(o *api.Options) { o.Hub = hub })
 	srv := replica.serve(t)
 
