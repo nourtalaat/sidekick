@@ -62,9 +62,12 @@ func MatchOf(investigation uuid.UUID, e event.Event) Match {
 // TODO: [SK-59] add memory_entries to the retention job
 
 // Sync makes the memory entry of the investigation with id match its
-// confirmed verdict: it writes or updates the entry of a confirmed
-// investigation and deletes the entry of one that is not confirmed. Call
-// it in the transaction that changes the confirmation.
+// confirmation: a confirmed investigation gets its entry written or
+// updated, and the entry of one that is not confirmed is deleted. Both
+// queries decide by the investigation's confirmed verdict, so an entry is
+// never deleted while its investigation is confirmed, even when the
+// group's events are gone. Call it in the transaction that changes the
+// confirmation.
 func Sync(ctx context.Context, q db.DBTX, id uuid.UUID) error {
 	queries := db.New(q)
 
@@ -77,7 +80,7 @@ func Sync(ctx context.Context, q db.DBTX, id uuid.UUID) error {
 		return nil
 	}
 
-	if err := queries.DeleteMemoryEntry(ctx, id); err != nil {
+	if err := queries.DeleteUnconfirmedMemoryEntry(ctx, id); err != nil {
 		return fmt.Errorf("delete the memory entry of investigation %s: %w", id, err)
 	}
 

@@ -41,11 +41,11 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"investigations_pkey", "events_group", "Conflict Arbiter Indexes: memory_entries_pkey"},
 		},
 		{
-			name: "DeleteMemoryEntry",
+			name: "DeleteUnconfirmedMemoryEntry",
 			run: func(ctx context.Context, q *db.Queries) error {
-				return fmt.Errorf("run query: %w", q.DeleteMemoryEntry(ctx, busy))
+				return fmt.Errorf("run query: %w", q.DeleteUnconfirmedMemoryEntry(ctx, busy))
 			},
-			wantIndex: []string{"memory_entries_pkey"},
+			wantIndex: []string{"memory_entries_pkey", "investigations_pkey"},
 		},
 		{
 			name: "ListMemoryByFingerprint",

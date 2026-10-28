@@ -1,38 +1,48 @@
 -- name: UpsertMemoryEntry :execrows
 -- UpsertMemoryEntry writes the memory entry of a confirmed investigation
 -- from its confirmed verdict and cause, its report's summary (or reason,
--- when the summary is empty), and the event that opened its group. An
--- existing entry is updated and keeps its disabled flag. It writes nothing
--- and returns 0 rows for an investigation that is not confirmed.
+-- when the summary is empty), and the service, alert name and fingerprint
+-- of the event that opened its group. An existing entry is updated and
+-- keeps its disabled flag. When the group's events are gone, for example
+-- deleted by retention, an existing entry keeps the service, alert name
+-- and fingerprint it has, and a new one gets none, with an empty
+-- fingerprint, so it can still match by its words. It writes a row
+-- exactly when the investigation exists and is confirmed.
 INSERT INTO memory_entries (
   investigation_id, service, alert_name, fingerprint, verdict, summary, cause, confirmed_at
 )
-SELECT i.id, first_event.service, first_event.alert_name, first_event.fingerprint, i.confirmed_verdict,
+SELECT i.id, first_event.service, first_event.alert_name, coalesce(first_event.fingerprint, ''), i.confirmed_verdict,
        coalesce(nullif(i.report->>'summary', ''), i.report->>'reason', ''), i.confirmed_cause, i.confirmed_at
 FROM investigations AS i
-CROSS JOIN LATERAL (
+LEFT JOIN LATERAL (
   SELECT e.service, e.alert_name, e.fingerprint
   FROM events AS e
   WHERE e.group_id = i.group_id
   ORDER BY e.received_at, e.id
   LIMIT 1
-) AS first_event
+) AS first_event ON true
 WHERE i.id = @investigation_id
   AND i.confirmed_verdict IS NOT NULL
   AND i.confirmed_at IS NOT NULL
 ON CONFLICT (investigation_id) DO UPDATE
-SET service = excluded.service,
-    alert_name = excluded.alert_name,
-    fingerprint = excluded.fingerprint,
+SET service = coalesce(excluded.service, memory_entries.service),
+    alert_name = coalesce(excluded.alert_name, memory_entries.alert_name),
+    fingerprint = coalesce(nullif(excluded.fingerprint, ''), memory_entries.fingerprint),
     verdict = excluded.verdict,
     summary = excluded.summary,
     cause = excluded.cause,
     confirmed_at = excluded.confirmed_at;
 
--- name: DeleteMemoryEntry :exec
--- DeleteMemoryEntry removes the memory entry of an investigation, if it has
--- one.
-DELETE FROM memory_entries WHERE investigation_id = @investigation_id;
+-- name: DeleteUnconfirmedMemoryEntry :exec
+-- DeleteUnconfirmedMemoryEntry removes the memory entry of an
+-- investigation that is not confirmed, or no longer exists. The entry of a
+-- confirmed investigation stays.
+DELETE FROM memory_entries AS m
+WHERE m.investigation_id = @investigation_id
+  AND NOT EXISTS (
+    SELECT 1 FROM investigations AS i
+    WHERE i.id = m.investigation_id AND i.confirmed_verdict IS NOT NULL AND i.confirmed_at IS NOT NULL
+  );
 
 -- name: ListMemoryByFingerprint :many
 -- ListMemoryByFingerprint returns enabled entries with the fingerprint,

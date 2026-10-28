@@ -83,6 +83,28 @@ func TestSync(t *testing.T) {
 			},
 		},
 		{
+			name: "a changed confirmation after the group's events are gone keeps the entry's alert fields",
+			id:   confirmedInvestigation,
+			seed: `INSERT INTO memory_entries (investigation_id, service, alert_name, fingerprint, verdict, summary, confirmed_at)
+			       VALUES ('0192d3a4-0000-7000-8000-0000000000c1', 'checkout-api', 'CheckoutLatencyP99', 'fp-checkout',
+			               'false_positive', 'Old summary.', now());
+			       DELETE FROM events WHERE group_id = '0192d3a4-0000-7000-8000-0000000000b1'`,
+			want: &entry{
+				Service: new("checkout-api"), AlertName: new("CheckoutLatencyP99"), Fingerprint: "fp-checkout",
+				Verdict: "true_positive", Summary: "p99 latency rose after deploy 4f2c1a.", Cause: new("Deploy 4f2c1a"),
+				ConfirmedAt: time.Date(2026, 10, 26, 14, 10, 0, 0, time.UTC),
+			},
+		},
+		{
+			name: "a confirmation after the group's events are gone gets an entry without alert fields",
+			id:   noSummaryInvestigation,
+			seed: `DELETE FROM events WHERE group_id = '0192d3a4-0000-7000-8000-0000000000b2'`,
+			want: &entry{
+				Verdict: "false_positive", Summary: "Only the batch export endpoint was slow.",
+				ConfirmedAt: time.Date(2026, 10, 26, 15, 10, 0, 0, time.UTC),
+			},
+		},
+		{
 			name: "an investigation that does not exist gets none",
 			id:   uuid.MustParse("0192d3a4-0000-7000-8000-0000000000cf"),
 		},
