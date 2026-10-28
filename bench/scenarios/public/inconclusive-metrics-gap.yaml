@@ -1,0 +1,71 @@
+# A queue lag alert with a gap in the metrics, so the lag cannot be checked and
+# nothing else shows a cause. Generic alert strategy, inconclusive.
+id: inconclusive-metrics-gap
+title: Queue lag alert whose metrics have a gap and whose pods look healthy
+tags: [inconclusive, no-data, queue]
+strategy: generic-alert
+now: 2026-09-24T21:10:00Z
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="WebhookQueueLagHigh"}'
+    alerts:
+      - status: firing
+        labels: { alertname: WebhookQueueLagHigh, service: webhook-dispatcher, env: prod, severity: warning }
+        annotations:
+          summary: webhook-dispatcher queue lag above 5 minutes
+          description: The oldest message in the dispatch queue is 7 minutes old.
+        startsAt: 2026-09-24T21:04:00Z
+        fingerprint: 96d0e3b71c8a25f4
+sources:
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: query_range
+        respond:
+          text: "No data for this query in the range. The last sample of any webhook_dispatcher_* series is from 20:52."
+          noData: true
+      - tool: query
+        respond:
+          text: "No data for this query. The series are stale."
+          noData: true
+      - tool: list_targets
+        respond:
+          text: "1 scrape target down for job webhook-dispatcher since 20:53, last error: context deadline exceeded. 11 targets are healthy."
+  k8s:
+    tools: { snapshot: bench/tools/kubernetes.json }
+    fixtures:
+      - tool: list_pod_problems
+        respond:
+          text: "No pods have problems in namespace dispatch. 6 of 6 pods are ready."
+          noData: true
+      - tool: get_workload
+        respond:
+          text: |
+            Deployment dispatch/webhook-dispatcher, 6 of 6 replicas ready
+            image quillcart/webhook-dispatcher:2026.09.10-2, no change since 2026-09-10
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: "No commits since the requested time."
+          noData: true
+      - tool: list_workflow_runs
+        respond:
+          text: 'run 6630 deploy webhook-dispatcher 2026-09-10T08:30:02Z success. No deploy since.'
+default: no_data
+expected:
+  verdict: inconclusive
+  rootCause:
+    summary: The metrics of webhook-dispatcher stopped at 20:52, so the queue lag cannot be confirmed, the pods look healthy and nothing changed.
+    rubric:
+      - { id: gap, text: "Says the metrics have no data for the alert window, or that a scrape target is down, so the queue lag could not be confirmed", weight: 2, required: true }
+      - { id: nocause, text: "Does not state a specific cause as fact", weight: 2, required: true }
+      - { id: next, text: "Says what would settle it, such as restoring the scrape or reading the queue directly", weight: 1 }
+  evidence:
+    - { calledTool: prometheus__query_range }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }

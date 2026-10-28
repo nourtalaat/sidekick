@@ -1,0 +1,847 @@
+{
+  "tools": [
+    {
+      "name": "signoz_list_alerts",
+      "description": "List firing/silenced/inhibited Alertmanager alert *instances* (not rule definitions) with optional alert-label and receiver filtering",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Most rows or groups to return per page. Default 50, at most 1000."
+          },
+          "offset": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Rows to skip, for the next page. Default 0."
+          },
+          "active": {
+            "type": [
+              "boolean",
+              "string"
+            ],
+            "description": "Include firing alerts. Default true."
+          },
+          "silenced": {
+            "type": [
+              "boolean",
+              "string"
+            ],
+            "description": "Include silenced alerts. Default true."
+          },
+          "inhibited": {
+            "type": [
+              "boolean",
+              "string"
+            ],
+            "description": "Include inhibited alerts. Default true."
+          },
+          "filter": {
+            "type": "string",
+            "description": "Comma-separated alert label comparisons, each a label, one of =, !=, =~ or !~, and a quoted value. Example: alertname=\"HighCPU\",severity=\"critical\"."
+          },
+          "receiver": {
+            "type": "string",
+            "description": "Regex that the receiver name must match, for example slack-.*."
+          }
+        }
+      }
+    },
+    {
+      "name": "signoz_list_alert_rules",
+      "description": "List configured alert-rule summaries, including inactive/OK and disabled rules; use signoz_get_alert for one full definition",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Most rows or groups to return per page. Default 50, at most 1000."
+          },
+          "offset": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Rows to skip, for the next page. Default 0."
+          }
+        }
+      }
+    },
+    {
+      "name": "signoz_get_alert_history",
+      "description": "Get one configured alert rule's firing or state-transition history; defaults to six hours and paginates with data.nextCursor",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Alert rule ID, from signoz_list_alert_rules."
+          },
+          "timeRange": {
+            "type": "string",
+            "description": "Relative time range, such as 30m, 1h, 6h, 24h or 3d. Ignored when both start and end are given. Default 6h."
+          },
+          "start": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Start time in unix milliseconds. With end, it overrides timeRange."
+          },
+          "end": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "End time in unix milliseconds. With start, it overrides timeRange."
+          },
+          "state": {
+            "type": "string",
+            "description": "Only transitions to this state: inactive, pending, recovering, firing, nodata or disabled."
+          },
+          "filter": {
+            "type": "string",
+            "description": "Filter on the timeline's labels in SigNoz query-builder syntax, for example \"severity = 'critical' AND team = 'payments'\"."
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Cursor from data.nextCursor of the previous page. Repeat the same filters and range with it."
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Rows per page. Default 20, at most 10000."
+          },
+          "order": {
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "default": "asc",
+            "description": "Sort order. Default asc."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "signoz_list_services",
+      "description": "List paginated APM services with trace activity in a time window; use field-value discovery for arbitrary service.name values in logs",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "timeRange": {
+            "type": "string",
+            "description": "Relative time range, such as 30m, 1h, 6h, 24h or 3d. Ignored when both start and end are given. Default 6h."
+          },
+          "start": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Start time in unix milliseconds. With end, it overrides timeRange."
+          },
+          "end": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "End time in unix milliseconds. With start, it overrides timeRange."
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Most rows or groups to return per page. Default 50, at most 1000."
+          },
+          "offset": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Rows to skip, for the next page. Default 0."
+          }
+        }
+      }
+    },
+    {
+      "name": "signoz_get_service_top_operations",
+      "description": "Return one traced service's built-in operation table, ranked by p99 with p50/p95/p99, calls, and errors; use signoz_aggregate_traces for custom aggregation",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "description": "Exact traced service name, from signoz_list_services."
+          },
+          "timeRange": {
+            "type": "string",
+            "description": "Relative time range, such as 30m, 1h, 6h, 24h or 3d. Ignored when both start and end are given. Default 6h."
+          },
+          "start": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Start time in unix milliseconds. With end, it overrides timeRange."
+          },
+          "end": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "End time in unix milliseconds. With start, it overrides timeRange."
+          },
+          "tags": {
+            "type": "string",
+            "description": "JSON-encoded array of tag filters, passed as a string. Omit for none."
+          }
+        },
+        "required": [
+          "service"
+        ]
+      }
+    },
+    {
+      "name": "signoz_list_metrics",
+      "description": "Discover active metric names and catalog metadata such as type, temporality, and monotonicity; use signoz_query_metrics for values or trends. Set source=\"meter\" for Cost Meter metrics",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "searchText": {
+            "type": "string",
+            "description": "Only metric names that contain this text, for example cpu or http_requests."
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Most metrics to return. Default 50."
+          },
+          "timeRange": {
+            "type": "string",
+            "description": "Relative time range, such as 30m, 1h, 6h, 24h or 3d. Ignored when both start and end are given. Default 1h."
+          },
+          "start": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Start time in unix milliseconds. With end, it overrides timeRange."
+          },
+          "end": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "End time in unix milliseconds. With start, it overrides timeRange."
+          },
+          "source": {
+            "type": "string",
+            "description": "Set meter to list Cost Meter metrics. Omit for the default metrics store."
+          }
+        }
+      }
+    },
+    {
+      "name": "signoz_query_metrics",
+      "description": "Query a known metric for scalar values, time-series trends, breakdowns, or formulas with metric-aware defaults; use signoz_list_metrics only when the metric name is unknown",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "metricName": {
+            "type": "string",
+            "description": "Name of the metric, for example http_requests_total."
+          },
+          "metricType": {
+            "type": "string",
+            "description": "gauge, sum, histogram or exponential_histogram. Omit to have it looked up."
+          },
+          "isMonotonic": {
+            "type": [
+              "boolean",
+              "string"
+            ],
+            "description": "Whether a sum metric only increases. Looked up when metricType is omitted."
+          },
+          "temporality": {
+            "type": "string",
+            "description": "cumulative, delta or unspecified. Looked up when metricType is omitted."
+          },
+          "timeAggregation": {
+            "type": "string",
+            "description": "Aggregation over time buckets: latest, sum, avg, min, max, count, count_distinct, rate or increase, by metric type."
+          },
+          "spaceAggregation": {
+            "type": "string",
+            "description": "Aggregation across series: sum, avg, min, max, count, p50, p75, p90, p95 or p99, by metric type."
+          },
+          "groupBy": {
+            "type": [
+              "string",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Field names to group by, as a comma-separated string or an array."
+          },
+          "filter": {
+            "type": "string",
+            "description": "Filter expression, for example \"k8s.cluster.name = 'prod' AND service.name = 'frontend'\"."
+          },
+          "timeRange": {
+            "type": "string",
+            "description": "Relative time range, such as 30m, 1h, 6h, 24h or 3d. Ignored when both start and end are given. Default 1h."
+          },
+          "start": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Start time in unix milliseconds. With end, it overrides timeRange."
+          },
+          "end": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "End time in unix milliseconds. With start, it overrides timeRange."
+          },
+          "stepInterval": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Bucket size in seconds for time_series. When omitted, SigNoz picks one."
+          },
+          "requestType": {
+            "type": "string",
+            "enum": [
+              "scalar",
+              "time_series"
+            ],
+            "default": "time_series",
+            "description": "time_series (default) returns one value per time bucket; scalar returns one value per series."
+          },
+          "reduceTo": {
+            "type": "string",
+            "description": "For scalar only: sum, count, avg, min, max, last or median."
+          },
+          "formula": {
+            "type": "string",
+            "description": "Formula over named queries, for example A / B * 100. The primary metric is query A."
+          },
+          "formulaQueries": {
+            "type": [
+              "string",
+              "array"
+            ],
+            "description": "Extra named metric queries for formula, as a JSON array or a JSON string. Each has name and metricName."
+          },
+          "source": {
+            "type": "string",
+            "description": "Set meter to query Cost Meter data. Omit for the default metrics store."
+          }
+        },
+        "required": [
+          "metricName"
+        ]
+      }
+    },
+    {
+      "name": "signoz_get_field_keys",
+      "description": "Discover available field names for filtering or grouping metrics, traces, or logs, including AI trace fields; use signoz_get_field_values after choosing a key",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "signal": {
+            "type": "string",
+            "enum": [
+              "metrics",
+              "traces",
+              "logs"
+            ],
+            "description": "Signal type."
+          },
+          "searchText": {
+            "type": "string",
+            "description": "Only field names that contain this text."
+          },
+          "metricName": {
+            "type": "string",
+            "description": "Metric name to scope the keys, for signal metrics."
+          },
+          "fieldContext": {
+            "type": "string",
+            "enum": [
+              "resource",
+              "attribute",
+              "scope",
+              "log",
+              "span",
+              "metric",
+              "trace",
+              "body"
+            ],
+            "description": "Only fields in this context."
+          },
+          "fieldDataType": {
+            "type": "string",
+            "description": "Only fields of this data type."
+          }
+        },
+        "required": [
+          "signal"
+        ]
+      }
+    },
+    {
+      "name": "signoz_get_field_values",
+      "description": "Get observed values for a known metrics, traces, or logs field key; use signoz_get_field_keys when the key is unknown",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "signal": {
+            "type": "string",
+            "enum": [
+              "metrics",
+              "traces",
+              "logs"
+            ],
+            "description": "Signal type."
+          },
+          "name": {
+            "type": "string",
+            "description": "Field name to list values for, for example service.name."
+          },
+          "searchText": {
+            "type": "string",
+            "description": "Only values that contain this text."
+          },
+          "metricName": {
+            "type": "string",
+            "description": "Metric name to scope the values, for signal metrics."
+          },
+          "fieldContext": {
+            "type": "string",
+            "enum": [
+              "resource",
+              "attribute",
+              "scope",
+              "log",
+              "span",
+              "metric",
+              "body"
+            ],
+            "description": "Context of the field, when the same name exists in more than one."
+          }
+        },
+        "required": [
+          "signal",
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "signoz_search_logs",
+      "description": "Search individual log records with field filters or explicit search() across log contexts; searchText matches only body text",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "filter": {
+            "type": "string",
+            "description": "Filter in SigNoz search syntax. Combine conditions with AND, OR and parentheses. Use body CONTAINS 'term' for message text, and attribute.<key> or resource.<key> to pick a context. Discover keys with signoz_get_field_keys. Example: \"service.name = 'payment-svc' AND severity_text = 'ERROR'\"."
+          },
+          "service": {
+            "type": "string",
+            "description": "Shortcut for service.name = '<value>'."
+          },
+          "severity": {
+            "type": "string",
+            "description": "Shortcut for severity_text, such as DEBUG, INFO, WARN, ERROR or FATAL."
+          },
+          "searchText": {
+            "type": "string",
+            "description": "Literal text to find; it is escaped for you. searchScope picks where it matches."
+          },
+          "searchScope": {
+            "type": "string",
+            "enum": [
+              "body",
+              "attribute",
+              "resource",
+              "all"
+            ],
+            "description": "Where searchText matches. Default body."
+          },
+          "timeRange": {
+            "type": "string",
+            "description": "Relative time range, such as 30m, 1h, 6h, 24h or 3d. Ignored when both start and end are given. Default 1h."
+          },
+          "start": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Start time in unix milliseconds. With end, it overrides timeRange."
+          },
+          "end": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "End time in unix milliseconds. With start, it overrides timeRange."
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Most log records to return. Default 100, at most 10000."
+          },
+          "offset": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Records to skip, for the next page. Default 0."
+          }
+        }
+      }
+    },
+    {
+      "name": "signoz_aggregate_logs",
+      "description": "Return aggregate log statistics and grouped or top-N breakdowns, not individual records; use signoz_search_logs for log rows and messages",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "aggregation": {
+            "type": "string",
+            "description": "Aggregation to apply: count, count_distinct, avg, sum, min, max, p50, p75, p90, p95, p99 or rate."
+          },
+          "aggregateOn": {
+            "type": "string",
+            "description": "Field to aggregate on. Required except for count and rate."
+          },
+          "groupBy": {
+            "type": "string",
+            "description": "Comma-separated field names to group by, for example service.name, severity_text."
+          },
+          "filter": {
+            "type": "string",
+            "description": "Filter in SigNoz search syntax. Combine conditions with AND, OR and parentheses. Use body CONTAINS 'term' for message text, and attribute.<key> or resource.<key> to pick a context. Discover keys with signoz_get_field_keys. Example: \"service.name = 'payment-svc' AND severity_text = 'ERROR'\"."
+          },
+          "service": {
+            "type": "string",
+            "description": "Shortcut for service.name = '<value>'."
+          },
+          "severity": {
+            "type": "string",
+            "description": "Shortcut for severity_text."
+          },
+          "orderBy": {
+            "type": "string",
+            "description": "Order as '<expression> <direction>', for example count() desc."
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Most groups to return. Default 100, at most 10000."
+          },
+          "timeRange": {
+            "type": "string",
+            "description": "Relative time range, such as 30m, 1h, 6h, 24h or 3d. Ignored when both start and end are given. Default 1h."
+          },
+          "start": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Start time in unix milliseconds. With end, it overrides timeRange."
+          },
+          "end": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "End time in unix milliseconds. With start, it overrides timeRange."
+          },
+          "requestType": {
+            "type": "string",
+            "enum": [
+              "scalar",
+              "time_series"
+            ],
+            "default": "scalar",
+            "description": "scalar returns one value or a grouped table over the whole range; time_series returns time-bucketed values, one series per group when grouped."
+          },
+          "stepInterval": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Bucket size in seconds for time_series. When omitted, SigNoz picks one."
+          }
+        },
+        "required": [
+          "aggregation"
+        ]
+      }
+    },
+    {
+      "name": "signoz_search_traces",
+      "description": "Return paginated span rows or one row per trace, including AI traces with per-trace cost and token counts, or discover trace IDs; use aggregate_traces for statistics and get_trace_details for a known trace",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "filter": {
+            "type": "string",
+            "description": "Filter in SigNoz search syntax. Combine conditions with AND, OR and parentheses. Use attribute.<key>, resource.<key> or span.<key> to pick a context. Discover keys with signoz_get_field_keys. Example: \"service.name = 'payment-svc' AND has_error = true\"."
+          },
+          "service": {
+            "type": "string",
+            "description": "Only spans of this service."
+          },
+          "operation": {
+            "type": "string",
+            "description": "Only spans with this operation name."
+          },
+          "error": {
+            "type": [
+              "boolean",
+              "string"
+            ],
+            "description": "Only spans with this error status."
+          },
+          "minDuration": {
+            "type": "string",
+            "description": "Shortest span duration in nanoseconds, for example 500000000 for 500ms."
+          },
+          "maxDuration": {
+            "type": "string",
+            "description": "Longest span duration in nanoseconds."
+          },
+          "timeRange": {
+            "type": "string",
+            "description": "Relative time range, such as 30m, 1h, 6h, 24h or 3d. Ignored when both start and end are given. Default 1h."
+          },
+          "start": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Start time in unix milliseconds. With end, it overrides timeRange."
+          },
+          "end": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "End time in unix milliseconds. With start, it overrides timeRange."
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Most rows to return. Default 100, at most 10000."
+          },
+          "offset": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Rows to skip, for the next page. Default 0."
+          },
+          "selectFields": {
+            "type": [
+              "string",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Extra fields to return on each span row, as an array or a comma-separated string."
+          },
+          "orderBy": {
+            "type": "string",
+            "description": "Order as '<expression> <direction>', for example duration_nano desc."
+          },
+          "queryType": {
+            "type": "string",
+            "enum": [
+              "builder_query",
+              "builder_ai_query"
+            ],
+            "default": "builder_query",
+            "description": "builder_query searches all traces. builder_ai_query searches AI traces."
+          },
+          "requestType": {
+            "type": "string",
+            "enum": [
+              "raw",
+              "trace"
+            ],
+            "default": "raw",
+            "description": "raw returns one row per span; trace returns one row per trace."
+          }
+        }
+      }
+    },
+    {
+      "name": "signoz_aggregate_traces",
+      "description": "Return custom aggregate span statistics, groups, or time series; use signoz_get_service_top_operations for one service's built-in p99-ranked operation table",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "aggregation": {
+            "type": "string",
+            "description": "Aggregation to apply: count, count_distinct, avg, sum, min, max, p50, p75, p90, p95, p99 or rate."
+          },
+          "aggregateOn": {
+            "type": "string",
+            "description": "Field to aggregate on, for example duration_nano. Required except for count and rate."
+          },
+          "groupBy": {
+            "type": "string",
+            "description": "Comma-separated field names to group by, for example service.name, name."
+          },
+          "filter": {
+            "type": "string",
+            "description": "Filter in SigNoz search syntax. Combine conditions with AND, OR and parentheses. Use attribute.<key>, resource.<key> or span.<key> to pick a context. Discover keys with signoz_get_field_keys. Example: \"service.name = 'payment-svc' AND has_error = true\"."
+          },
+          "service": {
+            "type": "string",
+            "description": "Shortcut for service.name = '<value>'."
+          },
+          "operation": {
+            "type": "string",
+            "description": "Shortcut for name = '<value>'."
+          },
+          "error": {
+            "type": [
+              "boolean",
+              "string"
+            ],
+            "description": "Shortcut for has_error = true or false."
+          },
+          "minDuration": {
+            "type": "string",
+            "description": "Shortest span duration in nanoseconds."
+          },
+          "maxDuration": {
+            "type": "string",
+            "description": "Longest span duration in nanoseconds."
+          },
+          "orderBy": {
+            "type": "string",
+            "description": "Order as '<expression> <direction>', for example count() desc."
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Most groups to return. Default 100, at most 10000."
+          },
+          "timeRange": {
+            "type": "string",
+            "description": "Relative time range, such as 30m, 1h, 6h, 24h or 3d. Ignored when both start and end are given. Default 1h."
+          },
+          "start": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Start time in unix milliseconds. With end, it overrides timeRange."
+          },
+          "end": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "End time in unix milliseconds. With start, it overrides timeRange."
+          },
+          "requestType": {
+            "type": "string",
+            "enum": [
+              "scalar",
+              "time_series"
+            ],
+            "default": "scalar",
+            "description": "scalar returns one value or a grouped table over the whole range; time_series returns time-bucketed values, one series per group when grouped."
+          },
+          "stepInterval": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Bucket size in seconds for time_series. When omitted, SigNoz picks one."
+          }
+        },
+        "required": [
+          "aggregation"
+        ]
+      }
+    },
+    {
+      "name": "signoz_get_trace_details",
+      "description": "For a known trace ID, return its spans, metadata, and hierarchy within a containing time window; use signoz_search_traces when the ID is unknown",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "traceId": {
+            "type": "string",
+            "description": "Trace ID, from signoz_search_traces."
+          },
+          "timeRange": {
+            "type": "string",
+            "description": "Relative time range, such as 30m, 1h, 6h, 24h or 3d. Ignored when both start and end are given. Default 6h. It must contain the trace."
+          },
+          "start": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Start time in unix milliseconds. With end, it overrides timeRange."
+          },
+          "end": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "End time in unix milliseconds. With start, it overrides timeRange."
+          },
+          "includeSpans": {
+            "type": [
+              "boolean",
+              "string"
+            ],
+            "description": "Include the spans. Default true."
+          }
+        },
+        "required": [
+          "traceId"
+        ]
+      }
+    }
+  ]
+}

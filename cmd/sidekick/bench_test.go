@@ -107,6 +107,67 @@ func TestBenchRunBadInput(t *testing.T) {
 	}
 }
 
+func TestBenchValidate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		config   string
+		scenario string
+		// wantStderr is a part of the error output; empty means the scenarios are valid.
+		wantStderr string
+	}{
+		{name: "a valid scenario"},
+		{
+			name:       "a scenario with an unknown key",
+			scenario:   benchScenario + "colour: red\n",
+			wantStderr: "colour: unknown key",
+		},
+		{
+			name:       "a scenario whose strategy is not loaded",
+			scenario:   strings.Replace(benchScenario, "STRATEGY", "nope", 1),
+			wantStderr: `strategy: "nope" is not loaded`,
+		},
+		{
+			name:       "a config with a problem",
+			config:     strings.Replace(validConfig, "investigate: claude", "investigate: claud", 1),
+			wantStderr: `model.roles.investigate: connector "claud" is not defined`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			scenario := cmp.Or(tt.scenario, strings.Replace(benchScenario, "STRATEGY", "generic-alert", 1))
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "disk-full.yaml"), []byte(scenario), 0o600))
+
+			configPath := writeConfig(t, cmp.Or(tt.config, validConfig), "")
+
+			var stdout, stderr bytes.Buffer
+
+			root := newTestRootCmd(newBenchCmd(fakeRegistries()))
+			root.SetArgs([]string{"bench", "validate", "--scenarios", dir, "--config", configPath})
+			root.SetOut(&stdout)
+			root.SetErr(&stderr)
+
+			err := root.ExecuteContext(t.Context())
+			if tt.wantStderr == "" {
+				require.NoError(t, err)
+				require.Equal(t, "scenarios checked: 1, problems: 0\n", stdout.String())
+
+				return
+			}
+
+			require.Error(t, err)
+			require.Equal(t, exitBadInput, exitCode(err), "the error: %v", err)
+			require.Contains(t, stderr.String(), tt.wantStderr)
+			require.Empty(t, stdout.String())
+		})
+	}
+}
+
 func TestBenchJudgeCheckBadInput(t *testing.T) {
 	t.Parallel()
 

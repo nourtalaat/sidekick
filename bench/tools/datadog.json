@@ -1,0 +1,364 @@
+{
+  "tools": [
+    {
+      "name": "search_datadog_logs",
+      "description": "Searches logs with filters (time, query, service, host, storage tier, and so on) and returns log details. Renamed from `get_logs`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Log search query in Datadog syntax, for example service:api env:prod status:error."
+          },
+          "from": {
+            "type": "string",
+            "description": "Start of the time range: a relative time such as now-1h, or an ISO 8601 time. Default now-1h."
+          },
+          "to": {
+            "type": "string",
+            "description": "End of the time range: now, a relative time, or an ISO 8601 time. Default now."
+          },
+          "storage_tier": {
+            "type": "string",
+            "description": "Log storage tier to search, for example indexes or flex."
+          },
+          "head_limit": {
+            "type": "integer",
+            "description": "The most log entries to return. Default 100."
+          },
+          "group_by_message": {
+            "type": "boolean",
+            "description": "Group similar log messages together."
+          },
+          "extra_fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Extra fields to return with each log."
+          },
+          "max_tokens": {
+            "type": "integer",
+            "description": "The most tokens the answer may take. Longer results are cut."
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "analyze_datadog_logs",
+      "description": "Analyze Datadog logs using SQL queries for counting, aggregations, and numerical analysis. Use this for statistical analysis.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "SQL query over the logs table, for example SELECT service, count(*) FROM logs GROUP BY service."
+          },
+          "filter": {
+            "type": "string",
+            "description": "Log filter in Datadog syntax that limits the rows the SQL query sees, for example service:api."
+          },
+          "from": {
+            "type": "string",
+            "description": "Start of the time range: a relative time such as now-1h, or an ISO 8601 time. Default now-1h."
+          },
+          "to": {
+            "type": "string",
+            "description": "End of the time range: now, a relative time, or an ISO 8601 time. Default now."
+          },
+          "storage_tier": {
+            "type": "string",
+            "description": "Log storage tier to analyze, for example indexes or flex."
+          },
+          "max_tokens": {
+            "type": "integer",
+            "description": "The most tokens the answer may take. Longer results are cut."
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "get_datadog_metric",
+      "description": "Queries and analyzes historical or real-time metric data, supporting custom queries and aggregations.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Metric query in Datadog syntax, for example avg:system.cpu.user{env:prod} by {host}."
+          },
+          "from": {
+            "type": "string",
+            "description": "Start of the time range: a relative time such as now-1h, or an ISO 8601 time. Default now-1h."
+          },
+          "to": {
+            "type": "string",
+            "description": "End of the time range: now, a relative time, or an ISO 8601 time. Default now."
+          },
+          "raw_data": {
+            "type": "boolean",
+            "description": "Return raw data points instead of binned values."
+          },
+          "max_tokens": {
+            "type": "integer",
+            "description": "The most tokens the answer may take. Longer results are cut."
+          }
+        },
+        "required": [
+          "query",
+          "from",
+          "to"
+        ]
+      }
+    },
+    {
+      "name": "get_datadog_metric_context",
+      "description": "Retrieves detailed information about a metric or derived metric, including metadata, available tags, and tag values for filtering and grouping.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "metric_name": {
+            "type": "string",
+            "description": "Name of the metric to describe, for example system.cpu.user."
+          },
+          "include_tag_values": {
+            "type": "boolean",
+            "description": "Also list the values of each tag."
+          },
+          "max_tokens": {
+            "type": "integer",
+            "description": "The most tokens the answer may take. Longer results are cut."
+          }
+        },
+        "required": [
+          "metric_name"
+        ]
+      }
+    },
+    {
+      "name": "search_datadog_metrics",
+      "description": "Lists available metrics, with options for filtering and metadata.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name_filter": {
+            "type": "string",
+            "description": "Glob that metric names must match, for example cockroachdb.*."
+          },
+          "max_tokens": {
+            "type": "integer",
+            "description": "The most tokens the answer may take. Longer results are cut."
+          }
+        }
+      }
+    },
+    {
+      "name": "search_datadog_monitors",
+      "description": "Retrieves information about Datadog monitors, including their statuses, thresholds, and alert conditions.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Monitor search query, for example status:alert or tag:team:payments."
+          },
+          "max_tokens": {
+            "type": "integer",
+            "description": "The most tokens the answer may take. Longer results are cut."
+          }
+        }
+      }
+    },
+    {
+      "name": "search_datadog_events",
+      "description": "Searches events like monitor alerts, deployment notifications, infrastructure changes, security findings, and service status changes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Event search query in Datadog syntax, for example source:deployment service:api."
+          },
+          "from": {
+            "type": "string",
+            "description": "Start of the time range: a relative time such as now-1h, or an ISO 8601 time. Default now-1h."
+          },
+          "to": {
+            "type": "string",
+            "description": "End of the time range: now, a relative time, or an ISO 8601 time. Default now."
+          },
+          "max_tokens": {
+            "type": "integer",
+            "description": "The most tokens the answer may take. Longer results are cut."
+          }
+        }
+      }
+    },
+    {
+      "name": "search_datadog_incidents",
+      "description": "Retrieves a list of Datadog incidents, including their state, severity, and metadata.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Incident search query. Default state:active."
+          },
+          "from": {
+            "type": "string",
+            "description": "Start of the time range."
+          },
+          "to": {
+            "type": "string",
+            "description": "End of the time range."
+          },
+          "max_tokens": {
+            "type": "integer",
+            "description": "The most tokens the answer may take. Longer results are cut."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_datadog_incident",
+      "description": "Retrieves detailed information about an incident.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "incident_id": {
+            "type": "string",
+            "description": "Incident ID."
+          },
+          "max_tokens": {
+            "type": "integer",
+            "description": "The most tokens the answer may take. Longer results are cut."
+          }
+        },
+        "required": [
+          "incident_id"
+        ]
+      }
+    },
+    {
+      "name": "search_datadog_spans",
+      "description": "Retrieves spans from APM traces with filters such as service, time, resource, and so on.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Span search query in Datadog syntax, for example service:checkout status:error."
+          },
+          "from": {
+            "type": "string",
+            "description": "Start of the time range: a relative time such as now-1h, or an ISO 8601 time. Default now-1h."
+          },
+          "to": {
+            "type": "string",
+            "description": "End of the time range: now, a relative time, or an ISO 8601 time. Default now."
+          },
+          "head_limit": {
+            "type": "integer",
+            "description": "The most spans to return. Default 100."
+          },
+          "custom_attributes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Extra span attributes to return."
+          },
+          "max_tokens": {
+            "type": "integer",
+            "description": "The most tokens the answer may take. Longer results are cut."
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "aggregate_spans",
+      "description": "Aggregates APM spans to compute counts, sums, averages, minimums, maximums, cardinality, and percentiles (p50 to p99). Group results by fields such as service or resource, or set `group_by.interval` in milliseconds to return a timeseries.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Span filter in Datadog syntax, for example service:checkout."
+          },
+          "from": {
+            "type": "string",
+            "description": "Start of the time range: a relative time such as now-1h, or an ISO 8601 time. Default now-1h."
+          },
+          "to": {
+            "type": "string",
+            "description": "End of the time range: now, a relative time, or an ISO 8601 time. Default now."
+          },
+          "compute": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "What to compute: an aggregation such as count, avg, sum, min, max, cardinality or a percentile from p50 to p99, with an optional metric."
+          },
+          "group_by": {
+            "type": "object",
+            "description": "Group the results by fields such as service or resource. Set interval, in milliseconds, to return a time series."
+          },
+          "max_tokens": {
+            "type": "integer",
+            "description": "The most tokens the answer may take. Longer results are cut."
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "get_datadog_trace",
+      "description": "Fetches a complete trace from Datadog APM using a trace ID.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "trace_id": {
+            "type": "string",
+            "description": "Trace ID."
+          },
+          "max_tokens": {
+            "type": "integer",
+            "description": "The most tokens the answer may take. Longer results are cut."
+          }
+        },
+        "required": [
+          "trace_id"
+        ]
+      }
+    },
+    {
+      "name": "search_datadog_entities",
+      "description": "Searches Datadog's Catalog for service identity, ownership and upstream and downstream dependencies.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "What to find in the Datadog catalog: a service name, an owner, or a dependency question."
+          },
+          "max_tokens": {
+            "type": "integer",
+            "description": "The most tokens the answer may take. Longer results are cut."
+          }
+        }
+      }
+    }
+  ]
+}

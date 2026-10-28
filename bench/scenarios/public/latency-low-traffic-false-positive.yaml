@@ -1,0 +1,79 @@
+# A p95 latency alert at night, when a handful of requests move the percentile.
+# Latency alert strategy, false positive.
+id: latency-low-traffic-false-positive
+title: Catalog search p95 latency at night on almost no traffic
+tags: [latency, low-traffic, false-positive]
+strategy: latency-alert
+now: 2026-09-15T03:25:00Z
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="CatalogSearchLatencyP95High"}'
+    alerts:
+      - status: firing
+        labels: { alertname: CatalogSearchLatencyP95High, service: catalog-search, env: prod, severity: warning }
+        annotations:
+          summary: catalog-search p95 latency above 1s for 5m
+          description: The p95 latency of GET /v1/search is 1.8s. The threshold is 1s.
+        startsAt: 2026-09-15T03:14:00Z
+        fingerprint: 8e0b2c47a1d93f56
+sources:
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: query_range
+        match:
+          args:
+            query: { regex: "(?i)requests_total|request_rate|count" }
+        respond:
+          text: |
+            Requests per second of catalog-search, last 24 hours, hourly points
+            daytime (08:00 to 22:00) 60 to 95, 23:00 12, 00:00 4, 01:00 1.2, 02:00 0.3, 03:00 0.1, 03:20 0.1
+            min 0.1, max 95, last 0.1. Traffic at 03:20 is about 6 requests per minute.
+          evidence:
+            - { kind: metric, title: catalog-search request rate, url: "https://prometheus.quillcart.example/graph?g0.expr=search_rps" }
+      - tool: query_range
+        match:
+          args:
+            query: { regex: "(?i)duration|latency|histogram_quantile" }
+        respond:
+          text: |
+            p95 latency in seconds of catalog-search, GET /v1/search, last 7 days
+            Each day 08:00 to 22:00: 0.18 to 0.31.
+            Every night between 02:30 and 04:00 for the last 7 nights: 0.9 to 2.1, for 10 to 25 minutes.
+            Now (03:20): 1.8
+          evidence:
+            - { kind: metric, title: catalog-search p95 latency, url: "https://prometheus.quillcart.example/graph?g0.expr=search_p95" }
+      - tool: get_rules
+        respond:
+          text: |
+            group catalog-search, alert CatalogSearchLatencyP95High, for 5m
+            expr: histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{service="catalog-search"}[5m]))) > 1
+            health ok, last evaluation 03:24:50
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: "No commits since the requested time."
+          noData: true
+      - tool: list_workflow_runs
+        respond:
+          text: 'run 4410 deploy catalog-search 2026-09-12T15:02:19Z success. No deploy since.'
+          evidence:
+            - { kind: deploy, title: deploy catalog-search 4410, url: "https://github.example.com/quillcart/catalog-search/actions/runs/4410" }
+default: no_data
+expected:
+  verdict: false_positive
+  rootCause:
+    summary: Traffic at night is about 6 requests per minute, so a few cold-cache requests set the p95. The same pattern shows on each of the last 7 nights and nothing changed.
+    rubric:
+      - { id: volume, text: "Finds that traffic is very low at this hour, a few requests per minute, so a few slow requests move the p95", weight: 2, required: true }
+      - { id: pattern, text: "Notes that the same night-time pattern appears on earlier nights, or that nothing changed recently", weight: 1 }
+      - { id: fix, text: "Proposes a minimum request rate condition, a longer duration or a different percentile window for the alert", weight: 2, required: true }
+  evidence:
+    - { calledTool: prometheus__query_range }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }
