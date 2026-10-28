@@ -443,8 +443,20 @@ func TestQueryLogsStopsTheQueryInTime(t *testing.T) {
 			sent := apis.logs.Requests()
 			require.Greater(t, len(sent), 2)
 			require.Equal(t, targetStartQuery, sent[0].Header.Get("X-Amz-Target"))
-			require.Equal(t, targetStopQuery, sent[len(sent)-1].Header.Get("X-Amz-Target"))
-			require.JSONEq(t, `{"queryId":"q-slow"}`, string(sent[len(sent)-1].Body))
+
+			// A poll cut short by the deadline can reach the server after the
+			// stop, so the stop is looked for anywhere.
+			stops := 0
+
+			for _, req := range sent {
+				if req.Header.Get("X-Amz-Target") == targetStopQuery {
+					stops++
+
+					require.JSONEq(t, `{"queryId":"q-slow"}`, string(req.Body))
+				}
+			}
+
+			require.Equal(t, 1, stops, "the query is stopped once")
 		})
 	}
 }
