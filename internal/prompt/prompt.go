@@ -131,20 +131,12 @@ func orderTools(tools []model.ToolSpec) []model.ToolSpec {
 	return out
 }
 
-// renderSystem renders system.tmpl. The template is part of the binary, so
-// a failure is a bug, caught by the tests.
+// renderSystem renders system.tmpl.
 func renderSystem() string {
-	tmpl := template.Must(template.New("system").Option("missingkey=error").Parse(systemTemplate))
-
-	var b strings.Builder
-	if err := tmpl.Execute(&b, map[string]string{
+	return renderTemplate("system.tmpl", systemTemplate, map[string]string{
 		"Tag":           untrustedTag,
 		"SubmitVerdict": report.SubmitVerdictTool,
-	}); err != nil {
-		panic("render system.tmpl: " + err.Error())
-	}
-
-	return strings.TrimSpace(b.String())
+	})
 }
 
 // Tool groups, in the order the prompt lists them.
@@ -161,4 +153,18 @@ func toolGroup(name string) int {
 	}
 
 	return builtInTools
+}
+
+// renderTemplate renders one of the templates of this package with data.
+// The templates are part of the binary, so a failure is a bug, caught by
+// the tests.
+func renderTemplate(name, text string, data map[string]string) string {
+	tmpl := template.Must(template.New(name).Option("missingkey=error").Parse(text))
+
+	var b strings.Builder
+	if err := tmpl.Execute(&b, data); err != nil {
+		panic("render " + name + ": " + err.Error())
+	}
+
+	return strings.TrimSpace(b.String())
 }
