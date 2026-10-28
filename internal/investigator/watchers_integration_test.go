@@ -5,6 +5,7 @@ package investigator
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"testing"
 	"time"
@@ -124,9 +125,13 @@ func TestARecoveryDuringARunIsEvidence(t *testing.T) {
 	recoverDuringTheTurn := modeltest.Turn{Func: func(ctx context.Context, _ model.Request) (model.Response, error) {
 		require.NoError(t, pgx.BeginFunc(ctx, h.pool, func(tx pgx.Tx) error {
 			ended, err := watch.EndGroupResolved(ctx, tx, h.investigation(t).GroupID, time.Now(), nil)
+			if err != nil {
+				return fmt.Errorf("end the watchers: %w", err)
+			}
+
 			require.Len(t, ended, 1)
 
-			return err
+			return nil
 		}))
 
 		return turn(search("c1")).Response, nil
