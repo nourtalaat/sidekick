@@ -453,6 +453,8 @@ func TestClientServiceURLs(t *testing.T) {
 		{raw: "http://127.0.0.1:8080/teams/"},
 		{raw: "https://attacker.example.com/teams/", wantErr: true},
 		{raw: "https://trafficmanager.net.attacker.example.com/", wantErr: true},
+		{raw: "https://evil.trafficmanager.net/", wantErr: true},
+		{raw: "https://smba.botframework.com/teams/"},
 		{raw: "http://smba.trafficmanager.net/emea/", wantErr: true},
 	}
 
@@ -475,15 +477,23 @@ func TestClientServiceURLs(t *testing.T) {
 func TestServiceURLRefusedBeforeSending(t *testing.T) {
 	t.Parallel()
 
-	api := fakehttp.New(t)
-	s, _ := testSink(t, api)
+	tests := []string{"https://attacker.example.com/", "https://evil.trafficmanager.net/"}
 
-	u := testUpdate(output.PhaseQueued, nil)
-	u.Event.Teams = &event.TeamsRef{ChannelID: testChannel, ThreadID: testThread, ServiceURL: "https://attacker.example.com/"}
+	for _, serviceURL := range tests {
+		t.Run(serviceURL, func(t *testing.T) {
+			t.Parallel()
 
-	_, err := s.Publish(t.Context(), u)
-	require.ErrorContains(t, err, "not a Bot Framework host")
-	require.Empty(t, api.Requests(), "no token is asked for or sent")
+			api := fakehttp.New(t)
+			s, _ := testSink(t, api)
+
+			u := testUpdate(output.PhaseQueued, nil)
+			u.Event.Teams = &event.TeamsRef{ChannelID: testChannel, ThreadID: testThread, ServiceURL: serviceURL}
+
+			_, err := s.Publish(t.Context(), u)
+			require.ErrorContains(t, err, "not a Bot Framework host")
+			require.Empty(t, api.Requests(), "no token is asked for or sent")
+		})
+	}
 }
 
 func TestConfigValidate(t *testing.T) {

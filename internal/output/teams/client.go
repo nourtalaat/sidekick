@@ -58,10 +58,15 @@ const (
 	statusBadResponse   = "bad_response"
 )
 
-// serviceHostSuffixes are the hosts the Bot Framework's service URLs are
-// on. The bot's token is sent only to them, to the configured service
-// URL's host and to loopback hosts, so a bad service URL cannot leak it.
-var serviceHostSuffixes = []string{".trafficmanager.net", ".botframework.com", ".teams.microsoft.com", ".teams.microsoft.us"}
+// The hosts the Bot Framework's service URLs are on. The bot's token is
+// sent only to them, to the configured service URL's host and to loopback
+// hosts, so a bad service URL cannot leak it. Only the public cloud's host
+// is allowed under trafficmanager.net, because anyone can make a Traffic
+// Manager name there; the other domains belong to Microsoft.
+var (
+	serviceHosts        = []string{"smba.trafficmanager.net"}
+	serviceHostSuffixes = []string{".botframework.com", ".teams.microsoft.com", ".teams.microsoft.us"}
+)
 
 var (
 	// errNotFound means Teams no longer has the message, usually because
@@ -310,7 +315,8 @@ func (c *client) checkServiceURL(raw string) error {
 	}
 
 	host := strings.ToLower(u.Hostname())
-	if host == c.allowedHost || httpclient.IsLoopbackHost(host) || slices.ContainsFunc(serviceHostSuffixes, func(s string) bool { return strings.HasSuffix(host, s) }) {
+	if host == c.allowedHost || httpclient.IsLoopbackHost(host) || slices.Contains(serviceHosts, host) ||
+		slices.ContainsFunc(serviceHostSuffixes, func(s string) bool { return strings.HasSuffix(host, s) }) {
 		return nil
 	}
 
