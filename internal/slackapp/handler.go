@@ -26,6 +26,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/intake/ingest"
 	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/registry"
+	"github.com/nourtalaat/sidekick/internal/roles"
 	"github.com/nourtalaat/sidekick/internal/secrets"
 )
 
@@ -78,6 +79,10 @@ type Options struct {
 	// TracerProvider makes the tracer of the intake.receive spans. Nil
 	// means the global tracer provider.
 	TracerProvider trace.TracerProvider
+	// Roles finds the role of a Slack user who asks a follow-up question;
+	// only responders and higher roles may ask. Pass the lookup the
+	// buttons use. Nil lets every Slack user ask.
+	Roles roles.Lookup
 }
 
 // Handler turns Events API payloads into stored events. Socket Mode and
@@ -97,6 +102,8 @@ type Handler struct {
 	now           func() time.Time
 	// ackBudget is AckBudget; tests on a slow database raise it.
 	ackBudget time.Duration
+	// followUps holds what turns thread replies into follow-up questions.
+	followUps followUps
 }
 
 // New builds a Handler from the slack section and the listeners of
@@ -148,6 +155,7 @@ func New(opts Options) (*Handler, error) {
 		tracer:        tp.Tracer(tracerName),
 		now:           time.Now,
 		ackBudget:     AckBudget,
+		followUps:     newFollowUps(opts),
 	}
 	h.listeners.Store(&listeners)
 
@@ -211,11 +219,24 @@ func (h *Handler) Handle(ctx context.Context, payload []byte) error {
 }
 
 // handleMessage stores a channel message that a listener matches. Edits,
-// thread replies, Sidekick's own messages and messages that mention
-// Sidekick, which arrive as app_mention too, are left out.
+// Sidekick's own messages and messages that mention Sidekick, which arrive
+// as app_mention too, are left out. A thread reply is only ever a
+// follow-up question, with slack.followUps set to any.
 func (h *Handler) handleMessage(ctx context.Context, env envelope, m message) error {
 	bot := env.botUserID()
-	if !m.isPost() || m.isThreadReply() || m.fromApp(env.APIAppID, bot) || m.mentions(bot) {
+	if !m.isPost() || m.fromApp(env.APIAppID, bot) || m.mentions(bot) {
+		return nil
+	}
+
+	if m.isThreadReply() {
+		if !h.followUps.anyReply {
+			return nil
+		}
+
+		if _, err := h.followUp(ctx, env, m); err != nil {
+			return fmt.Errorf("thread reply: %w", err)
+		}
+
 		return nil
 	}
 
@@ -236,15 +257,27 @@ func (h *Handler) handleMessage(ctx context.Context, env envelope, m message) er
 	return h.store(ctx, l.Name, trusted, ev)
 }
 
-// handleMention stores a mention of Sidekick. In a thread it is for the
-// thread's first message, read with conversations.replies, with the fields
-// and fingerprint a listener on that message gives it; at the top level it
-// is for the mention's own text without the mention. Mentions are never
-// trusted.
+// handleMention stores a mention of Sidekick. In the thread of an
+// investigation it is a follow-up question. In another thread it is for
+// the thread's first message, read with conversations.replies, with the
+// fields and fingerprint a listener on that message gives it; at the top
+// level it is for the mention's own text without the mention. Mentions
+// are never trusted.
 func (h *Handler) handleMention(ctx context.Context, env envelope, m message) error {
 	bot := env.botUserID()
 	if m.fromApp(env.APIAppID, bot) {
 		return nil
+	}
+
+	if m.isThreadReply() {
+		asked, err := h.followUp(ctx, env, m)
+		if err != nil {
+			return fmt.Errorf("mention in a thread: %w", err)
+		}
+
+		if asked {
+			return nil
+		}
 	}
 
 	var ev event.Event

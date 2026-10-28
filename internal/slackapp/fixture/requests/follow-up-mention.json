@@ -1,0 +1,25 @@
+{
+  "token": "unused-verification-token",
+  "team_id": "T01TEAM",
+  "api_app_id": "A01SIDEKICK",
+  "type": "event_callback",
+  "event_id": "Ev13FOLLOWUP",
+  "event_time": 1761473300,
+  "authorizations": [
+    {
+      "team_id": "T01TEAM",
+      "user_id": "U01SIDEKICK",
+      "is_bot": true
+    }
+  ],
+  "event": {
+    "type": "app_mention",
+    "channel": "C01OPS",
+    "team": "T01TEAM",
+    "user": "U03BOB",
+    "text": "<@U01SIDEKICK> did the deploy cause it? The token was SEEDED-ABCD1234",
+    "ts": "1761473300.001200",
+    "thread_ts": "1761472960.000500",
+    "event_ts": "1761473300.001200"
+  }
+}

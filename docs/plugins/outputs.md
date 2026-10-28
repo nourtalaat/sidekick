@@ -91,12 +91,14 @@ func init() {
 
 An update's `Phase` is the stage it describes: `queued` when the
 investigation is created, `running` while it runs, and `final` once it has
-a result. Later releases add phases for follow-up answers, action
-proposals and watchers. `Accepts` returns true for the phases your output
-shows; the publish job skips the others without calling `Publish`. A
-webhook callback, for example, accepts only `final`; a chat message that
-updates in place accepts all three, so people see that an investigation
-started within seconds.
+a result. After a follow-up question, `follow_up` carries the report with
+the new answer last in `Report.FollowUps`; an answer that changes the
+verdict comes as a new `final` instead. Later releases add phases for
+action proposals and watchers. `Accepts` returns true for the phases your
+output shows; the publish job skips the others without calling `Publish`.
+A webhook callback, for example, accepts only `final`; a chat message that
+updates in place accepts all of them, so people see that an investigation
+started within seconds, and the answers to their questions.
 
 ## Step 3: publishing and editing
 

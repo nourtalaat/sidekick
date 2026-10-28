@@ -105,7 +105,7 @@ func (r *run) save(ctx context.Context, s newStep) (db.Step, error) {
 			return fmt.Errorf("insert step %d: %w", step.Seq, err)
 		}
 
-		if s.kind == kindModelTurn {
+		if s.kind == kindModelTurn || s.kind == kindSummary {
 			if err := r.addSpend(ctx, tx, s); err != nil {
 				return fmt.Errorf("step %d: %w", step.Seq, err)
 			}
@@ -115,7 +115,8 @@ func (r *run) save(ctx context.Context, s newStep) (db.Step, error) {
 			return fmt.Errorf("step %d: %w", step.Seq, err)
 		}
 
-		if s.kind != kindPrompt && !hasLine {
+		// A follow-up run leaves the report on show while it runs.
+		if r.followUp() || (s.kind != kindPrompt && !hasLine) {
 			return nil
 		}
 
@@ -215,8 +216,14 @@ func (r *run) stepParams(s newStep) (db.InsertStepParams, error) {
 
 // finish ends the run with end: it adds what was checked, stores the
 // report and the final status, fenced, and publishes the final update, in
-// one transaction.
+// one transaction. Follow-up questions that arrived while the run ran get
+// their follow_up job in the same transaction. A follow-up run ends
+// through finishFollowUp instead.
 func (r *run) finish(ctx context.Context, end ending) error {
+	if r.followUp() {
+		return r.finishFollowUp(ctx, end)
+	}
+
 	end.report.Checked = r.hist.checked(r.tools.Checked())
 
 	raw, err := json.Marshal(end.report)
@@ -249,7 +256,15 @@ func (r *run) finish(ctx context.Context, end ending) error {
 			return fmt.Errorf("store the report: %w", err)
 		}
 
-		return publishFinal(ctx, tx, finished, r.hist.progress(), &end.report)
+		if err := publishFinal(ctx, tx, finished, r.hist.progress(), &end.report); err != nil {
+			return fmt.Errorf("end the run: %w", err)
+		}
+
+		if !answers(status) {
+			return nil
+		}
+
+		return enqueueWaitingFollowUp(ctx, tx, finished)
 	})
 	if err != nil {
 		return fmt.Errorf("finish: %w", err)
