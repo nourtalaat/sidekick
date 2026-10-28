@@ -64,6 +64,48 @@ func (e EventKind) Valid() bool {
 	}
 }
 
+// Defines values for FeedbackChannel.
+const (
+	Slack FeedbackChannel = "slack"
+	Ui    FeedbackChannel = "ui"
+)
+
+// Valid indicates whether the value is a known member of the FeedbackChannel enum.
+func (e FeedbackChannel) Valid() bool {
+	switch e {
+	case Slack:
+		return true
+	case Ui:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FeedbackConfirmation.
+const (
+	Confirmed FeedbackConfirmation = "confirmed"
+	Revised   FeedbackConfirmation = "revised"
+	Unchanged FeedbackConfirmation = "unchanged"
+	Withdrawn FeedbackConfirmation = "withdrawn"
+)
+
+// Valid indicates whether the value is a known member of the FeedbackConfirmation enum.
+func (e FeedbackConfirmation) Valid() bool {
+	switch e {
+	case Confirmed:
+		return true
+	case Revised:
+		return true
+	case Unchanged:
+		return true
+	case Withdrawn:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for FeedbackSummarySummary.
 const (
 	Correct FeedbackSummarySummary = "correct"
@@ -82,6 +124,30 @@ func (e FeedbackSummarySummary) Valid() bool {
 	case None:
 		return true
 	case Wrong:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FeedbackTargetKind.
+const (
+	FeedbackTargetKindFinding  FeedbackTargetKind = "finding"
+	FeedbackTargetKindFix      FeedbackTargetKind = "fix"
+	FeedbackTargetKindToolCall FeedbackTargetKind = "tool_call"
+	FeedbackTargetKindVerdict  FeedbackTargetKind = "verdict"
+)
+
+// Valid indicates whether the value is a known member of the FeedbackTargetKind enum.
+func (e FeedbackTargetKind) Valid() bool {
+	switch e {
+	case FeedbackTargetKindFinding:
+		return true
+	case FeedbackTargetKindFix:
+		return true
+	case FeedbackTargetKindToolCall:
+		return true
+	case FeedbackTargetKindVerdict:
 		return true
 	default:
 		return false
@@ -517,6 +583,32 @@ type FalsePositiveDetail struct {
 	WhyFired   string       `json:"whyFired"`
 }
 
+// Feedback defines model for Feedback.
+type Feedback struct {
+	Channel FeedbackChannel `json:"channel"`
+
+	// Confirmation How this submission changed the confirmed verdict of the investigation.
+	Confirmation    FeedbackConfirmation `json:"confirmation"`
+	CorrectCause    *string              `json:"correctCause,omitempty"`
+	CorrectVerdict  *Verdict             `json:"correctVerdict,omitempty"`
+	CreatedAt       time.Time            `json:"createdAt"`
+	Id              openapi_types.UUID   `json:"id"`
+	InvestigationId openapi_types.UUID   `json:"investigationId"`
+
+	// Rating correct or wrong.
+	Rating     string             `json:"rating"`
+	Reason     *string            `json:"reason,omitempty"`
+	TargetKind FeedbackTargetKind `json:"targetKind"`
+	TargetRef  string             `json:"targetRef"`
+	UpdatedAt  time.Time          `json:"updatedAt"`
+}
+
+// FeedbackChannel defines model for Feedback.Channel.
+type FeedbackChannel string
+
+// FeedbackConfirmation How this submission changed the confirmed verdict of the investigation.
+type FeedbackConfirmation string
+
 // FeedbackSummary The ratings responders gave the verdict of the current run.
 type FeedbackSummary struct {
 	Correct int `json:"correct"`
@@ -530,6 +622,9 @@ type FeedbackSummary struct {
 // FeedbackSummarySummary correct or wrong when every rating says so, mixed when both
 // kinds exist, and none when nobody rated.
 type FeedbackSummarySummary string
+
+// FeedbackTargetKind defines model for FeedbackTargetKind.
+type FeedbackTargetKind string
 
 // Finding defines model for Finding.
 type Finding struct {
@@ -714,6 +809,21 @@ type Me struct {
 
 // MeKind Whether the caller is a signed-in user or an API token.
 type MeKind string
+
+// NewFeedback defines model for NewFeedback.
+type NewFeedback struct {
+	CorrectCause   *string  `json:"correctCause,omitempty"`
+	CorrectVerdict *Verdict `json:"correctVerdict,omitempty"`
+
+	// Rating correct or wrong. Anything else answers 400.
+	Rating     string             `json:"rating"`
+	Reason     *string            `json:"reason,omitempty"`
+	TargetKind FeedbackTargetKind `json:"targetKind"`
+
+	// TargetRef `run:N/verdict`, `run:N/finding:ID` or `run:N/fix:ID` for the
+	// current run N, or the ID of a tool call.
+	TargetRef string `json:"targetRef"`
+}
 
 // NewToken defines model for NewToken.
 type NewToken struct {
@@ -1043,6 +1153,9 @@ type ListJobsParams struct {
 // ListJobsParamsStatus defines parameters for ListJobs.
 type ListJobsParamsStatus string
 
+// CreateInvestigationFeedbackJSONRequestBody defines body for CreateInvestigationFeedback for application/json ContentType.
+type CreateInvestigationFeedbackJSONRequestBody = NewFeedback
+
 // CreateTokenJSONRequestBody defines body for CreateToken for application/json ContentType.
 type CreateTokenJSONRequestBody = NewToken
 
@@ -1057,6 +1170,9 @@ type ServerInterface interface {
 	// GetInvestigation One investigation, with its report and the events of its group
 	// (GET /investigations/{id})
 	GetInvestigation(w http.ResponseWriter, r *http.Request, id InvestigationID)
+	// CreateInvestigationFeedback Say that one part of an investigation is correct or wrong
+	// (POST /investigations/{id}/feedback)
+	CreateInvestigationFeedback(w http.ResponseWriter, r *http.Request, id InvestigationID)
 	// ListInvestigationSteps The steps of an investigation, in order, a page at a time
 	// (GET /investigations/{id}/steps)
 	ListInvestigationSteps(w http.ResponseWriter, r *http.Request, id InvestigationID, params ListInvestigationStepsParams)
@@ -1276,6 +1392,32 @@ func (siw *ServerInterfaceWrapper) GetInvestigation(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetInvestigation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateInvestigationFeedback operation middleware
+func (siw *ServerInterfaceWrapper) CreateInvestigationFeedback(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id InvestigationID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateInvestigationFeedback(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1726,6 +1868,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}", wrapper.GetInvestigation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}/steps", wrapper.ListInvestigationSteps)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}/watchers", wrapper.ListInvestigationWatchers)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{id}/feedback", wrapper.CreateInvestigationFeedback)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}/stream", wrapper.StreamInvestigation)
 
 	return m
@@ -1838,6 +1981,46 @@ type GetInvestigationdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetInvestigationdefaultApplicationProblemPlusJSONResponse) VisitGetInvestigationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateInvestigationFeedbackRequestObject struct {
+	Id   InvestigationID `json:"id"`
+	Body *CreateInvestigationFeedbackJSONRequestBody
+}
+
+type CreateInvestigationFeedbackResponseObject interface {
+	VisitCreateInvestigationFeedbackResponse(w http.ResponseWriter) error
+}
+
+type CreateInvestigationFeedback201JSONResponse Feedback
+
+func (response CreateInvestigationFeedback201JSONResponse) VisitCreateInvestigationFeedbackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateInvestigationFeedbackdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateInvestigationFeedbackdefaultApplicationProblemPlusJSONResponse) VisitCreateInvestigationFeedbackResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -2228,6 +2411,9 @@ type StrictServerInterface interface {
 	// GetInvestigation One investigation, with its report and the events of its group
 	// (GET /investigations/{id})
 	GetInvestigation(ctx context.Context, request GetInvestigationRequestObject) (GetInvestigationResponseObject, error)
+	// CreateInvestigationFeedback Say that one part of an investigation is correct or wrong
+	// (POST /investigations/{id}/feedback)
+	CreateInvestigationFeedback(ctx context.Context, request CreateInvestigationFeedbackRequestObject) (CreateInvestigationFeedbackResponseObject, error)
 	// ListInvestigationSteps The steps of an investigation, in order, a page at a time
 	// (GET /investigations/{id}/steps)
 	ListInvestigationSteps(ctx context.Context, request ListInvestigationStepsRequestObject) (ListInvestigationStepsResponseObject, error)
@@ -2365,6 +2551,39 @@ func (sh *strictHandler) GetInvestigation(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetInvestigationResponseObject); ok {
 		if err := validResponse.VisitGetInvestigationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateInvestigationFeedback operation middleware
+func (sh *strictHandler) CreateInvestigationFeedback(w http.ResponseWriter, r *http.Request, id InvestigationID) {
+	var request CreateInvestigationFeedbackRequestObject
+
+	request.Id = id
+
+	var body CreateInvestigationFeedbackJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateInvestigationFeedback(ctx, request.(CreateInvestigationFeedbackRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateInvestigationFeedback")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateInvestigationFeedbackResponseObject); ok {
+		if err := validResponse.VisitCreateInvestigationFeedbackResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

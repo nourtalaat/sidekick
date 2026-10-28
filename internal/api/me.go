@@ -12,6 +12,8 @@ import (
 	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/auth"
 	"github.com/nourtalaat/sidekick/internal/config"
+	"github.com/nourtalaat/sidekick/internal/feedback"
+	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/redact"
 )
 
@@ -25,6 +27,9 @@ type server struct {
 	audit    *audit.Writer
 	hub      *Hub
 	log      *slog.Logger
+
+	feedbackMetrics *feedback.Metrics
+	memory          memory.SyncOptions
 
 	streamHeartbeat time.Duration
 	streamLifetime  time.Duration
