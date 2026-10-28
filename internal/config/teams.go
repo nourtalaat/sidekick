@@ -73,6 +73,17 @@ type Teams struct {
 	ServiceURL string `yaml:"serviceURL"`
 }
 
+// Bot returns the bot's identity as plugins get it in registry.Deps.
+func (t *Teams) Bot() registry.TeamsBot {
+	return registry.TeamsBot{
+		AppID:            t.AppID,
+		TenantID:         t.TenantID,
+		ClientSecret:     t.ClientSecret,
+		WorkloadIdentity: t.WorkloadIdentity,
+		ServiceURL:       t.ServiceURL,
+	}
+}
+
 // OnTeams reports whether the listener watches a Teams channel. A listener
 // with no source watches Slack.
 func (l Listener) OnTeams() bool {
