@@ -34,6 +34,18 @@ func registerSlackApp(ctx context.Context, a *app.App, cache *rules.Cache) error
 		return nil
 	}
 
+	// One lookup finds the roles of everyone who acts in Slack: buttons,
+	// commands and follow-up questions.
+	lookup, err := slackroles.New(slackroles.Options{
+		Slack:   cfg.Slack,
+		Secrets: a.Secrets(),
+		Pool:    a.Pool(),
+		Logger:  a.Logger().With("component", "slackroles"),
+	})
+	if err != nil {
+		return fmt.Errorf("set up Slack roles: %w", err)
+	}
+
 	h, err := slackapp.New(slackapp.Options{
 		Config:         cfg,
 		Secrets:        a.Secrets(),
@@ -42,6 +54,7 @@ func registerSlackApp(ctx context.Context, a *app.App, cache *rules.Cache) error
 		Logger:         log,
 		Metrics:        a.Telemetry().Registry(),
 		TracerProvider: a.Telemetry().TracerProvider(),
+		Roles:          lookup,
 	})
 	if err != nil {
 		return fmt.Errorf("set up the Slack app: %w", err)
@@ -58,16 +71,6 @@ func registerSlackApp(ctx context.Context, a *app.App, cache *rules.Cache) error
 
 		return nil
 	})
-
-	lookup, err := slackroles.New(slackroles.Options{
-		Slack:   cfg.Slack,
-		Secrets: a.Secrets(),
-		Pool:    a.Pool(),
-		Logger:  a.Logger().With("component", "slackroles"),
-	})
-	if err != nil {
-		return fmt.Errorf("set up Slack roles: %w", err)
-	}
 
 	commands := newSlackCommands(a, h, cache, lookup)
 

@@ -25,6 +25,20 @@ type ending struct {
 	status string
 	// budget names the budget that ran out, if one did.
 	budget string
+	// answered is set when a follow-up run ended with an accepted
+	// answer_follow_up: answer is the answer and evidence what its
+	// citations resolve to. report is then unset.
+	answered bool
+	answer   string
+	evidence []source.Evidence
+}
+
+// answered returns the ending of a follow-up run whose model gave the
+// answer that step s accepted.
+func (r *run) answered(s db.Step) ending {
+	text, evidence, _ := r.h.builtins.answer(r.hist, r.hist.calls[deref(s.ToolCallID)])
+
+	return ending{answered: true, answer: text, evidence: evidence}
 }
 
 // noVerdict returns the ending of a run whose model gave no report that

@@ -68,6 +68,15 @@ SET external = excluded.external,
     published_at = excluded.published_at
 WHERE output_refs.last_seq < excluded.last_seq;
 
+-- name: FindInvestigationByExternal :one
+-- FindInvestigationByExternal returns the investigation that one of sinks
+-- published at external, such as the Slack thread a reply is in. When
+-- several did, it returns the one published to last.
+SELECT investigation_id FROM output_refs
+WHERE sink = ANY (@sinks::text[]) AND external = @external
+ORDER BY published_at DESC
+LIMIT 1;
+
 -- name: ReserveWatcherChangeSeq :one
 -- ReserveWatcherChangeSeq raises the seq of an investigation's state by two
 -- without changing what it holds: a watcher's change takes the first of

@@ -166,8 +166,15 @@ func TestHandleFirstPost(t *testing.T) {
 			require.Equal(t, tt.wantThreadTS, posts[0].ThreadTS)
 			require.True(t, strings.HasPrefix(posts[0].Text, "Looking into it: "), posts[0].Text)
 
+			// The ref names the thread the message is in: the alert's, or the
+			// message's own.
+			thread := tt.wantThreadTS
+			if thread == "" {
+				thread = "1793023321.000001"
+			}
+
 			ref := h.outputRef(t, id, slackSink)
-			require.Equal(t, channelID(tt.wantChannel)+":1793023321.000001", ref.External)
+			require.Equal(t, channelID(tt.wantChannel)+":"+thread, ref.External)
 			require.Equal(t, SeqQueued, ref.LastSeq)
 
 			var stored output.Ref

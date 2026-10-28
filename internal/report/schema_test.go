@@ -98,6 +98,20 @@ func TestSubmitVerdictSchemaShape(t *testing.T) {
 	}
 }
 
+func TestAnswerFollowUpSchemaShape(t *testing.T) {
+	t.Parallel()
+
+	var schema schemaNode
+	require.NoError(t, json.Unmarshal(AnswerFollowUpSchema, &schema))
+
+	require.Equal(t, "object", schema.Type)
+	require.NotNil(t, schema.AdditionalProperties, "objects must set additionalProperties")
+	require.False(t, *schema.AdditionalProperties, "objects must not accept unknown fields")
+	require.ElementsMatch(t, []string{"answer", "evidenceToolCallIds"}, schema.Required)
+	require.Equal(t, "string", schema.Properties["answer"].Type)
+	require.Equal(t, "array", schema.Properties["evidenceToolCallIds"].Type)
+}
+
 func strs[S ~string](values ...S) []string {
 	out := make([]string, len(values))
 	for i, v := range values {

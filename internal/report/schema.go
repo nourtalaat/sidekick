@@ -58,3 +58,19 @@ var SubmitVerdictSchema = json.RawMessage(`{
     }
   }
 }`)
+
+// AnswerFollowUpTool is the name of the tool that answers a follow-up
+// question without changing the verdict. Only follow-up runs offer it.
+const AnswerFollowUpTool = "answer_follow_up"
+
+// AnswerFollowUpSchema is the input schema of answer_follow_up. Like a
+// finding, the answer cites the tool calls that support it.
+var AnswerFollowUpSchema = json.RawMessage(`{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["answer", "evidenceToolCallIds"],
+  "properties": {
+    "answer": {"type": "string", "maxLength": 2000},
+    "evidenceToolCallIds": {"type": "array", "items": {"type": "string"}}
+  }
+}`)

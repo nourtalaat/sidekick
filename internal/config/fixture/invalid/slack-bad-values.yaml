@@ -1,4 +1,5 @@
-# A trusted bot that is not a bot ID, and an API URL without a trailing slash.
+# A trusted bot that is not a bot ID, an API URL without a trailing slash,
+# and a follow-up setting that does not exist.
 database:
   urlSecret: { name: sidekick-db, key: url }
 
@@ -15,3 +16,4 @@ slack:
   botTokenSecret: { name: sidekick-slack, key: botToken }
   trustedBots: [SigNoz]
   apiURL: https://slack.com/api
+  followUps: mentions

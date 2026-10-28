@@ -136,7 +136,34 @@ its last turn as above, with `daily_cap` as the budget.
 
 `budgets.concurrency` and each route's `concurrency` limit how many
 investigations run at once across all replicas; the others wait in the
-queue.
+queue. Follow-up runs count too.
+
+## Follow-up questions
+
+A [follow-up question](slack.md#follow-up-questions) is answered in a new
+run of the investigation after the first run ends. The run starts from
+the saved steps, so the model sees the whole first run, then the
+questions that waited, in one message, with who asked each one. It has
+the same tools, and `answer_follow_up` to answer without changing the
+verdict; it calls `submit_verdict` with a full new report when the answer
+changes the verdict. Questions are what to look at: they cannot change the
+tools, the action mode or the verdict rules. Questions that arrive while a
+run is going on wait for the next run.
+
+Each follow-up run has half of each of the investigation's limits, at
+least 1 of a limit that is set, and counts only its own use: its tokens,
+tool calls and cost, and the time from its own start. Its last turn offers
+only `answer_follow_up`. A run that ends without an answer leaves the
+report as it was, with an answer that says why. A key in the config to set
+the follow-up limits can come later if it is needed.
+
+The model's reasoning is sent back to it in later runs only when the
+investigation's connector is still of the same provider type; reasoning
+from another provider is left out. When the saved conversation is over
+70% of the model's context size, the oldest long tool
+results are replaced by short summaries from the `summarize` role, or the
+`investigate` connector when no `summarize` role is set, until it fits.
+The summaries are saved as steps; the original results stay saved.
 
 ## Restarts and several replicas
 

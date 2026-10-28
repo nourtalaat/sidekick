@@ -252,22 +252,7 @@ func (b *Buttons) HandleInteraction(ctx context.Context, cb slack.InteractionCal
 // has their role read again when the lookup can do that, so a user just
 // given a higher role is not refused.
 func (b *Buttons) role(ctx context.Context, teamID, userID string) (roles.Role, error) {
-	role, err := b.roles.Role(ctx, teamID, userID)
-	if err != nil {
-		return 0, fmt.Errorf("look up the role: %w", err)
-	}
-
-	r, ok := b.roles.(refresher)
-	if role.Has(roles.Responder) || !ok {
-		return role, nil
-	}
-
-	role, err = r.Refresh(ctx, teamID, userID)
-	if err != nil {
-		return 0, fmt.Errorf("look up the role again: %w", err)
-	}
-
-	return role, nil
+	return responderRole(ctx, b.roles, teamID, userID)
 }
 
 // rate stores a rating of the verdict and shows it in the outputs, in one
@@ -476,4 +461,27 @@ func slackURL(raw string) bool {
 	}
 
 	return false
+}
+
+// responderRole returns the role lookup gives userID in teamID. A user
+// below responder has their role read again when lookup can do that, so a
+// user just given a higher role, such as one just added to a Slack user
+// group, is not refused.
+func responderRole(ctx context.Context, lookup roles.Lookup, teamID, userID string) (roles.Role, error) {
+	role, err := lookup.Role(ctx, teamID, userID)
+	if err != nil {
+		return 0, fmt.Errorf("look up the role: %w", err)
+	}
+
+	r, ok := lookup.(refresher)
+	if role.Has(roles.Responder) || !ok {
+		return role, nil
+	}
+
+	role, err = r.Refresh(ctx, teamID, userID)
+	if err != nil {
+		return 0, fmt.Errorf("look up the role again: %w", err)
+	}
+
+	return role, nil
 }
