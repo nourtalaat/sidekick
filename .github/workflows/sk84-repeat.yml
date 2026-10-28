@@ -1,5 +1,5 @@
 # Temporary (SK-84): runs the two flaky tests many times in a row. Removed
-# before review.
+# before review. Second round, after the fixture fix.
 name: SK-84 repeat
 
 on:
