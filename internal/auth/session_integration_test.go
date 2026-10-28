@@ -61,7 +61,7 @@ func TestAuthenticate(t *testing.T) {
 
 			var c *http.Cookie
 			if tt.cookie != "" {
-				c = &http.Cookie{Name: sessionCookie, Value: tt.cookie}
+				c = newSessionCookie(tt.cookie)
 			}
 
 			p, err := e.svc.Authenticate(requestWith(t, tt.method, c, tt.csrf))
@@ -104,7 +104,7 @@ func TestLogout(t *testing.T) {
 
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, auth.LogoutPath, nil)
 			if tt.cookie != "" {
-				req.AddCookie(&http.Cookie{Name: sessionCookie, Value: tt.cookie})
+				req.AddCookie(newSessionCookie(tt.cookie))
 			}
 
 			if tt.csrf != "" {
@@ -122,7 +122,7 @@ func TestLogout(t *testing.T) {
 				require.Nil(t, c)
 			}
 
-			_, err := e.svc.Authenticate(requestWith(t, http.MethodGet, &http.Cookie{Name: sessionCookie, Value: liveSession}, ""))
+			_, err := e.svc.Authenticate(requestWith(t, http.MethodGet, newSessionCookie(liveSession), ""))
 			if tt.wantLive {
 				require.NoError(t, err)
 			} else {
@@ -246,4 +246,10 @@ func TestQueryPlans(t *testing.T) {
 // sessionValue returns the cookie value of a session ID of 32 bytes of b.
 func sessionValue(b byte) string {
 	return base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{b}, 32))
+}
+
+// newSessionCookie returns the session cookie with value, with the
+// attributes the server sets on it.
+func newSessionCookie(value string) *http.Cookie {
+	return &http.Cookie{Name: sessionCookie, Value: value, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode}
 }

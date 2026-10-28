@@ -90,7 +90,7 @@ func (s server) do(t *testing.T, method, path, session, csrf string, body io.Rea
 
 	req := httptest.NewRequestWithContext(t.Context(), method, path, body)
 	if session != "" {
-		req.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
+		req.AddCookie(newSessionCookie(session))
 	}
 
 	if csrf != "" {
@@ -143,4 +143,10 @@ func (staticSecrets) Resolve(context.Context, registry.SecretRef) ([]byte, error
 // sessionValue returns the cookie value of a session ID of 32 bytes of b.
 func sessionValue(b byte) string {
 	return base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{b}, 32))
+}
+
+// newSessionCookie returns the session cookie with value, with the
+// attributes the server sets on it.
+func newSessionCookie(value string) *http.Cookie {
+	return &http.Cookie{Name: sessionCookie, Value: value, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode}
 }
