@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/feedback"
 	"github.com/nourtalaat/sidekick/internal/output"
 	"github.com/nourtalaat/sidekick/internal/queue"
@@ -271,14 +272,9 @@ func (h *Handler) markSent(ctx context.Context, p Payload, c db.ListUnsentWatche
 // investigation's group, the state of the group's watchers, and the ref of
 // what the sink published before.
 func (h *Handler) update(ctx context.Context, investigationID uuid.UUID, state db.GetPublishStateRow) (output.Update, error) {
-	loaded, err := db.New(h.pool).GetInvestigationWithEvent(ctx, investigationID)
+	inv, ev, err := h.load(ctx, investigationID)
 	if err != nil {
-		return output.Update{}, fmt.Errorf("load the investigation and its event: %w", err)
-	}
-
-	ev, err := store.EventOf(loaded.Event)
-	if err != nil {
-		return output.Update{}, fmt.Errorf("read event %s: %w", loaded.Event.ID, err)
+		return output.Update{}, fmt.Errorf("load the investigation: %w", err)
 	}
 
 	var stored body
@@ -307,7 +303,7 @@ func (h *Handler) update(ctx context.Context, investigationID uuid.UUID, state d
 	}
 
 	if u.Phase == output.PhaseFinal {
-		if err := h.addResponders(ctx, &u, loaded.Investigation); err != nil {
+		if err := h.addResponders(ctx, &u, inv); err != nil {
 			return output.Update{}, fmt.Errorf("load what responders did: %w", err)
 		}
 	}
@@ -322,6 +318,38 @@ func (h *Handler) update(ctx context.Context, investigationID uuid.UUID, state d
 	}
 
 	return u, nil
+}
+
+// load returns the investigation with the event that opened its group.
+// The retention job deletes events sooner than investigations by default,
+// so an old investigation can have no events left; it is then published
+// with an empty event, and the sinks fall back to their wording for an
+// event without a title, while the report comes from the publish state.
+func (h *Handler) load(ctx context.Context, id uuid.UUID) (db.Investigation, event.Event, error) {
+	queries := db.New(h.pool)
+
+	loaded, err := queries.GetInvestigationWithEvent(ctx, id)
+	if err == nil {
+		ev, err := store.EventOf(loaded.Event)
+		if err != nil {
+			return db.Investigation{}, event.Event{}, fmt.Errorf("read event %s: %w", loaded.Event.ID, err)
+		}
+
+		return loaded.Investigation, ev, nil
+	}
+
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return db.Investigation{}, event.Event{}, fmt.Errorf("with its event: %w", err)
+	}
+
+	inv, err := queries.GetInvestigation(ctx, id)
+	if err != nil {
+		return db.Investigation{}, event.Event{}, fmt.Errorf("without its event: %w", err)
+	}
+
+	h.log.DebugContext(ctx, "publishing an investigation whose events were deleted", "investigation_id", id.String())
+
+	return inv, event.Event{}, nil
 }
 
 // addResponders adds to a final update who rated the verdict and who

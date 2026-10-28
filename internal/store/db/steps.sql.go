@@ -13,6 +13,19 @@ import (
 	"github.com/google/uuid"
 )
 
+const countSteps = `-- name: CountSteps :one
+SELECT count(*) FROM steps WHERE investigation_id = $1
+`
+
+// CountSteps returns how many steps of an investigation are saved. It is
+// below next_seq once the retention job deleted old steps.
+func (q *Queries) CountSteps(ctx context.Context, investigationID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countSteps, investigationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const insertStep = `-- name: InsertStep :exec
 INSERT INTO steps (
   investigation_id, seq, run, kind, parts, source, tool, tool_call_id, status, error, evidence,

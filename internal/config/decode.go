@@ -25,6 +25,7 @@ const (
 
 var (
 	durationType        = reflect.TypeFor[time.Duration]()
+	periodType          = reflect.TypeFor[Period]()
 	nodeType            = reflect.TypeFor[yaml.Node]()
 	yamlUnmarshalerType = reflect.TypeFor[yaml.Unmarshaler]()
 	textUnmarshalerType = reflect.TypeFor[encoding.TextUnmarshaler]()
@@ -408,6 +409,10 @@ func leafMessage(node *yaml.Node, t reflect.Type, err error) string {
 func describeType(t reflect.Type) string {
 	if t == durationType {
 		return "a duration such as 30s or 10m"
+	}
+
+	if t == periodType {
+		return "a period such as 90d or 36h"
 	}
 
 	if isLeaf(t) {

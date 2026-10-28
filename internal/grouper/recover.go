@@ -26,8 +26,9 @@ const skipReasonNoGroup = "no group has this alert"
 // it has now recovered, a close_group job is enqueued to close it as
 // resolved.
 //
-// It reports false when no group has the alert, and the event is then
-// stored as skipped, or when another run linked or skipped the event
+// It reports false when no group has the alert, or the group is gone
+// because the retention job deleted it, and the event is then stored as
+// skipped, or when another run linked or skipped the event
 // first.
 func (g *Grouper) Recover(ctx context.Context, tx pgx.Tx, ev db.Event) (res Result, linked bool, err error) {
 	ctx, span := g.tracer.Start(ctx, SpanName)
@@ -43,22 +44,17 @@ func (g *Grouper) Recover(ctx context.Context, tx pgx.Tx, ev db.Event) (res Resu
 
 	queries := db.New(tx)
 
-	groupID, err := queries.FindGroupOfAlert(ctx, ev.Fingerprint)
-	if errors.Is(err, pgx.ErrNoRows) {
+	grp, found, err := lockGroupOfAlert(ctx, queries, ev.Fingerprint)
+	if err != nil {
+		return Result{}, false, fmt.Errorf("recovery event %s: %w", ev.ID, err)
+	}
+
+	if !found {
 		if _, err := queries.MarkEventSkipped(ctx, db.MarkEventSkippedParams{SkipReason: skipReasonNoGroup, ID: ev.ID}); err != nil {
 			return Result{}, false, fmt.Errorf("skip recovery event %s: %w", ev.ID, err)
 		}
 
 		return Result{}, false, nil
-	}
-
-	if err != nil {
-		return Result{}, false, fmt.Errorf("find the group of recovery event %s: %w", ev.ID, err)
-	}
-
-	grp, err := queries.LockEventGroup(ctx, groupID)
-	if err != nil {
-		return Result{}, false, fmt.Errorf("lock group %s: %w", groupID, err)
 	}
 
 	span.SetAttributes(attribute.String(attrRoute, grp.Route), attribute.String(attrGroupID, grp.ID.String()))
@@ -112,4 +108,30 @@ func (g *Grouper) closeIfRecovered(ctx context.Context, tx pgx.Tx, grp db.EventG
 	g.log.DebugContext(ctx, "every alert in the group recovered", "group_id", grp.ID.String())
 
 	return nil
+}
+
+// lockGroupOfAlert finds and locks the group of the newest grouped event
+// with fingerprint. It reports false when no event of the alert is
+// grouped, or when the group that event names was deleted: events have
+// no foreign key to their group, so an event can outlive it.
+func lockGroupOfAlert(ctx context.Context, queries *db.Queries, fingerprint string) (db.EventGroup, bool, error) {
+	groupID, err := queries.FindGroupOfAlert(ctx, fingerprint)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return db.EventGroup{}, false, nil
+	}
+
+	if err != nil {
+		return db.EventGroup{}, false, fmt.Errorf("find the group of the alert: %w", err)
+	}
+
+	grp, err := queries.LockEventGroup(ctx, groupID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return db.EventGroup{}, false, nil
+	}
+
+	if err != nil {
+		return db.EventGroup{}, false, fmt.Errorf("lock group %s: %w", groupID, err)
+	}
+
+	return grp, true, nil
 }

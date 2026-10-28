@@ -154,6 +154,7 @@ process (`process_*`) metrics, this release has:
 | `sidekick_feedback_total` | counter | `target`, `rating` | Ratings that responders stored, by target, such as `verdict`, and rating: `correct` or `wrong`. A repeated click is not counted. See [Investigations in Slack](slack.md#buttons). |
 | `sidekick_watcher_checks_total` | counter | `type`, `result` | [Watcher](configuration.md#watch) checks by type (`http`, `tool` or `alert`) and result (`pass`, `fail` or `error`). |
 | `sidekick_watcher_check_duration_seconds` | histogram | `type` | Duration of watcher checks. |
+| `sidekick_retention_deleted_rows_total` | counter | `table` | Rows the daily [retention](configuration.md#retention) job deleted on this replica, by table, such as `events` or `audit_log`. The steps, inbox rows and other records deleted together with an investigation are not counted on their own. |
 | `sidekick_watchers_running` | gauge | none | Watchers running in the deployment. Read from the database at each scrape, so every replica reports the same number; combine replicas with `max`. |
 | `sidekick_watcher_state_changes_total` | counter | `status` | Watcher state changes on this replica, by the new state: `started`, `recovered`, `timed_out` or `stopped`. |
 | `sidekick_watch_http_blocked_total` | counter | `reason` | Watcher HTTP checks the safety rules refused, by reason: `host`, `private_ip` or `redirect`. |

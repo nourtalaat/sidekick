@@ -110,6 +110,7 @@ func (v *validator) run() {
 	v.checkTelemetry()
 	v.checkWatch()
 	v.checkWatchSettings()
+	v.checkRetention()
 	v.checkSecretRefs()
 
 	if v.opts.CheckSecrets {
