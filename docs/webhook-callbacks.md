@@ -23,7 +23,9 @@ List the output in the routes whose results should be sent.
 ## What is sent
 
 One `POST` per investigation, when its result is final, with
-`Content-Type: application/json`:
+`Content-Type: application/json`. The result is sent again only when its
+report changes, not when something else about the investigation does,
+such as a watcher or a rating:
 
 ```json
 {
@@ -96,6 +98,7 @@ state, a callback with the same envelope reports it. `event` is
     "status": "recovered",
     "passesInARow": 2,
     "passesToRecover": 2,
+    "intervalSeconds": 30,
     "checks": 9,
     "lastCheckAt": "2026-10-26T10:10:00Z",
     "lastResult": "HTTP 200",
@@ -106,14 +109,13 @@ state, a callback with the same envelope reports it. `event` is
 ```
 
 - `watcher.stopped` has a `stopReason`: `group_resolved`, `responder` or
-  `config_changed`.
+  `config_changed`. A watcher a responder stopped in Slack also has
+  `stoppedBy`, with the responder's `slackUserId`.
+- `intervalSeconds` is the time between two checks.
 - `lastResult` is a short, redacted summary of the last check, such as
   `HTTP 503`.
 - `seq` grows with every callback of one investigation, the final result
   included, so a receiver can tell which came last.
-
-Watchers are not started yet in this release, so for now only
-`investigation.final` is sent.
 
 ## Headers
 
