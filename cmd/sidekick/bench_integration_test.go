@@ -157,11 +157,11 @@ func TestBenchRun(t *testing.T) {
 				require.False(t, rep.Thresholds[0].Passed)
 				require.NotNil(t, rep.Scenarios[0].Runs[0].RootCause, "the judge graded the run")
 
-				junit, err := os.ReadFile(filepath.Join(out, "junit.xml"))
+				junit, err := os.ReadFile(filepath.Join(out, "junit.xml")) //nolint:gosec // A file in the test's own temporary directory.
 				require.NoError(t, err)
 				require.Contains(t, string(junit), `<testsuite name="checkout-pool-size"`)
 
-				summary, err := os.ReadFile(filepath.Join(out, "summary.md"))
+				summary, err := os.ReadFile(filepath.Join(out, "summary.md")) //nolint:gosec // A file in the test's own temporary directory.
 				require.NoError(t, err)
 				require.Contains(t, string(summary), "**1 of 1 thresholds failed.**")
 			}
