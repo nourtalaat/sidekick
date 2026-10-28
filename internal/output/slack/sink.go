@@ -110,10 +110,10 @@ type ref struct {
 }
 
 // Accepts reports whether the sink shows updates of phase: it shows the
-// queued, running and final phases.
+// queued, running and final phases, and watcher changes.
 func (s *Sink) Accepts(phase output.Phase) bool {
 	switch phase {
-	case output.PhaseQueued, output.PhaseRunning, output.PhaseFinal:
+	case output.PhaseQueued, output.PhaseRunning, output.PhaseFinal, output.PhaseWatcher:
 		return true
 	default:
 		return false
@@ -125,8 +125,13 @@ func (s *Sink) Accepts(phase output.Phase) bool {
 // and an edit waits until editInterval after the last one. A final update
 // also posts the rest of a long report and a short verdict reply in the
 // thread, once per verdict, so a retried final does not announce twice. A
-// message that was deleted is posted again.
+// message that was deleted is posted again. A watcher change posts a short
+// reply in the thread and leaves the message to the state that follows.
 func (s *Sink) Publish(ctx context.Context, u output.Update) (output.Ref, error) {
+	if u.Phase == output.PhaseWatcher {
+		return s.watcherChanged(ctx, u)
+	}
+
 	if u.Previous == nil {
 		return s.post(ctx, u)
 	}
@@ -164,6 +169,54 @@ func (s *Sink) Publish(ctx context.Context, u output.Update) (output.Ref, error)
 	prev.seq, prev.editedAt = u.Seq, s.now()
 
 	return s.finish(ctx, u, prev)
+}
+
+// watcherChanged posts the short thread reply about the watcher change
+// in u and returns the ref of the main message as it was. The publish job
+// sends each change once, so a change is not compared with the Seq the
+// message shows. Without a message to reply under, it posts the message
+// first, as for a queued investigation; the state that follows has a
+// higher Seq and edits it. An update without a watcher posts nothing.
+func (s *Sink) watcherChanged(ctx context.Context, u output.Update) (output.Ref, error) {
+	if u.Watcher == nil {
+		s.log.WarnContext(ctx, "watcher update dropped: it does not say which watcher changed", "investigation_id", u.InvestigationID, "seq", u.Seq)
+
+		if u.Previous == nil {
+			return output.Ref{Sink: s.name}, nil
+		}
+
+		return *u.Previous, nil
+	}
+
+	var (
+		r  ref
+		ok bool
+	)
+
+	if u.Previous != nil {
+		r, ok = refOf(*u.Previous)
+	}
+
+	if !ok {
+		posted, err := s.post(ctx, u)
+		if err != nil {
+			return output.Ref{}, fmt.Errorf("post the message to reply under: %w", err)
+		}
+
+		r, _ = refOf(posted)
+	}
+
+	permalink, err := s.client.permalink(ctx, r.channel, r.ts)
+	if err != nil {
+		// The reply is still worth posting without its link.
+		s.log.WarnContext(ctx, "could not get a link to the Slack message", "investigation_id", u.InvestigationID, "error", err)
+	}
+
+	if err := s.reply(ctx, r, watcherReplyView(u, permalink)); err != nil {
+		return output.Ref{}, fmt.Errorf("post the watcher reply: %w", err)
+	}
+
+	return s.outputRef(r), nil
 }
 
 // post posts the main message: in the thread of the Slack message the

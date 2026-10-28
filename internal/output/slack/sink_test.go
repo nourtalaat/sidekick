@@ -416,6 +416,109 @@ func TestPublishFailures(t *testing.T) {
 	}
 }
 
+func TestPublishWatcherChange(t *testing.T) {
+	t.Parallel()
+
+	recovered := testWatchers()[1]
+	shown := shownRef(5, string(report.TruePositive))
+
+	tests := []struct {
+		name     string
+		previous *output.Ref
+		watcher  *output.WatcherState
+		// wantPaths are the Web API calls, in order.
+		wantPaths []string
+		wantRef   output.Ref
+	}{
+		{
+			name:      "a change is a reply in the thread, whatever the Seq the message shows",
+			previous:  &shown,
+			watcher:   &recovered,
+			wantPaths: []string{pathPermalink, pathPost},
+			wantRef:   shown,
+		},
+		{
+			name:      "without a message, the message is posted first",
+			watcher:   &recovered,
+			wantPaths: []string{pathPost, pathPermalink, pathPost},
+		},
+		{
+			name:     "an update that does not say which watcher changed posts nothing",
+			previous: &shown,
+			wantRef:  shown,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			api := fakehttp.New(t)
+
+			if len(tt.wantPaths) > 0 {
+				posts := []fakehttp.Response{postedResponse("1793023399.000001")}
+				if tt.previous == nil {
+					posts = []fakehttp.Response{postedResponse(mainTS), postedResponse("1793023399.000001")}
+				}
+
+				api.Handle(http.MethodPost, pathPost, posts...)
+				api.Handle(http.MethodGet, pathPermalink, fakehttp.Response{Body: []byte(`{"ok":true,"permalink":"` + permalinkOK + `"}`)})
+			}
+
+			api.ExpectAllCalled()
+
+			s, clock := testSink(t, api)
+
+			u := testUpdate(output.PhaseWatcher, nil)
+			u.Seq, u.Previous, u.Watcher = 3, tt.previous, tt.watcher
+			u.Watchers = testWatchers()
+
+			got, err := s.Publish(t.Context(), u)
+			require.NoError(t, err)
+
+			var paths []string
+			for _, req := range api.Requests() {
+				paths = append(paths, req.Path)
+			}
+
+			require.Equal(t, tt.wantPaths, paths)
+
+			if tt.watcher == nil {
+				require.Equal(t, tt.wantRef, got)
+
+				return
+			}
+
+			reply := decodeMessage(t, api.Requests()[len(api.Requests())-1].Body)
+			require.Equal(t, mainChannel, reply.Channel)
+			require.Equal(t, mainTS, reply.ThreadTS, "the reply goes in the thread of the main message")
+			require.Equal(t, "Back up alerts-cleared: checkout-api p99 latency above 2s", reply.Text)
+			require.Contains(t, reply.Attachments[0].Blocks[1].Elements[0].Text, "<"+permalinkOK+"|See the investigation>")
+
+			if tt.previous != nil {
+				require.Equal(t, tt.wantRef, got, "the ref of the message does not change")
+
+				return
+			}
+
+			main := decodeMessage(t, api.Requests()[0].Body)
+			require.Equal(t, "#alerts", main.Channel)
+			require.Equal(t, "Looking into it: checkout-api p99 latency above 2s", main.Text)
+			require.Equal(t, output.Ref{
+				Sink:     "slack-thread",
+				External: mainChannel + ":" + mainTS,
+				Data: map[string]string{
+					dataChannel:  mainChannel,
+					dataTS:       mainTS,
+					dataThreadTS: mainTS,
+					dataSeq:      "3",
+					dataEditedAt: strconv.FormatInt(clock.Now().UnixMilli(), 10),
+				},
+			}, got, "the state that follows has a higher Seq, so it edits the message")
+		})
+	}
+}
+
 func TestAccepts(t *testing.T) {
 	t.Parallel()
 
@@ -430,7 +533,7 @@ func TestAccepts(t *testing.T) {
 		{phase: output.PhaseProposal},
 		{phase: output.PhaseResolved},
 		{phase: output.PhaseCancelled},
-		{phase: output.PhaseWatcher},
+		{phase: output.PhaseWatcher, want: true},
 	}
 
 	for _, tt := range tests {

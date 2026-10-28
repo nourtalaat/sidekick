@@ -1,0 +1,125 @@
+{
+  "text": "Investigating: checkout-api p99 latency above 2s",
+  "attachments": [
+    {
+      "color": "#FF8848",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*Investigating* checkout-api p99 latency above 2s",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": ":white_check_mark: Step 1 done\n:white_check_mark: Step 2 done\n:white_check_mark: Step 3 done",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "Received <!date^1793023320^{time}|14:02 UTC> · 3 events · Updates as the investigation runs",
+              "verbatim": true
+            }
+          ]
+        },
+        {
+          "type": "context",
+          "block_id": "watcher",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": ":eyes: *Watching* checkout-health · checking every 30s since <!date^1793023350^{time}|14:02 UTC>",
+              "verbatim": true
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "block_id": "run",
+          "elements": [
+            {
+              "type": "button",
+              "action_id": "stop_investigation",
+              "text": {
+                "type": "plain_text",
+                "text": "Stop",
+                "emoji": true
+              },
+              "value": "0192d3a4-0000-7000-8000-0000000000aa",
+              "style": "danger",
+              "confirm": {
+                "title": {
+                  "type": "plain_text",
+                  "text": "Stop the investigation?",
+                  "emoji": true
+                },
+                "text": {
+                  "type": "plain_text",
+                  "text": "Sidekick stops now and reports what it found so far.",
+                  "emoji": true
+                },
+                "confirm": {
+                  "type": "plain_text",
+                  "text": "Stop",
+                  "emoji": true
+                },
+                "deny": {
+                  "type": "plain_text",
+                  "text": "Keep going",
+                  "emoji": true
+                },
+                "style": "danger"
+              }
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "block_id": "watchers",
+          "elements": [
+            {
+              "type": "button",
+              "action_id": "stop_watcher:1",
+              "text": {
+                "type": "plain_text",
+                "text": "Stop watching checkout-health",
+                "emoji": true
+              },
+              "value": "0192d3a4-0000-7000-8000-0000000000d1",
+              "confirm": {
+                "title": {
+                  "type": "plain_text",
+                  "text": "Stop watching?",
+                  "emoji": true
+                },
+                "text": {
+                  "type": "plain_text",
+                  "text": "Sidekick stops checking checkout-health. The investigation and its verdict stay as they are.",
+                  "emoji": true
+                },
+                "confirm": {
+                  "type": "plain_text",
+                  "text": "Stop watching",
+                  "emoji": true
+                },
+                "deny": {
+                  "type": "plain_text",
+                  "text": "Keep watching",
+                  "emoji": true
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
