@@ -47,3 +47,68 @@ How it behaves:
   the evidence of the call.
 - **Size.** Summaries and causes are cut to 1,000 bytes and notes to 8,000
   bytes; a result that was cut is marked as cut.
+
+## Search by meaning
+
+With [vector memory](../configuration.md#vector-memory-memoryvector) on,
+`search` and the examples in each prompt also find entries that mean the
+same as the query or the alert in other words. Sidekick embeds each entry,
+and the query or the alert's text, with the embeddings model of
+`memory.vector.embeddings`, and takes the entries nearest by cosine
+distance. It merges them with the full-text matches by reciprocal rank
+fusion: an entry scores the sum of 1/(60 + rank) over the lists it is in,
+and the best scores come first. An entry that is in both lists beats one
+that is in one. The examples that share the alert's fingerprint, or its
+service and alert name, still come first and are not changed.
+
+How it behaves:
+
+- **Off by default, and optional.** With `memory.vector.enabled` false,
+  nothing uses pgvector: no extension, no table and no vector query. Only
+  a Postgres with the [pgvector](https://github.com/pgvector/pgvector)
+  extension runs the vector migrations.
+- **Embedding happens outside the confirmation.** Confirming a verdict, or
+  changing the confirmation, queues a job that embeds the entry, so a slow
+  embeddings call never holds up the click. An entry that changes is
+  embedded again, a withdrawn one loses its vector at once, and the
+  retention job's delete removes vectors with their entries. At start-up,
+  Sidekick queues jobs for entries that have no vector or one from another
+  model, so switching models needs no manual step when the new model
+  returns vectors of the same length.
+- **Fall back to full text.** When the embeddings call fails, Sidekick
+  logs a warning, without the text, and answers with full-text matches
+  alone. An investigation never fails because of vectors.
+- **Cost.** Each entry is embedded once, when it is confirmed or changed,
+  and each search or investigation embeds up to 2,000 bytes of text, so the
+  cost is small. The calls are counted in the model metrics with
+  `role="embed"`, and priced when the model has a price (see
+  [`memory.vector`](../configuration.md#vector-memory-memoryvector)).
+- **Entries are cut.** An entry's text, its alert name, service, summary
+  and cause, is cut to 8,000 bytes before it is embedded.
+
+### Changing the length of the vectors
+
+The length of the vectors is set when the embedding column is made, from
+`memory.vector.embeddings.dimensions`. If you change `dimensions`, for
+example by moving to a model that returns longer vectors, Sidekick refuses
+to start, and `sidekick migrate up` fails, with this message:
+
+```
+memory_embeddings holds 1024-dimension vectors but memory.vector.embeddings.dimensions is 1536; run `sidekick migrate vector-reset` to empty the table and embed the memory entries again
+```
+
+Vectors are derived data, so the fix is to empty the table and let Sidekick
+embed every entry again:
+
+```sh
+sidekick migrate vector-reset --config /etc/sidekick/sidekick.yaml
+```
+
+The command asks for confirmation; answer `yes`, or pass `--yes` to skip
+the question. It empties `memory_embeddings` and takes the length off its
+column, in one transaction, and writes one audit entry, with the actor
+`system`, the action `memory.vectors_reset`, and the old and the new
+length. The next start, or `sidekick migrate up`, gives the column the new
+length, and the start-up backfill embeds every entry again, which costs one
+embeddings call for each entry. Until it has, searches use full text for the
+entries that have no vector yet.
