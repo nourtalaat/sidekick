@@ -63,6 +63,17 @@ WHERE ctid = ANY (ARRAY(
   ORDER BY c.at
   LIMIT @batch));
 
+-- name: DeleteOldMemoryEntries :execrows
+-- DeleteOldMemoryEntries deletes memory entries by when they were
+-- confirmed, disabled ones too. They have no foreign key to their
+-- investigation, so they can outlive it.
+DELETE FROM memory_entries
+WHERE ctid = ANY (ARRAY(
+  SELECT m.ctid FROM memory_entries m
+  WHERE m.confirmed_at < @before
+  ORDER BY m.confirmed_at
+  LIMIT @batch));
+
 -- name: AllowAuditLogDelete :exec
 -- AllowAuditLogDelete lets the transaction delete audit log rows, which
 -- the audit_log_delete_by_retention trigger rejects otherwise. The setting

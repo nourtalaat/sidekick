@@ -6,7 +6,9 @@
 // the same button again changes nothing, and clicking the other one
 // changes the rating. A Correct confirms the verdict, so the investigation
 // counts as confirmed; later feedback that disagrees with the confirmed
-// verdict changes it.
+// verdict changes it. Each change of the confirmation also changes the
+// investigation's memory entry in the same transaction, so only confirmed
+// investigations are in memory.
 package feedback
 
 import (
@@ -21,6 +23,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/ids"
+	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/output"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/store/db"
@@ -73,10 +76,10 @@ type Result struct {
 }
 
 // RateVerdict stores r in q's transaction and updates the confirmed
-// verdict, holding a lock on the investigation's row so two clicks at once
-// are applied in turn. Call it in a transaction, and show the change in
-// the outputs in the same one, for example with publish.Refresh. It
-// returns an error that wraps ErrNotFound or ErrNotRatable when the
+// verdict and the investigation's memory entry, holding a lock on the
+// investigation's row so two clicks at once are applied in turn. Call it
+// in a transaction, and show the change in the outputs in the same one,
+// for example with publish.Refresh. It returns an error that wraps ErrNotFound or ErrNotRatable when the
 // investigation has no verdict to rate.
 func RateVerdict(ctx context.Context, q db.DBTX, r VerdictRating) (Result, error) {
 	if r.Rating != output.RatingCorrect && r.Rating != output.RatingWrong {
@@ -121,6 +124,12 @@ func RateVerdict(ctx context.Context, q db.DBTX, r VerdictRating) (Result, error
 	change, err := confirm(ctx, q, inv, r)
 	if err != nil {
 		return Result{}, fmt.Errorf("investigation %s: %w", inv.ID, err)
+	}
+
+	if change != Unchanged {
+		if err := memory.Sync(ctx, q, inv.ID); err != nil {
+			return Result{}, fmt.Errorf("investigation %s: %w", inv.ID, err)
+		}
 	}
 
 	return Result{Stored: true, Confirmation: change}, nil

@@ -18,7 +18,7 @@ import (
 // and the layout of the other parts. Each investigation records it, so
 // results always refer to an exact prompt. Change it whenever the prompt
 // changes; a test fails until system.tmpl and this version agree.
-const Version = "3"
+const Version = "4"
 
 //go:embed system.tmpl
 var systemTemplate string
@@ -41,6 +41,9 @@ type Input struct {
 	Group Group
 	// Route is the route that matched the group.
 	Route RouteContext
+	// Memory are similar confirmed investigations, shown in the order
+	// given. Empty leaves the memory part out.
+	Memory []Example
 }
 
 // Group is an event group as the prompt shows it.
@@ -71,9 +74,9 @@ type parts struct {
 	tools    []model.ToolSpec
 	strategy string
 	// lessons and memory are reviewed guidance and short summaries of
-	// similar confirmed investigations. They arrive in M3; until then they
-	// are always empty. They change from one investigation to the next, so
-	// they sit after the last cache breakpoint.
+	// similar confirmed investigations. Lessons are always empty until
+	// they arrive in M3. Both change from one investigation to the next,
+	// so they sit after the last cache breakpoint.
 	lessons []string
 	memory  []string
 	event   string
@@ -81,13 +84,15 @@ type parts struct {
 
 // Build assembles the first request of an investigation: the system prompt
 // and the strategy as system text, the tools, and one user message with the
-// event group. Cache breakpoints mark the last tool and the strategy. The
+// similar past investigations, when there are any, then the event group.
+// Cache breakpoints mark the last tool and the strategy. The
 // caller adds the model settings (tool choice, token limits, thinking).
 func Build(in Input) model.Request {
 	p := parts{
 		system:   systemPrompt,
 		tools:    orderTools(in.Tools),
 		strategy: renderStrategy(in.Strategy, in.Tools),
+		memory:   renderMemory(in.Memory),
 		event:    renderEvent(in.Group, in.Route),
 	}
 

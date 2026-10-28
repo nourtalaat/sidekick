@@ -6,6 +6,13 @@ Keycloak. They are served on `server.listen` only when the config has an
 [`oidc` section](configuration.md#oidc); without it, there is no web UI,
 no `/auth` endpoints and no `/api/v1`.
 
+The UI is part of the Sidekick binary and image; it needs nothing else
+installed, and it loads no script, style or font from another host. It is
+served at `/` with a strict Content Security Policy (`default-src 'self'`,
+no inline scripts or styles), `X-Content-Type-Options: nosniff` and
+`Referrer-Policy: same-origin`. A reverse proxy in front of Sidekick must
+not replace those headers.
+
 ## Register Sidekick at your provider
 
 1. Create a web application (a confidential client that uses the

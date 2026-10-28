@@ -85,3 +85,39 @@ can list nodes
 cannot list pods -n kube-system
 cannot list pods --all-namespaces
 cannot get secrets -n "$namespace"
+
+echo "--- with an oidc section, the web UI is served from the pod"
+kubectl -n "$namespace" create secret generic sidekick-oidc --from-literal=clientSecret=ci-not-a-real-secret
+install upgrade --reuse-values \
+	--set 'secrets={sidekick-anthropic,sidekick-slack,sidekick-webhook,sidekick-oidc}' \
+	--set config.server.publicURL=https://sidekick.example.com \
+	--set config.oidc.issuer=https://idp.example.com \
+	--set config.oidc.clientID=sidekick \
+	--set config.oidc.clientSecret.name=sidekick-oidc \
+	--set config.oidc.clientSecret.key=clientSecret \
+	--set 'config.oidc.roles.viewer[0]=*'
+kubectl -n "$namespace" rollout status deploy/"$release" --timeout "$timeout"
+
+local_port=18080
+kubectl -n "$namespace" port-forward deploy/"$release" "$local_port":8080 >/dev/null &
+forward=$!
+trap 'kill $forward 2>/dev/null || true' EXIT
+
+# The forward needs a moment before it accepts connections.
+page=$(mktemp)
+headers=$(mktemp)
+tries=0
+until curl -fsS -D "$headers" -o "$page" "http://127.0.0.1:$local_port/"; do
+	tries=$((tries + 1))
+	[ "$tries" -lt 30 ]
+	sleep 1
+done
+
+grep -q '<div id="root"></div>' "$page"
+grep -qi '^content-security-policy: default-src .self.;' "$headers"
+grep -qi '^x-content-type-options: nosniff' "$headers"
+
+script=$(sed -n 's|.*src="\(/assets/[^"]*\.js\)".*|\1|p' "$page")
+[ -n "$script" ]
+curl -fsS -D - -o /dev/null "http://127.0.0.1:$local_port$script" | grep -qi '^cache-control: public, max-age=31536000, immutable'
+echo "index.html and $script are served with the security and cache headers"
