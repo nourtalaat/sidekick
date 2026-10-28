@@ -325,7 +325,31 @@ github.com/aws/aws-sdk-go-v2/service/cloudtrail v1.65.5
 LICENSE.txt: Apache License, Version 2.0 (text in LICENSE)
 
 ================================================================================
+github.com/aws/aws-sdk-go-v2/service/cloudwatch v1.75.0
+================================================================================
+
+LICENSE.txt: Apache License, Version 2.0 (text in LICENSE)
+
+================================================================================
 github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.90.0
+================================================================================
+
+LICENSE.txt: Apache License, Version 2.0 (text in LICENSE)
+
+================================================================================
+github.com/aws/aws-sdk-go-v2/service/ecs v1.102.0
+================================================================================
+
+LICENSE.txt: Apache License, Version 2.0 (text in LICENSE)
+
+================================================================================
+github.com/aws/aws-sdk-go-v2/service/eks v1.104.2
+================================================================================
+
+LICENSE.txt: Apache License, Version 2.0 (text in LICENSE)
+
+================================================================================
+github.com/aws/aws-sdk-go-v2/service/health v1.50.2
 ================================================================================
 
 LICENSE.txt: Apache License, Version 2.0 (text in LICENSE)
