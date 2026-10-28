@@ -55,7 +55,11 @@ type Source struct {
 // fake servers.
 type endpoints struct {
 	logs       string
+	cloudWatch string
 	cloudTrail string
+	eks        string
+	ecs        string
+	health     string
 	sts        string
 }
 
@@ -67,8 +71,8 @@ func (s *Source) Tools(context.Context) ([]source.Tool, error) {
 	return slices.Clone(toolList), nil
 }
 
-// Call runs one tool. A log group or resource that does not exist and a
-// query that returns nothing give a result with NoData set. An account,
+// Call runs one tool. A log group, alarm, cluster or service that does not
+// exist and a query that returns nothing give a result with NoData set. An account,
 // Region or log group the config does not allow, input that does not fit
 // and a request AWS refuses, such as a query it cannot parse or a
 // permission the role lacks, return a *source.ToolError.
@@ -91,8 +95,18 @@ func (s *Source) run(ctx context.Context, call source.Call) (source.Result, erro
 	switch call.Tool {
 	case toolQueryLogs:
 		return s.queryLogs(ctx, call.Input)
+	case toolQueryMetrics:
+		return s.queryMetrics(ctx, call.Input)
+	case toolListAlarms:
+		return s.listAlarms(ctx, call.Input)
 	case toolListChanges:
 		return s.listChanges(ctx, call.Input)
+	case toolGetEKSCluster:
+		return s.getEKSCluster(ctx, call.Input)
+	case toolGetECSService:
+		return s.getECSService(ctx, call.Input)
+	case toolListHealthEvents:
+		return s.listHealthEvents(ctx, call.Input)
 	default:
 		return source.Result{}, fmt.Errorf("tool %q: %w", call.Tool, errUnknownTool)
 	}
