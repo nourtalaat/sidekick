@@ -23,6 +23,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/intake"
 	"github.com/nourtalaat/sidekick/internal/intake/ingest"
 	"github.com/nourtalaat/sidekick/internal/investigator"
+	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/output"
 	slackout "github.com/nourtalaat/sidekick/internal/output/slack"
 	"github.com/nourtalaat/sidekick/internal/publish"
@@ -91,6 +92,9 @@ type ButtonsOptions struct {
 	HTTP *http.Client
 	// Logger gets one line per click, with IDs only.
 	Logger *slog.Logger
+	// Memory says how a rating syncs the investigation's memory entry; set
+	// Embed when vector memory is on.
+	Memory memory.SyncOptions
 }
 
 // Buttons handles clicks on the buttons of Sidekick's messages: Correct
@@ -108,6 +112,7 @@ type Buttons struct {
 	watchers *watch.Stopper
 	http     *http.Client
 	log      *slog.Logger
+	memory   memory.SyncOptions
 }
 
 var _ InteractionHandler = (*Buttons)(nil)
@@ -127,6 +132,7 @@ func NewButtons(opts ButtonsOptions) *Buttons {
 		watchers: opts.Watchers,
 		http:     hc,
 		log:      opts.Logger,
+		memory:   opts.Memory,
 	}
 }
 
@@ -269,7 +275,7 @@ func (b *Buttons) rate(ctx context.Context, log *slog.Logger, id uuid.UUID, user
 	err := pgx.BeginFunc(ctx, b.pool, func(tx pgx.Tx) error {
 		var err error
 
-		res, err = feedback.RateVerdict(ctx, tx, feedback.VerdictRating{InvestigationID: id, Rating: rating, SlackUserID: userID})
+		res, err = feedback.RateVerdict(ctx, tx, feedback.VerdictRating{InvestigationID: id, Rating: rating, SlackUserID: userID, Memory: b.memory})
 		if err != nil {
 			return fmt.Errorf("rate the verdict: %w", err)
 		}

@@ -64,6 +64,9 @@ type VerdictRating struct {
 	InvestigationID uuid.UUID
 	Rating          output.Rating
 	SlackUserID     string
+	// Memory says how the investigation's memory entry is synced when the
+	// rating changes the confirmation; set Embed with vector memory on.
+	Memory memory.SyncOptions
 }
 
 // Result is what a rating changed.
@@ -127,7 +130,7 @@ func RateVerdict(ctx context.Context, q db.DBTX, r VerdictRating) (Result, error
 	}
 
 	if change != Unchanged {
-		if err := memory.Sync(ctx, q, inv.ID); err != nil {
+		if err := memory.Sync(ctx, q, inv.ID, r.Memory); err != nil {
 			return Result{}, fmt.Errorf("investigation %s: %w", inv.ID, err)
 		}
 	}

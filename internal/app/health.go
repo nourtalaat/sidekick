@@ -73,11 +73,35 @@ func (r readiness) checkSchema(ctx context.Context) check {
 		return check{name: "schema", message: "cannot read the schema version: " + err.Error()}
 	}
 
+	if current < target {
+		message := fmt.Sprintf("the database has migrations up to %d but this release needs %d", current, target)
+		if r.cfg.Database.Migrations == config.MigrationsManual {
+			message += "; database.migrations is manual, so run `sidekick migrate up`"
+		}
+
+		return check{name: "schema", message: message}
+	}
+
+	if r.cfg.Memory.Vector.Enabled {
+		return r.checkVectorSchema(ctx)
+	}
+
+	return check{name: "schema", ok: true, message: "ok"}
+}
+
+// checkVectorSchema is checkSchema for the vector migrations, which vector
+// memory needs.
+func (r readiness) checkVectorSchema(ctx context.Context) check {
+	current, target, err := store.VectorSchemaVersion(ctx, r.pool)
+	if err != nil {
+		return check{name: "schema", message: "cannot read the vector schema version: " + err.Error()}
+	}
+
 	if current >= target {
 		return check{name: "schema", ok: true, message: "ok"}
 	}
 
-	message := fmt.Sprintf("the database has migrations up to %d but this release needs %d", current, target)
+	message := fmt.Sprintf("the database has vector memory migrations up to %d but this release needs %d", current, target)
 	if r.cfg.Database.Migrations == config.MigrationsManual {
 		message += "; database.migrations is manual, so run `sidekick migrate up`"
 	}

@@ -320,6 +320,10 @@ type Vector struct {
 	// section of its own: the provider, the embedding model, its
 	// dimensions and the credentials. It is required when enabled.
 	Embeddings Connector `yaml:"embeddings"`
+
+	// Dimensions is the length of the vectors, read from Embeddings when
+	// the config is validated. It is zero when vector memory is off.
+	Dimensions int `yaml:"-"`
 }
 
 // PromptExamples returns how many examples a prompt shows: zero when

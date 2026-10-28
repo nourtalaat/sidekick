@@ -613,7 +613,9 @@ func InvestigateAnyway(ctx context.Context, q db.DBTX, id uuid.UUID, by Requeste
 		return false, fmt.Errorf("restart investigation %s: %w", id, err)
 	}
 
-	if err := memory.Sync(ctx, q, inv.ID); err != nil {
+	// The confirmation is cleared, so this only deletes the entry, and its
+	// embedding goes with it; nothing is embedded.
+	if err := memory.Sync(ctx, q, inv.ID, memory.SyncOptions{}); err != nil {
 		return false, fmt.Errorf("investigation %s: %w", id, err)
 	}
 

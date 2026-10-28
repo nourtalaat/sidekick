@@ -188,7 +188,7 @@ func TestInvestigateAnyway(t *testing.T) {
 				confirmed_at = now(), cost_micros = 1000000, tool_calls = 40 WHERE id = $1`, testInvestigation)
 			require.NoError(t, err)
 			require.NoError(t, pgx.BeginFunc(t.Context(), h.pool, func(tx pgx.Tx) error {
-				if err := memory.Sync(t.Context(), tx, testInvestigation); err != nil {
+				if err := memory.Sync(t.Context(), tx, testInvestigation, memory.SyncOptions{}); err != nil {
 					return fmt.Errorf("sync memory: %w", err)
 				}
 
