@@ -12,6 +12,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ApiToken struct {
+	ID         uuid.UUID
+	Name       string
+	TokenHash  []byte
+	Role       string
+	CreatedBy  uuid.UUID
+	CreatedAt  time.Time
+	ExpiresAt  time.Time
+	LastUsedAt *time.Time
+	RevokedAt  *time.Time
+}
+
 type AuditLog struct {
 	ID              int64
 	At              time.Time
