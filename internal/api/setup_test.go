@@ -19,7 +19,9 @@ import (
 	"github.com/nourtalaat/sidekick/internal/auth"
 	"github.com/nourtalaat/sidekick/internal/auth/authtest"
 	"github.com/nourtalaat/sidekick/internal/config"
+	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/registry"
+	"github.com/nourtalaat/sidekick/internal/rules"
 	"github.com/nourtalaat/sidekick/internal/store/storetest"
 )
 
@@ -46,8 +48,8 @@ func TestMain(m *testing.M) {
 }
 
 // server is the login endpoints and the API, wired as sidekick serve
-// wires them, on a database of their own seeded with
-// fixture/sessions.sql, with a fake OIDC provider.
+// wires them, on a database of their own seeded with fixture/sessions.sql
+// and fixture/rules.sql, with a fake OIDC provider.
 type server struct {
 	mux      *http.ServeMux
 	provider *authtest.Provider
@@ -58,18 +60,31 @@ func setup(t *testing.T) server {
 
 	pool := storetest.New(t)
 	storetest.LoadFixture(t, pool, "fixture/sessions.sql")
+	storetest.LoadFixture(t, pool, "fixture/rules.sql")
 
 	provider := authtest.NewProvider(t, "sidekick")
 
-	sessions, err := auth.New(auth.Options{
+	cfg := &config.Config{
+		Server:   config.Server{PublicURL: "https://sidekick.example.com", Listen: ":8080"},
+		Database: config.Database{URLSecret: registry.SecretRef{Name: "sidekick-db", Key: "url"}, MaxConns: 20},
 		OIDC: &config.OIDC{
 			Issuer:       provider.Issuer(),
 			ClientID:     "sidekick",
 			ClientSecret: registry.SecretRef{Name: "sidekick-oidc", Key: "clientSecret"},
 			GroupsClaim:  config.DefaultGroupsClaim,
-			Roles:        map[config.RoleName][]string{config.RoleAdmin: {"sre-admins"}, config.RoleViewer: {config.AnyGroup}},
+			Roles: map[config.RoleName][]string{
+				config.RoleAdmin:  {"sre-admins", "lead@example.com"},
+				config.RoleViewer: {config.AnyGroup},
+			},
 		},
-		PublicURL: "https://sidekick.example.com",
+	}
+
+	redactor, err := redact.New(redact.Options{BuiltIn: []string{"emails"}, HashKey: []byte("test-key")})
+	require.NoError(t, err)
+
+	sessions, err := auth.New(auth.Options{
+		OIDC:      cfg.OIDC,
+		PublicURL: cfg.Server.PublicURL,
 		Secrets:   staticSecrets{},
 		Pool:      pool,
 		Audit:     audit.NewWriter(),
@@ -77,7 +92,9 @@ func setup(t *testing.T) server {
 	})
 	require.NoError(t, err)
 
-	handler, err := api.New(api.Options{Auth: sessions, Tokens: sessions})
+	handler, err := api.New(api.Options{
+		Auth: sessions, Tokens: sessions, Config: cfg, Rules: rules.NewStore(pool, cfg), Redactor: redactor,
+	})
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()

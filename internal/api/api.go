@@ -13,7 +13,9 @@ import (
 	apispec "github.com/nourtalaat/sidekick/api"
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/auth"
+	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/problem"
+	"github.com/nourtalaat/sidekick/internal/redact"
 )
 
 // BasePath is the path every API operation is under. Mount the handler New
@@ -34,6 +36,13 @@ type Options struct {
 	Auth Authenticator
 	// Tokens creates, lists and revokes API tokens.
 	Tokens TokenManager
+	// Config is the loaded config file, for GET /config.
+	Config *config.Config
+	// Rules reads the runtime listeners and routes, for GET /config.
+	Rules RuntimeRules
+	// Redactor redacts the strings GET /config shows. Nil shows them as
+	// they are.
+	Redactor *redact.Redactor
 	// Logger gets the errors that answer 500. Nil logs nothing.
 	Logger *slog.Logger
 }
@@ -66,7 +75,7 @@ func New(opts Options) (http.Handler, error) {
 
 	h := &handler{auth: opts.Auth, routes: http.NewServeMux(), log: log}
 
-	strict := apigen.NewStrictHandlerWithOptions(&server{tokens: opts.Tokens}, []apigen.StrictMiddlewareFunc{requireRoles(need)},
+	strict := apigen.NewStrictHandlerWithOptions(&server{tokens: opts.Tokens, cfg: opts.Config, rules: opts.Rules, redactor: opts.Redactor}, []apigen.StrictMiddlewareFunc{requireRoles(need)},
 		apigen.StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  h.requestError,
 			ResponseErrorHandlerFunc: h.responseError,

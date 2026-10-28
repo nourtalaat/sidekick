@@ -30,6 +30,25 @@ paths:
                 $ref: "#/components/schemas/Me"
         default:
           $ref: "#/components/responses/Problem"
+  /config:
+    get:
+      operationId: GetConfig
+      summary: The effective config, with secrets shown only as references
+      description: |
+        The config file as Sidekick read it, defaults included, which only
+        a config change can alter, and the listeners and routes stored at
+        runtime. Secrets appear only as references to a Secret's name and
+        key. Strings the redaction rules match are redacted.
+      x-sidekick-role: admin
+      responses:
+        "200":
+          description: The effective config.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EffectiveConfig"
+        default:
+          $ref: "#/components/responses/Problem"
   /tokens:
     get:
       operationId: ListTokens
@@ -134,6 +153,47 @@ components:
             The session's CSRF token. Requests made with the session that
             change anything send it in the X-CSRF-Token header. Absent for
             an API token.
+    EffectiveConfig:
+      type: object
+      required: [file, runtime]
+      properties:
+        file:
+          type: object
+          additionalProperties: true
+          description: sidekick.yaml with its defaults, by YAML key. Read-only.
+        runtime:
+          $ref: "#/components/schemas/RuntimeRules"
+    RuntimeRules:
+      type: object
+      required: [listeners, routes]
+      properties:
+        listeners:
+          type: array
+          items:
+            $ref: "#/components/schemas/RuntimeRule"
+        routes:
+          type: array
+          items:
+            $ref: "#/components/schemas/RuntimeRule"
+    RuntimeRule:
+      type: object
+      required: [name, enabled, version, updatedBy, updatedAt, config]
+      properties:
+        name:
+          type: string
+        enabled:
+          type: boolean
+        version:
+          type: integer
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        config:
+          type: object
+          additionalProperties: true
+          description: The rule, with the keys a listener or route has in sidekick.yaml.
     Token:
       type: object
       required: [id, name, role, createdBy, createdAt, expiresAt]

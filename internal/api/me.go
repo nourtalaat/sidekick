@@ -7,11 +7,15 @@ import (
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/auth"
 	"github.com/nourtalaat/sidekick/internal/config"
+	"github.com/nourtalaat/sidekick/internal/redact"
 )
 
 // server implements the API operations.
 type server struct {
-	tokens TokenManager
+	tokens   TokenManager
+	cfg      *config.Config
+	rules    RuntimeRules
+	redactor *redact.Redactor
 }
 
 var _ apigen.StrictServerInterface = (*server)(nil)
