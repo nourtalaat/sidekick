@@ -106,8 +106,8 @@ func registerSlackApp(ctx context.Context, a *app.App, cache *rules.Cache) error
 }
 
 // newButtons handles clicks on the buttons of Sidekick's messages, with
-// sidekick_feedback_total. Every Slack user is a responder until roles
-// can be set for Slack users.
+// sidekick_feedback_total. Each click checks the clicker's role with
+// lookup.
 func newButtons(a *app.App, h *slackapp.Handler, lookup roles.Lookup) (*slackapp.Buttons, error) {
 	metrics, err := feedback.NewMetrics(a.Telemetry().Registry())
 	if err != nil {
