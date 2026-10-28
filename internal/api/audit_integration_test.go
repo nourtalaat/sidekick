@@ -26,17 +26,17 @@ INSERT INTO audit_log (at, actor_kind, actor_id, action, target_kind, target_id,
 
 // auditEntryView is an entry of GET /audit as the tests read it.
 type auditEntryView struct {
-	ID              int64          `json:"id"`
-	At              string         `json:"at"`
-	ActorKind       string         `json:"actorKind"`
-	ActorID         string         `json:"actorId"`
-	ActorName       string         `json:"actorName"`
-	Action          string         `json:"action"`
-	TargetKind      string         `json:"targetKind"`
-	TargetID        string         `json:"targetId"`
-	InvestigationID string         `json:"investigationId"`
-	Old             any            `json:"old"`
-	New             map[string]any `json:"new"`
+	ID              int64  `json:"id"`
+	At              string `json:"at"`
+	ActorKind       string `json:"actorKind"`
+	ActorID         string `json:"actorId"`
+	ActorName       string `json:"actorName"`
+	Action          string `json:"action"`
+	TargetKind      string `json:"targetKind"`
+	TargetID        string `json:"targetId"`
+	InvestigationID string `json:"investigationId"`
+	Old             any    `json:"old"`
+	New             any    `json:"new"`
 }
 
 // auditPage is an answer of GET /audit.
@@ -76,7 +76,7 @@ func (p auditPage) ids() []int64 {
 func TestListAuditRoles(t *testing.T) {
 	t.Parallel()
 
-	s := setup(t)
+	s := setupRules(t)
 
 	tests := []struct {
 		who        ruleCaller
@@ -219,7 +219,7 @@ func TestListAuditEntries(t *testing.T) {
 		require.NotEmpty(t, e.At)
 		require.Equal(t, "route", e.TargetKind)
 		require.Equal(t, "a", e.TargetID)
-		require.InDelta(t, 1, e.New["priority"], 0)
+		require.InDelta(t, 1, e.New.(map[string]any)["priority"], 0)
 		require.Nil(t, e.Old)
 	})
 
@@ -259,7 +259,7 @@ func TestListAuditEntries(t *testing.T) {
 	t.Run("a value that a redaction rule matches is masked", func(t *testing.T) {
 		t.Parallel()
 
-		require.NotContains(t, byID[7].New["owner"], "pager@example.com")
+		require.NotContains(t, byID[7].New.(map[string]any)["owner"], "pager@example.com")
 	})
 }
 
