@@ -29,6 +29,7 @@ const (
 	unansweredNoReply = "Sidekick could not answer: the model gave no answer that passed its checks."
 	unansweredFailed  = "Sidekick could not answer: the model could not take the request."
 	unansweredDead    = "Sidekick could not answer: the follow-up stopped after repeated failures."
+	unansweredStopped = "Sidekick did not answer: a responder stopped the follow-up."
 )
 
 // FollowUpHandler runs follow_up jobs: each one answers the follow-up
@@ -155,7 +156,7 @@ func (f *FollowUpHandler) OnDead(ctx context.Context, job db.Job) error {
 			return fmt.Errorf("encode the report: %w", err)
 		}
 
-		ended, err := db.New(tx).EndFollowUpRun(ctx, db.EndFollowUpRunParams{Report: store.JSON(raw), ID: id})
+		ended, err := db.New(tx).EndFollowUpRun(ctx, db.EndFollowUpRunParams{Status: statusAfter(rep), Report: store.JSON(raw), ID: id})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
@@ -208,9 +209,8 @@ func (h *Handler) startFollowUp(ctx context.Context, job db.Job, id uuid.UUID) (
 
 		resume := locked.Status == StatusRunning && locked.Run > 1
 
-		// TODO: [SK-19] A Stop pressed during an earlier run leaves its
-		// cancel request set. Clear it here when a new follow-up run starts,
-		// so the new run is not stopped at once.
+		// A new run starts without the Stop of an earlier run, which
+		// StartFollowUpRun clears; a resumed run keeps its own.
 		if !resume && !h.waitingQuestion(ctx, queries, locked) {
 			if err := queue.ReleaseUniqueKey(ctx, tx, job); err != nil {
 				return fmt.Errorf("give up the unique key: %w", err)
@@ -239,11 +239,12 @@ func (h *Handler) startFollowUp(ctx context.Context, job db.Job, id uuid.UUID) (
 	return inv, started, nil
 }
 
-// waitingQuestion reports whether inv has ended and a follow-up question
-// waits in its inbox. A failed lookup counts as no question; the question
-// gets a job when the next one arrives or a run ends.
+// waitingQuestion reports whether inv has ended with a report and a
+// follow-up question waits in its inbox. A failed lookup counts as no
+// question; the question gets a job when the next one arrives or a run
+// ends.
 func (h *Handler) waitingQuestion(ctx context.Context, queries *db.Queries, inv db.Investigation) bool {
-	if inv.Status != StatusFinal {
+	if !answers(inv.Status) {
 		return false
 	}
 
@@ -287,7 +288,7 @@ func (r *run) finishFollowUp(ctx context.Context, end ending) error {
 		}
 
 		finished, err = db.New(tx).FinishInvestigation(ctx, db.FinishInvestigationParams{
-			Status:     StatusFinal,
+			Status:     statusAfter(rep),
 			Verdict:    new(string(rep.Verdict)),
 			Confidence: new(string(rep.Confidence)),
 			Report:     store.JSON(raw),
@@ -388,9 +389,22 @@ func unansweredText(end ending) string {
 		return fmt.Sprintf(unansweredBudget, budgetNames[end.budget])
 	case report.StopError:
 		return unansweredFailed
+	case report.StopCancelled:
+		return unansweredStopped
 	default:
 		return unansweredNoReply
 	}
+}
+
+// statusAfter returns the status of an investigation whose report is rep
+// once a follow-up run ends: cancelled while the report is the one of a
+// run a responder stopped, and final otherwise.
+func statusAfter(rep report.Report) string {
+	if rep.StopReason == report.StopCancelled {
+		return StatusCancelled
+	}
+
+	return StatusFinal
 }
 
 // publishFollowUp publishes the report of inv after a follow-up run: as a

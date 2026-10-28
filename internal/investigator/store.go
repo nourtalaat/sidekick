@@ -260,7 +260,7 @@ func (r *run) finish(ctx context.Context, end ending) error {
 			return fmt.Errorf("end the run: %w", err)
 		}
 
-		if status != StatusFinal {
+		if !answers(status) {
 			return nil
 		}
 

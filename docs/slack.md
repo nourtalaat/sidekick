@@ -231,8 +231,10 @@ everything the first run saw:
   When it does, the model gives a new report, which replaces the old one,
   and the message shows the new verdict. The report keeps every earlier
   answer either way.
-- A run that cannot answer, for example at its limits, posts a reply that
-  says so, and the report stays as it was.
+- A run that cannot answer, for example at its limits or because someone
+  stopped it, posts a reply that says so, and the report stays as it was.
+- An investigation that was stopped still answers questions; the Stop
+  applies only to the run it was pressed for.
 
 A question is redacted like event text before it is stored, and the model
 reads it as a request about what to look at: it cannot change the

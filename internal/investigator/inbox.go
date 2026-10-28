@@ -108,8 +108,9 @@ func FindInvestigation(ctx context.Context, q db.DBTX, sinks []string, external 
 }
 
 // AddFollowUp adds a follow-up question to the inbox of the investigation
-// with id. An investigation that has ended gets a follow_up job, which
-// answers it in a new run; one that is running keeps it until its run
+// with id. An investigation that has ended with a report, final or
+// stopped by a responder, gets a follow_up job, which answers it in a new
+// run; one that is queued or running keeps it until its run
 // ends, which then enqueues that job. Questions that arrive before the job
 // starts share its run. It returns false, and adds nothing, for a question
 // whose key was added before and for an investigation that takes no
@@ -141,9 +142,7 @@ func AddFollowUp(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, q Questi
 			return fmt.Errorf("lock the investigation: %w", err)
 		}
 
-		// TODO: [SK-19] Decide whether a cancelled investigation takes
-		// follow-up questions; until then only these statuses do.
-		if inv.Status != StatusQueued && inv.Status != StatusRunning && inv.Status != StatusFinal {
+		if inv.Status == StatusFailed {
 			return nil
 		}
 
@@ -159,7 +158,7 @@ func AddFollowUp(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, q Questi
 
 		added = rows > 0
 
-		if !added || inv.Status != StatusFinal {
+		if !added || !answers(inv.Status) {
 			return nil
 		}
 
@@ -321,6 +320,12 @@ func enqueueFollowUp(ctx context.Context, q db.DBTX, inv db.Investigation) error
 	}
 
 	return nil
+}
+
+// answers reports whether an investigation with status answers follow-up
+// questions now: it ended with a report, final or stopped by a responder.
+func answers(status string) bool {
+	return status == StatusFinal || status == StatusCancelled
 }
 
 // questionOf reads the question of a follow-up inbox item.

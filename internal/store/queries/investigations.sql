@@ -42,23 +42,29 @@ RETURNING *;
 
 -- name: StartFollowUpRun :one
 -- StartFollowUpRun gives a follow-up run of an investigation to the job
--- claim with the token fence. An investigation that has ended gets the next
--- run number and is set running; a follow-up run that is running already
--- keeps its number, so a new claim resumes it. It returns no row when a
--- newer claim owns the run, or when the investigation is in neither state.
+-- claim with the token fence. An investigation that has ended, final or
+-- cancelled, gets the next run number and is set running, without the
+-- Stop of an earlier run; a follow-up run that is running already keeps
+-- its number and its Stop, so a new claim resumes it. It returns no row
+-- when a newer claim owns the run, or when the investigation is in neither
+-- state.
 UPDATE investigations
 SET fence = @fence,
-    run = CASE WHEN status = 'final' THEN run + 1 ELSE run END,
+    run = CASE WHEN status = 'running' THEN run ELSE run + 1 END,
+    cancel_requested_at = CASE WHEN status = 'running' THEN cancel_requested_at END,
+    cancel_requested_by = CASE WHEN status = 'running' THEN cancel_requested_by END,
+    cancel_requested_by_slack_user = CASE WHEN status = 'running' THEN cancel_requested_by_slack_user END,
     status = 'running'
-WHERE id = @id AND fence < @fence AND (status = 'final' OR (status = 'running' AND run > 1))
+WHERE id = @id AND fence < @fence AND (status IN ('final', 'cancelled') OR (status = 'running' AND run > 1))
 RETURNING *;
 
 -- name: EndFollowUpRun :one
 -- EndFollowUpRun ends the running follow-up run of an investigation whose
--- job is dead, with the report that says it could not answer. It returns
--- no row when no follow-up run is running.
+-- job is dead, with status, final or cancelled as before the run, and the
+-- report that says it could not answer. It returns no row when no
+-- follow-up run is running.
 UPDATE investigations
-SET status = 'final', report = @report, finished_at = now()
+SET status = @status, report = @report, finished_at = now()
 WHERE id = @id AND status = 'running' AND run > 1
 RETURNING *;
 

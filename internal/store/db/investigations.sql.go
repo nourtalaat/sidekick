@@ -63,21 +63,23 @@ func (q *Queries) AdvanceInvestigation(ctx context.Context, arg AdvanceInvestiga
 
 const endFollowUpRun = `-- name: EndFollowUpRun :one
 UPDATE investigations
-SET status = 'final', report = $1, finished_at = now()
-WHERE id = $2 AND status = 'running' AND run > 1
+SET status = $1, report = $2, finished_at = now()
+WHERE id = $3 AND status = 'running' AND run > 1
 RETURNING id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at, cancel_requested_at, cancel_requested_by, cancel_requested_by_slack_user, confirmed_verdict, confirmed_cause, confirmed_by, confirmed_by_slack_user, confirmed_at
 `
 
 type EndFollowUpRunParams struct {
+	Status string
 	Report []byte
 	ID     uuid.UUID
 }
 
 // EndFollowUpRun ends the running follow-up run of an investigation whose
-// job is dead, with the report that says it could not answer. It returns
-// no row when no follow-up run is running.
+// job is dead, with status, final or cancelled as before the run, and the
+// report that says it could not answer. It returns no row when no
+// follow-up run is running.
 func (q *Queries) EndFollowUpRun(ctx context.Context, arg EndFollowUpRunParams) (Investigation, error) {
-	row := q.db.QueryRow(ctx, endFollowUpRun, arg.Report, arg.ID)
+	row := q.db.QueryRow(ctx, endFollowUpRun, arg.Status, arg.Report, arg.ID)
 	var i Investigation
 	err := row.Scan(
 		&i.ID,
@@ -593,9 +595,12 @@ func (q *Queries) RequestInvestigationCancel(ctx context.Context, arg RequestInv
 const startFollowUpRun = `-- name: StartFollowUpRun :one
 UPDATE investigations
 SET fence = $1,
-    run = CASE WHEN status = 'final' THEN run + 1 ELSE run END,
+    run = CASE WHEN status = 'running' THEN run ELSE run + 1 END,
+    cancel_requested_at = CASE WHEN status = 'running' THEN cancel_requested_at END,
+    cancel_requested_by = CASE WHEN status = 'running' THEN cancel_requested_by END,
+    cancel_requested_by_slack_user = CASE WHEN status = 'running' THEN cancel_requested_by_slack_user END,
     status = 'running'
-WHERE id = $2 AND fence < $1 AND (status = 'final' OR (status = 'running' AND run > 1))
+WHERE id = $2 AND fence < $1 AND (status IN ('final', 'cancelled') OR (status = 'running' AND run > 1))
 RETURNING id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at, cancel_requested_at, cancel_requested_by, cancel_requested_by_slack_user, confirmed_verdict, confirmed_cause, confirmed_by, confirmed_by_slack_user, confirmed_at
 `
 
@@ -605,10 +610,12 @@ type StartFollowUpRunParams struct {
 }
 
 // StartFollowUpRun gives a follow-up run of an investigation to the job
-// claim with the token fence. An investigation that has ended gets the next
-// run number and is set running; a follow-up run that is running already
-// keeps its number, so a new claim resumes it. It returns no row when a
-// newer claim owns the run, or when the investigation is in neither state.
+// claim with the token fence. An investigation that has ended, final or
+// cancelled, gets the next run number and is set running, without the
+// Stop of an earlier run; a follow-up run that is running already keeps
+// its number and its Stop, so a new claim resumes it. It returns no row
+// when a newer claim owns the run, or when the investigation is in neither
+// state.
 func (q *Queries) StartFollowUpRun(ctx context.Context, arg StartFollowUpRunParams) (Investigation, error) {
 	row := q.db.QueryRow(ctx, startFollowUpRun, arg.Fence, arg.ID)
 	var i Investigation

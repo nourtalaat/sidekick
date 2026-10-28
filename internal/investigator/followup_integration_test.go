@@ -310,6 +310,88 @@ func TestFollowUp(t *testing.T) {
 	}
 }
 
+func TestFollowUpStops(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// stopFirst stops the first run before it ends.
+		stopFirst bool
+		// stopFollowUp stops the follow-up run during its first model call.
+		stopFollowUp bool
+		wantStatus   string
+		wantAnswered bool
+		wantAnswer   string
+	}{
+		{
+			name:         "a stopped investigation answers, and its old Stop does not stop the follow-up",
+			stopFirst:    true,
+			wantStatus:   StatusCancelled,
+			wantAnswered: true,
+			wantAnswer:   "Only checkout-api pods log the errors.",
+		},
+		{
+			name:         "a Stop during the follow-up run ends it without an answer",
+			stopFollowUp: true,
+			wantStatus:   StatusFinal,
+			wantAnswer:   unansweredStopped,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var h *harness
+
+			stop := func(ctx context.Context) {
+				_, err := RequestCancel(ctx, h.pool, testInvestigation, Requester{SlackUserID: "U01ANA"})
+				require.NoError(t, err)
+			}
+
+			// The first run stops after its search, before its verdict.
+			first := firstRun()
+			if tt.stopFirst {
+				first = []modeltest.Turn{{Func: func(ctx context.Context, _ model.Request) (model.Response, error) {
+					stop(ctx)
+
+					return turn(search("c1")).Response, nil
+				}}}
+			}
+
+			followUp := turn(modeltest.Call("a1", report.AnswerFollowUpTool, answerC1))
+			if tt.stopFollowUp {
+				followUp = modeltest.Turn{Func: func(ctx context.Context, _ model.Request) (model.Response, error) {
+					stop(ctx)
+
+					return turn(search("c2")).Response, nil
+				}}
+			}
+
+			h = setup(t, options{turns: append(first, followUp)})
+
+			require.NoError(t, h.run(t))
+
+			if tt.stopFirst {
+				require.Equal(t, StatusCancelled, h.investigation(t).Status)
+				require.Equal(t, report.StopCancelled, h.report(t).StopReason)
+			}
+
+			require.True(t, h.ask(t, "Ev1", askPods))
+			require.NoError(t, h.runFollowUp(t))
+
+			inv := h.investigation(t)
+			require.Equal(t, tt.wantStatus, inv.Status)
+			require.EqualValues(t, 2, inv.Run)
+
+			r := h.report(t)
+			require.Len(t, r.FollowUps, 1)
+			require.Equal(t, tt.wantAnswered, r.FollowUps[0].Answered)
+			require.Equal(t, tt.wantAnswer, r.FollowUps[0].Answer)
+		})
+	}
+}
+
 func TestAddFollowUp(t *testing.T) {
 	t.Parallel()
 
@@ -320,6 +402,7 @@ func TestAddFollowUp(t *testing.T) {
 		wantJob   bool
 	}{
 		{name: "an investigation that has ended gets a job", status: StatusFinal, wantAdded: true, wantJob: true},
+		{name: "a stopped investigation gets a job", status: StatusCancelled, wantAdded: true, wantJob: true},
 		{name: "a running investigation keeps the question for later", status: StatusRunning, wantAdded: true},
 		{name: "a failed investigation takes no question", status: StatusFailed},
 	}
