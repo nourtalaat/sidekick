@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/prompt"
@@ -62,9 +63,16 @@ type Question struct {
 	// such as a Slack user ID.
 	Author   string
 	AuthorID string
+	// AuthorToken says AuthorID is the ID of an API token, for the audit
+	// entry.
+	AuthorToken bool
 	// Text is the question, redacted already.
 	Text string
 }
+
+// ActionFollowUpAsked is the action of the audit entry of a follow-up
+// question that was added.
+const ActionFollowUpAsked = "investigation.follow_up_asked"
 
 // followUpBody is the body of an inbox item with a follow-up question.
 type followUpBody struct {
@@ -192,15 +200,46 @@ func AddFollowUpTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, q Question) (bo
 		return false, fmt.Errorf("add the question: %w", err)
 	}
 
-	if rows == 0 || !answers(inv) {
-		return rows > 0, nil
+	if rows == 0 {
+		return false, nil
 	}
 
-	if err := enqueueFollowUp(ctx, tx, inv); err != nil {
-		return false, fmt.Errorf("enqueue the follow-up job: %w", err)
+	if answers(inv) {
+		if err := enqueueFollowUp(ctx, tx, inv); err != nil {
+			return false, fmt.Errorf("enqueue the follow-up job: %w", err)
+		}
+	}
+
+	if err := auditQuestion(ctx, tx, id, q); err != nil {
+		return false, err
 	}
 
 	return true, nil
+}
+
+// auditQuestion writes the audit entry of the question q added to the
+// investigation with id. It records the question's key and size, never
+// its text.
+func auditQuestion(ctx context.Context, q db.DBTX, id uuid.UUID, question Question) error {
+	kind := audit.ActorUser
+	if question.AuthorToken {
+		kind = audit.ActorToken
+	}
+
+	err := auditor.Write(ctx, q, audit.Entry{
+		ActorKind:       kind,
+		ActorID:         question.AuthorID,
+		Action:          ActionFollowUpAsked,
+		TargetKind:      auditTargetKind,
+		TargetID:        id.String(),
+		InvestigationID: &id,
+		New:             map[string]any{"key": question.Key, "bytes": len(question.Text)},
+	})
+	if err != nil {
+		return fmt.Errorf("audit the question to investigation %s: %w", id, err)
+	}
+
+	return nil
 }
 
 // deliverInbox saves every item that waits in the investigation's inbox

@@ -11,21 +11,12 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
-	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/auth"
 	"github.com/nourtalaat/sidekick/internal/grouper"
 	"github.com/nourtalaat/sidekick/internal/ids"
 	"github.com/nourtalaat/sidekick/internal/investigator"
 	"github.com/nourtalaat/sidekick/internal/output"
 	"github.com/nourtalaat/sidekick/internal/store/db"
-)
-
-// The audit actions of the investigation actions. Resolving a group and
-// stopping a watcher are audited by the code that does them, as
-// grouper.ActionResolved and the watcher.stopped row.
-const (
-	ActionFollowUpAsked   = "investigation.follow_up_asked"
-	ActionCancelRequested = "investigation.cancel_requested"
 )
 
 // maxQuestionBytes is the longest follow-up question, in bytes.
@@ -43,11 +34,10 @@ const (
 	detailLongAsk     = "text must be at most 4000 bytes."
 )
 
-// auditTargetKind is the target kind of the audit rows of the actions.
-const auditTargetKind = "investigation"
-
 // AskFollowUp adds a follow-up question from the caller to the
-// investigation, and writes the audit row in the same transaction.
+// investigation. The audit row is written in the same transaction by
+// investigator.AddFollowUpTx; resolving a group and stopping a watcher are
+// audited by the code that does them as well.
 func (s *server) AskFollowUp(ctx context.Context, req apigen.AskFollowUpRequestObject) (apigen.AskFollowUpResponseObject, error) {
 	p, _ := auth.PrincipalFrom(ctx)
 
@@ -64,7 +54,9 @@ func (s *server) AskFollowUp(ctx context.Context, req apigen.AskFollowUpRequestO
 		Key:      ids.New().String(),
 		Author:   p.Name,
 		AuthorID: p.ID.String(),
-		Text:     s.mask(text),
+		// AuthorToken makes the audit row name an API token.
+		AuthorToken: p.Kind == auth.KindToken,
+		Text:        s.mask(text),
 	}
 
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
@@ -85,7 +77,7 @@ func (s *server) AskFollowUp(ctx context.Context, req apigen.AskFollowUpRequestO
 			return problemf(http.StatusConflict, detailFailed)
 		}
 
-		return s.auditAction(ctx, tx, p, ActionFollowUpAsked, req.Id, map[string]any{"key": question.Key, "bytes": len(text)})
+		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("ask a follow-up question of investigation %s: %w", req.Id, err)
@@ -94,8 +86,9 @@ func (s *server) AskFollowUp(ctx context.Context, req apigen.AskFollowUpRequestO
 	return apigen.AskFollowUp202JSONResponse{Added: true}, nil
 }
 
-// CancelInvestigation asks the run to stop, and writes the audit row in
-// the same transaction when this request asked for it.
+// CancelInvestigation asks the run to stop. investigator.RequestCancel
+// writes the audit row in the same transaction when this request asked
+// for it.
 func (s *server) CancelInvestigation(ctx context.Context, req apigen.CancelInvestigationRequestObject) (apigen.CancelInvestigationResponseObject, error) {
 	p, _ := auth.PrincipalFrom(ctx)
 
@@ -108,16 +101,12 @@ func (s *server) CancelInvestigation(ctx context.Context, req apigen.CancelInves
 
 		var err error
 
-		asked, err = investigator.RequestCancel(ctx, tx, req.Id, investigator.Requester{UserID: &p.ID})
+		asked, err = investigator.RequestCancel(ctx, tx, req.Id, investigator.Requester{UserID: &p.ID, Token: p.Kind == auth.KindToken})
 		if err != nil {
 			return fmt.Errorf("ask the run to stop: %w", err)
 		}
 
-		if !asked {
-			return nil
-		}
-
-		return s.auditAction(ctx, tx, p, ActionCancelRequested, req.Id, nil)
+		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("stop investigation %s: %w", req.Id, err)
@@ -199,20 +188,6 @@ func (s *server) requireInvestigation(ctx context.Context, q db.DBTX, id uuid.UU
 
 	if err != nil {
 		return fmt.Errorf("read investigation %s: %w", id, err)
-	}
-
-	return nil
-}
-
-// auditAction writes the audit row of action on the investigation with id
-// by the caller p, through q.
-func (s *server) auditAction(ctx context.Context, q db.DBTX, p auth.Principal, action string, id uuid.UUID, details map[string]any) error {
-	err := s.audit.Write(ctx, q, audit.Entry{
-		ActorKind: actorKindOf(p), ActorID: p.ID.String(), Action: action,
-		TargetKind: auditTargetKind, TargetID: id.String(), InvestigationID: &id, New: details,
-	})
-	if err != nil {
-		return fmt.Errorf("audit %s of investigation %s: %w", action, id, err)
 	}
 
 	return nil

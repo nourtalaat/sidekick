@@ -500,6 +500,18 @@ func TestAddFollowUp(t *testing.T) {
 
 			require.Equal(t, tt.wantAdded, h.ask(t, "Ev1", askDeploy))
 			require.Equal(t, tt.wantJob, h.pendingFollowUps(t) == 1)
+
+			var want []string
+			if tt.wantAdded {
+				want = []string{"user U01ANA"}
+			}
+
+			require.Equal(t, want, h.audited(t, ActionFollowUpAsked))
+
+			if tt.wantAdded {
+				require.False(t, h.ask(t, "Ev1", askDeploy), "the same key adds nothing")
+				require.Len(t, h.audited(t, ActionFollowUpAsked), 1, "and is not audited again")
+			}
 		})
 	}
 }

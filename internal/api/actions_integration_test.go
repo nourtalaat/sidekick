@@ -14,6 +14,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/api"
 	"github.com/nourtalaat/sidekick/internal/grouper"
+	"github.com/nourtalaat/sidekick/internal/investigator"
 	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
@@ -154,7 +155,7 @@ func TestAskFollowUp(t *testing.T) {
 
 			rec := s.post(t, "/api/v1/investigations/"+tt.id+"/follow-ups", tt.who, tt.body)
 			require.Equal(t, tt.wantStatus, rec.Code, rec.Body.String())
-			require.Equal(t, tt.wantAudit, s.auditRows(t, api.ActionFollowUpAsked))
+			require.Equal(t, tt.wantAudit, s.auditRows(t, investigator.ActionFollowUpAsked))
 
 			var questions, jobs int
 
@@ -206,7 +207,7 @@ func TestAskFollowUpStoresTheAuthorAndRedactsTheText(t *testing.T) {
 
 	var details []byte
 
-	require.NoError(t, s.pool.QueryRow(t.Context(), "SELECT details FROM audit_log WHERE action = $1", api.ActionFollowUpAsked).Scan(&details))
+	require.NoError(t, s.pool.QueryRow(t.Context(), "SELECT details FROM audit_log WHERE action = $1", investigator.ActionFollowUpAsked).Scan(&details))
 	require.NotContains(t, string(details), "ops@example.com", "the audit row does not keep the question")
 }
 
@@ -239,7 +240,7 @@ func TestCancelInvestigation(t *testing.T) {
 
 			rec := s.post(t, path, tt.who, "")
 			require.Equal(t, tt.wantStatus, rec.Code, rec.Body.String())
-			require.Equal(t, tt.wantAudit, s.auditRows(t, api.ActionCancelRequested))
+			require.Equal(t, tt.wantAudit, s.auditRows(t, investigator.ActionCancelRequested))
 
 			if tt.wantStatus != http.StatusOK {
 				require.Equal(t, "application/problem+json", rec.Header().Get("Content-Type"))
@@ -271,7 +272,7 @@ func TestCancelInvestigation(t *testing.T) {
 			again := s.post(t, path, tt.who, "")
 			require.Equal(t, http.StatusOK, again.Code, again.Body.String())
 			require.JSONEq(t, `{"requested": false}`, again.Body.String(), "a second stop asks for nothing")
-			require.Len(t, s.auditRows(t, api.ActionCancelRequested), 1)
+			require.Len(t, s.auditRows(t, investigator.ActionCancelRequested), 1)
 		})
 	}
 }
