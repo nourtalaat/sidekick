@@ -48,7 +48,7 @@ func TestWrite(t *testing.T) {
 			t.Parallel()
 
 			rec := httptest.NewRecorder()
-			tt.write(rec, httptest.NewRequest(http.MethodPut, "/api/v1/routes/x", nil))
+			tt.write(rec, httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/routes/x", nil))
 
 			require.Equal(t, problem.ContentType, rec.Header().Get("Content-Type"))
 

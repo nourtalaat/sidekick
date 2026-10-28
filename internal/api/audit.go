@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/google/uuid"
-
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/store/db"
@@ -75,7 +73,7 @@ func auditParams(p apigen.ListAuditParams) (db.ListAuditEntriesParams, int, erro
 		AtFrom:          p.From,
 		AtTo:            p.To,
 		Action:          nonEmpty(p.Action),
-		InvestigationID: (*uuid.UUID)(p.Investigation),
+		InvestigationID: p.Investigation,
 		PageSize:        int32(limit + 1), //nolint:gosec // limit is at most maxAuditPage.
 	}
 

@@ -24,6 +24,8 @@ var reSession = sessionValue(0x04)
 const reCSRF = "csrf-re"
 
 // The tokens of the fixtures, by role.
+//
+//nolint:gosec // Test tokens of the fixtures.
 const (
 	viewerToken    = "skt_viewer"
 	responderToken = "skt_responder"
