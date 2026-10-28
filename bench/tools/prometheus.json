@@ -48,6 +48,43 @@
         ],
         "additionalProperties": false
       }
+    },
+    {
+      "name": "list_alerts",
+      "description": "List the alerts that are firing or pending now, firing first and newest first: name, state, since when, labels and annotations. When Sidekick reads an Alertmanager, list its alerts instead, with the silences and inhibitions that mute them.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "alertname": {
+            "type": "string",
+            "description": "Only alerts with this alertname label."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 200. Default 50.",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_rules",
+      "description": "Get the alerting rules with one alert name: their group, PromQL expression, for, labels, annotations, health, last error and last evaluation. Run the expression with query_range to see when and why it fired.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "alertname": {
+            "type": "string",
+            "description": "The alert name, the alertname label of the alert."
+          }
+        },
+        "required": [
+          "alertname"
+        ],
+        "additionalProperties": false
+      }
     }
   ]
 }

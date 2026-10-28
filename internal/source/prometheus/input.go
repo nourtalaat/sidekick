@@ -114,6 +114,15 @@ func rangeStep(w window) int {
 	return max(int(math.Ceil(w.end.Sub(w.start).Seconds()/(maxPoints-1))), 1)
 }
 
+// limitOf returns the limit a call gives, or def, within 1 and most.
+func limitOf(limit, def, most int) int {
+	if limit <= 0 {
+		return def
+	}
+
+	return min(limit, most)
+}
+
 // timestamp formats a time the way the Prometheus API takes it.
 func timestamp(t time.Time) string {
 	return t.UTC().Format(time.RFC3339Nano)

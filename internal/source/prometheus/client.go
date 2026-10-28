@@ -33,8 +33,11 @@ var (
 	errEmptySecret = errors.New("the secret is empty")
 )
 
-// servicePrometheus is the name of the service in error messages.
-const servicePrometheus = "Prometheus"
+// Names of the services in error messages.
+const (
+	servicePrometheus   = "Prometheus"
+	serviceAlertmanager = "Alertmanager"
+)
 
 // client sends requests to one API root with the source's credentials.
 type client struct {
@@ -178,9 +181,9 @@ func (t limitTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 // readStatusError returns the *statusError of an answer with code. The
-// Prometheus API sends {"errorType": "...", "error": "..."}; other
-// compatible servers may send a JSON string or {"message": "..."}, and a
-// proxy in front of them plain text.
+// Prometheus API sends {"errorType": "...", "error": "..."}; Alertmanager
+// sends a JSON string or {"message": "..."}; a proxy in front of either
+// may send plain text.
 func readStatusError(service string, code int, body io.Reader) error {
 	e := &statusError{service: service, code: code}
 

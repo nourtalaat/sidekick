@@ -24,7 +24,7 @@ func TestConfigValidate(t *testing.T) {
 	}{
 		{name: "an in-cluster Prometheus over http without credentials", cfg: Config{BaseURL: "http://prometheus-operated.monitoring:9090"}},
 		{name: "every setting", cfg: Config{
-			BaseURL:   base,
+			BaseURL: base, AlertmanagerURL: "https://mimir.example.com/alertmanager",
 			BasicAuth: &BasicAuth{Username: "sidekick", PasswordSecret: password},
 			TLS:       &TLS{CertSecret: ref("cert"), KeySecret: ref("key"), CASecret: ref("ca")},
 			Headers:   map[string]string{"X-Scope-OrgID": "tenant-a"},
@@ -39,6 +39,9 @@ func TestConfigValidate(t *testing.T) {
 			wantErr: []string{"baseURL: must not hold a user name or password"}},
 		{name: "a bearer token over http", cfg: Config{BaseURL: "http://prometheus:9090", BearerTokenSecret: ref("token")},
 			wantErr: []string{"baseURL: \"http://prometheus:9090\" must use https, because credentials are sent"}},
+		{name: "basic auth to an Alertmanager over http",
+			cfg:     Config{BaseURL: base, AlertmanagerURL: "http://alertmanager:9093", BasicAuth: &BasicAuth{Username: "u", PasswordSecret: password}},
+			wantErr: []string{"alertmanagerURL: \"http://alertmanager:9093\" must use https"}},
 		{name: "a bearer token and basic auth",
 			cfg:     Config{BaseURL: base, BearerTokenSecret: ref("token"), BasicAuth: &BasicAuth{Username: "u", PasswordSecret: password}},
 			wantErr: []string{"set one of bearerTokenSecret and basicAuth"}},

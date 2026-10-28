@@ -27,7 +27,7 @@ const (
 
 // notFoundText is the text of a result for an API the server does not
 // have.
-const notFoundText = "Not found: the server does not have this API, or baseURL points at the wrong path."
+const notFoundText = "Not found: the server does not have this API, or baseURL or alertmanagerURL points at the wrong path."
 
 // promUITime is the time format of the Prometheus web UI's URL parameters,
 // in UTC.

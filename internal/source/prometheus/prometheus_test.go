@@ -55,6 +55,17 @@ func TestSourceSendsCredentials(t *testing.T) {
 			answer:   `{"status":"success","data":` + emptyVector + `}`,
 			wantAuth: "Basic " + base64.StdEncoding.EncodeToString([]byte("sidekick:p@ss word")),
 		},
+		{
+			name: "Alertmanager gets the same credentials and headers",
+			cfg: Config{AlertmanagerURL: "alertmanager", BearerTokenSecret: ref("token"),
+				Headers: map[string]string{"X-Scope-OrgID": "tenant-a"}},
+			secrets:  map[string]string{"token": "abc123"},
+			tool:     toolListAlerts,
+			input:    `{}`,
+			path:     amAlertsPath,
+			answer:   `[]`,
+			wantAuth: "Bearer abc123",
+		},
 	}
 
 	for _, tt := range tests {
@@ -65,7 +76,12 @@ func TestSourceSendsCredentials(t *testing.T) {
 			api.Handle(http.MethodGet, tt.path, body(tt.answer))
 			api.ExpectAllCalled()
 
-			s := newTestSource(t, api, tt.cfg, secretsOf(t, tt.secrets))
+			cfg := tt.cfg
+			if cfg.AlertmanagerURL != "" {
+				cfg.AlertmanagerURL = api.URL() + "/alertmanager"
+			}
+
+			s := newTestSource(t, api, cfg, secretsOf(t, tt.secrets))
 
 			_, err := s.Call(t.Context(), source.Call{Tool: tt.tool, Input: json.RawMessage(tt.input)})
 			require.NoError(t, err)
@@ -299,7 +315,7 @@ func TestNew(t *testing.T) {
 			wantText: "concurrency: must not be negative"},
 		{name: "no credentials need no secrets resolver", cfg: Config{BaseURL: "http://prometheus-operated.monitoring:9090/"}},
 		{name: "every setting", withSecrets: true, cfg: Config{
-			BaseURL:   "https://mimir.example.com/prometheus",
+			BaseURL: "https://mimir.example.com/prometheus", AlertmanagerURL: "https://mimir.example.com/alertmanager",
 			BasicAuth: &BasicAuth{Username: "sidekick", PasswordSecret: *ref("password")},
 			TLS:       &TLS{CertSecret: ref("cert"), KeySecret: ref("key"), CASecret: ref("ca")},
 		}},
@@ -338,6 +354,7 @@ func TestNew(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, strings.TrimSuffix(tt.cfg.BaseURL, "/"), built.prom.root)
 			require.Equal(t, strings.TrimSuffix(tt.cfg.BaseURL, "/"), built.links.prometheus, "links go to the base URL by default")
+			require.Equal(t, tt.cfg.AlertmanagerURL != "", built.alertmanager != nil)
 		})
 	}
 }

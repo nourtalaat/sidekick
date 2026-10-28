@@ -151,7 +151,12 @@ func runCalls(t *testing.T, tests []callCase) {
 
 			api.ExpectAllCalled()
 
-			s := newTestSource(t, api, tt.cfg, secretsOf(t, tt.secrets))
+			cfg := tt.cfg
+			if cfg.AlertmanagerURL == "alertmanager" {
+				cfg.AlertmanagerURL = api.URL() + "/alertmanager"
+			}
+
+			s := newTestSource(t, api, cfg, secretsOf(t, tt.secrets))
 
 			res, err := s.Call(t.Context(), source.Call{Tool: tt.tool, Input: json.RawMessage(tt.input)})
 

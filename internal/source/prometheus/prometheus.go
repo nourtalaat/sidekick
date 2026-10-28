@@ -37,13 +37,15 @@ func init() {
 	registry.Sources.Register(Type, registry.Typed(New))
 }
 
-// Source reads one Prometheus-compatible server. It is safe for
-// concurrent use.
+// Source reads one Prometheus-compatible server, and optionally an
+// Alertmanager. It is safe for concurrent use.
 type Source struct {
-	prom   *client
-	links  links
-	parser parser.Parser
-	now    func() time.Time
+	prom *client
+	// alertmanager is nil when the config has no alertmanagerURL.
+	alertmanager *client
+	links        links
+	parser       parser.Parser
+	now          func() time.Time
 }
 
 var _ source.Source = (*Source)(nil)
@@ -80,6 +82,10 @@ func (s *Source) run(ctx context.Context, call source.Call) (source.Result, erro
 		return s.query(ctx, call.Input)
 	case toolQueryRange:
 		return s.queryRange(ctx, call.Input)
+	case toolListAlerts:
+		return s.listAlerts(ctx, call.Input)
+	case toolGetRules:
+		return s.getRules(ctx, call.Input)
 	default:
 		return source.Result{}, fmt.Errorf("tool %q: %w", call.Tool, errUnknownTool)
 	}
@@ -120,9 +126,10 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (source
 	limited.Transport = limitTransport{next: next}
 
 	a := &auth{secrets: deps.Secrets, bearer: cfg.BearerTokenSecret, basic: cfg.BasicAuth, headers: cfg.Headers}
+	userAgent := "sidekick/" + buildinfo.Version
 
-	return &Source{
-		prom: &client{http: &limited, root: strings.TrimSuffix(cfg.BaseURL, "/"), service: servicePrometheus, userAgent: "sidekick/" + buildinfo.Version, auth: a},
+	s := &Source{
+		prom: &client{http: &limited, root: strings.TrimSuffix(cfg.BaseURL, "/"), service: servicePrometheus, userAgent: userAgent, auth: a},
 		links: links{
 			prometheus: cfg.prometheusURL(),
 			grafana:    strings.TrimSuffix(cfg.Links.GrafanaURL, "/"),
@@ -130,7 +137,15 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (source
 		},
 		parser: newParser(),
 		now:    time.Now,
-	}, nil
+	}
+
+	if cfg.AlertmanagerURL != "" {
+		s.alertmanager = &client{
+			http: &limited, root: strings.TrimSuffix(cfg.AlertmanagerURL, "/"), service: serviceAlertmanager, userAgent: userAgent, auth: a,
+		}
+	}
+
+	return s, nil
 }
 
 // newParser returns the PromQL parser of the source. It accepts every

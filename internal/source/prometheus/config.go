@@ -35,6 +35,11 @@ type Config struct {
 	// /api/v1, for example https://prometheus.example.com, or
 	// https://mimir.example.com/prometheus for Mimir.
 	BaseURL string `yaml:"baseURL"`
+	// AlertmanagerURL is the root of an Alertmanager API, the part before
+	// /api/v2. When it is set, list_alerts reads Alertmanager, with
+	// silences, instead of Prometheus. The credentials and headers go to
+	// it too.
+	AlertmanagerURL string `yaml:"alertmanagerURL"`
 	// BearerTokenSecret holds a token sent as a bearer token.
 	BearerTokenSecret *registry.SecretRef `yaml:"bearerTokenSecret"`
 	// BasicAuth is a user name and the secret that holds its password.
@@ -94,6 +99,12 @@ func (c *Config) Validate() error {
 		errs = append(errs, err)
 	}
 
+	if c.AlertmanagerURL != "" {
+		if err := checkAPIURL("alertmanagerURL", c.AlertmanagerURL, credentials); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
 	errs = append(errs, c.checkAuth()...)
 	errs = append(errs, c.checkHeaders()...)
 	errs = append(errs, c.Links.check()...)
@@ -145,8 +156,10 @@ func (c *Config) checkAuth() []error {
 			errs = append(errs, errors.New("tls: set certSecret and keySecret, caSecret, or both"))
 		}
 
-		if strings.HasPrefix(c.BaseURL, "http://") {
-			errs = append(errs, errors.New("tls: needs https, but baseURL uses http"))
+		for _, f := range []struct{ key, raw string }{{"baseURL", c.BaseURL}, {"alertmanagerURL", c.AlertmanagerURL}} {
+			if strings.HasPrefix(f.raw, "http://") {
+				errs = append(errs, fmt.Errorf("tls: needs https, but %s uses http", f.key))
+			}
 		}
 	}
 
