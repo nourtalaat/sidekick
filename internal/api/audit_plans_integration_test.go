@@ -4,7 +4,9 @@ package api_test
 
 import (
 	"regexp"
+	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,6 +54,8 @@ func TestAuditQueryPlans(t *testing.T) {
 		name string
 		// params sets the filters; the page size is set for every case.
 		params func(p *db.ListAuditEntriesParams)
+		// wantIndex, when set, lists the indexes of which the plan must use one.
+		wantIndex []string
 	}{
 		{name: "NoFilter", params: func(*db.ListAuditEntriesParams) {}},
 		{
@@ -62,16 +66,17 @@ func TestAuditQueryPlans(t *testing.T) {
 			},
 		},
 		{name: "Actor", params: func(p *db.ListAuditEntriesParams) { p.ActorID = new("user-7") }},
-		{name: "ActorWhoIsRare", params: func(p *db.ListAuditEntriesParams) { p.ActorID = new("user-rare") }},
+		{name: "ActorWhoIsRare", params: func(p *db.ListAuditEntriesParams) { p.ActorID = new("user-rare") }, wantIndex: []string{"audit_log_actor"}},
 		{name: "ActorKind", params: func(p *db.ListAuditEntriesParams) { p.ActorKind = new("policy") }},
 		{name: "Action", params: func(p *db.ListAuditEntriesParams) { p.Action = new("action.3") }},
-		{name: "ActionThatIsRare", params: func(p *db.ListAuditEntriesParams) { p.Action = new("action.rare") }},
+		{name: "ActionThatIsRare", params: func(p *db.ListAuditEntriesParams) { p.Action = new("action.rare") }, wantIndex: []string{"audit_log_action"}},
 		{name: "Investigation", params: func(p *db.ListAuditEntriesParams) { p.InvestigationID = &investigation }},
 		{
 			name: "ActorAndAction",
 			params: func(p *db.ListAuditEntriesParams) {
 				p.ActorID, p.Action = new("user-rare"), new("action.rare")
 			},
+			wantIndex: []string{"audit_log_actor", "audit_log_action"},
 		},
 		{
 			name: "ActorAndTimeRange",
@@ -79,6 +84,7 @@ func TestAuditQueryPlans(t *testing.T) {
 				from := now.Add(-30 * 24 * time.Hour)
 				p.ActorID, p.AtFrom = new("user-rare"), &from
 			},
+			wantIndex: []string{"audit_log_actor"},
 		},
 		{
 			name: "CursorFromTheMiddle",
@@ -113,6 +119,12 @@ func TestAuditQueryPlans(t *testing.T) {
 			require.ErrorIs(t, err, storetest.ErrExplained)
 
 			require.NotContains(t, explain.Plan, "Seq Scan on audit_log")
+
+			if len(tt.wantIndex) > 0 {
+				require.True(t, slices.ContainsFunc(tt.wantIndex, func(index string) bool { return strings.Contains(explain.Plan, index) }),
+					"the plan uses none of %v", tt.wantIndex)
+			}
+
 			require.LessOrEqual(t, removedByFilters(t, explain.Plan), auditPlanMaxFiltered, "the plan reads and drops too many rows")
 		})
 	}
