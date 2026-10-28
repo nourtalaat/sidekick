@@ -1,0 +1,65 @@
+{
+  "_links": {
+    "self": { "href": "/api/v2/auditlog", "type": "application/json" }
+  },
+  "items": [
+    {
+      "_links": {
+        "self": { "href": "/api/v2/auditlog/6655aa0000000000000000a1", "type": "application/json" },
+        "site": { "href": "/shop/production/features/new-checkout", "type": "text/html" }
+      },
+      "_id": "6655aa0000000000000000a1",
+      "_accountId": "6655aa0000000000000000ff",
+      "date": 1777888680000,
+      "accesses": [
+        { "action": "updateOn", "resource": "proj/shop:env/production:flag/new-checkout" }
+      ],
+      "kind": "flag",
+      "name": "New checkout",
+      "description": "- Turned on the flag\n",
+      "shortDescription": "Turned on the flag",
+      "comment": "Rolling out to everyone",
+      "member": {
+        "_links": { "self": { "href": "/api/v2/members/6655aa0000000000000000b1", "type": "application/json" } },
+        "_id": "6655aa0000000000000000b1",
+        "email": "ada@example.com",
+        "firstName": "Ada",
+        "lastName": "Lovelace"
+      },
+      "titleVerb": "turned on the flag",
+      "title": "[Ada Lovelace](mailto:ada@example.com) turned on the flag [New checkout](https://app.eu.launchdarkly.com/shop/production/features/new-checkout) in `Production`",
+      "target": {
+        "_links": {
+          "canonical": { "href": "/api/v2/flags/shop/new-checkout", "type": "application/json" },
+          "site": { "href": "/shop/production/features/new-checkout", "type": "text/html" }
+        },
+        "name": "New checkout",
+        "resources": ["proj/shop:env/production:flag/new-checkout"]
+      }
+    },
+    {
+      "_links": {
+        "self": { "href": "/api/v2/auditlog/6655aa0000000000000000a2", "type": "application/json" },
+        "site": { "href": "https://elsewhere.example.com/dark-mode", "type": "text/html" }
+      },
+      "_id": "6655aa0000000000000000a2",
+      "_accountId": "6655aa0000000000000000ff",
+      "date": 1777887000000,
+      "accesses": [
+        { "action": "updateFallthrough", "resource": "proj/shop:env/production:flag/dark-mode;mobile" }
+      ],
+      "kind": "flag",
+      "name": "Dark mode",
+      "description": "",
+      "shortDescription": "Changed the default rule to a percentage rollout",
+      "token": {
+        "_links": { "self": { "href": "/api/v2/tokens/6655aa0000000000000000c1", "type": "application/json" } },
+        "_id": "6655aa0000000000000000c1",
+        "name": "deploy-bot",
+        "ending": "a1b2",
+        "serviceToken": true
+      },
+      "titleVerb": "updated the flag"
+    }
+  ]
+}

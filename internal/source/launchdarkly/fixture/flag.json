@@ -1,0 +1,54 @@
+{
+  "_links": {
+    "parent": { "href": "/api/v2/flags/shop", "type": "application/json" },
+    "self": { "href": "/api/v2/flags/shop/new-checkout", "type": "application/json" }
+  },
+  "key": "new-checkout",
+  "name": "New checkout",
+  "kind": "boolean",
+  "description": "Turns on the new checkout page.",
+  "archived": false,
+  "temporary": true,
+  "tags": ["checkout"],
+  "creationDate": 1777000000000,
+  "variations": [
+    { "_id": "6655aa0000000000000000d1", "value": true, "name": "On" },
+    { "_id": "6655aa0000000000000000d2", "value": false, "name": "Off" }
+  ],
+  "environments": {
+    "production": {
+      "on": true,
+      "archived": false,
+      "salt": "61eddeadbeef",
+      "sel": "8de1085cb7354b0ab41c0e778376dfd3",
+      "lastModified": 1777888680000,
+      "version": 12,
+      "targets": [
+        { "values": ["user-1", "user-2"], "variation": 0, "contextKind": "user" }
+      ],
+      "contextTargets": [
+        { "values": [], "variation": 0, "contextKind": "user" },
+        { "values": ["acme"], "variation": 1, "contextKind": "organization" }
+      ],
+      "rules": [
+        { "_id": "6655aa0000000000000000e1", "variation": 0, "clauses": [{ "attribute": "country", "op": "in", "values": ["NL"] }] },
+        { "_id": "6655aa0000000000000000e2", "variation": 1, "clauses": [{ "attribute": "plan", "op": "in", "values": ["free"] }] }
+      ],
+      "fallthrough": {
+        "rollout": {
+          "variations": [
+            { "variation": 0, "weight": 25000 },
+            { "variation": 1, "weight": 75000 }
+          ],
+          "contextKind": "user"
+        }
+      },
+      "offVariation": 1,
+      "prerequisites": [],
+      "_site": { "href": "/shop/production/features/new-checkout", "type": "text/html" },
+      "_environmentName": "Production",
+      "trackEvents": false,
+      "trackEventsFallthrough": false
+    }
+  }
+}
