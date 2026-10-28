@@ -33,9 +33,12 @@ on:
 permissions:
   contents: read
 
+# A run in progress is never cancelled: a pull request event that the job's
+# condition skips, such as another label, would otherwise cancel a paid run.
+# A run waiting behind it is replaced by a newer one.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
   bench:
