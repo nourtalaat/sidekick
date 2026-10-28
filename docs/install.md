@@ -13,9 +13,9 @@ bundled Postgres for evaluation, and then the changes for production.
 
 ## Quick start
 
-Five steps, about 13 minutes in all. The times are for someone who has
-the Slack and Anthropic accounts ready; write down yours, it helps us make
-the quick start shorter.
+Five steps, about 13 minutes by our estimate. The times assume the Slack and
+Anthropic accounts are ready; write down yours, it helps us make the quick
+start shorter.
 
 ### 1. Create the Slack app (3 minutes)
 
