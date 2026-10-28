@@ -18,3 +18,4 @@ retention:
   steps: 31d
   auditLog: 90 days
   watcherChecks: 720h
+  memory: 0d

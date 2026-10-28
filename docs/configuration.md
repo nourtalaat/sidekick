@@ -915,6 +915,23 @@ How it behaves:
   stops waiting for response headers after 60 seconds; `sidekick config
   validate` rejects a longer one.
 
+#### Memory sources (`type: memory`)
+
+A memory source lets the model search Sidekick's own memory: the past
+investigations whose verdict a responder confirmed, and the notes people
+wrote about services. It has only the keys every source has. [The memory
+source](sources/memory.md) lists what its tools return.
+
+```yaml
+sources:
+  memory:
+    type: memory
+```
+
+The tools, as the model sees them with the source name `memory`, are
+`memory__search` and `memory__service_notes`. Prompts show similar
+confirmed investigations without it, as [`memory`](#memory) describes.
+
 #### Prometheus sources (`type: prometheus`)
 
 A Prometheus source reads Prometheus or a server that shares its HTTP API,
@@ -1602,6 +1619,26 @@ A false positive verdict below this confidence is not accepted. Lower it
 only if you accept that a real incident may be reported as a false positive
 more often.
 
+### `memory`
+
+```yaml
+memory:
+  enabled: true   # default true
+  examples: 3     # 1 to 10; default 3
+```
+
+Sidekick remembers every investigation whose verdict a responder marked
+correct, and shows the model up to `examples` of them that look like the
+alert it investigates, as hints about where to look. It picks those with
+the same fingerprint first, then those with the same service and alert
+name, then those whose summary shares words with the alert. A Wrong that
+takes the confirmation back takes the investigation out of memory again,
+so investigations nobody confirmed are never shown. With
+`enabled: false`, prompts show none. Entries are kept for
+[`retention.memory`](#retention), 730 days by default, even after their
+investigation is deleted. To let the model search memory itself, add a
+[memory source](sources/memory.md).
+
 ### `redaction`
 
 Redaction removes secrets and personal data from event text, raw webhook
@@ -1794,11 +1831,14 @@ retention:
   steps: 90d           # the full record of each step of a run, by when it started
   auditLog: 730d       # audit log entries, by when they were written
   watcherChecks: 30d   # results of single watcher checks, by when they ran
+  memory: 730d         # memory entries of confirmed investigations, by when they were confirmed
 ```
 
 `steps` and `watcherChecks` cannot be longer than `investigations`,
 because deleting an investigation deletes its steps and its watchers with
-their checks.
+their checks. `memory` can be longer: a [memory](#memory) entry keeps its
+own copy of what it shows, so it stays after its investigation is
+deleted.
 
 Every replica checks once an hour, and at start-up, that the retention
 job of the day (in UTC) is queued; however many replicas there are, it
@@ -1862,6 +1902,8 @@ with access to the database, who can turn the guard off.
 | `routes[].grouping.window` | `30m` |
 | `routes[].grouping.fingerprintLabels` | none: the intake's own fingerprint |
 | `report.minFalsePositiveConfidence` | `high` |
+| `memory.enabled` | `true` |
+| `memory.examples` | `3` |
 | `redaction.builtIn` | every built-in rule except `ip_addresses` |
 | `telemetry.logLevel` | `info` |
 | `routes[].watcherLimits.types` | every check type: `http`, `tool` and `alert` |
@@ -1878,6 +1920,7 @@ with access to the database, who can turn the guard off.
 | `retention.investigations` | `365d` |
 | `retention.auditLog` | `730d` |
 | `retention.watcherChecks` | `30d` |
+| `retention.memory` | `730d` |
 
 ## What is checked
 

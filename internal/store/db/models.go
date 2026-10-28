@@ -173,6 +173,19 @@ type Listener struct {
 	UpdatedAt    time.Time
 }
 
+type MemoryEntry struct {
+	InvestigationID uuid.UUID
+	Service         *string
+	AlertName       *string
+	Fingerprint     string
+	Verdict         string
+	Summary         string
+	Cause           *string
+	ConfirmedAt     time.Time
+	Disabled        bool
+	Search          interface{}
+}
+
 type Notice struct {
 	Key    string
 	SentAt time.Time
@@ -210,6 +223,13 @@ type Route struct {
 	Enabled   bool
 	Version   int32
 	UpdatedBy *string
+	UpdatedAt time.Time
+}
+
+type ServiceNote struct {
+	Service   string
+	Text      string
+	UpdatedBy *uuid.UUID
 	UpdatedAt time.Time
 }
 

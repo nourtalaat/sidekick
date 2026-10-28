@@ -139,6 +139,31 @@ func (q *Queries) DeleteOldEvents(ctx context.Context, arg DeleteOldEventsParams
 	return result.RowsAffected(), nil
 }
 
+const deleteOldMemoryEntries = `-- name: DeleteOldMemoryEntries :execrows
+DELETE FROM memory_entries
+WHERE ctid = ANY (ARRAY(
+  SELECT m.ctid FROM memory_entries m
+  WHERE m.confirmed_at < $1
+  ORDER BY m.confirmed_at
+  LIMIT $2))
+`
+
+type DeleteOldMemoryEntriesParams struct {
+	Before time.Time
+	Batch  int32
+}
+
+// DeleteOldMemoryEntries deletes memory entries by when they were
+// confirmed, disabled ones too. They have no foreign key to their
+// investigation, so they can outlive it.
+func (q *Queries) DeleteOldMemoryEntries(ctx context.Context, arg DeleteOldMemoryEntriesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOldMemoryEntries, arg.Before, arg.Batch)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteOldSteps = `-- name: DeleteOldSteps :execrows
 DELETE FROM steps
 WHERE ctid = ANY (ARRAY(
