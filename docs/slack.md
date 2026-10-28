@@ -5,7 +5,7 @@ messages: alerts that bots post in the channels it listens to, and
 mentions of `@Sidekick`, each of which starts an investigation. The
 `slack` output shows each investigation as one Slack message that is
 edited in place while the investigation runs, with buttons to stop the
-run and to rate its verdict. Slash commands, follow-up questions in the
+run, to rate its verdict and to stop its watchers. Slash commands, follow-up questions in the
 thread and a link to the web UI come in later releases.
 
 ## What it posts
@@ -41,6 +41,24 @@ thread and a link to the web UI come in later releases.
 - **A run that could not finish** shows "Could not finish" with a yellow
   bar and what was checked, and gets a short reply too, so no message is
   left on "Investigating".
+- **When the group has [watchers](configuration.md#watch)**, the message
+  shows a line for each one, in every state of the investigation, and is
+  edited when a watcher changes state:
+
+  | State | Line |
+  |---|---|
+  | Running | `:eyes: *Watching* checkout-health · checking every 30s since 14:02` |
+  | Recovered | `:white_check_mark: *Back up* checkout-health · at 14:14, watched for 12 min` |
+  | Timed out | `:hourglass: *Stopped watching* checkout-health · after 60 min, still down` |
+  | Stopped | `:black_square_for_stop: *Stopped watching* checkout-health · stopped by @ana at 14:08`, or why it stopped: every alert recovered, or the config no longer allows its check |
+
+  The lines show times of day, in each reader's time zone, rather than
+  how long ago something happened, so they stay true between edits.
+- **Every change of a watcher's state also gets a short new reply** in the
+  thread, when it starts and when it ends, with how often it checked, the
+  result of its last check and a link to the message. The bar is blue
+  while it watches, green when the service is back up, yellow when it
+  timed out and gray when it was stopped.
 
 Text from the alert and from the model is escaped, so it cannot mention
 `@channel` or a person, or add links. The only links are to evidence that
@@ -53,6 +71,10 @@ the sources returned.
   seconds, even in the middle of a slow model or tool call and whichever
   replica runs it, and the message then shows "Not sure yet" with what was
   found and checked so far, and who stopped it.
+- **Stop watching** is on the message for each running watcher, in every
+  state of the investigation. Slack asks to confirm first. The watcher
+  stops with the stop reason `responder`, the thread gets a short reply,
+  and the investigation and its verdict stay as they are.
 - **Correct** and **Wrong** are on the final message, except after a Stop
   or a run that could not finish. Each person has one rating per verdict:
   clicking the same button again changes nothing, and clicking the other
@@ -64,7 +86,7 @@ verdict people agree with. A later Wrong on a confirmed verdict takes the
 confirmation back.
 
 Every click is checked against the clicker's role at the time of the
-click: rating and stopping need the responder role. Until roles can be set
+click: rating, stopping and stopping a watcher need the responder role. Until roles can be set
 for Slack users, every Slack user is a responder. When a click cannot do
 anything, for example a Correct before there is a verdict, or a Stop on an
 investigation that has ended, Sidekick says so in a note only the clicker

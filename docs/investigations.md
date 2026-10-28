@@ -23,6 +23,12 @@ answer, Sidekick sends everything that waits as one message, with what the
 sender wrote marked as data from outside Sidekick. A message shows at most
 20 events in full and counts the rest. A recovery is evidence, for example
 that the alert cleared on its own; it never stops the investigation.
+Each change of a [watcher's](configuration.md#watch) state waits in the
+inbox too, such as a watcher that started or recovered, and so does a
+route or strategy watcher that a limit kept from starting. The message
+lists them after the events, with the result of each watcher's last check
+marked as data from outside Sidekick. Like a recovery, a watcher's result
+is evidence and never decides the verdict by itself.
 
 The model uses the connector that `model.roles.investigate` names, or the
 route's own `roles.investigate`. A call that fails because the provider is
