@@ -9,6 +9,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/investigator"
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
+	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/model/instrument"
 	"github.com/nourtalaat/sidekick/internal/model/pricing"
 	"github.com/nourtalaat/sidekick/internal/queue"
@@ -20,15 +21,11 @@ import (
 // questions, with every source behind guard, every model connector
 // wrapped with its span and metrics, and start_watcher through watchers,
 // and listens for Stops of the runs on this replica.
-func registerInvestigator(a *app.App, guard *tools.Guard, watchers *watch.ModelStarter) error {
+func registerInvestigator(a *app.App, guard *tools.Guard, watchers *watch.ModelStarter, modelMetrics *instrument.Metrics, vectors *memory.Vectors) error {
 	cfg := a.Config()
 	prices := pricing.New(cfg.Model.PriceTable())
 
-	connectors, err := investigatorConnectors(a, prices)
-	if err != nil {
-		return fmt.Errorf("set up the model connectors: %w", err)
-	}
-
+	connectors := investigatorConnectors(a, prices, modelMetrics)
 	metrics, err := investigator.NewMetrics(a.Telemetry().Registry())
 	if err != nil {
 		return fmt.Errorf("set up investigation metrics: %w", err)
@@ -69,6 +66,7 @@ func registerInvestigator(a *app.App, guard *tools.Guard, watchers *watch.ModelS
 			Skip:          cfg.Budgets.Daily.OnDailyCap == config.OnDailyCapSkip,
 		},
 		MemoryExamples: cfg.Memory.PromptExamples(),
+		MemoryVectors:  vectors,
 		Watchers:       watchers,
 		Logger:         a.Logger().With("component", "investigator"),
 		Metrics:        metrics,
@@ -130,12 +128,7 @@ func newGuard(a *app.App) (*tools.Guard, error) {
 // investigatorConnectors wraps every built model connector with the
 // model.generate span and the model metrics, priced with prices, the same
 // table the investigator prices its steps with.
-func investigatorConnectors(a *app.App, prices pricing.Table) (map[string]investigator.Connector, error) {
-	metrics, err := instrument.NewMetrics(a.Telemetry().Registry())
-	if err != nil {
-		return nil, fmt.Errorf("set up model metrics: %w", err)
-	}
-
+func investigatorConnectors(a *app.App, prices pricing.Table, metrics *instrument.Metrics) map[string]investigator.Connector {
 	cfg := a.Config()
 	tracer := a.Telemetry().TracerProvider().Tracer(instrument.TracerName)
 
@@ -155,5 +148,5 @@ func investigatorConnectors(a *app.App, prices pricing.Table) (map[string]invest
 		}
 	}
 
-	return out, nil
+	return out
 }
