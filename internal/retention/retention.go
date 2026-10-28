@@ -39,6 +39,7 @@ const (
 	TableWatcherChecks  = "watcher_checks"
 	TableEvents         = "events"
 	TableAuditLog       = "audit_log"
+	TableMemoryEntries  = "memory_entries"
 	TableJobs           = "jobs"
 )
 
@@ -50,6 +51,7 @@ type Periods struct {
 	Steps          time.Duration
 	AuditLog       time.Duration
 	WatcherChecks  time.Duration
+	MemoryEntries  time.Duration
 }
 
 // Options set up a Handler. Pool is required.
@@ -114,13 +116,13 @@ func New(opts Options) *Handler {
 	p := opts.Periods
 	// Investigations go first: their steps, inbox rows and watchers go
 	// with them, so the later tables have fewer rows left to delete.
-	// TODO: [SK-40] add memory_entries here with retention.memory.
 	h.tables = []table{
 		{name: TableInvestigations, period: p.Investigations, delete: h.deleteInvestigations},
 		{name: TableSteps, period: p.Steps, delete: h.deleteSteps},
 		{name: TableWatcherChecks, period: p.WatcherChecks, delete: h.deleteWatcherChecks},
 		{name: TableEvents, period: p.Events, delete: h.deleteEvents},
 		{name: TableAuditLog, period: p.AuditLog, delete: h.deleteAuditEntries},
+		{name: TableMemoryEntries, period: p.MemoryEntries, delete: h.deleteMemoryEntries},
 		{name: TableJobs, period: DoneJobsPeriod, delete: h.deleteDoneJobs},
 		{name: TableJobs, period: DeadJobsPeriod, delete: h.deleteDeadJobs},
 	}
@@ -271,6 +273,10 @@ func (h *Handler) deleteWatcherChecks(ctx context.Context, before time.Time, bat
 
 func (h *Handler) deleteEvents(ctx context.Context, before time.Time, batch int32) (int64, error) {
 	return h.counted(TableEvents)(db.New(h.pool).DeleteOldEvents(ctx, db.DeleteOldEventsParams{Before: before, Batch: batch}))
+}
+
+func (h *Handler) deleteMemoryEntries(ctx context.Context, before time.Time, batch int32) (int64, error) {
+	return h.counted(TableMemoryEntries)(db.New(h.pool).DeleteOldMemoryEntries(ctx, db.DeleteOldMemoryEntriesParams{Before: before, Batch: batch}))
 }
 
 func (h *Handler) deleteDoneJobs(ctx context.Context, before time.Time, batch int32) (int64, error) {

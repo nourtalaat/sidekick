@@ -235,6 +235,7 @@ func TestValidateFixtures(t *testing.T) {
 		{file: "retention-invalid", want: []string{
 			`retention.auditLog: expected a period such as 90d or 36h, got "90 days"`,
 			"retention.events: must be positive",
+			"retention.memory: must be positive",
 			"retention.steps: 31d is longer than retention.investigations 30d; they are deleted with their investigation",
 		}},
 		// Several problems, reported together and sorted by path.

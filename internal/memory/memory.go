@@ -59,8 +59,6 @@ func MatchOf(investigation uuid.UUID, e event.Event) Match {
 	}
 }
 
-// TODO: [SK-59] add memory_entries to the retention job
-
 // Sync makes the memory entry of the investigation with id match its
 // confirmation: a confirmed investigation gets its entry written or
 // updated, and the entry of one that is not confirmed is deleted. Both

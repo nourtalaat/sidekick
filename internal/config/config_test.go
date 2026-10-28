@@ -78,6 +78,7 @@ func TestParseDefaults(t *testing.T) {
 					Steps:          Period(90 * Day),
 					AuditLog:       Period(730 * Day),
 					WatcherChecks:  Period(30 * Day),
+					Memory:         Period(730 * Day),
 				}, cfg.Retention)
 				require.Nil(t, cfg.Slack)
 				require.Equal(t, Memory{Enabled: true, Examples: 3}, cfg.Memory)

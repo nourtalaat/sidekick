@@ -39,6 +39,8 @@ CREATE INDEX memory_entries_service_alert ON memory_entries (service, alert_name
 -- per confirmation, and read at the start of every investigation, so new
 -- entries go into the index at once rather than into its pending list.
 CREATE INDEX memory_entries_search ON memory_entries USING gin (search) WITH (fastupdate = off) WHERE NOT disabled;
+-- The retention job, oldest confirmation first, disabled entries too.
+CREATE INDEX memory_entries_confirmed ON memory_entries (confirmed_at);
 
 CREATE TABLE service_notes (
   service    text PRIMARY KEY,

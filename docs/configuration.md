@@ -1409,8 +1409,10 @@ the same fingerprint first, then those with the same service and alert
 name, then those whose summary shares words with the alert. A Wrong that
 takes the confirmation back takes the investigation out of memory again,
 so investigations nobody confirmed are never shown. With
-`enabled: false`, prompts show none. To let the model search memory
-itself, add a [memory source](sources/memory.md).
+`enabled: false`, prompts show none. Entries are kept for
+[`retention.memory`](#retention), 730 days by default, even after their
+investigation is deleted. To let the model search memory itself, add a
+[memory source](sources/memory.md).
 
 ### `redaction`
 
@@ -1604,11 +1606,14 @@ retention:
   steps: 90d           # the full record of each step of a run, by when it started
   auditLog: 730d       # audit log entries, by when they were written
   watcherChecks: 30d   # results of single watcher checks, by when they ran
+  memory: 730d         # memory entries of confirmed investigations, by when they were confirmed
 ```
 
 `steps` and `watcherChecks` cannot be longer than `investigations`,
 because deleting an investigation deletes its steps and its watchers with
-their checks.
+their checks. `memory` can be longer: a [memory](#memory) entry keeps its
+own copy of what it shows, so it stays after its investigation is
+deleted.
 
 Every replica checks once an hour, and at start-up, that the retention
 job of the day (in UTC) is queued; however many replicas there are, it
@@ -1689,6 +1694,7 @@ with access to the database, who can turn the guard off.
 | `retention.investigations` | `365d` |
 | `retention.auditLog` | `730d` |
 | `retention.watcherChecks` | `30d` |
+| `retention.memory` | `730d` |
 
 ## What is checked
 

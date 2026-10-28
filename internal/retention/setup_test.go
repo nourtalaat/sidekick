@@ -25,6 +25,7 @@ var testPeriods = Periods{
 	Steps:          5 * 24 * time.Hour,
 	AuditLog:       20 * 24 * time.Hour,
 	WatcherChecks:  3 * 24 * time.Hour,
+	MemoryEntries:  20 * 24 * time.Hour,
 }
 
 // TestMain runs the tests, then lets storetest stop the Postgres container
