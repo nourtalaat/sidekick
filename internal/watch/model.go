@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -40,8 +39,9 @@ type ModelStarterOptions struct {
 	Checker *Checker
 	// Policy is what the config allows.
 	Policy Policy
-	// Logger receives a line per started watcher. Nil logs nothing.
-	Logger *slog.Logger
+	// Recorder records each started watcher. Nil writes and shows the
+	// start, but logs and counts nothing.
+	Recorder *Recorder
 	// Now returns the current time. Nil means time.Now.
 	Now func() time.Time
 }
@@ -51,7 +51,6 @@ type ModelStarterOptions struct {
 // it is safe for concurrent use.
 type ModelStarter struct {
 	opts ModelStarterOptions
-	log  *slog.Logger
 	now  func() time.Time
 }
 
@@ -106,17 +105,12 @@ func NewModelStarter(opts ModelStarterOptions) (*ModelStarter, error) {
 		return nil, errMissingStarterOption
 	}
 
-	log := opts.Logger
-	if log == nil {
-		log = slog.New(slog.DiscardHandler)
-	}
-
 	now := opts.Now
 	if now == nil {
 		now = time.Now
 	}
 
-	return &ModelStarter{opts: opts, log: log, now: now}, nil
+	return &ModelStarter{opts: opts, now: now}, nil
 }
 
 // Spec returns the start_watcher tool for an investigation of route that
@@ -194,7 +188,7 @@ func (m *ModelStarter) start(ctx context.Context, tx pgx.Tx, req ModelRequest, w
 		return ModelResult{}, fmt.Errorf("lock group %s: %w", w.GroupID, err)
 	}
 
-	started, err := Start(ctx, tx, m.opts.Policy, w, m.now(), m.log)
+	started, err := Start(ctx, tx, m.opts.Policy, w, m.now(), m.opts.Recorder)
 
 	if limit, ok := errors.AsType[*LimitError](err); ok {
 		return ModelResult{Name: w.Name, Refusal: limit.Error()}, nil

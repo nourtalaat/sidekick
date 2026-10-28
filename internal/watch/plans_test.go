@@ -148,6 +148,24 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"watchers_group_name"},
 		},
 		{
+			name: "ListGroupWatchers",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListGroupWatchers(ctx, busy)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"watchers_group_name", "watcher_checks_pkey"},
+		},
+		{
+			name: "GetWatcherWithLastCheck",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.GetWatcherWithLastCheck(ctx, busyWatcher)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"watchers_pkey", "watcher_checks_pkey"},
+		},
+		{
 			name: "ListGroupAlertStates",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.ListGroupAlertStates(ctx, busy)

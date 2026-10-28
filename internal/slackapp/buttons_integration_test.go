@@ -17,12 +17,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
 	"github.com/nourtalaat/sidekick/internal/feedback"
+	"github.com/nourtalaat/sidekick/internal/grouper"
 	"github.com/nourtalaat/sidekick/internal/investigator"
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
 	"github.com/nourtalaat/sidekick/internal/model"
@@ -38,14 +40,20 @@ import (
 	"github.com/nourtalaat/sidekick/internal/store/db"
 	"github.com/nourtalaat/sidekick/internal/store/storetest"
 	"github.com/nourtalaat/sidekick/internal/strategy"
+	"github.com/nourtalaat/sidekick/internal/watch"
 	"github.com/nourtalaat/sidekick/strategies"
 )
 
-// The investigations in fixture/investigations.sql.
+// The investigations in fixture/investigations.sql, and the watcher of
+// the final one.
 var (
 	finalInvestigation  = uuid.MustParse("0192d3a4-0000-7000-8000-0000000000c1")
 	queuedInvestigation = uuid.MustParse("0192d3a4-0000-7000-8000-0000000000c2")
+	runningWatcher      = uuid.MustParse("0192d3a4-0000-7000-8000-0000000000d1")
 )
+
+// stopWatching is the action ID of the first Stop watching button.
+const stopWatching = slackout.ActionStopWatcher + ":1"
 
 // stopWithin is how soon a stopped run must end.
 const stopWithin = 5 * time.Second
@@ -145,6 +153,77 @@ func TestInteractivity(t *testing.T) {
 				t.Helper()
 
 				require.Equal(t, "U01STOP", *b.investigation(t, queuedInvestigation).CancelRequestedBySlackUser, "the first Stop is kept")
+			},
+		},
+		{
+			name:       "Stop watching stops the watcher and shows it",
+			send:       clickBy{user: "U01STOP", action: stopWatching, id: runningWatcher},
+			wantStatus: http.StatusOK,
+			wantNotes:  []string{noteWatcherStopped},
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				w := b.watcher(t)
+				require.Equal(t, watch.StatusStopped, w.Status)
+				require.Equal(t, new(watch.StopResponder), w.StopReason)
+				require.Equal(t, new("U01STOP"), w.StoppedBySlackUser)
+				require.NotNil(t, w.EndedAt)
+
+				changes := collect[db.WatcherChange](t, b.pool, "SELECT * FROM watcher_changes")
+				require.Len(t, changes, 1, "the outputs get the change")
+				require.Equal(t, finalInvestigation, changes[0].InvestigationID)
+				require.Equal(t, int64(6), changes[0].Seq)
+				require.Equal(t, int64(7), b.publishSeq(t, finalInvestigation), "the message is shown again")
+				require.Equal(t, 1, b.publishJobs(t))
+
+				inbox := collect[db.InvestigationInbox](t, b.pool, "SELECT * FROM investigation_inbox")
+				require.Len(t, inbox, 1, "the investigation's inbox gets the change")
+				require.Equal(t, watch.InboxKind, inbox[0].Kind)
+
+				var item watch.InboxItem
+				require.NoError(t, json.Unmarshal(inbox[0].Body, &item))
+				require.Equal(t, output.WatcherStopped, item.State.Status)
+				require.Equal(t, &output.Person{SlackUserID: "U01STOP"}, item.State.StoppedBy)
+
+				require.Equal(t, 1, b.count(t, "SELECT count(*) FROM jobs WHERE kind = 'close_group'"), "the group can close")
+				require.InDelta(t, 1, b.stateChanges(t, "stopped"), 0)
+			},
+		},
+		{
+			name:       "a repeated Stop watching says the watcher has ended",
+			before:     []clickBy{{user: "U01STOP", action: stopWatching, id: runningWatcher}},
+			send:       clickBy{user: "U01BEN", action: stopWatching, id: runningWatcher},
+			wantStatus: http.StatusOK,
+			wantNotes:  []string{noteWatcherStopped, noteWatcherEnded},
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				require.Equal(t, new("U01STOP"), b.watcher(t).StoppedBySlackUser, "the first stop is kept")
+				require.InDelta(t, 1, b.stateChanges(t, "stopped"), 0)
+			},
+		},
+		{
+			name:       "a viewer cannot stop watching",
+			role:       roles.Viewer,
+			send:       clickBy{user: "U01VIEW", action: stopWatching, id: runningWatcher},
+			wantStatus: http.StatusOK,
+			wantNotes:  []string{noteDenied},
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				require.Equal(t, watch.StatusRunning, b.watcher(t).Status)
+				require.Empty(t, collect[db.WatcherChange](t, b.pool, "SELECT * FROM watcher_changes"))
+			},
+		},
+		{
+			name:       "a forged Stop watching is refused",
+			send:       clickBy{user: "U01STOP", action: stopWatching, id: runningWatcher},
+			forged:     true,
+			wantStatus: http.StatusUnauthorized,
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				require.Equal(t, watch.StatusRunning, b.watcher(t).Status)
 			},
 		},
 		{
@@ -332,16 +411,23 @@ func setupButtonsWith(t *testing.T, lookup roles.Lookup) *buttonsHarness {
 	metrics, err := feedback.NewMetrics(h.reg)
 	require.NoError(t, err)
 
+	recorder, err := watch.NewRecorder(slog.New(slog.DiscardHandler), h.reg)
+	require.NoError(t, err)
+
+	stopper, err := watch.NewStopper(watch.StopperOptions{Pool: h.pool, CloseGroup: grouper.EnqueueClose, Recorder: recorder})
+	require.NoError(t, err)
+
 	b := &buttonsHarness{harness: h, responses: fakehttp.New(t)}
 	b.responses.HandleFunc(http.MethodPost, responsePath, b.record)
 
 	b.buttons = NewButtons(ButtonsOptions{
-		Handler: h.handler,
-		Pool:    h.pool,
-		Roles:   lookup,
-		Metrics: metrics,
-		HTTP:    b.responses.Client(),
-		Logger:  slog.New(slog.DiscardHandler),
+		Handler:  h.handler,
+		Pool:     h.pool,
+		Roles:    lookup,
+		Metrics:  metrics,
+		Watchers: stopper,
+		HTTP:     b.responses.Client(),
+		Logger:   slog.New(slog.DiscardHandler),
 	})
 
 	mux := http.NewServeMux()
@@ -502,6 +588,62 @@ func (b *buttonsHarness) feedbackCount(t *testing.T, rating output.Rating) float
 	}
 
 	return 0
+}
+
+// watcher returns the watcher of the final investigation.
+func (b *buttonsHarness) watcher(t *testing.T) db.Watcher {
+	t.Helper()
+
+	w, err := db.New(b.pool).GetWatcher(t.Context(), runningWatcher)
+	require.NoError(t, err)
+
+	return w
+}
+
+// count returns the number query counts.
+func (b *buttonsHarness) count(t *testing.T, query string) int {
+	t.Helper()
+
+	var n int
+	require.NoError(t, b.pool.QueryRow(t.Context(), query).Scan(&n))
+
+	return n
+}
+
+// stateChanges returns sidekick_watcher_state_changes_total for status, or
+// 0 when the series does not exist.
+func (b *buttonsHarness) stateChanges(t *testing.T, status string) float64 {
+	t.Helper()
+
+	families, err := b.reg.Gather()
+	require.NoError(t, err)
+
+	for _, f := range families {
+		if f.GetName() != watch.MetricStateChanges {
+			continue
+		}
+
+		for _, m := range f.GetMetric() {
+			if m.GetLabel()[0].GetValue() == status {
+				return m.GetCounter().GetValue()
+			}
+		}
+	}
+
+	return 0
+}
+
+// collect runs query and returns its rows as T, column by column.
+func collect[T any](t *testing.T, pool *pgxpool.Pool, query string) []T {
+	t.Helper()
+
+	rows, err := pool.Query(t.Context(), query)
+	require.NoError(t, err)
+
+	out, err := pgx.CollectRows(rows, pgx.RowToStructByPos[T])
+	require.NoError(t, err)
+
+	return out
 }
 
 // requireNoRatings checks that no rating was stored.

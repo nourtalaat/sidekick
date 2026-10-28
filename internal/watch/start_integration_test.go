@@ -4,7 +4,6 @@ package watch
 
 import (
 	"errors"
-	"log/slog"
 	"testing"
 	"time"
 
@@ -131,7 +130,7 @@ func TestEndGroupResolved(t *testing.T) {
 			var ended []string
 
 			require.NoError(t, pgx.BeginFunc(t.Context(), h.pool, func(tx pgx.Tx) error {
-				got, err := EndGroupResolved(t.Context(), tx, checkoutGroup, h.now, slog.New(slog.DiscardHandler))
+				got, err := EndGroupResolved(t.Context(), tx, checkoutGroup, h.now, h.recorder)
 				for _, e := range got {
 					ended = append(ended, e.Name)
 				}

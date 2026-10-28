@@ -71,12 +71,14 @@ INSERT INTO watcher_checks (watcher_id, seq, at, result, detail, duration_ms)
 VALUES (@watcher_id, @seq, @at, @result, sqlc.narg(detail), @duration_ms);
 
 -- name: EndWatcher :one
--- EndWatcher sets a running watcher to a final status. A recovered watcher
--- records when its run of passes started. It returns no row for a watcher
+-- EndWatcher sets a running watcher to a final status, with the Slack
+-- user who stopped it, if one did. A recovered watcher records when its
+-- run of passes started. It returns no row for a watcher
 -- that has ended already.
 UPDATE watchers
 SET status = @status::text,
     stop_reason = sqlc.narg(stop_reason)::text,
+    stopped_by_slack_user = sqlc.narg(stopped_by_slack_user)::text,
     ended_at = @at::timestamptz,
     recovered_at = CASE WHEN @status::text = 'recovered' THEN coalesce(passing_since, @at::timestamptz) END
 WHERE id = @id AND status = 'running'
@@ -102,3 +104,20 @@ SELECT DISTINCT ON (fingerprint) fingerprint, (kind = 'resolved')::boolean AS re
 FROM events
 WHERE group_id = @group_id::uuid AND kind IN ('alert', 'resolved')
 ORDER BY fingerprint, received_at DESC, id DESC;
+
+-- name: ListGroupWatchers :many
+-- ListGroupWatchers returns every watcher of a group, oldest first, with
+-- the detail of its last check.
+SELECT sqlc.embed(w), c.detail AS last_detail
+FROM watchers w
+LEFT JOIN watcher_checks c ON c.watcher_id = w.id AND c.seq = w.checks
+WHERE w.group_id = @group_id
+ORDER BY w.started_at, w.id;
+
+-- name: GetWatcherWithLastCheck :one
+-- GetWatcherWithLastCheck returns a watcher with the detail of its last
+-- check.
+SELECT sqlc.embed(w), c.detail AS last_detail
+FROM watchers w
+LEFT JOIN watcher_checks c ON c.watcher_id = w.id AND c.seq = w.checks
+WHERE w.id = @id;

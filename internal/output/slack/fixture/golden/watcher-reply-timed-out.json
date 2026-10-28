@@ -1,0 +1,28 @@
+{
+  "text": "Stopped watching payments-health: checkout-api p99 latency above 2s",
+  "attachments": [
+    {
+      "color": "#B08400",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": ":hourglass: *Stopped watching* payments-health · after 60 min, still down",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "checkout-api p99 latency above 2s · Checked every 1 min, 60 checks · Last check: HTTP 503 &lt;!channel&gt; · <https://example.slack.com/archives/C123/p1793023321000200|See the investigation>",
+              "verbatim": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -27,6 +27,7 @@ import (
 	slackout "github.com/nourtalaat/sidekick/internal/output/slack"
 	"github.com/nourtalaat/sidekick/internal/publish"
 	"github.com/nourtalaat/sidekick/internal/roles"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // InteractivityPattern is the route interactions are served at in events
@@ -42,11 +43,13 @@ const payloadField = "payload"
 
 // The notes the user who clicked sees, only to them.
 const (
-	noteDenied    = "Only responders can rate verdicts or stop investigations."
-	noteNoVerdict = "This investigation has no verdict to rate yet."
-	noteStopping  = "Stopping the investigation. The message shows what it found so far once it stops."
-	noteEnded     = "This investigation has ended already, or someone stopped it."
-	noteFailed    = "Sidekick could not record that click. Try again in a moment."
+	noteDenied         = "Only responders can rate verdicts, stop investigations or stop watchers."
+	noteNoVerdict      = "This investigation has no verdict to rate yet."
+	noteStopping       = "Stopping the investigation. The message shows what it found so far once it stops."
+	noteEnded          = "This investigation has ended already, or someone stopped it."
+	noteWatcherStopped = "Stopped watching. A reply in the thread says so in a moment."
+	noteWatcherEnded   = "This watcher has ended already, or someone stopped it."
+	noteFailed         = "Sidekick could not record that click. Try again in a moment."
 )
 
 // refresher is a role lookup that can read a user's role again, for a
@@ -56,8 +59,13 @@ type refresher interface {
 	Refresh(ctx context.Context, teamID, userID string) (roles.Role, error)
 }
 
-// errBadResponseURL is returned for a response URL that is not Slack's.
-var errBadResponseURL = errors.New("the response URL is not a Slack URL")
+var (
+	// errBadResponseURL is returned for a response URL that is not Slack's.
+	errBadResponseURL = errors.New("the response URL is not a Slack URL")
+	// errNoStopper is returned for a Stop watching click when Buttons has
+	// no Watchers.
+	errNoStopper = errors.New("watchers cannot be stopped here")
+)
 
 // ButtonsOptions set up Buttons. Handler, Pool, Roles and Logger are
 // required.
@@ -72,6 +80,9 @@ type ButtonsOptions struct {
 	Roles roles.Lookup
 	// Metrics counts stored ratings. Nil counts nothing.
 	Metrics *feedback.Metrics
+	// Watchers stops the watchers responders stop with the Stop watching
+	// button. Nil makes those clicks fail.
+	Watchers *watch.Stopper
 	// HTTP posts notes to the user who clicked. Nil means
 	// httpclient.New().
 	HTTP *http.Client
@@ -80,17 +91,19 @@ type ButtonsOptions struct {
 }
 
 // Buttons handles clicks on the buttons of Sidekick's messages: Correct
-// and Wrong store a rating of the verdict, and Stop stops the run. Every
-// click needs the responder role at the time of the click. It answers
+// and Wrong store a rating of the verdict, Stop stops the run, and Stop
+// watching stops a watcher. Every click needs the responder role at the
+// time of the click. It answers
 // interactions from Socket Mode as an InteractionHandler, and at
 // POST /slack/interactivity in events mode.
 type Buttons struct {
-	handler *Handler
-	pool    *pgxpool.Pool
-	roles   roles.Lookup
-	metrics *feedback.Metrics
-	http    *http.Client
-	log     *slog.Logger
+	handler  *Handler
+	pool     *pgxpool.Pool
+	roles    roles.Lookup
+	metrics  *feedback.Metrics
+	watchers *watch.Stopper
+	http     *http.Client
+	log      *slog.Logger
 }
 
 var _ InteractionHandler = (*Buttons)(nil)
@@ -103,12 +116,13 @@ func NewButtons(opts ButtonsOptions) *Buttons {
 	}
 
 	return &Buttons{
-		handler: opts.Handler,
-		pool:    opts.Pool,
-		roles:   opts.Roles,
-		metrics: opts.Metrics,
-		http:    hc,
-		log:     opts.Logger,
+		handler:  opts.Handler,
+		pool:     opts.Pool,
+		roles:    opts.Roles,
+		metrics:  opts.Metrics,
+		watchers: opts.Watchers,
+		http:     hc,
+		log:      opts.Logger,
 	}
 }
 
@@ -179,14 +193,20 @@ func (b *Buttons) HandleInteraction(ctx context.Context, cb slack.InteractionCal
 
 	log := b.log.With("action", action.ActionID, "user_id", cb.User.ID)
 
-	id, ok := investigationID(action.Value)
+	id, ok := buttonID(action.Value)
 	if !ok {
-		log.WarnContext(ctx, "ignoring a click whose value is not an investigation ID")
+		log.WarnContext(ctx, "ignoring a click whose value is not an ID")
 
 		return nil, nil
 	}
 
-	log = log.With("investigation_id", id.String())
+	stopWatcher := slackout.IsStopWatcher(action.ActionID)
+
+	if stopWatcher {
+		log = log.With("watcher_id", id.String())
+	} else {
+		log = log.With("investigation_id", id.String())
+	}
 
 	role, err := b.role(ctx, cb.Team.ID, cb.User.ID)
 	if err != nil {
@@ -204,10 +224,12 @@ func (b *Buttons) HandleInteraction(ctx context.Context, cb slack.InteractionCal
 
 	var note string
 
-	switch action.ActionID {
-	case slackout.ActionStop:
+	switch {
+	case stopWatcher:
+		note, err = b.stopWatcher(ctx, log, id, cb.User.ID)
+	case action.ActionID == slackout.ActionStop:
 		note, err = b.stop(ctx, log, id, cb.User.ID)
-	case slackout.ActionVerdictCorrect:
+	case action.ActionID == slackout.ActionVerdictCorrect:
 		note, err = b.rate(ctx, log, id, cb.User.ID, output.RatingCorrect)
 	default:
 		note, err = b.rate(ctx, log, id, cb.User.ID, output.RatingWrong)
@@ -216,7 +238,7 @@ func (b *Buttons) HandleInteraction(ctx context.Context, cb slack.InteractionCal
 	if err != nil {
 		b.note(ctx, log, cb, noteFailed)
 
-		return nil, fmt.Errorf("investigation %s: %w", id, err)
+		return nil, fmt.Errorf("click on %s for %s: %w", action.ActionID, id, err)
 	}
 
 	if note != "" {
@@ -300,6 +322,27 @@ func (b *Buttons) stop(ctx context.Context, log *slog.Logger, id uuid.UUID, user
 	return noteStopping, nil
 }
 
+// stopWatcher stops the watcher with id for the user who clicked and
+// returns the note for the user.
+func (b *Buttons) stopWatcher(ctx context.Context, log *slog.Logger, id uuid.UUID, userID string) (string, error) {
+	if b.watchers == nil {
+		return "", errNoStopper
+	}
+
+	_, stopped, err := b.watchers.Stop(ctx, id, output.Person{SlackUserID: userID})
+	if err != nil {
+		return "", fmt.Errorf("stop watching: %w", err)
+	}
+
+	log.InfoContext(ctx, "stop watching asked for", "stopped", stopped)
+
+	if !stopped {
+		return noteWatcherEnded, nil
+	}
+
+	return noteWatcherStopped, nil
+}
+
 // note posts text to the user who clicked, visible only to them, through
 // the interaction's response URL. A note that cannot be posted is logged
 // and dropped: the click itself has been handled.
@@ -353,8 +396,9 @@ func (b *Buttons) postNote(ctx context.Context, responseURL, text string) error 
 // buttons.
 func ourAction(actions []*slack.BlockAction) (*slack.BlockAction, bool) {
 	for _, a := range actions {
-		switch a.ActionID {
-		case slackout.ActionVerdictCorrect, slackout.ActionVerdictWrong, slackout.ActionStop:
+		switch {
+		case a.ActionID == slackout.ActionVerdictCorrect, a.ActionID == slackout.ActionVerdictWrong,
+			a.ActionID == slackout.ActionStop, slackout.IsStopWatcher(a.ActionID):
 			return a, true
 		}
 	}
@@ -362,9 +406,10 @@ func ourAction(actions []*slack.BlockAction) (*slack.BlockAction, bool) {
 	return nil, false
 }
 
-// investigationID returns the investigation ID a button carries as its
-// value, and false when the value is not one.
-func investigationID(value string) (uuid.UUID, bool) {
+// buttonID returns the ID a button carries as its value, the
+// investigation's or, for Stop watching, the watcher's, and false when the
+// value is not one.
+func buttonID(value string) (uuid.UUID, bool) {
 	id, err := uuid.Parse(value)
 
 	return id, err == nil
