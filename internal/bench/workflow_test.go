@@ -132,7 +132,7 @@ func TestBenchSettingsOfTheWorkflow(t *testing.T) {
 		require.NoError(t, err)
 
 		withBaseline := filepath.Join(t.TempDir(), "bench.yaml")
-		require.NoError(t, os.WriteFile(withBaseline, append(raw, []byte("  baseline: bench/baseline.json\n  maxDrop: 0.02\n")...), 0o600))
+		require.NoError(t, os.WriteFile(withBaseline, append(raw, []byte("  baseline: bench/baseline.json\n  maxDrop: 0.02\n")...), 0o600)) //nolint:gosec // A file in the test's own temporary directory.
 
 		got, err := LoadSettings(withBaseline)
 		require.NoError(t, err)
