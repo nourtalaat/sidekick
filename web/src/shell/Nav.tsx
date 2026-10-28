@@ -1,4 +1,4 @@
-import { BookOpen, Gauge, Inbox, LayoutDashboard, ListChecks, Route, ScrollText, Settings, type LucideIcon } from "lucide-react";
+import { BookOpen, Gauge, Inbox, LayoutDashboard, ListChecks, Radio, Route, ScrollText, Settings, type LucideIcon } from "lucide-react";
 import { NavLink } from "react-router";
 
 export const MAIN_NAV_ID = "main-nav";
@@ -15,6 +15,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: "/review", label: "Review queue", Icon: Inbox },
   { to: "/lessons", label: "Lessons", Icon: BookOpen },
   { to: "/routes", label: "Routes", Icon: Route },
+  { to: "/listeners", label: "Listeners", Icon: Radio },
   { to: "/benchmarks", label: "Benchmarks", Icon: Gauge },
   { to: "/audit", label: "Audit log", Icon: ScrollText },
   { to: "/settings", label: "Settings", Icon: Settings },
