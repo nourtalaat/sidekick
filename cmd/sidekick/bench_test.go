@@ -106,3 +106,119 @@ func TestBenchRunBadInput(t *testing.T) {
 		})
 	}
 }
+
+func TestBenchJudgeCheckBadInput(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// args follow "bench judge-check"; CONFIG is replaced.
+		args       []string
+		wantStderr string
+	}{
+		{
+			name:       "an agreement above 1",
+			args:       []string{"--config", "CONFIG", "--min-agreement", "2"},
+			wantStderr: "--min-agreement must be from 0 to 1, not 2",
+		},
+		{
+			name:       "no such case path",
+			args:       []string{"--config", "CONFIG", "--cases", "CASES/missing"},
+			wantStderr: "invalid scenario",
+		},
+		{
+			name:       "a case with an unknown field",
+			args:       []string{"--config", "CONFIG", "--cases", "CASES"},
+			wantStderr: `unknown field "colour"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "case.json"), []byte(`{"colour": 1}`), 0o600))
+
+			configPath := writeConfig(t, validConfig, "")
+
+			args := []string{"bench", "judge-check"}
+			for _, a := range tt.args {
+				args = append(args, strings.NewReplacer("CASES", dir, "CONFIG", configPath).Replace(a))
+			}
+
+			var stdout, stderr bytes.Buffer
+
+			root := newTestRootCmd(newBenchCmd(fakeRegistries()))
+			root.SetArgs(args)
+			root.SetOut(&stdout)
+			root.SetErr(&stderr)
+
+			err := root.ExecuteContext(t.Context())
+			require.Error(t, err)
+			require.Equal(t, exitBadInput, exitCode(err), "the error: %v", err)
+			require.Contains(t, err.Error()+stderr.String(), tt.wantStderr)
+			require.Empty(t, stdout.String(), "nothing ran")
+		})
+	}
+}
+
+func TestBenchCompare(t *testing.T) {
+	t.Parallel()
+
+	const fixtures = "../../internal/bench/fixture/"
+
+	tests := []struct {
+		name       string
+		args       []string
+		wantCode   int
+		wantGolden string
+		wantErr    string
+	}{
+		{
+			name:       "two reports side by side",
+			args:       []string{fixtures + "compare-a.json", fixtures + "compare-b.json"},
+			wantGolden: fixtures + "compare.golden",
+		},
+		{
+			name:     "one report",
+			args:     []string{fixtures + "compare-a.json"},
+			wantCode: exitBadInput,
+			wantErr:  "compare takes two report files, not 1",
+		},
+		{
+			name:     "a report that does not exist",
+			args:     []string{fixtures + "compare-a.json", fixtures + "missing.json"},
+			wantCode: exitBadInput,
+			wantErr:  "read the second report: invalid benchmark report",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var stdout, stderr bytes.Buffer
+
+			root := newTestRootCmd(newBenchCmd(fakeRegistries()))
+			root.SetArgs(append([]string{"bench", "compare"}, tt.args...))
+			root.SetOut(&stdout)
+			root.SetErr(&stderr)
+
+			err := root.ExecuteContext(t.Context())
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				require.Equal(t, tt.wantCode, exitCode(err), "the error: %v", err)
+				require.ErrorContains(t, err, tt.wantErr)
+
+				return
+			}
+
+			require.NoError(t, err)
+
+			want, err := os.ReadFile(tt.wantGolden)
+			require.NoError(t, err)
+			require.Equal(t, string(want), stdout.String())
+		})
+	}
+}

@@ -20,12 +20,33 @@ import (
 // benchmark's schema, which runs even after Ctrl-C.
 const benchCloseTimeout = time.Minute
 
+// compareArgs is the number of reports `sidekick bench compare` takes.
+const compareArgs = 2
+
+// defaultJudgeCases is the directory of the hand-graded reports that
+// `sidekick bench judge-check` reads by default.
+const defaultJudgeCases = "bench/judge-check"
+
+// judgeCheckFlags are the flags of `sidekick bench judge-check`.
+type judgeCheckFlags struct {
+	configPath   string
+	cases        string
+	minAgreement float64
+}
+
 // benchFlags are the flags of `sidekick bench run`.
 type benchFlags struct {
 	configPath string
 	scenarios  string
 	repeat     int
 	db         bool
+	// settings is bench.yaml.
+	settings string
+	seed     uint64
+	label    string
+	out      string
+	junit    string
+	markdown string
 }
 
 // newBenchCmd builds `sidekick bench`, which holds the benchmark
@@ -39,6 +60,8 @@ func newBenchCmd(regs config.Registries) *cobra.Command {
 	}
 
 	cmd.AddCommand(newBenchRunCmd(regs))
+	cmd.AddCommand(newBenchJudgeCheckCmd(regs))
+	cmd.AddCommand(newBenchCompareCmd())
 
 	return cmd
 }
@@ -62,12 +85,20 @@ container with Docker, and removed when the runs end, Ctrl-C included.
 With --db the runs use the database of the config file's
 database.urlSecret instead, in a schema of their own that is dropped at the
 end, so nothing is left behind and a Sidekick serving from the same
-database never sees the runs' jobs. The database role then needs CREATE on
-the database.
+database never sees the runs' jobs. The scored results are then stored in
+bench_runs and bench_results of the database's default schema, which must
+have every migration (run sidekick migrate first). The database role needs
+CREATE on the database and INSERT on those two tables.
 
-Exit status: 0 when every run finished, 2 for bad flags, a bad config file
-or a bad scenario file, 3 when the model provider is unreachable after its
-retries or Docker or the database fails, and 1 for anything else.`,
+Once every run has finished, the judge grades each run's root cause, the
+runs are scored and the command prints the spread of each scenario, the
+run totals with their 95% intervals, and the thresholds of --bench-config.
+--out, --junit and --markdown write the results to files as well.
+
+Exit status: 0 when every run finished and every threshold is met, 1 when
+a threshold failed, 2 for bad flags, a bad config, bench.yaml, baseline or
+scenario file, 3 when the model provider is unreachable after its retries
+or Docker or the database fails, and 1 for anything else.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGTERM, os.Interrupt)
@@ -84,7 +115,13 @@ retries or Docker or the database fails, and 1 for anything else.`,
 	addConfigFlag(cmd, &flags.configPath)
 	cmd.Flags().StringVarP(&flags.scenarios, "scenarios", "s", "", "a scenario file, or a directory of them (required)")
 	cmd.Flags().IntVarP(&flags.repeat, "repeat", "n", bench.DefaultRepeat, "how many times each scenario runs")
-	cmd.Flags().BoolVar(&flags.db, "db", false, "run in a schema of its own on the database of database.urlSecret, instead of a temporary Postgres")
+	cmd.Flags().BoolVar(&flags.db, "db", false, "run in a schema of its own on the database of database.urlSecret, instead of a temporary Postgres, and store the results there")
+	cmd.Flags().StringVar(&flags.settings, "bench-config", "", "a bench.yaml with the weights of the overall score and the thresholds")
+	cmd.Flags().Uint64Var(&flags.seed, "seed", bench.DefaultSeed, "seeds the resampling of the 95% intervals")
+	cmd.Flags().StringVar(&flags.label, "label", "", "a name for the run, kept in report.json")
+	cmd.Flags().StringVar(&flags.out, "out", "", "write the results to this report.json")
+	cmd.Flags().StringVar(&flags.junit, "junit", "", "write the results to this JUnit XML file")
+	cmd.Flags().StringVar(&flags.markdown, "markdown", "", "write a Markdown summary, for a pull request comment, to this file")
 
 	if err := cmd.MarkFlagRequired("scenarios"); err != nil {
 		panic(fmt.Sprintf("mark flag required: %v", err))
@@ -93,12 +130,73 @@ retries or Docker or the database fails, and 1 for anything else.`,
 	return cmd
 }
 
-// benchRun checks the flags, the scenarios and the config, gets Postgres,
-// runs the scenarios and prints the table of results, also of the runs
-// that finished before a failure or Ctrl-C.
+// newBenchJudgeCheckCmd builds `sidekick bench judge-check`.
+func newBenchJudgeCheckCmd(regs config.Registries) *cobra.Command {
+	var flags judgeCheckFlags
+
+	cmd := &cobra.Command{
+		Use:   "judge-check [--cases bench/judge-check]",
+		Short: "Grade hand-graded reports with the judge and show how far its grades agree",
+		Long: `Have the judge grade each hand-graded report and compare its grades with
+the hand grades, item by item, to see how far a judge model's grades move.
+
+The judge is the model of the config file's model.roles.judge, or of
+model.roles.investigate when no judge role is set.
+
+Exit status: 0 when the judge graded every case and agrees with at least
+--min-agreement of the items, 1 when it agrees with fewer, 2 for bad
+flags, a bad config file or a bad case file, and 3 when the model provider
+is unreachable after its retries.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return benchJudgeCheck(cmd.Context(), cmd, regs, flags)
+		},
+	}
+
+	addConfigFlag(cmd, &flags.configPath)
+	cmd.Flags().StringVar(&flags.cases, "cases", defaultJudgeCases, "a case file, or a directory of them")
+	cmd.Flags().Float64Var(&flags.minAgreement, "min-agreement", 0, "the share of items, from 0 to 1, the judge must grade as the hand grades do")
+
+	return cmd
+}
+
+// newBenchCompareCmd builds `sidekick bench compare`.
+func newBenchCompareCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "compare <a.json> <b.json>",
+		Short: "Show two benchmark reports side by side",
+		Long: `Show two report.json files of sidekick bench run side by side: what each
+run used, each metric with the change from the first to the second, and
+each scenario's runs. A share whose 95% intervals overlap in the two runs
+is flagged "no clear difference": the change may be chance.
+
+Exit status: 0 when both reports were read, 2 when one cannot be read or
+has another schema version.`,
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) != compareArgs {
+				return &exitError{code: exitBadInput, err: fmt.Errorf("compare takes two report files, not %d", len(args))}
+			}
+
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return benchCompare(cmd, args[0], args[1])
+		},
+	}
+}
+
+// benchRun checks the flags, the settings, the scenarios and the config,
+// gets Postgres, runs the scenarios, scores them and prints the results,
+// writes the output files and checks the thresholds. When a run fails it
+// prints the table of the runs that finished before it, unscored.
 func benchRun(ctx context.Context, cmd *cobra.Command, regs config.Registries, flags benchFlags) (err error) {
 	if flags.repeat < 1 {
 		return &exitError{code: exitBadInput, err: fmt.Errorf("--repeat must be at least 1, not %d", flags.repeat)}
+	}
+
+	settings, baseline, err := benchSettings(flags.settings)
+	if err != nil {
+		return &exitError{code: exitBadInput, err: err}
 	}
 
 	scenarios, err := bench.LoadScenarios(flags.scenarios, bench.LoadOptions{})
@@ -128,7 +226,26 @@ func benchRun(ctx context.Context, cmd *cobra.Command, regs config.Registries, f
 		return configProblems(cmd, err)
 	}
 
-	database, err := benchDatabase(ctx, cfg, flags.db, log)
+	judge, err := runner.Judge()
+	if err != nil {
+		return &exitError{code: exitBadInput, err: err}
+	}
+
+	var (
+		url         string
+		resultStore *bench.ResultStore
+	)
+
+	if flags.db {
+		url, resultStore, err = benchResultStore(ctx, cfg)
+		if err != nil {
+			return err
+		}
+
+		defer resultStore.Close()
+	}
+
+	database, err := benchDatabase(ctx, url, log)
 	if err != nil {
 		return err
 	}
@@ -143,6 +260,11 @@ func benchRun(ctx context.Context, cmd *cobra.Command, regs config.Registries, f
 	}()
 
 	results, runErr := runner.Run(ctx, database)
+	if runErr == nil {
+		log.InfoContext(ctx, "grading the root causes", "judge", judge.Name())
+
+		runErr = bench.Score(ctx, results, bench.ScoreOptions{Grader: judge, Weights: settings.ScoreWeights(), Seed: flags.seed})
+	}
 
 	if err := results.WriteTable(cmd.OutOrStdout()); err != nil {
 		return errors.Join(runErr, fmt.Errorf("print the results: %w", err))
@@ -150,29 +272,139 @@ func benchRun(ctx context.Context, cmd *cobra.Command, regs config.Registries, f
 
 	switch {
 	case runErr == nil:
-		return nil
 	case errors.Is(runErr, bench.ErrInfrastructure):
 		return &exitError{code: exitInfrastructure, err: runErr}
 	default:
 		return fmt.Errorf("run the scenarios: %w", runErr)
 	}
+
+	thresholds := settings.Thresholds.Check(*results.Summary, baseline)
+
+	if err := printBenchResults(cmd, results, thresholds); err != nil {
+		return err
+	}
+
+	info := benchInfo(runner, flags)
+
+	if err := writeBenchOutputs(results, info, thresholds, flags); err != nil {
+		return err
+	}
+
+	if resultStore != nil {
+		if err := storeBenchResults(ctx, resultStore, results, info, thresholds, log); err != nil {
+			return err
+		}
+	}
+
+	if failed := bench.Failed(thresholds); len(failed) > 0 {
+		return &exitError{code: exitThresholdFailed, err: fmt.Errorf("%d of %d thresholds failed: %s", len(failed), len(thresholds), thresholdNames(failed))}
+	}
+
+	return nil
 }
 
-// benchDatabase starts a temporary Postgres, or, with db, opens a schema of
-// the benchmark's own on the config's database.
-func benchDatabase(ctx context.Context, cfg *config.Config, db bool, log *slog.Logger) (*bench.Database, error) {
-	if !db {
+// benchJudgeCheck loads the cases and the config, has the judge grade each
+// case and prints how far its grades agree with the hand grades.
+func benchJudgeCheck(ctx context.Context, cmd *cobra.Command, regs config.Registries, flags judgeCheckFlags) error {
+	if flags.minAgreement < 0 || flags.minAgreement > 1 {
+		return &exitError{code: exitBadInput, err: fmt.Errorf("--min-agreement must be from 0 to 1, not %g", flags.minAgreement)}
+	}
+
+	cases, err := bench.LoadJudgeCases(flags.cases)
+	if err != nil {
+		return &exitError{code: exitBadInput, err: fmt.Errorf("load the judge-check cases: %w", err)}
+	}
+
+	cfg, err := config.Load(ctx, flags.configPath, config.LoadOptions{Registries: regs})
+	if err != nil {
+		return configProblems(cmd, err)
+	}
+
+	log := slog.New(slog.NewTextHandler(cmd.ErrOrStderr(), &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	runner, err := bench.New(ctx, nil, bench.Options{Config: cfg, Registries: regs, Logger: log})
+	if err != nil {
+		return configProblems(cmd, err)
+	}
+
+	judge, err := runner.Judge()
+	if err != nil {
+		return &exitError{code: exitBadInput, err: err}
+	}
+
+	log.InfoContext(ctx, "grading the judge-check cases", "cases", len(cases), "judge", judge.Name())
+
+	check, err := bench.CheckJudge(ctx, judge, cases)
+	if err != nil {
+		if errors.Is(err, bench.ErrInfrastructure) {
+			return &exitError{code: exitInfrastructure, err: err}
+		}
+
+		return fmt.Errorf("check the judge: %w", err)
+	}
+
+	if err := check.WriteTable(cmd.OutOrStdout()); err != nil {
+		return fmt.Errorf("print the judge-check results: %w", err)
+	}
+
+	if flags.minAgreement > 0 && (check.Agreement == nil || *check.Agreement < flags.minAgreement) {
+		return &exitError{code: exitThresholdFailed, err: fmt.Errorf("the judge agrees with fewer than %g of the hand grades", flags.minAgreement)}
+	}
+
+	return nil
+}
+
+// benchCompare reads two reports and prints them side by side.
+func benchCompare(cmd *cobra.Command, pathA, pathB string) error {
+	a, err := bench.ReadReport(pathA)
+	if err != nil {
+		return &exitError{code: exitBadInput, err: fmt.Errorf("read the first report: %w", err)}
+	}
+
+	b, err := bench.ReadReport(pathB)
+	if err != nil {
+		return &exitError{code: exitBadInput, err: fmt.Errorf("read the second report: %w", err)}
+	}
+
+	if err := bench.WriteComparison(cmd.OutOrStdout(), a, b); err != nil {
+		return fmt.Errorf("print the comparison: %w", err)
+	}
+
+	return nil
+}
+
+// benchResultStore reads the URL of the config's database for --db and
+// opens the store of the results in its default schema, which must have
+// every migration of this Sidekick.
+func benchResultStore(ctx context.Context, cfg *config.Config) (string, *bench.ResultStore, error) {
+	url, err := cfg.DatabaseURL(ctx, nil)
+	if err != nil {
+		return "", nil, &exitError{code: exitBadInput, err: fmt.Errorf("--db uses the database of database.urlSecret, which cannot be read: %w", err)}
+	}
+
+	resultStore, err := bench.OpenResultStore(ctx, url)
+	if err != nil {
+		code := exitInfrastructure
+		if errors.Is(err, bench.ErrSchemaNotCurrent) {
+			code = exitBadInput
+		}
+
+		return "", nil, &exitError{code: code, err: fmt.Errorf("--db: %w", err)}
+	}
+
+	return url, resultStore, nil
+}
+
+// benchDatabase starts a temporary Postgres, or, with a url from --db,
+// opens a schema of the benchmark's own on that database.
+func benchDatabase(ctx context.Context, url string, log *slog.Logger) (*bench.Database, error) {
+	if url == "" {
 		database, err := bench.StartTemporary(ctx, log)
 		if err != nil {
 			return nil, &exitError{code: exitInfrastructure, err: err}
 		}
 
 		return database, nil
-	}
-
-	url, err := cfg.DatabaseURL(ctx, nil)
-	if err != nil {
-		return nil, &exitError{code: exitBadInput, err: fmt.Errorf("--db uses the database of database.urlSecret, which cannot be read: %w", err)}
 	}
 
 	database, err := bench.OpenSchema(ctx, url, log)

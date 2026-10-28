@@ -1,0 +1,30 @@
+              A                           B
+sidekick      v0.1.0 (abc1234)            v0.2.0 (def5678)
+scenarios     bench/scenarios/sample (2)  bench/scenarios/sample (3)
+repeat        3                           3
+investigate   claude (claude-opus-5-5)    claude (claude-opus-5)
+judge         claude (claude-opus-5-5)    judge (gpt-5.6)
+prompt        2                           2
+judge prompt  1                           1
+strategies    generic-alert 1a2b3c4d      generic-alert 9f8e7d6c
+
+METRIC                    A        B        CHANGE    DIFFERENCE
+overall score             0.55     0.87     +0.32     clear difference
+verdict accuracy          0.50     0.83     +0.33     no clear difference
+false positive precision  0.50     1.00     +0.50     no clear difference
+false positive recall     0.33     0.67     +0.33     -
+true positive precision   0.67     0.75     +0.08     -
+true positive recall      0.67     1.00     +0.33     -
+root cause match          0.50     0.83     +0.33     no clear difference
+root cause score          0.70     0.90     +0.20     -
+evidence                  0.75     1.00     +0.25     no clear difference
+source failures reported  1.00     -        -         -
+mean cost per run         $0.0200  $0.0180  -$0.0020  -
+mean time per run         4s       3.8s     -200ms    -
+runs                      6        9        +3        -
+judge errors              0        1        +1        -
+
+SCENARIO   A CORRECT  B CORRECT  A ROOT CAUSE  B ROOT CAUSE
+pool       2/3        3/3        0.70          0.90
+noise      1/3        2/3        -             -
+disk-full  -          3/3        -             1.00
