@@ -243,8 +243,14 @@ everything the first run saw:
 
 A question is redacted like event text before it is stored, and the model
 reads it as a request about what to look at: it cannot change the
-investigation's tools, its action mode or the verdict rules. Until roles
-arrive, anyone in the channel can ask.
+investigation's tools, its action mode or the verdict rules.
+
+Asking needs the `responder` role, like the buttons (see [Roles](#roles)).
+A `viewer`'s question is not sent: Sidekick starts no run for it and
+replies in the thread with a note only that person sees, "Only responders
+can ask Sidekick follow-up questions, so this one was not sent." As with
+the buttons, a refused user's groups are read again first, so someone just
+added to a group can ask at once.
 
 ## The /sidekick command
 

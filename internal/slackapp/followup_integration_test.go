@@ -11,7 +11,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
+	"github.com/nourtalaat/sidekick/internal/config"
+	"github.com/nourtalaat/sidekick/internal/fakehttp"
 	"github.com/nourtalaat/sidekick/internal/investigator"
+	"github.com/nourtalaat/sidekick/internal/roles"
+	"github.com/nourtalaat/sidekick/internal/slackroles"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 	"github.com/nourtalaat/sidekick/internal/store/storetest"
 )
@@ -31,7 +35,45 @@ func TestFollowUpQuestions(t *testing.T) {
 		want []string
 		// wantAuthor is the Slack user of the questions.
 		wantAuthor string
+		// roles finds the askers' roles; nil lets everyone ask.
+		roles func(t *testing.T, refreshes *int) roles.Lookup
+		// wantRefused expects the note that refuses the question, and
+		// wantRefreshes how often the role was read again.
+		wantRefused   bool
+		wantRefreshes int
 	}{
+		{
+			name: "a viewer's question is refused with a note only they see",
+			roles: func(t *testing.T, _ *int) roles.Lookup {
+				t.Helper()
+
+				lookup, err := slackroles.New(slackroles.Options{Slack: &config.Slack{RoleUsers: map[string]config.RoleName{"U03BOB": config.RoleViewer}}})
+				require.NoError(t, err)
+
+				return lookup
+			},
+			send:        []string{"follow-up-mention"},
+			wantRefused: true,
+		},
+		{
+			name: "a viewer whose role is read again as responder asks",
+			roles: func(_ *testing.T, n *int) roles.Lookup {
+				return refreshingRoles{role: roles.Viewer, refreshed: roles.Responder, refreshes: n}
+			},
+			send:          []string{"follow-up-mention"},
+			want:          []string{"did the deploy cause it?"},
+			wantAuthor:    "U03BOB",
+			wantRefreshes: 1,
+		},
+		{
+			name: "a responder asks without the role being read again",
+			roles: func(_ *testing.T, n *int) roles.Lookup {
+				return refreshingRoles{role: roles.Responder, refreshed: roles.Viewer, refreshes: n}
+			},
+			send:       []string{"follow-up-mention"},
+			want:       []string{"did the deploy cause it?"},
+			wantAuthor: "U03BOB",
+		},
 		{
 			name:       "a reply that mentions Sidekick is a follow-up question, without the mention and redacted",
 			send:       []string{"follow-up-mention"},
@@ -64,6 +106,16 @@ func TestFollowUpQuestions(t *testing.T) {
 			storetest.LoadFixture(t, h.pool, "fixture/investigation.sql")
 			h.handler.followUps.anyReply = tt.anyReply
 
+			refreshes := 0
+			if tt.roles != nil {
+				h.handler.followUps.roles = tt.roles(t, &refreshes)
+			}
+
+			if tt.wantRefused {
+				h.slack.Handle(http.MethodGet, "/"+methodEphemeral, fakehttp.Response{Body: []byte(`{"ok":true}`)})
+				h.slack.ExpectAllCalled()
+			}
+
 			for _, file := range tt.send {
 				status, body := h.post(t, request{file: file}.headers(t), request{file: file}.content(t))
 				require.Equal(t, http.StatusOK, status, body)
@@ -87,8 +139,22 @@ func TestFollowUpQuestions(t *testing.T) {
 
 			require.Len(t, h.events(t), 1, "a reply in the thread of an investigation is no new event")
 			require.Zero(t, h.routeJobs(t))
-			require.Empty(t, h.slack.Requests(), "the thread's first message is not fetched")
 			require.Equal(t, min(len(tt.want), 1), followUpJobs(t, h), "an investigation that has ended gets one follow_up job")
+			require.Equal(t, tt.wantRefreshes, refreshes)
+
+			if !tt.wantRefused {
+				require.Empty(t, h.slack.Requests(), "the thread's first message is not fetched")
+
+				return
+			}
+
+			calls := h.slack.Requests()
+			require.Len(t, calls, 1)
+			require.Equal(t, "/"+methodEphemeral, calls[0].Path)
+			require.Equal(t, "C01OPS", calls[0].Query.Get("channel"))
+			require.Equal(t, "U03BOB", calls[0].Query.Get("user"))
+			require.Equal(t, "1761472960.000500", calls[0].Query.Get("thread_ts"))
+			require.Equal(t, noteQuestionDenied, calls[0].Query.Get("text"))
 		})
 	}
 }

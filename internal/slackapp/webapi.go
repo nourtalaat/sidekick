@@ -22,8 +22,9 @@ const DefaultAPIURL = "https://slack.com/api/"
 
 // The Web API methods the app calls with the bot token.
 const (
-	methodReplies = "conversations.replies"
-	methodInfo    = "conversations.info"
+	methodReplies   = "conversations.replies"
+	methodInfo      = "conversations.info"
+	methodEphemeral = "chat.postEphemeral"
 )
 
 const (
@@ -133,6 +134,19 @@ func (c *webAPI) threadParent(ctx context.Context, channel, threadTS string) (me
 	}
 
 	return message{}, nil, errMessageNotFound
+}
+
+// postEphemeral shows text to user only, in the thread at threadTS in
+// channel. text is plain text that Sidekick wrote.
+func (c *webAPI) postEphemeral(ctx context.Context, channel, user, threadTS, text string) error {
+	var out struct{}
+
+	query := url.Values{"channel": {channel}, "user": {user}, "thread_ts": {threadTS}, "text": {text}}
+	if err := c.call(ctx, methodEphemeral, query, &out); err != nil {
+		return fmt.Errorf("post a note to %s: %w", user, err)
+	}
+
+	return nil
 }
 
 // channelName returns the name of the channel with id, without "#". Names

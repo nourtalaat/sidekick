@@ -26,6 +26,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/intake/ingest"
 	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/registry"
+	"github.com/nourtalaat/sidekick/internal/roles"
 	"github.com/nourtalaat/sidekick/internal/secrets"
 )
 
@@ -78,6 +79,10 @@ type Options struct {
 	// TracerProvider makes the tracer of the intake.receive spans. Nil
 	// means the global tracer provider.
 	TracerProvider trace.TracerProvider
+	// Roles finds the role of a Slack user who asks a follow-up question;
+	// only responders and higher roles may ask. Pass the lookup the
+	// buttons use. Nil lets every Slack user ask.
+	Roles roles.Lookup
 }
 
 // Handler turns Events API payloads into stored events. Socket Mode and

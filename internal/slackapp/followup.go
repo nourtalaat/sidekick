@@ -1,6 +1,7 @@
 package slackapp
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -13,11 +14,16 @@ import (
 	"github.com/nourtalaat/sidekick/internal/investigator"
 	slackout "github.com/nourtalaat/sidekick/internal/output/slack"
 	"github.com/nourtalaat/sidekick/internal/redact"
+	"github.com/nourtalaat/sidekick/internal/roles"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
 
 // maxQuestionBytes is the longest follow-up question kept, in bytes.
 const maxQuestionBytes = 4000
+
+// noteQuestionDenied is what a Slack user below responder sees, only to
+// them, when they ask a follow-up question.
+const noteQuestionDenied = "Only responders can ask Sidekick follow-up questions, so this one was not sent."
 
 // followUps is what turns thread replies into follow-up questions.
 type followUps struct {
@@ -29,6 +35,8 @@ type followUps struct {
 	sinks    []string
 	pool     *pgxpool.Pool
 	redactor *redact.Redactor
+	// roles finds who may ask; nil lets everyone ask.
+	roles roles.Lookup
 }
 
 // newFollowUps reads the follow-up setting and the Slack outputs of
@@ -47,6 +55,7 @@ func newFollowUps(opts Options) followUps {
 		sinks:    sinks,
 		pool:     opts.Pool,
 		redactor: opts.Redactor,
+		roles:    opts.Roles,
 	}
 }
 
@@ -55,8 +64,9 @@ func newFollowUps(opts Options) followUps {
 // output refs of the Slack outputs. It reports whether the thread is an
 // investigation's, so a mention there is not investigated as a new event.
 // A reply from a bot, or with no text besides the mention, asks nothing.
-// The text is redacted and cut to maxQuestionBytes before it is stored,
-// and is never logged.
+// Only a responder or a higher role may ask: anyone else gets a note only
+// they see, and the question is not stored. The text is redacted and cut
+// to maxQuestionBytes before it is stored, and is never logged.
 func (h *Handler) followUp(ctx context.Context, env envelope, m message) (bool, error) {
 	f := h.followUps
 
@@ -74,8 +84,17 @@ func (h *Handler) followUp(ctx context.Context, env envelope, m message) (bool, 
 		return true, nil
 	}
 
-	// TODO: [SK-18] Check the Slack user's role here: only a responder or a
-	// higher role may ask follow-up questions.
+	allowed, err := h.mayAsk(ctx, cmp.Or(m.Team, env.TeamID), m.User)
+	if err != nil {
+		return true, fmt.Errorf("check who asks: %w", err)
+	}
+
+	if !allowed {
+		h.refuseQuestion(ctx, id.String(), m)
+
+		return true, nil
+	}
+
 	added, err := investigator.AddFollowUp(ctx, f.pool, id, investigator.Question{
 		Key:      env.EventID,
 		AuthorID: m.User,
@@ -88,4 +107,32 @@ func (h *Handler) followUp(ctx context.Context, env envelope, m message) (bool, 
 	h.log.InfoContext(ctx, "Slack follow-up question", "investigation_id", id.String(), "added", added)
 
 	return true, nil
+}
+
+// mayAsk reports whether the Slack user userID in teamID may ask
+// follow-up questions: a responder or a higher role, with the role read
+// again before a refusal, as the buttons do.
+func (h *Handler) mayAsk(ctx context.Context, teamID, userID string) (bool, error) {
+	if h.followUps.roles == nil {
+		return true, nil
+	}
+
+	role, err := responderRole(ctx, h.followUps.roles, teamID, userID)
+	if err != nil {
+		return false, fmt.Errorf("user %s: %w", userID, err)
+	}
+
+	return role.Has(roles.Responder), nil
+}
+
+// refuseQuestion tells the author of m, and only them, that their
+// question was not sent. A note that cannot be posted is logged; the
+// question stays refused either way.
+func (h *Handler) refuseQuestion(ctx context.Context, investigationID string, m message) {
+	log := h.log.With("investigation_id", investigationID, "slack_user", m.User)
+	log.InfoContext(ctx, "Slack follow-up question refused: the user is not a responder")
+
+	if err := h.api.postEphemeral(ctx, m.Channel, m.User, m.ThreadTS, noteQuestionDenied); err != nil {
+		log.WarnContext(ctx, "could not tell the user that their follow-up question was refused", "error", err.Error())
+	}
 }
