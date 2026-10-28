@@ -90,31 +90,55 @@ type EventGroup struct {
 	InvestigationID *uuid.UUID
 }
 
-type Investigation struct {
+type Feedback struct {
 	ID              uuid.UUID
-	GroupID         uuid.UUID
-	Route           string
-	Strategy        *string
-	StrategyVersion *string
-	Mode            string
-	Status          string
-	Run             int32
-	NextSeq         int32
-	Fence           int64
-	Verdict         *string
-	Confidence      *string
-	Report          []byte
-	StopReason      *string
-	Connectors      json.RawMessage
-	Budget          json.RawMessage
-	InputTokens     int64
-	OutputTokens    int64
-	CostMicros      int64
-	ToolCalls       int32
+	InvestigationID uuid.UUID
+	TargetKind      string
+	TargetRef       string
+	Rating          string
+	Reason          *string
+	CorrectVerdict  *string
+	CorrectCause    *string
+	UserID          *uuid.UUID
+	SlackUserID     *string
+	Channel         string
 	CreatedAt       time.Time
-	StartedAt       *time.Time
-	FirstFindingAt  *time.Time
-	FinishedAt      *time.Time
+	UpdatedAt       time.Time
+}
+
+type Investigation struct {
+	ID                         uuid.UUID
+	GroupID                    uuid.UUID
+	Route                      string
+	Strategy                   *string
+	StrategyVersion            *string
+	Mode                       string
+	Status                     string
+	Run                        int32
+	NextSeq                    int32
+	Fence                      int64
+	Verdict                    *string
+	Confidence                 *string
+	Report                     []byte
+	StopReason                 *string
+	Connectors                 json.RawMessage
+	Budget                     json.RawMessage
+	InputTokens                int64
+	OutputTokens               int64
+	CostMicros                 int64
+	ToolCalls                  int32
+	CreatedAt                  time.Time
+	StartedAt                  *time.Time
+	FirstFindingAt             *time.Time
+	FinishedAt                 *time.Time
+	CancelRequestedAt          *time.Time
+	CancelRequestedBy          *uuid.UUID
+	CancelRequestedBySlackUser *string
+	ConfirmedVerdict           *string
+	ConfirmedCause             *string
+	ConfirmedBy                *uuid.UUID
+	ConfirmedBySlackUser       *string
+	ConfirmedAt                *time.Time
 }
 
 type InvestigationInbox struct {
