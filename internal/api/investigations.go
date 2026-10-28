@@ -238,7 +238,7 @@ func investigationOf(row db.GetInvestigationDetailRow) (apigen.Investigation, er
 		GroupId:           inv.GroupID,
 		GroupStatus:       apigen.InvestigationGroupStatus(row.GroupStatus),
 		GroupClosedReason: row.GroupClosedReason,
-		Title:            nonEmpty(inv.AlertTitle),
+		Title:             nonEmpty(inv.AlertTitle),
 		Service:           inv.Service,
 		Route:             inv.Route,
 		Strategy:          inv.Strategy,

@@ -15,6 +15,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/source"
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/weblink"
 )
 
 // Type is the source type this package registers.
@@ -60,6 +61,8 @@ type Config struct {
 // Source reads Sidekick's memory. It is safe for concurrent use.
 type Source struct {
 	db db.DBTX
+	// publicURL is server.publicURL, for links to the investigation pages.
+	publicURL string
 	// vectors adds the entries nearest in meaning to a search. It is set
 	// when vector memory is on, and nil otherwise.
 	vectors atomic.Pointer[mem.Vectors]
@@ -152,10 +155,10 @@ func (s *Source) search(ctx context.Context, input json.RawMessage) (source.Resu
 		truncated = truncated || len(e.Summary) < len(r.Summary) || len(e.Cause) < len(deref(r.Cause))
 
 		out.Entries = append(out.Entries, e)
-		// TODO: [SK-35] link each entry to its investigation page
 		evidence = append(evidence, source.Evidence{
 			Kind:  source.EvidenceIncident,
 			Title: "Confirmed investigation " + e.InvestigationID,
+			URL:   weblink.Investigation(s.publicURL, e.InvestigationID),
 			At:    e.ConfirmedAt,
 		})
 	}
@@ -192,7 +195,7 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (source
 		return nil, fmt.Errorf("check settings: %w", err)
 	}
 
-	return &Source{db: deps.DB}, nil
+	return &Source{db: deps.DB, publicURL: deps.PublicURL}, nil
 }
 
 // searchResult is the result of search.

@@ -18,6 +18,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/weblink"
 )
 
 // maxReminders is how many times the model is reminded to submit a
@@ -211,6 +212,10 @@ func (r *run) savePrompt(ctx context.Context) error {
 	examples, err := memory.Examples(ctx, r.h.opts.Pool, memory.MatchOf(r.inv.ID, group.First), r.h.opts.MemoryExamples, r.h.opts.MemoryVectors)
 	if err != nil {
 		return fmt.Errorf("find similar confirmed investigations: %w", err)
+	}
+
+	for i := range examples {
+		examples[i].URL = weblink.Investigation(r.h.opts.PublicURL, examples[i].InvestigationID)
 	}
 
 	req := prompt.Build(prompt.Input{

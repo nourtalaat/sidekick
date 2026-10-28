@@ -145,3 +145,33 @@ func TestBuildMemoryCutsLongText(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderMemoryLinksToThePage(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		url     string
+		wantHas bool
+	}{
+		{name: "a page address", url: "https://sidekick.example.com/investigations/inv-1", wantHas: true},
+		{name: "no address"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := renderMemory([]Example{{InvestigationID: "inv-1", Verdict: "true_positive", Summary: "s", URL: tt.url}})
+			require.Len(t, got, 1)
+
+			if tt.wantHas {
+				require.Contains(t, got[0], "Investigation: inv-1\nPage: "+tt.url+"\n")
+
+				return
+			}
+
+			require.NotContains(t, got[0], "Page:")
+		})
+	}
+}
