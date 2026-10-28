@@ -12,6 +12,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.33.11
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.11
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.63.7
+	github.com/aws/aws-sdk-go-v2/service/cloudtrail v1.65.5
+	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.90.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.5
 	github.com/aws/smithy-go v1.28.6
 	github.com/coreos/go-oidc/v3 v3.20.0

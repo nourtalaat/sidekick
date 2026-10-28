@@ -1,0 +1,99 @@
+{
+  "tools": [
+    {
+      "name": "query_logs",
+      "description": "Run a CloudWatch Logs Insights query on log groups over a time range, for example fields @timestamp, @message | filter @message like /ERROR/ | sort @timestamp desc | limit 50. Returns the fields and rows, at most 500 rows, and a link to the query in the CloudWatch console.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "The 12-digit AWS account ID. It may be left out when Sidekick reads only one account."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 500. Default 100.",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "logGroups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Log group names, or the start of names followed by *, for example [\"/ecs/checkout\", \"/aws/eks/prod/*\"]. One query reads at most 50 log groups.",
+            "minItems": 1,
+            "maxItems": 20
+          },
+          "query": {
+            "type": "string",
+            "description": "The Logs Insights query, passed to CloudWatch as given. Use limit or stats to keep the result small."
+          },
+          "region": {
+            "type": "string",
+            "description": "The AWS Region, for example us-east-1. It may be left out when Sidekick reads only one Region."
+          },
+          "since": {
+            "type": "string",
+            "description": "The start of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z.",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "description": "The end of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "logGroups",
+          "query",
+          "since",
+          "until"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_changes",
+      "description": "List the write events of CloudTrail event history in a time range, newest first: which API was called on which resources, by whom, and whether it failed, with a console link to each event. Read-only calls are left out.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "The 12-digit AWS account ID. It may be left out when Sidekick reads only one account."
+          },
+          "eventSource": {
+            "type": "string",
+            "description": "Only events of this AWS service, for example ecs.amazonaws.com."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 200. Default 50.",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "region": {
+            "type": "string",
+            "description": "The AWS Region, for example us-east-1. It may be left out when Sidekick reads only one Region."
+          },
+          "resource": {
+            "type": "string",
+            "description": "Only events about this resource, by name or ARN, for example checkout or arn:aws:ecs:us-east-1:111122223333:service/shop/checkout."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only events at or after this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: 24 hours before until.",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "description": "Only events before this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}

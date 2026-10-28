@@ -291,6 +291,18 @@ github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.63.7
 LICENSE.txt: Apache License, Version 2.0 (text in LICENSE)
 
 ================================================================================
+github.com/aws/aws-sdk-go-v2/service/cloudtrail v1.65.5
+================================================================================
+
+LICENSE.txt: Apache License, Version 2.0 (text in LICENSE)
+
+================================================================================
+github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.90.0
+================================================================================
+
+LICENSE.txt: Apache License, Version 2.0 (text in LICENSE)
+
+================================================================================
 github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.22
 ================================================================================
 
