@@ -734,8 +734,12 @@ type PendingFollowUp struct {
 
 // Person Someone who acted, by their Slack user ID, or their user ID in the web UI.
 type Person struct {
-	SlackUserId *string             `json:"slackUserId,omitempty"`
-	UserId      *openapi_types.UUID `json:"userId,omitempty"`
+	// Name The web UI user's name, or the API token's name. Show it as plain text.
+	Name        *string `json:"name,omitempty"`
+	SlackUserId *string `json:"slackUserId,omitempty"`
+
+	// UserId The web UI user's ID, or the API token's ID.
+	UserId *openapi_types.UUID `json:"userId,omitempty"`
 }
 
 // Prevention defines model for Prevention.

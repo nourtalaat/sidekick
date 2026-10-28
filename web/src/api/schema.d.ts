@@ -729,8 +729,13 @@ export interface components {
         /** @description Someone who acted, by their Slack user ID, or their user ID in the web UI. */
         Person: {
             slackUserId?: string;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The web UI user's ID, or the API token's ID.
+             */
             userId?: string;
+            /** @description The web UI user's name, or the API token's name. Show it as plain text. */
+            name?: string;
         };
         WatcherCheck: {
             seq: number;

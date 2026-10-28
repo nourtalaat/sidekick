@@ -53,7 +53,8 @@ func NewStopper(opts StopperOptions) (*Stopper, error) {
 	return &Stopper{opts: opts, now: now}, nil
 }
 
-// Stop stops the running watcher with id for the responder by, with
+// Stop stops the running watcher with id for the responder by, who is a
+// Slack user, a web user or an API token, with
 // stop_reason responder, and returns it. In one transaction it locks the
 // watcher's group and then the watcher, as a tick does, records the change
 // and enqueues close_group for the group; the watcher's next tick sees the
@@ -111,6 +112,7 @@ func (s *Stopper) stop(ctx context.Context, tx pgx.Tx, id uuid.UUID, by output.P
 	ended, err := queries.EndWatcher(ctx, db.EndWatcherParams{
 		Status:             StatusStopped,
 		StopReason:         optional(StopResponder),
+		StoppedBy:          optionalID(by.UserID),
 		StoppedBySlackUser: optional(by.SlackUserID),
 		At:                 s.now(),
 		ID:                 id,
@@ -128,4 +130,13 @@ func (s *Stopper) stop(ctx context.Context, tx pgx.Tx, id uuid.UUID, by output.P
 	}
 
 	return ended, true, nil
+}
+
+// optionalID turns the zero UUID into SQL NULL.
+func optionalID(id uuid.UUID) *uuid.UUID {
+	if id == uuid.Nil {
+		return nil
+	}
+
+	return &id
 }

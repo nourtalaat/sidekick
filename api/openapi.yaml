@@ -1199,6 +1199,10 @@ components:
         userId:
           type: string
           format: uuid
+          description: The web UI user's ID, or the API token's ID.
+        name:
+          type: string
+          description: The web UI user's name, or the API token's name. Show it as plain text.
     WatcherCheck:
       type: object
       required: [seq, at, result, durationMs]

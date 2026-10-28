@@ -62,6 +62,28 @@ func TestFinalShowsResponders(t *testing.T) {
 			},
 			want: "Stopped by <@U01STOP>",
 		},
+		{
+			name: "a stop from the web UI",
+			report: report.Report{
+				Verdict: report.Inconclusive, Confidence: report.Low, Reason: "Stopped.", StopReason: report.StopCancelled,
+			},
+			act: func(t *testing.T, h *harness) {
+				t.Helper()
+
+				const userID = "0198f3a0-7b1c-7d4e-9a10-5c2b6d8e4f01"
+
+				_, err := h.pool.Exec(t.Context(),
+					"INSERT INTO users (id, oidc_issuer, oidc_subject, name, role, created_at, last_login_at) VALUES ($1, 'https://idp', 'ada', 'Ada Lovelace', 'responder', now(), now())", userID)
+				require.NoError(t, err)
+
+				_, err = h.pool.Exec(t.Context(),
+					"UPDATE investigations SET cancel_requested_by = $1 WHERE id = $2", userID, webhookInvestigation)
+				require.NoError(t, err)
+
+				h.refresh(t)
+			},
+			want: "Stopped by Ada Lovelace",
+		},
 	}
 
 	for _, tt := range tests {

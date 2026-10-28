@@ -505,3 +505,28 @@ func watcherReplies() map[string]output.WatcherState {
 		"stopped":   w[3],
 	}
 }
+
+func TestMention(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		person output.Person
+		want   string
+	}{
+		{name: "a Slack user", person: output.Person{SlackUserID: "U01ABCDEF"}, want: "<@U01ABCDEF>"},
+		{name: "a Slack user wins over the name", person: output.Person{SlackUserID: "U01ABCDEF", Name: "Ada"}, want: "<@U01ABCDEF>"},
+		{name: "a web user is shown by name", person: output.Person{Name: "Ada Lovelace"}, want: "Ada Lovelace"},
+		{name: "the name is escaped", person: output.Person{Name: "<!channel> & co"}, want: "&lt;!channel&gt; &amp; co"},
+		{name: "an invalid Slack ID falls back to the name", person: output.Person{SlackUserID: "not an id", Name: "Ada"}, want: "Ada"},
+		{name: "nobody", person: output.Person{}, want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tt.want, mention(tt.person))
+		})
+	}
+}

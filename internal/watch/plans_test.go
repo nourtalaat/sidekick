@@ -154,7 +154,7 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"watchers_group_name", "watcher_checks_pkey"},
+			wantIndex: []string{"watchers_group_name", "watcher_checks_pkey", "users_pkey", "api_tokens_pkey"},
 		},
 		{
 			name: "GetWatcherWithLastCheck",
@@ -163,7 +163,16 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"watchers_pkey", "watcher_checks_pkey"},
+			wantIndex: []string{"watchers_pkey", "watcher_checks_pkey", "users_pkey", "api_tokens_pkey"},
+		},
+		{
+			name: "GetActorName",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.GetActorName(ctx, busyWatcher)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"users_pkey", "api_tokens_pkey"},
 		},
 		{
 			name: "ListGroupAlertStates",

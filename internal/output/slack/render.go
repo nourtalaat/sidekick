@@ -581,14 +581,15 @@ func stoppedLine(by *output.Person) string {
 	return "Stopped by a responder"
 }
 
-// mention is the Slack mention of p, or "" when p has no valid Slack user
-// ID.
+// mention is the Slack mention of p; for someone who acted in the web UI
+// and has no valid Slack user ID, their escaped name; or "" when p has
+// neither.
 func mention(p output.Person) string {
-	if !slackUserID.MatchString(p.SlackUserID) {
-		return ""
+	if slackUserID.MatchString(p.SlackUserID) {
+		return "<@" + p.SlackUserID + ">"
 	}
 
-	return "<@" + p.SlackUserID + ">"
+	return escape(cut(p.Name, maxLineChars))
 }
 
 // joinParts joins the parts of a context line that are not empty.

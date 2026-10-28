@@ -362,11 +362,42 @@ func (h *Handler) addResponders(ctx context.Context, u *output.Update, inv db.In
 
 	u.Feedback = ratings
 
-	if inv.CancelRequestedBySlackUser != nil {
-		u.StoppedBy = &output.Person{SlackUserID: *inv.CancelRequestedBySlackUser}
+	stoppedBy, err := stoppedByOf(ctx, h.pool, inv)
+	if err != nil {
+		return fmt.Errorf("load who stopped the run: %w", err)
 	}
 
+	u.StoppedBy = stoppedBy
+
 	return nil
+}
+
+// stoppedByOf returns who asked to stop the run of inv, or nil when
+// nobody did. A web user or API token is named by the users or api_tokens
+// row; one that was deleted since is shown without a name.
+func stoppedByOf(ctx context.Context, q db.DBTX, inv db.Investigation) (*output.Person, error) {
+	if inv.CancelRequestedBy == nil && inv.CancelRequestedBySlackUser == nil {
+		return nil, nil
+	}
+
+	p := &output.Person{}
+
+	if inv.CancelRequestedBySlackUser != nil {
+		p.SlackUserID = *inv.CancelRequestedBySlackUser
+	}
+
+	if inv.CancelRequestedBy != nil {
+		p.UserID = *inv.CancelRequestedBy
+
+		actor, err := db.New(q).GetActorName(ctx, *inv.CancelRequestedBy)
+		if err != nil {
+			return nil, fmt.Errorf("read the name of %s: %w", p.UserID, err)
+		}
+
+		p.Name = actor.Name
+	}
+
+	return p, nil
 }
 
 // finish ends the run in one transaction: it locks the state row, stores
