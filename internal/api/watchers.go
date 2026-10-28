@@ -104,8 +104,18 @@ func watcherOf(state output.WatcherState, id uuid.UUID, recent []apigen.WatcherC
 	}
 
 	if state.StoppedBy != nil {
-		w.StoppedBy = &apigen.Person{SlackUserId: nonEmpty(&state.StoppedBy.SlackUserID)}
+		w.StoppedBy = personOf(*state.StoppedBy)
 	}
 
 	return w
+}
+
+// personOf is the API's view of someone who acted.
+func personOf(p output.Person) *apigen.Person {
+	out := &apigen.Person{SlackUserId: nonEmpty(&p.SlackUserID), Name: nonEmpty(&p.Name)}
+	if p.UserID != uuid.Nil {
+		out.UserId = &p.UserID
+	}
+
+	return out
 }

@@ -1,0 +1,28 @@
+{
+  "text": "Could not finish: checkout-api p99 latency above 2s",
+  "attachments": [
+    {
+      "color": "#B08400",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": ":warning: *Could not finish*\nThe model returned an error after 3 tries.",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "Checked signoz · <https://sidekick.example.com/investigations/0192d3a4-0000-7000-8000-0000000000aa|Open in Sidekick>",
+              "verbatim": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

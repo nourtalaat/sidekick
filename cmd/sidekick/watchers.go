@@ -73,6 +73,23 @@ func newWatchRecorder(a *app.App) (*watch.Recorder, error) {
 	return recorder, nil
 }
 
+// newWatchStopper returns the Stopper of the Stop watching button and of
+// POST /watchers/{id}/stop, with the recorder of the app, and that
+// recorder.
+func newWatchStopper(a *app.App) (*watch.Stopper, *watch.Recorder, error) {
+	recorder, err := newWatchRecorder(a)
+	if err != nil {
+		return nil, nil, fmt.Errorf("set up the watcher recorder: %w", err)
+	}
+
+	stopper, err := watch.NewStopper(watch.StopperOptions{Pool: a.Pool(), CloseGroup: grouper.EnqueueClose, Recorder: recorder})
+	if err != nil {
+		return nil, nil, fmt.Errorf("set up the watcher stopper: %w", err)
+	}
+
+	return stopper, recorder, nil
+}
+
 // newChecker builds the watcher check runner with the safe HTTP client of
 // watch.http, the check metrics and the alert states in the database.
 func newChecker(a *app.App, guard *tools.Guard) (*watch.Checker, error) {

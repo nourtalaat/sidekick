@@ -586,6 +586,103 @@ paths:
                 type: string
         default:
           $ref: "#/components/responses/Problem"
+  /investigations/{id}/follow-ups:
+    post:
+      operationId: AskFollowUp
+      summary: Ask a follow-up question about an investigation
+      description: |
+        Adds the question to the investigation's inbox. A running
+        investigation reads it before its next model turn; one that has
+        ended answers it in a new follow-up run. The text is redacted
+        before it is stored. The answer shows up in the investigation's
+        report, and the stream tells the page when a run starts.
+        The answer is 409 for a triage-only result, which takes no
+        questions until a full investigation has run, and for an
+        investigation that failed.
+      x-sidekick-role: responder
+      parameters:
+        - $ref: "#/components/parameters/InvestigationID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FollowUpRequest"
+      responses:
+        "202":
+          description: The question was stored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FollowUpAccepted"
+        default:
+          $ref: "#/components/responses/Problem"
+  /investigations/{id}/cancel:
+    post:
+      operationId: CancelInvestigation
+      summary: Stop the run of an investigation
+      description: |
+        Asks the run to stop. The worker that owns it cancels the call in
+        flight, and the run ends as cancelled with a report built from its
+        steps. Asking again, or asking for an investigation that has ended,
+        changes nothing and answers with `requested` false.
+      x-sidekick-role: responder
+      parameters:
+        - $ref: "#/components/parameters/InvestigationID"
+      responses:
+        "200":
+          description: Whether this request asked for the stop.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelResult"
+        default:
+          $ref: "#/components/responses/Problem"
+  /investigations/{id}/resolve:
+    post:
+      operationId: ResolveInvestigation
+      summary: Mark the investigation's group as resolved
+      description: |
+        Closes the group as resolved and ends its running watchers, as a
+        recovery does. A group that is resolved already changes nothing and
+        answers with `resolved` false. A group that closed for another
+        reason, such as the end of its window, answers 409.
+      x-sidekick-role: responder
+      parameters:
+        - $ref: "#/components/parameters/InvestigationID"
+      responses:
+        "200":
+          description: Whether this request resolved the group.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolveResult"
+        default:
+          $ref: "#/components/responses/Problem"
+  /watchers/{id}/stop:
+    post:
+      operationId: StopWatcher
+      summary: Stop a running watcher
+      description: |
+        Stops the watcher with reason `responder`. A watcher that has ended
+        already changes nothing and answers with `stopped` false.
+      x-sidekick-role: responder
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Whether this request stopped the watcher.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StopWatcherResult"
+        default:
+          $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
     session:
@@ -1196,6 +1293,7 @@ components:
       required:
         - id
         - groupId
+        - groupStatus
         - route
         - mode
         - status
@@ -1216,6 +1314,13 @@ components:
         groupId:
           type: string
           format: uuid
+        groupStatus:
+          type: string
+          enum: [open, closed]
+          description: Whether the group of events is still open. Only an open group, or one closed as resolved, can be resolved.
+        groupClosedReason:
+          type: string
+          description: For a closed group, resolved or window_ended.
         title:
           type: string
         service:
@@ -1682,6 +1787,42 @@ components:
           format: int64
         toolCalls:
           type: integer
+    FollowUpRequest:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          description: The question, at most 4000 bytes after trimming.
+    FollowUpAccepted:
+      type: object
+      required: [added]
+      properties:
+        added:
+          type: boolean
+    CancelResult:
+      type: object
+      required: [requested]
+      properties:
+        requested:
+          type: boolean
+          description: False when the investigation had ended or a stop was asked for already.
+    ResolveResult:
+      type: object
+      required: [resolved]
+      properties:
+        resolved:
+          type: boolean
+          description: False when the group was resolved already.
+    StopWatcherResult:
+      type: object
+      required: [stopped]
+      properties:
+        stopped:
+          type: boolean
+          description: False when the watcher had ended already.
     WatcherList:
       type: object
       required: [watchers]
@@ -1747,6 +1888,10 @@ components:
         userId:
           type: string
           format: uuid
+          description: The web UI user's ID, or the API token's ID.
+        name:
+          type: string
+          description: The web UI user's name, or the API token's name. Show it as plain text.
     WatcherCheck:
       type: object
       required: [seq, at, result, durationMs]

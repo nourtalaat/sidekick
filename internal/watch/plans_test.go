@@ -5,6 +5,7 @@ package watch
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -154,7 +155,7 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"watchers_group_name", "watcher_checks_pkey"},
+			wantIndex: []string{"watchers_group_name", "watcher_checks_pkey", "users_pkey"},
 		},
 		{
 			name: "GetWatcherWithLastCheck",
@@ -163,7 +164,16 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"watchers_pkey", "watcher_checks_pkey"},
+			wantIndex: []string{"watchers_pkey", "watcher_checks_pkey", "users_pkey"},
+		},
+		{
+			name: "GetActorName",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.GetActorName(ctx, busyWatcher)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"users_pkey"},
 		},
 		{
 			name: "ListGroupAlertStates",
@@ -193,7 +203,9 @@ func TestQueryPlans(t *testing.T) {
 				require.Contains(t, explain.Plan, index)
 			}
 
-			require.NotContains(t, explain.Plan, "Seq Scan")
+			// api_tokens holds the few tokens that admins create, in one page,
+			// so reading it whole is the right plan.
+			require.NotContains(t, strings.ReplaceAll(explain.Plan, "Seq Scan on api_tokens", ""), "Seq Scan")
 		})
 	}
 }

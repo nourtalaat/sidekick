@@ -65,6 +65,7 @@ func registerInvestigator(a *app.App, guard *tools.Guard, watchers *watch.ModelS
 			MaxCostMicros: cfg.Budgets.Daily.MaxCostMicros(),
 			Skip:          cfg.Budgets.Daily.OnDailyCap == config.OnDailyCapSkip,
 		},
+		PublicURL:      cfg.Server.PublicURL,
 		MemoryExamples: cfg.Memory.PromptExamples(),
 		MemoryVectors:  vectors,
 		Watchers:       watchers,

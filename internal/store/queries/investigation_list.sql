@@ -96,8 +96,9 @@ LISTEN investigation_updates;
 
 -- name: GetInvestigationDetail :one
 -- GetInvestigationDetail returns an investigation with the number of
--- events in its group.
-SELECT sqlc.embed(investigations), event_groups.event_count
+-- events in its group, and the group's status and closing reason.
+SELECT sqlc.embed(investigations), event_groups.event_count,
+       event_groups.status AS group_status, event_groups.closed_reason AS group_closed_reason
 FROM investigations
 JOIN event_groups ON event_groups.id = investigations.group_id
 WHERE investigations.id = @id;

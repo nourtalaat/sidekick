@@ -80,6 +80,9 @@ type Deps struct {
 	// Sidekick's data, such as the memory source. It is nil where a
 	// command builds plugins without a database, as config validate does.
 	DB db.DBTX
+	// PublicURL is server.publicURL, for plugins that link to pages of the
+	// web UI. Empty means no links.
+	PublicURL string
 }
 
 // TeamsBot is who the Teams bot is and how it gets tokens, as the teams

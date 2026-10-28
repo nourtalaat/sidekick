@@ -174,6 +174,75 @@ func TestStop(t *testing.T) {
 	}
 }
 
+func TestStopByWebUser(t *testing.T) {
+	t.Parallel()
+
+	const insertUser = "INSERT INTO users (id, oidc_issuer, oidc_subject, name, role, created_at, last_login_at) VALUES ($1, 'https://idp', $2, $3, 'responder', now(), now())"
+
+	tests := []struct {
+		name string
+		// add inserts the row that names the actor.
+		add      func(t *testing.T, h *harness, actor uuid.UUID)
+		wantName string
+		wantKind string
+	}{
+		{
+			name: "a web user",
+			add: func(t *testing.T, h *harness, actor uuid.UUID) {
+				_, err := h.pool.Exec(t.Context(), insertUser, actor, "ada", "Ada Lovelace")
+				require.NoError(t, err)
+			},
+			wantName: "Ada Lovelace",
+			wantKind: "user",
+		},
+		{
+			name: "an API token",
+			add: func(t *testing.T, h *harness, actor uuid.UUID) {
+				creator := ids.New()
+				_, err := h.pool.Exec(t.Context(), insertUser, creator, "root", "Root")
+				require.NoError(t, err)
+
+				_, err = h.pool.Exec(t.Context(), `INSERT INTO api_tokens (id, name, token_hash, role, created_by, created_at, expires_at)
+					VALUES ($1, 'ci-bot', decode('01', 'hex'), 'responder', $2, now(), now() + interval '1 day')`, actor, creator)
+				require.NoError(t, err)
+			},
+			wantName: "ci-bot",
+			wantKind: "token",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := setup(t)
+			w := h.mustStart(t, httpWatcher("health", "http://127.0.0.1/healthz", 2))
+			actor := ids.New()
+			tt.add(t, h, actor)
+
+			_, stopped, err := h.stopper(t).Stop(t.Context(), w.ID, output.Person{UserID: actor})
+			require.NoError(t, err)
+			require.True(t, stopped)
+
+			stored := h.watcher(t, w.ID)
+			require.Equal(t, &actor, stored.StoppedBy)
+			require.Nil(t, stored.StoppedBySlackUser)
+
+			var kind, actorID string
+
+			require.NoError(t, h.pool.QueryRow(t.Context(),
+				"SELECT actor_kind, actor_id FROM audit_log WHERE action = 'watcher.stopped' AND target_id = $1", w.ID.String()).Scan(&kind, &actorID))
+			require.Equal(t, tt.wantKind, kind)
+			require.Equal(t, actor.String(), actorID)
+
+			states, err := States(t.Context(), h.pool, checkoutGroup)
+			require.NoError(t, err)
+			require.Len(t, states, 1)
+			require.Equal(t, &output.Person{UserID: actor, Name: tt.wantName}, states[0].StoppedBy)
+		})
+	}
+}
+
 func TestStates(t *testing.T) {
 	t.Parallel()
 

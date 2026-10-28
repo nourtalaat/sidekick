@@ -21,6 +21,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/problem"
 	"github.com/nourtalaat/sidekick/internal/redact"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // BasePath is the path every API operation is under. Mount the handler New
@@ -62,6 +63,15 @@ type Options struct {
 	// StreamLifetime is how long an event stream stays open. Zero means
 	// DefaultStreamLifetime.
 	StreamLifetime time.Duration
+	// Stopper stops watchers, for POST /watchers/{id}/stop. Without it,
+	// that operation answers 503.
+	Stopper *watch.Stopper
+	// Watchers records the watchers that resolving an investigation's
+	// group ends. Nil writes and shows the changes, but logs and counts
+	// nothing.
+	Watchers *watch.Recorder
+	// Now returns the current time. Nil means time.Now.
+	Now func() time.Time
 	// Logger gets the errors that answer 500. Nil logs nothing.
 	Logger *slog.Logger
 }
@@ -92,11 +102,16 @@ func New(opts Options) (http.Handler, error) {
 		log = slog.New(slog.DiscardHandler)
 	}
 
+	now := opts.Now
+	if now == nil {
+		now = time.Now
+	}
+
 	h := &handler{auth: opts.Auth, routes: http.NewServeMux(), log: log}
 
 	srv := &server{
 		tokens: opts.Tokens, cfg: opts.Config, rules: opts.Rules, redactor: opts.Redactor, pool: opts.Pool, audit: opts.Audit,
-		hub: opts.Hub, log: log,
+		hub: opts.Hub, log: log, stopper: opts.Stopper, watchers: opts.Watchers, now: now,
 		streamHeartbeat: cmp.Or(opts.StreamHeartbeat, DefaultStreamHeartbeat),
 		streamLifetime:  cmp.Or(opts.StreamLifetime, DefaultStreamLifetime),
 	}

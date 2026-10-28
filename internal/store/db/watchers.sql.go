@@ -106,29 +106,32 @@ const endWatcher = `-- name: EndWatcher :one
 UPDATE watchers
 SET status = $1::text,
     stop_reason = $2::text,
-    stopped_by_slack_user = $3::text,
-    ended_at = $4::timestamptz,
-    recovered_at = CASE WHEN $1::text = 'recovered' THEN coalesce(passing_since, $4::timestamptz) END
-WHERE id = $5 AND status = 'running'
+    stopped_by = $3::uuid,
+    stopped_by_slack_user = $4::text,
+    ended_at = $5::timestamptz,
+    recovered_at = CASE WHEN $1::text = 'recovered' THEN coalesce(passing_since, $5::timestamptz) END
+WHERE id = $6 AND status = 'running'
 RETURNING id, group_id, investigation_id, name, origin, started_by_seq, check_type, spec, interval_s, passes_to_recover, check_timeout_s, status, stop_reason, passes_in_a_row, checks, started_at, deadline, last_check_at, passing_since, recovered_at, ended_at, stopped_by, stopped_by_slack_user
 `
 
 type EndWatcherParams struct {
 	Status             string
 	StopReason         *string
+	StoppedBy          *uuid.UUID
 	StoppedBySlackUser *string
 	At                 time.Time
 	ID                 uuid.UUID
 }
 
-// EndWatcher sets a running watcher to a final status, with the Slack
-// user who stopped it, if one did. A recovered watcher records when its
+// EndWatcher sets a running watcher to a final status, with the web user
+// or API token, or the Slack user, who stopped it, if one did. A recovered watcher records when its
 // run of passes started. It returns no row for a watcher
 // that has ended already.
 func (q *Queries) EndWatcher(ctx context.Context, arg EndWatcherParams) (Watcher, error) {
 	row := q.db.QueryRow(ctx, endWatcher,
 		arg.Status,
 		arg.StopReason,
+		arg.StoppedBy,
 		arg.StoppedBySlackUser,
 		arg.At,
 		arg.ID,
@@ -283,19 +286,20 @@ func (q *Queries) GetWatcherForTick(ctx context.Context, id uuid.UUID) (GetWatch
 }
 
 const getWatcherWithLastCheck = `-- name: GetWatcherWithLastCheck :one
-SELECT w.id, w.group_id, w.investigation_id, w.name, w.origin, w.started_by_seq, w.check_type, w.spec, w.interval_s, w.passes_to_recover, w.check_timeout_s, w.status, w.stop_reason, w.passes_in_a_row, w.checks, w.started_at, w.deadline, w.last_check_at, w.passing_since, w.recovered_at, w.ended_at, w.stopped_by, w.stopped_by_slack_user, c.detail AS last_detail
+SELECT w.id, w.group_id, w.investigation_id, w.name, w.origin, w.started_by_seq, w.check_type, w.spec, w.interval_s, w.passes_to_recover, w.check_timeout_s, w.status, w.stop_reason, w.passes_in_a_row, w.checks, w.started_at, w.deadline, w.last_check_at, w.passing_since, w.recovered_at, w.ended_at, w.stopped_by, w.stopped_by_slack_user, c.detail AS last_detail, coalesce((SELECT u.name FROM users u WHERE u.id = w.stopped_by), (SELECT t.name FROM api_tokens t WHERE t.id = w.stopped_by), '')::text AS stopped_by_name
 FROM watchers w
 LEFT JOIN watcher_checks c ON c.watcher_id = w.id AND c.seq = w.checks
 WHERE w.id = $1
 `
 
 type GetWatcherWithLastCheckRow struct {
-	Watcher    Watcher
-	LastDetail *string
+	Watcher       Watcher
+	LastDetail    *string
+	StoppedByName string
 }
 
 // GetWatcherWithLastCheck returns a watcher with the detail of its last
-// check.
+// check and the name of the user or API token that stopped it.
 func (q *Queries) GetWatcherWithLastCheck(ctx context.Context, id uuid.UUID) (GetWatcherWithLastCheckRow, error) {
 	row := q.db.QueryRow(ctx, getWatcherWithLastCheck, id)
 	var i GetWatcherWithLastCheckRow
@@ -324,6 +328,7 @@ func (q *Queries) GetWatcherWithLastCheck(ctx context.Context, id uuid.UUID) (Ge
 		&i.Watcher.StoppedBy,
 		&i.Watcher.StoppedBySlackUser,
 		&i.LastDetail,
+		&i.StoppedByName,
 	)
 	return i, err
 }
@@ -486,7 +491,7 @@ func (q *Queries) ListGroupAlertStates(ctx context.Context, groupID uuid.UUID) (
 }
 
 const listGroupWatchers = `-- name: ListGroupWatchers :many
-SELECT w.id, w.group_id, w.investigation_id, w.name, w.origin, w.started_by_seq, w.check_type, w.spec, w.interval_s, w.passes_to_recover, w.check_timeout_s, w.status, w.stop_reason, w.passes_in_a_row, w.checks, w.started_at, w.deadline, w.last_check_at, w.passing_since, w.recovered_at, w.ended_at, w.stopped_by, w.stopped_by_slack_user, c.detail AS last_detail
+SELECT w.id, w.group_id, w.investigation_id, w.name, w.origin, w.started_by_seq, w.check_type, w.spec, w.interval_s, w.passes_to_recover, w.check_timeout_s, w.status, w.stop_reason, w.passes_in_a_row, w.checks, w.started_at, w.deadline, w.last_check_at, w.passing_since, w.recovered_at, w.ended_at, w.stopped_by, w.stopped_by_slack_user, c.detail AS last_detail, coalesce((SELECT u.name FROM users u WHERE u.id = w.stopped_by), (SELECT t.name FROM api_tokens t WHERE t.id = w.stopped_by), '')::text AS stopped_by_name
 FROM watchers w
 LEFT JOIN watcher_checks c ON c.watcher_id = w.id AND c.seq = w.checks
 WHERE w.group_id = $1
@@ -494,12 +499,14 @@ ORDER BY w.started_at, w.id
 `
 
 type ListGroupWatchersRow struct {
-	Watcher    Watcher
-	LastDetail *string
+	Watcher       Watcher
+	LastDetail    *string
+	StoppedByName string
 }
 
 // ListGroupWatchers returns every watcher of a group, oldest first, with
-// the detail of its last check.
+// the detail of its last check and the name of the user or API token that
+// stopped it.
 func (q *Queries) ListGroupWatchers(ctx context.Context, groupID uuid.UUID) ([]ListGroupWatchersRow, error) {
 	rows, err := q.db.Query(ctx, listGroupWatchers, groupID)
 	if err != nil {
@@ -534,6 +541,7 @@ func (q *Queries) ListGroupWatchers(ctx context.Context, groupID uuid.UUID) ([]L
 			&i.Watcher.StoppedBy,
 			&i.Watcher.StoppedBySlackUser,
 			&i.LastDetail,
+			&i.StoppedByName,
 		); err != nil {
 			return nil, err
 		}

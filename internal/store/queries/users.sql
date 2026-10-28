@@ -26,3 +26,11 @@ UPDATE users
 SET email = sqlc.narg(email), name = @name, groups = @groups, role = @role, last_login_at = @now
 WHERE id = @id
 RETURNING *;
+
+-- name: GetActorName :one
+-- GetActorName returns the name of the user, or else of the API token,
+-- with id, and whether it is a token. The name is empty for an ID that is
+-- neither.
+SELECT
+  coalesce((SELECT u.name FROM users u WHERE u.id = @id::uuid), (SELECT t.name FROM api_tokens t WHERE t.id = @id::uuid), '')::text AS name,
+  EXISTS (SELECT 1 FROM api_tokens t WHERE t.id = @id::uuid) AS is_token;

@@ -67,6 +67,9 @@ type Options struct {
 	Rules report.Rules
 	// Daily are the daily spending caps and their time zone.
 	Daily DailyCaps
+	// PublicURL is server.publicURL. With it, the memory examples in the
+	// prompt link to their investigation pages. Empty leaves the links out.
+	PublicURL string
 	// MemoryExamples is the most similar confirmed investigations the
 	// prompt shows. Zero shows none.
 	MemoryExamples int

@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
@@ -29,11 +30,26 @@ const (
 // errCancelled is the cause of a run's context when a responder stops it.
 var errCancelled = errors.New("a responder stopped the investigation")
 
+// ActionCancelRequested is the action of the audit entry of a request to
+// stop a run.
+const ActionCancelRequested = "investigation.cancel_requested"
+
 // Requester is who asked for something: a Sidekick user, or a Slack user
 // who has none yet. At least one is set.
 type Requester struct {
 	UserID      *uuid.UUID
 	SlackUserID string
+	// Token says UserID is the ID of an API token, not of a user.
+	Token bool
+}
+
+// actorKind is the kind of actor the requester is in an audit entry.
+func (r Requester) actorKind() string {
+	if r.Token {
+		return audit.ActorToken
+	}
+
+	return audit.ActorUser
 }
 
 // actorID names the requester in an audit entry: the Sidekick user ID, or
@@ -70,6 +86,18 @@ func RequestCancel(ctx context.Context, q db.DBTX, id uuid.UUID, by Requester) (
 
 	if err := queries.NotifyInvestigationCancel(ctx, id.String()); err != nil {
 		return false, fmt.Errorf("notify the stop of investigation %s: %w", id, err)
+	}
+
+	err = auditor.Write(ctx, q, audit.Entry{
+		ActorKind:       by.actorKind(),
+		ActorID:         by.actorID(),
+		Action:          ActionCancelRequested,
+		TargetKind:      auditTargetKind,
+		TargetID:        id.String(),
+		InvestigationID: &id,
+	})
+	if err != nil {
+		return false, fmt.Errorf("audit the stop of investigation %s: %w", id, err)
 	}
 
 	return true, nil

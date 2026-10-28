@@ -57,6 +57,9 @@ type Example struct {
 	// Cause is the confirmed cause.
 	Cause       string
 	ConfirmedAt time.Time
+	// URL is the address of the investigation's page in the web UI. Empty
+	// leaves the link out.
+	URL string
 }
 
 // renderMemory writes the memory part, or nothing when there are no
@@ -73,8 +76,8 @@ func renderMemory(examples []Example) []string {
 	fmt.Fprintf(&b, "# Similar past investigations\n\n%s\n", memoryIntro)
 
 	for i, ex := range examples {
-		// TODO: [SK-35] link each example to its investigation page
 		fmt.Fprintf(&b, "\n## Example %d: %s\n\nInvestigation: %s\n", i+1, ex.Verdict, ex.InvestigationID)
+		writeField(&b, "Page", ex.URL)
 		writeField(&b, "Matched by", matchText[ex.Match])
 		writeTime(&b, "Confirmed", ex.ConfirmedAt)
 		b.WriteString("\n")

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
@@ -139,6 +140,52 @@ func TestRequestCancel(t *testing.T) {
 
 	require.False(t, requestCancel(t, h.pool), "a repeated Stop")
 	require.Equal(t, first, h.investigation(t).CancelRequestedAt)
+	require.Equal(t, []string{"user U01STOPPER"}, h.audited(t, ActionCancelRequested), "only the Stop that took effect is audited")
+}
+
+func TestRequestCancelAuditsTheKindOfRequester(t *testing.T) {
+	t.Parallel()
+
+	byUser := uuid.MustParse("0192d3a4-0000-7000-8000-0000000000f1")
+
+	tests := []struct {
+		name string
+		by   Requester
+		want string
+	}{
+		{name: "a web user", by: Requester{UserID: &byUser}, want: "user " + byUser.String()},
+		{name: "an API token", by: Requester{UserID: &byUser, Token: true}, want: "token " + byUser.String()},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := setup(t, options{})
+
+			err := pgx.BeginFunc(t.Context(), h.pool, func(tx pgx.Tx) error {
+				_, err := RequestCancel(t.Context(), tx, testInvestigation, tt.by)
+
+				return err
+			})
+			require.NoError(t, err)
+			require.Equal(t, []string{tt.want}, h.audited(t, ActionCancelRequested))
+		})
+	}
+}
+
+// audited returns "actor_kind actor_id" of each audit entry with action.
+func (h *harness) audited(t *testing.T, action string) []string {
+	t.Helper()
+
+	rows, err := h.pool.Query(t.Context(),
+		"SELECT actor_kind || ' ' || coalesce(actor_id, '') FROM audit_log WHERE action = $1 AND investigation_id = $2 ORDER BY id", action, testInvestigation)
+	require.NoError(t, err)
+
+	out, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	require.NoError(t, err)
+
+	return out
 }
 
 // slowTurn is a model turn that closes started and answers only when its
