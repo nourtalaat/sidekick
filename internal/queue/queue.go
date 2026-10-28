@@ -42,6 +42,7 @@ const (
 	KindWatchTick       = "watch_tick"
 	KindRollup          = "rollup"
 	KindRetention       = "retention"
+	KindBackfill        = "backfill"
 	KindNotice          = "notice"
 )
 

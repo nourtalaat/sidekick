@@ -94,6 +94,7 @@ func TestRun(t *testing.T) {
 				require.NotNil(t, inv.FirstFindingAt)
 				require.NotNil(t, inv.FinishedAt)
 				require.EqualValues(t, 1, inv.ToolCalls)
+				require.Equal(t, testModel, deref(inv.Model), "the first model turn sets the model")
 
 				_, phase, body := h.publishState(t)
 				require.Equal(t, "final", phase)

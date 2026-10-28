@@ -1,10 +1,11 @@
 -- name: InsertInvestigation :exec
 -- InsertInvestigation creates an investigation for a group.
 INSERT INTO investigations (
-  id, group_id, route, strategy, strategy_version, mode, status, connectors, budget, created_at
+  id, group_id, route, strategy, strategy_version, mode, status, connectors, budget, alert_title, service, created_at
 )
 VALUES (
-  @id, @group_id, @route, @strategy, @strategy_version, @mode, @status, @connectors, @budget, now()
+  @id, @group_id, @route, @strategy, @strategy_version, @mode, @status, @connectors, @budget, @alert_title::text,
+  sqlc.narg(service), now()
 );
 
 -- name: GetInvestigationWithEvent :one
@@ -82,7 +83,9 @@ LIMIT 1;
 
 -- name: AdvanceInvestigation :one
 -- AdvanceInvestigation takes the next step seq of a running investigation
--- and adds the step's counters, when fence still owns the run. Run it in
+-- and adds the step's counters, when fence still owns the run. A model
+-- turn passes its model, which the investigation keeps the first of, for
+-- the list's model filter. Run it in
 -- the transaction that inserts the step. It returns no row when the fence
 -- is stale, so a worker that lost its lease writes nothing. It also
 -- returns cancel_requested_at, so the run sees a Stop at every step.
@@ -92,6 +95,7 @@ SET next_seq = next_seq + 1,
     output_tokens = output_tokens + @output_tokens,
     cost_micros = cost_micros + @cost_micros,
     tool_calls = tool_calls + @tool_calls,
+    model = coalesce(model, sqlc.narg(model)),
     first_finding_at = CASE WHEN @finding::boolean THEN coalesce(first_finding_at, now()) ELSE first_finding_at END
 WHERE id = @id AND fence = @fence AND status = 'running'
 RETURNING next_seq - 1 AS seq, first_finding_at, cancel_requested_at;

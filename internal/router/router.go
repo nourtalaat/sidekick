@@ -394,6 +394,8 @@ func startInvestigation(ctx context.Context, tx pgx.Tx, ev db.Event, rt route, r
 		Status:          investigator.StatusQueued,
 		Connectors:      rt.connectors,
 		Budget:          rt.budget,
+		AlertTitle:      investigator.ListTitle(deref(ev.Title), deref(ev.AlertName), deref(ev.Body)),
+		Service:         ev.Service,
 	}); err != nil {
 		return fmt.Errorf("create the investigation: %w", err)
 	}
