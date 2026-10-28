@@ -36,7 +36,10 @@ func TestRunShowsMemory(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			h := setup(t, options{turns: []modeltest.Turn{turn(modeltest.Call("v1", report.SubmitVerdictTool, goodReport))}})
+			h := setup(t, options{turns: []modeltest.Turn{
+				turn(search("c1")),
+				turn(modeltest.Call("v1", report.SubmitVerdictTool, goodReport)),
+			}})
 			h.handler.opts.MemoryExamples = tt.examples
 
 			_, err := h.pool.Exec(t.Context(), pastCheckoutLatency)
