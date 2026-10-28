@@ -78,17 +78,21 @@ type Options struct {
 	// watchers each route's groups start. The benchmark gives an empty
 	// one, so its runs start no watchers. Nil means Config.WatchPolicy().
 	WatchPolicy *watch.Policy
+	// Watchers records the watchers the router starts. Nil writes and
+	// shows each start, but logs and counts nothing.
+	Watchers *watch.Recorder
 }
 
 // Router handles route_event jobs. Make it with New and register it for
 // queue.KindRouteEvent.
 type Router struct {
-	routes  []route
-	watch   watch.Policy
-	pool    *pgxpool.Pool
-	grouper *grouper.Grouper
-	log     *slog.Logger
-	tracer  trace.Tracer
+	routes   []route
+	watch    watch.Policy
+	watchers *watch.Recorder
+	pool     *pgxpool.Pool
+	grouper  *grouper.Grouper
+	log      *slog.Logger
+	tracer   trace.Tracer
 	// globalRate is budgets.rateLimit, nil for none.
 	globalRate *config.RateLimit
 	// skippedEvents counts the events a rate limit skipped; nil counts
@@ -131,6 +135,7 @@ func New(opts Options) (*Router, error) {
 	r := &Router{
 		routes:     routes,
 		watch:      policy,
+		watchers:   opts.Watchers,
 		pool:       opts.Pool,
 		grouper:    grouper.New(grouper.Options{Logger: log, TracerProvider: tp, Catalog: opts.Catalog}),
 		log:        log,
@@ -384,8 +389,8 @@ func startInvestigation(ctx context.Context, tx pgx.Tx, ev db.Event, rt route, r
 
 // startWatchers starts the watchers of rt and of its strategy that match
 // ev, for the group the grouper opened for it, in tx. A watcher over
-// watch.maxPerGroup or watch.maxTotal is not started, and a line is
-// logged.
+// watch.maxPerGroup or watch.maxTotal is not started: a line is logged,
+// and the investigation's inbox says so and why.
 func (r *Router) startWatchers(ctx context.Context, tx pgx.Tx, ev db.Event, rt route, res grouper.Result) error {
 	if len(rt.watchers) == 0 {
 		return nil
@@ -408,12 +413,15 @@ func (r *Router) startWatchers(ctx context.Context, tx pgx.Tx, ev db.Event, rt r
 			Origin:          d.Origin,
 			Check:           d.Check,
 			Settings:        d.Settings,
-		}, r.now(), r.log)
+		}, r.now(), r.watchers)
 
 		if limit, ok := errors.AsType[*watch.LimitError](err); ok {
-			// TODO: [SK-32] Tell the investigation that the watcher did not start.
 			r.log.WarnContext(ctx, "watcher not started: a limit is reached",
 				"group_id", res.GroupID.String(), "watcher", d.Name, "limit", limit.Limit)
+
+			if err := watch.NotStarted(ctx, tx, res.InvestigationID, d.Name, d.Check.Type(), limit.Error()); err != nil {
+				return fmt.Errorf("watcher %s: %w", d.Name, err)
+			}
 
 			continue
 		}

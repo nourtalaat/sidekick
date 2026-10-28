@@ -3,11 +3,13 @@
 package investigator
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
@@ -108,6 +110,58 @@ func TestStartWatcherTool(t *testing.T) {
 			require.Equal(t, statusOK, result.Status)
 		})
 	}
+}
+
+// TestARecoveryDuringARunIsEvidence starts an alert watcher with
+// start_watcher and lets it recover while the model takes its next turn.
+// The turn after gets the recovery in its inbox message, as evidence, and
+// the investigation ends with the verdict the model submits.
+func TestARecoveryDuringARunIsEvidence(t *testing.T) {
+	t.Parallel()
+
+	var h *harness
+
+	recoverDuringTheTurn := modeltest.Turn{Func: func(ctx context.Context, _ model.Request) (model.Response, error) {
+		require.NoError(t, pgx.BeginFunc(ctx, h.pool, func(tx pgx.Tx) error {
+			ended, err := watch.EndGroupResolved(ctx, tx, h.investigation(t).GroupID, time.Now(), nil)
+			require.Len(t, ended, 1)
+
+			return err
+		}))
+
+		return turn(search("c1")).Response, nil
+	}}
+
+	h = setup(t, options{turns: []modeltest.Turn{
+		turn(modeltest.Call("w1", watch.StartWatcherTool, `{"name": "cleared", "type": "alert"}`)),
+		recoverDuringTheTurn,
+		turn(modeltest.Call("v1", report.SubmitVerdictTool, goodReport)),
+	}})
+	h.handler.opts.Watchers = newModelStarter(t, h)
+
+	require.NoError(t, h.run(t))
+
+	requests := h.conn.Requests()
+	require.Len(t, requests, 3)
+
+	started := lastUserText(requests[1])
+	require.Contains(t, started, "# Watchers since your last turn")
+	require.Contains(t, started, "cleared (alert check) started at")
+
+	recovered := lastUserText(requests[2])
+	require.Contains(t, recovered, "# Watchers since your last turn")
+	require.Contains(t, recovered, "cleared (alert check) recovered at")
+	require.Contains(t, recovered, "a watcher never decides the verdict")
+
+	inv := h.investigation(t)
+	require.Equal(t, StatusFinal, inv.Status)
+	require.Equal(t, "true_positive", *inv.Verdict, "the recovery does not change the verdict by itself")
+	require.Equal(t, report.TruePositive, h.report(t).Verdict)
+}
+
+// lastUserText returns the text of the last message of req.
+func lastUserText(req model.Request) string {
+	return userText(req.Messages[len(req.Messages)-1])
 }
 
 // newModelStarter returns a start_watcher starter that allows HTTP and

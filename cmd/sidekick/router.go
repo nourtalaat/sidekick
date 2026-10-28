@@ -16,6 +16,11 @@ import (
 func registerRouter(a *app.App) error {
 	catalog := grouper.NewCatalog(a.Instances().Sources, a.Logger().With("component", "catalog"))
 
+	recorder, err := newWatchRecorder(a)
+	if err != nil {
+		return fmt.Errorf("set up the router: %w", err)
+	}
+
 	r, err := router.New(router.Options{
 		Config:         a.Config(),
 		ModelSettings:  a.Instances().ModelSettings,
@@ -24,6 +29,7 @@ func registerRouter(a *app.App) error {
 		Metrics:        a.Telemetry().Registry(),
 		TracerProvider: a.Telemetry().TracerProvider(),
 		Catalog:        catalog,
+		Watchers:       recorder,
 	})
 	if err != nil {
 		return fmt.Errorf("set up the router: %w", err)

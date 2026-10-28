@@ -36,8 +36,11 @@ type TickerOptions struct {
 	// watcher that reached a final state calls so a group kept open for
 	// its watchers can close.
 	CloseGroup func(ctx context.Context, q db.DBTX, groupID uuid.UUID) error
-	// Logger receives a line per state change, with IDs and names only,
-	// never check details. Nil logs nothing.
+	// Recorder records each state change. Nil writes and shows it, but
+	// logs and counts nothing.
+	Recorder *Recorder
+	// Logger receives a line when the config no longer allows a watcher's
+	// check, with IDs only, never check details. Nil logs nothing.
 	Logger *slog.Logger
 	// Now returns the current time. Nil means time.Now.
 	Now func() time.Time
@@ -285,8 +288,8 @@ func (t *Ticker) locked(ctx context.Context, job db.Job, w db.Watcher, fn func(t
 	return nil
 }
 
-// endIn sets the running watcher w to a final status in tx and enqueues
-// close_group for its group.
+// endIn sets the running watcher w to a final status in tx, records the
+// change and enqueues close_group for its group.
 func (t *Ticker) endIn(ctx context.Context, tx pgx.Tx, w db.Watcher, status, stopReason string) error {
 	ended, err := db.New(tx).EndWatcher(ctx, db.EndWatcherParams{
 		Status:     status,
@@ -302,7 +305,9 @@ func (t *Ticker) endIn(ctx context.Context, tx pgx.Tx, w db.Watcher, status, sto
 		return fmt.Errorf("set the watcher %s: %w", status, err)
 	}
 
-	stateChanged(ctx, t.log, &w, ended)
+	if err := t.opts.Recorder.changed(ctx, tx, &w, ended); err != nil {
+		return fmt.Errorf("record the change: %w", err)
+	}
 
 	if err := t.opts.CloseGroup(ctx, tx, w.GroupID); err != nil {
 		return fmt.Errorf("let group %s close: %w", w.GroupID, err)
