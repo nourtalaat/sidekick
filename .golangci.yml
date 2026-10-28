@@ -148,6 +148,11 @@ linters:
       enable:
         - after-block
 
+  exclusions:
+    paths:
+      # npm packages can hold Go files of their own.
+      - web/node_modules
+
 formatters:
   enable:
     - gofmt
@@ -156,3 +161,6 @@ formatters:
     goimports:
       local-prefixes:
         - github.com/nourtalaat/sidekick
+  exclusions:
+    paths:
+      - web/node_modules

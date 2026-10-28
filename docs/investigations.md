@@ -7,8 +7,9 @@ happens when Sidekick restarts in the middle of one.
 ## The loop
 
 The investigation runs on one replica at a time, as a background job. It
-sends the model the event, the route's strategy and the tools it may call,
-then loops:
+sends the model the event, the route's strategy, the tools it may call and
+up to 3 similar past investigations whose verdicts people confirmed (see
+[`memory`](configuration.md#memory)), then loops:
 
 1. The model answers. It can call tools, several at once.
 2. Sidekick runs the calls, at most 4 at a time, and sends the results

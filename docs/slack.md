@@ -96,10 +96,13 @@ the sources returned.
   once: a second click, or one on any other result, changes nothing.
 
 A Correct confirms the verdict, which marks the investigation as one whose
-verdict people agree with. A later Wrong on a confirmed verdict takes the
-confirmation back. Investigate anyway clears the confirmation of the triage
-verdict, since the full investigation gives a verdict of its own; the
-ratings of the triage verdict are kept.
+verdict people agree with, and puts it in memory, so later investigations
+of similar alerts see it as an example (see
+[`memory`](configuration.md#memory)). A later Wrong on a confirmed verdict
+takes the confirmation back, and the investigation out of memory.
+Investigate anyway clears the confirmation of the triage verdict, and so
+takes it out of memory too, since the full investigation gives a verdict
+of its own; the ratings of the triage verdict are kept.
 
 Every click is checked against the clicker's role at the time of the
 click: **Stop**, **Correct**, **Wrong**, **Stop watching** and

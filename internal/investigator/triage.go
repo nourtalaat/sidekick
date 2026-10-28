@@ -18,6 +18,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
+	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/prompt"
 	"github.com/nourtalaat/sidekick/internal/queue"
@@ -591,6 +592,8 @@ func (b Budget) tightened(s strategy.Budgets) Budget {
 // run ended with a triage-only result, as by asked for: it sets the
 // investigation back to queued for its next run, enqueues its investigate
 // job and writes the audit entry, all in q, which must be a transaction.
+// The confirmation of the triage verdict is cleared, so the investigation
+// leaves memory until its full verdict is confirmed.
 // It returns false, and changes nothing, for an investigation that did not
 // end that way, including one whose full investigation has started
 // already.
@@ -608,6 +611,10 @@ func InvestigateAnyway(ctx context.Context, q db.DBTX, id uuid.UUID, by Requeste
 
 	if err != nil {
 		return false, fmt.Errorf("restart investigation %s: %w", id, err)
+	}
+
+	if err := memory.Sync(ctx, q, inv.ID); err != nil {
+		return false, fmt.Errorf("investigation %s: %w", id, err)
 	}
 
 	payload, err := json.Marshal(Payload{InvestigationID: inv.ID, GroupID: inv.GroupID})

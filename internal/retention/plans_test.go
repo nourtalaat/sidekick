@@ -23,6 +23,7 @@ const (
 	planSteps          = 90 * 24 * time.Hour
 	planAuditLog       = 730 * 24 * time.Hour
 	planWatcherChecks  = 30 * 24 * time.Hour
+	planMemoryEntries  = 730 * 24 * time.Hour
 	// planBatchIDs is how many investigations the queries that take IDs
 	// get.
 	planBatchIDs = 100
@@ -119,6 +120,15 @@ func TestQueryPlans(t *testing.T) {
 				return fmt.Errorf("run query: %w", err)
 			},
 			wantIndex: []string{"audit_log_at", "Tid Scan on audit_log"},
+		},
+		{
+			name: "DeleteOldMemoryEntries",
+			run: func(ctx context.Context, q *db.Queries, _ planRows) error {
+				_, err := q.DeleteOldMemoryEntries(ctx, db.DeleteOldMemoryEntriesParams{Before: before(planMemoryEntries), Batch: DefaultBatchSize})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"memory_entries_confirmed", "Tid Scan on memory_entries"},
 		},
 		{
 			name: "DeleteDoneJobs",

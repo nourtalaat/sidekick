@@ -63,11 +63,30 @@ GENERATE_TARGETS :=
 help: ## List the targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-z-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
+# The web UI in web/ is built into internal/web/dist, which the binary
+# embeds. node_modules comes from the lockfile, and no package's install
+# script runs (web/.npmrc).
+WEB_DIR := web
+
 CI_TARGETS += lint
 .PHONY: lint
-lint: $(GOLANGCI_LINT) ## Run golangci-lint and check that go.mod and go.sum are tidy
+lint: $(GOLANGCI_LINT) ui-deps ## Run golangci-lint and ESLint and tsc on the web UI, and check that go.mod and go.sum are tidy
 	GOLANGCI_LINT_CACHE="$(GOLANGCI_LINT_CACHE)" $(GOLANGCI_LINT) run
 	$(GO) mod tidy -diff
+	cd $(WEB_DIR) && npm run lint
+	cd $(WEB_DIR) && npm run typecheck
+
+.PHONY: ui-deps
+ui-deps: $(WEB_DIR)/node_modules/.package-lock.json ## Install the web UI's npm packages from the lockfile
+
+.PHONY: ui-build
+ui-build: ui-deps ## Build the web UI into internal/web/dist, which the binary embeds
+	cd $(WEB_DIR) && npm run build
+
+CI_TARGETS += ui-test
+.PHONY: ui-test
+ui-test: ui-deps ## Run the web UI's tests (Vitest)
+	cd $(WEB_DIR) && npm test
 
 .PHONY: fmt
 fmt: $(GOLANGCI_LINT) ## Format the Go code
@@ -80,17 +99,19 @@ test: ## Run the unit tests
 
 # Integration tests are behind the `integration` build tag and use the
 # Postgres at SIDEKICK_TEST_DATABASE_URL when it is set.
+# The UI is built first, so the tests that serve it find the real one.
 CI_TARGETS += test-integration
 .PHONY: test-integration
-test-integration: ## Run unit and integration tests against Postgres
-	$(GO) test -race -tags integration ./...
+test-integration: ui-build ## Build the web UI, then run unit and integration tests against Postgres
+	SIDEKICK_UI_BUILT=true $(GO) test -race -tags integration ./...
 
 # Runs before generate-mocks, since mocks can be made of the generated
 # interfaces.
 GENERATE_TARGETS += openapi-generate
 .PHONY: openapi-generate
-openapi-generate: $(OAPI_CODEGEN) ## Generate the API server code in internal/api/apigen from api/openapi.yaml
+openapi-generate: $(OAPI_CODEGEN) ui-deps ## Generate the API server code in internal/api/apigen and the web UI's types in web/src/api from api/openapi.yaml
 	$(OAPI_CODEGEN) -config api/oapi-codegen.yaml api/openapi.yaml
+	cd $(WEB_DIR) && npm run openapi
 
 GENERATE_TARGETS += generate-mocks
 .PHONY: generate-mocks
@@ -102,12 +123,13 @@ GENERATE_TARGETS += sqlc-generate
 sqlc-generate: $(SQLC) ## Generate internal/store/db from the queries and migrations
 	$(SQLC) generate
 
-# NOTICE lists the modules linked into the binary, so a dependency change
-# that does not regenerate it fails verify-generated. The validator's
-# NOTICE gets its tools part when its image is built.
+# NOTICE lists the modules linked into the binary and the npm packages
+# bundled into the web UI, which the UI build lists. A dependency change that
+# does not regenerate it fails verify-generated. The validator's NOTICE gets
+# its tools part when its image is built.
 GENERATE_TARGETS += notice
 .PHONY: notice
-notice: ## Write NOTICE and cmd/sidekick-validate/NOTICE, the third-party notices that ship with the binaries and images
+notice: ui-build ## Write NOTICE and cmd/sidekick-validate/NOTICE, the third-party notices that ship with the binaries and images
 	sh scripts/notice.sh ./cmd/sidekick > NOTICE.tmp
 	mv NOTICE.tmp NOTICE
 	sh scripts/notice.sh ./cmd/sidekick-validate > cmd/sidekick-validate/NOTICE.tmp
@@ -124,7 +146,7 @@ migrate-new: ## Create the next goose migration: make migrate-new name=add_jobs
 
 CI_TARGETS += build
 .PHONY: build
-build: ## Build bin/sidekick and bin/sidekick-validate with the version and commit set
+build: ui-build ## Build the web UI, then bin/sidekick and bin/sidekick-validate with the version and commit set
 	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/sidekick ./cmd/sidekick
 	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/sidekick-validate ./cmd/sidekick-validate
 
@@ -208,6 +230,9 @@ $(SQLC):
 
 $(OAPI_CODEGEN):
 	GOBIN="$(dir $@)" $(GO) install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION)
+
+$(WEB_DIR)/node_modules/.package-lock.json: $(WEB_DIR)/package.json $(WEB_DIR)/package-lock.json
+	cd $(WEB_DIR) && npm ci
 
 .PHONY: generate
 generate: $(GENERATE_TARGETS) ## Run every code generator

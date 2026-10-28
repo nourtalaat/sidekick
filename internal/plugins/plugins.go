@@ -29,7 +29,9 @@ import (
 	_ "github.com/nourtalaat/sidekick/internal/source/kubernetes"    // Source type "kubernetes".
 	_ "github.com/nourtalaat/sidekick/internal/source/launchdarkly"  // Source type "launchdarkly".
 	_ "github.com/nourtalaat/sidekick/internal/source/mcp"           // Source type "mcp".
+	_ "github.com/nourtalaat/sidekick/internal/source/memory"        // Source type "memory".
 	_ "github.com/nourtalaat/sidekick/internal/source/mock"          // Source type "mock", for benchmarks.
 	_ "github.com/nourtalaat/sidekick/internal/source/postgres"      // Source type "postgres".
 	_ "github.com/nourtalaat/sidekick/internal/source/prometheus"    // Source type "prometheus".
+	_ "github.com/nourtalaat/sidekick/internal/source/unleash"       // Source type "unleash".
 )

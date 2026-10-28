@@ -1,7 +1,8 @@
 -- A large database for the query plan tests: 50,000 closed groups with an
 -- investigation and a watcher each over the last 400 days, 1,000,000
 -- steps, 100,000 events, 100,000 watcher checks, 100,000 audit log
--- entries over 800 days, and 120,000 finished jobs.
+-- entries and 100,000 memory entries over 800 days, and 120,000 finished
+-- jobs.
 INSERT INTO event_groups (id, fingerprint, route, status, event_count, opened_at, last_event_at, closed_reason, investigation_id)
 SELECT md5('group' || i)::uuid, 'fp-' || i, 'default', 'closed', 2,
        now() - make_interval(secs => i * 691), now() - make_interval(secs => i * 691), 'window_ended',
@@ -39,6 +40,10 @@ FROM generate_series(1, 50000) AS i, generate_series(1, 2) AS n;
 
 INSERT INTO audit_log (at, actor_kind, action)
 SELECT now() - make_interval(secs => i * 691), 'system', 'route.updated'
+FROM generate_series(1, 100000) AS i;
+
+INSERT INTO memory_entries (investigation_id, fingerprint, verdict, summary, confirmed_at, disabled)
+SELECT md5('memory' || i)::uuid, 'fp-' || i, 'true_positive', 'Summary ' || i, now() - make_interval(secs => i * 691), i % 10 = 0
 FROM generate_series(1, 100000) AS i;
 
 INSERT INTO jobs (kind, payload, status, finished_at)

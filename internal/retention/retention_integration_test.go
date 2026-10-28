@@ -27,6 +27,7 @@ const (
 	listWatcherChecks  = "SELECT right(watcher_id::text, 2) || '/' || seq FROM watcher_checks ORDER BY 1"
 	listEvents         = "SELECT key FROM events ORDER BY key"
 	listAuditLog       = "SELECT action FROM audit_log ORDER BY action"
+	listMemoryEntries  = "SELECT right(investigation_id::text, 2) FROM memory_entries ORDER BY 1"
 	listJobs           = "SELECT unique_key FROM jobs ORDER BY unique_key"
 )
 
@@ -61,6 +62,7 @@ func TestHandleDeletesOnlyOldRows(t *testing.T) {
 		{listWatcherChecks, []string{"d4/3"}},
 		{listEvents, []string{"ev-3"}},
 		{listAuditLog, []string{"audit-3"}},
+		{listMemoryEntries, []string{"c1"}},
 		{listJobs, []string{"job-dead-2d", "job-done-1h", "job-pending"}},
 	}
 
@@ -86,7 +88,7 @@ func TestHandleDeletesOnlyOldRows(t *testing.T) {
 
 			for table, n := range map[string]float64{
 				TableInvestigations: 2, TableWatchers: 2, TableEventGroups: 2, TableSteps: 2,
-				TableWatcherChecks: 2, TableEvents: 3, TableAuditLog: 2, TableJobs: 3,
+				TableWatcherChecks: 2, TableEvents: 3, TableAuditLog: 2, TableMemoryEntries: 2, TableJobs: 3,
 			} {
 				require.InDelta(t, n, testutil.ToFloat64(h.metrics.deletedRows.WithLabelValues(table)), 0, table)
 			}
@@ -147,6 +149,13 @@ func TestBatchTakesTheOldestFirst(t *testing.T) {
 			want:   []string{"audit-2", "audit-3"},
 		},
 		{
+			name:   "memory entries",
+			delete: func(h *Handler) func(context.Context, time.Time, int32) (int64, error) { return h.deleteMemoryEntries },
+			period: testPeriods.MemoryEntries,
+			query:  listMemoryEntries,
+			want:   []string{"c1", "e2"},
+		},
+		{
 			name:   "done jobs",
 			delete: func(h *Handler) func(context.Context, time.Time, int32) (int64, error) { return h.deleteDoneJobs },
 			period: DoneJobsPeriod,
@@ -179,7 +188,8 @@ func TestBatchTakesTheOldestFirst(t *testing.T) {
 // TestDeletingAnInvestigationTakesWhatBelongsToIt checks that deleting the
 // old investigations removes their steps, inbox rows, output refs, publish
 // states, feedback, watchers with their checks, and event groups, and
-// leaves those of the others.
+// leaves those of the others. Memory entries stay, even that of a deleted
+// investigation.
 func TestDeletingAnInvestigationTakesWhatBelongsToIt(t *testing.T) {
 	t.Parallel()
 
@@ -204,6 +214,7 @@ func TestDeletingAnInvestigationTakesWhatBelongsToIt(t *testing.T) {
 		{listWatcherChanges, []string{"c4"}},
 		{listWatcherChecks, []string{"d4/1", "d4/2", "d4/3"}},
 		{listEvents, []string{"ev-1", "ev-2", "ev-3", "ev-4"}},
+		{listMemoryEntries, []string{"c1", "e1", "e2"}},
 	}
 
 	for _, w := range want {

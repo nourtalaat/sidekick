@@ -68,6 +68,7 @@ func registerInvestigator(a *app.App, guard *tools.Guard, watchers *watch.ModelS
 			MaxCostMicros: cfg.Budgets.Daily.MaxCostMicros(),
 			Skip:          cfg.Budgets.Daily.OnDailyCap == config.OnDailyCapSkip,
 		},
+		MemoryExamples: cfg.Memory.PromptExamples(),
 		Watchers:       watchers,
 		Logger:         a.Logger().With("component", "investigator"),
 		Metrics:        metrics,
