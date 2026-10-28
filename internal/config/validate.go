@@ -80,6 +80,9 @@ type validator struct {
 	// strategies are the built-in and file strategies, or nil when they
 	// could not be loaded.
 	strategies *strategy.Set
+	// extraIntakes are intake names a route's match may name besides the
+	// file's: the runtime listeners, when a runtime route is checked.
+	extraIntakes []string
 }
 
 // run runs every check, recording the problems in v.errs.

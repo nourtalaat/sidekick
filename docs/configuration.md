@@ -815,7 +815,11 @@ The tools, as the model sees them with the source name `azure`:
 | Tool | Returns |
 |---|---|
 | `azure__query_logs` | The tables and rows of a KQL query on a Log Analytics workspace. |
+| `azure__query_metrics` | Azure Monitor platform metrics of one resource, optionally split by dimension. |
+| `azure__list_alerts` | Azure Monitor alerts that started in a range, with severity, state and target. |
 | `azure__list_changes` | Activity Log writes, deletes and actions: deployments and config changes, with who made them. |
+| `azure__get_resource_health` | The Resource Health of one resource, or the subscription's unavailable resources and Azure service health events. |
+| `azure__get_aks_cluster` | An AKS cluster's state, versions, upgrade channel and node pools, or the list of clusters. |
 
 How it behaves:
 
@@ -827,17 +831,19 @@ How it behaves:
   `subscriptions` lists one, a full `resource` ID, or a `workspace`. Any
   of them outside the config, or input that does not fit, such as a range
   longer than 7 days, is a tool error, and nothing is sent.
-- **Queries.** The KQL of `query_logs` goes to Log Analytics as the model
-  wrote it, so the identity's role assignments are what limit what can be
-  read. A query that calls `workspace()`, `app()`, `resource()`, `adx()`,
-  `arg()`, `cluster()` or `database()`, or uses `externaldata`, is refused
-  before it is sent, because those reach beyond the workspace.
-- **Results** are JSON with links to the workspace's logs or the Activity
-  Log in the Azure portal, which become evidence links in the report. Lists are
+- **Queries.** The KQL of `query_logs` and the dimension filter of
+  `query_metrics` go to Azure as the model wrote them, so the identity's
+  role assignments are what limit what can be read. A query that calls
+  `workspace()`, `app()`, `resource()`, `adx()`, `arg()`, `cluster()` or
+  `database()`, or uses `externaldata`, is refused before it is sent,
+  because those reach beyond the workspace.
+- **Results** are JSON with links to the workspace's logs, the resource's
+  metrics or health page, the alert, the Activity Log or the cluster in
+  the Azure portal, which become evidence links in the report. Lists are
   capped as [Azure source](sources/azure.md#limits) describes, and say
   when they were cut.
-- **No data.** A query that returns no rows, an empty list, and a
-  workspace Azure does not have, are reported as no data.
+- **No data.** A query that returns no rows, metrics without values, an
+  empty list, and a resource Azure does not have, are reported as no data.
 - **Errors.** A refused request, such as a query Log Analytics cannot
   parse or a permission the identity lacks, goes to the model as a tool
   error with Azure's message. A refused token, rate limits, server errors
@@ -902,6 +908,11 @@ slack:
   followUps: mention                                        # or any
   trustedBots: [B01SIGNOZ]                                  # bot IDs whose messages can be trusted
   apiURL: https://slack.com/api/                            # optional
+  roleGroups:                                               # Slack user group ID to role
+    S01ONCALL: responder
+    S01SRE: admin
+  roleUsers:                                                # Slack user ID to role
+    U01LEAD: approver
 ```
 
 `botTokenSecret` is the bot token of the Slack app. Every `slack` output
@@ -928,6 +939,12 @@ investigations:
   listener marked `trusted: true`. Every other message is untrusted.
 - `apiURL` is the Slack Web API base URL, ending in `/`. GovSlack
   workspaces use `https://slack-gov.com/api/`.
+- `roleGroups` and `roleUsers` give Slack users their Sidekick role, one
+  of `viewer`, `responder`, `approver` and `admin`. `roleGroups` maps
+  Slack user group IDs (`S...`) to roles, and `roleUsers` maps user IDs
+  (`U...` or `W...`) to roles, for teams without user groups. A user gets
+  the highest role from either map; a user in neither is a `responder`.
+  [Roles](slack.md#roles) says what each role may do.
 
 [Investigations in Slack](slack.md) describes how to set up the app.
 
@@ -996,7 +1013,8 @@ text of its attachments and blocks added, one part per line.
 [Listeners and mentions](slack.md#listeners-and-mentions) says which
 messages a listener sees and how events are built from them. Listeners
 need the Slack app to receive events, so `slack.appTokenSecret` (or
-`mode: events`) must be set.
+`mode: events`) must be set. Listeners can also be added from Slack with
+[`/sidekick listen`](slack.md#the-sidekick-command).
 
 `source: teams` makes a listener watch a Teams channel instead, through
 the bot in the [`teams`](#teams) section. Its keys are the same, with
@@ -1403,6 +1421,11 @@ result is still valid JSON. A string value under a key that names a secret,
 such as `password` or `Authorization`, is redacted as a whole. Text and tool
 results longer than 256 KiB are cut and marked as truncated.
 
+The IDs that locate a Slack or Teams message (the team, tenant, channel,
+message and thread IDs or timestamps, the sender's user ID and the Teams
+service URL) are stored as received, even when a rule matches them, because
+replies are sent to them. The message text is redacted like any other.
+
 ### `telemetry`
 
 ```yaml
@@ -1584,9 +1607,11 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   output, intake and strategy a route names is defined. Glob and regular
   expression matches parse.
 - `slack.mode` is `socket` or `events`, and `events` has `signingSecret`.
-  `trustedBots` are bot IDs, and listeners are set only when the Slack app
-  receives events. Each listener has a channel name or ID, a `sender.kind`
-  of `human` or `bot`, bot and user IDs of the right shape, regular
+  `trustedBots` are bot IDs, `roleGroups` keys are user group IDs,
+  `roleUsers` keys are user IDs, every role is a known role, and listeners
+  are set only when the Slack app receives events. Each listener has a
+  channel name or ID, a `sender.kind` of `human` or `bot`, bot and user
+  IDs of the right shape, regular
   expressions that parse, `extract` patterns with at least one named
   group, and `trusted: true` only when `slack.trustedBots` is set.
 - `teams` has an `appID` and a `tenantID` of the right shape and exactly

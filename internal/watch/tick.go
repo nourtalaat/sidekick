@@ -302,7 +302,9 @@ func (t *Ticker) endIn(ctx context.Context, tx pgx.Tx, w db.Watcher, status, sto
 		return fmt.Errorf("set the watcher %s: %w", status, err)
 	}
 
-	stateChanged(ctx, t.log, &w, ended)
+	if err := stateChanged(ctx, tx, t.log, &w, ended); err != nil {
+		return fmt.Errorf("end watcher %s: %w", w.Name, err)
+	}
 
 	if err := t.opts.CloseGroup(ctx, tx, w.GroupID); err != nil {
 		return fmt.Errorf("let group %s close: %w", w.GroupID, err)

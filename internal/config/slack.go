@@ -5,9 +5,11 @@ import (
 	"maps"
 	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/registry"
+	"github.com/nourtalaat/sidekick/internal/roles"
 )
 
 // SlackMentionIntake is the intake name of events that start because
@@ -56,6 +58,34 @@ const (
 	ExtractSeverity = "severity"
 )
 
+// RoleName is the name of a Sidekick role in the config file.
+type RoleName string
+
+// Role names, lowest first.
+const (
+	RoleViewer    RoleName = "viewer"
+	RoleResponder RoleName = "responder"
+	RoleApprover  RoleName = "approver"
+	RoleAdmin     RoleName = "admin"
+)
+
+// knownRoleNames are the role names config accepts, lowest first.
+var knownRoleNames = []RoleName{RoleViewer, RoleResponder, RoleApprover, RoleAdmin}
+
+// Role returns the role n names, or 0 for a name that is not a role.
+func (n RoleName) Role() roles.Role {
+	return roles.Role(slices.Index(knownRoleNames, n) + 1)
+}
+
+// RoleNameOf returns the name of r, or "" for a value that is not a role.
+func RoleNameOf(r roles.Role) RoleName {
+	if r < roles.Viewer || int(r) > len(knownRoleNames) {
+		return ""
+	}
+
+	return knownRoleNames[r-1]
+}
+
 // The sender kinds a listener can match.
 var knownListenerSenders = []event.SenderKind{event.SenderHuman, event.SenderBot}
 
@@ -66,6 +96,8 @@ var (
 	botIDPattern = regexp.MustCompile(`^B[A-Z0-9]{2,}$`)
 	// userIDPattern is a Slack user ID, such as U01ABCDEF or W01ABCDEF.
 	userIDPattern = regexp.MustCompile(`^[UW][A-Z0-9]{2,}$`)
+	// userGroupIDPattern is a Slack user group ID, such as S01ABCDEF.
+	userGroupIDPattern = regexp.MustCompile(`^S[A-Z0-9]{2,}$`)
 )
 
 // Slack holds the Slack app's credentials and how it receives events
@@ -92,13 +124,18 @@ type Slack struct {
 	// APIURL is the base URL of the Slack Web API, ending in "/". Empty
 	// means https://slack.com/api/.
 	APIURL string `yaml:"apiURL"`
+	// RoleGroups maps Slack user group IDs to roles. A user in several
+	// groups gets the highest of their roles.
+	RoleGroups map[string]RoleName `yaml:"roleGroups"`
+	// RoleUsers maps Slack user IDs to roles, for teams without user
+	// groups. The higher of this role and the one from RoleGroups wins.
+	RoleUsers map[string]RoleName `yaml:"roleUsers"`
 }
 
 // Listener picks the Slack or Teams messages in one channel that start an
 // investigation (IN-5, IN-8). Every field of Match that is set must match.
 type Listener struct {
 	// Source is the chat app of the channel: slack, the default, or teams.
-	// TODO: [SK-18] Add source to the runtime listeners once they land.
 	Source ListenerSource `yaml:"source"`
 	// Channel is a Slack channel name such as "#alerts" or channel ID, or
 	// a Teams channel ID such as 19:abc123@thread.tacv2.
@@ -206,6 +243,26 @@ func (v *validator) checkSlackSection(s *Slack) {
 	if s.APIURL != "" && (!isHTTPURL(s.APIURL) || s.APIURL[len(s.APIURL)-1] != '/') {
 		v.errs.add("slack.apiURL", `expected an absolute http or https URL ending in "/", such as https://slack.com/api/, got %q`, s.APIURL)
 	}
+
+	v.checkRoleMap("slack.roleGroups", s.RoleGroups, userGroupIDPattern, "a user group ID such as S01ABCDEF")
+	v.checkRoleMap("slack.roleUsers", s.RoleUsers, userIDPattern, "a user ID such as U01ABCDEF")
+}
+
+// checkRoleMap checks that every key of m matches pattern and every value
+// is a role name.
+func (v *validator) checkRoleMap(path string, m map[string]RoleName, pattern *regexp.Regexp, want string) {
+	names := asStrings(knownRoleNames)
+
+	for _, id := range sortedKeys(m) {
+		at := joinPath(path, id)
+		if !pattern.MatchString(id) {
+			v.errs.add(at, "expected %s, got %q", want, id)
+		}
+
+		if role := m[id]; role.Role() == 0 {
+			v.errs.add(at, "unknown role %q, expected one of %s%s", role, strings.Join(names, ", "), didYouMean(string(role), names))
+		}
+	}
 }
 
 func (v *validator) checkListener(at, name string, l Listener) {
@@ -284,6 +341,7 @@ func (v *validator) checkIntakeName(path, name string) {
 func (v *validator) intakeNames() []string {
 	names := slices.Collect(maps.Keys(v.cfg.Intake.Webhooks))
 	names = append(names, slices.Collect(maps.Keys(v.cfg.Listeners))...)
+	names = append(names, v.extraIntakes...)
 
 	if v.cfg.Slack != nil {
 		names = append(names, SlackMentionIntake)
