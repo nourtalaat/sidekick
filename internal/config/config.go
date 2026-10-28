@@ -67,6 +67,7 @@ type Config struct {
 	Sources    map[string]Section `yaml:"sources"`
 	Intake     Intake             `yaml:"intake"`
 	Slack      *Slack             `yaml:"slack"`
+	Teams      *Teams             `yaml:"teams"`
 	Outputs    map[string]Section `yaml:"outputs"`
 	Strategies Strategies         `yaml:"strategies"`
 	Routes     []Route            `yaml:"routes"`
@@ -77,7 +78,7 @@ type Config struct {
 	Watch      Watch              `yaml:"watch"`
 
 	// Listeners are the file listeners, by name. Their events go through
-	// the Slack app.
+	// the Slack app or the Teams bot.
 	Listeners map[string]Listener `yaml:"listeners"`
 
 	// strategySet holds the built-in and file strategies, loaded by Parse.
