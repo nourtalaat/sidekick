@@ -281,21 +281,32 @@ func (h *Handler) waitingQuestion(ctx context.Context, queries *db.Queries, inv 
 // answerPastRetention ends the follow-up run of inv, which the claim of
 // job owns, without running it, because the retention job deleted steps
 // the run would resume from. In one transaction fenced like
-// finishFollowUp, the waiting questions are marked delivered at next_seq,
-// where the run's first step would have gone, and get an answer that says
-// why there is none; the investigation is final again with its report,
-// and the outputs show the answer, without progress lines, since the
-// steps they come from are gone.
+// finishFollowUp, the run takes the next seq without saving a step there,
+// the waiting questions are marked delivered at it and get an answer that
+// says why there is none, the investigation is final again with its
+// report, and the outputs show the answer, without progress lines, since
+// the steps they come from are gone.
 func (h *Handler) answerPastRetention(ctx context.Context, job db.Job, inv db.Investigation) error {
 	hist, err := newHistory(nil)
 	if err != nil {
 		return fmt.Errorf("start an empty history: %w", err)
 	}
 
-	seq := inv.NextSeq
-
 	err = pgx.BeginFunc(ctx, h.opts.Pool, func(tx pgx.Tx) error {
 		queries := db.New(tx)
+
+		// Taking a seq with no step behind it marks the delivery, and
+		// keeps the published answer newer than the update before it.
+		taken, err := queries.AdvanceInvestigation(ctx, db.AdvanceInvestigationParams{ID: inv.ID, Fence: inv.Fence})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("take a seq: %w", queue.ErrLeaseLost)
+		}
+
+		if err != nil {
+			return fmt.Errorf("take a seq: %w", err)
+		}
+
+		seq := taken.Seq
 
 		waiting, err := queries.ListWaitingInbox(ctx, inv.ID)
 		if err != nil {
