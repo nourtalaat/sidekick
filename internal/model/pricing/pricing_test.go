@@ -78,6 +78,34 @@ func TestTableCost(t *testing.T) {
 			wantOK: true,
 		},
 		{
+			name:   "OpenAI embedding model",
+			model:  "text-embedding-3-small",
+			usage:  model.Usage{InputTokens: 500_000},
+			want:   500_000 * 0.02,
+			wantOK: true,
+		},
+		{
+			name:   "Voyage embedding model",
+			model:  "voyage-4",
+			usage:  model.Usage{InputTokens: 2_000_000},
+			want:   2_000_000 * 0.06,
+			wantOK: true,
+		},
+		{
+			name:   "Titan embedding model",
+			model:  "amazon.titan-embed-text-v2:0",
+			usage:  model.Usage{InputTokens: 1_000_000},
+			want:   1_000_000 * 0.02,
+			wantOK: true,
+		},
+		{
+			name:   "Cohere embedding model through a geo inference profile",
+			model:  "eu.cohere.embed-v4:0",
+			usage:  model.Usage{InputTokens: 1_000_000},
+			want:   1_000_000 * 0.12,
+			wantOK: true,
+		},
+		{
 			name:      "an override wins over the shipped price",
 			overrides: map[string]model.Price{"claude-opus-5-5": override},
 			model:     "claude-opus-5-5",
@@ -141,6 +169,13 @@ func TestShippedPrices(t *testing.T) {
 
 			p, ok := Shipped().Lookup(id)
 			require.True(t, ok)
+
+			if _, embedding := shippedEmbeddings[id]; embedding {
+				requireSaneEmbedding(t, p)
+
+				return
+			}
+
 			requireSane(t, p)
 
 			if p.Above != nil {
@@ -212,4 +247,16 @@ func requireSane(t *testing.T, p model.Price) {
 	require.Less(t, p.CacheReadPerMTok, p.InputPerMTok)
 	require.LessOrEqual(t, p.InputPerMTok, p.CacheWritePerMTok)
 	require.Less(t, p.InputPerMTok, p.OutputPerMTok)
+}
+
+// requireSaneEmbedding checks that an embedding price has an input price
+// and nothing else, since an embedding call has only input tokens.
+func requireSaneEmbedding(t *testing.T, p model.Price) {
+	t.Helper()
+
+	require.Positive(t, p.InputPerMTok)
+	require.Zero(t, p.OutputPerMTok)
+	require.Zero(t, p.CacheReadPerMTok)
+	require.Zero(t, p.CacheWritePerMTok)
+	require.Nil(t, p.Above)
 }
