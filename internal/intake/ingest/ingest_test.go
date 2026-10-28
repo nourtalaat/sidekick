@@ -1,6 +1,7 @@
 package ingest
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -154,24 +155,45 @@ func TestRow(t *testing.T) {
 			},
 		},
 		{
-			name: "the Slack reference and the text are redacted",
+			name: "the Slack reference is kept as it is while the text is redacted",
 			d:    Delivery{Intake: "alerts"},
-			ev:   event.Event{Key: "k", Kind: event.KindMessage, Text: "token SEEDED-7", Slack: &event.SlackRef{Channel: "C1", TS: "1.2", UserID: "SEEDED-8"}},
-			check: func(t *testing.T, _ event.Event, got rowView) {
+			ev: event.Event{Key: "k", Kind: event.KindMessage, Text: "token SEEDED-7", Slack: &event.SlackRef{
+				TeamID: "T1", Channel: "C1", TS: "1700000000.123456", ThreadTS: "1700000000.000100", UserID: "SEEDED-8",
+			}},
+			check: func(t *testing.T, ev event.Event, got rowView) {
 				t.Helper()
 				require.Equal(t, "token "+redactor.Text("SEEDED-7").Text, got.body)
-				require.NotContains(t, got.slack, "SEEDED-8")
-				require.Contains(t, got.slack, `"Channel":"C1"`)
+				require.NotEqual(t, ev.Slack.UserID, redactor.Text(ev.Slack.UserID).Text, "the user ID matches a rule")
+
+				var stored event.SlackRef
+				require.NoError(t, json.Unmarshal([]byte(got.slack), &stored))
+				require.Equal(t, *ev.Slack, stored)
+				require.Empty(t, got.teams)
 			},
 		},
 		{
-			name: "the Teams reference is redacted",
+			name: "the Teams reference is kept as it is while the text is redacted",
 			d:    Delivery{Intake: "alerts"},
-			ev:   event.Event{Key: "k", Kind: event.KindMessage, Teams: &event.TeamsRef{ChannelID: "19:a@thread.tacv2", MessageID: "2", UserID: "SEEDED-9"}},
-			check: func(t *testing.T, _ event.Event, got rowView) {
+			ev: event.Event{Key: "k", Kind: event.KindMessage, Text: "token SEEDED-10", Teams: &event.TeamsRef{
+				TenantID:   "SEEDED-11",
+				TeamID:     teamIDCardNumber,
+				ChannelID:  "19:abc@thread.skype",
+				MessageID:  "1700000000123",
+				ThreadID:   "1700000000123",
+				UserID:     "29:SEEDED-9",
+				ServiceURL: "https://smba.trafficmanager.net/amer/",
+			}},
+			check: func(t *testing.T, ev event.Event, got rowView) {
 				t.Helper()
-				require.NotContains(t, got.teams, "SEEDED-9")
-				require.Contains(t, got.teams, `"ChannelID":"19:a@thread.tacv2"`)
+				require.Equal(t, "token "+redactor.Text("SEEDED-10").Text, got.body)
+
+				for _, id := range []string{ev.Teams.TenantID, ev.Teams.TeamID, ev.Teams.ChannelID, ev.Teams.UserID} {
+					require.NotEqual(t, id, redactor.Text(id).Text, "%s matches a rule", id)
+				}
+
+				var stored event.TeamsRef
+				require.NoError(t, json.Unmarshal([]byte(got.teams), &stored))
+				require.Equal(t, *ev.Teams, stored)
 				require.Empty(t, got.slack)
 			},
 		},
@@ -201,6 +223,115 @@ func TestRow(t *testing.T) {
 			tt.check(t, tt.ev, got)
 		})
 	}
+}
+
+func TestRedactedRef(t *testing.T) {
+	t.Parallel()
+
+	redactor := testRedactor(t)
+	w := &Writer{redactor: redactor}
+
+	// ref stands for a Slack or Teams reference that gained a field the
+	// writer does not list as an ID.
+	type ref struct {
+		ID       string
+		Note     string
+		Password string
+	}
+
+	tests := []struct {
+		name string
+		ref  ref
+		ids  []string
+		want map[string]string
+	}{
+		{
+			name: "a listed field is kept and any other is redacted",
+			ref:  ref{ID: "SEEDED-1", Note: "SEEDED-2"},
+			ids:  []string{"ID"},
+			want: map[string]string{"ID": "SEEDED-1", "Note": redactor.Text("SEEDED-2").Text, "Password": ""},
+		},
+		{
+			name: "the rules that look at a key apply to a field not listed",
+			ref:  ref{ID: "U1", Password: "hunter2"},
+			ids:  []string{"ID"},
+			want: map[string]string{"ID": "U1", "Note": "", "Password": redactedMember(t, redactor, "Password", "hunter2")},
+		},
+		{
+			name: "with no IDs listed, every field is redacted",
+			ref:  ref{ID: "SEEDED-3"},
+			want: map[string]string{"ID": redactor.Text("SEEDED-3").Text, "Note": "", "Password": ""},
+		},
+		{
+			name: "a NUL character in a kept field is replaced, so jsonb takes it",
+			ref:  ref{ID: "a\x00b"},
+			ids:  []string{"ID"},
+			want: map[string]string{"ID": "a�b", "Note": "", "Password": ""},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := w.redactedRef(tt.ref, tt.ids)
+			require.NoError(t, err)
+
+			var fields map[string]string
+			require.NoError(t, json.Unmarshal(got, &fields))
+			require.Equal(t, tt.want, fields)
+		})
+	}
+}
+
+func TestRefIDsAreFields(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		ref  any
+		ids  []string
+	}{
+		{name: "Slack", ref: event.SlackRef{}, ids: slackRefIDs},
+		{name: "Teams", ref: event.TeamsRef{}, ids: teamsRefIDs},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			raw, err := json.Marshal(tt.ref)
+			require.NoError(t, err)
+
+			var fields map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(raw, &fields))
+
+			for _, id := range tt.ids {
+				require.Contains(t, fields, id, "a renamed or removed field would leave its new name redacted")
+			}
+		})
+	}
+}
+
+// teamIDCardNumber is an all-digit ID that passes the Luhn check, so the
+// card_numbers rule matches it.
+const teamIDCardNumber = "4111111111111111"
+
+// redactedMember returns value as the redactor stores it under key in a
+// JSON object.
+func redactedMember(t *testing.T, redactor *redact.Redactor, key, value string) string {
+	t.Helper()
+
+	raw, err := json.Marshal(map[string]string{key: value})
+	require.NoError(t, err)
+
+	out, _ := redactor.JSON(raw)
+
+	var fields map[string]string
+	require.NoError(t, json.Unmarshal(out, &fields))
+	require.NotEqual(t, value, fields[key], "a key rule matches %s", key)
+
+	return fields[key]
 }
 
 // rowView holds the fields of an events row that TestRow checks.

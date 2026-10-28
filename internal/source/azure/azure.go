@@ -31,8 +31,17 @@ const (
 	logAnalyticsScope = "https://api.loganalytics.io/.default"
 )
 
-// activityLogVersion is the pinned api-version of the Activity Log API.
-const activityLogVersion = "2015-04-01"
+// The pinned api-version of each Azure Resource Manager API the source
+// calls.
+const (
+	metricsVersion     = "2024-02-01"
+	activityLogVersion = "2015-04-01"
+	// alertsVersion is a preview: Alerts Management has no stable
+	// version of the alerts list.
+	alertsVersion         = "2023-07-12-preview"
+	resourceHealthVersion = "2025-05-01"
+	aksVersion            = "2026-08-01"
+)
 
 var (
 	// errNoSecrets is returned when clientSecret is set but the source is
@@ -96,8 +105,16 @@ func (s *Source) run(ctx context.Context, call source.Call) (source.Result, erro
 	switch call.Tool {
 	case toolQueryLogs:
 		return s.queryLogs(ctx, call.Input)
+	case toolQueryMetrics:
+		return s.queryMetrics(ctx, call.Input)
+	case toolListAlerts:
+		return s.listAlerts(ctx, call.Input)
 	case toolListChanges:
 		return s.listChanges(ctx, call.Input)
+	case toolGetResourceHealth:
+		return s.getResourceHealth(ctx, call.Input)
+	case toolGetAKSCluster:
+		return s.getAKSCluster(ctx, call.Input)
 	default:
 		return source.Result{}, fmt.Errorf("tool %q: %w", call.Tool, errUnknownTool)
 	}
