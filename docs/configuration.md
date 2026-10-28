@@ -83,6 +83,7 @@ model:
       apiKeySecret: { name: sidekick-anthropic, key: apiKey }
   roles:
     investigate: claude      # required, and the model must be able to call tools
+    triage: claude           # optional; see "Triage" in investigations.md
     judge: claude            # grades benchmark runs; must call tools; default: the investigate connector
     summarize: claude
   prices:
@@ -118,7 +119,7 @@ claude:
 
   ```yaml
   capabilities:
-    toolCalling: true          # needed for the investigate role
+    toolCalling: true          # needed for the investigate and triage roles
     toolChoice: true           # the model accepts a forced tool choice
     thinkingModes: [adaptive]  # adaptive and/or enabled
     effortLevels: [low, medium, high]
@@ -293,9 +294,9 @@ gpt-with-a-key:
   - these Foundry models from other providers: `Kimi-K2.6`, `Kimi-K2.5`,
     `grok-4.7`, `grok-4.6` and `grok-4.3`, which call tools, and
     `DeepSeek-V4-Pro`, `DeepSeek-V4-Flash` and `DeepSeek-V3.2`, which
-    cannot be the `investigate` model. DeepSeek's thinking models fail a
-    tool call turn unless the reasoning of earlier turns is sent back, which
-    Sidekick does not do on Chat Completions; use them for `triage` or
+    cannot be the `investigate` or `triage` model. DeepSeek's thinking
+    models fail a tool call turn unless the reasoning of earlier turns is
+    sent back, which Sidekick does not do on Chat Completions; use them for
     `summarize`. Foundry does not say whether these models honour a forced
     tool choice, so Sidekick does not force one; when the model ends a turn
     without calling a tool, the investigation reminds it to call
@@ -666,6 +667,68 @@ The tools, as the model sees them with the source name `backstage`, are
 `backstage__get_service`, `backstage__get_owner` and
 `backstage__get_system`.
 
+#### Elasticsearch and OpenSearch sources (`type: elasticsearch`)
+
+An Elasticsearch source searches the logs an Elasticsearch or OpenSearch
+cluster keeps, through the `_search` and `_field_caps` APIs, with an API
+key or a user and password. Its tools only read, and only the index
+patterns it lists. [The Elasticsearch and OpenSearch
+source](sources/elasticsearch.md) lists every key, the read-only role it
+needs and how to set up links to Kibana or OpenSearch Dashboards.
+
+| Key | Meaning |
+|---|---|
+| `flavor` | `elasticsearch` or `opensearch`. Default: `elasticsearch`. |
+| `baseURL` | The root of the cluster's REST API, for example `https://logs.example.com:9200`. Required. It must use `https`; plain `http` is accepted only for `localhost` and loopback addresses. |
+| `apiKeySecret` | `{ name, key }` of the Secret that holds an Elasticsearch API key, encoded. Only with `flavor: elasticsearch`. |
+| `basicAuth` | `username` and `passwordSecret`, `{ name, key }` of the Secret that holds the password. Set exactly one of `apiKeySecret` and `basicAuth`. |
+| `indexPatterns` | The index patterns the tools may read, such as `logs-*`. Required; a call for an index no pattern covers fails before anything is sent. |
+| `timeField`, `messageField` | The fields that hold each log's time and message. Default: `@timestamp` and `message`. |
+| `defaultFields` | The fields `search_logs` returns when the call names none. Default: a few Elastic Common Schema fields such as `log.level` and `service.name`. |
+| `discoverURL` | A Go template for evidence links to Kibana Discover or OpenSearch Dashboards, with `.Index`, `.Query`, `.From` and `.To`. |
+
+```yaml
+sources:
+  logs:
+    type: elasticsearch
+    flavor: opensearch
+    baseURL: https://opensearch.example.com:9200
+    basicAuth:
+      username: sidekick
+      passwordSecret: { name: sidekick-opensearch, key: password }
+    indexPatterns: [logs-*]
+```
+
+The tools, as the model sees them with the source name `logs`:
+
+| Tool | Returns |
+|---|---|
+| `logs__search_logs` | The newest logs that match a Lucene query string in a time range, with the chosen fields. |
+| `logs__count_logs` | Counts of matching logs over time, optionally split by the 10 most common values of one field. |
+| `logs__list_fields` | The fields of an index pattern with their types. |
+
+How it behaves:
+
+- **Start-up never waits for the cluster.** The first tool call is the
+  first request, and the API key or password is read from its Secret for
+  each request.
+- **Input.** An index outside `indexPatterns`, an `_index` clause in the
+  query string that points outside it, a range longer than 7 days or with
+  no `since`, or input that does not fit is a tool error, and nothing is
+  sent.
+- **Results** are JSON. `search_logs` returns at most 200 hits, with long
+  values cut, and says when hits were left out. Searches and counts link
+  to Kibana or OpenSearch Dashboards when `discoverURL` is set.
+- **No data.** A search that matches nothing and an index that does not
+  exist are reported as no data.
+- **Errors.** A query string the cluster cannot parse or a privilege the
+  role lacks goes to the model as a tool error with the cluster's message.
+  Refused credentials, rate limits and server errors count as failures of
+  the source.
+- **Timeout.** `timeout` may be at most `60s`, because the HTTP client
+  stops waiting for response headers after 60 seconds; `sidekick config
+  validate` rejects a longer one.
+
 #### Google Cloud sources (`type: gcp`)
 
 A Google Cloud source reads Google Cloud projects through the Cloud
@@ -853,6 +916,120 @@ How it behaves:
   stops waiting for response headers after 60 seconds; `sidekick config
   validate` rejects a longer one.
 
+#### Prometheus sources (`type: prometheus`)
+
+A Prometheus source reads Prometheus or a server that shares its HTTP API,
+such as Thanos, Mimir, Cortex or VictoriaMetrics, and optionally an
+Alertmanager, with a bearer token, basic auth or a client certificate from
+Secrets, or none. Its tools only read. [Prometheus
+source](sources/prometheus.md) lists every key, the access it needs and
+its limits.
+
+| Key | Meaning |
+|---|---|
+| `baseURL` | The root of the Prometheus HTTP API, the part before `/api/v1`. Required. It must use `https` when credentials are sent, except for `localhost` and loopback addresses. |
+| `alertmanagerURL` | The root of an Alertmanager API, the part before `/api/v2`. When set, `list_alerts` reads Alertmanager, with silences. |
+| `bearerTokenSecret` | `{ name, key }` of the Secret that holds a bearer token. |
+| `basicAuth` | `username`, and `passwordSecret`, the `{ name, key }` of the Secret that holds the password. Not with `bearerTokenSecret`. |
+| `tls` | `certSecret` and `keySecret` for a client certificate, and `caSecret` for the CAs to trust, each a `{ name, key }`. |
+| `headers` | Extra headers for every request, such as `X-Scope-OrgID`. Never credentials. |
+| `links` | `prometheusURL`, the web UI for evidence links (default: `baseURL`), or `grafanaURL` and `grafanaDatasource` for links to Grafana Explore. |
+
+```yaml
+sources:
+  prometheus:
+    type: prometheus
+    baseURL: http://prometheus-operated.monitoring:9090
+    alertmanagerURL: http://alertmanager-operated.monitoring:9093
+```
+
+The tools, as the model sees them with the source name `prometheus`:
+
+| Tool | Returns |
+|---|---|
+| `prometheus__query` | An instant PromQL query: each series' labels and value. |
+| `prometheus__query_range` | A PromQL range query with a step picked for at most 250 points per series: the min, max, average and last of each series, and its points. |
+| `prometheus__list_alerts` | The firing and pending alerts, or the Alertmanager alerts with their silences. |
+| `prometheus__get_rules` | The alerting rules with one name: expression, `for`, labels, health and last error. |
+| `prometheus__list_series` | The series that match a series selector. |
+| `prometheus__list_label_values` | The values of one label. |
+| `prometheus__list_targets` | The scrape targets that are not up. |
+
+How it behaves:
+
+- **Start-up never waits for Prometheus.** The first tool call is the
+  first request. Secrets are read again for each request, so a rotated
+  one needs no restart.
+- **Queries.** Every PromQL query and series selector is parsed with the
+  Prometheus parser before it is sent; one that does not parse is a tool
+  error, and nothing is sent.
+- **Results** are JSON with links to the query in the Prometheus web UI or
+  Grafana Explore, or to the alerts or targets page, which become evidence
+  links in the report. Lists are capped as
+  [Prometheus source](sources/prometheus.md#limits) describes, and say
+  when they were cut.
+- **No data.** A query with no series, an empty list, and an API the
+  server does not have, are reported as no data.
+- **Errors.** A query the server refuses or cannot run, a `403`, and an
+  answer larger than 16 MiB go to the model as a tool error with the
+  server's message. A refused credential, rate limits, server errors and
+  secrets that cannot be read count as failures of the source.
+- **Timeout.** `timeout` may be at most `60s`, because the HTTP client
+  stops waiting for response headers after 60 seconds; `sidekick config
+  validate` rejects a longer one.
+
+#### LaunchDarkly sources (`type: launchdarkly`)
+
+A LaunchDarkly source reads feature flag changes from the LaunchDarkly
+audit log and the current state of flags, with an access token, so
+investigations can see that someone changed a flag. Its tools only read.
+[The LaunchDarkly source](sources/launchdarkly.md) lists its limits and
+how to make a token with the Reader role.
+
+| Key | Meaning |
+|---|---|
+| `tokenSecret` | `{ name, key }` of the Secret that holds the access token. Required. |
+| `projects` | The projects the tools may read, each with its `key` and the `environments` in it they may read. Required; a call for any other project or environment fails before anything is sent. |
+| `baseURL` | The root of the LaunchDarkly instance: `https://app.eu.launchdarkly.com` for EU, `https://app.launchdarkly.us` for Federal. It must use `https`; plain `http` is accepted only for `localhost` and loopback addresses. Default: `https://app.launchdarkly.com`. |
+
+```yaml
+sources:
+  flags:
+    type: launchdarkly
+    tokenSecret: { name: sidekick-launchdarkly, key: token }
+    projects:
+      - key: shop
+        environments: [production, staging]
+```
+
+The tools, as the model sees them with the source name `flags`:
+
+| Tool | Returns |
+|---|---|
+| `flags__list_flag_changes` | Audit log changes to the flags of one project and environment in a time range of at most 7 days, or to one flag: who, when, what was done, the summary, the comment and a link. |
+| `flags__get_flag` | One flag's state in one environment: on or off, the number of rules and targets, what it serves by default and when off, and when it last changed. |
+
+How it behaves:
+
+- **Start-up never waits for LaunchDarkly.** The token is read from its
+  Secret for each request, so a rotated token needs no restart.
+- **Scope.** Both tools take `project` and `environment`, which may be
+  left out when the config lists only one. Anything outside `projects`, a
+  key that is not one, or a range longer than 7 days is a tool error, and
+  nothing is sent.
+- **Results** are JSON with links to the flags' pages in LaunchDarkly,
+  which become evidence links in the report. Lists are capped as
+  [The LaunchDarkly source](sources/launchdarkly.md#limits) describes, and
+  say when they were cut.
+- **No data.** A range without changes, and a project or flag LaunchDarkly
+  does not have, are reported as no data.
+- **Errors.** A refused request, such as a 400 or a 403, goes to the model
+  as a tool error with LaunchDarkly's message. A refused token, rate
+  limits and server errors count as failures of the source.
+- **Timeout.** `timeout` may be at most `60s`, because the HTTP client
+  stops waiting for response headers after 60 seconds; `sidekick config
+  validate` rejects a longer one.
+
 #### Mock sources (`type: mock`)
 
 A mock source answers tool calls from fixtures instead of a real system.
@@ -943,8 +1120,10 @@ investigations:
 - `roleGroups` and `roleUsers` give Slack users their Sidekick role, one
   of `viewer`, `responder`, `approver` and `admin`. `roleGroups` maps
   Slack user group IDs (`S...`) to roles, and `roleUsers` maps user IDs
-  (`U...` or `W...`) to roles, for teams without user groups. A user gets
-  the highest role from either map; a user in neither is a `responder`.
+  (`U...` or `W...`) to roles, for teams without user groups. With the
+  [`oidc` section](#oidc) set, a Slack user whose email a web UI user has
+  also gets that user's role. A user gets the highest of these roles; a
+  user none of them gives a role is a `responder`.
   [Roles](slack.md#roles) says what each role may do.
 
 [Investigations in Slack](slack.md) describes how to set up the app.
@@ -986,6 +1165,44 @@ With the section set, Sidekick serves the bot's messaging endpoint at
 `POST /teams/messages` on `server.listen`, which needs a public https URL.
 [Investigations in Microsoft Teams](teams.md) describes how to set up the
 bot.
+
+### `oidc`
+
+```yaml
+oidc:
+  issuer: https://acme.okta.com                         # required
+  clientID: sidekick                                    # required
+  clientSecret: { name: sidekick-oidc, key: clientSecret }   # required
+  groupsClaim: groups                                   # the ID token claim with the user's groups
+  scopes: [groups]                                      # asked for besides openid, email and profile
+  roles:                                                # role to groups; the highest match wins
+    admin: [sre-admins]
+    approver: [oncall-leads]
+    responder: [engineering]
+    viewer: ["*"]                                       # "*" matches everyone
+```
+
+The section turns on the web UI login and the JSON API under `/api/v1`.
+Without it, neither is served. [Web UI and API](web-ui.md) says how to
+register Sidekick with your identity provider.
+
+- `issuer` is the provider's issuer URL. It must be https, except on a
+  loopback address for local testing.
+- `clientID` and `clientSecret` are those of the app you register for
+  Sidekick at the provider. The redirect URI to register is
+  `<server.publicURL>/auth/callback`, so `server.publicURL` is required
+  and must be https.
+- `groupsClaim` names the ID token claim that lists the user's groups.
+  Some providers send groups only when a scope asks for them; list it in
+  `scopes`.
+- `roles` maps each role to the groups that give it. A user gets the
+  highest role any of their groups gives, and the role is read again at
+  every login. A user no group matches cannot sign in, so map `viewer` to
+  `"*"` to let everyone in with read access. `"*"` is allowed only for
+  `viewer`, so a typo cannot make every user an admin, and not at all
+  with `https://accounts.google.com`, which anyone with a Google account
+  can sign in to. Google sends no groups claim of its own; send groups
+  in a custom claim and name it in `groupsClaim`.
 
 ### `listeners`
 
@@ -1072,6 +1289,9 @@ The types:
 - `slack` posts one message per investigation and edits it as the
   investigation runs. [Investigations in Slack](slack.md) describes its
   keys, what it posts and how to set up the Slack app.
+- `teams` does the same in a Microsoft Teams thread, as the bot of the
+  [`teams`](#teams) section, which it needs. [Investigations in Microsoft
+  Teams](teams.md#what-it-posts) describes its one key, `channel`.
 - `linear.comment` and `jira.comment` post the result as a comment on the
   Linear or Jira issue the alert names. [Results on tickets](tickets.md)
   describes their keys and how they find the issue.
@@ -1090,8 +1310,16 @@ strategies:
   dir: /etc/sidekick/strategies   # extra strategy files, read-only
 ```
 
-Sidekick ships with built-in strategies; this release has `generic-alert`,
-which fits any alert. `dir` adds your own: every `*.yaml` or `*.yml` file at
+Sidekick ships with these built-in strategies:
+
+| Strategy | For |
+|---|---|
+| `generic-alert` | Any alert or event that no more specific strategy covers. |
+| `latency-alert` | A latency monitor, such as p95 or p99 response time, for an HTTP or RPC service. |
+| `error-rate-alert` | An error rate monitor, such as the share of failed requests or 5xx responses. |
+| `service-down` | A service, host or endpoint that stopped answering, such as a failed health check or uptime probe. |
+
+`dir` adds your own: every `*.yaml` or `*.yml` file at
 the top of the directory is one strategy. Hidden files and other files are
 skipped. A `dir` that is not set, or does not exist, adds none; one that
 exists but cannot be read stops Sidekick from starting.
@@ -1109,8 +1337,8 @@ A strategy file looks like this. Unknown keys are errors, as in
 ```yaml
 name: latency-alert                # required; lower-case letters, digits and "-"
 description: A latency monitor fired for an HTTP or RPC service.   # required
-match:                             # the events the strategy fits; used to pick
-  alertNames: ["*Latency*"]        # a strategy in a later release
+match:                             # the events the strategy fits; triage is
+  alertNames: ["*Latency*"]        # told which strategies fit an event
   textPattern: "(?i)latency|slow"  # a regular expression
 sources:
   prefer: [signoz, k8s]            # sources to try first; unknown names are skipped
@@ -1487,9 +1715,18 @@ A watcher ends in one of these states:
   one that could not run, starts the count again.
 - `timed_out`: it ran for `timeout` without recovering.
 - `stopped`: every alert of the group recovered (`group_resolved`; an `alert`
-  watcher counts as recovered instead), or a config change no longer allows
-  its check, for example a host taken off `allowHosts` or a source removed
-  (`config_changed`).
+  watcher counts as recovered instead), a responder stopped it with the
+  Stop watching button in Slack (`responder`), or a config change no longer
+  allows its check, for example a host taken off `allowHosts` or a source
+  removed (`config_changed`).
+
+Each change of a watcher's state, from its start to its end, is shown in
+the investigation's outputs, such as the
+[Slack message](slack.md#what-it-posts) and
+[webhook callbacks](webhook-callbacks.md#watcher-events), and goes to the
+investigation's inbox, so a running investigation sees it before the
+model's next answer. The model weighs it as evidence; a watcher never
+decides the verdict by itself.
 
 A group whose grouping window ends while one of its watchers runs stays
 open, so events with the same fingerprint still join it, and closes when
@@ -1501,7 +1738,8 @@ With `allowModel: true`, investigations can start watchers with the
 [Watchers](#watchers)). A request outside the limits or the bounds, or over
 `maxPerGroup` or `maxTotal`, gets an error that names the limit, and
 nothing starts. A route or strategy watcher over `maxPerGroup` or
-`maxTotal` is not started, and a line is logged.
+`maxTotal` is not started: a line is logged, and the investigation's inbox
+says which watcher did not start and why.
 
 `allowHosts` lists the hosts an HTTP check may reach: exact host names or
 IP addresses, or `*.` and a name, which matches every name below it
@@ -1544,6 +1782,53 @@ A refused request ends the check with an error and is counted in
 `sidekick_watch_http_blocked_total`, by reason: `host`, `private_ip` or
 `redirect`.
 
+### `retention`
+
+How long Sidekick keeps each kind of record. Once a day, old records are
+deleted. Only this file sets these periods. Each is a whole number of days
+such as `90d`, or a duration such as `36h`.
+
+```yaml
+retention:
+  events: 90d          # received alerts and messages, by when they arrived
+  investigations: 365d # investigations, with their report, by when they were created
+  steps: 90d           # the full record of each step of a run, by when it started
+  auditLog: 730d       # audit log entries, by when they were written
+  watcherChecks: 30d   # results of single watcher checks, by when they ran
+```
+
+`steps` and `watcherChecks` cannot be longer than `investigations`,
+because deleting an investigation deletes its steps and its watchers with
+their checks.
+
+Every replica checks once an hour, and at start-up, that the retention
+job of the day (in UTC) is queued; however many replicas there are, it
+runs once a day. It deletes at most 5,000 rows at a time, oldest first,
+each batch in a short transaction of its own, so it does not hold locks
+for long. It also deletes finished background jobs: done jobs after 1
+day, and dead jobs after 30 days. `sidekick_retention_deleted_rows_total`
+counts what it deleted, by table.
+
+Deleting an investigation also deletes its steps, its inbox, its
+published message references, its feedback, its watchers with their
+checks, and its event group. An investigation whose event group is
+still open is kept until the group closes.
+
+With the defaults, an investigation outlives its events and its steps.
+An investigation older than `events` and `steps` keeps its verdict,
+report, costs and feedback, but no longer has the alert or message that
+started it, nor the full record of its tool calls and model turns.
+Responders can still rate it, and its message is still updated; it then
+names its subject "the alert", since the alert's title is gone. A
+follow-up question on an investigation that lost any of its steps is not
+investigated: it gets a short answer that the investigation is past its
+retention period and its details were deleted.
+
+The audit log can be deleted only by the retention job: the database
+rejects any other `DELETE` or `TRUNCATE` of it, as it rejects every
+`UPDATE`. This guards against bugs and stray queries, not against someone
+with access to the database, who can turn the guard off.
+
 ## Defaults
 
 | Setting | Default |
@@ -1557,6 +1842,7 @@ A refused request ends the check with an error and is counted in
 | `slack.mode` | `socket` |
 | `slack.followUps` | `mention` |
 | `slack.apiURL` | `https://slack.com/api/` |
+| `oidc.groupsClaim` | `groups` |
 | `routes[].priority` | `100` |
 | `routes[].strategy` | `generic-alert` |
 | `routes[].mode` | `read-only` |
@@ -1589,6 +1875,10 @@ A refused request ends the check with an error and is counted in
 | `watch.minInterval`, `watch.maxInterval`, `watch.maxTimeout` | `10s`, `15m`, `4h` |
 | `watch.http.allowHosts` | none: HTTP checks cannot reach any host |
 | `watch.http.allowPrivate` | none: every private and special range is blocked |
+| `retention.events`, `retention.steps` | `90d` |
+| `retention.investigations` | `365d` |
+| `retention.auditLog` | `730d` |
+| `retention.watcherChecks` | `30d` |
 
 ## What is checked
 
@@ -1602,7 +1892,7 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
 - Every `provider`, source `type`, `adapter` and output `type` is one this
   version of Sidekick has, and its section passes that plugin's own checks.
 - `model.roles.investigate` is set, every role names a defined connector,
-  and the connectors for `investigate` and `judge`, globally or on a
+  and the connectors for `investigate`, `triage` and `judge`, globally or on a
   route, can call tools.
 - Every secret reference has a `name` and a `key`, each a plain name without
   `/`. At start-up, every referenced secret file must exist and be readable.
@@ -1626,6 +1916,13 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   `source` is `slack` or `teams`; listeners with `source: teams` need the
   `teams` section, a Teams channel ID, Teams bot IDs and Microsoft Entra
   object IDs, and `trusted: true` only with `teams.trustedBots`.
+- `oidc` has an `issuer` that is https (or http on a loopback address), a
+  `clientID`, a `clientSecret`, a non-empty `groupsClaim` and `scopes`,
+  and at least one known role in `roles`, each with at least one group.
+  `"*"` is used only for `viewer`, and never with
+  `https://accounts.google.com`.
+  With `oidc` set, `server.publicURL` is required and must be https (or
+  http on a loopback address).
 - Every strategy file in `strategies.dir` is valid, and no two of them have
   the same name.
 - Every route is `read-only` with no `actions`, and its budgets, daily
@@ -1657,6 +1954,8 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
 - Watcher names are unique within a route, each check passes its own
   checks, an `http` check's host is in `watch.http.allowHosts`, and a `tool`
   check's source is one of the route's.
+- Every `retention` period is positive, and `retention.steps` and
+  `retention.watcherChecks` are at most `retention.investigations`.
 - `database.migrations`, `report.minFalsePositiveConfidence` and
   `telemetry.logLevel` are known values, URLs are absolute, and listen
   addresses have a port.

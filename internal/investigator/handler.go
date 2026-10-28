@@ -19,6 +19,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/model/pricing"
+	"github.com/nourtalaat/sidekick/internal/prompt"
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/store/db"
@@ -115,6 +116,7 @@ type Route struct {
 type Handler struct {
 	opts     Options
 	builtins builtins
+	triager  triager
 	log      *slog.Logger
 	tracer   trace.Tracer
 	// now is the clock of the soft limits. Tests replace it.
@@ -144,6 +146,11 @@ func New(opts Options) (*Handler, error) {
 		return nil, fmt.Errorf("new investigator: %s: %w", report.AnswerFollowUpTool, err)
 	}
 
+	triage, err := tools.ParseInputSchema(submitTriageSchema)
+	if err != nil {
+		return nil, fmt.Errorf("new investigator: %s: %w", prompt.SubmitTriageTool, err)
+	}
+
 	tp := opts.TracerProvider
 	if tp == nil {
 		tp = otel.GetTracerProvider()
@@ -157,6 +164,7 @@ func New(opts Options) (*Handler, error) {
 	h := &Handler{
 		opts:     opts,
 		builtins: builtins{submitVerdict: submit, recordFinding: record, answerFollowUp: answer},
+		triager:  triager{schema: triage, strategies: opts.Strategies},
 		log:      log,
 		tracer:   tp.Tracer(tracerName),
 		now:      time.Now,

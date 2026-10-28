@@ -11,21 +11,8 @@ import (
 	"time"
 
 	"github.com/nourtalaat/sidekick/internal/source"
+	"github.com/nourtalaat/sidekick/internal/source/promql"
 )
-
-// promAnswer is the answer of the Prometheus query_range API.
-type promAnswer struct {
-	Status string `json:"status"`
-	Error  string `json:"error"`
-	Data   struct {
-		ResultType string `json:"resultType"`
-		Result     []struct {
-			Metric map[string]string `json:"metric"`
-			Values [][2]any          `json:"values"`
-		} `json:"result"`
-	} `json:"data"`
-	Warnings []string `json:"warnings"`
-}
 
 // promPoint is one point of a PromQL series: the time and the value as
 // Prometheus writes it, such as "0.25" or "NaN".
@@ -85,25 +72,30 @@ func (s *Source) queryPromQL(ctx context.Context, input json.RawMessage) (source
 
 	target := s.apis.prometheus + "/projects/" + url.PathEscape(project) + "/location/global/prometheus/api/v1/query_range"
 
-	var answer promAnswer
+	var answer promql.Answer[promql.QueryData]
 	if err := s.client.get(ctx, target, query, &answer); err != nil {
 		return source.Result{}, fmt.Errorf("run the PromQL query in %s: %w", project, err)
 	}
 
-	if answer.Status != "success" {
+	if answer.Status != promql.StatusSuccess {
 		return source.Result{}, &source.ToolError{Message: "the PromQL query failed: " + source.CutText(answer.Error, maxMessageLen)}
 	}
 
+	series, err := answer.Data.Series()
+	if err != nil {
+		return source.Result{}, fmt.Errorf("read the PromQL answer of %s: %w", project, err)
+	}
+
 	limit := limitOf(in.Limit, defaultSeries, maxSeries)
-	out := promResult{Project: project, Series: make([]promSeries, 0, min(len(answer.Data.Result), limit))}
+	out := promResult{Project: project, Series: make([]promSeries, 0, min(len(series), limit))}
 	b := budget{}
-	cut := len(answer.Data.Result) > limit
+	cut := len(series) > limit
 
 	for _, warning := range answer.Warnings {
 		out.Warnings = append(out.Warnings, source.CutText(warning, maxNameLen))
 	}
 
-	for _, r := range answer.Data.Result[:min(len(answer.Data.Result), limit)] {
+	for _, r := range series[:min(len(series), limit)] {
 		labels, labelsCut := cutLabels(r.Metric)
 		item := promSeries{Labels: labels}
 		values := r.Values
@@ -137,20 +129,9 @@ func (s *Source) queryPromQL(ctx context.Context, input json.RawMessage) (source
 	return structured(out, evidence, cut || b.cut, len(out.Series) == 0, empty)
 }
 
-// promValue returns one Prometheus point, [<unix seconds>, "<value>"].
-func promValue(v [2]any) promPoint {
-	var p promPoint
-
-	if secs, ok := v[0].(float64); ok {
-		whole, frac := math.Modf(secs)
-		p.T = time.Unix(int64(whole), int64(frac*float64(time.Second))).UTC()
-	}
-
-	if s, ok := v[1].(string); ok {
-		p.V = source.CutText(s, maxNameLen)
-	}
-
-	return p
+// promValue returns one Prometheus point, with its value cut.
+func promValue(v promql.Sample) promPoint {
+	return promPoint{T: v.T, V: source.CutText(v.V, maxNameLen)}
 }
 
 // step returns the step a call gives, at least minStep seconds, or one

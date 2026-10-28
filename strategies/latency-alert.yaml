@@ -1,0 +1,26 @@
+name: latency-alert
+description: A latency monitor, such as p95 or p99 response time, fired for an HTTP or RPC service.
+match:
+  alertNames: ["*Latency*", "*latency*", "*P99*", "*p99*", "*P95*", "*p95*", "*Slow*", "*slow*"]
+  textPattern: "(?i)latency|response time|slow|p9[059]"
+sources:
+  prefer: [signoz, k8s, github]
+first:
+  - Find the service, the endpoint or method, the percentile and the threshold that fired, and when latency started to rise.
+  - Check what changed in the 2 hours before the alert started, such as deploys, config changes and feature flags.
+  - Compare latency with the request rate. A drop in traffic can raise percentiles without a real problem.
+  - Look at the downstream calls in traces, such as databases, caches and other services, and find the slowest span.
+  - Check whether latency is still high now, or whether it already recovered.
+commonCauses:
+  - A deploy that added a slow query, removed an index or added a retry loop.
+  - Connection pool exhaustion in a database or HTTP client.
+  - A slow or failing dependency, such as a database, a cache or a third-party API.
+  - Too little CPU or memory, such as CPU throttling, long garbage collection pauses or too few replicas for the load.
+  - A sudden rise in traffic, or a few expensive requests.
+falsePositiveSigns:
+  - Very low request volume during the window, so a few slow requests move the percentile.
+  - The alert cleared within one evaluation interval and has fired the same way before.
+  - Latency is high only on a health check, batch or export endpoint that is slow by design.
+verdictHints:
+  truePositive: Name the slowest downstream call or the change that made requests slower.
+  falsePositive: Propose a minimum request rate condition, a longer duration, or leaving out the slow endpoint.

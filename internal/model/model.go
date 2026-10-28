@@ -350,12 +350,12 @@ func (p Price) Cost(u Usage) int64 {
 }
 
 // ErrNoToolCalling is returned when a model without tool calling is given
-// the investigate role, or the judge role, which answers with a tool too.
+// the investigate, triage or judge role, which all end by calling a tool.
 var ErrNoToolCalling = errors.New("model cannot call tools")
 
 // CheckRole validates that a connector with caps can fill role.
 func CheckRole(role Role, caps Capabilities) error {
-	if (role == RoleInvestigate || role == RoleJudge) && !caps.ToolCalling {
+	if (role == RoleInvestigate || role == RoleTriage || role == RoleJudge) && !caps.ToolCalling {
 		return fmt.Errorf("role %s: %w", role, ErrNoToolCalling)
 	}
 

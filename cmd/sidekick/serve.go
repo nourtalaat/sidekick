@@ -26,7 +26,8 @@ func newServeCmd(regs config.Registries, info buildinfo.Info) *cobra.Command {
 		Short: "Run Sidekick until it receives SIGTERM or SIGINT",
 		Long: `Run Sidekick. It loads the config file and checks every secret it
 references, migrates the database unless database.migrations is manual,
-then serves webhooks at /hooks/<name> on server.listen, and /metrics,
+then serves webhooks at /hooks/<name> on server.listen, with the oidc
+section the web UI login at /auth and the JSON API at /api/v1, and /metrics,
 /healthz and /readyz on server.metricsListen. With the Slack app's app
 token it receives Slack messages over Socket Mode, or at /slack/events
 with slack.mode events. With a teams section it receives the Teams bot's
@@ -37,7 +38,8 @@ route's outputs, such as a Slack thread. The
 investigation asks the route's model, calls the sources it needs, and
 posts its verdict to the same outputs. Watchers that the route defines,
 or that the investigation starts, check on their own schedule whether
-the service is back up. Logs go to standard output as JSON.
+the service is back up. Once a day, records older than the retention
+section allows are deleted. Logs go to standard output as JSON.
 
 On SIGTERM or SIGINT it stops taking requests, hands back jobs it cannot
 finish, and exits within ` + app.ShutdownGrace.String() + `. A second signal exits at once.`,
@@ -82,6 +84,10 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
+	if err := registerAPI(ctx, a); err != nil {
+		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
+	}
+
 	cache, err := registerRules(ctx, a)
 	if err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
@@ -104,6 +110,10 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 	}
 
 	if err := registerPublisher(a); err != nil {
+		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
+	}
+
+	if err := registerRetention(a); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 

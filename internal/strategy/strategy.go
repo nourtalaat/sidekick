@@ -45,9 +45,9 @@ type Strategy struct {
 	Name string `yaml:"name"`
 	// Description says which events the strategy is for.
 	Description string `yaml:"description"`
-	// Match describes the events the strategy fits. Triage uses it to pick
-	// a strategy, which arrives with the triage role; until then a route
-	// names its strategy and Match is only checked.
+	// Match describes the events the strategy fits. Triage shows which
+	// strategies fit the event, to help it pick one; without triage, the
+	// route's strategy is used.
 	Match Match `yaml:"match"`
 	// Sources lists the sources worth trying first.
 	Sources Sources `yaml:"sources"`
@@ -219,6 +219,27 @@ type Condition struct {
 	Value     yaml.Node `yaml:"value"`
 	TextRegex string    `yaml:"textRegex"`
 	Negate    bool      `yaml:"negate"`
+}
+
+// Fits reports whether an event with this alert name and text fits the
+// match: one of the alert name globs matches the alert name, or the text
+// pattern matches the text. An empty match fits no event.
+func (m Match) Fits(alertName, text string) bool {
+	if alertName != "" && slices.ContainsFunc(m.AlertNames, func(g string) bool {
+		ok, err := path.Match(g, alertName)
+
+		return err == nil && ok
+	}) {
+		return true
+	}
+
+	if m.TextPattern == "" || text == "" {
+		return false
+	}
+
+	re, err := regexp.Compile(m.TextPattern)
+
+	return err == nil && re.MatchString(text)
 }
 
 // validate checks the rules decoding cannot, and returns every problem.

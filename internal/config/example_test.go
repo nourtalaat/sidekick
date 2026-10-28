@@ -58,6 +58,13 @@ func TestExampleConfig(t *testing.T) {
 				require.Equal(t, LogLevelInfo, cfg.Telemetry.LogLevel)
 				require.Equal(t, []RedactionRule{{Name: "customer_id", Pattern: "cus_[A-Za-z0-9]{14}"}}, cfg.Redaction.Custom)
 				require.Equal(t, WatchHTTP{AllowHosts: []string{"*.internal.example.com", "status.example.com"}, AllowPrivate: []string{"10.20.0.0/16"}}, cfg.Watch.HTTP)
+				require.Equal(t, Retention{
+					Events:         Period(90 * Day),
+					Investigations: Period(365 * Day),
+					Steps:          Period(90 * Day),
+					AuditLog:       Period(730 * Day),
+					WatcherChecks:  Period(30 * Day),
+				}, cfg.Retention)
 			},
 		},
 		{
@@ -95,7 +102,7 @@ func TestExampleConfig(t *testing.T) {
 			name: "built-in and file strategies",
 			check: func(t *testing.T, cfg *Config) {
 				t.Helper()
-				require.Equal(t, []string{"generic-alert", "latency-alert"}, cfg.StrategySet().Names())
+				require.Equal(t, []string{"error-rate-alert", "generic-alert", "latency-alert", "service-down"}, cfg.StrategySet().Names())
 
 				st, ok := cfg.StrategySet().Get("latency-alert")
 				require.True(t, ok)

@@ -64,7 +64,8 @@ Run `make help` for the full list. The main ones:
 | `make fmt` | Formats the Go code (gofmt and goimports). |
 | `make test` | Unit tests with the race detector. |
 | `make test-integration` | Unit and integration tests (build tag `integration`) against Postgres. |
-| `make generate` | Every code generator: `generate-mocks`, `sqlc-generate` and `notice`. |
+| `make generate` | Every code generator: `openapi-generate`, `generate-mocks`, `sqlc-generate` and `notice`. |
+| `make openapi-generate` | Generates the API server code in `internal/api/apigen` from `api/openapi.yaml`. |
 | `make generate-mocks` | Runs the `mockgen` directives through `go generate`. |
 | `make sqlc-generate` | Generates `internal/store/db` from the queries and migrations. |
 | `make notice` | Writes `NOTICE`, the licenses of every module linked into the binary. Run it after changing dependencies. |
@@ -152,7 +153,11 @@ client := NewClient(api.URL(), api.Client())
 - `Handle` serves its responses once each, in order. `HandleFunc` takes a
   handler function for anything canned responses cannot do. `Response`
   also has `Body` and `Delay`, and `fakehttp.New(t, fakehttp.WithTLS())`
-  starts an HTTPS server.
+  starts an HTTPS server. `fakehttp.WithClientCertificates()` starts one
+  that also asks for a client certificate and records the one it gets;
+  `fakehttp.NewCertificate` makes one for the client to send, and
+  `CertificatePEM` returns the server's own certificate, for a client told
+  which CA to trust.
 - A request that no route expects fails the test and gets a 501, so a
   missing mock never passes silently. `ExpectAllCalled` also fails the test
   when a response goes unused.
@@ -232,6 +237,24 @@ lock while it runs. `sidekick serve` also migrates at start-up, unless
    followed by its plan. To write the files yourself, set
    `SIDEKICK_PLANS_DIR` to a directory when you run the integration tests,
    with `-count=1` so Go does not reuse a cached result that wrote nothing.
+
+## API operations
+
+The JSON API under `/api/v1` is described in `api/openapi.yaml` (OpenAPI
+3.1). `oapi-codegen` turns it into the strict server interface and types in
+`internal/api/apigen`, and `internal/api` implements that interface.
+
+1. Add the operation to `api/openapi.yaml` with an `operationId`, and set
+   `x-sidekick-role` to the lowest role that may call it: `viewer`,
+   `responder`, `approver` or `admin`. A test fails for any operation
+   without one, and the server refuses to start.
+2. Give it a `default` response of `#/components/responses/Problem`.
+3. Run `make openapi-generate` and implement the new method in
+   `internal/api`. Return an `*api.Error` for an answer such as 404 or 409;
+   any other error answers 500, with the cause in the logs only.
+
+Roles are checked in one place, the middleware in `internal/api/roles.go`,
+from the spec. Handlers do not check roles themselves.
 
 ## Background jobs
 

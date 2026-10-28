@@ -131,6 +131,75 @@ func TestUpdateIsRejected(t *testing.T) {
 	}
 }
 
+// TestDeleteOnlyByRetention checks that audit log rows can be deleted only
+// in a transaction that took the retention job's setting, and that the
+// setting does not allow UPDATE.
+func TestDeleteOnlyByRetention(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// allow runs AllowAuditLogDelete in the transaction first.
+		allow    bool
+		prepare  string
+		query    string
+		wantErr  string
+		wantRows int
+	}{
+		{name: "a plain delete", query: "DELETE FROM audit_log", wantErr: "audit_log rows are deleted only by the retention job", wantRows: 1},
+		{name: "a delete of no rows", query: "DELETE FROM audit_log WHERE id = -1", wantErr: "audit_log rows are deleted only by the retention job", wantRows: 1},
+		{name: "truncate", query: "TRUNCATE audit_log", wantErr: "audit_log rows are deleted only by the retention job", wantRows: 1},
+		{
+			name: "another role setting", prepare: "SET LOCAL sidekick.role = 'admin'", query: "DELETE FROM audit_log",
+			wantErr: "audit_log rows are deleted only by the retention job", wantRows: 1,
+		},
+		{name: "the retention job's setting", allow: true, query: "DELETE FROM audit_log", wantRows: 0},
+		{
+			name: "an update with the retention job's setting", allow: true, query: "UPDATE audit_log SET action = 'changed'",
+			wantErr: "audit_log rows cannot be updated", wantRows: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			pool := storetest.New(t)
+			require.NoError(t, audit.NewWriter().Write(t.Context(), pool, audit.Entry{ActorKind: audit.ActorUser, Action: "route.updated"}))
+
+			err := pgx.BeginFunc(t.Context(), pool, func(tx pgx.Tx) error {
+				if tt.allow {
+					if err := db.New(tx).AllowAuditLogDelete(t.Context()); err != nil {
+						return fmt.Errorf("allow the delete: %w", err)
+					}
+				}
+
+				if tt.prepare != "" {
+					if _, err := tx.Exec(t.Context(), tt.prepare); err != nil {
+						return fmt.Errorf("prepare: %w", err)
+					}
+				}
+
+				if _, err := tx.Exec(t.Context(), tt.query); err != nil {
+					return fmt.Errorf("run the query: %w", err)
+				}
+
+				return nil
+			})
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+
+			require.Len(t, readAll(t, pool), tt.wantRows)
+
+			_, err = pool.Exec(t.Context(), "DELETE FROM audit_log")
+			require.ErrorContains(t, err, "audit_log rows are deleted only by the retention job", "the setting ends with its transaction")
+		})
+	}
+}
+
 // TestQueryPlans runs EXPLAIN ANALYZE on each audit query over 50,000
 // entries.
 func TestQueryPlans(t *testing.T) {

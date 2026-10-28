@@ -12,6 +12,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ApiToken struct {
+	ID         uuid.UUID
+	Name       string
+	TokenHash  []byte
+	Role       string
+	CreatedBy  uuid.UUID
+	CreatedAt  time.Time
+	ExpiresAt  time.Time
+	LastUsedAt *time.Time
+	RevokedAt  *time.Time
+}
+
 type AuditLog struct {
 	ID              int64
 	At              time.Time
@@ -236,6 +248,14 @@ type Route struct {
 	UpdatedAt time.Time
 }
 
+type Session struct {
+	IDHash    []byte
+	UserID    uuid.UUID
+	CsrfToken string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+}
+
 type SlackIdentity struct {
 	SlackUserID string
 	TeamID      *string
@@ -280,29 +300,51 @@ type Step struct {
 	Budget           *string
 }
 
+type User struct {
+	ID          uuid.UUID
+	OidcIssuer  string
+	OidcSubject string
+	Email       *string
+	Name        string
+	Groups      []string
+	Role        string
+	CreatedAt   time.Time
+	LastLoginAt time.Time
+}
+
 type Watcher struct {
-	ID              uuid.UUID
-	GroupID         uuid.UUID
-	InvestigationID *uuid.UUID
-	Name            string
-	Origin          string
-	StartedBySeq    *int32
-	CheckType       string
-	Spec            json.RawMessage
-	IntervalS       int32
-	PassesToRecover int32
-	CheckTimeoutS   int32
-	Status          string
-	StopReason      *string
-	PassesInARow    int32
-	Checks          int32
-	StartedAt       time.Time
-	Deadline        time.Time
-	LastCheckAt     *time.Time
-	PassingSince    *time.Time
-	RecoveredAt     *time.Time
-	EndedAt         *time.Time
-	StoppedBy       *uuid.UUID
+	ID                 uuid.UUID
+	GroupID            uuid.UUID
+	InvestigationID    *uuid.UUID
+	Name               string
+	Origin             string
+	StartedBySeq       *int32
+	CheckType          string
+	Spec               json.RawMessage
+	IntervalS          int32
+	PassesToRecover    int32
+	CheckTimeoutS      int32
+	Status             string
+	StopReason         *string
+	PassesInARow       int32
+	Checks             int32
+	StartedAt          time.Time
+	Deadline           time.Time
+	LastCheckAt        *time.Time
+	PassingSince       *time.Time
+	RecoveredAt        *time.Time
+	EndedAt            *time.Time
+	StoppedBy          *uuid.UUID
+	StoppedBySlackUser *string
+}
+
+type WatcherChange struct {
+	ID              int64
+	InvestigationID uuid.UUID
+	Seq             int64
+	State           json.RawMessage
+	SentTo          []string
+	CreatedAt       time.Time
 }
 
 type WatcherCheck struct {

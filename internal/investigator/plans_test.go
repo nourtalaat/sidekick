@@ -202,6 +202,15 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"steps_pkey"},
 		},
 		{
+			name: "CountSteps",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.CountSteps(ctx, busy)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"steps_pkey"},
+		},
+		{
 			name: "AdvanceInvestigation",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.AdvanceInvestigation(ctx, db.AdvanceInvestigationParams{
@@ -269,6 +278,27 @@ func TestQueryPlans(t *testing.T) {
 				_, err := q.FailInvestigation(ctx, db.FailInvestigationParams{
 					Verdict: new("inconclusive"), Confidence: new("low"), Report: report, StopReason: new("error"), ID: busy,
 				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"investigations_pkey"},
+		},
+		{
+			name: "SetInvestigationStrategy",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.SetInvestigationStrategy(ctx, db.SetInvestigationStrategyParams{
+					Strategy: new("latency-alert"), StrategyVersion: new("0123456789abcdef"), Budget: json.RawMessage(`{"max_tool_calls": 30}`),
+					ID: busy, Fence: planFence,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"investigations_pkey"},
+		},
+		{
+			name: "RestartTriagedInvestigation",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.RestartTriagedInvestigation(ctx, busy)
 
 				return fmt.Errorf("run query: %w", err)
 			},

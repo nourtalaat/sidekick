@@ -268,6 +268,7 @@ func TestHandleKeepsTheKeyWhenTheSinkFails(t *testing.T) {
 	h := setup(t)
 
 	sink := output.NewMockSink(gomock.NewController(t))
+	sink.EXPECT().Accepts(output.PhaseWatcher).Return(false)
 	sink.EXPECT().Accepts(output.PhaseQueued).Return(true)
 	sink.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(output.Ref{}, errors.New("slack is down"))
 
@@ -290,6 +291,7 @@ func TestHandleSkipsAPhaseTheSinkDoesNotShow(t *testing.T) {
 	h := setup(t)
 
 	sink := output.NewMockSink(gomock.NewController(t))
+	sink.EXPECT().Accepts(output.PhaseWatcher).Return(false)
 	sink.EXPECT().Accepts(output.PhaseQueued).Return(false)
 
 	h = setupWith(t, h.pool, h.slack, map[string]output.Sink{"callback": sink})

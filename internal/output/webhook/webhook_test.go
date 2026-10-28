@@ -329,6 +329,77 @@ func TestPublishDropsAnOlderUpdate(t *testing.T) {
 	require.Empty(t, api.Requests())
 }
 
+func TestPublishSendsAFinalResultOnce(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// watcher sends a watcher event between the two finals.
+		watcher bool
+		// change changes the second final's report.
+		change   func(r *report.Report)
+		wantSent []string
+	}{
+		{name: "the same report is not sent again", wantSent: []string{eventFinal}},
+		{
+			name:     "a watcher event in between does not send it again",
+			watcher:  true,
+			wantSent: []string{eventFinal, "watcher.recovered"},
+		},
+		{
+			name:     "a changed report is sent",
+			change:   func(r *report.Report) { r.Verdict, r.Cause, r.Impact = report.FalsePositive, "", "" },
+			wantSent: []string{eventFinal, eventFinal},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			responses := make([]fakehttp.Response, len(tt.wantSent))
+			for i := range responses {
+				responses[i] = fakehttp.Response{Status: http.StatusNoContent}
+			}
+
+			api := fakehttp.New(t)
+			api.Handle(http.MethodPost, pathHook, responses...)
+			api.ExpectAllCalled()
+
+			s := testSink(t, api)
+
+			ref, err := s.Publish(t.Context(), finalUpdate())
+			require.NoError(t, err)
+
+			if tt.watcher {
+				u := watcherUpdate()
+				u.Previous = &ref
+
+				ref, err = s.Publish(t.Context(), u)
+				require.NoError(t, err)
+			}
+
+			again := finalUpdate()
+			again.Seq, again.Previous = 7, &ref
+
+			if tt.change != nil {
+				tt.change(again.Report)
+			}
+
+			got, err := s.Publish(t.Context(), again)
+			require.NoError(t, err)
+			require.Equal(t, "7", got.Data[dataSeq], "the update is not tried again")
+
+			var sent []string
+			for _, req := range api.Requests() {
+				sent = append(sent, req.Header.Get(headerEvent))
+			}
+
+			require.Equal(t, tt.wantSent, sent)
+		})
+	}
+}
+
 func TestRedirects(t *testing.T) {
 	t.Parallel()
 
@@ -504,6 +575,7 @@ func watcherUpdate() output.Update {
 		Status:          output.WatcherRecovered,
 		PassesInARow:    2,
 		PassesToRecover: 2,
+		IntervalSeconds: 30,
 		Checks:          9,
 		LastCheckAt:     started.Add(4 * time.Minute),
 		LastResult:      "HTTP 200",

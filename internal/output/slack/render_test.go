@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -45,6 +46,7 @@ func TestRenderGolden(t *testing.T) {
 		{name: "false-alarm-fields", view: mainView(testUpdate(output.PhaseFinal, falseAlarm()))},
 		{name: "untrusted-text", view: mainView(untrustedUpdate())},
 		{name: "no-verdict", view: mainView(testUpdate(output.PhaseFinal, noVerdict()))},
+		{name: "triage-only", view: mainView(testUpdate(output.PhaseFinal, triageOnly()))},
 		{name: "notice", view: noticeView(output.Notice{
 			Kind:  output.NoticeDailyCap,
 			Title: "Daily cap reached",
@@ -69,6 +71,23 @@ func TestRenderGolden(t *testing.T) {
 		rendered{name: "long-report-continued", view: more},
 		rendered{name: "reply-without-permalink", view: verdictReplyView(long, "")},
 	)
+
+	watchers := testWatchers()
+	running := runningUpdate(3)
+	running.Watchers = watchers[:1]
+	all := testUpdate(output.PhaseRunning, nil)
+	all.Watchers = watchers
+
+	cases = append(cases,
+		rendered{name: "running-with-watchers", view: mainView(running)},
+		rendered{name: "watcher-lines", view: view{attachment: attachment{Blocks: slices.Concat(watcherContext(all), watcherButtons(all))}}},
+	)
+
+	for name, w := range watcherReplies() {
+		u := testUpdate(output.PhaseWatcher, nil)
+		u.Watchers, u.Watcher = watchers, &w
+		cases = append(cases, rendered{name: "watcher-reply-" + name, view: watcherReplyView(u, "https://example.slack.com/archives/C123/p1793023321000200")})
+	}
 
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
@@ -344,6 +363,17 @@ func noVerdict() *report.Report {
 	}
 }
 
+// triageOnly returns the report of a run that triage ended as a duplicate.
+func triageOnly() *report.Report {
+	return &report.Report{
+		Verdict:    report.Duplicate,
+		Confidence: report.High,
+		Reason:     "The same alert as the open checkout-api latency incident.",
+		StopReason: report.StopTriage,
+		StopDetail: "Triage only: no full investigation ran.",
+	}
+}
+
 // falseAlarm returns a false alarm report with its explanation.
 func falseAlarm() *report.Report {
 	r := verdictReport(report.FalsePositive)
@@ -397,4 +427,59 @@ func untrustedUpdate() output.Update {
 	u.Report.Fixes = []report.Fix{{ID: "x1", Title: "<tel:123|Call now>"}}
 
 	return u
+}
+
+// testWatchers returns a watcher of the test event's group in each state:
+// running, recovered, timed out, and stopped by a responder, when the
+// group resolved and after a config change.
+func testWatchers() []output.WatcherState {
+	started := receivedAt.Add(30 * time.Second)
+	stoppedAt := receivedAt.Add(6 * time.Minute)
+
+	return []output.WatcherState{
+		{
+			ID: "0192d3a4-0000-7000-8000-0000000000d1", Name: "checkout-health", CheckType: "http", Status: output.WatcherRunning,
+			PassesToRecover: 2, IntervalSeconds: 30, Checks: 4, LastResult: "HTTP 503", StartedAt: started,
+		},
+		{
+			ID: "0192d3a4-0000-7000-8000-0000000000d2", Name: "alerts-cleared", CheckType: "alert", Status: output.WatcherRecovered,
+			PassesInARow: 1, PassesToRecover: 1, IntervalSeconds: 30, Checks: 25, LastResult: "1 of 1 alerts recovered",
+			StartedAt: started, EndedAt: receivedAt.Add(12*time.Minute + 30*time.Second),
+		},
+		{
+			ID: "0192d3a4-0000-7000-8000-0000000000d3", Name: "payments-health", CheckType: "http", Status: output.WatcherTimedOut,
+			PassesToRecover: 2, IntervalSeconds: 60, Checks: 60, LastResult: "HTTP 503 <!channel>",
+			StartedAt: receivedAt, EndedAt: receivedAt.Add(time.Hour),
+		},
+		{
+			ID: "0192d3a4-0000-7000-8000-0000000000d4", Name: "db-health", CheckType: "http", Status: output.WatcherStopped,
+			PassesToRecover: 2, IntervalSeconds: 30, Checks: 12, LastResult: "HTTP 502", StartedAt: started, EndedAt: stoppedAt,
+			StopReason: "responder", StoppedBy: &output.Person{SlackUserID: "U123"},
+		},
+		{
+			ID: "0192d3a4-0000-7000-8000-0000000000d5", Name: "queue-depth", CheckType: "tool", Status: output.WatcherStopped,
+			PassesToRecover: 2, IntervalSeconds: 120, Checks: 3, StartedAt: started, EndedAt: stoppedAt, StopReason: "group_resolved",
+		},
+		{
+			ID: "0192d3a4-0000-7000-8000-0000000000d6", Name: "cache-health", CheckType: "http", Status: output.WatcherStopped,
+			PassesToRecover: 2, IntervalSeconds: 30, Checks: 2, StartedAt: started, EndedAt: stoppedAt, StopReason: "config_changed",
+		},
+	}
+}
+
+// watcherReplies returns the changes the short replies announce, by the
+// name of their golden file: a start, and the first three ends of
+// testWatchers.
+func watcherReplies() map[string]output.WatcherState {
+	w := testWatchers()
+
+	started := w[0]
+	started.Checks, started.LastResult = 0, ""
+
+	return map[string]output.WatcherState{
+		"started":   started,
+		"recovered": w[1],
+		"timed-out": w[2],
+		"stopped":   w[3],
+	}
 }

@@ -30,6 +30,9 @@ const (
 	unansweredFailed  = "Sidekick could not answer: the model could not take the request."
 	unansweredDead    = "Sidekick could not answer: the follow-up stopped after repeated failures."
 	unansweredStopped = "Sidekick did not answer: a responder stopped the follow-up."
+	// unansweredPastRetention is the answer when the retention job deleted
+	// the steps a follow-up run would resume from.
+	unansweredPastRetention = "Sidekick cannot answer: this investigation is past its retention period, and the details a follow-up needs were deleted."
 )
 
 // FollowUpHandler runs follow_up jobs: each one answers the follow-up
@@ -55,7 +58,9 @@ func (h *Handler) FollowUps() *FollowUpHandler {
 // model answers, submits a new report, or a limit is reached; the
 // investigation then shows the report with the answer added. A job for an
 // investigation with no waiting question, or whose first run has not
-// ended, does nothing; that run's end enqueues the job again.
+// ended, does nothing; that run's end enqueues the job again. When the
+// retention job deleted steps of the investigation, no run starts: the
+// questions get an answer that says the details are gone.
 //
 // Errors are those of Handler.Handle.
 func (f *FollowUpHandler) Handle(ctx context.Context, job db.Job) (err error) {
@@ -89,6 +94,21 @@ func (f *FollowUpHandler) Handle(ctx context.Context, job db.Job) (err error) {
 	span.SetAttributes(attribute.String(attrRoute, inv.Route), attribute.Int(attrRun, int(inv.Run)))
 
 	log := f.h.log.With("investigation_id", id.String(), "job_id", job.ID, "route", inv.Route, "run", inv.Run)
+
+	saved, err := db.New(f.h.opts.Pool).CountSteps(ctx, id)
+	if err != nil {
+		return fmt.Errorf("count the steps of investigation %s: %w", id, err)
+	}
+
+	if saved < int64(inv.NextSeq) {
+		if err := f.h.answerPastRetention(ctx, job, inv); err != nil {
+			return fmt.Errorf("investigation %s: %w", id, err)
+		}
+
+		log.InfoContext(ctx, "follow-up not run: the retention job deleted the investigation's steps", "steps", saved, "next_seq", inv.NextSeq)
+
+		return nil
+	}
 
 	r, err := f.h.newRun(ctx, inv, log)
 	if err != nil {
@@ -244,7 +264,7 @@ func (h *Handler) startFollowUp(ctx context.Context, job db.Job, id uuid.UUID) (
 // question; the question gets a job when the next one arrives or a run
 // ends.
 func (h *Handler) waitingQuestion(ctx context.Context, queries *db.Queries, inv db.Investigation) bool {
-	if !answers(inv.Status) {
+	if !answers(inv) {
 		return false
 	}
 
@@ -256,6 +276,111 @@ func (h *Handler) waitingQuestion(ctx context.Context, queries *db.Queries, inv 
 	}
 
 	return waiting
+}
+
+// answerPastRetention ends the follow-up run of inv, which the claim of
+// job owns, without running it, because the retention job deleted steps
+// the run would resume from. In one transaction fenced like
+// finishFollowUp, the run takes the next seq without saving a step there,
+// the waiting questions are marked delivered at it and get an answer that
+// says why there is none, the investigation is final again with its
+// report, and the outputs show the answer, without progress lines, since
+// the steps they come from are gone.
+func (h *Handler) answerPastRetention(ctx context.Context, job db.Job, inv db.Investigation) error {
+	hist, err := newHistory(nil)
+	if err != nil {
+		return fmt.Errorf("start an empty history: %w", err)
+	}
+
+	err = pgx.BeginFunc(ctx, h.opts.Pool, func(tx pgx.Tx) error {
+		queries := db.New(tx)
+
+		// Taking a seq with no step behind it marks the delivery, and
+		// keeps the published answer newer than the update before it.
+		taken, err := queries.AdvanceInvestigation(ctx, db.AdvanceInvestigationParams{ID: inv.ID, Fence: inv.Fence})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("take a seq: %w", queue.ErrLeaseLost)
+		}
+
+		if err != nil {
+			return fmt.Errorf("take a seq: %w", err)
+		}
+
+		seq := taken.Seq
+
+		waiting, err := queries.ListWaitingInbox(ctx, inv.ID)
+		if err != nil {
+			return fmt.Errorf("list the waiting questions: %w", err)
+		}
+
+		var rep report.Report
+		if len(inv.Report) > 0 {
+			if err := json.Unmarshal(inv.Report, &rep); err != nil {
+				return fmt.Errorf("decode the report: %w", err)
+			}
+		}
+
+		answer := report.FollowUp{Run: int(inv.Run), Questions: []report.FollowUpQuestion{}, Answer: unansweredPastRetention, At: h.now()}
+
+		var ids []int64
+
+		for _, item := range waiting {
+			if item.Kind != InboxFollowUp {
+				continue
+			}
+
+			question, err := questionOf(item)
+			if err != nil {
+				return fmt.Errorf("item %d: %w", item.ID, err)
+			}
+
+			ids = append(ids, item.ID)
+			answer.Questions = append(answer.Questions, question)
+		}
+
+		if _, err := queries.MarkInboxDelivered(ctx, db.MarkInboxDeliveredParams{DeliveredSeq: &seq, InvestigationID: inv.ID, Ids: ids}); err != nil {
+			return fmt.Errorf("mark the questions delivered: %w", err)
+		}
+
+		rep.FollowUps = append(rep.FollowUps, answer)
+
+		raw, err := json.Marshal(rep)
+		if err != nil {
+			return fmt.Errorf("encode the report: %w", err)
+		}
+
+		finished, err := queries.FinishInvestigation(ctx, db.FinishInvestigationParams{
+			Status:     statusAfter(rep),
+			Verdict:    new(string(rep.Verdict)),
+			Confidence: new(string(rep.Confidence)),
+			Report:     store.JSON(raw),
+			StopReason: new(string(rep.StopReason)),
+			ID:         inv.ID,
+			Fence:      inv.Fence,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("store the report: %w", queue.ErrLeaseLost)
+		}
+
+		if err != nil {
+			return fmt.Errorf("store the report: %w", err)
+		}
+
+		if err := publishFollowUp(ctx, tx, finished, hist, rep, false); err != nil {
+			return fmt.Errorf("publish: %w", err)
+		}
+
+		if err := queue.ReleaseUniqueKey(ctx, tx, job); err != nil {
+			return fmt.Errorf("give up the unique key: %w", err)
+		}
+
+		return enqueueWaitingFollowUp(ctx, tx, finished)
+	})
+	if err != nil {
+		return fmt.Errorf("answer past the retention period: %w", err)
+	}
+
+	return nil
 }
 
 // finishFollowUp ends a follow-up run with end, in one transaction, fenced

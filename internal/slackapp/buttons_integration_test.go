@@ -17,12 +17,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
 	"github.com/nourtalaat/sidekick/internal/feedback"
+	"github.com/nourtalaat/sidekick/internal/grouper"
 	"github.com/nourtalaat/sidekick/internal/investigator"
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
 	"github.com/nourtalaat/sidekick/internal/model"
@@ -38,14 +40,27 @@ import (
 	"github.com/nourtalaat/sidekick/internal/store/db"
 	"github.com/nourtalaat/sidekick/internal/store/storetest"
 	"github.com/nourtalaat/sidekick/internal/strategy"
+	"github.com/nourtalaat/sidekick/internal/watch"
 	"github.com/nourtalaat/sidekick/strategies"
 )
 
-// The investigations in fixture/investigations.sql.
+// The investigations in fixture/investigations.sql, and the watcher of
+// the final one.
 var (
-	finalInvestigation  = uuid.MustParse("0192d3a4-0000-7000-8000-0000000000c1")
-	queuedInvestigation = uuid.MustParse("0192d3a4-0000-7000-8000-0000000000c2")
+	finalInvestigation   = uuid.MustParse("0192d3a4-0000-7000-8000-0000000000c1")
+	queuedInvestigation  = uuid.MustParse("0192d3a4-0000-7000-8000-0000000000c2")
+	triagedInvestigation = uuid.MustParse("0192d3a4-0000-7000-8000-0000000000c3")
+	runningWatcher       = uuid.MustParse("0192d3a4-0000-7000-8000-0000000000d1")
 )
+
+// stopWatching is the action ID of the first Stop watching button.
+const stopWatching = slackout.ActionStopWatcher + ":1"
+
+// heldTriageKey adds the job that ran the triage of the triaged
+// investigation, still running, as it is for a moment after the run ends.
+const heldTriageKey = `INSERT INTO jobs (kind, route, payload, unique_key, status)
+VALUES ('investigate', 'default', '{"investigation_id": "0192d3a4-0000-7000-8000-0000000000c3"}',
+        'investigate:0192d3a4-0000-7000-8000-0000000000b3', 'running')`
 
 // stopWithin is how soon a stopped run must end.
 const stopWithin = 5 * time.Second
@@ -70,6 +85,8 @@ func TestInteractivity(t *testing.T) {
 		name string
 		// role is the role every user has; zero means responder.
 		role roles.Role
+		// sql runs first, to set up the database.
+		sql string
 		// before are clicks sent first; their answers must be 200.
 		before []clickBy
 		send   clickBy
@@ -148,6 +165,154 @@ func TestInteractivity(t *testing.T) {
 			},
 		},
 		{
+			name:       "Investigate anyway starts a full investigation of a triage-only result",
+			send:       clickBy{user: "U01BEN", action: slackout.ActionInvestigateAnyway, id: triagedInvestigation},
+			wantStatus: http.StatusOK,
+			wantNotes:  []string{noteAnyway},
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				inv := b.investigation(t, triagedInvestigation)
+				require.Equal(t, investigator.StatusQueued, inv.Status)
+				require.EqualValues(t, 2, inv.Run)
+				require.Nil(t, inv.Verdict)
+				require.Nil(t, inv.StopReason)
+				require.Nil(t, inv.ConfirmedVerdict, "the confirmation of the triage verdict does not carry over")
+				require.Nil(t, inv.ConfirmedBySlackUser)
+				require.Nil(t, inv.ConfirmedAt)
+				require.Equal(t, 1, b.feedbackRows(t, triagedInvestigation), "the rating of the triage verdict stays as history")
+				require.Equal(t, []string{"investigate:0192d3a4-0000-7000-8000-0000000000b3"}, b.pendingInvestigateKeys(t, triagedInvestigation))
+				require.Equal(t, []string{"user U01BEN investigation.investigate_anyway"}, b.auditActions(t, triagedInvestigation))
+			},
+		},
+		{
+			name:       "a second Investigate anyway changes nothing",
+			before:     []clickBy{{user: "U01BEN", action: slackout.ActionInvestigateAnyway, id: triagedInvestigation}},
+			send:       clickBy{user: "U01ANA", action: slackout.ActionInvestigateAnyway, id: triagedInvestigation},
+			wantStatus: http.StatusOK,
+			wantNotes:  []string{noteAnyway, noteNotTriaged},
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				require.EqualValues(t, 2, b.investigation(t, triagedInvestigation).Run)
+				require.Len(t, b.pendingInvestigateKeys(t, triagedInvestigation), 1)
+				require.Len(t, b.auditActions(t, triagedInvestigation), 1, "only the first click is audited")
+			},
+		},
+		{
+			name:       "Investigate anyway while the triage job is still finishing",
+			sql:        heldTriageKey,
+			send:       clickBy{user: "U01BEN", action: slackout.ActionInvestigateAnyway, id: triagedInvestigation},
+			wantStatus: http.StatusOK,
+			wantNotes:  []string{noteBusy},
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				inv := b.investigation(t, triagedInvestigation)
+				require.Equal(t, investigator.StatusFinal, inv.Status, "the reset is rolled back")
+				require.EqualValues(t, 1, inv.Run)
+				require.Equal(t, "duplicate", *inv.ConfirmedVerdict)
+				require.Empty(t, b.auditActions(t, triagedInvestigation))
+			},
+		},
+		{
+			name:       "Investigate anyway on a full investigation",
+			send:       clickBy{user: "U01BEN", action: slackout.ActionInvestigateAnyway, id: finalInvestigation},
+			wantStatus: http.StatusOK,
+			wantNotes:  []string{noteNotTriaged},
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				inv := b.investigation(t, finalInvestigation)
+				require.Equal(t, investigator.StatusFinal, inv.Status)
+				require.EqualValues(t, 1, inv.Run)
+			},
+		},
+		{
+			name:       "a viewer cannot start a full investigation",
+			role:       roles.Viewer,
+			send:       clickBy{user: "U01VIEW", action: slackout.ActionInvestigateAnyway, id: triagedInvestigation},
+			wantStatus: http.StatusOK,
+			wantNotes:  []string{noteDenied},
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				require.Equal(t, investigator.StatusFinal, b.investigation(t, triagedInvestigation).Status)
+				require.Empty(t, b.pendingInvestigateKeys(t, triagedInvestigation))
+			},
+		},
+		{
+			name:       "Stop watching stops the watcher and shows it",
+			send:       clickBy{user: "U01STOP", action: stopWatching, id: runningWatcher},
+			wantStatus: http.StatusOK,
+			wantNotes:  []string{noteWatcherStopped},
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				w := b.watcher(t)
+				require.Equal(t, watch.StatusStopped, w.Status)
+				require.Equal(t, new(watch.StopResponder), w.StopReason)
+				require.Equal(t, new("U01STOP"), w.StoppedBySlackUser)
+				require.NotNil(t, w.EndedAt)
+
+				changes := collect[db.WatcherChange](t, b.pool, "SELECT * FROM watcher_changes")
+				require.Len(t, changes, 1, "the outputs get the change")
+				require.Equal(t, finalInvestigation, changes[0].InvestigationID)
+				require.Equal(t, int64(6), changes[0].Seq)
+				require.Equal(t, int64(7), b.publishSeq(t, finalInvestigation), "the message is shown again")
+				require.Equal(t, 1, b.publishJobs(t))
+
+				inbox := collect[db.InvestigationInbox](t, b.pool, "SELECT * FROM investigation_inbox")
+				require.Len(t, inbox, 1, "the investigation's inbox gets the change")
+				require.Equal(t, watch.InboxKind, inbox[0].Kind)
+
+				var item watch.InboxItem
+				require.NoError(t, json.Unmarshal(inbox[0].Body, &item))
+				require.Equal(t, output.WatcherStopped, item.State.Status)
+				require.Equal(t, &output.Person{SlackUserID: "U01STOP"}, item.State.StoppedBy)
+
+				require.Equal(t, 1, b.count(t, "SELECT count(*) FROM jobs WHERE kind = 'close_group'"), "the group can close")
+				require.InDelta(t, 1, b.stateChanges(t, "stopped"), 0)
+			},
+		},
+		{
+			name:       "a repeated Stop watching says the watcher has ended",
+			before:     []clickBy{{user: "U01STOP", action: stopWatching, id: runningWatcher}},
+			send:       clickBy{user: "U01BEN", action: stopWatching, id: runningWatcher},
+			wantStatus: http.StatusOK,
+			wantNotes:  []string{noteWatcherStopped, noteWatcherEnded},
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				require.Equal(t, new("U01STOP"), b.watcher(t).StoppedBySlackUser, "the first stop is kept")
+				require.InDelta(t, 1, b.stateChanges(t, "stopped"), 0)
+			},
+		},
+		{
+			name:       "a viewer cannot stop watching",
+			role:       roles.Viewer,
+			send:       clickBy{user: "U01VIEW", action: stopWatching, id: runningWatcher},
+			wantStatus: http.StatusOK,
+			wantNotes:  []string{noteDenied},
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				require.Equal(t, watch.StatusRunning, b.watcher(t).Status)
+				require.Empty(t, collect[db.WatcherChange](t, b.pool, "SELECT * FROM watcher_changes"))
+			},
+		},
+		{
+			name:       "a forged Stop watching is refused",
+			send:       clickBy{user: "U01STOP", action: stopWatching, id: runningWatcher},
+			forged:     true,
+			wantStatus: http.StatusUnauthorized,
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				require.Equal(t, watch.StatusRunning, b.watcher(t).Status)
+			},
+		},
+		{
 			name:       "Correct before there is a verdict",
 			send:       clickBy{user: "U01ANA", action: slackout.ActionVerdictCorrect, id: queuedInvestigation},
 			wantStatus: http.StatusOK,
@@ -185,6 +350,11 @@ func TestInteractivity(t *testing.T) {
 			}
 
 			b := setupButtons(t, role)
+
+			if tt.sql != "" {
+				_, err := b.pool.Exec(t.Context(), tt.sql)
+				require.NoError(t, err)
+			}
 
 			for _, c := range tt.before {
 				require.Equal(t, http.StatusOK, b.click(t, c, false))
@@ -332,16 +502,23 @@ func setupButtonsWith(t *testing.T, lookup roles.Lookup) *buttonsHarness {
 	metrics, err := feedback.NewMetrics(h.reg)
 	require.NoError(t, err)
 
+	recorder, err := watch.NewRecorder(slog.New(slog.DiscardHandler), h.reg)
+	require.NoError(t, err)
+
+	stopper, err := watch.NewStopper(watch.StopperOptions{Pool: h.pool, CloseGroup: grouper.EnqueueClose, Recorder: recorder})
+	require.NoError(t, err)
+
 	b := &buttonsHarness{harness: h, responses: fakehttp.New(t)}
 	b.responses.HandleFunc(http.MethodPost, responsePath, b.record)
 
 	b.buttons = NewButtons(ButtonsOptions{
-		Handler: h.handler,
-		Pool:    h.pool,
-		Roles:   lookup,
-		Metrics: metrics,
-		HTTP:    b.responses.Client(),
-		Logger:  slog.New(slog.DiscardHandler),
+		Handler:  h.handler,
+		Pool:     h.pool,
+		Roles:    lookup,
+		Metrics:  metrics,
+		Watchers: stopper,
+		HTTP:     b.responses.Client(),
+		Logger:   slog.New(slog.DiscardHandler),
 	})
 
 	mux := http.NewServeMux()
@@ -466,6 +643,46 @@ func (b *buttonsHarness) publishSeq(t *testing.T, id uuid.UUID) int64 {
 	return seq
 }
 
+// feedbackRows counts the feedback rows of id.
+func (b *buttonsHarness) feedbackRows(t *testing.T, id uuid.UUID) int {
+	t.Helper()
+
+	var n int
+	require.NoError(t, b.pool.QueryRow(t.Context(), "SELECT count(*) FROM feedback WHERE investigation_id = $1", id).Scan(&n))
+
+	return n
+}
+
+// auditActions returns each audit entry of id as "actor_kind actor_id
+// action".
+func (b *buttonsHarness) auditActions(t *testing.T, id uuid.UUID) []string {
+	t.Helper()
+
+	rows, err := b.pool.Query(t.Context(),
+		"SELECT actor_kind || ' ' || actor_id || ' ' || action FROM audit_log WHERE investigation_id = $1 ORDER BY id", id)
+	require.NoError(t, err)
+
+	out, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	require.NoError(t, err)
+
+	return out
+}
+
+// pendingInvestigateKeys returns the unique keys of the pending
+// investigate jobs of id.
+func (b *buttonsHarness) pendingInvestigateKeys(t *testing.T, id uuid.UUID) []string {
+	t.Helper()
+
+	rows, err := b.pool.Query(t.Context(),
+		"SELECT unique_key FROM jobs WHERE kind = 'investigate' AND status = 'pending' AND payload->>'investigation_id' = $1", id.String())
+	require.NoError(t, err)
+
+	keys, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	require.NoError(t, err)
+
+	return keys
+}
+
 // publishJobs counts the publish jobs.
 func (b *buttonsHarness) publishJobs(t *testing.T) int {
 	t.Helper()
@@ -502,6 +719,62 @@ func (b *buttonsHarness) feedbackCount(t *testing.T, rating output.Rating) float
 	}
 
 	return 0
+}
+
+// watcher returns the watcher of the final investigation.
+func (b *buttonsHarness) watcher(t *testing.T) db.Watcher {
+	t.Helper()
+
+	w, err := db.New(b.pool).GetWatcher(t.Context(), runningWatcher)
+	require.NoError(t, err)
+
+	return w
+}
+
+// count returns the number query counts.
+func (b *buttonsHarness) count(t *testing.T, query string) int {
+	t.Helper()
+
+	var n int
+	require.NoError(t, b.pool.QueryRow(t.Context(), query).Scan(&n))
+
+	return n
+}
+
+// stateChanges returns sidekick_watcher_state_changes_total for status, or
+// 0 when the series does not exist.
+func (b *buttonsHarness) stateChanges(t *testing.T, status string) float64 {
+	t.Helper()
+
+	families, err := b.reg.Gather()
+	require.NoError(t, err)
+
+	for _, f := range families {
+		if f.GetName() != watch.MetricStateChanges {
+			continue
+		}
+
+		for _, m := range f.GetMetric() {
+			if m.GetLabel()[0].GetValue() == status {
+				return m.GetCounter().GetValue()
+			}
+		}
+	}
+
+	return 0
+}
+
+// collect runs query and returns its rows as T, column by column.
+func collect[T any](t *testing.T, pool *pgxpool.Pool, query string) []T {
+	t.Helper()
+
+	rows, err := pool.Query(t.Context(), query)
+	require.NoError(t, err)
+
+	out, err := pgx.CollectRows(rows, pgx.RowToStructByPos[T])
+	require.NoError(t, err)
+
+	return out
 }
 
 // requireNoRatings checks that no rating was stored.

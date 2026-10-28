@@ -8,6 +8,9 @@ package fakehttp
 
 import (
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -42,6 +45,9 @@ type Request struct {
 	Query  url.Values
 	Header http.Header
 	Body   []byte
+	// ClientCertificate is the certificate the client sent, on a server
+	// made WithClientCertificates. It is nil when the client sent none.
+	ClientCertificate *x509.Certificate
 }
 
 // Option changes how New starts a server.
@@ -58,7 +64,8 @@ type Server struct {
 }
 
 type options struct {
-	tls bool
+	tls         bool
+	clientCerts bool
 }
 
 type routeKey struct {
@@ -81,6 +88,16 @@ func WithTLS() Option {
 	return func(o *options) { o.tls = true }
 }
 
+// WithClientCertificates makes the server use HTTPS, as WithTLS does, and
+// ask each client for a certificate without requiring one. The certificate
+// a client sent is in its Request.ClientCertificate.
+func WithClientCertificates() Option {
+	return func(o *options) {
+		o.tls = true
+		o.clientCerts = true
+	}
+}
+
 // New starts a server for t and closes it when t ends.
 func New(t testing.TB, opts ...Option) *Server {
 	t.Helper()
@@ -92,10 +109,16 @@ func New(t testing.TB, opts ...Option) *Server {
 
 	s := &Server{t: t, routes: map[routeKey]*route{}}
 
-	if o.tls {
-		s.srv = httptest.NewTLSServer(http.HandlerFunc(s.serveHTTP))
-	} else {
-		s.srv = httptest.NewServer(http.HandlerFunc(s.serveHTTP))
+	s.srv = httptest.NewUnstartedServer(http.HandlerFunc(s.serveHTTP))
+
+	switch {
+	case o.clientCerts:
+		s.srv.TLS = &tls.Config{ClientAuth: tls.RequestClientCert, MinVersion: tls.VersionTLS12}
+		s.srv.StartTLS()
+	case o.tls:
+		s.srv.StartTLS()
+	default:
+		s.srv.Start()
 	}
 
 	t.Cleanup(s.srv.Close)
@@ -112,6 +135,18 @@ func (s *Server) URL() string {
 // the server's certificate.
 func (s *Server) Client() *http.Client {
 	return s.srv.Client()
+}
+
+// CertificatePEM returns the certificate of a TLS server in PEM form, for
+// tests of clients that are told which CA to trust. It is nil for a server
+// without TLS.
+func (s *Server) CertificatePEM() []byte {
+	cert := s.srv.Certificate()
+	if cert == nil {
+		return nil
+	}
+
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
 }
 
 // Handle answers requests to method and path with the responses, one each,
@@ -216,13 +251,19 @@ func (s *Server) next(req *http.Request, body []byte) (handler http.HandlerFunc,
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.requests = append(s.requests, Request{
+	recorded := Request{
 		Method: req.Method,
 		Path:   req.URL.Path,
 		Query:  req.URL.Query(),
 		Header: req.Header.Clone(),
 		Body:   body,
-	})
+	}
+
+	if req.TLS != nil && len(req.TLS.PeerCertificates) > 0 {
+		recorded.ClientCertificate = req.TLS.PeerCertificates[0]
+	}
+
+	s.requests = append(s.requests, recorded)
 
 	rt, found := s.routes[routeKey{method: req.Method, path: req.URL.Path}]
 
