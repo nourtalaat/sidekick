@@ -149,8 +149,13 @@ func (s *Source) queryRange(ctx context.Context, input json.RawMessage) (source.
 	}
 
 	if t := expr.Type(); t != parser.ValueTypeVector && t != parser.ValueTypeScalar {
+		kind := string(t)
+		if t == parser.ValueTypeMatrix {
+			kind = "range vector"
+		}
+
 		return source.Result{}, &source.ToolError{Message: fmt.Sprintf("query: a range query needs an expression that returns an instant "+
-			"vector or a scalar, not a %s; wrap a range vector such as x[5m] in a function such as rate()", t)}
+			"vector or a scalar, not a %s; wrap a range vector such as x[5m] in a function such as rate()", kind)}
 	}
 
 	w, err := s.window(in.Since, in.Until)
