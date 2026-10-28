@@ -21,6 +21,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/output"
 	"github.com/nourtalaat/sidekick/internal/source"
+	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
 // The registries, one per plugin kind.
@@ -71,6 +72,10 @@ type Deps struct {
 	// RegisterOrExisting so that several instances of one plugin type share
 	// one collector. Nil means no metrics.
 	Metrics prometheus.Registerer
+	// DB is Sidekick's own database, for built-in plugins that read
+	// Sidekick's data, such as the memory source. It is nil where a
+	// command builds plugins without a database, as config validate does.
+	DB db.DBTX
 }
 
 // Factory builds one named instance of a plugin from its config section.

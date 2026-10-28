@@ -852,6 +852,23 @@ How it behaves:
   stops waiting for response headers after 60 seconds; `sidekick config
   validate` rejects a longer one.
 
+#### Memory sources (`type: memory`)
+
+A memory source lets the model search Sidekick's own memory: the past
+investigations whose verdict a responder confirmed, and the notes people
+wrote about services. It has only the keys every source has. [The memory
+source](sources/memory.md) lists what its tools return.
+
+```yaml
+sources:
+  memory:
+    type: memory
+```
+
+The tools, as the model sees them with the source name `memory`, are
+`memory__search` and `memory__service_notes`. Prompts show similar
+confirmed investigations without it, as [`memory`](#memory) describes.
+
 #### Mock sources (`type: mock`)
 
 A mock source answers tool calls from fixtures instead of a real system.
@@ -1364,7 +1381,8 @@ the same fingerprint first, then those with the same service and alert
 name, then those whose summary shares words with the alert. A Wrong that
 takes the confirmation back takes the investigation out of memory again,
 so investigations nobody confirmed are never shown. With
-`enabled: false`, prompts show none.
+`enabled: false`, prompts show none. To let the model search memory
+itself, add a [memory source](sources/memory.md).
 
 ### `redaction`
 
