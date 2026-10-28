@@ -83,79 +83,6 @@ func TestListenerMatchesChannel(t *testing.T) {
 	}
 }
 
-func TestListenerFields(t *testing.T) {
-	t.Parallel()
-
-	extract := []string{
-		`Alert: (?P<alert>[A-Za-z]+)`,
-		`service=(?P<service>[a-z-]+)`,
-		`(?i)severity: (?P<severity>[a-z]+)`,
-		`env=(?P<env>[a-z]+)`,
-		`(?P<service>later-[a-z]+) region=(?P<region>[a-z0-9-]*)`,
-	}
-
-	tests := []struct {
-		name    string
-		extract []string
-		text    string
-		want    fields
-	}{
-		{name: "no patterns", text: "Alert: Disk", want: fields{severity: event.SeverityUnknown}},
-		{
-			name:    "every field",
-			extract: extract,
-			text:    "Alert: HighErrorRate firing\nservice=checkout severity: CRIT env=prod",
-			want:    fields{alert: "HighErrorRate", service: "checkout", severity: event.SeverityCritical, labels: map[string]string{"env": "prod"}},
-		},
-		{
-			name:    "the first pattern that sets a field wins, and empty groups set nothing",
-			extract: extract,
-			text:    "service=checkout later-api region=",
-			want:    fields{service: "checkout", severity: event.SeverityUnknown},
-		},
-		{
-			name:    "an unknown severity name",
-			extract: extract,
-			text:    "severity: purple",
-			want:    fields{severity: event.SeverityUnknown},
-		},
-		{name: "nothing matches", extract: extract, text: "hello", want: fields{severity: event.SeverityUnknown}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			l := compileOne(t, config.Listener{Extract: tt.extract})
-			require.Equal(t, tt.want, l.fields(tt.text))
-		})
-	}
-}
-
-func TestListenerRecovery(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		recovery string
-		text     string
-		want     bool
-	}{
-		{name: "no pattern", text: "Alert resolved"},
-		{name: "matches", recovery: "(?i)resolved|recovered", text: "[RESOLVED] HighErrorRate", want: true},
-		{name: "does not match", recovery: "(?i)resolved|recovered", text: "[FIRING] HighErrorRate"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			l := compileOne(t, config.Listener{Recovery: tt.recovery})
-			require.Equal(t, tt.want, l.isRecovery(tt.text))
-		})
-	}
-}
-
 func TestCompileListeners(t *testing.T) {
 	t.Parallel()
 
@@ -192,7 +119,7 @@ func TestCompileListeners(t *testing.T) {
 
 			names := []string{}
 			for _, l := range got {
-				names = append(names, l.name)
+				names = append(names, l.Name)
 			}
 
 			require.Equal(t, append([]string{}, tt.wantNames...), names)

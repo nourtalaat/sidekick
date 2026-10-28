@@ -1,0 +1,67 @@
+{
+  "type": "message",
+  "id": "1761642000001",
+  "timestamp": "2026-10-28T09:00:00.000Z",
+  "serviceUrl": "https://smba.trafficmanager.net/emea/",
+  "channelId": "msteams",
+  "from": {
+    "id": "28:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    "name": "Grafana",
+    "role": "bot"
+  },
+  "conversation": {
+    "isGroup": true,
+    "conversationType": "channel",
+    "tenantId": "55555555-6666-7777-8888-999999999999",
+    "id": "19:alerts@thread.tacv2;messageid=1761642000001"
+  },
+  "recipient": {
+    "id": "28:00000000-1111-2222-3333-444444444444",
+    "name": "Sidekick"
+  },
+  "textFormat": "plain",
+  "text": "",
+  "attachments": [
+    {
+      "contentType": "application/vnd.microsoft.card.adaptive",
+      "content": {
+        "type": "AdaptiveCard",
+        "version": "1.4",
+        "body": [
+          {
+            "type": "TextBlock",
+            "text": "[FIRING] HighErrorRate",
+            "weight": "Bolder"
+          },
+          {
+            "type": "TextBlock",
+            "text": "service=checkout severity: critical env=prod"
+          }
+        ],
+        "actions": [
+          {
+            "type": "Action.OpenUrl",
+            "title": "View in Grafana",
+            "url": "https://grafana.example.com/alerting/7"
+          }
+        ]
+      }
+    }
+  ],
+  "entities": [],
+  "channelData": {
+    "teamsChannelId": "19:alerts@thread.tacv2",
+    "teamsTeamId": "19:team@thread.tacv2",
+    "channel": {
+      "id": "19:alerts@thread.tacv2"
+    },
+    "team": {
+      "id": "19:team@thread.tacv2",
+      "aadGroupId": "6b6b6b6b-7777-8888-9999-000000000000"
+    },
+    "tenant": {
+      "id": "55555555-6666-7777-8888-999999999999"
+    }
+  },
+  "locale": "en-US"
+}
