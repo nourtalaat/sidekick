@@ -1,0 +1,96 @@
+openapi: 3.1.0
+info:
+  title: Sidekick API
+  version: v1
+  description: |
+    The JSON API of Sidekick, which the web UI uses. Every operation needs a
+    web UI session or an API token, and names the lowest role that may call
+    it in `x-sidekick-role`: viewer, responder, approver or admin. A higher
+    role includes every lower one. Errors are problem details (RFC 9457).
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: /api/v1
+security:
+  - session: []
+  - token: []
+paths:
+  /me:
+    get:
+      operationId: GetMe
+      summary: The signed-in user or API token, and its role
+      x-sidekick-role: viewer
+      responses:
+        "200":
+          description: The caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        default:
+          $ref: "#/components/responses/Problem"
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: __Host-sidekick_session
+      description: |
+        The web UI session, set by /auth/callback. Requests that change
+        anything also need the session's CSRF token in the X-CSRF-Token
+        header.
+    token:
+      type: http
+      scheme: bearer
+      description: An API token an admin created.
+  responses:
+    Problem:
+      description: An error, as problem details.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    Role:
+      type: string
+      enum: [viewer, responder, approver, admin]
+    Me:
+      type: object
+      required: [kind, id, name, role]
+      properties:
+        kind:
+          type: string
+          enum: [user, token]
+          description: Whether the caller is a signed-in user or an API token.
+        id:
+          type: string
+          description: The user's or the token's ID.
+        name:
+          type: string
+          description: The user's name, or the token's name.
+        email:
+          type: string
+          description: The user's email, when the identity provider sent a verified one.
+        role:
+          $ref: "#/components/schemas/Role"
+    Problem:
+      type: object
+      description: Problem details, as RFC 9457 describes.
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          description: A URI that names the kind of problem; about:blank when the status says it all.
+        title:
+          type: string
+          description: A short summary of the kind of problem.
+        status:
+          type: integer
+          description: The HTTP status code.
+        detail:
+          type: string
+          description: What went wrong with this request.
+        instance:
+          type: string
+          description: The path of the request.
