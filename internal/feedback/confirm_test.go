@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/output"
@@ -43,7 +44,50 @@ func TestNextConfirmation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, change := nextConfirmation(tt.cur, tt.rating, "true_positive", &cause, "U01BEN", now)
+			got, change := nextConfirmation(tt.cur, tt.rating, "true_positive", &cause, actor{slackUser: new("U01BEN")}, now)
+			require.Equal(t, tt.wantChange, change)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestNextRealVerdict(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 10, 26, 14, 10, 0, 0, time.UTC)
+	earlier := now.Add(-time.Hour)
+	who := actor{userID: new(uuid.MustParse("0192d3a4-0000-7000-8000-0000000000e1"))}
+
+	confirmed := func(verdict, cause string) confirmation {
+		return confirmation{verdict: &verdict, cause: &cause, bySlackUser: new("U01ANA"), at: &earlier}
+	}
+
+	byWho := func(verdict string, cause *string) confirmation {
+		return confirmation{verdict: &verdict, cause: cause, by: who.userID, at: &now}
+	}
+
+	tests := []struct {
+		name       string
+		cur        confirmation
+		verdict    string
+		cause      *string
+		want       confirmation
+		wantChange Change
+	}{
+		{name: "nothing confirmed yet", verdict: "false_positive", cause: new("Load test"), want: byWho("false_positive", new("Load test")), wantChange: Confirmed},
+		{name: "a verdict without a cause", verdict: "false_positive", want: byWho("false_positive", nil), wantChange: Confirmed},
+		{name: "another verdict than the confirmed one", cur: confirmed("true_positive", "Deploy"), verdict: "false_positive", cause: new("Load test"), want: byWho("false_positive", new("Load test")), wantChange: Revised},
+		{name: "another verdict drops the old cause", cur: confirmed("true_positive", "Deploy"), verdict: "false_positive", want: byWho("false_positive", nil), wantChange: Revised},
+		{name: "the confirmed verdict with no cause", cur: confirmed("true_positive", "Deploy"), verdict: "true_positive", want: confirmed("true_positive", "Deploy"), wantChange: Unchanged},
+		{name: "the confirmed verdict with the same cause", cur: confirmed("true_positive", "Deploy"), verdict: "true_positive", cause: new("Deploy"), want: confirmed("true_positive", "Deploy"), wantChange: Unchanged},
+		{name: "the confirmed verdict with another cause", cur: confirmed("true_positive", "Deploy"), verdict: "true_positive", cause: new("Config"), want: byWho("true_positive", new("Config")), wantChange: Revised},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, change := nextRealVerdict(tt.cur, tt.verdict, tt.cause, who, now)
 			require.Equal(t, tt.wantChange, change)
 			require.Equal(t, tt.want, got)
 		})

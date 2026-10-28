@@ -36,3 +36,57 @@ SELECT rating, user_id, slack_user_id, updated_at
 FROM feedback
 WHERE investigation_id = @investigation_id AND target_kind = @target_kind AND target_ref = @target_ref
 ORDER BY updated_at, id;
+
+-- name: GetUserFeedbackRating :one
+-- GetUserFeedbackRating returns the rating a signed-in user gave a target,
+-- and no row when they gave none.
+SELECT rating FROM feedback
+WHERE investigation_id = @investigation_id AND target_kind = @target_kind AND target_ref = @target_ref
+  AND user_id = @user_id;
+
+-- name: GetSlackFeedbackRating :one
+-- GetSlackFeedbackRating returns the rating a Slack user gave a target, and
+-- no row when they gave none.
+SELECT rating FROM feedback
+WHERE investigation_id = @investigation_id AND target_kind = @target_kind AND target_ref = @target_ref
+  AND slack_user_id = @slack_user_id::text;
+
+-- name: UpsertUserFeedback :one
+-- UpsertUserFeedback stores a signed-in user's feedback on a target. A user
+-- has one opinion per target: a new submission replaces the earlier one.
+INSERT INTO feedback (
+  id, investigation_id, target_kind, target_ref, rating, reason, correct_verdict, correct_cause,
+  user_id, channel, created_at, updated_at
+)
+VALUES (
+  @id, @investigation_id, @target_kind, @target_ref, @rating, sqlc.narg(reason), sqlc.narg(correct_verdict),
+  sqlc.narg(correct_cause), @user_id, @channel, now(), now()
+)
+ON CONFLICT (investigation_id, target_kind, target_ref, user_id) WHERE user_id IS NOT NULL
+DO UPDATE SET rating = excluded.rating, reason = excluded.reason, correct_verdict = excluded.correct_verdict,
+              correct_cause = excluded.correct_cause, channel = excluded.channel, updated_at = excluded.updated_at
+RETURNING *;
+
+-- name: UpsertSlackFeedbackDetails :one
+-- UpsertSlackFeedbackDetails stores a Slack user's feedback on a target
+-- from the Details form. A user has one opinion per target: it replaces the
+-- user's earlier rating of the target, whatever they said in it.
+INSERT INTO feedback (
+  id, investigation_id, target_kind, target_ref, rating, reason, correct_verdict, correct_cause,
+  slack_user_id, channel, created_at, updated_at
+)
+VALUES (
+  @id, @investigation_id, @target_kind, @target_ref, @rating, sqlc.narg(reason), sqlc.narg(correct_verdict),
+  sqlc.narg(correct_cause), @slack_user_id::text, @channel, now(), now()
+)
+ON CONFLICT (investigation_id, target_kind, target_ref, slack_user_id) WHERE slack_user_id IS NOT NULL
+DO UPDATE SET rating = excluded.rating, reason = excluded.reason, correct_verdict = excluded.correct_verdict,
+              correct_cause = excluded.correct_cause, channel = excluded.channel, updated_at = excluded.updated_at
+RETURNING *;
+
+-- name: ToolCallExists :one
+-- ToolCallExists reports whether a step of an investigation holds the tool
+-- call with this ID.
+SELECT EXISTS (
+  SELECT 1 FROM steps WHERE investigation_id = @investigation_id AND tool_call_id = @tool_call_id
+);

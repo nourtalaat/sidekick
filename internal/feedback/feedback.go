@@ -167,35 +167,41 @@ func VerdictRef(run int32) string {
 // returns how it changed. A change to a verdict confirmed before is
 // written to the audit log in the same transaction.
 func confirm(ctx context.Context, q db.DBTX, inv db.Investigation, r VerdictRating) (Change, error) {
-	queries := db.New(q)
-	before := current(inv)
-	next, change := nextConfirmation(before, r.Rating, *inv.Verdict, causeOf(inv.Report), r.SlackUserID, time.Now())
+	who := actor{slackUser: &r.SlackUserID}
+	next, change := nextConfirmation(current(inv), r.Rating, *inv.Verdict, causeOf(inv.Report), who, time.Now())
 
-	switch change {
-	case Unchanged:
+	return applyConfirmation(ctx, q, inv, next, change, who, false)
+}
+
+// applyConfirmation stores next as the confirmed verdict of inv, through
+// q, when change says it differs from the current one, and returns change.
+// A change to a verdict confirmed before is written to the audit log in the
+// same transaction; so is the first confirmation when auditFirst is set.
+func applyConfirmation(ctx context.Context, q db.DBTX, inv db.Investigation, next confirmation, change Change, who actor, auditFirst bool) (Change, error) {
+	if change == Unchanged {
 		return Unchanged, nil
-	case Revised, Withdrawn:
-		if err := setConfirmation(ctx, queries, inv.ID, next); err != nil {
-			return Unchanged, fmt.Errorf("change the confirmed verdict: %w", err)
-		}
+	}
 
-		err := auditor.Write(ctx, q, audit.Entry{
-			ActorKind:       audit.ActorUser,
-			ActorID:         r.SlackUserID,
-			Action:          auditActionPrefix + string(change),
-			TargetKind:      auditTarget,
-			TargetID:        inv.ID.String(),
-			InvestigationID: &inv.ID,
-			Old:             before.view(),
-			New:             next.view(),
-		})
-		if err != nil {
-			return Unchanged, fmt.Errorf("audit the change of the confirmed verdict: %w", err)
-		}
-	default:
-		if err := setConfirmation(ctx, queries, inv.ID, next); err != nil {
-			return Unchanged, fmt.Errorf("confirm the verdict: %w", err)
-		}
+	if err := setConfirmation(ctx, db.New(q), inv.ID, next); err != nil {
+		return Unchanged, fmt.Errorf("change the confirmed verdict: %w", err)
+	}
+
+	if change == Confirmed && !auditFirst {
+		return change, nil
+	}
+
+	err := auditor.Write(ctx, q, audit.Entry{
+		ActorKind:       audit.ActorUser,
+		ActorID:         who.id(),
+		Action:          auditActionPrefix + string(change),
+		TargetKind:      auditTarget,
+		TargetID:        inv.ID.String(),
+		InvestigationID: &inv.ID,
+		Old:             current(inv).view(),
+		New:             next.view(),
+	})
+	if err != nil {
+		return Unchanged, fmt.Errorf("audit the change of the confirmed verdict: %w", err)
 	}
 
 	return change, nil
