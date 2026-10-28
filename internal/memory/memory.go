@@ -152,7 +152,7 @@ func Examples(ctx context.Context, q db.DBTX, m Match, limit int, vec *Vectors) 
 
 	if m.Text != "" && c.left > 0 {
 		if err := c.textTier(ctx, q, m, vec); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("list entries for the text tier: %w", err)
 		}
 	}
 

@@ -242,7 +242,7 @@ func printMigrationStatus(cmd *cobra.Command, pool *pgxpool.Pool, vector bool) e
 	}
 
 	if err := printStatuses(cmd, statuses); err != nil {
-		return err
+		return fmt.Errorf("print the migrations: %w", err)
 	}
 
 	if !vector {
@@ -258,7 +258,11 @@ func printMigrationStatus(cmd *cobra.Command, pool *pgxpool.Pool, vector bool) e
 		return fmt.Errorf("write status: %w", err)
 	}
 
-	return printStatuses(cmd, statuses)
+	if err := printStatuses(cmd, statuses); err != nil {
+		return fmt.Errorf("print the vector migrations: %w", err)
+	}
+
+	return nil
 }
 
 func printStatuses(cmd *cobra.Command, statuses []*goose.MigrationStatus) error {
