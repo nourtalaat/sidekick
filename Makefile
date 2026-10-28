@@ -12,6 +12,7 @@ TOOLS_DIR := $(BIN_DIR)/tools
 GOLANGCI_LINT_VERSION := v2.12.2
 MOCKGEN_VERSION := v0.6.0
 GOVULNCHECK_VERSION := v1.9.0
+ACTIONLINT_VERSION := v1.7.12
 SQLC_VERSION := v1.31.1
 OAPI_CODEGEN_VERSION := v2.8.0
 
@@ -31,6 +32,7 @@ GOLANGCI_LINT := $(TOOLS_DIR)/golangci-lint-$(GOLANGCI_LINT_VERSION)/golangci-li
 MOCKGEN_DIR := $(TOOLS_DIR)/mockgen-$(MOCKGEN_VERSION)
 MOCKGEN := $(MOCKGEN_DIR)/mockgen
 GOVULNCHECK := $(TOOLS_DIR)/govulncheck-$(GOVULNCHECK_VERSION)/govulncheck
+ACTIONLINT := $(TOOLS_DIR)/actionlint-$(ACTIONLINT_VERSION)/actionlint
 SQLC := $(TOOLS_DIR)/sqlc-$(SQLC_VERSION)/sqlc
 OAPI_CODEGEN := $(TOOLS_DIR)/oapi-codegen-$(OAPI_CODEGEN_VERSION)/oapi-codegen
 
@@ -209,6 +211,11 @@ helm-path: $(HELM) ## Install the pinned Helm and print its path, for scripts
 helm-golden: $(HELM) ## Rewrite the golden files after an intended chart change
 	sh scripts/helm-test.sh $(HELM) --update
 
+CI_TARGETS += workflow-lint
+.PHONY: workflow-lint
+workflow-lint: $(ACTIONLINT) ## Check the GitHub Actions workflows with actionlint
+	$(ACTIONLINT)
+
 .PHONY: vulncheck
 vulncheck: $(GOVULNCHECK) ## Check dependencies and code for known vulnerabilities
 	$(GOVULNCHECK) ./...
@@ -224,6 +231,9 @@ $(MOCKGEN):
 
 $(GOVULNCHECK):
 	GOBIN="$(dir $@)" $(GO) install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+
+$(ACTIONLINT):
+	GOBIN="$(dir $@)" $(GO) install github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
 
 $(SQLC):
 	GOBIN="$(dir $@)" $(GO) install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)

@@ -1,0 +1,26 @@
+# The config that the benchmark workflow (.github/workflows/bench.yml) runs
+# the public scenarios with: the quick-start Anthropic model for the
+# investigation and for the judge, and the built-in strategies. The
+# workflow writes the API key to bench/.secrets/anthropic/apiKey, which git
+# ignores. `sidekick bench run` starts its own Postgres, so the database
+# secret below is never read.
+#
+# Add a `triage` role to model.roles to run the triage scenario through
+# triage; without one, its alert goes through a full investigation.
+secrets:
+  dir: bench/.secrets
+
+database:
+  urlSecret: { name: unused, key: url }
+
+model:
+  connectors:
+    claude:
+      provider: anthropic
+      model: claude-opus-5-5
+      apiKeySecret: { name: anthropic, key: apiKey }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default

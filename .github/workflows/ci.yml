@@ -111,6 +111,8 @@ jobs:
         env:
           PLANS_DIR: ${{ runner.temp }}/query-plans
         run: |
+          # The backticks are Markdown, not command substitution.
+          # shellcheck disable=SC2016
           {
             echo '### Query plans'
             echo 'Download the `query-plans` artifact of this run for the files.'
