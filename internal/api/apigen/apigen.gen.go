@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -59,6 +60,21 @@ func (e Role) Valid() bool {
 	}
 }
 
+// Defines values for ListJobsParamsStatus.
+const (
+	Dead ListJobsParamsStatus = "dead"
+)
+
+// Valid indicates whether the value is a known member of the ListJobsParamsStatus enum.
+func (e ListJobsParamsStatus) Valid() bool {
+	switch e {
+	case Dead:
+		return true
+	default:
+		return false
+	}
+}
+
 // CreatedToken defines model for CreatedToken.
 type CreatedToken struct {
 	// Secret The token, sent as "Authorization: Bearer <secret>". It is shown only here.
@@ -71,6 +87,32 @@ type EffectiveConfig struct {
 	// File sidekick.yaml with its defaults, by YAML key. Read-only.
 	File    map[string]interface{} `json:"file"`
 	Runtime RuntimeRules           `json:"runtime"`
+}
+
+// Job defines model for Job.
+type Job struct {
+	Attempts  int       `json:"attempts"`
+	CreatedAt time.Time `json:"createdAt"`
+
+	// FinishedAt When the job became dead.
+	FinishedAt *time.Time `json:"finishedAt,omitempty"`
+	Id         int64      `json:"id"`
+
+	// Kind The kind of job, such as investigate or publish.
+	Kind string `json:"kind"`
+
+	// LastError Why the last attempt failed, redacted.
+	LastError   *string `json:"lastError,omitempty"`
+	MaxAttempts int     `json:"maxAttempts"`
+	Route       *string `json:"route,omitempty"`
+}
+
+// JobList defines model for JobList.
+type JobList struct {
+	Jobs []Job `json:"jobs"`
+
+	// NextCursor Pass as cursor for the next page. Absent on the last page.
+	NextCursor *string `json:"nextCursor,omitempty"`
 }
 
 // Me defines model for Me.
@@ -166,6 +208,19 @@ type TokenList struct {
 	Tokens []Token `json:"tokens"`
 }
 
+// ListJobsParams defines parameters for ListJobs.
+type ListJobsParams struct {
+	// Status Only dead jobs are listed.
+	Status *ListJobsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// Cursor The nextCursor of the page before.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListJobsParamsStatus defines parameters for ListJobs.
+type ListJobsParamsStatus string
+
 // CreateTokenJSONRequestBody defines body for CreateToken for application/json ContentType.
 type CreateTokenJSONRequestBody = NewToken
 
@@ -174,6 +229,12 @@ type ServerInterface interface {
 	// GetConfig The effective config, with secrets shown only as references
 	// (GET /config)
 	GetConfig(w http.ResponseWriter, r *http.Request)
+	// ListJobs Dead jobs, newest first, a page at a time
+	// (GET /jobs)
+	ListJobs(w http.ResponseWriter, r *http.Request, params ListJobsParams)
+	// RetryJob Retry a dead job
+	// (POST /jobs/{id}/retry)
+	RetryJob(w http.ResponseWriter, r *http.Request, id int64)
 	// GetMe The signed-in user or API token, and its role
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
@@ -202,6 +263,91 @@ func (siw *ServerInterfaceWrapper) GetConfig(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetConfig(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListJobs operation middleware
+func (siw *ServerInterfaceWrapper) ListJobs(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListJobsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListJobs(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RetryJob operation middleware
+func (siw *ServerInterfaceWrapper) RetryJob(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RetryJob(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -401,6 +547,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me", wrapper.GetMe)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/config", wrapper.GetConfig)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/jobs", wrapper.ListJobs)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/jobs/{id}/retry", wrapper.RetryJob)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tokens", wrapper.ListTokens)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/tokens", wrapper.CreateToken)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/tokens/{id}", wrapper.RevokeToken)
@@ -437,6 +585,78 @@ type GetConfigdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetConfigdefaultApplicationProblemPlusJSONResponse) VisitGetConfigResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListJobsRequestObject struct {
+	Params ListJobsParams
+}
+
+type ListJobsResponseObject interface {
+	VisitListJobsResponse(w http.ResponseWriter) error
+}
+
+type ListJobs200JSONResponse JobList
+
+func (response ListJobs200JSONResponse) VisitListJobsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListJobsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListJobsdefaultApplicationProblemPlusJSONResponse) VisitListJobsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RetryJobRequestObject struct {
+	Id int64 `json:"id"`
+}
+
+type RetryJobResponseObject interface {
+	VisitRetryJobResponse(w http.ResponseWriter) error
+}
+
+type RetryJob204Response struct {
+}
+
+func (response RetryJob204Response) VisitRetryJobResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RetryJobdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RetryJobdefaultApplicationProblemPlusJSONResponse) VisitRetryJobResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -601,6 +821,12 @@ type StrictServerInterface interface {
 	// GetConfig The effective config, with secrets shown only as references
 	// (GET /config)
 	GetConfig(ctx context.Context, request GetConfigRequestObject) (GetConfigResponseObject, error)
+	// ListJobs Dead jobs, newest first, a page at a time
+	// (GET /jobs)
+	ListJobs(ctx context.Context, request ListJobsRequestObject) (ListJobsResponseObject, error)
+	// RetryJob Retry a dead job
+	// (POST /jobs/{id}/retry)
+	RetryJob(ctx context.Context, request RetryJobRequestObject) (RetryJobResponseObject, error)
 	// GetMe The signed-in user or API token, and its role
 	// (GET /me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
@@ -671,6 +897,58 @@ func (sh *strictHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetConfigResponseObject); ok {
 		if err := validResponse.VisitGetConfigResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListJobs operation middleware
+func (sh *strictHandler) ListJobs(w http.ResponseWriter, r *http.Request, params ListJobsParams) {
+	var request ListJobsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListJobs(ctx, request.(ListJobsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListJobs")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListJobsResponseObject); ok {
+		if err := validResponse.VisitListJobsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RetryJob operation middleware
+func (sh *strictHandler) RetryJob(w http.ResponseWriter, r *http.Request, id int64) {
+	var request RetryJobRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RetryJob(ctx, request.(RetryJobRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RetryJob")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RetryJobResponseObject); ok {
+		if err := validResponse.VisitRetryJobResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

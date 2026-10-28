@@ -12,6 +12,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/api"
@@ -53,6 +54,7 @@ func TestMain(m *testing.M) {
 type server struct {
 	mux      *http.ServeMux
 	provider *authtest.Provider
+	pool     *pgxpool.Pool
 }
 
 func setup(t *testing.T) server {
@@ -94,6 +96,7 @@ func setup(t *testing.T) server {
 
 	handler, err := api.New(api.Options{
 		Auth: sessions, Tokens: sessions, Config: cfg, Rules: rules.NewStore(pool, cfg), Redactor: redactor,
+		Pool: pool, Audit: audit.NewWriter(),
 	})
 	require.NoError(t, err)
 
@@ -101,7 +104,7 @@ func setup(t *testing.T) server {
 	sessions.Register(mux)
 	mux.Handle(api.BasePath+"/", handler)
 
-	return server{mux: mux, provider: provider}
+	return server{mux: mux, provider: provider, pool: pool}
 }
 
 // do sends a request with the session cookie, when it is set, and the CSRF

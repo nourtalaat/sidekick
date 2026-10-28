@@ -43,6 +43,8 @@ func registerAPI(ctx context.Context, a *app.App) error {
 		Config:   cfg,
 		Rules:    rules.NewStore(a.Pool(), cfg),
 		Redactor: a.Redactor(),
+		Pool:     a.Pool(),
+		Audit:    audit.NewWriter(),
 		Logger:   log,
 	})
 	if err != nil {

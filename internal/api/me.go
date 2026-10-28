@@ -4,7 +4,10 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
+	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/auth"
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/redact"
@@ -16,6 +19,8 @@ type server struct {
 	cfg      *config.Config
 	rules    RuntimeRules
 	redactor *redact.Redactor
+	pool     *pgxpool.Pool
+	audit    *audit.Writer
 }
 
 var _ apigen.StrictServerInterface = (*server)(nil)
