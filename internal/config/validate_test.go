@@ -228,6 +228,12 @@ func TestValidateFixtures(t *testing.T) {
 			"the built-in default interval 30s is below routes[0].watcherLimits.minInterval 45s; set routes[0].watcherDefaults.interval or watch.defaults.interval",
 			"the built-in default timeout 1h0m0s is above watch.maxTimeout 30m0s; set watch.defaults.timeout",
 		}},
+		// Retention
+		{file: "retention-invalid", want: []string{
+			`retention.auditLog: expected a period such as 90d or 36h, got "90 days"`,
+			"retention.events: must be positive",
+			"retention.steps: 31d is longer than retention.investigations 30d; they are deleted with their investigation",
+		}},
 		// Several problems, reported together and sorted by path.
 		{file: "three-errors", want: []string{
 			`report.minFalsePositiveConfidence: unknown confidence "hgh" (did you mean "high"?)`,

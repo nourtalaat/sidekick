@@ -1543,6 +1543,25 @@ A refused request ends the check with an error and is counted in
 `sidekick_watch_http_blocked_total`, by reason: `host`, `private_ip` or
 `redirect`.
 
+### `retention`
+
+How long Sidekick keeps each kind of record. Once a day, old records are
+deleted. Only this file sets these periods. Each is a whole number of days
+such as `90d`, or a duration such as `36h`.
+
+```yaml
+retention:
+  events: 90d          # received alerts and messages, by when they arrived
+  investigations: 365d # investigations, with their report, by when they were created
+  steps: 90d           # the full record of each step of a run, by when it started
+  auditLog: 730d       # audit log entries, by when they were written
+  watcherChecks: 30d   # results of single watcher checks, by when they ran
+```
+
+`steps` and `watcherChecks` cannot be longer than `investigations`,
+because deleting an investigation deletes its steps and its watchers with
+their checks.
+
 ## Defaults
 
 | Setting | Default |
@@ -1588,6 +1607,10 @@ A refused request ends the check with an error and is counted in
 | `watch.minInterval`, `watch.maxInterval`, `watch.maxTimeout` | `10s`, `15m`, `4h` |
 | `watch.http.allowHosts` | none: HTTP checks cannot reach any host |
 | `watch.http.allowPrivate` | none: every private and special range is blocked |
+| `retention.events`, `retention.steps` | `90d` |
+| `retention.investigations` | `365d` |
+| `retention.auditLog` | `730d` |
+| `retention.watcherChecks` | `30d` |
 
 ## What is checked
 
@@ -1656,6 +1679,8 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
 - Watcher names are unique within a route, each check passes its own
   checks, an `http` check's host is in `watch.http.allowHosts`, and a `tool`
   check's source is one of the route's.
+- Every `retention` period is positive, and `retention.steps` and
+  `retention.watcherChecks` are at most `retention.investigations`.
 - `database.migrations`, `report.minFalsePositiveConfidence` and
   `telemetry.logLevel` are known values, URLs are absolute, and listen
   addresses have a port.
