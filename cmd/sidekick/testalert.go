@@ -61,11 +61,13 @@ type testAlertOptions struct {
 	configPath string
 	webhook    string
 	baseURL    string
+	channel    string
 }
 
 // newTestAlertCmd builds `sidekick test-alert`, which sends a sample
 // Alertmanager alert to Sidekick's own webhook endpoint, authenticated as
-// the endpoint's config says, and prints Sidekick's answer. regs are the
+// the endpoint's config says, and prints Sidekick's answer. With --channel
+// it posts a sample alert into a Slack channel instead. regs are the
 // plugin registries; the zero value means the global ones.
 func newTestAlertCmd(regs config.Registries) *cobra.Command {
 	var opts testAlertOptions
@@ -85,7 +87,14 @@ this machine, so run it inside Sidekick's pod
 (kubectl exec deploy/sidekick -c sidekick -- sidekick test-alert), or
 give Sidekick's address with --url.
 
-The exit status is 1 when Sidekick does not accept the alert.`,
+With --channel it posts the sample alert into that Slack channel as the
+bot instead, about a pod that the Kubernetes source can read (or a made-up
+pod, which the message says), so that the listener of the channel picks it
+up like an alert from a monitoring bot. The bot must be in the channel.
+It prints which listener takes the alert, or why none does. This needs the
+Slack bot token and no webhook endpoint.
+
+The exit status is 1 when Sidekick or Slack does not accept the alert.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := config.Load(cmd.Context(), opts.configPath, config.LoadOptions{Registries: regs})
@@ -99,6 +108,14 @@ The exit status is 1 when Sidekick does not accept the alert.`,
 				return errInvalidConfig
 			}
 
+			if opts.channel != "" {
+				if opts.webhook != "" || opts.baseURL != "" {
+					return errChannelWithWebhook
+				}
+
+				return sendSlackTestAlert(cmd.Context(), cmd.OutOrStdout(), cfg, regs, opts.channel, httpclient.New(), findSamplePod)
+			}
+
 			return sendTestAlert(cmd.Context(), cmd.OutOrStdout(), cfg, opts, httpclient.New(), time.Now())
 		},
 	}
@@ -106,6 +123,7 @@ The exit status is 1 when Sidekick does not accept the alert.`,
 	addConfigFlag(cmd, &opts.configPath)
 	cmd.Flags().StringVar(&opts.webhook, "webhook", "", "the webhook endpoint to send to (default: the only one with the alertmanager adapter)")
 	cmd.Flags().StringVar(&opts.baseURL, "url", "", "Sidekick's address, such as http://sidekick.monitoring:8080 (default: server.listen on this machine)")
+	cmd.Flags().StringVar(&opts.channel, "channel", "", "post the sample alert into this Slack channel, such as '#alerts', as the bot, instead of sending it to a webhook")
 
 	return cmd
 }

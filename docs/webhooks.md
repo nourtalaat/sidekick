@@ -210,9 +210,43 @@ and posts to its outputs.
 | `--config`, `-c` | `/etc/sidekick/sidekick.yaml` | The config file, for the endpoint and its secret. |
 | `--webhook` | the only endpoint with `adapter: alertmanager` | The endpoint to send to. It must use the `alertmanager` adapter. |
 | `--url` | `server.listen` on this machine | Sidekick's address, such as `http://sidekick.monitoring:8080`, to send from outside the pod. |
+| `--channel` | none | Post the sample alert into this Slack channel instead of sending it to a webhook endpoint; see [In a Slack channel](#in-a-slack-channel). |
 
 The token is never printed. The exit status is 1 when Sidekick does not
 answer `202`.
+
+### In a Slack channel
+
+With `--channel`, the command posts a sample alert into a Slack channel
+instead, as the Sidekick bot, with the bot token of the `slack` section. A
+listener on the channel then takes it like an alert from a monitoring bot,
+and Sidekick answers in its thread. It needs no webhook endpoint, so it is
+the test of the [quick start](install.md#5-send-a-test-alert-3-minutes):
+
+```sh
+kubectl exec deploy/sidekick -c sidekick -- sidekick test-alert --channel '#alerts'
+```
+
+```text
+Posted a test alert in #alerts, about the pod shop/api-5d8c9b7f4-m2xkq.
+The listener alerts takes it. The reply appears in its thread within 30 seconds, and the verdict within a few minutes.
+```
+
+- The alert says a pod keeps restarting. The pod is one that a Kubernetes
+  source of the config can read (a running pod outside the system
+  namespaces, which needs the same `list` permission on pods as
+  `list_pod_problems`). When the config has no such source, or it cannot
+  list a pod, the command says why, uses a made-up pod name, and the
+  message says that the name is made up.
+- The command then checks the channel, the bot's identity and the alert's
+  text against the listeners, and says which listener takes the alert. When
+  none does, for example because the listener is for another bot, it says
+  so, since Sidekick would not investigate the alert.
+- The bot must be in the channel. Slack answers `not_in_channel` or
+  `channel_not_found` otherwise, and the command suggests inviting the app.
+- `--channel` cannot be used with `--webhook` or `--url`.
+- The alert is marked so that the Slack app does not skip it as one of its
+  own messages; see [The test alert](slack.md#the-test-alert).
 
 ## Monitoring intake
 
