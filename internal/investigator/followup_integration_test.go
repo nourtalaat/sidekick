@@ -293,6 +293,49 @@ func TestFollowUp(t *testing.T) {
 				require.Equal(t, "follow_up", phase)
 			},
 		},
+		{
+			// The model has no turns for a follow-up run, so a run that
+			// started would fail.
+			name:  "a question after the retention job deleted old steps gets an answer that says so, and no run",
+			opts:  options{turns: firstRun()},
+			steps: []string{},
+			from:  firstRunSteps - 2,
+			run: func(t *testing.T, h *harness) {
+				t.Helper()
+
+				require.NoError(t, h.run(t))
+
+				_, err := h.pool.Exec(t.Context(), "DELETE FROM steps WHERE investigation_id = $1 AND seq < 2", testInvestigation)
+				require.NoError(t, err)
+
+				require.True(t, h.ask(t, "Ev1", askDeploy))
+				require.NoError(t, h.runFollowUp(t))
+				require.Zero(t, h.pendingFollowUps(t), "the question is answered, so no job waits")
+
+				inv := h.investigation(t)
+				require.Equal(t, StatusFinal, inv.Status)
+				require.Equal(t, RunKindInvestigate, inv.RunKind)
+				require.Equal(t, "true_positive", deref(inv.Verdict))
+
+				r := h.report(t)
+				require.Len(t, r.FollowUps, 1)
+				require.False(t, r.FollowUps[0].Answered)
+				require.Equal(t, unansweredPastRetention, r.FollowUps[0].Answer)
+				require.Equal(t, []report.FollowUpQuestion{{Author: "Ana", AuthorID: "U01ANA", Text: askDeploy}}, r.FollowUps[0].Questions)
+
+				_, phase, body := h.publishState(t)
+				require.Equal(t, "follow_up", phase)
+				require.Len(t, body.Report.FollowUps, 1)
+				require.Len(t, h.conn.Requests(), 2, "only the first run called the model")
+
+				require.True(t, h.ask(t, "Ev2", askPods))
+				require.NoError(t, h.runFollowUp(t))
+				later := h.report(t).FollowUps
+				require.Len(t, later, 2)
+				require.Equal(t, unansweredPastRetention, later[1].Answer, "a later question gets the same answer")
+				require.Equal(t, []report.FollowUpQuestion{{Author: "Ana", AuthorID: "U01ANA", Text: askPods}}, later[1].Questions)
+			},
+		},
 	}
 
 	for _, tt := range tests {

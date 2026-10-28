@@ -37,7 +37,8 @@ route's outputs, such as a Slack thread. The
 investigation asks the route's model, calls the sources it needs, and
 posts its verdict to the same outputs. Watchers that the route defines,
 or that the investigation starts, check on their own schedule whether
-the service is back up. Logs go to standard output as JSON.
+the service is back up. Once a day, records older than the retention
+section allows are deleted. Logs go to standard output as JSON.
 
 On SIGTERM or SIGINT it stops taking requests, hands back jobs it cannot
 finish, and exits within ` + app.ShutdownGrace.String() + `. A second signal exits at once.`,
@@ -104,6 +105,10 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 	}
 
 	if err := registerPublisher(a); err != nil {
+		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
+	}
+
+	if err := registerRetention(a); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 

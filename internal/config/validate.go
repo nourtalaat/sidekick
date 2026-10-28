@@ -41,6 +41,10 @@ const nameRule = `must start with a lower-case letter and hold only lower-case l
 // the slack section.
 const slackOutputType = "slack"
 
+// teamsOutputType is the output type that posts as the bot of the teams
+// section.
+const teamsOutputType = "teams"
+
 // The values config accepts for enumerations, for checks and suggestions.
 var (
 	knownRoles      = []model.Role{model.RoleTriage, model.RoleInvestigate, model.RoleJudge, model.RoleSummarize}
@@ -106,6 +110,7 @@ func (v *validator) run() {
 	v.checkTelemetry()
 	v.checkWatch()
 	v.checkWatchSettings()
+	v.checkRetention()
 	v.checkSecretRefs()
 
 	if v.opts.CheckSecrets {
@@ -288,6 +293,10 @@ func (v *validator) checkOutputs() {
 
 		if s.Type == slackOutputType && v.cfg.Slack == nil {
 			v.errs.add(s.Path(), "type slack needs slack.botTokenSecret")
+		}
+
+		if s.Type == teamsOutputType && v.cfg.Teams == nil {
+			v.errs.add(s.Path(), "type teams needs the teams section, the bot it posts as")
 		}
 	}
 }

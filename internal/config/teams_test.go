@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/nourtalaat/sidekick/internal/registry"
 )
 
 func TestTeamsListeners(t *testing.T) {
@@ -18,6 +20,10 @@ func TestTeamsListeners(t *testing.T) {
 		TrustedBots:      []string{"28:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"},
 		ServiceURL:       "https://smba.trafficmanager.net/emea/",
 	}, cfg.Teams)
+
+	require.Equal(t, registry.TeamsBot{
+		AppID: cfg.Teams.AppID, TenantID: cfg.Teams.TenantID, WorkloadIdentity: true, ServiceURL: cfg.Teams.ServiceURL,
+	}, cfg.Teams.Bot())
 
 	tests := []struct {
 		listener string

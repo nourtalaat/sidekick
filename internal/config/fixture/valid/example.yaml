@@ -181,6 +181,13 @@ watch:
     allowHosts: ["*.internal.example.com", "status.example.com"]
     allowPrivate: ["10.20.0.0/16"]
 
+retention:
+  events: 90d
+  investigations: 365d
+  steps: 90d
+  auditLog: 730d
+  watcherChecks: 30d
+
 telemetry:
   otlpEndpoint: http://otel-collector.observability:4317
   logLevel: info

@@ -1072,6 +1072,9 @@ The types:
 - `slack` posts one message per investigation and edits it as the
   investigation runs. [Investigations in Slack](slack.md) describes its
   keys, what it posts and how to set up the Slack app.
+- `teams` does the same in a Microsoft Teams thread, as the bot of the
+  [`teams`](#teams) section, which it needs. [Investigations in Microsoft
+  Teams](teams.md#what-it-posts) describes its one key, `channel`.
 - `linear.comment` and `jira.comment` post the result as a comment on the
   Linear or Jira issue the alert names. [Results on tickets](tickets.md)
   describes their keys and how they find the issue.
@@ -1562,6 +1565,53 @@ A refused request ends the check with an error and is counted in
 `sidekick_watch_http_blocked_total`, by reason: `host`, `private_ip` or
 `redirect`.
 
+### `retention`
+
+How long Sidekick keeps each kind of record. Once a day, old records are
+deleted. Only this file sets these periods. Each is a whole number of days
+such as `90d`, or a duration such as `36h`.
+
+```yaml
+retention:
+  events: 90d          # received alerts and messages, by when they arrived
+  investigations: 365d # investigations, with their report, by when they were created
+  steps: 90d           # the full record of each step of a run, by when it started
+  auditLog: 730d       # audit log entries, by when they were written
+  watcherChecks: 30d   # results of single watcher checks, by when they ran
+```
+
+`steps` and `watcherChecks` cannot be longer than `investigations`,
+because deleting an investigation deletes its steps and its watchers with
+their checks.
+
+Every replica checks once an hour, and at start-up, that the retention
+job of the day (in UTC) is queued; however many replicas there are, it
+runs once a day. It deletes at most 5,000 rows at a time, oldest first,
+each batch in a short transaction of its own, so it does not hold locks
+for long. It also deletes finished background jobs: done jobs after 1
+day, and dead jobs after 30 days. `sidekick_retention_deleted_rows_total`
+counts what it deleted, by table.
+
+Deleting an investigation also deletes its steps, its inbox, its
+published message references, its feedback, its watchers with their
+checks, and its event group. An investigation whose event group is
+still open is kept until the group closes.
+
+With the defaults, an investigation outlives its events and its steps.
+An investigation older than `events` and `steps` keeps its verdict,
+report, costs and feedback, but no longer has the alert or message that
+started it, nor the full record of its tool calls and model turns.
+Responders can still rate it, and its message is still updated; it then
+names its subject "the alert", since the alert's title is gone. A
+follow-up question on an investigation that lost any of its steps is not
+investigated: it gets a short answer that the investigation is past its
+retention period and its details were deleted.
+
+The audit log can be deleted only by the retention job: the database
+rejects any other `DELETE` or `TRUNCATE` of it, as it rejects every
+`UPDATE`. This guards against bugs and stray queries, not against someone
+with access to the database, who can turn the guard off.
+
 ## Defaults
 
 | Setting | Default |
@@ -1607,6 +1657,10 @@ A refused request ends the check with an error and is counted in
 | `watch.minInterval`, `watch.maxInterval`, `watch.maxTimeout` | `10s`, `15m`, `4h` |
 | `watch.http.allowHosts` | none: HTTP checks cannot reach any host |
 | `watch.http.allowPrivate` | none: every private and special range is blocked |
+| `retention.events`, `retention.steps` | `90d` |
+| `retention.investigations` | `365d` |
+| `retention.auditLog` | `730d` |
+| `retention.watcherChecks` | `30d` |
 
 ## What is checked
 
@@ -1675,6 +1729,8 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
 - Watcher names are unique within a route, each check passes its own
   checks, an `http` check's host is in `watch.http.allowHosts`, and a `tool`
   check's source is one of the route's.
+- Every `retention` period is positive, and `retention.steps` and
+  `retention.watcherChecks` are at most `retention.investigations`.
 - `database.migrations`, `report.minFalsePositiveConfidence` and
   `telemetry.logLevel` are known values, URLs are absolute, and listen
   addresses have a port.

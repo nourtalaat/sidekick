@@ -202,6 +202,15 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"steps_pkey"},
 		},
 		{
+			name: "CountSteps",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.CountSteps(ctx, busy)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"steps_pkey"},
+		},
+		{
 			name: "AdvanceInvestigation",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.AdvanceInvestigation(ctx, db.AdvanceInvestigationParams{

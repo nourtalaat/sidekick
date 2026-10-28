@@ -18,6 +18,7 @@ import (
 	_ "github.com/nourtalaat/sidekick/internal/output/jira"         // Output type "jira.comment".
 	_ "github.com/nourtalaat/sidekick/internal/output/linear"       // Output type "linear.comment".
 	_ "github.com/nourtalaat/sidekick/internal/output/slack"        // Output type "slack".
+	_ "github.com/nourtalaat/sidekick/internal/output/teams"        // Output type "teams".
 	_ "github.com/nourtalaat/sidekick/internal/output/webhook"      // Output type "webhook".
 	_ "github.com/nourtalaat/sidekick/internal/source/azure"        // Source type "azure".
 	_ "github.com/nourtalaat/sidekick/internal/source/backstage"    // Source type "backstage".

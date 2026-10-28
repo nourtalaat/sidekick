@@ -16,3 +16,8 @@ VALUES (
 -- name: ListSteps :many
 -- ListSteps returns the steps of an investigation in order.
 SELECT * FROM steps WHERE investigation_id = @investigation_id ORDER BY seq;
+
+-- name: CountSteps :one
+-- CountSteps returns how many steps of an investigation are saved. It is
+-- below next_seq once the retention job deleted old steps.
+SELECT count(*) FROM steps WHERE investigation_id = @investigation_id;
