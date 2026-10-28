@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/event"
+	"github.com/nourtalaat/sidekick/internal/store"
 )
 
 func TestStore(t *testing.T) {
@@ -84,6 +85,45 @@ func TestStore(t *testing.T) {
 
 				require.Equal(t, StatusReceived, stored[0].Status)
 				require.Equal(t, []string{stored[0].ID.String()}, h.routeJobs(t))
+			},
+		},
+		{
+			name: "Slack and Teams IDs that match a rule are stored as received and the text is redacted",
+			d: Delivery{Intake: "chat", ReceivedAt: at, Events: []event.Event{
+				{
+					Key: "slack", Kind: event.KindMessage, Text: "disk full SEEDED-20",
+					Slack: &event.SlackRef{TeamID: "T1", Channel: "C1", TS: "1700000000.123456", ThreadTS: "1700000000.000100", UserID: "SEEDED-21"},
+				},
+				{
+					Key: "teams", Kind: event.KindMessage, Text: "disk full SEEDED-22",
+					Teams: &event.TeamsRef{
+						TenantID: "SEEDED-23", TeamID: teamIDCardNumber, ChannelID: "19:abc@thread.skype", MessageID: "1700000000123",
+						ThreadID: "1700000000123", UserID: "29:SEEDED-24", ServiceURL: "https://smba.trafficmanager.net/amer/",
+					},
+				},
+			}},
+			check: func(t *testing.T, h *harness, stored []Stored) {
+				t.Helper()
+
+				events := h.events(t)
+				require.Len(t, events, 3)
+
+				redactor := testRedactor(t)
+
+				slack, err := store.EventOf(events[1])
+				require.NoError(t, err)
+				require.Equal(t, stored[0].ID, events[1].ID)
+				require.Equal(t, "disk full "+redactor.Text("SEEDED-20").Text, slack.Text)
+				require.Equal(t, &event.SlackRef{TeamID: "T1", Channel: "C1", TS: "1700000000.123456", ThreadTS: "1700000000.000100", UserID: "SEEDED-21"}, slack.Slack)
+
+				teams, err := store.EventOf(events[2])
+				require.NoError(t, err)
+				require.Equal(t, stored[1].ID, events[2].ID)
+				require.Equal(t, "disk full "+redactor.Text("SEEDED-22").Text, teams.Text)
+				require.Equal(t, &event.TeamsRef{
+					TenantID: "SEEDED-23", TeamID: teamIDCardNumber, ChannelID: "19:abc@thread.skype", MessageID: "1700000000123",
+					ThreadID: "1700000000123", UserID: "29:SEEDED-24", ServiceURL: "https://smba.trafficmanager.net/amer/",
+				}, teams.Teams)
 			},
 		},
 		{
