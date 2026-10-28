@@ -17,6 +17,14 @@ then loops:
 3. The loop goes on until the model submits its report, or a limit is
    reached.
 
+Whatever the strategy says, the model is told to check what changed shortly
+before the event started: deploys, config changes and feature flags, with
+every tool that can show them, such as the
+[GitHub source](sources/github.md) or the rollout history of the
+[Kubernetes source](sources/kubernetes.md). It records what it found as a
+finding, also when nothing changed. When no tool can show recent changes,
+the report's reason says they could not be checked.
+
 Events that join the investigation's group while it runs, and recoveries
 of its alerts, wait in the investigation's inbox. Before the model's next
 answer, Sidekick sends everything that waits as one message, with what the
