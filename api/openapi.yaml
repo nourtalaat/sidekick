@@ -30,6 +30,133 @@ paths:
                 $ref: "#/components/schemas/Me"
         default:
           $ref: "#/components/responses/Problem"
+  /config:
+    get:
+      operationId: GetConfig
+      summary: The effective config, with secrets shown only as references
+      description: |
+        The config file as Sidekick read it, defaults included, which only
+        a config change can alter, and the listeners and routes stored at
+        runtime. Secrets appear only as references to a Secret's name and
+        key. Strings the redaction rules match are redacted.
+      x-sidekick-role: admin
+      responses:
+        "200":
+          description: The effective config.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EffectiveConfig"
+        default:
+          $ref: "#/components/responses/Problem"
+  /jobs:
+    get:
+      operationId: ListJobs
+      summary: Dead jobs, newest first, a page at a time
+      x-sidekick-role: admin
+      parameters:
+        - name: status
+          in: query
+          description: Only dead jobs are listed.
+          schema:
+            type: string
+            enum: [dead]
+            default: dead
+        - name: cursor
+          in: query
+          description: The nextCursor of the page before.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: A page of dead jobs.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /jobs/{id}/retry:
+    post:
+      operationId: RetryJob
+      summary: Retry a dead job
+      description: |
+        Sets the dead job back to pending with its attempts reset, and
+        writes the retry to the audit log.
+      x-sidekick-role: admin
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "204":
+          description: The job is pending again.
+        default:
+          $ref: "#/components/responses/Problem"
+  /tokens:
+    get:
+      operationId: ListTokens
+      summary: Every API token, revoked and expired ones included, newest first
+      x-sidekick-role: admin
+      responses:
+        "200":
+          description: The tokens. The tokens themselves are never shown again.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenList"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: CreateToken
+      summary: Create an API token
+      description: |
+        Only a signed-in admin can create a token, never another token. The
+        token's role is at most the creator's, and its expiry at most a year
+        away. The answer holds the token itself, which is never shown again.
+      x-sidekick-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewToken"
+      responses:
+        "201":
+          description: The new token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedToken"
+        default:
+          $ref: "#/components/responses/Problem"
+  /tokens/{id}:
+    delete:
+      operationId: RevokeToken
+      summary: Revoke an API token
+      x-sidekick-role: admin
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: The token is revoked.
+        default:
+          $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
     session:
@@ -80,6 +207,142 @@ components:
             The session's CSRF token. Requests made with the session that
             change anything send it in the X-CSRF-Token header. Absent for
             an API token.
+    EffectiveConfig:
+      type: object
+      required: [file, runtime]
+      properties:
+        file:
+          type: object
+          additionalProperties: true
+          description: sidekick.yaml with its defaults, by YAML key. Read-only.
+        runtime:
+          $ref: "#/components/schemas/RuntimeRules"
+    RuntimeRules:
+      type: object
+      required: [listeners, routes]
+      properties:
+        listeners:
+          type: array
+          items:
+            $ref: "#/components/schemas/RuntimeRule"
+        routes:
+          type: array
+          items:
+            $ref: "#/components/schemas/RuntimeRule"
+    RuntimeRule:
+      type: object
+      required: [name, enabled, version, updatedBy, updatedAt, config]
+      properties:
+        name:
+          type: string
+        enabled:
+          type: boolean
+        version:
+          type: integer
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        config:
+          type: object
+          additionalProperties: true
+          description: The rule, with the keys a listener or route has in sidekick.yaml.
+    Job:
+      type: object
+      required: [id, kind, attempts, maxAttempts, createdAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        kind:
+          type: string
+          description: The kind of job, such as investigate or publish.
+        route:
+          type: string
+        attempts:
+          type: integer
+        maxAttempts:
+          type: integer
+        lastError:
+          type: string
+          description: Why the last attempt failed, redacted.
+        createdAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+          description: When the job became dead.
+    JobList:
+      type: object
+      required: [jobs]
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: "#/components/schemas/Job"
+        nextCursor:
+          type: string
+          description: Pass as cursor for the next page. Absent on the last page.
+    Token:
+      type: object
+      required: [id, name, role, createdBy, createdAt, expiresAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        role:
+          $ref: "#/components/schemas/Role"
+        createdBy:
+          type: string
+          format: uuid
+          description: The ID of the user who created the token.
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+          description: When the token was last used, to the minute.
+        revokedAt:
+          type: string
+          format: date-time
+    TokenList:
+      type: object
+      required: [tokens]
+      properties:
+        tokens:
+          type: array
+          items:
+            $ref: "#/components/schemas/Token"
+    NewToken:
+      type: object
+      required: [name, role, expiresAt]
+      properties:
+        name:
+          type: string
+          description: What the token is for, 1 to 100 characters.
+        role:
+          $ref: "#/components/schemas/Role"
+        expiresAt:
+          type: string
+          format: date-time
+          description: When the token stops working, at most a year away.
+    CreatedToken:
+      type: object
+      required: [token, secret]
+      properties:
+        token:
+          $ref: "#/components/schemas/Token"
+        secret:
+          type: string
+          description: 'The token, sent as "Authorization: Bearer <secret>". It is shown only here.'
     Problem:
       type: object
       description: Problem details, as RFC 9457 describes.

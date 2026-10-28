@@ -12,14 +12,18 @@ import (
 	"os"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/nourtalaat/sidekick/internal/api"
 	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/auth"
 	"github.com/nourtalaat/sidekick/internal/auth/authtest"
 	"github.com/nourtalaat/sidekick/internal/config"
+	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/registry"
+	"github.com/nourtalaat/sidekick/internal/rules"
 	"github.com/nourtalaat/sidekick/internal/store/storetest"
 )
 
@@ -27,13 +31,28 @@ import (
 const sessionCookie = "__Host-sidekick_session"
 
 // The sessions of fixture/sessions.sql, as cookie values, and the CSRF
-// token of the live one.
+// tokens of the live ones.
 var (
 	viSession        = sessionValue(0x01)
 	viExpiredSession = sessionValue(0x02)
+	adSession        = sessionValue(0x03)
 )
 
-const viCSRF = "csrf-vi"
+const (
+	viCSRF = "csrf-vi"
+	adCSRF = "csrf-ad"
+)
+
+// sourceYAML is a source section with credentials written in by mistake:
+// a URL with a user and password, and a header value the email rule
+// matches. GET /config must mask both.
+//
+//nolint:gosec // Fake credentials that GET /config must mask.
+const sourceYAML = `
+url: https://mcp-bot:hunter2@mcp.internal/mcp
+headers:
+  X-Contact: { value: pager@example.com }
+`
 
 // TestMain runs the tests, then lets storetest stop the Postgres container
 // it may have started.
@@ -42,11 +61,12 @@ func TestMain(m *testing.M) {
 }
 
 // server is the login endpoints and the API, wired as sidekick serve
-// wires them, on a database of their own seeded with
-// fixture/sessions.sql, with a fake OIDC provider.
+// wires them, on a database of their own seeded with fixture/sessions.sql
+// and fixture/rules.sql, with a fake OIDC provider.
 type server struct {
 	mux      *http.ServeMux
 	provider *authtest.Provider
+	pool     *pgxpool.Pool
 }
 
 func setup(t *testing.T) server {
@@ -54,18 +74,36 @@ func setup(t *testing.T) server {
 
 	pool := storetest.New(t)
 	storetest.LoadFixture(t, pool, "fixture/sessions.sql")
+	storetest.LoadFixture(t, pool, "fixture/rules.sql")
 
 	provider := authtest.NewProvider(t, "sidekick")
 
-	sessions, err := auth.New(auth.Options{
+	var source yaml.Node
+
+	require.NoError(t, yaml.Unmarshal([]byte(sourceYAML), &source))
+
+	cfg := &config.Config{
+		Server:   config.Server{PublicURL: "https://sidekick.example.com", Listen: ":8080"},
+		Sources:  map[string]config.Section{"signoz": {Type: "mcp", Node: source.Content[0]}},
+		Database: config.Database{URLSecret: registry.SecretRef{Name: "sidekick-db", Key: "url"}, MaxConns: 20},
 		OIDC: &config.OIDC{
 			Issuer:       provider.Issuer(),
 			ClientID:     "sidekick",
 			ClientSecret: registry.SecretRef{Name: "sidekick-oidc", Key: "clientSecret"},
 			GroupsClaim:  config.DefaultGroupsClaim,
-			Roles:        map[config.RoleName][]string{config.RoleAdmin: {"sre-admins"}, config.RoleViewer: {config.AnyGroup}},
+			Roles: map[config.RoleName][]string{
+				config.RoleAdmin:  {"sre-admins", "lead@example.com"},
+				config.RoleViewer: {config.AnyGroup},
+			},
 		},
-		PublicURL: "https://sidekick.example.com",
+	}
+
+	redactor, err := redact.New(redact.Options{BuiltIn: []string{"emails"}, HashKey: []byte("test-key")})
+	require.NoError(t, err)
+
+	sessions, err := auth.New(auth.Options{
+		OIDC:      cfg.OIDC,
+		PublicURL: cfg.Server.PublicURL,
 		Secrets:   staticSecrets{},
 		Pool:      pool,
 		Audit:     audit.NewWriter(),
@@ -73,14 +111,17 @@ func setup(t *testing.T) server {
 	})
 	require.NoError(t, err)
 
-	handler, err := api.New(api.Options{Auth: sessions})
+	handler, err := api.New(api.Options{
+		Auth: sessions, Tokens: sessions, Config: cfg, Rules: rules.NewStore(pool, cfg), Redactor: redactor,
+		Pool: pool, Audit: audit.NewWriter(),
+	})
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
 	sessions.Register(mux)
 	mux.Handle(api.BasePath+"/", handler)
 
-	return server{mux: mux, provider: provider}
+	return server{mux: mux, provider: provider, pool: pool}
 }
 
 // do sends a request with the session cookie, when it is set, and the CSRF
@@ -96,6 +137,20 @@ func (s server) do(t *testing.T, method, path, session, csrf string, body io.Rea
 	if csrf != "" {
 		req.Header.Set(auth.CSRFHeader, csrf)
 	}
+
+	rec := httptest.NewRecorder()
+	s.mux.ServeHTTP(rec, req)
+
+	return rec
+}
+
+// doWithToken sends a request with the API token in the Authorization
+// header.
+func (s server) doWithToken(t *testing.T, method, path, token string, body io.Reader) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := httptest.NewRequestWithContext(t.Context(), method, path, body)
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	rec := httptest.NewRecorder()
 	s.mux.ServeHTTP(rec, req)

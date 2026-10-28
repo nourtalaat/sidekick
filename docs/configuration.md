@@ -1004,8 +1004,10 @@ investigations:
 - `roleGroups` and `roleUsers` give Slack users their Sidekick role, one
   of `viewer`, `responder`, `approver` and `admin`. `roleGroups` maps
   Slack user group IDs (`S...`) to roles, and `roleUsers` maps user IDs
-  (`U...` or `W...`) to roles, for teams without user groups. A user gets
-  the highest role from either map; a user in neither is a `responder`.
+  (`U...` or `W...`) to roles, for teams without user groups. With the
+  [`oidc` section](#oidc) set, a Slack user whose email a web UI user has
+  also gets that user's role. A user gets the highest of these roles; a
+  user none of them gives a role is a `responder`.
   [Roles](slack.md#roles) says what each role may do.
 
 [Investigations in Slack](slack.md) describes how to set up the app.
