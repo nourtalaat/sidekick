@@ -36,6 +36,16 @@ type Requester struct {
 	SlackUserID string
 }
 
+// actorID names the requester in an audit entry: the Sidekick user ID, or
+// the Slack user ID of someone with none yet.
+func (r Requester) actorID() string {
+	if r.UserID != nil {
+		return r.UserID.String()
+	}
+
+	return r.SlackUserID
+}
+
 // RequestCancel asks the run of a queued or running investigation to stop,
 // and tells every replica once q's transaction commits. The worker that
 // owns the run then cancels the model or tool call in flight, and the run

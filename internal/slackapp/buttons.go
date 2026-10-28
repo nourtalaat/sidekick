@@ -211,7 +211,7 @@ func (b *Buttons) HandleInteraction(ctx context.Context, cb slack.InteractionCal
 	case slackout.ActionStop:
 		note, err = b.stop(ctx, log, id, cb.User.ID)
 	case slackout.ActionInvestigateAnyway:
-		note, err = b.investigateAnyway(ctx, log, id)
+		note, err = b.investigateAnyway(ctx, log, id, cb.User.ID)
 	case slackout.ActionVerdictCorrect:
 		note, err = b.rate(ctx, log, id, cb.User.ID, output.RatingCorrect)
 	default:
@@ -322,18 +322,16 @@ func (b *Buttons) stop(ctx context.Context, log *slog.Logger, id uuid.UUID, user
 
 // investigateAnyway starts a full investigation of a triage-only result
 // and returns the note for the user.
-func (b *Buttons) investigateAnyway(ctx context.Context, log *slog.Logger, id uuid.UUID) (string, error) {
+func (b *Buttons) investigateAnyway(ctx context.Context, log *slog.Logger, id uuid.UUID, userID string) (string, error) {
 	var started bool
 
 	err := pgx.BeginFunc(ctx, b.pool, func(tx pgx.Tx) error {
 		var err error
 
-		started, err = investigator.InvestigateAnyway(ctx, tx, id)
+		started, err = investigator.InvestigateAnyway(ctx, tx, id, investigator.Requester{SlackUserID: userID})
 		if err != nil {
 			return fmt.Errorf("start the full investigation: %w", err)
 		}
-
-		// TODO: [SK-18] audit the investigate-anyway click
 
 		return nil
 	})

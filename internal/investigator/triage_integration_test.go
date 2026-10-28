@@ -185,6 +185,8 @@ func TestInvestigateAnyway(t *testing.T) {
 			require.Nil(t, inv.ConfirmedVerdict, "the confirmation of the triage verdict does not carry over")
 			require.Nil(t, inv.ConfirmedBySlackUser)
 			require.Nil(t, inv.ConfirmedAt)
+			require.Equal(t, []string{`user U01BEN investigation.investigate_anyway {"new": {"run": 2, "status": "queued"}, "old": {"run": 1, "stopReason": "triage"}}`},
+				h.auditRows(t))
 
 			require.NoError(t, h.run(t))
 
@@ -288,7 +290,7 @@ func (h *harness) anyway(t *testing.T) bool {
 	require.NoError(t, pgx.BeginFunc(t.Context(), h.pool, func(tx pgx.Tx) error {
 		var err error
 
-		started, err = InvestigateAnyway(t.Context(), tx, testInvestigation)
+		started, err = InvestigateAnyway(t.Context(), tx, testInvestigation, Requester{SlackUserID: "U01BEN"})
 		if err != nil {
 			return fmt.Errorf("investigate anyway: %w", err)
 		}
@@ -297,6 +299,22 @@ func (h *harness) anyway(t *testing.T) bool {
 	}))
 
 	return started
+}
+
+// auditRows returns each audit entry of the test investigation as "actor
+// action details".
+func (h *harness) auditRows(t *testing.T) []string {
+	t.Helper()
+
+	rows, err := h.pool.Query(t.Context(),
+		"SELECT actor_kind || ' ' || actor_id || ' ' || action || ' ' || details::text FROM audit_log WHERE investigation_id = $1 ORDER BY id",
+		testInvestigation)
+	require.NoError(t, err)
+
+	out, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	require.NoError(t, err)
+
+	return out
 }
 
 // spanNames returns the names of the ended spans.

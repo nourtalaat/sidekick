@@ -167,6 +167,7 @@ func TestInteractivity(t *testing.T) {
 				require.Nil(t, inv.ConfirmedAt)
 				require.Equal(t, 1, b.feedbackRows(t, triagedInvestigation), "the rating of the triage verdict stays as history")
 				require.Equal(t, []string{"investigate:0192d3a4-0000-7000-8000-0000000000b3"}, b.pendingInvestigateKeys(t, triagedInvestigation))
+				require.Equal(t, []string{"user U01BEN investigation.investigate_anyway"}, b.auditActions(t, triagedInvestigation))
 			},
 		},
 		{
@@ -180,6 +181,7 @@ func TestInteractivity(t *testing.T) {
 
 				require.EqualValues(t, 2, b.investigation(t, triagedInvestigation).Run)
 				require.Len(t, b.pendingInvestigateKeys(t, triagedInvestigation), 1)
+				require.Len(t, b.auditActions(t, triagedInvestigation), 1, "only the first click is audited")
 			},
 		},
 		{
@@ -535,6 +537,21 @@ func (b *buttonsHarness) feedbackRows(t *testing.T, id uuid.UUID) int {
 	require.NoError(t, b.pool.QueryRow(t.Context(), "SELECT count(*) FROM feedback WHERE investigation_id = $1", id).Scan(&n))
 
 	return n
+}
+
+// auditActions returns each audit entry of id as "actor_kind actor_id
+// action".
+func (b *buttonsHarness) auditActions(t *testing.T, id uuid.UUID) []string {
+	t.Helper()
+
+	rows, err := b.pool.Query(t.Context(),
+		"SELECT actor_kind || ' ' || actor_id || ' ' || action FROM audit_log WHERE investigation_id = $1 ORDER BY id", id)
+	require.NoError(t, err)
+
+	out, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	require.NoError(t, err)
+
+	return out
 }
 
 // pendingInvestigateKeys returns the unique keys of the pending

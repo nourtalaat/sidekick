@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/prompt"
@@ -65,6 +66,15 @@ const (
 	triageFallbackText    = "Triage gave no decision Sidekick could use, so a full investigation runs with strategy %s."
 	triageOverrideText    = "A responder asked for a full investigation after the triage-only result."
 )
+
+// The audit entry of a request for a full investigation.
+const (
+	auditInvestigateAnyway = "investigation.investigate_anyway"
+	auditTargetKind        = "investigation"
+)
+
+// auditor writes the audit entries of this package.
+var auditor = audit.NewWriter()
 
 // triageOnlyDetail is the stop detail of a triage-only report.
 const triageOnlyDetail = "Triage only: no full investigation ran."
@@ -574,13 +584,13 @@ func (b Budget) tightened(s strategy.Budgets) Budget {
 }
 
 // InvestigateAnyway starts a full investigation of an investigation whose
-// run ended with a triage-only result, as a responder asked: it sets the
-// investigation back to queued for its next run and enqueues its
-// investigate job, in q, which should be the transaction that records the
-// request. It returns false, and changes nothing, for an investigation
-// that did not end that way, including one whose full investigation has
-// started already.
-func InvestigateAnyway(ctx context.Context, q db.DBTX, id uuid.UUID) (bool, error) {
+// run ended with a triage-only result, as by asked: it sets the
+// investigation back to queued for its next run, enqueues its investigate
+// job and writes the audit entry, all in q, which should be a transaction.
+// It returns false, and changes nothing, for an investigation that did not
+// end that way, including one whose full investigation has started
+// already.
+func InvestigateAnyway(ctx context.Context, q db.DBTX, id uuid.UUID, by Requester) (bool, error) {
 	inv, err := db.New(q).RestartTriagedInvestigation(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
@@ -603,6 +613,20 @@ func InvestigateAnyway(ctx context.Context, q db.DBTX, id uuid.UUID) (bool, erro
 	})
 	if err != nil && !errors.Is(err, queue.ErrDuplicate) {
 		return false, fmt.Errorf("enqueue the investigate job of investigation %s: %w", id, err)
+	}
+
+	err = auditor.Write(ctx, q, audit.Entry{
+		ActorKind:       audit.ActorUser,
+		ActorID:         by.actorID(),
+		Action:          auditInvestigateAnyway,
+		TargetKind:      auditTargetKind,
+		TargetID:        inv.ID.String(),
+		InvestigationID: &inv.ID,
+		Old:             map[string]any{"run": inv.Run - 1, "stopReason": report.StopTriage},
+		New:             map[string]any{"run": inv.Run, "status": inv.Status},
+	})
+	if err != nil {
+		return false, fmt.Errorf("audit the full investigation of investigation %s: %w", id, err)
 	}
 
 	return true, nil
