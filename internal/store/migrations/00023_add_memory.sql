@@ -35,8 +35,10 @@ CREATE TABLE memory_entries (
 CREATE INDEX memory_entries_fingerprint ON memory_entries (fingerprint, confirmed_at DESC) WHERE NOT disabled;
 -- Examples with the same service and alert name, newest first.
 CREATE INDEX memory_entries_service_alert ON memory_entries (service, alert_name, confirmed_at DESC) WHERE NOT disabled;
--- Full-text examples and memory__search.
-CREATE INDEX memory_entries_search ON memory_entries USING gin (search) WHERE NOT disabled;
+-- Full-text examples and memory__search. Entries are written rarely, once
+-- per confirmation, and read at the start of every investigation, so new
+-- entries go into the index at once rather than into its pending list.
+CREATE INDEX memory_entries_search ON memory_entries USING gin (search) WITH (fastupdate = off) WHERE NOT disabled;
 
 CREATE TABLE service_notes (
   service    text PRIMARY KEY,

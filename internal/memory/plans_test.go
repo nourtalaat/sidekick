@@ -84,12 +84,25 @@ func TestQueryPlans(t *testing.T) {
 			name: "SearchMemory",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.SearchMemory(ctx, db.SearchMemoryParams{
-					Query: "w42", Service: new("svc-42"), Verdict: new("true_positive"), MaxRows: DefaultExamples,
+					Query: "w42", Verdict: new("true_positive"), MaxRows: DefaultExamples,
 				})
 
 				return fmt.Errorf("run query: %w", err)
 			},
 			wantIndex: []string{"memory_entries_search"},
+		},
+		{
+			// With a service, the service index can find fewer rows to
+			// check than the text index; either is fast.
+			name: "SearchMemoryOfAService",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.SearchMemory(ctx, db.SearchMemoryParams{
+					Query: "w42", Service: new("svc-42"), Verdict: new("true_positive"), MaxRows: DefaultExamples,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"Index Scan on memory_entries_"},
 		},
 		{
 			name: "GetServiceNotes",
