@@ -1,0 +1,107 @@
+{
+  "tools": [
+    {
+      "name": "search_logs",
+      "description": "Search the logs in an Elasticsearch or OpenSearch index pattern in a time range, newest first, with a Lucene query string such as level:error AND service.name:checkout. Returns each hit's index, ID and chosen fields, long values cut, the total number of matches, and a link to the search.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The fields to return, such as service.name or kubernetes.*. The time and message fields are always returned. Default: the time and message fields and a few common ones such as log.level.",
+            "maxItems": 50
+          },
+          "index": {
+            "type": "string",
+            "description": "The index or index pattern to read, such as logs-*, one that Sidekick's config allows. It may be left out when Sidekick allows only one pattern."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most hits to return, 1 to 200. Default 50.",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "query": {
+            "type": "string",
+            "description": "The Lucene query string, for example status:\u003e=500 AND NOT path:\"/healthz\". Empty matches every log in the time range."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only logs at or after this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Required; the range may be at most 7 days.",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "description": "Only logs before this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "since"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "count_logs",
+      "description": "Count the logs in an Elasticsearch or OpenSearch index pattern that match a Lucene query string, in time buckets over a range, optionally split by the 10 most common values of one field. Shows when errors started or stopped, and which service or host they come from.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "string",
+            "description": "The index or index pattern to read, such as logs-*, one that Sidekick's config allows. It may be left out when Sidekick allows only one pattern."
+          },
+          "interval": {
+            "type": "integer",
+            "description": "The length of one time bucket, in seconds. At most 200 buckets fit in the range. Default: about 60 buckets.",
+            "minimum": 1
+          },
+          "query": {
+            "type": "string",
+            "description": "The Lucene query string, for example level:error. Empty counts every log."
+          },
+          "since": {
+            "type": "string",
+            "description": "The start of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Required; the range may be at most 7 days.",
+            "format": "date-time"
+          },
+          "splitBy": {
+            "type": "string",
+            "description": "A keyword field to split the counts by, such as service.name or host.name. list_fields says which fields are aggregatable."
+          },
+          "until": {
+            "type": "string",
+            "description": "The end of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "since"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_fields",
+      "description": "List the fields of an Elasticsearch or OpenSearch index pattern with their types, and whether each can be searched and counted by, so queries name fields that exist.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "fields": {
+            "type": "string",
+            "description": "Only fields whose names match this pattern, such as kubernetes.* or *.name. Default: every field."
+          },
+          "index": {
+            "type": "string",
+            "description": "The index or index pattern to read, such as logs-*, one that Sidekick's config allows. It may be left out when Sidekick allows only one pattern."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}
