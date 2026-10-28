@@ -35,7 +35,7 @@ func TestConfigValidate(t *testing.T) {
 		{name: "no base URL", cfg: Config{}, wantErr: []string{"baseURL: required"}},
 		{name: "a base URL without a scheme", cfg: Config{BaseURL: "prometheus:9090"}, wantErr: []string{"must be an absolute http or https URL"}},
 		{name: "a base URL with a query", cfg: Config{BaseURL: "https://prom.example.com/?x=1"}, wantErr: []string{"baseURL:"}},
-		{name: "a base URL with a password", cfg: Config{BaseURL: "https://sidekick:secret@prom.example.com"},
+		{name: "a base URL with a user name", cfg: Config{BaseURL: "https://sidekick@prom.example.com"},
 			wantErr: []string{"baseURL: must not hold a user name or password"}},
 		{name: "a bearer token over http", cfg: Config{BaseURL: "http://prometheus:9090", BearerTokenSecret: ref("token")},
 			wantErr: []string{"baseURL: \"http://prometheus:9090\" must use https, because credentials are sent"}},
