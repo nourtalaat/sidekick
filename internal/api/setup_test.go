@@ -93,13 +93,20 @@ func setup(t *testing.T) server {
 	return setupWith(t, nil)
 }
 
-// setupWith is setup with tune, when not nil, changing the API's options.
-func setupWith(t *testing.T, tune func(*api.Options)) server {
+// setupWith is setup with tune, when not nil, changing the API's options,
+// and with more fixtures loaded. They load before the hub listens, since
+// the notifications of their rows would otherwise reach a stream that a
+// test opens right after.
+func setupWith(t *testing.T, tune func(*api.Options), fixtures ...string) server {
 	t.Helper()
 
 	pool := storetest.New(t)
 	storetest.LoadFixture(t, pool, "fixture/sessions.sql")
 	storetest.LoadFixture(t, pool, "fixture/rules.sql")
+
+	for _, fixture := range fixtures {
+		storetest.LoadFixture(t, pool, fixture)
+	}
 
 	provider := authtest.NewProvider(t, "sidekick")
 
@@ -172,8 +179,10 @@ func (s server) replica(t *testing.T, tune func(*api.Options)) server {
 	return s
 }
 
-// startHub starts a hub that runs until ctx ends, waits until it listens,
-// and returns it with the process ID of its connection.
+// startHub starts a hub that runs until ctx ends, waits until it listens and
+// has woken its subscriptions, and returns it with the process ID of its
+// connection. A stream opened after that gets no wake-up for the hub's
+// start, which would send an unexpected watchers event.
 func startHub(t *testing.T, ctx context.Context, pool *pgxpool.Pool, opts api.HubOptions) (*api.Hub, int) {
 	t.Helper()
 
@@ -191,6 +200,12 @@ func startHub(t *testing.T, ctx context.Context, pool *pgxpool.Pool, opts api.Hu
 
 		return len(added) == 1
 	}, testWait, testPoll, "the hub never listened")
+
+	select {
+	case <-hub.Listening():
+	case <-time.After(testWait):
+		require.FailNow(t, "the hub never woke its subscriptions")
+	}
 
 	return hub, added[0]
 }

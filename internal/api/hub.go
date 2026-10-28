@@ -69,8 +69,10 @@ type Hub struct {
 	subs  map[uuid.UUID]map[*Subscription]struct{}
 	count int
 
-	stopped chan struct{}
-	stop    sync.Once
+	stopped   chan struct{}
+	stop      sync.Once
+	listening chan struct{}
+	listened  sync.Once
 }
 
 // Subscription is one stream's interest in an investigation. Get it with
@@ -105,12 +107,13 @@ func NewHub(opts HubOptions) *Hub {
 	}
 
 	return &Hub{
-		pool:    opts.Pool,
-		log:     log,
-		retry:   cmp.Or(opts.ListenRetry, hubListenRetry),
-		max:     cmp.Or(opts.MaxStreams, MaxStreams),
-		subs:    map[uuid.UUID]map[*Subscription]struct{}{},
-		stopped: make(chan struct{}),
+		pool:      opts.Pool,
+		log:       log,
+		retry:     cmp.Or(opts.ListenRetry, hubListenRetry),
+		max:       cmp.Or(opts.MaxStreams, MaxStreams),
+		subs:      map[uuid.UUID]map[*Subscription]struct{}{},
+		stopped:   make(chan struct{}),
+		listening: make(chan struct{}),
 	}
 }
 
@@ -132,6 +135,14 @@ func (h *Hub) Run(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// Listening returns a channel that closes once the hub listens for the
+// first time and has woken the subscriptions that exist then. A stream
+// opened after that gets no wake-up for the hub's start, only for changes.
+// Tests wait on it before they open a stream.
+func (h *Hub) Listening() <-chan struct{} {
+	return h.listening
 }
 
 // Subscribe starts a subscription to the investigation with id. It fails
@@ -226,6 +237,7 @@ func (h *Hub) listen(ctx context.Context) error {
 	}
 
 	h.wakeAll()
+	h.listened.Do(func() { close(h.listening) })
 
 	for {
 		n, err := conn.WaitForNotification(ctx)

@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/api"
-	"github.com/nourtalaat/sidekick/internal/store/storetest"
 )
 
 // The investigations of fixture/investigations.sql, by the last
@@ -68,10 +67,7 @@ func setupInvestigations(t *testing.T) server {
 func setupInvestigationsWith(t *testing.T, tune func(*api.Options)) server {
 	t.Helper()
 
-	s := setupWith(t, tune)
-	storetest.LoadFixture(t, s.pool, "fixture/investigations.sql")
-
-	return s
+	return setupWith(t, tune, "fixture/investigations.sql")
 }
 
 func TestListInvestigations(t *testing.T) {
