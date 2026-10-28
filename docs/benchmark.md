@@ -88,6 +88,24 @@ Benchmarks always run on Postgres, with the same code as `serve`.
 When a run fails, the command prints the runs that finished before it,
 unscored, and writes no output files.
 
+## Checking scenario files
+
+`sidekick bench validate` checks scenario files the way `bench run` does
+before its first run: the file format, the strategy, the intake adapter and
+its payload, and each mock source with its tool snapshot and fixtures. It
+prints every problem with its file and field. It calls no model and needs
+neither Postgres nor Docker.
+
+```sh
+sidekick bench validate --scenarios bench/scenarios/public --config sidekick.yaml
+```
+
+When every scenario is valid it prints `scenarios checked: 13, problems: 0`.
+It takes `--scenarios` and `--config`, as `bench run` does. The config is read
+for its strategies and model connectors, so the secrets of the connectors
+must be readable; nothing is sent to a provider. It exits with `0` when every
+scenario is valid and `2` for a bad flag, config file or scenario file.
+
 ## Scores
 
 Each run gets these scores:
