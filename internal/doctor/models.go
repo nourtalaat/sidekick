@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/model/pricing"
 )
@@ -44,6 +45,13 @@ func (d *doctor) checkPrices(ctx context.Context) []Result {
 		}
 	}
 
+	if embeddings := d.cfg.Memory.Vector; embeddings.Enabled {
+		decoded, err := d.regs.Models.Check(ctx, embeddings.Embeddings.Type, config.EmbeddingsName, embeddings.Embeddings.Section)
+		if configured, ok := decoded.(model.Configured); err == nil && ok {
+			models[config.EmbeddingsName] = configured.ModelSettings().Model
+		}
+	}
+
 	unpriced := pricing.New(d.cfg.Model.PriceTable()).Unpriced(models)
 	if len(unpriced) == 0 {
 		if len(models) == 0 {
@@ -55,6 +63,16 @@ func (d *doctor) checkPrices(ctx context.Context) []Result {
 
 	results := make([]Result, 0, len(unpriced))
 	for _, u := range unpriced {
+		if u.Connector == config.EmbeddingsName {
+			results = append(results, Result{
+				Check: "price " + u.Connector, Status: StatusWarn,
+				Message: fmt.Sprintf("the embedding model %s has no price, so its calls show no cost in the metrics", u.Model),
+				Fix:     fmt.Sprintf("add model.prices.%q with inputPerMTok, in US dollars per million tokens", u.Model),
+			})
+
+			continue
+		}
+
 		results = append(results, Result{
 			Check: "price " + u.Connector, Status: StatusWarn,
 			Message: fmt.Sprintf("the model %s has no price, so its calls show no cost and count nothing toward the cost budgets and daily caps", u.Model),
