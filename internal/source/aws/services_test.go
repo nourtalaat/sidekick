@@ -408,6 +408,15 @@ func TestSourceCallServicesInput(t *testing.T) {
 			input: `{"queries":[{"id":"e1","expression":"1"}],"period":90}`, want: "period: 90 is not a multiple of 60 seconds"},
 		{name: "a metric range longer than seven days", tool: toolQueryMetrics,
 			input: `{"queries":[{"id":"e1","expression":"1"}],"since":"2026-04-01T00:00:00Z"}`, want: "longer than the 168h0m0s"},
+		{name: "a SEARCH expression", tool: toolQueryMetrics,
+			input: `{"queries":[{"id":"e1","expression":"SEARCH('{AWS/EC2,InstanceId} CPUUtilization', 'Average')"}]}`,
+			want:  "queries[0].expression: SEARCH() and Metrics Insights queries can read metrics of other accounts"},
+		{name: "a lower-case search with a space before the parenthesis", tool: toolQueryMetrics,
+			input: `{"queries":[{"id":"e1","expression":"MAX(search ('CPUUtilization', 'Average'))"}]}`,
+			want:  "SEARCH() and Metrics Insights queries can read metrics of other accounts"},
+		{name: "a Metrics Insights query", tool: toolQueryMetrics,
+			input: `{"queries":[{"id":"q1","expression":"  select AVG(CPUUtilization) FROM SCHEMA(\"AWS/EC2\", InstanceId)"}]}`,
+			want:  "queries[0].expression: SEARCH() and Metrics Insights queries can read metrics of other accounts"},
 		{name: "an alarm and a prefix", tool: toolListAlarms, input: `{"alarm":"a","prefix":"b"}`, want: "give alarm or prefix, not both"},
 		{name: "an alarm state that is not one", tool: toolListAlarms, input: `{"state":"FIRING"}`,
 			want: `state: "FIRING" is not ALARM, OK, INSUFFICIENT_DATA or any`},
@@ -484,6 +493,32 @@ func TestHealthRegion(t *testing.T) {
 			t.Parallel()
 
 			require.Equal(t, tt.want, healthRegion(tt.region))
+		})
+	}
+}
+
+func TestMetricQueriesTakeMath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		expression string
+	}{
+		{name: "plain math", expression: "m1 / m2 * 100"},
+		{name: "a function over IDs", expression: "FILL(m1, 0) + RATE(m2)"},
+		{name: "an ID that starts with search", expression: "searches_total * 2"},
+		{name: "an ID that starts with select", expression: "selected / m1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			queries, err := metricQueries([]metricQuery{{ID: "e1", Expression: tt.expression}}, minPeriod)
+			require.NoError(t, err)
+			require.Len(t, queries, 1)
+			require.Equal(t, tt.expression, *queries[0].Expression)
+			require.Nil(t, queries[0].AccountId, "the query never names another account")
 		})
 	}
 }

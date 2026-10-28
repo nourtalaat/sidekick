@@ -47,6 +47,12 @@ const (
 var (
 	// queryIDPattern is the shape of a GetMetricData query ID.
 	queryIDPattern = regexp.MustCompile(`^[a-z][A-Za-z0-9_]{0,254}$`)
+	// searchCall matches a SEARCH() call in metric math, and selectQuery a
+	// Metrics Insights query. In a cross-account monitoring account both
+	// read the metrics of every linked source account unless they filter
+	// on the account themselves.
+	searchCall  = regexp.MustCompile(`(?i)\bsearch\s*\(`)
+	selectQuery = regexp.MustCompile(`(?i)^\s*select\b`)
 	// statPattern is the shape of a statistic: a named one, or a
 	// percentile or trimmed statistic such as p99 or tm90.
 	statPattern = regexp.MustCompile(`^(Average|Sum|Minimum|Maximum|SampleCount|IQM|(p|tm|wm|tc|ts)[0-9]{1,2}(\.[0-9]{1,2})?)$`)
@@ -228,6 +234,11 @@ func fillQuery(query *types.MetricDataQuery, key string, q metricQuery, period i
 	case q.Expression != "":
 		if len(q.Expression) > maxExpressionLen || strings.ContainsFunc(q.Expression, isControl) {
 			return &source.ToolError{Message: fmt.Sprintf("%s.expression: must be at most %d bytes, on one line", key, maxExpressionLen)}
+		}
+
+		if searchCall.MatchString(q.Expression) || selectQuery.MatchString(q.Expression) {
+			return &source.ToolError{Message: key + ".expression: SEARCH() and Metrics Insights queries can read metrics of other accounts; " +
+				"name each metric with namespace, metric and dimensions instead, and use expressions only for math over them"}
 		}
 
 		query.Expression = awssdk.String(q.Expression)

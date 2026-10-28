@@ -92,12 +92,15 @@ What the source can read is what this policy allows:
 - `logs:StopQuery` stops a Logs Insights query and changes no data. AWS
   counts it as read-only access too: the managed
   `CloudWatchLogsReadOnlyAccess` policy includes it.
-- `query_metrics` passes the model's metric math to CloudWatch as it is.
-  `SEARCH()` and Metrics Insights queries in an expression can read any
-  metric of the account, which `cloudwatch:GetMetricData` allows anyway:
-  AWS has no way to limit it to some metrics. In a CloudWatch
-  cross-account monitoring account, that includes the metrics of the
-  linked source accounts.
+- `query_metrics` reads any metric of the account that a call names:
+  `cloudwatch:GetMetricData` cannot be limited to some metrics. It passes
+  the model's metric math to CloudWatch as it is, but refuses an
+  expression that calls `SEARCH()` or is a Metrics Insights query
+  (`SELECT ...`), before anything is sent. In a CloudWatch cross-account
+  monitoring account, both would read the metrics of every linked source
+  account, including accounts that are not in `accounts`. The model names
+  each metric with its namespace, name and dimensions instead, and the
+  source never asks for another account's metrics.
 - `cloudtrail:LookupEvents` reads the management events of the last 90
   days in one Region. Global services such as IAM log their events in
   us-east-1, so list that Region to see them. Data events, such as S3
