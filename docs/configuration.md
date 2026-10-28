@@ -1018,7 +1018,11 @@ register Sidekick with your identity provider.
 - `roles` maps each role to the groups that give it. A user gets the
   highest role any of their groups gives, and the role is read again at
   every login. A user no group matches cannot sign in, so map `viewer` to
-  `"*"` to let everyone in with read access.
+  `"*"` to let everyone in with read access. `"*"` is allowed only for
+  `viewer`, so a typo cannot make every user an admin, and not at all
+  with `https://accounts.google.com`, which anyone with a Google account
+  can sign in to. Google sends no groups claim of its own; send groups
+  in a custom claim and name it in `groupsClaim`.
 
 ### `listeners`
 
@@ -1663,6 +1667,8 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
 - `oidc` has an `issuer` that is https (or http on a loopback address), a
   `clientID`, a `clientSecret`, a non-empty `groupsClaim` and `scopes`,
   and at least one known role in `roles`, each with at least one group.
+  `"*"` is used only for `viewer`, and never with
+  `https://accounts.google.com`.
   With `oidc` set, `server.publicURL` is required and must be https (or
   http on a loopback address).
 - Every strategy file in `strategies.dir` is valid, and no two of them have

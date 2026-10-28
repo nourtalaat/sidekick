@@ -213,6 +213,13 @@ func TestValidateFixtures(t *testing.T) {
 			"oidc.scopes[0]: must not be empty",
 			`server.publicURL: expected an https URL with the oidc section, or http on a loopback address, since the session cookie is only sent over https, got "http://sidekick.example.com"`,
 		}},
+		{file: "oidc-any-group", want: []string{
+			`oidc.roles.admin[0]: "*" would give every user of the provider the admin role; list the groups that should have it ("*" is allowed only for viewer)`,
+			`oidc.roles.responder[1]: "*" would give every user of the provider the responder role; list the groups that should have it ("*" is allowed only for viewer)`,
+		}},
+		{file: "oidc-google-any-group", want: []string{
+			`oidc.roles.viewer[0]: "*" is not allowed with https://accounts.google.com, which anyone with a Google account can sign in to; list groups instead, sent in a custom claim`,
+		}},
 		{file: "oidc-without-public-url", want: []string{
 			"oidc.roles: map at least one role to groups, or nobody can sign in",
 			"server.publicURL: required with the oidc section: the provider sends users back to <publicURL>/auth/callback",

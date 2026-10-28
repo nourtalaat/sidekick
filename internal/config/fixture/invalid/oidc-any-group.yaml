@@ -1,0 +1,25 @@
+# "*" gives a role to every user of the provider, so only viewer may use
+# it.
+server:
+  publicURL: https://sidekick.example.com
+
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default
+
+oidc:
+  issuer: https://acme.okta.com
+  clientID: sidekick
+  clientSecret: { name: sidekick-oidc, key: clientSecret }
+  roles:
+    admin: ["*"]
+    responder: [engineering, "*"]
+    viewer: ["*"]

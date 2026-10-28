@@ -41,9 +41,18 @@ at start-up, so it starts while the provider is down.
 ## Roles
 
 `oidc.roles` maps each role to the groups that give it. A user gets the
-highest role any of their groups gives; `"*"` matches everyone. A user
-no group matches cannot sign in. The role is read again at every login,
-so a change in the provider takes effect at the user's next login.
+highest role any of their groups gives. A user no group matches cannot
+sign in. The role is read again at every login, so a change in the
+provider takes effect at the user's next login.
+
+`"*"` matches every user who can sign in at the provider, so Sidekick
+allows it only for `viewer`: one typo must not make every employee an
+admin. With Google (`https://accounts.google.com`) it is refused
+altogether, because anyone with a Google account, inside your company or
+not, can sign in there. Google sends no groups claim of its own, so
+Google sign-in needs something in front of it, such as a federating
+provider, that adds the user's groups in a custom claim; name that claim
+in `oidc.groupsClaim`.
 
 | Role | Can |
 |---|---|

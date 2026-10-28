@@ -15,8 +15,13 @@ import (
 // oidc.groupsClaim is empty.
 const DefaultGroupsClaim = "groups"
 
-// AnyGroup in a role's group list of oidc.roles matches every user.
+// AnyGroup in a role's group list of oidc.roles matches every user. Only
+// the viewer role may use it.
 const AnyGroup = "*"
+
+// googleIssuer is the host of Google's issuer, which anyone with a Google
+// account can sign in to, so it never limits who a role reaches.
+const googleIssuer = "accounts.google.com"
 
 // OIDC sets up web UI login through an OpenID Connect provider (UI-1). The
 // web UI and the JSON API are served only when the section is set.
@@ -90,7 +95,7 @@ func (v *validator) checkOIDC() {
 		}
 	}
 
-	v.checkOIDCRoles(o.Roles)
+	v.checkOIDCRoles(o)
 
 	switch publicURL := v.cfg.Server.PublicURL; {
 	case publicURL == "":
@@ -100,7 +105,12 @@ func (v *validator) checkOIDC() {
 	}
 }
 
-func (v *validator) checkOIDCRoles(m map[RoleName][]string) {
+// checkOIDCRoles checks oidc.roles. AnyGroup may give only the viewer
+// role, and no role at all with Google's issuer.
+func (v *validator) checkOIDCRoles(o *OIDC) {
+	m := o.Roles
+	google := isGoogleIssuer(o.Issuer)
+
 	if len(m) == 0 {
 		v.errs.add("oidc.roles", "map at least one role to groups, or nobody can sign in")
 
@@ -120,8 +130,15 @@ func (v *validator) checkOIDCRoles(m map[RoleName][]string) {
 		}
 
 		for i, g := range m[name] {
-			if g == "" {
-				v.errs.add(fmt.Sprintf("%s[%d]", at, i), "must not be empty")
+			entry := fmt.Sprintf("%s[%d]", at, i)
+
+			switch {
+			case g == "":
+				v.errs.add(entry, "must not be empty")
+			case g == AnyGroup && google:
+				v.errs.add(entry, "%q is not allowed with %s, which anyone with a Google account can sign in to; list groups instead, sent in a custom claim", AnyGroup, o.Issuer)
+			case g == AnyGroup && name != RoleViewer:
+				v.errs.add(entry, "%q would give every user of the provider the %s role; list the groups that should have it (%q is allowed only for viewer)", AnyGroup, name, AnyGroup)
 			}
 		}
 	}
@@ -136,4 +153,11 @@ func isSecureURL(s string) bool {
 	}
 
 	return u.Scheme == "https" || (u.Scheme == "http" && httpclient.IsLoopbackHost(u.Hostname()))
+}
+
+// isGoogleIssuer reports whether issuer is Google's.
+func isGoogleIssuer(issuer string) bool {
+	u, err := url.Parse(issuer)
+
+	return err == nil && strings.EqualFold(u.Hostname(), googleIssuer)
 }
