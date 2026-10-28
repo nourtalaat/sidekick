@@ -918,9 +918,10 @@ How it behaves:
 
 #### AWS sources (`type: aws`)
 
-An AWS source reads AWS accounts through CloudWatch Logs Insights and
-CloudTrail event history, with the default AWS credential chain (IRSA or
-EKS Pod Identity on EKS) and, for other accounts, a role it assumes. Its
+An AWS source reads AWS accounts through CloudWatch Logs Insights,
+CloudWatch metrics and alarms, CloudTrail event history, EKS, ECS and AWS
+Health, with the default AWS credential chain (IRSA or EKS Pod Identity on
+EKS) and, for other accounts, a role it assumes. Its
 tools only read. [AWS source](sources/aws.md) lists the IAM policy the
 role needs and how to set it up.
 
@@ -948,7 +949,12 @@ The tools, as the model sees them with the source name `aws`:
 | Tool | Returns |
 |---|---|
 | `aws__query_logs` | The fields and rows of a Logs Insights query over named log groups or log group prefixes. |
+| `aws__query_metrics` | CloudWatch metrics and metric math expressions, with a period that keeps each series within 120 points. |
+| `aws__list_alarms` | CloudWatch alarms in a state, by default ALARM, or one alarm and its state changes. |
 | `aws__list_changes` | CloudTrail write events: which API was called on which resources, by whom, and whether it failed. |
+| `aws__get_eks_cluster` | An EKS cluster's status, version and health issues, and its node groups, or the list of clusters. |
+| `aws__get_ecs_service` | An ECS service's task counts, deployments and latest events, or the cluster's services. |
+| `aws__list_health_events` | AWS Health events of the Region and of global services. Needs a support plan that includes the Health API. |
 
 How it behaves:
 
@@ -966,12 +972,14 @@ How it behaves:
   with the `SOURCE` command, which picks its own log groups, is refused
   before it is sent. The query is started, polled every second and
   stopped when the call is about to run out of time.
-- **Results** are JSON with links to the query in Logs Insights and to
-  each CloudTrail event in the AWS console, which become evidence links in
-  the report. Lists are capped as [AWS source](sources/aws.md#limits)
+- **Results** are JSON with links to the query in Logs Insights, the
+  metrics graph, each alarm, each CloudTrail event, the cluster, the
+  service and each Health event in the AWS console, which become evidence
+  links in the report. Lists are capped as [AWS source](sources/aws.md#limits)
   describes, and say when they were cut.
-- **No data.** A query that returns no rows, an empty event list, and a
-  log group AWS does not have, are reported as no data.
+- **No data.** A query that returns no rows, metrics without points, an
+  empty list, and a log group, alarm, cluster or service AWS does not
+  have, are reported as no data.
 - **Errors.** A refused request, such as a query Logs Insights cannot
   parse or a permission the role lacks, goes to the model as a tool error
   with AWS's message. Rate limits, refused credentials, server errors and

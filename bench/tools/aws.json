@@ -54,6 +54,150 @@
       }
     },
     {
+      "name": "query_metrics",
+      "description": "Read CloudWatch metrics over a time range with GetMetricData: metrics by namespace, name, dimensions and statistic, and metric math expressions over them, such as 100 * errors / requests. Returns each series' points, oldest first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "The 12-digit AWS account ID. It may be left out when Sidekick reads only one account."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 50. Default 10.",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "period": {
+            "type": "integer",
+            "description": "The seconds each point covers, a multiple of 60. Default and least: the smallest that gives at most 120 points per series.",
+            "minimum": 60
+          },
+          "queries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "dimensions": {
+                  "type": "object",
+                  "description": "The metric's dimensions by name, for example {\"LoadBalancer\": \"app/shop/50dc6c495c0c9188\"}.",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "expression": {
+                  "type": "string",
+                  "description": "A metric math expression over the IDs of other queries, for example 100 * m1 / m2, instead of namespace and metric."
+                },
+                "hidden": {
+                  "type": "boolean",
+                  "description": "Leave the query's own series out, for one only used in an expression."
+                },
+                "id": {
+                  "type": "string",
+                  "description": "The query's ID, starting with a lower-case letter, for example m1. Expressions name other queries by it."
+                },
+                "label": {
+                  "type": "string",
+                  "description": "A name for the series."
+                },
+                "metric": {
+                  "type": "string",
+                  "description": "The metric's name, for example HTTPCode_Target_5XX_Count."
+                },
+                "namespace": {
+                  "type": "string",
+                  "description": "The metric's namespace, for example AWS/ApplicationELB."
+                },
+                "stat": {
+                  "type": "string",
+                  "description": "The metric's statistic: Average, Sum, Minimum, Maximum, SampleCount or a percentile such as p99. Default Average."
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "additionalProperties": false
+            },
+            "description": "The metrics and expressions to read. Each has an id and either namespace and metric, or expression.",
+            "minItems": 1,
+            "maxItems": 10
+          },
+          "region": {
+            "type": "string",
+            "description": "The AWS Region, for example us-east-1. It may be left out when Sidekick reads only one Region."
+          },
+          "since": {
+            "type": "string",
+            "description": "The start of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: one hour before until.",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "description": "The end of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "queries"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_alarms",
+      "description": "List the CloudWatch alarms in a state, by default ALARM, with their reason, metric and threshold. With alarm, return that alarm and its state changes in a time range, newest first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "The 12-digit AWS account ID. It may be left out when Sidekick reads only one account."
+          },
+          "alarm": {
+            "type": "string",
+            "description": "The name of one alarm, to read its state history."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 100. Default 30.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "prefix": {
+            "type": "string",
+            "description": "Only alarms whose name starts with this."
+          },
+          "region": {
+            "type": "string",
+            "description": "The AWS Region, for example us-east-1. It may be left out when Sidekick reads only one Region."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only state changes at or after this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: 24 hours before until.",
+            "format": "date-time"
+          },
+          "state": {
+            "type": "string",
+            "description": "Only alarms in this state. Default ALARM.",
+            "enum": [
+              "ALARM",
+              "OK",
+              "INSUFFICIENT_DATA",
+              "any"
+            ]
+          },
+          "until": {
+            "type": "string",
+            "description": "Only state changes before this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "list_changes",
       "description": "List the write events of CloudTrail event history in a time range, newest first: which API was called on which resources, by whom, and whether it failed, with a console link to each event. Read-only calls are left out.",
       "inputSchema": {
@@ -89,6 +233,107 @@
           "until": {
             "type": "string",
             "description": "Only events before this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_eks_cluster",
+      "description": "Get an EKS cluster: status, Kubernetes and platform version, support type and health issues, and its managed node groups with their status, version, size and health issues. Without cluster, list the clusters.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "The 12-digit AWS account ID. It may be left out when Sidekick reads only one account."
+          },
+          "cluster": {
+            "type": "string",
+            "description": "The cluster's name. Leave it out to list the clusters."
+          },
+          "region": {
+            "type": "string",
+            "description": "The AWS Region, for example us-east-1. It may be left out when Sidekick reads only one Region."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_ecs_service",
+      "description": "Get an ECS service: status, desired, running and pending tasks, its deployments with their rollout state, and its latest service events, newest first. Without service, list the cluster's services.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "The 12-digit AWS account ID. It may be left out when Sidekick reads only one account."
+          },
+          "cluster": {
+            "type": "string",
+            "description": "The ECS cluster's name."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 100. Default 20.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "region": {
+            "type": "string",
+            "description": "The AWS Region, for example us-east-1. It may be left out when Sidekick reads only one Region."
+          },
+          "service": {
+            "type": "string",
+            "description": "The service's name. Leave it out to list the cluster's services."
+          }
+        },
+        "required": [
+          "cluster"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_health_events",
+      "description": "List the AWS Health events of the account in the Region and for global services, updated in a time range, newest first: service, type, status, times and the latest description. Needs a Business, Enterprise On-Ramp or Enterprise support plan.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "The 12-digit AWS account ID. It may be left out when Sidekick reads only one account."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 100. Default 20.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "region": {
+            "type": "string",
+            "description": "The AWS Region, for example us-east-1. It may be left out when Sidekick reads only one Region."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only events updated at or after this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: 24 hours before until.",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "description": "Only events with this status. Default any.",
+            "enum": [
+              "open",
+              "upcoming",
+              "closed",
+              "any"
+            ]
+          },
+          "until": {
+            "type": "string",
+            "description": "Only events updated before this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
             "format": "date-time"
           }
         },

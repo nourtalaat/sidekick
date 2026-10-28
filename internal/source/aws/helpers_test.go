@@ -42,15 +42,29 @@ var testNow = time.Date(2026, 5, 4, 10, 0, 0, 0, time.UTC)
 
 // fakeAPIs are the fake AWS APIs of one test.
 type fakeAPIs struct {
-	logs  *fakehttp.Server
-	trail *fakehttp.Server
-	sts   *fakehttp.Server
+	logs       *fakehttp.Server
+	cloudWatch *fakehttp.Server
+	trail      *fakehttp.Server
+	eks        *fakehttp.Server
+	ecs        *fakehttp.Server
+	health     *fakehttp.Server
+	sts        *fakehttp.Server
 }
 
-// requests returns the requests every fake API received: CloudWatch Logs,
-// then CloudTrail, then STS.
+// all returns every fake API, in the order requests lists their requests.
+func (f fakeAPIs) all() []*fakehttp.Server {
+	return []*fakehttp.Server{f.logs, f.cloudWatch, f.trail, f.eks, f.ecs, f.health, f.sts}
+}
+
+// requests returns the requests every fake API received, API by API in the
+// order of all.
 func (f fakeAPIs) requests() []fakehttp.Request {
-	return append(append(f.logs.Requests(), f.trail.Requests()...), f.sts.Requests()...)
+	var out []fakehttp.Request
+	for _, api := range f.all() {
+		out = append(out, api.Requests()...)
+	}
+
+	return out
 }
 
 // newTestSource returns a source with every API on a fake server of the
@@ -61,8 +75,9 @@ func (f fakeAPIs) requests() []fakehttp.Request {
 func newTestSource(t *testing.T, edit func(*Config)) (*Source, fakeAPIs) {
 	t.Helper()
 
-	apis := fakeAPIs{logs: fakehttp.New(t), trail: fakehttp.New(t), sts: fakehttp.New(t)}
-	for _, api := range []*fakehttp.Server{apis.logs, apis.trail, apis.sts} {
+	apis := fakeAPIs{logs: fakehttp.New(t), cloudWatch: fakehttp.New(t), trail: fakehttp.New(t), eks: fakehttp.New(t),
+		ecs: fakehttp.New(t), health: fakehttp.New(t), sts: fakehttp.New(t)}
+	for _, api := range apis.all() {
 		api.ExpectAllCalled()
 	}
 
@@ -77,7 +92,8 @@ func newTestSource(t *testing.T, edit func(*Config)) (*Source, fakeAPIs) {
 	}
 
 	s, err := build(t.Context(), "aws", cfg, registry.Deps{HTTP: apis.logs.Client()}, fakeAWSConfig,
-		endpoints{logs: apis.logs.URL(), cloudTrail: apis.trail.URL(), sts: apis.sts.URL()})
+		endpoints{logs: apis.logs.URL(), cloudWatch: apis.cloudWatch.URL(), cloudTrail: apis.trail.URL(), eks: apis.eks.URL(),
+			ecs: apis.ecs.URL(), health: apis.health.URL(), sts: apis.sts.URL()})
 	require.NoError(t, err)
 
 	s.now = func() time.Time { return testNow }
@@ -164,3 +180,8 @@ var stsDenied = xmlAnswer(403, `<ErrorResponse xmlns="https://sts.amazonaws.com/
   <Error><Type>Sender</Type><Code>AccessDenied</Code><Message>not authorized to perform sts:AssumeRole</Message></Error>
   <RequestId>r-3</RequestId>
 </ErrorResponse>`)
+
+// at returns a time on the test day.
+func at(hour, minute int) time.Time {
+	return time.Date(2026, 5, 4, hour, minute, 0, 0, time.UTC)
+}

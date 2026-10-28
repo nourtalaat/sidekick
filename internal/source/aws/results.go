@@ -26,6 +26,8 @@ const (
 	// maxCellLen bounds one field of a Logs Insights row, and the request
 	// parameters of one CloudTrail event.
 	maxCellLen = 1 << 10
+	// maxMessages bounds the messages AWS adds to one result.
+	maxMessages = 20
 )
 
 // notFoundText is the text of a result for something that does not exist.
@@ -161,16 +163,20 @@ func apiMessage(status int, apiErr smithy.APIError) string {
 // consoleURL returns the link to a page of the AWS console of service in
 // region, with fragment after the #.
 func consoleURL(region, service, fragment string) string {
-	host := region + ".console.aws.amazon.com"
+	return consoleRoot(region) + "/" + service + "/home?region=" + region + "#" + fragment
+}
 
+// consoleRoot returns the address of the AWS console of region, in its
+// partition.
+func consoleRoot(region string) string {
 	switch {
 	case strings.HasPrefix(region, "cn-"):
-		host = region + ".console.amazonaws.cn"
+		return "https://" + region + ".console.amazonaws.cn"
 	case strings.HasPrefix(region, "us-gov-"):
-		host = region + ".console.amazonaws-us-gov.com"
+		return "https://" + region + ".console.amazonaws-us-gov.com"
+	default:
+		return "https://" + region + ".console.aws.amazon.com"
 	}
-
-	return "https://" + host + "/" + service + "/home?region=" + region + "#" + fragment
 }
 
 // jsurl encodes s as a string in the JSURL form the CloudWatch console

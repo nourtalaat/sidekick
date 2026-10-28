@@ -2,9 +2,10 @@
 
 The AWS source (`type: aws`) lets investigations read the AWS accounts your
 services run in: CloudWatch Logs Insights queries over the log groups you
-allow, and what changed according to CloudTrail event history. It calls
-the AWS APIs with aws-sdk-go-v2, in the accounts and Regions you list, and
-it only reads.
+allow, CloudWatch metrics and alarms, what changed according to CloudTrail
+event history, EKS clusters and their node groups, ECS services with their
+deployments and events, and AWS Health events. It calls the AWS APIs with
+aws-sdk-go-v2, in the accounts and Regions you list, and it only reads.
 
 This page lists the IAM policy the source needs and how to give Sidekick
 its AWS identity. The source's config keys are in
@@ -40,7 +41,18 @@ account's ID and list your own log group prefixes, the same ones as in
         "logs:GetQueryResults",
         "logs:StopQuery",
         "logs:DescribeLogGroups",
-        "cloudtrail:LookupEvents"
+        "cloudwatch:GetMetricData",
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:DescribeAlarmHistory",
+        "cloudtrail:LookupEvents",
+        "eks:ListClusters",
+        "eks:DescribeCluster",
+        "eks:ListNodegroups",
+        "eks:DescribeNodegroup",
+        "ecs:ListServices",
+        "ecs:DescribeServices",
+        "health:DescribeEvents",
+        "health:DescribeEventDetails"
       ],
       "Resource": "*"
     }
@@ -53,7 +65,12 @@ account's ID and list your own log group prefixes, the same ones as in
 | `logs:StartQuery`, on the allowed log groups only | `query_logs` |
 | `logs:GetQueryResults`, `logs:StopQuery` | `query_logs`, to read its query's results and to stop a query that runs out of time |
 | `logs:DescribeLogGroups` | `query_logs`, to find the log groups that start with a prefix such as `/aws/eks/prod/*` |
+| `cloudwatch:GetMetricData` | `query_metrics` |
+| `cloudwatch:DescribeAlarms`, `cloudwatch:DescribeAlarmHistory` | `list_alarms` |
 | `cloudtrail:LookupEvents` | `list_changes` |
+| `eks:ListClusters`, `eks:DescribeCluster`, `eks:ListNodegroups`, `eks:DescribeNodegroup` | `get_eks_cluster` |
+| `ecs:ListServices`, `ecs:DescribeServices` | `get_ecs_service` |
+| `health:DescribeEvents`, `health:DescribeEventDetails` | `list_health_events` |
 
 Use `arn:aws-us-gov:` or `arn:aws-cn:` instead of `arn:aws:` in GovCloud
 or China. Do not use the managed `ReadOnlyAccess` or
@@ -75,10 +92,31 @@ What the source can read is what this policy allows:
 - `logs:StopQuery` stops a Logs Insights query and changes no data. AWS
   counts it as read-only access too: the managed
   `CloudWatchLogsReadOnlyAccess` policy includes it.
+- `query_metrics` reads any metric of the account that a call names:
+  `cloudwatch:GetMetricData` cannot be limited to some metrics. It passes
+  the model's metric math to CloudWatch as it is, but refuses an
+  expression that calls `SEARCH()` or is a Metrics Insights query
+  (`SELECT ...`), before anything is sent. In a CloudWatch cross-account
+  monitoring account, both would read the metrics of every linked source
+  account, including accounts that are not in `accounts`. The model names
+  each metric with its namespace, name and dimensions instead, and the
+  source never asks for another account's metrics.
 - `cloudtrail:LookupEvents` reads the management events of the last 90
   days in one Region. Global services such as IAM log their events in
   us-east-1, so list that Region to see them. Data events, such as S3
   object reads, are not in event history.
+- `eks:DescribeCluster` returns the cluster's settings, never credentials,
+  and gives no access to the Kubernetes API, which needs an access entry
+  in the cluster. Objects inside a cluster are read by the
+  [Kubernetes source](kubernetes.md). `get_eks_cluster` and
+  `get_ecs_service` take cluster and service names only, not ARNs, since
+  an ARN can name another account.
+- The AWS Health API needs a Business, Enterprise On-Ramp or Enterprise
+  support plan on the account. Without one, `list_health_events` is a tool
+  error that says so; the other tools are not affected. The Health API is
+  global: Sidekick calls it in us-east-1 (cn-northwest-1 in China,
+  us-gov-west-1 in GovCloud) and asks only for events of the call's
+  Region and of global services.
 - Nothing in the policy writes, and the source sends no request that
   changes anything in AWS.
 
@@ -156,15 +194,22 @@ sources:
 ```
 
 With `networkPolicy.restrictEgress`, allow `logs.<region>.amazonaws.com`,
-`cloudtrail.<region>.amazonaws.com` and `sts.<region>.amazonaws.com` on
-port 443 for each Region in `regions`, as well as what IRSA or EKS Pod
-Identity need.
+`monitoring.<region>.amazonaws.com`, `cloudtrail.<region>.amazonaws.com`,
+`eks.<region>.amazonaws.com`, `ecs.<region>.amazonaws.com` and
+`sts.<region>.amazonaws.com` on port 443 for each Region in `regions`,
+`health.us-east-1.amazonaws.com` for `list_health_events`, as well as what
+IRSA or EKS Pod Identity need.
 
 ## Limits
 
 - **Time range.** Every tool reads at most 7 days. `query_logs` needs
-  both `since` and `until`; `list_changes` reads the last 24 hours by
-  default.
+  both `since` and `until`; `query_metrics` reads the last hour by
+  default, and `list_changes`, `list_alarms` and `list_health_events` the
+  last 24 hours.
+- **Points.** `query_metrics` takes at most 10 queries and returns up to
+  10 series by default and at most 50. Each series has at most 120
+  points: the period is at least 60 seconds, and is raised to the
+  smallest whole minute that keeps the range within 120 points.
 - **Log groups.** One `query_logs` call names at most 20 log groups or
   prefixes, and one query reads at most 50 log groups, the Logs Insights
   limit; a prefix is expanded from at most 2 pages of log group names.
@@ -178,6 +223,11 @@ Identity need.
   `stats` so it returns what matters. `list_changes` returns up to 50
   events by default and at most 200, from at most 5 pages of 50 events,
   with each event's request parameters cut at 1 KiB and at most 10
-  resources.
+  resources. `list_alarms` returns up to 30 alarms, or state changes of
+  one alarm, by default and at most 100. `get_eks_cluster` describes at
+  most 10 node groups, and lists at most 100 clusters. `get_ecs_service`
+  returns up to 20 service events by default and at most 100, and lists
+  at most 100 services. `list_health_events` returns up to 20 events by
+  default and at most 100, with the description of the first 10.
 - **Size.** Error messages are cut at 2 KiB, and names at 512 bytes. A
   result stops adding items at 256 KiB. A result that was cut says so.
