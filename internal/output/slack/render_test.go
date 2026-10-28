@@ -45,6 +45,7 @@ func TestRenderGolden(t *testing.T) {
 		{name: "false-alarm-fields", view: mainView(testUpdate(output.PhaseFinal, falseAlarm()))},
 		{name: "untrusted-text", view: mainView(untrustedUpdate())},
 		{name: "no-verdict", view: mainView(testUpdate(output.PhaseFinal, noVerdict()))},
+		{name: "triage-only", view: mainView(testUpdate(output.PhaseFinal, triageOnly()))},
 		{name: "notice", view: noticeView(output.Notice{
 			Kind:  output.NoticeDailyCap,
 			Title: "Daily cap reached",
@@ -341,6 +342,17 @@ func noVerdict() *report.Report {
 		Checked:    []report.Check{{Source: "signoz", Status: report.CheckOK, ToolCalls: 2}},
 		StopReason: report.StopNoVerdict,
 		StopDetail: "invalid report: true_positive needs cause, impact and at least one fix",
+	}
+}
+
+// triageOnly returns the report of a run that triage ended as a duplicate.
+func triageOnly() *report.Report {
+	return &report.Report{
+		Verdict:    report.Duplicate,
+		Confidence: report.High,
+		Reason:     "The same alert as the open checkout-api latency incident.",
+		StopReason: report.StopTriage,
+		StopDetail: "Triage only: no full investigation ran.",
 	}
 }
 

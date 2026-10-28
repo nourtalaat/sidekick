@@ -46,10 +46,14 @@ const noTitle = "the alert"
 // The action IDs of the buttons on the main message. Each button's value
 // is the investigation ID; the Slack app reads both back from a click.
 const (
-	ActionVerdictCorrect = "verdict_correct"
-	ActionVerdictWrong   = "verdict_wrong"
-	ActionStop           = "stop_investigation"
+	ActionVerdictCorrect    = "verdict_correct"
+	ActionVerdictWrong      = "verdict_wrong"
+	ActionStop              = "stop_investigation"
+	ActionInvestigateAnyway = "investigate_anyway"
 )
+
+// triageOnlyLine is the context line of a triage-only result.
+const triageOnlyLine = "Triage only · No full investigation ran"
 
 // The block IDs of the button rows.
 const (
@@ -202,7 +206,8 @@ func runningView(u output.Update, title string) view {
 // confidence with the reason, the cause and impact, the findings, the
 // fixes, what was checked, who rated the verdict, then the Correct and
 // Wrong buttons. A run a responder stopped says who stopped it instead of
-// asking for a rating.
+// asking for a rating. A triage-only result says so, and adds the
+// Investigate anyway button.
 func finalView(u output.Update, title string) view {
 	r := u.Report
 	style, line := verdictLine(r)
@@ -222,8 +227,12 @@ func finalView(u output.Update, title string) view {
 	}
 
 	checked := checkedLine(r)
-	if r.StopReason == report.StopCancelled {
+
+	switch r.StopReason {
+	case report.StopCancelled:
 		checked = joinParts(checked, stoppedLine(u.StoppedBy))
+	case report.StopTriage:
+		checked = joinParts(checked, triageOnlyLine)
 	}
 
 	if checked != "" {
@@ -440,12 +449,21 @@ func stopButtons(u output.Update) block {
 	}}}
 }
 
-// feedbackButtons is the row with the Correct and Wrong buttons.
+// feedbackButtons is the row with the Correct and Wrong buttons, and the
+// Investigate anyway button on a triage-only result.
 func feedbackButtons(u output.Update) block {
-	return block{Type: blockActions, BlockID: blockIDFeedback, Buttons: []button{
+	buttons := []button{
 		{Type: elemButton, ActionID: ActionVerdictCorrect, Text: plain(":thumbsup: Correct"), Value: u.InvestigationID},
 		{Type: elemButton, ActionID: ActionVerdictWrong, Text: plain(":thumbsdown: Wrong"), Value: u.InvestigationID},
-	}}
+	}
+
+	if u.Report != nil && u.Report.StopReason == report.StopTriage {
+		buttons = append(buttons, button{
+			Type: elemButton, ActionID: ActionInvestigateAnyway, Text: plain("Investigate anyway"), Value: u.InvestigationID, Style: stylePrimary,
+		})
+	}
+
+	return block{Type: blockActions, BlockID: blockIDFeedback, Buttons: buttons}
 }
 
 // feedbackLine says who rated the verdict, such as ":thumbsup: Marked
