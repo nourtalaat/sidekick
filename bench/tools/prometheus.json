@@ -85,6 +85,96 @@
         ],
         "additionalProperties": false
       }
+    },
+    {
+      "name": "list_series",
+      "description": "List the series that match a series selector, such as http_requests_total{service=\"checkout\"}, in a time range: each series' labels. Use it to find metric and label names before writing a query.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 500. Default 100.",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "match": {
+            "type": "string",
+            "description": "The series selector, a metric name and label matchers, for example up{job=\"api\"}."
+          },
+          "since": {
+            "type": "string",
+            "description": "The start of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: one hour before until.",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "description": "The end of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "match"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_label_values",
+      "description": "List the values of one label, such as service, namespace or __name__ for metric names, in a time range, optionally only on the series that match a series selector.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "The label name, for example service."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 1000. Default 100.",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "match": {
+            "type": "string",
+            "description": "Only values on series that match this series selector, for example up{job=\"api\"}."
+          },
+          "since": {
+            "type": "string",
+            "description": "The start of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: one hour before until.",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "description": "The end of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_targets",
+      "description": "List the scrape targets that are down or unknown, with their scrape pool, URL, health, last error and last scrape. Healthy targets are left out; the result counts them.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 200. Default 50.",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "pool": {
+            "type": "string",
+            "description": "Only targets of this scrape pool, for example the job name."
+          }
+        },
+        "additionalProperties": false
+      }
     }
   ]
 }

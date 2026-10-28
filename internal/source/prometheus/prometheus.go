@@ -86,6 +86,12 @@ func (s *Source) run(ctx context.Context, call source.Call) (source.Result, erro
 		return s.listAlerts(ctx, call.Input)
 	case toolGetRules:
 		return s.getRules(ctx, call.Input)
+	case toolListSeries:
+		return s.listSeries(ctx, call.Input)
+	case toolListLabelValues:
+		return s.listLabelValues(ctx, call.Input)
+	case toolListTargets:
+		return s.listTargets(ctx, call.Input)
 	default:
 		return source.Result{}, fmt.Errorf("tool %q: %w", call.Tool, errUnknownTool)
 	}

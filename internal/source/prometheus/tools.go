@@ -15,10 +15,13 @@ import (
 // Tool names, as the source names them. The model sees them with the
 // source prefix, for example prometheus__query_range.
 const (
-	toolQuery      = "query"
-	toolQueryRange = "query_range"
-	toolListAlerts = "list_alerts"
-	toolGetRules   = "get_rules"
+	toolQuery           = "query"
+	toolQueryRange      = "query_range"
+	toolListAlerts      = "list_alerts"
+	toolGetRules        = "get_rules"
+	toolListSeries      = "list_series"
+	toolListLabelValues = "list_label_values"
+	toolListTargets     = "list_targets"
 )
 
 // Limits on what a tool returns.
@@ -34,6 +37,15 @@ const (
 	// maxRules bounds the rules of get_rules: one alert name can be in
 	// several groups.
 	maxRules = 20
+	// defaultSeriesList and maxSeriesList bound the series of list_series.
+	defaultSeriesList = 100
+	maxSeriesList     = 500
+	// defaultValues and maxValues bound the values of list_label_values.
+	defaultValues = 100
+	maxValues     = 1000
+	// defaultTargets and maxTargets bound the targets of list_targets.
+	defaultTargets = 50
+	maxTargets     = 200
 )
 
 // toolList is what Tools returns. Every tool only reads.
@@ -80,6 +92,41 @@ var toolList = []source.Tool{
 		InputSchema: schema(map[string]*jsonschema.Schema{
 			"alertname": stringProperty("The alert name, the alertname label of the alert."),
 		}, "alertname"),
+		ReadOnly: true,
+	},
+	{
+		Name: toolListSeries,
+		Description: "List the series that match a series selector, such as http_requests_total{service=\"checkout\"}, in a " +
+			"time range: each series' labels. Use it to find metric and label names before writing a query.",
+		InputSchema: schema(map[string]*jsonschema.Schema{
+			"match": stringProperty("The series selector, a metric name and label matchers, for example up{job=\"api\"}."),
+			"since": timeProperty("The start of the range. Default: one hour before until."),
+			"until": timeProperty("The end of the range. Default: now."),
+			"limit": limitProperty(defaultSeriesList, maxSeriesList),
+		}, "match"),
+		ReadOnly: true,
+	},
+	{
+		Name: toolListLabelValues,
+		Description: "List the values of one label, such as service, namespace or __name__ for metric names, in a time " +
+			"range, optionally only on the series that match a series selector.",
+		InputSchema: schema(map[string]*jsonschema.Schema{
+			"label": stringProperty("The label name, for example service."),
+			"match": stringProperty("Only values on series that match this series selector, for example up{job=\"api\"}."),
+			"since": timeProperty("The start of the range. Default: one hour before until."),
+			"until": timeProperty("The end of the range. Default: now."),
+			"limit": limitProperty(defaultValues, maxValues),
+		}, "label"),
+		ReadOnly: true,
+	},
+	{
+		Name: toolListTargets,
+		Description: "List the scrape targets that are down or unknown, with their scrape pool, URL, health, last error and " +
+			"last scrape. Healthy targets are left out; the result counts them.",
+		InputSchema: schema(map[string]*jsonschema.Schema{
+			"pool":  stringProperty("Only targets of this scrape pool, for example the job name."),
+			"limit": limitProperty(defaultTargets, maxTargets),
+		}),
 		ReadOnly: true,
 	},
 }

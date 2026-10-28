@@ -5,9 +5,9 @@
 // A source reads one server through its HTTP API, and optionally an
 // Alertmanager, with a bearer token, basic auth or a client certificate
 // from Secrets, read again for each request or connection so a rotated
-// secret needs no restart. Every PromQL query is parsed with the
-// Prometheus parser before it is sent, so one that does not parse is a
-// tool error and never reaches the server.
+// secret needs no restart. Every PromQL query and series selector is
+// parsed with the Prometheus parser before it is sent, so one that does
+// not parse is a tool error and never reaches the server.
 //
 // Every tool only reads. Range queries pick their own step, so a series
 // keeps about 250 points, and every result is bounded and says when it was
