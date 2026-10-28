@@ -182,8 +182,8 @@ rejected.
 Sidekick needs no cloud keys in a Secret on EKS, GKE or AKS: the pod gets an
 identity through its service account, which the chart creates and names
 after the release (`sidekick` for a release named `sidekick`). The
-[Bedrock connector](configuration.md#the-bedrock-provider) uses the AWS
-identity, and the [Google connector](configuration.md#the-google-provider)
+[Bedrock connector](configuration.md#the-bedrock-provider) and the
+[AWS source](sources/aws.md) use the AWS identity, and the [Google connector](configuration.md#the-google-provider)
 with `backend: vertex` uses the Google one. The identity applies to every container in the pod, so
 [MCP servers in sidecars](#mcp-servers-in-sidecars) can use it too.
 
