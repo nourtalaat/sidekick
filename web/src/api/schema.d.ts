@@ -239,6 +239,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The audit log, newest first, a page at a time
+         * @description Every proposal, approval, investigation, feedback, rule change, login
+         *     and role change, with who made it and, for a change, the old and new
+         *     values. Rows are never changed. The filters must all match. Values
+         *     that a redaction rule matches are redacted.
+         */
+        get: operations["ListAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/investigations": {
         parameters: {
             query?: never;
@@ -554,6 +577,33 @@ export interface components {
              */
             field: string;
             message: string;
+        };
+        AuditEntry: {
+            /** Format: int64 */
+            id: number;
+            /** Format: date-time */
+            at: string;
+            /** @enum {string} */
+            actorKind: "user" | "token" | "sidekick" | "policy" | "system";
+            /** @description A user ID, an API token ID or a Slack user ID. Absent for sidekick, policy and system. */
+            actorId?: string;
+            /** @description The name of the user or token, when it is still known. */
+            actorName?: string;
+            /** @description What happened, such as route.updated. */
+            action: string;
+            targetKind?: string;
+            targetId?: string;
+            /** Format: uuid */
+            investigationId?: string;
+            /** @description The value before the change, of any JSON type. Absent when there was none. */
+            old?: unknown;
+            /** @description The value after the change, of any JSON type. Absent when there was none. */
+            new?: unknown;
+        };
+        AuditList: {
+            entries: components["schemas"]["AuditEntry"][];
+            /** @description Pass it as cursor to get the next page. Absent on the last page. */
+            nextCursor?: string;
         };
         Job: {
             /** Format: int64 */
@@ -1394,6 +1444,45 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListAudit: {
+        parameters: {
+            query?: {
+                /** @description Only entries made at or after this time. */
+                from?: string;
+                /** @description Only entries made before this time. */
+                to?: string;
+                /**
+                 * @description The ID of the user, API token or Slack user that made the change.
+                 *     sidekick, policy and system select the entries Sidekick made on
+                 *     its own.
+                 */
+                actor?: string;
+                /** @description The action, such as route.updated or job.retried. */
+                action?: string;
+                /** @description Only entries of this investigation. */
+                investigation?: string;
+                /** @description The nextCursor of the page before. */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of audit entries. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditList"];
+                };
             };
             default: components["responses"]["Problem"];
         };

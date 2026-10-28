@@ -212,6 +212,16 @@ used by every replica within seconds.
   written into the file by mistake, the user and password of every URL
   are removed, and strings the [redaction](configuration.md#redaction)
   rules match are redacted.
+- `GET /api/v1/audit` returns the audit log, newest first, 50 entries at
+  a time (`limit` takes up to 200); pass the answer's `nextCursor` as
+  `cursor` for the next page. The filters `from` (inclusive), `to`
+  (exclusive), `actor`, `action` and `investigation` must all match.
+  `actor` is the ID of a user, an API token or a Slack user; `sidekick`,
+  `policy` and `system` select what Sidekick did on its own. Each entry has
+  the actor, with the name of the user or token when it is still known,
+  the action, what it was done to, and for a change the `old` and `new`
+  values, masked the same way as the effective config. Rows are never
+  changed.
 - `GET /api/v1/jobs?status=dead` lists dead jobs, the background jobs
   that gave up, newest first, 50 at a time (`limit` takes up to 100);
   pass the answer's `nextCursor` as `cursor` for the next page. Each

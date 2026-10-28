@@ -19,6 +19,33 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AuditEntryActorKind.
+const (
+	AuditEntryActorKindPolicy   AuditEntryActorKind = "policy"
+	AuditEntryActorKindSidekick AuditEntryActorKind = "sidekick"
+	AuditEntryActorKindSystem   AuditEntryActorKind = "system"
+	AuditEntryActorKindToken    AuditEntryActorKind = "token"
+	AuditEntryActorKindUser     AuditEntryActorKind = "user"
+)
+
+// Valid indicates whether the value is a known member of the AuditEntryActorKind enum.
+func (e AuditEntryActorKind) Valid() bool {
+	switch e {
+	case AuditEntryActorKindPolicy:
+		return true
+	case AuditEntryActorKindSidekick:
+		return true
+	case AuditEntryActorKindSystem:
+		return true
+	case AuditEntryActorKindToken:
+		return true
+	case AuditEntryActorKindUser:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for Confidence.
 const (
 	High   Confidence = "high"
@@ -264,19 +291,19 @@ func (e RunKind) Valid() bool {
 
 // Defines values for SenderKind.
 const (
-	Bot    SenderKind = "bot"
-	Human  SenderKind = "human"
-	System SenderKind = "system"
+	SenderKindBot    SenderKind = "bot"
+	SenderKindHuman  SenderKind = "human"
+	SenderKindSystem SenderKind = "system"
 )
 
 // Valid indicates whether the value is a known member of the SenderKind enum.
 func (e SenderKind) Valid() bool {
 	switch e {
-	case Bot:
+	case SenderKindBot:
 		return true
-	case Human:
+	case SenderKindHuman:
 		return true
-	case System:
+	case SenderKindSystem:
 		return true
 	default:
 		return false
@@ -494,6 +521,41 @@ func (e ListJobsParamsStatus) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// AuditEntry defines model for AuditEntry.
+type AuditEntry struct {
+	// Action What happened, such as route.updated.
+	Action string `json:"action"`
+
+	// ActorId A user ID, an API token ID or a Slack user ID. Absent for sidekick, policy and system.
+	ActorId   *string             `json:"actorId,omitempty"`
+	ActorKind AuditEntryActorKind `json:"actorKind"`
+
+	// ActorName The name of the user or token, when it is still known.
+	ActorName       *string             `json:"actorName,omitempty"`
+	At              time.Time           `json:"at"`
+	Id              int64               `json:"id"`
+	InvestigationId *openapi_types.UUID `json:"investigationId,omitempty"`
+
+	// New The value after the change, of any JSON type. Absent when there was none.
+	New interface{} `json:"new,omitempty"`
+
+	// Old The value before the change, of any JSON type. Absent when there was none.
+	Old        interface{} `json:"old,omitempty"`
+	TargetId   *string     `json:"targetId,omitempty"`
+	TargetKind *string     `json:"targetKind,omitempty"`
+}
+
+// AuditEntryActorKind defines model for AuditEntry.ActorKind.
+type AuditEntryActorKind string
+
+// AuditList defines model for AuditList.
+type AuditList struct {
+	Entries []AuditEntry `json:"entries"`
+
+	// NextCursor Pass it as cursor to get the next page. Absent on the last page.
+	NextCursor *string `json:"nextCursor,omitempty"`
 }
 
 // Confidence defines model for Confidence.
@@ -1330,6 +1392,30 @@ type InvestigationID = openapi_types.UUID
 // RuleName defines model for RuleName.
 type RuleName = string
 
+// ListAuditParams defines parameters for ListAudit.
+type ListAuditParams struct {
+	// From Only entries made at or after this time.
+	From *time.Time `form:"from,omitempty" json:"from,omitempty"`
+
+	// To Only entries made before this time.
+	To *time.Time `form:"to,omitempty" json:"to,omitempty"`
+
+	// Actor The ID of the user, API token or Slack user that made the change.
+	// sidekick, policy and system select the entries Sidekick made on
+	// its own.
+	Actor *string `form:"actor,omitempty" json:"actor,omitempty"`
+
+	// Action The action, such as route.updated or job.retried.
+	Action *string `form:"action,omitempty" json:"action,omitempty"`
+
+	// Investigation Only entries of this investigation.
+	Investigation *openapi_types.UUID `form:"investigation,omitempty" json:"investigation,omitempty"`
+
+	// Cursor The nextCursor of the page before.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // ListInvestigationsParams defines parameters for ListInvestigations.
 type ListInvestigationsParams struct {
 	// From Only investigations created at or after this time.
@@ -1403,6 +1489,9 @@ type CreateTokenJSONRequestBody = NewToken
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// ListAudit The audit log, newest first, a page at a time
+	// (GET /audit)
+	ListAudit(w http.ResponseWriter, r *http.Request, params ListAuditParams)
 	// GetConfig The effective config, with secrets shown only as references
 	// (GET /config)
 	GetConfig(w http.ResponseWriter, r *http.Request)
@@ -1473,6 +1562,117 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// ListAudit operation middleware
+func (siw *ServerInterfaceWrapper) ListAudit(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAuditParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "actor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "actor", r.URL.Query(), &params.Actor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "actor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "actor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "action" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "action", r.URL.Query(), &params.Action, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "action"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "action", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "investigation" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "investigation", r.URL.Query(), &params.Investigation, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "investigation"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "investigation", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAudit(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // GetConfig operation middleware
 func (siw *ServerInterfaceWrapper) GetConfig(w http.ResponseWriter, r *http.Request) {
@@ -2269,6 +2469,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/routes", wrapper.CreateRoute)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/routes/{name}", wrapper.DeleteRoute)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/routes/{name}", wrapper.UpdateRoute)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/audit", wrapper.ListAudit)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations", wrapper.ListInvestigations)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}", wrapper.GetInvestigation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}/steps", wrapper.ListInvestigationSteps)
@@ -2279,6 +2480,45 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 }
 
 type ProblemApplicationProblemPlusJSONResponse Problem
+
+type ListAuditRequestObject struct {
+	Params ListAuditParams
+}
+
+type ListAuditResponseObject interface {
+	VisitListAuditResponse(w http.ResponseWriter) error
+}
+
+type ListAudit200JSONResponse AuditList
+
+func (response ListAudit200JSONResponse) VisitListAuditResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAuditdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListAuditdefaultApplicationProblemPlusJSONResponse) VisitListAuditResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type GetConfigRequestObject struct {
 }
@@ -3066,6 +3306,9 @@ func (response RevokeTokendefaultApplicationProblemPlusJSONResponse) VisitRevoke
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// ListAudit The audit log, newest first, a page at a time
+	// (GET /audit)
+	ListAudit(ctx context.Context, request ListAuditRequestObject) (ListAuditResponseObject, error)
 	// GetConfig The effective config, with secrets shown only as references
 	// (GET /config)
 	GetConfig(ctx context.Context, request GetConfigRequestObject) (GetConfigResponseObject, error)
@@ -3165,6 +3408,32 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// ListAudit operation middleware
+func (sh *strictHandler) ListAudit(w http.ResponseWriter, r *http.Request, params ListAuditParams) {
+	var request ListAuditRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAudit(ctx, request.(ListAuditRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAudit")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAuditResponseObject); ok {
+		if err := validResponse.VisitListAuditResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // GetConfig operation middleware

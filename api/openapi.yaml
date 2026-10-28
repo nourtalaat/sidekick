@@ -326,6 +326,69 @@ paths:
           description: The route is deleted.
         default:
           $ref: "#/components/responses/Problem"
+  /audit:
+    get:
+      operationId: ListAudit
+      summary: The audit log, newest first, a page at a time
+      description: |
+        Every proposal, approval, investigation, feedback, rule change, login
+        and role change, with who made it and, for a change, the old and new
+        values. Rows are never changed. The filters must all match. Values
+        that a redaction rule matches are redacted.
+      x-sidekick-role: admin
+      parameters:
+        - name: from
+          in: query
+          description: Only entries made at or after this time.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: Only entries made before this time.
+          schema:
+            type: string
+            format: date-time
+        - name: actor
+          in: query
+          description: |
+            The ID of the user, API token or Slack user that made the change.
+            sidekick, policy and system select the entries Sidekick made on
+            its own.
+          schema:
+            type: string
+        - name: action
+          in: query
+          description: The action, such as route.updated or job.retried.
+          schema:
+            type: string
+        - name: investigation
+          in: query
+          description: Only entries of this investigation.
+          schema:
+            type: string
+            format: uuid
+        - name: cursor
+          in: query
+          description: The nextCursor of the page before.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: A page of audit entries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditList"
+        default:
+          $ref: "#/components/responses/Problem"
   /investigations:
     get:
       operationId: ListInvestigations
@@ -894,6 +957,50 @@ components:
             with the whole body.
         message:
           type: string
+    AuditEntry:
+      type: object
+      required: [id, at, actorKind, action]
+      properties:
+        id:
+          type: integer
+          format: int64
+        at:
+          type: string
+          format: date-time
+        actorKind:
+          type: string
+          enum: [user, token, sidekick, policy, system]
+        actorId:
+          type: string
+          description: A user ID, an API token ID or a Slack user ID. Absent for sidekick, policy and system.
+        actorName:
+          type: string
+          description: The name of the user or token, when it is still known.
+        action:
+          type: string
+          description: What happened, such as route.updated.
+        targetKind:
+          type: string
+        targetId:
+          type: string
+        investigationId:
+          type: string
+          format: uuid
+        old:
+          description: The value before the change, of any JSON type. Absent when there was none.
+        new:
+          description: The value after the change, of any JSON type. Absent when there was none.
+    AuditList:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditEntry"
+        nextCursor:
+          type: string
+          description: Pass it as cursor to get the next page. Absent on the last page.
     Job:
       type: object
       required: [id, kind, attempts, maxAttempts, createdAt]
