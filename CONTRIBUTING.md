@@ -10,6 +10,10 @@ You need:
 
 - Go 1.26 or newer, and a C compiler (sqlc is built with cgo).
 - GNU Make and Git.
+- Node, in the version `web/.nvmrc` names, with npm, to build the web UI.
+  Without Node, `go build ./...` and `go test ./...` still work, but the
+  binary serves a page that says it has no UI; `go build -tags noui ./...`
+  says the same on purpose.
 - For integration tests, one of:
   - Docker or Podman, so the tests can start Postgres in a container
     themselves; or
@@ -61,6 +65,8 @@ Run `make help` for the full list. The main ones:
 |---|---|
 | `make ci` | Everything CI runs. Run it before every push. |
 | `make lint` | golangci-lint, and a check that `go.mod` and `go.sum` are tidy. |
+| `make ui-build` | Installs the npm packages from `web/package-lock.json` (`npm ci`, without install scripts) and builds the web UI into `internal/web/dist`, which the binary embeds. `make build` runs it first. |
+| `make ui-test` | The web UI's tests (Vitest). `make lint` also runs ESLint and `tsc --noEmit` on `web/`. |
 | `make fmt` | Formats the Go code (gofmt and goimports). |
 | `make test` | Unit tests with the race detector. |
 | `make test-integration` | Unit and integration tests (build tag `integration`) against Postgres. |
@@ -233,6 +239,28 @@ lock while it runs. `sidekick serve` also migrates at start-up, unless
    followed by its plan. To write the files yourself, set
    `SIDEKICK_PLANS_DIR` to a directory when you run the integration tests,
    with `-count=1` so Go does not reuse a cached result that wrote nothing.
+
+## Web UI
+
+The web UI is a React and TypeScript app in `web/`, built with Vite. The
+Go server serves it from `internal/web`, with a Content Security Policy
+that allows no inline script or style, so write styles in CSS files and
+load nothing from another host. The build fails if `index.html` breaks
+that.
+
+- Styles use the variables of `assets/tokens/tokens.css`, which the app
+  imports; do not copy their values.
+- The API client and its types in `web/src/api/schema.d.ts` are generated
+  from `api/openapi.yaml` by `make openapi-generate`. Commit the result.
+- `npm run dev` in `web/` starts the dev server, which forwards `/api` and
+  `/auth` to the Sidekick at `$SIDEKICK_URL` (default
+  `http://localhost:8080`).
+- npm dependencies: exact versions in `package.json`, a committed
+  lockfile, and only versions published at least 7 days ago, so
+  `npm install --before=<date>` when adding one. A package with an install
+  script needs a reason in the pull request, since installs run with
+  `ignore-scripts`. `make notice` lists the packages that end up in the
+  bundle in `NOTICE`.
 
 ## API operations
 

@@ -8,6 +8,7 @@
     "node": ">=24.18.0"
   },
   "scripts": {
+    "dev": "vite",
     "build": "vite build && node build/check-dist.mjs",
     "test": "vitest run",
     "lint": "eslint .",
