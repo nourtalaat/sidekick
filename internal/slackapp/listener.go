@@ -132,13 +132,17 @@ func (f *fields) set(name, value string) {
 	}
 }
 
-// compileListeners compiles the configured listeners, in name order, which
-// is the order messages are matched in.
+// compileListeners compiles the configured Slack listeners, in name order,
+// which is the order messages are matched in. Teams listeners are left out.
 func compileListeners(cfg map[string]config.Listener) ([]listener, error) {
 	out := make([]listener, 0, len(cfg))
 
 	for _, name := range slices.Sorted(maps.Keys(cfg)) {
 		c := cfg[name]
+		if c.OnTeams() {
+			continue
+		}
+
 		l := listener{name: name, channel: c.Channel, sender: c.Match.Sender, trusted: c.Trusted}
 
 		var err error

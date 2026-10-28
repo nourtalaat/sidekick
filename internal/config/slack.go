@@ -75,10 +75,14 @@ type Slack struct {
 	APIURL string `yaml:"apiURL"`
 }
 
-// Listener picks the Slack messages in one channel that start an
-// investigation (IN-5). Every field of Match that is set must match.
+// Listener picks the Slack or Teams messages in one channel that start an
+// investigation (IN-5, IN-8). Every field of Match that is set must match.
 type Listener struct {
-	// Channel is a channel name such as "#alerts", or a channel ID.
+	// Source is the chat app of the channel: slack, the default, or teams.
+	// TODO: [SK-18] Add source to the runtime listeners once they land.
+	Source ListenerSource `yaml:"source"`
+	// Channel is a Slack channel name such as "#alerts" or channel ID, or
+	// a Teams channel ID such as 19:abc123@thread.tacv2.
 	Channel string `yaml:"channel"`
 	// Match selects messages in the channel.
 	Match ListenerMatch `yaml:"match"`
@@ -90,8 +94,9 @@ type Listener struct {
 	// Recovery is a regular expression. A message it matches becomes a
 	// resolved event instead of an alert.
 	Recovery string `yaml:"recovery"`
-	// Trusted marks events from the bots in slack.trustedBots as trusted
-	// (ACT-6). Every other sender stays untrusted.
+	// Trusted marks events from the bots in slack.trustedBots, or
+	// teams.trustedBots for a Teams listener, as trusted (ACT-6). Every
+	// other sender stays untrusted.
 	Trusted bool `yaml:"trusted"`
 }
 
@@ -110,9 +115,11 @@ type ListenerSender struct {
 	Kind event.SenderKind `yaml:"kind"`
 	// Names are bot names, such as SigNoz, compared without case.
 	Names []string `yaml:"names"`
-	// Bots are bot IDs, such as B01ABCDEF.
+	// Bots are Slack bot IDs, such as B01ABCDEF, or for Teams the bot's
+	// "28:" ID.
 	Bots []string `yaml:"bots"`
-	// Users are user IDs, such as U01ABCDEF.
+	// Users are Slack user IDs, such as U01ABCDEF, or for Teams the users'
+	// Microsoft Entra object IDs.
 	Users []string `yaml:"users"`
 }
 
@@ -141,8 +148,12 @@ func (v *validator) checkSlack() {
 		v.checkListener(joinPath("listeners", name), name, v.cfg.Listeners[name])
 	}
 
-	if len(v.cfg.Listeners) > 0 && !s.Connects() {
+	if v.hasListeners(ListenerSourceSlack) && !s.Connects() {
 		v.errs.add("listeners", "listeners need the Slack app to receive events: set slack.appTokenSecret, or slack.mode: events with slack.signingSecret")
+	}
+
+	if v.hasListeners(ListenerSourceTeams) && v.cfg.Teams == nil {
+		v.errs.add("listeners", "listeners with source teams need the teams section, the Teams bot that receives their messages")
 	}
 }
 
@@ -180,10 +191,11 @@ func (v *validator) checkListener(at, name string, l Listener) {
 	}
 
 	switch {
-	case l.Channel == "":
-		v.errs.add(at+".channel", "required")
-	case !channelPattern.MatchString(l.Channel):
-		v.errs.add(at+".channel", `expected a channel name such as "#alerts" or a channel ID such as C01ABCDEF, got %q`, l.Channel)
+	case !v.checkListenerSource(at, l):
+	case l.OnTeams():
+		v.checkTeamsListener(at, l)
+	default:
+		v.checkSlackListener(at, l)
 	}
 
 	sender := l.Match.Sender
@@ -191,8 +203,6 @@ func (v *validator) checkListener(at, name string, l Listener) {
 		v.errs.add(at+".match.sender.kind", "expected human or bot, got %q%s", sender.Kind, didYouMean(string(sender.Kind), asStrings(knownListenerSenders)))
 	}
 
-	v.checkIDs(at+".match.sender.bots", sender.Bots, botIDPattern, "a bot ID such as B01ABCDEF")
-	v.checkIDs(at+".match.sender.users", sender.Users, userIDPattern, "a user ID such as U01ABCDEF")
 	v.checkRegexp(at+".match.text", l.Match.Text)
 	v.checkRegexp(at+".recovery", l.Recovery)
 
@@ -210,6 +220,20 @@ func (v *validator) checkListener(at, name string, l Listener) {
 			v.errs.add(p, "has no named group such as (?P<service>...); only named groups set fields")
 		}
 	}
+}
+
+// checkSlackListener checks the fields of a listener on a Slack channel
+// whose rules differ from Teams'.
+func (v *validator) checkSlackListener(at string, l Listener) {
+	switch {
+	case l.Channel == "":
+		v.errs.add(at+".channel", "required")
+	case !channelPattern.MatchString(l.Channel):
+		v.errs.add(at+".channel", `expected a channel name such as "#alerts" or a channel ID such as C01ABCDEF, got %q`, l.Channel)
+	}
+
+	v.checkIDs(at+".match.sender.bots", l.Match.Sender.Bots, botIDPattern, "a bot ID such as B01ABCDEF")
+	v.checkIDs(at+".match.sender.users", l.Match.Sender.Users, userIDPattern, "a user ID such as U01ABCDEF")
 
 	if l.Trusted && (v.cfg.Slack == nil || len(v.cfg.Slack.TrustedBots) == 0) {
 		v.errs.add(at+".trusted", "has no effect without slack.trustedBots, the bots whose messages are trusted")
@@ -221,19 +245,27 @@ func (v *validator) checkListener(at, name string, l Listener) {
 func (v *validator) checkIntakeName(path, name string) {
 	v.checkName(path, name)
 
-	if name == SlackMentionIntake {
+	switch name {
+	case SlackMentionIntake:
 		v.errs.add(path, "name %q is reserved for events from mentions of Sidekick in Slack", name)
+	case TeamsMentionIntake:
+		v.errs.add(path, "name %q is reserved for events from mentions of Sidekick in Teams", name)
 	}
 }
 
 // intakeNames returns the names a route's match.intake can name: the
-// webhook endpoints, the listeners and, with a slack section, mentions.
+// webhook endpoints, the listeners and, with a slack or teams section,
+// the mentions in that app.
 func (v *validator) intakeNames() []string {
 	names := slices.Collect(maps.Keys(v.cfg.Intake.Webhooks))
 	names = append(names, slices.Collect(maps.Keys(v.cfg.Listeners))...)
 
 	if v.cfg.Slack != nil {
 		names = append(names, SlackMentionIntake)
+	}
+
+	if v.cfg.Teams != nil {
+		names = append(names, TeamsMentionIntake)
 	}
 
 	return names

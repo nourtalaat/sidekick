@@ -1,0 +1,14 @@
+# A Kubernetes source makes the pods mount their service account token.
+# The validator sidecar gets an empty directory at the token's path
+# instead, and the pod annotations make the cloud identity webhooks skip
+# it, so a module the model wrote cannot read a token into an error.
+config:
+  sources:
+    k8s:
+      type: kubernetes
+  routes:
+    - name: default
+      sources: [k8s]
+      outputs: [slack]
+validator:
+  enabled: true

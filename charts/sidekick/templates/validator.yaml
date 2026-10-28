@@ -1,0 +1,78 @@
+{{- /*
+Job mode of the validator: Sidekick creates one Job per validation, with
+the request in a ConfigMap, and reads the result from the Job's pod. The
+Role allows that in the release's namespace only, and the NetworkPolicy
+keeps the Job pods off the network. The Sidekick pods mount their service
+account token in this mode (sidekick.automountToken).
+*/ -}}
+{{- if include "sidekick.validator.job" . }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "sidekick.fullname" . }}-validator
+  labels:
+    {{- include "sidekick.labels" . | nindent 4 }}
+    app.kubernetes.io/component: validator
+rules:
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [create, get, list, watch, delete]
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create, get, delete]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "sidekick.fullname" . }}-validator
+  labels:
+    {{- include "sidekick.labels" . | nindent 4 }}
+    app.kubernetes.io/component: validator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "sidekick.fullname" . }}-validator
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "sidekick.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- if .Values.networkPolicy.enabled }}
+---
+# The validation Job pods take no connections, and make none unless
+# validator.allowDownloads lets OpenTofu reach registries over HTTPS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sidekick.fullname" . }}-validator
+  labels:
+    {{- include "sidekick.labels" . | nindent 4 }}
+    app.kubernetes.io/component: validator
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "sidekick.validator.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  {{- if .Values.validator.allowDownloads }}
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - ports:
+        - port: 443
+          protocol: TCP
+  {{- else }}
+  egress: []
+  {{- end }}
+{{- end }}
+{{- end }}

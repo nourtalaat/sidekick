@@ -1,0 +1,42 @@
+# A Teams bot with workload identity, a Teams listener next to a Slack
+# one, and a route for Teams mentions.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+slack:
+  botTokenSecret: { name: sidekick-slack, key: botToken }
+  appTokenSecret: { name: sidekick-slack, key: appToken }
+
+teams:
+  appID: 00000000-1111-2222-3333-444444444444
+  tenantID: 55555555-6666-7777-8888-999999999999
+  workloadIdentity: true
+  trustedBots: ["28:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"]
+  serviceURL: https://smba.trafficmanager.net/emea/
+
+listeners:
+  slack-alerts:
+    channel: "#alerts"
+  teams-alerts:
+    source: teams
+    channel: "19:abc123@thread.tacv2"
+    match:
+      sender:
+        kind: bot
+        bots: ["28:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"]
+        users: [ffffffff-0000-1111-2222-333333333333]
+      text: "(?i)firing"
+    extract: ["service=(?P<service>[a-z-]+)"]
+    recovery: "(?i)resolved"
+    trusted: true
+
+routes:
+  - name: teams-mentions
+    match: { intake: [teams-mention, teams-alerts] }
+  - name: default
