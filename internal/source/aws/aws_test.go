@@ -27,7 +27,7 @@ const (
 	targetQueryResults = "Logs_20140328.GetQueryResults"
 	targetStopQuery    = "Logs_20140328.StopQuery"
 	targetLogGroups    = "Logs_20140328.DescribeLogGroups"
-	targetLookupEvents = "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.LookupEvents"
+	targetLookupEvents = "CloudTrail_20131101.LookupEvents"
 )
 
 // Console links of the tests.
