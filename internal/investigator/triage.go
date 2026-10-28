@@ -73,6 +73,10 @@ const (
 	auditTargetKind        = "investigation"
 )
 
+// ErrBusy means another investigate job of the investigation's group is
+// still pending or running, so a full investigation cannot be queued yet.
+var ErrBusy = errors.New("another investigate job of the group is still pending or running")
+
 // auditor writes the audit entries of this package.
 var auditor = audit.NewWriter()
 
@@ -584,12 +588,18 @@ func (b Budget) tightened(s strategy.Budgets) Budget {
 }
 
 // InvestigateAnyway starts a full investigation of an investigation whose
-// run ended with a triage-only result, as by asked: it sets the
+// run ended with a triage-only result, as by asked for: it sets the
 // investigation back to queued for its next run, enqueues its investigate
-// job and writes the audit entry, all in q, which should be a transaction.
+// job and writes the audit entry, all in q, which must be a transaction.
 // It returns false, and changes nothing, for an investigation that did not
 // end that way, including one whose full investigation has started
 // already.
+//
+// The job that ran the triage holds the group's investigate key until the
+// queue marks it done, a moment after the run ended. A request in that
+// moment returns an error that wraps ErrBusy; the caller must roll back,
+// so the investigation is not left queued without a job, and ask again
+// later.
 func InvestigateAnyway(ctx context.Context, q db.DBTX, id uuid.UUID, by Requester) (bool, error) {
 	inv, err := db.New(q).RestartTriagedInvestigation(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -611,7 +621,11 @@ func InvestigateAnyway(ctx context.Context, q db.DBTX, id uuid.UUID, by Requeste
 		Payload:   payload,
 		UniqueKey: UniqueKey(inv.GroupID),
 	})
-	if err != nil && !errors.Is(err, queue.ErrDuplicate) {
+	if errors.Is(err, queue.ErrDuplicate) {
+		return false, fmt.Errorf("investigation %s: %w", id, ErrBusy)
+	}
+
+	if err != nil {
 		return false, fmt.Errorf("enqueue the investigate job of investigation %s: %w", id, err)
 	}
 

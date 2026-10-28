@@ -48,6 +48,7 @@ const (
 	noteEnded      = "This investigation has ended already, or someone stopped it."
 	noteAnyway     = "Starting a full investigation. The message shows its progress once it starts."
 	noteNotTriaged = "This investigation is not a triage-only result, or its full investigation has started already."
+	noteBusy       = "The last run of this investigation is still finishing. Try again in a moment."
 	noteFailed     = "Sidekick could not record that click. Try again in a moment."
 )
 
@@ -335,6 +336,12 @@ func (b *Buttons) investigateAnyway(ctx context.Context, log *slog.Logger, id uu
 
 		return nil
 	})
+	if errors.Is(err, investigator.ErrBusy) {
+		log.InfoContext(ctx, "full investigation not started: the last run is still finishing")
+
+		return noteBusy, nil
+	}
+
 	if err != nil {
 		return "", fmt.Errorf("investigate anyway: %w", err)
 	}

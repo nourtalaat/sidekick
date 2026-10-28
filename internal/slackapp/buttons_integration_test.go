@@ -49,6 +49,12 @@ var (
 	triagedInvestigation = uuid.MustParse("0192d3a4-0000-7000-8000-0000000000c3")
 )
 
+// heldTriageKey adds the job that ran the triage of the triaged
+// investigation, still running, as it is for a moment after the run ends.
+const heldTriageKey = `INSERT INTO jobs (kind, route, payload, unique_key, status)
+VALUES ('investigate', 'default', '{"investigation_id": "0192d3a4-0000-7000-8000-0000000000c3"}',
+        'investigate:0192d3a4-0000-7000-8000-0000000000b3', 'running')`
+
 // stopWithin is how soon a stopped run must end.
 const stopWithin = 5 * time.Second
 
@@ -72,6 +78,8 @@ func TestInteractivity(t *testing.T) {
 		name string
 		// role is the role every user has; zero means responder.
 		role roles.Role
+		// sql runs first, to set up the database.
+		sql string
 		// before are clicks sent first; their answers must be 200.
 		before []clickBy
 		send   clickBy
@@ -185,6 +193,22 @@ func TestInteractivity(t *testing.T) {
 			},
 		},
 		{
+			name:       "Investigate anyway while the triage job is still finishing",
+			sql:        heldTriageKey,
+			send:       clickBy{user: "U01BEN", action: slackout.ActionInvestigateAnyway, id: triagedInvestigation},
+			wantStatus: http.StatusOK,
+			wantNotes:  []string{noteBusy},
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				inv := b.investigation(t, triagedInvestigation)
+				require.Equal(t, investigator.StatusFinal, inv.Status, "the reset is rolled back")
+				require.EqualValues(t, 1, inv.Run)
+				require.Equal(t, "duplicate", *inv.ConfirmedVerdict)
+				require.Empty(t, b.auditActions(t, triagedInvestigation))
+			},
+		},
+		{
 			name:       "Investigate anyway on a full investigation",
 			send:       clickBy{user: "U01BEN", action: slackout.ActionInvestigateAnyway, id: finalInvestigation},
 			wantStatus: http.StatusOK,
@@ -248,6 +272,11 @@ func TestInteractivity(t *testing.T) {
 			}
 
 			b := setupButtons(t, role)
+
+			if tt.sql != "" {
+				_, err := b.pool.Exec(t.Context(), tt.sql)
+				require.NoError(t, err)
+			}
 
 			for _, c := range tt.before {
 				require.Equal(t, http.StatusOK, b.click(t, c, false))

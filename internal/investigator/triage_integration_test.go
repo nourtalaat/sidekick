@@ -246,6 +246,37 @@ func TestInvestigateAnywayOnlyAfterTriage(t *testing.T) {
 	}
 }
 
+// TestInvestigateAnywayWhileTheJobFinishes asks for a full investigation
+// while the job that ran the triage still holds the group's investigate
+// key, and checks that nothing changes.
+func TestInvestigateAnywayWhileTheJobFinishes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+	}{
+		{name: "the triage job is not marked done yet"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := setup(t, options{triageTurns: []modeltest.Turn{triageTurn(triageDuplicate)}})
+			require.NoError(t, h.run(t))
+
+			_, err := h.tryAnyway(t)
+			require.ErrorIs(t, err, ErrBusy)
+
+			inv := h.investigation(t)
+			require.Equal(t, StatusFinal, inv.Status, "the reset is rolled back")
+			require.EqualValues(t, 1, inv.Run)
+			require.Equal(t, string(report.Duplicate), *inv.Verdict)
+			require.Empty(t, h.auditRows(t))
+		})
+	}
+}
+
 // goodReportNoCitations is a true positive whose finding cites no call.
 const goodReportNoCitations = `{"verdict": "true_positive", "confidence": "high", "reason": "Latency rose after the deploy.",
 	"summary": "Slow after a deploy.", "cause": "Deploy 4f2c1a", "impact": "Checkouts are slow",
@@ -285,9 +316,20 @@ func (h *harness) complete(t *testing.T, job db.Job) {
 func (h *harness) anyway(t *testing.T) bool {
 	t.Helper()
 
+	started, err := h.tryAnyway(t)
+	require.NoError(t, err)
+
+	return started
+}
+
+// tryAnyway is anyway, returning the error of a transaction that rolled
+// back.
+func (h *harness) tryAnyway(t *testing.T) (bool, error) {
+	t.Helper()
+
 	var started bool
 
-	require.NoError(t, pgx.BeginFunc(t.Context(), h.pool, func(tx pgx.Tx) error {
+	err := pgx.BeginFunc(t.Context(), h.pool, func(tx pgx.Tx) error {
 		var err error
 
 		started, err = InvestigateAnyway(t.Context(), tx, testInvestigation, Requester{SlackUserID: "U01BEN"})
@@ -296,9 +338,12 @@ func (h *harness) anyway(t *testing.T) bool {
 		}
 
 		return nil
-	}))
+	})
+	if err != nil {
+		return false, fmt.Errorf("transaction: %w", err)
+	}
 
-	return started
+	return started, nil
 }
 
 // auditRows returns each audit entry of the test investigation as "actor
