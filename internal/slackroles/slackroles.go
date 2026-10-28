@@ -1,8 +1,10 @@
 // Package slackroles finds the Sidekick role of a Slack user from
-// slack.roleUsers and slack.roleGroups. Group membership is read from
-// Slack with usergroups.users.list and kept in the slack_identities table
-// for a day, so most lookups make no Slack call. A user neither map names
-// is a responder.
+// slack.roleUsers, slack.roleGroups and, with web UI login on, the web UI
+// user whose email the Slack user has. Group membership is read from Slack
+// with usergroups.users.list and the email with users.info, and both are
+// kept in the slack_identities table for a day, so most lookups make no
+// Slack call. The highest of these roles wins; a user none of them gives a
+// role is a responder.
 package slackroles
 
 import (
@@ -16,6 +18,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/slack-go/slack"
@@ -58,19 +61,33 @@ type Options struct {
 	// Logger gets a warning when Slack cannot be reached and stored
 	// groups are used instead. Nil logs nothing.
 	Logger *slog.Logger
+	// MatchEmails matches Slack users to web UI users by email, read
+	// with users.info (the users:read.email scope), so the web UI user's
+	// role applies in Slack too. Set it when web UI login is on.
+	MatchEmails bool
 }
 
 // Lookup finds Slack users' roles. It is safe for concurrent use.
 type Lookup struct {
-	slack   *config.Slack
-	groups  []string
-	secrets registry.Secrets
-	pool    *pgxpool.Pool
-	http    *http.Client
-	apiURL  string
-	maxAge  time.Duration
-	log     *slog.Logger
-	now     func() time.Time
+	slack       *config.Slack
+	groups      []string
+	matchEmails bool
+	secrets     registry.Secrets
+	pool        *pgxpool.Pool
+	http        *http.Client
+	apiURL      string
+	maxAge      time.Duration
+	log         *slog.Logger
+	now         func() time.Time
+}
+
+// found is what one look at Slack and the users table found for a Slack
+// user.
+type found struct {
+	groups   []string
+	email    string
+	userID   *uuid.UUID
+	userRole *string
 }
 
 var _ roles.Lookup = (*Lookup)(nil)
@@ -92,15 +109,16 @@ func New(opts Options) (*Lookup, error) {
 	}
 
 	return &Lookup{
-		slack:   opts.Slack,
-		groups:  slices.Sorted(maps.Keys(opts.Slack.RoleGroups)),
-		secrets: opts.Secrets,
-		pool:    opts.Pool,
-		http:    cmp.Or(opts.HTTP, httpclient.New()),
-		apiURL:  cmp.Or(opts.Slack.APIURL, defaultAPIURL),
-		maxAge:  maxAge,
-		log:     log,
-		now:     time.Now,
+		slack:       opts.Slack,
+		groups:      slices.Sorted(maps.Keys(opts.Slack.RoleGroups)),
+		matchEmails: opts.MatchEmails,
+		secrets:     opts.Secrets,
+		pool:        opts.Pool,
+		http:        cmp.Or(opts.HTTP, httpclient.New()),
+		apiURL:      cmp.Or(opts.Slack.APIURL, defaultAPIURL),
+		maxAge:      maxAge,
+		log:         log,
+		now:         time.Now,
 	}, nil
 }
 
@@ -111,64 +129,133 @@ func (l *Lookup) Role(ctx context.Context, teamID, userID string) (roles.Role, e
 }
 
 // Refresh returns the role of the Slack user like Role, but reads the
-// user's groups from Slack first. Call it when a user is refused for their
-// role, so a user who was just added to a group is not kept waiting a day.
+// user's groups and email from Slack first. Call it when a user is refused
+// for their role, so a user who was just added to a group, or who just
+// signed in to the web UI, is not kept waiting a day.
 func (l *Lookup) Refresh(ctx context.Context, teamID, userID string) (roles.Role, error) {
 	return l.role(ctx, teamID, userID, true)
 }
 
 func (l *Lookup) role(ctx context.Context, teamID, userID string, fresh bool) (roles.Role, error) {
-	if len(l.groups) == 0 {
+	if len(l.groups) == 0 && !l.matchEmails {
 		return RoleOf(l.slack, userID, nil), nil
 	}
 
 	q := db.New(l.pool)
 
-	stored, err := q.GetSlackIdentity(ctx, userID)
+	stored, err := q.GetSlackIdentityWithUser(ctx, userID)
 
-	found := err == nil
+	have := err == nil
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return 0, fmt.Errorf("read the stored groups of %s: %w", userID, err)
+		return 0, fmt.Errorf("read what is stored for %s: %w", userID, err)
 	}
 
-	if found && !fresh && l.now().Sub(stored.RefreshedAt) < l.maxAge {
-		return RoleOf(l.slack, userID, stored.Groups), nil
+	if have && !fresh && l.now().Sub(stored.RefreshedAt) < l.maxAge {
+		return l.roleOf(userID, stored.Groups, stored.UserRole), nil
 	}
 
-	groups, err := l.memberOf(ctx, teamID, userID)
+	f, err := l.lookUp(ctx, q, teamID, userID, stored, have)
 	if err != nil {
-		if !found {
-			return 0, fmt.Errorf("read the user groups of %s: %w", userID, err)
+		if !have {
+			return 0, fmt.Errorf("look up %s in Slack: %w", userID, err)
 		}
 
 		l.log.WarnContext(ctx, "could not read a Slack user's groups; using the ones stored before", "user", userID, "error", err)
 
-		return RoleOf(l.slack, userID, stored.Groups), nil
+		return l.roleOf(userID, stored.Groups, stored.UserRole), nil
 	}
 
-	role := RoleOf(l.slack, userID, groups)
+	role := l.roleOf(userID, f.groups, f.userRole)
 	name := string(config.RoleNameOf(role))
 
 	err = q.SaveSlackIdentity(ctx, db.SaveSlackIdentityParams{
-		SlackUserID: userID, TeamID: optional(teamID), Groups: groups, Role: &name, RefreshedAt: l.now(),
+		SlackUserID: userID, TeamID: optional(teamID), Email: optional(f.email), UserID: f.userID,
+		Groups: f.groups, Role: &name, RefreshedAt: l.now(),
 	})
 	if err != nil {
-		return 0, fmt.Errorf("store the groups of %s: %w", userID, err)
+		return 0, fmt.Errorf("store what was found for %s: %w", userID, err)
 	}
 
 	return role, nil
 }
 
-// memberOf returns the slack.roleGroups user groups that userID is in, in
-// order, never nil.
-func (l *Lookup) memberOf(ctx context.Context, teamID, userID string) ([]string, error) {
+// lookUp reads the user's groups and, when emails are matched, their email
+// from Slack, and finds the web UI user with that email. When Slack does
+// not give the email, for example because the app lacks the
+// users:read.email scope, the email stored before is used.
+func (l *Lookup) lookUp(ctx context.Context, q *db.Queries, teamID, userID string, stored db.GetSlackIdentityWithUserRow, have bool) (found, error) {
 	token, err := secrets.ResolveText(ctx, l.secrets, l.slack.BotTokenSecret)
 	if err != nil {
-		return nil, fmt.Errorf("resolve the bot token: %w", err)
+		return found{}, fmt.Errorf("resolve the bot token: %w", err)
 	}
 
 	api := slack.New(token, slack.OptionAPIURL(l.apiURL), slack.OptionHTTPClient(l.http))
 
+	groups, err := l.memberOf(ctx, api, teamID, userID)
+	if err != nil {
+		return found{}, fmt.Errorf("read the user groups: %w", err)
+	}
+
+	f := found{groups: groups}
+	if !l.matchEmails {
+		return f, nil
+	}
+
+	f.email = l.emailOf(ctx, api, userID)
+	if f.email == "" && have && stored.Email != nil {
+		f.email = *stored.Email
+	}
+
+	if f.email == "" {
+		return f, nil
+	}
+
+	user, err := q.FindUserByEmail(ctx, f.email)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return f, nil
+	}
+
+	if err != nil {
+		return found{}, fmt.Errorf("find the web UI user of %s: %w", userID, err)
+	}
+
+	f.userID, f.userRole = &user.ID, &user.Role
+
+	return f, nil
+}
+
+// emailOf returns the email Slack has for userID, or "" when Slack does not
+// give one.
+func (l *Lookup) emailOf(ctx context.Context, api *slack.Client, userID string) string {
+	user, err := api.GetUserInfoContext(ctx, userID)
+	if err != nil {
+		l.log.WarnContext(ctx, "could not read a Slack user's email; check that the app has the users:read.email scope", "user", userID, "error", err)
+
+		return ""
+	}
+
+	return user.Profile.Email
+}
+
+// roleOf returns the highest of the roles the config maps give userID in
+// groups and userRole, the role of the matched web UI user, or
+// UnmatchedRole when none gives a role.
+func (l *Lookup) roleOf(userID string, groups []string, userRole *string) roles.Role {
+	role := mappedRole(l.slack, userID, groups)
+	if userRole != nil {
+		role = max(role, config.RoleName(*userRole).Role())
+	}
+
+	if role == 0 {
+		return UnmatchedRole
+	}
+
+	return role
+}
+
+// memberOf returns the slack.roleGroups user groups that userID is in, in
+// order, never nil.
+func (l *Lookup) memberOf(ctx context.Context, api *slack.Client, teamID, userID string) ([]string, error) {
 	var opts []slack.GetUserGroupMembersOption
 	if teamID != "" {
 		opts = append(opts, slack.GetUserGroupMembersOptionTeamID(teamID))
@@ -194,14 +281,20 @@ func (l *Lookup) memberOf(ctx context.Context, teamID, userID string) ([]string,
 // role slack.roleUsers gives the user and those slack.roleGroups gives the
 // groups, or UnmatchedRole when neither names the user.
 func RoleOf(s *config.Slack, userID string, groups []string) roles.Role {
+	if role := mappedRole(s, userID, groups); role != 0 {
+		return role
+	}
+
+	return UnmatchedRole
+}
+
+// mappedRole returns the highest role slack.roleUsers and slack.roleGroups
+// give userID in groups, or 0 when neither does.
+func mappedRole(s *config.Slack, userID string, groups []string) roles.Role {
 	role := s.RoleUsers[userID].Role()
 
 	for _, g := range groups {
 		role = max(role, s.RoleGroups[g].Role())
-	}
-
-	if role == 0 {
-		return UnmatchedRole
 	}
 
 	return role

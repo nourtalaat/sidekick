@@ -128,7 +128,7 @@ func TestLookup(t *testing.T) {
 }
 
 // TestQueryPlans runs EXPLAIN ANALYZE on the slack_identities queries over
-// 5,000 users.
+// 5,000 Slack users matched to 5,000 web UI users.
 func TestQueryPlans(t *testing.T) {
 	t.Parallel()
 
@@ -150,6 +150,24 @@ func TestQueryPlans(t *testing.T) {
 				return fmt.Errorf("run query: %w", err)
 			},
 			wantIndex: "slack_identities_pkey",
+		},
+		{
+			name: "GetSlackIdentityWithUser",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.GetSlackIdentityWithUser(ctx, "U2500")
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "slack_identities_pkey",
+		},
+		{
+			name: "FindUserByEmail",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.FindUserByEmail(ctx, "User2500@example.com")
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "users_email",
 		},
 		{
 			name: "SaveSlackIdentity",
