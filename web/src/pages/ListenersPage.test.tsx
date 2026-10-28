@@ -45,7 +45,7 @@ describe("the listeners page", () => {
     renderApp({ me: RESPONDER, route: "/listeners", handler });
 
     expect(await screen.findByRole("link", { name: /Add a listener/ })).toHaveAttribute("href", "/listeners/new");
-    expect(screen.getByRole("heading", { name: "No listeners yet" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "No listeners yet" })).toBeInTheDocument();
   });
 
   it("asks before it deletes, and deletes with the CSRF token", async () => {
