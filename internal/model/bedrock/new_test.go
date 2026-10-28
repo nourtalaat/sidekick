@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
 
+	"github.com/nourtalaat/sidekick/internal/awsauth"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/registry"
 )
@@ -22,7 +23,7 @@ func TestNew(t *testing.T) {
 	tests := []struct {
 		name    string
 		cfg     Config
-		load    awsConfigLoader
+		load    awsauth.Loader
 		wantErr error
 	}{
 		{
@@ -50,7 +51,7 @@ func TestNew(t *testing.T) {
 			load: func(context.Context, ...func(*config.LoadOptions) error) (aws.Config, error) {
 				return aws.Config{Region: testRegion}, nil
 			},
-			wantErr: errNoCredentials,
+			wantErr: awsauth.ErrNoCredentials,
 		},
 	}
 
