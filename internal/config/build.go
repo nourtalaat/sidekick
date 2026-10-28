@@ -27,6 +27,12 @@ type Instances struct {
 	// as its model ID, from configs that embed model.Settings; other
 	// connectors have the zero value.
 	ModelSettings map[string]model.Settings
+	// Embedder is the memory.vector.embeddings connector, built when
+	// memory.vector.enabled is true, and nil otherwise.
+	Embedder model.Embedder
+	// EmbedderSettings are the shared settings of Embedder, such as its
+	// model ID and retries.
+	EmbedderSettings model.Settings
 }
 
 // Build builds every configured plugin instance through the registries,
@@ -75,6 +81,10 @@ func Build(ctx context.Context, cfg *Config, regs Registries, deps registry.Deps
 	in.SourceSettings = sharedSettings(ctx, regs.Sources, cfg.Sources, in.Sources, source.Configured.SourceSettings, &errs)
 	in.ModelSettings = sharedSettings(ctx, regs.Models, connectors, in.Models, model.Configured.ModelSettings, &errs)
 
+	if cfg.Memory.Vector.Enabled {
+		in.Embedder, in.EmbedderSettings = buildEmbedder(ctx, regs.Models, cfg.Memory.Vector.Embeddings, deps, &errs)
+	}
+
 	checkBuiltRoles(&errs, "model.roles", cfg.Model.Roles, in.Models)
 
 	for i, r := range cfg.Routes {
@@ -92,7 +102,30 @@ func Build(ctx context.Context, cfg *Config, regs Registries, deps registry.Deps
 	return in, nil
 }
 
-// Close closes the sources, the only instances that hold connections or
+// buildEmbedder builds the embeddings connector of vector memory from its
+// section, and returns it with its shared settings. A provider whose
+// connector cannot embed is an error at the section's path.
+func buildEmbedder(ctx context.Context, reg *registry.Registry[model.Connector], s Connector, deps registry.Deps, errs *errorList) (model.Embedder, model.Settings) {
+	connector, err := reg.Build(ctx, s.Type, EmbeddingsName, s.Section, deps)
+	if err != nil {
+		errs.addAll(pluginErrors(s.Path(), err))
+
+		return nil, model.Settings{}
+	}
+
+	embedder, ok := connector.(model.Embedder)
+	if !ok {
+		errs.add(s.Path(), "the %s provider cannot embed text", s.Type)
+
+		return nil, model.Settings{}
+	}
+
+	settings := sharedSettings(ctx, reg, map[string]Section{EmbeddingsName: s.Section}, map[string]model.Connector{EmbeddingsName: connector}, model.Configured.ModelSettings, errs)
+
+	return embedder, settings[EmbeddingsName]
+}
+
+// Close closes thesources, the only instances that hold connections or
 // child processes.
 func (in *Instances) Close() error {
 	var errs []error

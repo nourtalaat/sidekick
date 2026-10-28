@@ -76,6 +76,32 @@ type fakeLazyModelConfig struct {
 	FailBuild   bool `yaml:"failBuild"`
 }
 
+// fakeEmbeddingConfig is the config of the fake provider that embeds text.
+type fakeEmbeddingConfig struct {
+	model.Settings `yaml:",inline"`
+
+	APIKeySecret *registry.SecretRef `yaml:"apiKeySecret"`
+	Dimensions   int                 `yaml:"dimensions"`
+}
+
+// Embedding implements model.EmbeddingConfigured.
+func (c *fakeEmbeddingConfig) Embedding() (dimensions int, ok bool) {
+	return c.Dimensions, true
+}
+
+// fakeEmbedder is the connector built from a fakeEmbeddingConfig.
+type fakeEmbedder struct {
+	fakeConnector
+
+	dimensions int
+}
+
+func (f fakeEmbedder) Embed(context.Context, []string) (model.EmbedResult, error) {
+	return model.EmbedResult{}, errors.New("fake embedder")
+}
+
+func (f fakeEmbedder) Dimensions() int { return f.dimensions }
+
 type fakeConnector struct {
 	caps model.Capabilities
 }
@@ -152,6 +178,10 @@ func testRegistries() Registries {
 	for _, provider := range []string{"anthropic", "bedrock", "openai"} {
 		regs.Models.Register(provider, declared)
 	}
+
+	regs.Models.Register("voyage", registry.Typed(func(_ context.Context, _ string, cfg fakeEmbeddingConfig, _ registry.Deps) (model.Connector, error) {
+		return fakeEmbedder{dimensions: cfg.Dimensions}, nil
+	}))
 
 	regs.Models.Register("lazy", registry.Typed(func(_ context.Context, _ string, cfg fakeLazyModelConfig, _ registry.Deps) (model.Connector, error) {
 		if cfg.FailBuild {

@@ -189,6 +189,14 @@ func (v *validator) checkConnectors() {
 			continue
 		}
 
+		if e, ok := decoded.(model.EmbeddingConfigured); ok {
+			if dims, embedding := e.Embedding(); embedding {
+				v.rejectEmbeddingConnector(c.Path(), dims)
+
+				continue
+			}
+		}
+
 		declarer, ok := decoded.(model.CapabilityDeclarer)
 		if !ok {
 			continue
@@ -583,6 +591,60 @@ func (v *validator) checkMemory() {
 	if n := v.cfg.Memory.Examples; n < 1 || n > memory.MaxExamples {
 		v.errs.add("memory.examples", "must be between 1 and %d, got %d; set memory.enabled to false for none", memory.MaxExamples, n)
 	}
+
+	if v.cfg.Memory.Vector.Enabled {
+		v.checkVector()
+	}
+}
+
+// checkVector checks the embeddings connector of vector memory: a provider
+// that can embed, configured with an embedding model, and dimensions that
+// pgvector can index.
+func (v *validator) checkVector() {
+	section := v.cfg.Memory.Vector.Embeddings
+	path := "memory.vector.embeddings"
+
+	if section.Type == "" {
+		v.errs.add(joinPath(path, providerKey), "required when memory.vector.enabled is true")
+
+		return
+	}
+
+	decoded, ok := checkPlugin(v, v.regs.Models, "model provider", providerKey, EmbeddingsName, section.Section)
+	if !ok {
+		return
+	}
+
+	e, ok := decoded.(model.EmbeddingConfigured)
+	if !ok {
+		v.errs.add(joinPath(path, providerKey), "the %s provider cannot embed text; use openai, bedrock or voyage", section.Type)
+
+		return
+	}
+
+	dims, embedding := e.Embedding()
+	if !embedding {
+		v.errs.add(path, "the model is not an embedding model; set dimensions and name an embedding model")
+
+		return
+	}
+
+	if dims > memory.MaxEmbeddingDimensions {
+		v.errs.add(joinPath(path, "dimensions"), "must be at most %d, the most pgvector's HNSW index holds; use a model that returns shorter vectors, or ask it for fewer dimensions", memory.MaxEmbeddingDimensions)
+	}
+}
+
+// rejectEmbeddingConnector records that a connector under model.connectors
+// is an embedding connector, which only memory.vector.embeddings takes, so
+// a generation connector never carries an embedding setting.
+func (v *validator) rejectEmbeddingConnector(path string, dims int) {
+	if dims != 0 {
+		v.errs.add(joinPath(path, "dimensions"), "valid only in memory.vector.embeddings, not in model.connectors")
+
+		return
+	}
+
+	v.errs.add(path, "this connector embeds text, which only memory.vector.embeddings can use, not model.connectors")
 }
 
 func (v *validator) checkRedaction() {

@@ -29,6 +29,10 @@ const DefaultExamples = 3
 // MaxExamples is the most examples a prompt may show.
 const MaxExamples = 10
 
+// MaxEmbeddingDimensions is the longest vector vector memory takes: the
+// most dimensions pgvector's HNSW index holds for the vector type.
+const MaxEmbeddingDimensions = 2000
+
 // maxMatchText is the most bytes of an event's text the full-text tier
 // matches with, so a long alert body does not make a huge query.
 const maxMatchText = 2000
