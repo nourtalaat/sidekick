@@ -1,0 +1,8 @@
+-- Vi is a viewer with a live session (ID: 32 bytes of 0x01) and an
+-- expired one (32 bytes of 0x02).
+INSERT INTO users (id, oidc_issuer, oidc_subject, email, name, groups, role, created_at, last_login_at) VALUES
+  ('01920000-0000-7000-8000-000000000030', 'https://idp.example.com', 'vi', 'vi@example.com', 'Vi', '{everyone}', 'viewer', now(), now());
+
+INSERT INTO sessions (id_hash, user_id, csrf_token, created_at, expires_at) VALUES
+  (sha256(decode(repeat('01', 32), 'hex')), '01920000-0000-7000-8000-000000000030', 'csrf-vi', now(), now() + interval '1 hour'),
+  (sha256(decode(repeat('02', 32), 'hex')), '01920000-0000-7000-8000-000000000030', 'csrf-vi-old', now() - interval '13 hours', now() - interval '1 hour');

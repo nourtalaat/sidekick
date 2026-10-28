@@ -27,6 +27,7 @@ Sidekick receives alerts from webhooks or Slack, investigates them with the LLM 
 - [How investigations run](docs/investigations.md): the agent loop, the report checks, how an investigation ends, its limits, and what happens on a restart.
 - [Investigations in Slack](docs/slack.md): how to set up the Slack app from its manifest, how listeners, mentions and the `/sidekick` command start investigations, and what the Slack output posts while an investigation runs and when it finishes.
 - [Investigations in Microsoft Teams](docs/teams.md): how to set up the Teams bot, the Teams app manifest and the public messaging endpoint, how Teams listeners and mentions start investigations, and what is not known yet.
+- [Web UI and API](docs/web-ui.md): OIDC login, roles from groups, sessions and CSRF tokens, and the JSON API under `/api/v1`.
 - [Results on tickets](docs/tickets.md): the Linear and Jira comment outputs, how it finds the ticket an alert is about, and how to set it up.
 - [Webhook callbacks](docs/webhook-callbacks.md): the signed JSON callback with each final result and watcher event, and how a receiver checks it.
 - [The monitor validator](docs/validator.md): the image that checks monitor files before a pull request, its formats, sidecar and Job modes, and network isolation.

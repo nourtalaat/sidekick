@@ -26,7 +26,8 @@ func newServeCmd(regs config.Registries, info buildinfo.Info) *cobra.Command {
 		Short: "Run Sidekick until it receives SIGTERM or SIGINT",
 		Long: `Run Sidekick. It loads the config file and checks every secret it
 references, migrates the database unless database.migrations is manual,
-then serves webhooks at /hooks/<name> on server.listen, and /metrics,
+then serves webhooks at /hooks/<name> on server.listen, with the oidc
+section the web UI login at /auth and the JSON API at /api/v1, and /metrics,
 /healthz and /readyz on server.metricsListen. With the Slack app's app
 token it receives Slack messages over Socket Mode, or at /slack/events
 with slack.mode events. With a teams section it receives the Teams bot's
@@ -79,6 +80,10 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 	}
 
 	if err := registerWebhooks(a); err != nil {
+		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
+	}
+
+	if err := registerAPI(ctx, a); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
