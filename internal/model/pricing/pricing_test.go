@@ -2,6 +2,7 @@ package pricing
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -143,6 +144,154 @@ func TestTableCost(t *testing.T) {
 			got, ok := New(tt.overrides).Cost(tt.model, tt.usage)
 			require.Equal(t, tt.wantOK, ok)
 			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestTableLookupAt(t *testing.T) {
+	t.Parallel()
+
+	before := perMTok(2, 10, 0.10, 2)
+	after := perMTok(4, 20, 0.20, 4)
+	override := perMTok(3, 15, 0.30, 3)
+
+	start := time.Date(2026, time.December, 1, 0, 0, 0, 0, time.UTC)
+	table := Table{prices: map[string][]period{
+		"dated": {{price: before}, {from: start, price: after}},
+		"plain": {{price: before}},
+		"two":   {{price: before}, {from: start, price: after}, {from: start.AddDate(0, 1, 0), price: override}},
+	}}
+
+	tests := []struct {
+		name   string
+		model  string
+		at     time.Time
+		want   model.Price
+		wantOK bool
+	}{
+		{name: "long before the start date", model: "dated", at: start.AddDate(-1, 0, 0), want: before, wantOK: true},
+		{name: "the last nanosecond before the start date", model: "dated", at: start.Add(-time.Nanosecond), want: before, wantOK: true},
+		{name: "on the start date", model: "dated", at: start, want: after, wantOK: true},
+		{name: "after the start date", model: "dated", at: start.AddDate(1, 0, 0), want: after, wantOK: true},
+		{name: "a later time zone before the start date in UTC", model: "dated", at: start.In(time.FixedZone("UTC+2", 2*60*60)).Add(-time.Hour), want: before, wantOK: true},
+		{name: "a price with no start date", model: "plain", at: start.AddDate(5, 0, 0), want: before, wantOK: true},
+		{name: "between two start dates", model: "two", at: start.AddDate(0, 0, 10), want: after, wantOK: true},
+		{name: "after the second start date", model: "two", at: start.AddDate(0, 1, 0), want: override, wantOK: true},
+		{name: "unknown model", model: "unknown", at: start},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, ok := table.LookupAt(tt.model, tt.at)
+			require.Equal(t, tt.wantOK, ok)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestTableCostAtAndNow(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, time.December, 1, 0, 0, 0, 0, time.UTC)
+	usage := model.Usage{InputTokens: 1_000_000, OutputTokens: 1_000_000}
+	table := Table{prices: map[string][]period{
+		"dated": {{price: perMTok(2, 10, 0.10, 2)}, {from: start, price: perMTok(4, 20, 0.20, 4)}},
+		"past":  {{price: perMTok(1, 2, 0.1, 1)}, {from: time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC), price: perMTok(3, 6, 0.3, 3)}},
+		"later": {{price: perMTok(1, 2, 0.1, 1)}, {from: time.Now().AddDate(1, 0, 0), price: perMTok(3, 6, 0.3, 3)}},
+	}}
+
+	got, ok := table.CostAt("dated", usage, start.Add(-time.Second))
+	require.True(t, ok)
+	require.EqualValues(t, 12*usd, got)
+
+	got, ok = table.CostAt("dated", usage, start)
+	require.True(t, ok)
+	require.EqualValues(t, 24*usd, got)
+
+	_, ok = table.CostAt("unknown", usage, start)
+	require.False(t, ok)
+
+	got, ok = table.Cost("past", usage)
+	require.True(t, ok)
+	require.EqualValues(t, 9*usd, got, "Cost uses the price that applies now")
+
+	p, ok := table.Lookup("later")
+	require.True(t, ok)
+	require.Equal(t, perMTok(1, 2, 0.1, 1), p, "Lookup ignores a price that starts later")
+}
+
+func TestBuild(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, time.December, 1, 0, 0, 0, 0, time.UTC)
+	today := perMTok(2, 10, 0.10, 2)
+	rise := perMTok(4, 20, 0.20, 4)
+	override := perMTok(1, 2, 0.1, 1)
+
+	base := map[string]model.Price{"dated": today, "plain": today}
+	changes := map[string][]period{"dated": {{from: start, price: rise}}}
+
+	tests := []struct {
+		name      string
+		overrides map[string]model.Price
+		model     string
+		at        time.Time
+		want      model.Price
+		wantOK    bool
+	}{
+		{name: "the shipped price before the start date", model: "dated", at: start.Add(-time.Second), want: today, wantOK: true},
+		{name: "the shipped price on the start date", model: "dated", at: start, want: rise, wantOK: true},
+		{name: "the shipped price after the start date", model: "dated", at: start.AddDate(1, 0, 0), want: rise, wantOK: true},
+		{name: "a model with no change", model: "plain", at: start.AddDate(1, 0, 0), want: today, wantOK: true},
+		{
+			name: "an override replaces the price before the start date", overrides: map[string]model.Price{"dated": override},
+			model: "dated", at: start.Add(-time.Second), want: override, wantOK: true,
+		},
+		{
+			name: "an override replaces the price on the start date", overrides: map[string]model.Price{"dated": override},
+			model: "dated", at: start, want: override, wantOK: true,
+		},
+		{
+			name: "an override replaces the price after the start date", overrides: map[string]model.Price{"dated": override},
+			model: "dated", at: start.AddDate(1, 0, 0), want: override, wantOK: true,
+		},
+		{
+			name: "an override adds a model", overrides: map[string]model.Price{"added": override},
+			model: "added", at: start, want: override, wantOK: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, ok := build(base, changes, tt.overrides).LookupAt(tt.model, tt.at)
+			require.Equal(t, tt.wantOK, ok)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestShippedChangesAreSane(t *testing.T) {
+	t.Parallel()
+
+	for id, changes := range shippedChanges {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+
+			_, ok := shipped[id]
+			require.True(t, ok, "a change needs a shipped price to follow")
+
+			previous := time.Time{}
+			for _, c := range changes {
+				require.True(t, c.from.After(previous), "changes are sorted by date, none on the zero time")
+				require.Equal(t, time.UTC, c.from.Location())
+				requireSane(t, c.price)
+
+				previous = c.from
+			}
 		})
 	}
 }
