@@ -53,6 +53,16 @@
                 "emoji": true
               },
               "value": "0192d3a4-0000-7000-8000-0000000000aa"
+            },
+            {
+              "type": "button",
+              "action_id": "feedback_details",
+              "text": {
+                "type": "plain_text",
+                "text": "Details",
+                "emoji": true
+              },
+              "value": "0192d3a4-0000-7000-8000-0000000000aa"
             }
           ]
         }

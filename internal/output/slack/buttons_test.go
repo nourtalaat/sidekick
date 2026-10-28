@@ -56,13 +56,13 @@ func TestButtons(t *testing.T) {
 
 				return u
 			},
-			actions: []string{ActionVerdictCorrect, ActionVerdictWrong},
+			actions: []string{ActionVerdictCorrect, ActionVerdictWrong, ActionFeedbackDetails},
 			context: ":thumbsup: Marked correct by <@U01ANA>, <@W01BEN> · :thumbsdown: Marked wrong by <@U01CY>",
 		},
 		{
 			name:    "triage only",
 			update:  func() output.Update { return testUpdate(output.PhaseFinal, triageOnly()) },
-			actions: []string{ActionVerdictCorrect, ActionVerdictWrong, ActionInvestigateAnyway},
+			actions: []string{ActionVerdictCorrect, ActionVerdictWrong, ActionFeedbackDetails, ActionInvestigateAnyway},
 			context: "Triage only · No full investigation ran",
 		},
 		{
