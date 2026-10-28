@@ -18,6 +18,7 @@ func registerPublisher(a *app.App) error {
 		Logger:         a.Logger().With("component", "publish"),
 		TracerProvider: a.Telemetry().TracerProvider(),
 		Watchers:       watch.States,
+		PublicURL:      a.Config().Server.PublicURL,
 	})
 
 	if err := a.RegisterJob(queue.KindPublish, h, queue.KindOptions{Concurrency: publish.Concurrency}); err != nil {

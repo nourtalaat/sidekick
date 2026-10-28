@@ -1,0 +1,68 @@
+{
+  "text": "Looking into it: checkout-api p99 latency above 2s",
+  "attachments": [
+    {
+      "color": "#FF8848",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*Looking into it* checkout-api p99 latency above 2s",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "Received <!date^1793023320^{time}|14:02 UTC> · Updates as the investigation runs · <https://sidekick.example.com/investigations/0192d3a4-0000-7000-8000-0000000000aa|Open in Sidekick>",
+              "verbatim": true
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "block_id": "run",
+          "elements": [
+            {
+              "type": "button",
+              "action_id": "stop_investigation",
+              "text": {
+                "type": "plain_text",
+                "text": "Stop",
+                "emoji": true
+              },
+              "value": "0192d3a4-0000-7000-8000-0000000000aa",
+              "style": "danger",
+              "confirm": {
+                "title": {
+                  "type": "plain_text",
+                  "text": "Stop the investigation?",
+                  "emoji": true
+                },
+                "text": {
+                  "type": "plain_text",
+                  "text": "Sidekick stops now and reports what it found so far.",
+                  "emoji": true
+                },
+                "confirm": {
+                  "type": "plain_text",
+                  "text": "Stop",
+                  "emoji": true
+                },
+                "deny": {
+                  "type": "plain_text",
+                  "text": "Keep going",
+                  "emoji": true
+                },
+                "style": "danger"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

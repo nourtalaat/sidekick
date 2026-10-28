@@ -21,6 +21,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/weblink"
 )
 
 // SpanName is the name of the span of one publish job.
@@ -56,16 +57,20 @@ type Options struct {
 	// Watchers returns the state of every watcher of a group, for the live
 	// display in every update. Nil shows no watchers.
 	Watchers func(ctx context.Context, q db.DBTX, groupID uuid.UUID) ([]output.WatcherState, error)
+	// PublicURL is server.publicURL. With it, each update has the address of
+	// the investigation page in Update.URL. Empty leaves the URL out.
+	PublicURL string
 }
 
 // Handler runs publish jobs. Make it with New and register it for
 // queue.KindPublish.
 type Handler struct {
-	pool     *pgxpool.Pool
-	sinks    map[string]output.Sink
-	log      *slog.Logger
-	tracer   trace.Tracer
-	watchers func(ctx context.Context, q db.DBTX, groupID uuid.UUID) ([]output.WatcherState, error)
+	pool      *pgxpool.Pool
+	sinks     map[string]output.Sink
+	log       *slog.Logger
+	tracer    trace.Tracer
+	watchers  func(ctx context.Context, q db.DBTX, groupID uuid.UUID) ([]output.WatcherState, error)
+	publicURL string
 }
 
 var _ queue.Handler = (*Handler)(nil)
@@ -82,7 +87,7 @@ func New(opts Options) *Handler {
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	return &Handler{pool: opts.Pool, sinks: opts.Sinks, log: log, tracer: tp.Tracer(tracerName), watchers: opts.Watchers}
+	return &Handler{pool: opts.Pool, sinks: opts.Sinks, log: log, tracer: tp.Tracer(tracerName), watchers: opts.Watchers, publicURL: opts.PublicURL}
 }
 
 // Handle shows the newest state of one investigation in one sink, inside
@@ -284,6 +289,7 @@ func (h *Handler) update(ctx context.Context, investigationID uuid.UUID, state d
 
 	u := output.Update{
 		InvestigationID: investigationID.String(),
+		URL:             weblink.Investigation(h.publicURL, investigationID.String()),
 		Event:           ev,
 		Events:          int(state.EventCount),
 		Phase:           output.Phase(state.Phase),
