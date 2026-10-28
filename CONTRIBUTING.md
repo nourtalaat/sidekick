@@ -78,6 +78,7 @@ Run `make help` for the full list. The main ones:
 | `make migrate-new name=...` | Creates the next migration file in `internal/store/migrations`. |
 | `make verify-generated` | Runs `make generate` and fails if any file changed. |
 | `make build` | Builds `bin/sidekick` with the version and commit set. |
+| `make workflow-lint` | actionlint on the workflows in `.github/workflows`. |
 | `make vulncheck` | govulncheck on the code and its dependencies. |
 | `make helm-lint` | `helm lint --strict` of the chart, which checks `values.schema.json`, with the quick-start values and each file in `charts/sidekick/ci/`. |
 | `make helm-test` | Compares `helm template` of the quick-start values with `charts/testdata/quickstart.golden.yaml`, and runs `sidekick config validate` on the `sidekick.yaml` each example values file and each case renders. Each `charts/testdata/<template>/<case>.values.yaml` is layered on the quick-start values and must render `templates/<template>.yaml` as `<case>.golden.yaml` (empty when the template renders nothing), or fail with the message in `<case>.error`. |
