@@ -13,6 +13,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/auth"
 	"github.com/nourtalaat/sidekick/internal/config"
+	"github.com/nourtalaat/sidekick/internal/problem"
 	"github.com/nourtalaat/sidekick/internal/roles"
 )
 
@@ -96,7 +97,7 @@ func requireRoles(need map[string]roles.Role) apigen.StrictMiddlewareFunc {
 		return func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 			p, ok := auth.PrincipalFrom(ctx)
 			if !known || !ok || !p.Role.Has(role) {
-				writeProblem(w, r, http.StatusForbidden, fmt.Sprintf("This needs the %s role.", roleName(role)))
+				problem.Write(w, r, http.StatusForbidden, fmt.Sprintf("This needs the %s role.", roleName(role)))
 
 				return nil, nil
 			}

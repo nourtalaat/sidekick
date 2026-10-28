@@ -13,6 +13,7 @@ import (
 	apispec "github.com/nourtalaat/sidekick/api"
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/auth"
+	"github.com/nourtalaat/sidekick/internal/problem"
 )
 
 // BasePath is the path every API operation is under. Mount the handler New
@@ -107,12 +108,12 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *handler) authError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, auth.ErrUnauthenticated):
-		writeProblem(w, r, http.StatusUnauthorized, "Sign in, or send an API token.")
+		problem.Write(w, r, http.StatusUnauthorized, "Sign in, or send an API token.")
 	case errors.Is(err, auth.ErrCSRF):
-		writeProblem(w, r, http.StatusForbidden, "Send the session's CSRF token in the X-CSRF-Token header.")
+		problem.Write(w, r, http.StatusForbidden, "Send the session's CSRF token in the X-CSRF-Token header.")
 	default:
 		h.log.ErrorContext(r.Context(), "could not authenticate an API request", "path", r.URL.Path, "error", err)
-		writeProblem(w, r, http.StatusInternalServerError, internalDetail)
+		problem.Write(w, r, http.StatusInternalServerError, problem.InternalDetail)
 	}
 }
 
@@ -125,10 +126,10 @@ func (h *handler) unrouted(w http.ResponseWriter, r *http.Request, route http.Ha
 
 	switch probe.status {
 	case http.StatusNotFound:
-		writeProblem(w, r, http.StatusNotFound, "No API operation has this path.")
+		problem.Write(w, r, http.StatusNotFound, "No API operation has this path.")
 	case http.StatusMethodNotAllowed:
 		w.Header().Set("Allow", probe.header.Get("Allow"))
-		writeProblem(w, r, http.StatusMethodNotAllowed, "This path does not take this method.")
+		problem.Write(w, r, http.StatusMethodNotAllowed, "This path does not take this method.")
 	default:
 		route.ServeHTTP(w, r)
 	}
