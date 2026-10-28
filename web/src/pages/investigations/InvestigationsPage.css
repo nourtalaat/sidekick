@@ -1,0 +1,12 @@
+.sk-compact {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sk-space-2);
+  align-self: flex-start;
+  min-height: var(--sk-size-target-min);
+}
+
+.sk-more {
+  display: flex;
+  justify-content: center;
+}
