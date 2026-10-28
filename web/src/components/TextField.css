@@ -27,6 +27,15 @@
   border-color: var(--sk-status-danger-border);
 }
 
+.sk-field__input--area {
+  padding: var(--sk-space-2) var(--sk-space-3);
+  resize: vertical;
+}
+
+.sk-field__input--mono {
+  font: var(--sk-type-mono);
+}
+
 .sk-field__help {
   margin: 0;
   color: var(--sk-text-secondary);
