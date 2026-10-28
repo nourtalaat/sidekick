@@ -251,6 +251,55 @@ server whether it is Ollama, so it can print the line to add.
 
 Local models have no price, so they count as free in the budgets.
 
+#### The `azure` provider
+
+The `azure` provider calls model deployments on Azure OpenAI and Microsoft
+Foundry, through their v1 API, which takes OpenAI's request shapes and
+needs no `api-version`.
+
+```yaml
+gpt-on-azure:
+  provider: azure
+  model: gpt-6.1-sol                       # required: the model the deployment runs
+  endpoint: https://my-resource.openai.azure.com   # required; or https://my-resource.services.ai.azure.com
+  deployment: prod-gpt                     # the deployment name; default: the same as model
+  auth: entra                              # entra, or apiKey (the default) with apiKeySecret
+  effort: high                             # the model's own levels, as for the openai provider
+  maxTokens: 32000                         # default: the model's own limit
+  timeout: 10m                             # per call, default 10m
+  retries: 3                               # retries of rate limits, overloads and timeouts
+
+gpt-with-a-key:
+  provider: azure
+  model: gpt-5.4
+  endpoint: https://my-resource.openai.azure.com
+  apiKeySecret: { name: sidekick-azure, key: apiKey }
+```
+
+- **Endpoint** is the resource address, as the Azure portal shows it. It
+  must use https, except to localhost; leave out paths such as
+  `/openai/deployments/...` and the `api-version` query of older SDKs.
+- **Credentials.** With `auth: entra`, Sidekick gets Microsoft Entra ID
+  tokens from the default Azure credential chain: AKS Workload Identity in
+  the cluster (see [Cloud credentials](install.md#cloud-credentials)), a
+  managed identity, the `AZURE_*` environment variables, or the Azure CLI
+  for local runs. The identity needs the Cognitive Services OpenAI User
+  role on the resource. Otherwise the key in `apiKeySecret` is sent in the
+  `api-key` header, read again on every call.
+- **Known models** are the OpenAI models of the `openai` provider, named by
+  their model ID in `model`, whatever the deployment is called. For any
+  other model, add a `capabilities` block like the `openai` one.
+- **API.** The Responses API is the default, as Microsoft recommends for
+  Azure OpenAI models; set `api: chat_completions` to use Chat Completions.
+  Reasoning is kept by Sidekick, as for the `openai` provider, and is not
+  shared with OpenAI's own API.
+- **Thinking** is not accepted; use `effort`.
+- **Errors.** A prompt that Azure's content filter blocks, and a
+  deployment that does not exist, fail the step without retries.
+- **Prices.** The shipped OpenAI prices apply, by `model`. They are the
+  prices of Global Standard deployments; Data Zone and Regional
+  deployments cost 10% more, so set them with `prices`.
+
 #### The `bedrock` provider
 
 The `bedrock` provider calls models on Amazon Bedrock through the Converse

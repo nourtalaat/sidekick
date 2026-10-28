@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "PermissionDenied",
+    "message": "The principal `5f3c1e2a-0000-4b8e-9d7a-2c6f1a0b9e11` lacks the required data action `Microsoft.CognitiveServices/accounts/OpenAI/responses/write` to perform `POST /openai/v1/responses` operation."
+  }
+}

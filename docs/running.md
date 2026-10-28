@@ -151,6 +151,7 @@ process (`process_*`) metrics, this release has:
 | `sidekick_tool_call_duration_seconds` | histogram | `source` | Duration of source tool calls. |
 | `sidekick_source_up` | gauge | `source` | 1 when a source is connected and its circuit breaker is closed, 0 otherwise. |
 | `sidekick_guard_keys_full_total` | counter | none | Guarded calls that are not source tool calls, such as watcher HTTP checks, refused because the guard already held limits for 1024 targets, all in use. |
+| `sidekick_feedback_total` | counter | `target`, `rating` | Ratings that responders stored, by target, such as `verdict`, and rating: `correct` or `wrong`. A repeated click is not counted. See [Investigations in Slack](slack.md#buttons). |
 | `sidekick_watcher_checks_total` | counter | `type`, `result` | [Watcher](configuration.md#watch) checks by type (`http`, `tool` or `alert`) and result (`pass`, `fail` or `error`). |
 | `sidekick_watcher_check_duration_seconds` | histogram | `type` | Duration of watcher checks. |
 | `sidekick_watch_http_blocked_total` | counter | `reason` | Watcher HTTP checks the safety rules refused, by reason: `host`, `private_ip` or `redirect`. |

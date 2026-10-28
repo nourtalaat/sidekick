@@ -25,6 +25,9 @@ const (
 	// refused the request, or its job became dead. Its report is built from
 	// the saved steps, with stop reason error.
 	StatusFailed = "failed"
+	// StatusCancelled is an investigation a responder stopped. Its report
+	// is built from the saved steps, with stop reason cancelled.
+	StatusCancelled = "cancelled"
 )
 
 // uniqueKeyPrefix starts the unique key of an investigate job.

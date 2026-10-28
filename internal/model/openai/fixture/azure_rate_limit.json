@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "429",
+    "message": "Requests to the Responses_Create Operation under Azure OpenAI API version v1 have exceeded token rate limit of your current AIServices S0 pricing tier. Please retry after 6 seconds. Please contact Azure support service if you would like to further increase the default rate limit."
+  }
+}

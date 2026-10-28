@@ -34,6 +34,12 @@ var kindsByCode = map[string]model.ErrorKind{
 	"invalid_api_key":    model.ErrAuth,
 	"server_error":       model.ErrOverloaded,
 	"invalid_prompt":     model.ErrInvalid,
+	// Azure codes. A prompt that Azure's content filter blocks fails the
+	// same way when it is sent again, like any invalid request.
+	"content_filter":     model.ErrInvalid,
+	"DeploymentNotFound": model.ErrInvalid,
+	// The identity lacks the Cognitive Services OpenAI User role.
+	"PermissionDenied": model.ErrAuth,
 }
 
 // kindsByStatus classifies API errors whose code is not in kindsByCode.
