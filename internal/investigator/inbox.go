@@ -44,6 +44,10 @@ var (
 	errNoQuestionKey    = errors.New("a follow-up question needs a key")
 )
 
+// ErrTriageOnly means the investigation ended with a triage-only result,
+// which takes no follow-up questions until a full investigation has run.
+var ErrTriageOnly = errors.New("the investigation has a triage-only result")
+
 // inboxEvent is the body of an inbox item about an event.
 type inboxEvent struct {
 	EventID uuid.UUID `json:"event_id"`
@@ -118,7 +122,11 @@ func FindInvestigation(ctx context.Context, q db.DBTX, sinks []string, external 
 // ends, which then enqueues that job. Questions that arrive before the job
 // starts share its run. It returns false, and adds nothing, for a question
 // whose key was added before and for an investigation that takes no
-// questions: one that failed or does not exist.
+// questions: one that failed or does not exist. A question to a
+// triage-only result is not added either, and the error wraps
+// ErrTriageOnly, so the asker can be told to ask for a full investigation
+// first. A question that arrived while triage ran waits for the full
+// investigation, if one is asked for.
 //
 // The investigation's row stays locked until the question and the job are
 // committed, so a run that ends meanwhile sees the question.
@@ -150,6 +158,10 @@ func AddFollowUp(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, q Questi
 			return nil
 		}
 
+		if triageOnlyResult(inv) {
+			return ErrTriageOnly
+		}
+
 		rows, err := queries.InsertKeyedInboxItem(ctx, db.InsertKeyedInboxItemParams{
 			InvestigationID: id,
 			Kind:            InboxFollowUp,
@@ -162,7 +174,7 @@ func AddFollowUp(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, q Questi
 
 		added = rows > 0
 
-		if !added || !answers(inv.Status) {
+		if !added || !answers(inv) {
 			return nil
 		}
 
@@ -338,10 +350,16 @@ func enqueueFollowUp(ctx context.Context, q db.DBTX, inv db.Investigation) error
 	return nil
 }
 
-// answers reports whether an investigation with status answers follow-up
-// questions now: it ended with a report, final or stopped by a responder.
-func answers(status string) bool {
-	return status == StatusFinal || status == StatusCancelled
+// answers reports whether inv answers follow-up questions now: it ended
+// with a report, final or stopped by a responder, after a full
+// investigation. A triage-only result has no conversation to go on from.
+func answers(inv db.Investigation) bool {
+	return (inv.Status == StatusFinal || inv.Status == StatusCancelled) && !triageOnlyResult(inv)
+}
+
+// triageOnlyResult reports whether inv ended with a triage-only result.
+func triageOnlyResult(inv db.Investigation) bool {
+	return inv.Status == StatusFinal && deref(inv.StopReason) == string(report.StopTriage)
 }
 
 // questionOf reads the question of a follow-up inbox item.

@@ -284,6 +284,27 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"investigations_pkey"},
 		},
 		{
+			name: "SetInvestigationStrategy",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.SetInvestigationStrategy(ctx, db.SetInvestigationStrategyParams{
+					Strategy: new("latency-alert"), StrategyVersion: new("0123456789abcdef"), Budget: json.RawMessage(`{"max_tool_calls": 30}`),
+					ID: busy, Fence: planFence,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"investigations_pkey"},
+		},
+		{
+			name: "RestartTriagedInvestigation",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.RestartTriagedInvestigation(ctx, busy)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"investigations_pkey"},
+		},
+		{
 			name: "AddSpend",
 			run: func(ctx context.Context, q *db.Queries) error {
 				err := q.AddSpend(ctx, db.AddSpendParams{
