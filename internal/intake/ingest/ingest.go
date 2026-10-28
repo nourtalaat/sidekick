@@ -44,6 +44,15 @@ const hashedKeyPrefix = "sha256:"
 // routeJobKeyPrefix starts the unique key of an event's route_event job.
 const routeJobKeyPrefix = "route_event:"
 
+// slackRefIDs are the event.SlackRef fields stored as received. They only
+// locate a message, and replies go to them, so a placeholder in one would
+// send the reply nowhere. Any field not listed is redacted.
+var slackRefIDs = []string{"TeamID", "Channel", "TS", "ThreadTS", "UserID"}
+
+// teamsRefIDs are the event.TeamsRef fields stored as received, for the
+// same reason as slackRefIDs. Any field not listed is redacted.
+var teamsRefIDs = []string{"TenantID", "TeamID", "ChannelID", "MessageID", "ThreadID", "UserID", "ServiceURL"}
+
 // routeEventPayload is the payload of a route_event job.
 type routeEventPayload struct {
 	EventID uuid.UUID `json:"event_id"`
@@ -146,7 +155,8 @@ func (w *Writer) Store(ctx context.Context, d Delivery) (stored []Stored, err er
 }
 
 // row builds the events row for ev. Every text from the payload is
-// redacted, and a link whose URL redaction would change is dropped. The key
+// redacted, except the IDs in its Slack or Teams reference, and a link
+// whose URL redaction would change is dropped. The key
 // is kept as it is unless the redactor finds something in it, it is too
 // long, or it is not valid text; then it is stored as its SHA-256, which
 // still makes a repeated delivery map to the same row.
@@ -191,21 +201,21 @@ func (w *Writer) row(d Delivery, ev event.Event) (db.InsertEventParams, error) {
 	}
 
 	if ev.Slack != nil {
-		slack, err := json.Marshal(ev.Slack)
+		slack, err := w.redactedRef(ev.Slack, slackRefIDs)
 		if err != nil {
 			return db.InsertEventParams{}, fmt.Errorf("encode the Slack reference: %w", err)
 		}
 
-		p.Slack = w.redactedJSON(slack)
+		p.Slack = slack
 	}
 
 	if ev.Teams != nil {
-		teams, err := json.Marshal(ev.Teams)
+		teams, err := w.redactedRef(ev.Teams, teamsRefIDs)
 		if err != nil {
 			return db.InsertEventParams{}, fmt.Errorf("encode the Teams reference: %w", err)
 		}
 
-		p.Teams = w.redactedJSON(teams)
+		p.Teams = teams
 	}
 
 	return p, nil
@@ -272,6 +282,52 @@ func (w *Writer) redactedLinks(links []event.Link) ([]byte, error) {
 	}
 
 	return raw, nil
+}
+
+// redactedRef encodes ref, a Slack or Teams reference, as a JSON object
+// for a jsonb column. The fields named in ids are kept as they are. Every
+// other field is redacted, as members of one JSON object, so the rules that
+// look at a member's key still apply to them.
+func (w *Writer) redactedRef(ref any, ids []string) ([]byte, error) {
+	raw, err := json.Marshal(ref)
+	if err != nil {
+		return nil, fmt.Errorf("encode: %w", err)
+	}
+
+	var rest map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &rest); err != nil {
+		return nil, fmt.Errorf("decode the fields: %w", err)
+	}
+
+	fields := make(map[string]json.RawMessage, len(rest))
+
+	for _, id := range ids {
+		if v, ok := rest[id]; ok {
+			fields[id] = v
+			delete(rest, id)
+		}
+	}
+
+	if len(rest) > 0 {
+		encoded, err := json.Marshal(rest)
+		if err != nil {
+			return nil, fmt.Errorf("encode the fields to redact: %w", err)
+		}
+
+		var redacted map[string]json.RawMessage
+		if err := json.Unmarshal(w.redactedJSON(encoded), &redacted); err != nil {
+			return nil, fmt.Errorf("decode the redacted fields: %w", err)
+		}
+
+		maps.Copy(fields, redacted)
+	}
+
+	out, err := json.Marshal(fields)
+	if err != nil {
+		return nil, fmt.Errorf("encode the stored fields: %w", err)
+	}
+
+	return store.JSON(out), nil
 }
 
 // redactedJSON redacts raw and makes it fit a jsonb column. Empty input
