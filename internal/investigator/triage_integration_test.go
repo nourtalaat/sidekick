@@ -57,7 +57,7 @@ func TestTriage(t *testing.T) {
 
 				st, _ := h.handler.opts.Strategies.Get("latency-alert")
 				require.Equal(t, st.Version, *inv.StrategyVersion)
-				require.EqualValues(t, testUsage.InputTokens+triageUsage.InputTokens, inv.InputTokens)
+				require.Equal(t, testUsage.InputTokens+triageUsage.InputTokens, inv.InputTokens)
 
 				triageReq := h.triage.Requests()[0]
 				require.Equal(t, prompt.SubmitTriageTool, triageReq.Tools[0].Name)
