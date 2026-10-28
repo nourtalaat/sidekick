@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/bench"
@@ -41,6 +42,10 @@ func TestBenchRun(t *testing.T) {
 		// outputs adds --bench-config with a verdict accuracy threshold,
 		// --out, --junit and --markdown.
 		outputs bool
+		// oldSchema leaves the database's newest migration out.
+		oldSchema bool
+		// wantStored is how many bench_runs rows the run leaves.
+		wantStored int
 		// anthropic answers the model calls.
 		anthropic  func(t *testing.T) *fakehttp.Server
 		wantCode   int
@@ -58,7 +63,16 @@ func TestBenchRun(t *testing.T) {
 			db:         true,
 			anthropic:  inconclusiveAnthropic,
 			wantStdout: []string{"checkout-pool-size", "1/1", "inconclusive", "root cause match"},
-			wantStderr: []string{"created the benchmark's schema", "dropped the benchmark's schema"},
+			wantStderr: []string{"created the benchmark's schema", "dropped the benchmark's schema", "stored the results in bench_runs and bench_results"},
+			wantStored: 1,
+		},
+		{
+			name:       "--db on a database that needs sidekick migrate",
+			db:         true,
+			oldSchema:  true,
+			anthropic:  func(t *testing.T) *fakehttp.Server { t.Helper(); return fakeAnthropic(t) },
+			wantCode:   exitBadInput,
+			wantStderr: []string{"run sidekick migrate first"},
 		},
 		{
 			name:       "the output files and a failed threshold",
@@ -68,6 +82,7 @@ func TestBenchRun(t *testing.T) {
 			wantCode:   exitThresholdFailed,
 			wantStdout: []string{"THRESHOLD", "verdictAccuracy", "FAILED"},
 			wantStderr: []string{"1 of 1 thresholds failed: verdictAccuracy"},
+			wantStored: 1,
 		},
 		{
 			name: "the model provider is unreachable",
@@ -93,6 +108,10 @@ func TestBenchRun(t *testing.T) {
 
 			dbURL := storetest.NewURL(t)
 			configPath := writeConfig(t, serveConfig(tt.anthropic(t).URL()), dbURL)
+
+			if tt.oldSchema {
+				execSQL(t, dbURL, "DELETE FROM goose_db_version WHERE version_id = (SELECT max(version_id) FROM goose_db_version)")
+			}
 
 			sample, err := filepath.Abs(filepath.Join(repoRoot, "bench", "scenarios", "sample"))
 			require.NoError(t, err)
@@ -123,6 +142,11 @@ func TestBenchRun(t *testing.T) {
 			}
 
 			require.Equal(t, 0, benchSchemas(t, dbURL), "no benchmark schema is left behind")
+
+			if !tt.oldSchema {
+				require.Equal(t, tt.wantStored, countRows(t, dbURL, "bench_runs"))
+				require.Equal(t, tt.wantStored, countRows(t, dbURL, "bench_results"), "one result per run")
+			}
 
 			if tt.outputs {
 				rep, err := bench.ReadReport(filepath.Join(out, "report.json"))
@@ -229,6 +253,35 @@ func runBench(t *testing.T, args []string) (code int, stdout, stderr string) {
 	}
 
 	return code, out.String(), errOut.String()
+}
+
+// execSQL runs sql on the database at dbURL.
+func execSQL(t *testing.T, dbURL, sql string) {
+	t.Helper()
+
+	pool, err := store.Open(t.Context(), dbURL, 1)
+	require.NoError(t, err)
+
+	defer pool.Close()
+
+	_, err = pool.Exec(t.Context(), sql)
+	require.NoError(t, err)
+}
+
+// countRows counts the rows of table in the default schema of the
+// database at dbURL.
+func countRows(t *testing.T, dbURL, table string) int {
+	t.Helper()
+
+	pool, err := store.Open(t.Context(), dbURL, 1)
+	require.NoError(t, err)
+
+	defer pool.Close()
+
+	var n int
+	require.NoError(t, pool.QueryRow(t.Context(), "SELECT count(*) FROM "+pgx.Identifier{table}.Sanitize()).Scan(&n))
+
+	return n
 }
 
 // benchSchemas counts the benchmark schemas in the database at dbURL.

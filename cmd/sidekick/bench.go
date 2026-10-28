@@ -85,8 +85,10 @@ container with Docker, and removed when the runs end, Ctrl-C included.
 With --db the runs use the database of the config file's
 database.urlSecret instead, in a schema of their own that is dropped at the
 end, so nothing is left behind and a Sidekick serving from the same
-database never sees the runs' jobs. The database role then needs CREATE on
-the database.
+database never sees the runs' jobs. The scored results are then stored in
+bench_runs and bench_results of the database's default schema, which must
+have every migration (run sidekick migrate first). The database role needs
+CREATE on the database and INSERT on those two tables.
 
 Once every run has finished, the judge grades each run's root cause, the
 runs are scored and the command prints the spread of each scenario, the
@@ -113,7 +115,7 @@ or Docker or the database fails, and 1 for anything else.`,
 	addConfigFlag(cmd, &flags.configPath)
 	cmd.Flags().StringVarP(&flags.scenarios, "scenarios", "s", "", "a scenario file, or a directory of them (required)")
 	cmd.Flags().IntVarP(&flags.repeat, "repeat", "n", bench.DefaultRepeat, "how many times each scenario runs")
-	cmd.Flags().BoolVar(&flags.db, "db", false, "run in a schema of its own on the database of database.urlSecret, instead of a temporary Postgres")
+	cmd.Flags().BoolVar(&flags.db, "db", false, "run in a schema of its own on the database of database.urlSecret, instead of a temporary Postgres, and store the results there")
 	cmd.Flags().StringVar(&flags.settings, "bench-config", "", "a bench.yaml with the weights of the overall score and the thresholds")
 	cmd.Flags().Uint64Var(&flags.seed, "seed", bench.DefaultSeed, "seeds the resampling of the 95% intervals")
 	cmd.Flags().StringVar(&flags.label, "label", "", "a name for the run, kept in report.json")
@@ -229,7 +231,21 @@ func benchRun(ctx context.Context, cmd *cobra.Command, regs config.Registries, f
 		return &exitError{code: exitBadInput, err: err}
 	}
 
-	database, err := benchDatabase(ctx, cfg, flags.db, log)
+	var (
+		url         string
+		resultStore *bench.ResultStore
+	)
+
+	if flags.db {
+		url, resultStore, err = benchResultStore(ctx, cfg)
+		if err != nil {
+			return err
+		}
+
+		defer resultStore.Close()
+	}
+
+	database, err := benchDatabase(ctx, url, log)
 	if err != nil {
 		return err
 	}
@@ -268,8 +284,16 @@ func benchRun(ctx context.Context, cmd *cobra.Command, regs config.Registries, f
 		return err
 	}
 
-	if err := writeBenchOutputs(results, benchInfo(runner, flags), thresholds, flags); err != nil {
+	info := benchInfo(runner, flags)
+
+	if err := writeBenchOutputs(results, info, thresholds, flags); err != nil {
 		return err
+	}
+
+	if resultStore != nil {
+		if err := storeBenchResults(ctx, resultStore, results, info, thresholds, log); err != nil {
+			return err
+		}
 	}
 
 	if failed := bench.Failed(thresholds); len(failed) > 0 {
@@ -349,21 +373,38 @@ func benchCompare(cmd *cobra.Command, pathA, pathB string) error {
 	return nil
 }
 
-// benchDatabase starts a temporary Postgres, or, with db, opens a schema of
-// the benchmark's own on the config's database.
-func benchDatabase(ctx context.Context, cfg *config.Config, db bool, log *slog.Logger) (*bench.Database, error) {
-	if !db {
+// benchResultStore reads the URL of the config's database for --db and
+// opens the store of the results in its default schema, which must have
+// every migration of this Sidekick.
+func benchResultStore(ctx context.Context, cfg *config.Config) (string, *bench.ResultStore, error) {
+	url, err := cfg.DatabaseURL(ctx, nil)
+	if err != nil {
+		return "", nil, &exitError{code: exitBadInput, err: fmt.Errorf("--db uses the database of database.urlSecret, which cannot be read: %w", err)}
+	}
+
+	resultStore, err := bench.OpenResultStore(ctx, url)
+	if err != nil {
+		code := exitInfrastructure
+		if errors.Is(err, bench.ErrSchemaNotCurrent) {
+			code = exitBadInput
+		}
+
+		return "", nil, &exitError{code: code, err: fmt.Errorf("--db: %w", err)}
+	}
+
+	return url, resultStore, nil
+}
+
+// benchDatabase starts a temporary Postgres, or, with a url from --db,
+// opens a schema of the benchmark's own on that database.
+func benchDatabase(ctx context.Context, url string, log *slog.Logger) (*bench.Database, error) {
+	if url == "" {
 		database, err := bench.StartTemporary(ctx, log)
 		if err != nil {
 			return nil, &exitError{code: exitInfrastructure, err: err}
 		}
 
 		return database, nil
-	}
-
-	url, err := cfg.DatabaseURL(ctx, nil)
-	if err != nil {
-		return nil, &exitError{code: exitBadInput, err: fmt.Errorf("--db uses the database of database.urlSecret, which cannot be read: %w", err)}
 	}
 
 	database, err := bench.OpenSchema(ctx, url, log)

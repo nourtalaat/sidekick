@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -89,6 +91,24 @@ func writeBenchOutputs(results *bench.Results, info bench.RunInfo, thresholds []
 			return fmt.Errorf("write --markdown: %w", err)
 		}
 	}
+
+	return nil
+}
+
+// storeBenchResults writes the results into bench_runs and bench_results
+// of the --db database's default schema.
+func storeBenchResults(ctx context.Context, resultStore *bench.ResultStore, results *bench.Results, info bench.RunInfo, thresholds []bench.ThresholdResult, log *slog.Logger) error {
+	rep, err := results.Report(info, thresholds)
+	if err != nil {
+		return fmt.Errorf("build the stored results: %w", err)
+	}
+
+	id, err := resultStore.Save(ctx, rep)
+	if err != nil {
+		return &exitError{code: exitInfrastructure, err: err}
+	}
+
+	log.InfoContext(ctx, "stored the results in bench_runs and bench_results", "bench_run", id)
 
 	return nil
 }

@@ -59,10 +59,22 @@ Benchmarks always run on Postgres, with the same code as `serve`.
   schema is dropped, with everything in it, when the runs end, also after
   Ctrl-C or an error, so nothing is left behind. A Sidekick that serves from
   the same database never sees the runs' events and jobs, and the runs keep
-  their locks apart from its own. The database role needs `CREATE` on the
-  database. The schema's name is logged when it is created; if the process
-  is killed before it can drop it, drop it by hand with
-  `DROP SCHEMA sidekick_bench_<random> CASCADE`.
+  their locks apart from its own. The schema's name is logged when it is
+  created; if the process is killed before it can drop it, drop it by hand
+  with `DROP SCHEMA sidekick_bench_<random> CASCADE`.
+
+  Once the runs are scored, the results are stored in the database's
+  default schema, the one `sidekick serve` uses, so the web UI can show
+  them: one `bench_runs` row for the run, with its settings, totals and
+  thresholds, and one `bench_results` row per run of a scenario. They are
+  written in one transaction, through a connection of their own, apart
+  from the runs' schema. The default schema must have every migration of
+  this Sidekick: if it does not, the command exits with `2` before any run
+  and asks you to run `sidekick migrate` first. It never migrates the
+  default schema itself. A run that fails stores nothing.
+
+  The database role needs `CREATE` on the database, for the runs' schema,
+  and `INSERT` on `bench_runs` and `bench_results` in the default schema.
 
 ### Exit status
 
@@ -70,7 +82,7 @@ Benchmarks always run on Postgres, with the same code as `serve`.
 |---|---|
 | `0` | Every run finished and every threshold is met. |
 | `1` | A threshold failed, or something else failed. |
-| `2` | A bad flag, config file, `bench.yaml`, baseline or scenario file, or, with `--db`, a database secret that cannot be read or a role that may not create the schema. |
+| `2` | A bad flag, config file, `bench.yaml`, baseline or scenario file, or, with `--db`, a database secret that cannot be read, a role that may not create the schema, or a default schema that needs `sidekick migrate`. |
 | `3` | The model provider is unreachable after the connector's retries, for the runs or for the judge, or Docker or the database failed. |
 
 When a run fails, the command prints the runs that finished before it,
