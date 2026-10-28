@@ -93,13 +93,20 @@ func setup(t *testing.T) server {
 	return setupWith(t, nil)
 }
 
-// setupWith is setup with tune, when not nil, changing the API's options.
-func setupWith(t *testing.T, tune func(*api.Options)) server {
+// setupWith is setup with tune, when not nil, changing the API's options,
+// and with more fixtures loaded. They load before the hub listens, since
+// the notifications of their rows would otherwise reach a stream that a
+// test opens right after.
+func setupWith(t *testing.T, tune func(*api.Options), fixtures ...string) server {
 	t.Helper()
 
 	pool := storetest.New(t)
 	storetest.LoadFixture(t, pool, "fixture/sessions.sql")
 	storetest.LoadFixture(t, pool, "fixture/rules.sql")
+
+	for _, fixture := range fixtures {
+		storetest.LoadFixture(t, pool, fixture)
+	}
 
 	provider := authtest.NewProvider(t, "sidekick")
 
