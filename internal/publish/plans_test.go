@@ -96,6 +96,42 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"output_refs_pkey"},
 		},
 		{
+			name: "ReserveWatcherChangeSeq",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ReserveWatcherChangeSeq(ctx, busy)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"publish_states_pkey"},
+		},
+		{
+			name: "InsertWatcherChange",
+			run: func(ctx context.Context, q *db.Queries) error {
+				err := q.InsertWatcherChange(ctx, db.InsertWatcherChangeParams{InvestigationID: busy, Seq: 7, State: json.RawMessage(`{}`)})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"Insert on watcher_changes"},
+		},
+		{
+			name: "ListUnsentWatcherChanges",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListUnsentWatcherChanges(ctx, db.ListUnsentWatcherChangesParams{InvestigationID: busy, MaxSeq: 5, Sink: slackSink})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"watcher_changes_investigation"},
+		},
+		{
+			name: "MarkWatcherChangeSent",
+			run: func(ctx context.Context, q *db.Queries) error {
+				err := q.MarkWatcherChangeSent(ctx, db.MarkWatcherChangeSentParams{Sink: slackSink, ID: 25000})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"watcher_changes_pkey"},
+		},
+		{
 			name: "GetInvestigationWithEvent",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.GetInvestigationWithEvent(ctx, busy)

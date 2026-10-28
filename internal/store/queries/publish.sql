@@ -33,11 +33,12 @@ RETURNING sinks;
 
 -- name: GetPublishState :one
 -- GetPublishState returns the state of an investigation for one sink: the
--- newest update, the number of events in its group, and what the sink
--- published last, if anything.
+-- newest update, its group and the number of events in it, and what the
+-- sink published last, if anything.
 SELECT
   publish_states.seq,
   publish_states.phase,
+  investigations.group_id,
   publish_states.body,
   event_groups.event_count,
   output_refs.ref AS previous_ref,
@@ -66,3 +67,31 @@ SET external = excluded.external,
     last_seq = excluded.last_seq,
     published_at = excluded.published_at
 WHERE output_refs.last_seq < excluded.last_seq;
+
+-- name: ReserveWatcherChangeSeq :one
+-- ReserveWatcherChangeSeq raises the seq of an investigation's state by two
+-- without changing what it holds: a watcher's change takes the first of
+-- the two, and the state, shown again with the change, the second. It
+-- returns the change's seq and the sinks, or no row when the investigation
+-- has no state.
+UPDATE publish_states
+SET seq = seq + 2, update_seq = coalesce(update_seq, seq), updated_at = now()
+WHERE investigation_id = @investigation_id
+RETURNING (seq - 1)::bigint AS change_seq, sinks;
+
+-- name: InsertWatcherChange :exec
+INSERT INTO watcher_changes (investigation_id, seq, state, created_at)
+VALUES (@investigation_id, @seq, @state, now());
+
+-- name: ListUnsentWatcherChanges :many
+-- ListUnsentWatcherChanges returns the watcher changes of an investigation
+-- up to max_seq that have not been sent to sink, oldest first.
+SELECT id, seq, state FROM watcher_changes
+WHERE investigation_id = @investigation_id AND seq <= @max_seq::bigint AND NOT (@sink::text = ANY (sent_to))
+ORDER BY seq;
+
+-- name: MarkWatcherChangeSent :exec
+-- MarkWatcherChangeSent records that a watcher change was sent to sink.
+UPDATE watcher_changes
+SET sent_to = array_append(sent_to, @sink::text)
+WHERE id = @id AND NOT (@sink::text = ANY (sent_to));
