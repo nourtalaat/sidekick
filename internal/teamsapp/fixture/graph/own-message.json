@@ -1,0 +1,18 @@
+{
+  "id": "1761642000009",
+  "messageType": "message",
+  "createdDateTime": "2026-10-28T08:55:00Z",
+  "from": {
+    "user": null,
+    "application": {
+      "id": "00000000-1111-2222-3333-444444444444",
+      "displayName": "Sidekick",
+      "applicationIdentityType": "bot"
+    }
+  },
+  "body": {
+    "contentType": "html",
+    "content": "<p>Looking into it</p>"
+  },
+  "attachments": []
+}

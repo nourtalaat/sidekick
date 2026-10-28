@@ -1,0 +1,48 @@
+# The config the Teams bot tests load. The secrets under fixture/secrets
+# are test values only. The model connector is a fake the tests register.
+# The tests point the bot at their fake Microsoft services.
+database:
+  urlSecret: { name: db, key: url }
+
+secrets:
+  dir: fixture/secrets
+
+model:
+  connectors:
+    fake: { provider: fake }
+  roles:
+    investigate: fake
+
+teams:
+  appID: 00000000-1111-2222-3333-444444444444
+  tenantID: 55555555-6666-7777-8888-999999999999
+  clientSecret: { name: teams, key: clientSecret }
+  trustedBots: ["28:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"]
+
+listeners:
+  alerts:
+    source: teams
+    channel: "19:alerts@thread.tacv2"
+    match:
+      sender: { kind: bot, names: [Grafana, Datadog] }
+      text: "(?i)firing|resolved"
+    extract:
+      - "\\[[A-Z]+\\] (?P<alert>[A-Za-z]+)"
+      - "service=(?P<service>[a-z-]+)"
+      - "(?i)severity: (?P<severity>[a-z]+)"
+      - "env=(?P<env>[a-z]+)"
+    recovery: "(?i)resolved"
+    trusted: true
+  ops:
+    source: teams
+    channel: "19:ops@thread.tacv2"
+    match:
+      sender: { kind: human }
+
+routes:
+  - name: default
+
+redaction:
+  hashKeySecret: { name: redaction, key: hash-key }
+  custom:
+    - { name: seeded, pattern: "SEEDED-[A-Z0-9]{8}" }

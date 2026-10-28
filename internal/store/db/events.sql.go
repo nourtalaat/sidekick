@@ -68,6 +68,54 @@ func (q *Queries) GetEvent(ctx context.Context, id uuid.UUID) (Event, error) {
 	return i, err
 }
 
+const getEventByKey = `-- name: GetEventByKey :one
+SELECT id, intake, key, kind, sender_kind, sender_id, sender_name, trusted, alert_name, title, body, service, severity, labels, links, fingerprint, slack, raw, status, skip_reason, route, group_id, starts_at, ends_at, received_at, teams FROM events
+WHERE intake = ANY ($1::text[]) AND key = $2
+ORDER BY received_at, id
+LIMIT 1
+`
+
+type GetEventByKeyParams struct {
+	Intakes []string
+	Key     string
+}
+
+// GetEventByKey returns the event that one of intakes stored with key, the
+// oldest when several did.
+func (q *Queries) GetEventByKey(ctx context.Context, arg GetEventByKeyParams) (Event, error) {
+	row := q.db.QueryRow(ctx, getEventByKey, arg.Intakes, arg.Key)
+	var i Event
+	err := row.Scan(
+		&i.ID,
+		&i.Intake,
+		&i.Key,
+		&i.Kind,
+		&i.SenderKind,
+		&i.SenderID,
+		&i.SenderName,
+		&i.Trusted,
+		&i.AlertName,
+		&i.Title,
+		&i.Body,
+		&i.Service,
+		&i.Severity,
+		&i.Labels,
+		&i.Links,
+		&i.Fingerprint,
+		&i.Slack,
+		&i.Raw,
+		&i.Status,
+		&i.SkipReason,
+		&i.Route,
+		&i.GroupID,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.ReceivedAt,
+		&i.Teams,
+	)
+	return i, err
+}
+
 const insertEvent = `-- name: InsertEvent :one
 INSERT INTO events (
   id, intake, key, kind, sender_kind, sender_id, sender_name, trusted,
