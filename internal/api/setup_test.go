@@ -46,6 +46,8 @@ const (
 // sourceYAML is a source section with credentials written in by mistake:
 // a URL with a user and password, and a header value the email rule
 // matches. GET /config must mask both.
+//
+//nolint:gosec // Fake credentials that GET /config must mask.
 const sourceYAML = `
 url: https://mcp-bot:hunter2@mcp.internal/mcp
 headers:
