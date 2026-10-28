@@ -18,6 +18,102 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for Confidence.
+const (
+	High   Confidence = "high"
+	Low    Confidence = "low"
+	Medium Confidence = "medium"
+)
+
+// Valid indicates whether the value is a known member of the Confidence enum.
+func (e Confidence) Valid() bool {
+	switch e {
+	case High:
+		return true
+	case Low:
+		return true
+	case Medium:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EventKind.
+const (
+	Alert    EventKind = "alert"
+	Mention  EventKind = "mention"
+	Message  EventKind = "message"
+	Resolved EventKind = "resolved"
+)
+
+// Valid indicates whether the value is a known member of the EventKind enum.
+func (e EventKind) Valid() bool {
+	switch e {
+	case Alert:
+		return true
+	case Mention:
+		return true
+	case Message:
+		return true
+	case Resolved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FeedbackSummarySummary.
+const (
+	Correct FeedbackSummarySummary = "correct"
+	Mixed   FeedbackSummarySummary = "mixed"
+	None    FeedbackSummarySummary = "none"
+	Wrong   FeedbackSummarySummary = "wrong"
+)
+
+// Valid indicates whether the value is a known member of the FeedbackSummarySummary enum.
+func (e FeedbackSummarySummary) Valid() bool {
+	switch e {
+	case Correct:
+		return true
+	case Mixed:
+		return true
+	case None:
+		return true
+	case Wrong:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InvestigationStatus.
+const (
+	InvestigationStatusCancelled InvestigationStatus = "cancelled"
+	InvestigationStatusFailed    InvestigationStatus = "failed"
+	InvestigationStatusFinal     InvestigationStatus = "final"
+	InvestigationStatusQueued    InvestigationStatus = "queued"
+	InvestigationStatusRunning   InvestigationStatus = "running"
+)
+
+// Valid indicates whether the value is a known member of the InvestigationStatus enum.
+func (e InvestigationStatus) Valid() bool {
+	switch e {
+	case InvestigationStatusCancelled:
+		return true
+	case InvestigationStatusFailed:
+		return true
+	case InvestigationStatusFinal:
+		return true
+	case InvestigationStatusQueued:
+		return true
+	case InvestigationStatusRunning:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for MeKind.
 const (
 	MeKindToken MeKind = "token"
@@ -30,6 +126,36 @@ func (e MeKind) Valid() bool {
 	case MeKindToken:
 		return true
 	case MeKindUser:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReportStopReason.
+const (
+	ReportStopReasonBudget    ReportStopReason = "budget"
+	ReportStopReasonCancelled ReportStopReason = "cancelled"
+	ReportStopReasonError     ReportStopReason = "error"
+	ReportStopReasonNoVerdict ReportStopReason = "no_verdict"
+	ReportStopReasonSubmitted ReportStopReason = "submitted"
+	ReportStopReasonTriage    ReportStopReason = "triage"
+)
+
+// Valid indicates whether the value is a known member of the ReportStopReason enum.
+func (e ReportStopReason) Valid() bool {
+	switch e {
+	case ReportStopReasonBudget:
+		return true
+	case ReportStopReasonCancelled:
+		return true
+	case ReportStopReasonError:
+		return true
+	case ReportStopReasonNoVerdict:
+		return true
+	case ReportStopReasonSubmitted:
+		return true
+	case ReportStopReasonTriage:
 		return true
 	default:
 		return false
@@ -60,6 +186,243 @@ func (e Role) Valid() bool {
 	}
 }
 
+// Defines values for RunKind.
+const (
+	RunKindFollowUp    RunKind = "follow_up"
+	RunKindInvestigate RunKind = "investigate"
+)
+
+// Valid indicates whether the value is a known member of the RunKind enum.
+func (e RunKind) Valid() bool {
+	switch e {
+	case RunKindFollowUp:
+		return true
+	case RunKindInvestigate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SenderKind.
+const (
+	Bot    SenderKind = "bot"
+	Human  SenderKind = "human"
+	System SenderKind = "system"
+)
+
+// Valid indicates whether the value is a known member of the SenderKind enum.
+func (e SenderKind) Valid() bool {
+	switch e {
+	case Bot:
+		return true
+	case Human:
+		return true
+	case System:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SourceCheckStatus.
+const (
+	SourceCheckStatusFailed      SourceCheckStatus = "failed"
+	SourceCheckStatusNoData      SourceCheckStatus = "no_data"
+	SourceCheckStatusOk          SourceCheckStatus = "ok"
+	SourceCheckStatusUnavailable SourceCheckStatus = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the SourceCheckStatus enum.
+func (e SourceCheckStatus) Valid() bool {
+	switch e {
+	case SourceCheckStatusFailed:
+		return true
+	case SourceCheckStatusNoData:
+		return true
+	case SourceCheckStatusOk:
+		return true
+	case SourceCheckStatusUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StepKind.
+const (
+	StepKindInbox          StepKind = "inbox"
+	StepKindModelTurn      StepKind = "model_turn"
+	StepKindNote           StepKind = "note"
+	StepKindPrompt         StepKind = "prompt"
+	StepKindSummary        StepKind = "summary"
+	StepKindToolResult     StepKind = "tool_result"
+	StepKindTriageOverride StepKind = "triage_override"
+	StepKindTriagePrompt   StepKind = "triage_prompt"
+	StepKindTriageResult   StepKind = "triage_result"
+	StepKindTriageTurn     StepKind = "triage_turn"
+)
+
+// Valid indicates whether the value is a known member of the StepKind enum.
+func (e StepKind) Valid() bool {
+	switch e {
+	case StepKindInbox:
+		return true
+	case StepKindModelTurn:
+		return true
+	case StepKindNote:
+		return true
+	case StepKindPrompt:
+		return true
+	case StepKindSummary:
+		return true
+	case StepKindToolResult:
+		return true
+	case StepKindTriageOverride:
+		return true
+	case StepKindTriagePrompt:
+		return true
+	case StepKindTriageResult:
+		return true
+	case StepKindTriageTurn:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StepStatus.
+const (
+	StepStatusError       StepStatus = "error"
+	StepStatusNoData      StepStatus = "no_data"
+	StepStatusOk          StepStatus = "ok"
+	StepStatusOverBudget  StepStatus = "over_budget"
+	StepStatusRejected    StepStatus = "rejected"
+	StepStatusTimeout     StepStatus = "timeout"
+	StepStatusUnavailable StepStatus = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the StepStatus enum.
+func (e StepStatus) Valid() bool {
+	switch e {
+	case StepStatusError:
+		return true
+	case StepStatusNoData:
+		return true
+	case StepStatusOk:
+		return true
+	case StepStatusOverBudget:
+		return true
+	case StepStatusRejected:
+		return true
+	case StepStatusTimeout:
+		return true
+	case StepStatusUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StepPartType.
+const (
+	StepPartTypeReasoning  StepPartType = "reasoning"
+	StepPartTypeText       StepPartType = "text"
+	StepPartTypeToolCall   StepPartType = "tool_call"
+	StepPartTypeToolResult StepPartType = "tool_result"
+)
+
+// Valid indicates whether the value is a known member of the StepPartType enum.
+func (e StepPartType) Valid() bool {
+	switch e {
+	case StepPartTypeReasoning:
+		return true
+	case StepPartTypeText:
+		return true
+	case StepPartTypeToolCall:
+		return true
+	case StepPartTypeToolResult:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for Verdict.
+const (
+	Duplicate     Verdict = "duplicate"
+	FalsePositive Verdict = "false_positive"
+	Flapping      Verdict = "flapping"
+	Inconclusive  Verdict = "inconclusive"
+	KnownIssue    Verdict = "known_issue"
+	TruePositive  Verdict = "true_positive"
+)
+
+// Valid indicates whether the value is a known member of the Verdict enum.
+func (e Verdict) Valid() bool {
+	switch e {
+	case Duplicate:
+		return true
+	case FalsePositive:
+		return true
+	case Flapping:
+		return true
+	case Inconclusive:
+		return true
+	case KnownIssue:
+		return true
+	case TruePositive:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WatcherCheckResult.
+const (
+	WatcherCheckResultError WatcherCheckResult = "error"
+	WatcherCheckResultFail  WatcherCheckResult = "fail"
+	WatcherCheckResultPass  WatcherCheckResult = "pass"
+)
+
+// Valid indicates whether the value is a known member of the WatcherCheckResult enum.
+func (e WatcherCheckResult) Valid() bool {
+	switch e {
+	case WatcherCheckResultError:
+		return true
+	case WatcherCheckResultFail:
+		return true
+	case WatcherCheckResultPass:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WatcherStatus.
+const (
+	WatcherStatusRecovered WatcherStatus = "recovered"
+	WatcherStatusRunning   WatcherStatus = "running"
+	WatcherStatusStopped   WatcherStatus = "stopped"
+	WatcherStatusTimedOut  WatcherStatus = "timed_out"
+)
+
+// Valid indicates whether the value is a known member of the WatcherStatus enum.
+func (e WatcherStatus) Valid() bool {
+	switch e {
+	case WatcherStatusRecovered:
+		return true
+	case WatcherStatusRunning:
+		return true
+	case WatcherStatusStopped:
+		return true
+	case WatcherStatusTimedOut:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListJobsParamsStatus.
 const (
 	Dead ListJobsParamsStatus = "dead"
@@ -75,6 +438,16 @@ func (e ListJobsParamsStatus) Valid() bool {
 	}
 }
 
+// Confidence defines model for Confidence.
+type Confidence string
+
+// Confirmation The verdict people agree with.
+type Confirmation struct {
+	At      time.Time `json:"at"`
+	Cause   *string   `json:"cause,omitempty"`
+	Verdict Verdict   `json:"verdict"`
+}
+
 // CreatedToken defines model for CreatedToken.
 type CreatedToken struct {
 	// Secret The token, sent as "Authorization: Bearer <secret>". It is shown only here.
@@ -87,6 +460,208 @@ type EffectiveConfig struct {
 	// File sidekick.yaml with its defaults, by YAML key. Read-only.
 	File    map[string]interface{} `json:"file"`
 	Runtime RuntimeRules           `json:"runtime"`
+}
+
+// Event An alert or message that joined the group. Its text came from the
+// sender, redacted but untrusted: show it as plain text, and open its
+// links only as web links.
+type Event struct {
+	AlertName *string `json:"alertName,omitempty"`
+
+	// Body The text, cut to 2000 bytes.
+	Body *string            `json:"body,omitempty"`
+	Id   openapi_types.UUID `json:"id"`
+
+	// Intake The webhook endpoint or Slack listener that took it.
+	Intake string            `json:"intake"`
+	Kind   EventKind         `json:"kind"`
+	Labels map[string]string `json:"labels"`
+
+	// Links The links the sender attached, with http or https addresses only.
+	Links      []EventLink `json:"links"`
+	ReceivedAt time.Time   `json:"receivedAt"`
+	Sender     *Sender     `json:"sender,omitempty"`
+	Service    *string     `json:"service,omitempty"`
+	Severity   *string     `json:"severity,omitempty"`
+	Title      *string     `json:"title,omitempty"`
+}
+
+// EventKind defines model for Event.Kind.
+type EventKind string
+
+// EventLink defines model for EventLink.
+type EventLink struct {
+	Title string `json:"title"`
+	Url   string `json:"url"`
+}
+
+// Evidence defines model for Evidence.
+type Evidence struct {
+	At *time.Time `json:"at,omitempty"`
+
+	// Kind What the link points at, such as log_query, metric or deploy.
+	Kind  string `json:"kind"`
+	Title string `json:"title"`
+
+	// ToolCallId The tool call whose step produced the evidence.
+	ToolCallId *string `json:"toolCallId,omitempty"`
+
+	// Url A web link. Absent when the source gave none that is an http or https address.
+	Url *string `json:"url,omitempty"`
+}
+
+// FalsePositiveDetail defines model for FalsePositiveDetail.
+type FalsePositiveDetail struct {
+	Prevention []Prevention `json:"prevention"`
+	WhyFired   string       `json:"whyFired"`
+}
+
+// FeedbackSummary The ratings responders gave the verdict of the current run.
+type FeedbackSummary struct {
+	Correct int `json:"correct"`
+
+	// Summary correct or wrong when every rating says so, mixed when both
+	// kinds exist, and none when nobody rated.
+	Summary FeedbackSummarySummary `json:"summary"`
+	Wrong   int                    `json:"wrong"`
+}
+
+// FeedbackSummarySummary correct or wrong when every rating says so, mixed when both
+// kinds exist, and none when nobody rated.
+type FeedbackSummarySummary string
+
+// Finding defines model for Finding.
+type Finding struct {
+	Claim string `json:"claim"`
+
+	// Evidence Empty for a hypothesis.
+	Evidence []Evidence `json:"evidence"`
+	Id       string     `json:"id"`
+}
+
+// Fix defines model for Fix.
+type Fix struct {
+	ActionProposalId *string `json:"actionProposalId,omitempty"`
+	Detail           string  `json:"detail"`
+	Id               string  `json:"id"`
+	Title            string  `json:"title"`
+}
+
+// FollowUp defines model for FollowUp.
+type FollowUp struct {
+	// Answer The answer, or why there is none when answered is false.
+	Answer          string             `json:"answer"`
+	Answered        bool               `json:"answered"`
+	At              time.Time          `json:"at"`
+	Evidence        *[]Evidence        `json:"evidence,omitempty"`
+	PreviousVerdict *Verdict           `json:"previousVerdict,omitempty"`
+	Questions       []FollowUpQuestion `json:"questions"`
+	Run             int                `json:"run"`
+}
+
+// FollowUpQuestion defines model for FollowUpQuestion.
+type FollowUpQuestion struct {
+	Author *string `json:"author,omitempty"`
+	Text   string  `json:"text"`
+}
+
+// Investigation defines model for Investigation.
+type Investigation struct {
+	// CancelRequestedAt When a responder asked to stop the run, while it has not stopped yet.
+	CancelRequestedAt *time.Time  `json:"cancelRequestedAt,omitempty"`
+	Confidence        *Confidence `json:"confidence,omitempty"`
+
+	// Confirmation The verdict people agree with.
+	Confirmation *Confirmation `json:"confirmation,omitempty"`
+
+	// Connector The model connector the investigation runs on.
+	Connector  *string   `json:"connector,omitempty"`
+	CostMicros int64     `json:"costMicros"`
+	CreatedAt  time.Time `json:"createdAt"`
+	DurationMs *int64    `json:"durationMs,omitempty"`
+
+	// EventCount How many events the group has, which can be more than events lists.
+	EventCount int `json:"eventCount"`
+
+	// Events The first 50 events of the group, oldest first.
+	Events         []Event            `json:"events"`
+	FinishedAt     *time.Time         `json:"finishedAt,omitempty"`
+	FirstFindingAt *time.Time         `json:"firstFindingAt,omitempty"`
+	GroupId        openapi_types.UUID `json:"groupId"`
+	Id             openapi_types.UUID `json:"id"`
+	InputTokens    int64              `json:"inputTokens"`
+
+	// Mode The action mode in effect, such as read-only.
+	Mode string `json:"mode"`
+
+	// Model The model of the first model turn.
+	Model        *string `json:"model,omitempty"`
+	OutputTokens int64   `json:"outputTokens"`
+
+	// PendingFollowUps Follow-up questions that no run has answered yet, oldest first.
+	PendingFollowUps []PendingFollowUp `json:"pendingFollowUps"`
+
+	// Report The result of the investigation. The model wrote its text from what
+	// the sources returned, so show it as plain text.
+	Report *Report `json:"report,omitempty"`
+	Route  string  `json:"route"`
+
+	// Run The number of the current run; follow-up runs count too.
+	Run int `json:"run"`
+
+	// RunKind What the current run does: a full investigation, or the answer to follow-up questions.
+	RunKind   RunKind             `json:"runKind"`
+	Service   *string             `json:"service,omitempty"`
+	StartedAt *time.Time          `json:"startedAt,omitempty"`
+	Status    InvestigationStatus `json:"status"`
+
+	// StopReason Why the run ended, such as submitted, budget, cancelled or triage.
+	StopReason      *string  `json:"stopReason,omitempty"`
+	Strategy        *string  `json:"strategy,omitempty"`
+	StrategyVersion *string  `json:"strategyVersion,omitempty"`
+	Title           *string  `json:"title,omitempty"`
+	ToolCalls       int      `json:"toolCalls"`
+	Verdict         *Verdict `json:"verdict,omitempty"`
+}
+
+// InvestigationList defines model for InvestigationList.
+type InvestigationList struct {
+	Investigations []InvestigationSummary `json:"investigations"`
+
+	// NextCursor Pass as cursor for the next page. Absent on the last page.
+	NextCursor *string `json:"nextCursor,omitempty"`
+}
+
+// InvestigationStatus defines model for InvestigationStatus.
+type InvestigationStatus string
+
+// InvestigationSummary One row of the list. The title comes from the alert, so it is text
+// a sender wrote: show it as plain text.
+type InvestigationSummary struct {
+	Confidence *Confidence `json:"confidence,omitempty"`
+
+	// CostMicros The cost so far, in millionths of a US dollar.
+	CostMicros int64     `json:"costMicros"`
+	CreatedAt  time.Time `json:"createdAt"`
+
+	// DurationMs From the start to the end of the run. Absent while it runs.
+	DurationMs *int64 `json:"durationMs,omitempty"`
+
+	// Feedback The ratings responders gave the verdict of the current run.
+	Feedback   FeedbackSummary     `json:"feedback"`
+	FinishedAt *time.Time          `json:"finishedAt,omitempty"`
+	Id         openapi_types.UUID  `json:"id"`
+	Route      string              `json:"route"`
+	Service    *string             `json:"service,omitempty"`
+	StartedAt  *time.Time          `json:"startedAt,omitempty"`
+	Status     InvestigationStatus `json:"status"`
+
+	// Title The title of the event that opened the group. Absent when it has none.
+	Title   *string  `json:"title,omitempty"`
+	Verdict *Verdict `json:"verdict,omitempty"`
+
+	// Watcher The newest watcher of the investigation's group.
+	Watcher *WatcherSummary `json:"watcher,omitempty"`
 }
 
 // Job defines model for Job.
@@ -149,6 +724,25 @@ type NewToken struct {
 	Role Role   `json:"role"`
 }
 
+// PendingFollowUp defines model for PendingFollowUp.
+type PendingFollowUp struct {
+	Author    *string   `json:"author,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+	Text      string    `json:"text"`
+}
+
+// Person Someone who acted, by their Slack user ID, or their user ID in the web UI.
+type Person struct {
+	SlackUserId *string             `json:"slackUserId,omitempty"`
+	UserId      *openapi_types.UUID `json:"userId,omitempty"`
+}
+
+// Prevention defines model for Prevention.
+type Prevention struct {
+	Detail string `json:"detail"`
+	Kind   string `json:"kind"`
+}
+
 // Problem Problem details, as RFC 9457 describes.
 type Problem struct {
 	// Detail What went wrong with this request.
@@ -167,8 +761,36 @@ type Problem struct {
 	Type string `json:"type"`
 }
 
+// Report The result of the investigation. The model wrote its text from what
+// the sources returned, so show it as plain text.
+type Report struct {
+	Cause *string `json:"cause,omitempty"`
+
+	// Checked What was checked in each source.
+	Checked       []SourceCheck        `json:"checked"`
+	Confidence    Confidence           `json:"confidence"`
+	FalsePositive *FalsePositiveDetail `json:"falsePositive,omitempty"`
+	Findings      []Finding            `json:"findings"`
+	Fixes         *[]Fix               `json:"fixes,omitempty"`
+
+	// FollowUps The follow-up runs after the first, oldest first.
+	FollowUps  *[]FollowUp      `json:"followUps,omitempty"`
+	Impact     *string          `json:"impact,omitempty"`
+	Reason     string           `json:"reason"`
+	StopDetail *string          `json:"stopDetail,omitempty"`
+	StopReason ReportStopReason `json:"stopReason"`
+	Summary    string           `json:"summary"`
+	Verdict    Verdict          `json:"verdict"`
+}
+
+// ReportStopReason defines model for Report.StopReason.
+type ReportStopReason string
+
 // Role defines model for Role.
 type Role string
+
+// RunKind What the current run does: a full investigation, or the answer to follow-up questions.
+type RunKind string
 
 // RuntimeRule defines model for RuntimeRule.
 type RuntimeRule struct {
@@ -185,6 +807,100 @@ type RuntimeRule struct {
 type RuntimeRules struct {
 	Listeners []RuntimeRule `json:"listeners"`
 	Routes    []RuntimeRule `json:"routes"`
+}
+
+// Sender defines model for Sender.
+type Sender struct {
+	Kind *SenderKind `json:"kind,omitempty"`
+	Name *string     `json:"name,omitempty"`
+}
+
+// SenderKind defines model for Sender.Kind.
+type SenderKind string
+
+// SourceCheck defines model for SourceCheck.
+type SourceCheck struct {
+	Error     *string           `json:"error,omitempty"`
+	Source    string            `json:"source"`
+	Status    SourceCheckStatus `json:"status"`
+	ToolCalls int               `json:"toolCalls"`
+}
+
+// SourceCheckStatus defines model for SourceCheck.Status.
+type SourceCheckStatus string
+
+// Step One step of the record. A prompt step has only the first message the
+// model got. Reasoning is shown when the provider returned it. Parts
+// hold text from alerts, sources and the model: show it as plain text.
+type Step struct {
+	// CallId For a tool result, the ID of the call it answers.
+	CallId     *string    `json:"callId,omitempty"`
+	Connector  *string    `json:"connector,omitempty"`
+	CostMicros *int64     `json:"costMicros,omitempty"`
+	DurationMs int32      `json:"durationMs"`
+	Error      *string    `json:"error,omitempty"`
+	Kind       StepKind   `json:"kind"`
+	Model      *string    `json:"model,omitempty"`
+	Parts      []StepPart `json:"parts"`
+	Run        int        `json:"run"`
+	Seq        int32      `json:"seq"`
+
+	// Source For a tool result, the source that answered. Absent for a built-in tool.
+	Source    *string     `json:"source,omitempty"`
+	StartedAt time.Time   `json:"startedAt"`
+	Status    StepStatus  `json:"status"`
+	Tokens    *StepTokens `json:"tokens,omitempty"`
+	Tool      *string     `json:"tool,omitempty"`
+}
+
+// StepKind defines model for Step.Kind.
+type StepKind string
+
+// StepStatus defines model for Step.Status.
+type StepStatus string
+
+// StepList defines model for StepList.
+type StepList struct {
+	// NextAfter The seq to pass as after for the next page. Absent on the last page.
+	NextAfter *int32 `json:"nextAfter,omitempty"`
+	Steps     []Step `json:"steps"`
+}
+
+// StepPart defines model for StepPart.
+type StepPart struct {
+	// CallId For a tool result, the ID of the call it answers.
+	CallId *string `json:"callId,omitempty"`
+
+	// Content For a tool result, what the tool returned, redacted and cut to 32 KiB.
+	Content *string `json:"content,omitempty"`
+
+	// Id For a tool call, its ID.
+	Id *string `json:"id,omitempty"`
+
+	// Input For a tool call, the arguments, as JSON.
+	Input   interface{} `json:"input,omitempty"`
+	IsError *bool       `json:"isError,omitempty"`
+
+	// Name For a tool call, the tool's name.
+	Name *string `json:"name,omitempty"`
+
+	// Text For text and reasoning, cut to 32 KiB.
+	Text *string `json:"text,omitempty"`
+
+	// Truncated Set when text or content was cut.
+	Truncated *bool        `json:"truncated,omitempty"`
+	Type      StepPartType `json:"type"`
+}
+
+// StepPartType defines model for StepPart.Type.
+type StepPartType string
+
+// StepTokens defines model for StepTokens.
+type StepTokens struct {
+	CacheRead  *int64 `json:"cacheRead,omitempty"`
+	CacheWrite *int64 `json:"cacheWrite,omitempty"`
+	Input      int64  `json:"input"`
+	Output     int64  `json:"output"`
 }
 
 // Token defines model for Token.
@@ -208,6 +924,102 @@ type TokenList struct {
 	Tokens []Token `json:"tokens"`
 }
 
+// Verdict defines model for Verdict.
+type Verdict string
+
+// Watcher A check that runs on a schedule until the service is back up or its
+// time is over. The last result comes from the checked service, so
+// show it as plain text.
+type Watcher struct {
+	// CheckType http, tool or alert.
+	CheckType string `json:"checkType"`
+
+	// Checks How many checks have run.
+	Checks          int                `json:"checks"`
+	EndedAt         *time.Time         `json:"endedAt,omitempty"`
+	Id              openapi_types.UUID `json:"id"`
+	IntervalSeconds int                `json:"intervalSeconds"`
+	LastCheckAt     *time.Time         `json:"lastCheckAt,omitempty"`
+	LastResult      *string            `json:"lastResult,omitempty"`
+	Name            string             `json:"name"`
+	PassesInARow    int                `json:"passesInARow"`
+	PassesToRecover int                `json:"passesToRecover"`
+
+	// RecentChecks Up to the last 50 checks, newest first.
+	RecentChecks []WatcherCheck `json:"recentChecks"`
+	StartedAt    time.Time      `json:"startedAt"`
+	Status       WatcherStatus  `json:"status"`
+
+	// StopReason For a stopped watcher, group_resolved, responder or config_changed.
+	StopReason *string `json:"stopReason,omitempty"`
+
+	// StoppedBy Someone who acted, by their Slack user ID, or their user ID in the web UI.
+	StoppedBy *Person `json:"stoppedBy,omitempty"`
+}
+
+// WatcherCheck defines model for WatcherCheck.
+type WatcherCheck struct {
+	At         time.Time          `json:"at"`
+	Detail     *string            `json:"detail,omitempty"`
+	DurationMs int                `json:"durationMs"`
+	Result     WatcherCheckResult `json:"result"`
+	Seq        int                `json:"seq"`
+}
+
+// WatcherCheckResult defines model for WatcherCheck.Result.
+type WatcherCheckResult string
+
+// WatcherList defines model for WatcherList.
+type WatcherList struct {
+	Watchers []Watcher `json:"watchers"`
+}
+
+// WatcherStatus defines model for WatcherStatus.
+type WatcherStatus string
+
+// WatcherSummary The newest watcher of the investigation's group.
+type WatcherSummary struct {
+	Name   string        `json:"name"`
+	Status WatcherStatus `json:"status"`
+}
+
+// InvestigationID defines model for InvestigationID.
+type InvestigationID = openapi_types.UUID
+
+// ListInvestigationsParams defines parameters for ListInvestigations.
+type ListInvestigationsParams struct {
+	// From Only investigations created at or after this time.
+	From *time.Time `form:"from,omitempty" json:"from,omitempty"`
+
+	// To Only investigations created before this time.
+	To      *time.Time `form:"to,omitempty" json:"to,omitempty"`
+	Route   *string    `form:"route,omitempty" json:"route,omitempty"`
+	Service *string    `form:"service,omitempty" json:"service,omitempty"`
+
+	// Model The model of the investigation's first model turn.
+	Model   *string              `form:"model,omitempty" json:"model,omitempty"`
+	Verdict *Verdict             `form:"verdict,omitempty" json:"verdict,omitempty"`
+	Status  *InvestigationStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// Q Words of the alert title. Every word must be in it; quotes match
+	// a phrase, and a minus sign leaves a word out.
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Cursor The nextCursor of the page before.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListInvestigationStepsParams defines parameters for ListInvestigationSteps.
+type ListInvestigationStepsParams struct {
+	// Run Only the steps of this run.
+	Run *int `form:"run,omitempty" json:"run,omitempty"`
+
+	// After Only the steps with a seq above this one; the nextAfter of the page before.
+	After *int32 `form:"after,omitempty" json:"after,omitempty"`
+	Limit *int   `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // ListJobsParams defines parameters for ListJobs.
 type ListJobsParams struct {
 	// Status Only dead jobs are listed.
@@ -229,6 +1041,18 @@ type ServerInterface interface {
 	// GetConfig The effective config, with secrets shown only as references
 	// (GET /config)
 	GetConfig(w http.ResponseWriter, r *http.Request)
+	// ListInvestigations Investigations, newest first, a page at a time
+	// (GET /investigations)
+	ListInvestigations(w http.ResponseWriter, r *http.Request, params ListInvestigationsParams)
+	// GetInvestigation One investigation, with its report and the events of its group
+	// (GET /investigations/{id})
+	GetInvestigation(w http.ResponseWriter, r *http.Request, id InvestigationID)
+	// ListInvestigationSteps The steps of an investigation, in order, a page at a time
+	// (GET /investigations/{id}/steps)
+	ListInvestigationSteps(w http.ResponseWriter, r *http.Request, id InvestigationID, params ListInvestigationStepsParams)
+	// ListInvestigationWatchers The watchers of the investigation's group, with their last checks
+	// (GET /investigations/{id}/watchers)
+	ListInvestigationWatchers(w http.ResponseWriter, r *http.Request, id InvestigationID)
 	// ListJobs Dead jobs, newest first, a page at a time
 	// (GET /jobs)
 	ListJobs(w http.ResponseWriter, r *http.Request, params ListJobsParams)
@@ -263,6 +1087,276 @@ func (siw *ServerInterfaceWrapper) GetConfig(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetConfig(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListInvestigations operation middleware
+func (siw *ServerInterfaceWrapper) ListInvestigations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListInvestigationsParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "route" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "route", r.URL.Query(), &params.Route, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "route"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "route", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "service" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "service", r.URL.Query(), &params.Service, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "service"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "service", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "model" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "model", r.URL.Query(), &params.Model, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "model"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "model", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "verdict" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "verdict", r.URL.Query(), &params.Verdict, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "verdict"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "verdict", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListInvestigations(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetInvestigation operation middleware
+func (siw *ServerInterfaceWrapper) GetInvestigation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id InvestigationID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetInvestigation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListInvestigationSteps operation middleware
+func (siw *ServerInterfaceWrapper) ListInvestigationSteps(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id InvestigationID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListInvestigationStepsParams
+
+	// ------------- Optional query parameter "run" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "run", r.URL.Query(), &params.Run, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "run"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "run", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "after" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "after", r.URL.Query(), &params.After, runtime.BindQueryParameterOptions{Type: "integer", Format: "int32"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListInvestigationSteps(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListInvestigationWatchers operation middleware
+func (siw *ServerInterfaceWrapper) ListInvestigationWatchers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id InvestigationID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListInvestigationWatchers(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -552,6 +1646,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tokens", wrapper.ListTokens)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/tokens", wrapper.CreateToken)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/tokens/{id}", wrapper.RevokeToken)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations", wrapper.ListInvestigations)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}", wrapper.GetInvestigation)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}/steps", wrapper.ListInvestigationSteps)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}/watchers", wrapper.ListInvestigationWatchers)
 
 	return m
 }
@@ -585,6 +1683,163 @@ type GetConfigdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetConfigdefaultApplicationProblemPlusJSONResponse) VisitGetConfigResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListInvestigationsRequestObject struct {
+	Params ListInvestigationsParams
+}
+
+type ListInvestigationsResponseObject interface {
+	VisitListInvestigationsResponse(w http.ResponseWriter) error
+}
+
+type ListInvestigations200JSONResponse InvestigationList
+
+func (response ListInvestigations200JSONResponse) VisitListInvestigationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListInvestigationsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListInvestigationsdefaultApplicationProblemPlusJSONResponse) VisitListInvestigationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInvestigationRequestObject struct {
+	Id InvestigationID `json:"id"`
+}
+
+type GetInvestigationResponseObject interface {
+	VisitGetInvestigationResponse(w http.ResponseWriter) error
+}
+
+type GetInvestigation200JSONResponse Investigation
+
+func (response GetInvestigation200JSONResponse) VisitGetInvestigationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInvestigationdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetInvestigationdefaultApplicationProblemPlusJSONResponse) VisitGetInvestigationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListInvestigationStepsRequestObject struct {
+	Id     InvestigationID `json:"id"`
+	Params ListInvestigationStepsParams
+}
+
+type ListInvestigationStepsResponseObject interface {
+	VisitListInvestigationStepsResponse(w http.ResponseWriter) error
+}
+
+type ListInvestigationSteps200JSONResponse StepList
+
+func (response ListInvestigationSteps200JSONResponse) VisitListInvestigationStepsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListInvestigationStepsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListInvestigationStepsdefaultApplicationProblemPlusJSONResponse) VisitListInvestigationStepsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListInvestigationWatchersRequestObject struct {
+	Id InvestigationID `json:"id"`
+}
+
+type ListInvestigationWatchersResponseObject interface {
+	VisitListInvestigationWatchersResponse(w http.ResponseWriter) error
+}
+
+type ListInvestigationWatchers200JSONResponse WatcherList
+
+func (response ListInvestigationWatchers200JSONResponse) VisitListInvestigationWatchersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListInvestigationWatchersdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListInvestigationWatchersdefaultApplicationProblemPlusJSONResponse) VisitListInvestigationWatchersResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -821,6 +2076,18 @@ type StrictServerInterface interface {
 	// GetConfig The effective config, with secrets shown only as references
 	// (GET /config)
 	GetConfig(ctx context.Context, request GetConfigRequestObject) (GetConfigResponseObject, error)
+	// ListInvestigations Investigations, newest first, a page at a time
+	// (GET /investigations)
+	ListInvestigations(ctx context.Context, request ListInvestigationsRequestObject) (ListInvestigationsResponseObject, error)
+	// GetInvestigation One investigation, with its report and the events of its group
+	// (GET /investigations/{id})
+	GetInvestigation(ctx context.Context, request GetInvestigationRequestObject) (GetInvestigationResponseObject, error)
+	// ListInvestigationSteps The steps of an investigation, in order, a page at a time
+	// (GET /investigations/{id}/steps)
+	ListInvestigationSteps(ctx context.Context, request ListInvestigationStepsRequestObject) (ListInvestigationStepsResponseObject, error)
+	// ListInvestigationWatchers The watchers of the investigation's group, with their last checks
+	// (GET /investigations/{id}/watchers)
+	ListInvestigationWatchers(ctx context.Context, request ListInvestigationWatchersRequestObject) (ListInvestigationWatchersResponseObject, error)
 	// ListJobs Dead jobs, newest first, a page at a time
 	// (GET /jobs)
 	ListJobs(ctx context.Context, request ListJobsRequestObject) (ListJobsResponseObject, error)
@@ -897,6 +2164,111 @@ func (sh *strictHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetConfigResponseObject); ok {
 		if err := validResponse.VisitGetConfigResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListInvestigations operation middleware
+func (sh *strictHandler) ListInvestigations(w http.ResponseWriter, r *http.Request, params ListInvestigationsParams) {
+	var request ListInvestigationsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListInvestigations(ctx, request.(ListInvestigationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListInvestigations")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListInvestigationsResponseObject); ok {
+		if err := validResponse.VisitListInvestigationsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetInvestigation operation middleware
+func (sh *strictHandler) GetInvestigation(w http.ResponseWriter, r *http.Request, id InvestigationID) {
+	var request GetInvestigationRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetInvestigation(ctx, request.(GetInvestigationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetInvestigation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetInvestigationResponseObject); ok {
+		if err := validResponse.VisitGetInvestigationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListInvestigationSteps operation middleware
+func (sh *strictHandler) ListInvestigationSteps(w http.ResponseWriter, r *http.Request, id InvestigationID, params ListInvestigationStepsParams) {
+	var request ListInvestigationStepsRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListInvestigationSteps(ctx, request.(ListInvestigationStepsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListInvestigationSteps")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListInvestigationStepsResponseObject); ok {
+		if err := validResponse.VisitListInvestigationStepsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListInvestigationWatchers operation middleware
+func (sh *strictHandler) ListInvestigationWatchers(w http.ResponseWriter, r *http.Request, id InvestigationID) {
+	var request ListInvestigationWatchersRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListInvestigationWatchers(ctx, request.(ListInvestigationWatchersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListInvestigationWatchers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListInvestigationWatchersResponseObject); ok {
+		if err := validResponse.VisitListInvestigationWatchersResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

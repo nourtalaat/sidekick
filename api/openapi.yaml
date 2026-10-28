@@ -157,6 +157,155 @@ paths:
           description: The token is revoked.
         default:
           $ref: "#/components/responses/Problem"
+  /investigations:
+    get:
+      operationId: ListInvestigations
+      summary: Investigations, newest first, a page at a time
+      description: |
+        Every filter that is given must match. The investigations are
+        ordered by the time they were created, newest first, and a page
+        starts after the investigation the cursor names. Investigations
+        from before the list's service, model and title columns existed are
+        filled in the background when Sidekick starts; until that has
+        finished they do not match the service, model and q filters.
+      x-sidekick-role: viewer
+      parameters:
+        - name: from
+          in: query
+          description: Only investigations created at or after this time.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: Only investigations created before this time.
+          schema:
+            type: string
+            format: date-time
+        - name: route
+          in: query
+          schema:
+            type: string
+        - name: service
+          in: query
+          schema:
+            type: string
+        - name: model
+          in: query
+          description: The model of the investigation's first model turn.
+          schema:
+            type: string
+        - name: verdict
+          in: query
+          schema:
+            $ref: "#/components/schemas/Verdict"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/InvestigationStatus"
+        - name: q
+          in: query
+          description: |
+            Words of the alert title. Every word must be in it; quotes match
+            a phrase, and a minus sign leaves a word out.
+          schema:
+            type: string
+            maxLength: 200
+        - name: cursor
+          in: query
+          description: The nextCursor of the page before.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: A page of investigations.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvestigationList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /investigations/{id}:
+    get:
+      operationId: GetInvestigation
+      summary: One investigation, with its report and the events of its group
+      x-sidekick-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/InvestigationID"
+      responses:
+        "200":
+          description: The investigation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Investigation"
+        default:
+          $ref: "#/components/responses/Problem"
+  /investigations/{id}/steps:
+    get:
+      operationId: ListInvestigationSteps
+      summary: The steps of an investigation, in order, a page at a time
+      description: |
+        The record of the run: the prompt, each model turn, each tool call
+        and its result, as the model saw them. Tool results are redacted
+        already. Steps the retention job deleted are missing from the
+        list.
+      x-sidekick-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/InvestigationID"
+        - name: run
+          in: query
+          description: Only the steps of this run.
+          schema:
+            type: integer
+            minimum: 1
+        - name: after
+          in: query
+          description: Only the steps with a seq above this one; the nextAfter of the page before.
+          schema:
+            type: integer
+            format: int32
+            minimum: -1
+            default: -1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: A page of steps.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StepList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /investigations/{id}/watchers:
+    get:
+      operationId: ListInvestigationWatchers
+      summary: The watchers of the investigation's group, with their last checks
+      x-sidekick-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/InvestigationID"
+      responses:
+        "200":
+          description: The watchers, oldest first, each with up to its last 50 checks, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatcherList"
+        default:
+          $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
     session:
@@ -171,6 +320,14 @@ components:
       type: http
       scheme: bearer
       description: An API token an admin created.
+  parameters:
+    InvestigationID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
   responses:
     Problem:
       description: An error, as problem details.
@@ -343,6 +500,633 @@ components:
         secret:
           type: string
           description: 'The token, sent as "Authorization: Bearer <secret>". It is shown only here.'
+    Verdict:
+      type: string
+      enum: [true_positive, false_positive, inconclusive, duplicate, known_issue, flapping]
+    Confidence:
+      type: string
+      enum: [low, medium, high]
+    InvestigationStatus:
+      type: string
+      enum: [queued, running, final, failed, cancelled]
+    RunKind:
+      type: string
+      enum: [investigate, follow_up]
+      description: 'What the current run does: a full investigation, or the answer to follow-up questions.'
+    FeedbackSummary:
+      type: object
+      required: [correct, wrong, summary]
+      description: The ratings responders gave the verdict of the current run.
+      properties:
+        correct:
+          type: integer
+        wrong:
+          type: integer
+        summary:
+          type: string
+          enum: [correct, wrong, mixed, none]
+          description: |
+            correct or wrong when every rating says so, mixed when both
+            kinds exist, and none when nobody rated.
+    WatcherStatus:
+      type: string
+      enum: [running, recovered, timed_out, stopped]
+    WatcherSummary:
+      type: object
+      required: [name, status]
+      description: The newest watcher of the investigation's group.
+      properties:
+        name:
+          type: string
+        status:
+          $ref: "#/components/schemas/WatcherStatus"
+    InvestigationSummary:
+      type: object
+      required: [id, route, status, createdAt, costMicros, feedback]
+      description: |
+        One row of the list. The title comes from the alert, so it is text
+        a sender wrote: show it as plain text.
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          description: The title of the event that opened the group. Absent when it has none.
+        service:
+          type: string
+        route:
+          type: string
+        verdict:
+          $ref: "#/components/schemas/Verdict"
+        confidence:
+          $ref: "#/components/schemas/Confidence"
+        status:
+          $ref: "#/components/schemas/InvestigationStatus"
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+        durationMs:
+          type: integer
+          format: int64
+          description: From the start to the end of the run. Absent while it runs.
+        costMicros:
+          type: integer
+          format: int64
+          description: The cost so far, in millionths of a US dollar.
+        feedback:
+          $ref: "#/components/schemas/FeedbackSummary"
+        watcher:
+          $ref: "#/components/schemas/WatcherSummary"
+    InvestigationList:
+      type: object
+      required: [investigations]
+      properties:
+        investigations:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvestigationSummary"
+        nextCursor:
+          type: string
+          description: Pass as cursor for the next page. Absent on the last page.
+    Investigation:
+      type: object
+      required:
+        - id
+        - groupId
+        - route
+        - mode
+        - status
+        - run
+        - runKind
+        - inputTokens
+        - outputTokens
+        - costMicros
+        - toolCalls
+        - createdAt
+        - eventCount
+        - events
+        - pendingFollowUps
+      properties:
+        id:
+          type: string
+          format: uuid
+        groupId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        service:
+          type: string
+        route:
+          type: string
+        strategy:
+          type: string
+        strategyVersion:
+          type: string
+        mode:
+          type: string
+          description: The action mode in effect, such as read-only.
+        status:
+          $ref: "#/components/schemas/InvestigationStatus"
+        run:
+          type: integer
+          description: The number of the current run; follow-up runs count too.
+        runKind:
+          $ref: "#/components/schemas/RunKind"
+        verdict:
+          $ref: "#/components/schemas/Verdict"
+        confidence:
+          $ref: "#/components/schemas/Confidence"
+        stopReason:
+          type: string
+          description: Why the run ended, such as submitted, budget, cancelled or triage.
+        model:
+          type: string
+          description: The model of the first model turn.
+        connector:
+          type: string
+          description: The model connector the investigation runs on.
+        inputTokens:
+          type: integer
+          format: int64
+        outputTokens:
+          type: integer
+          format: int64
+        costMicros:
+          type: integer
+          format: int64
+        toolCalls:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+        firstFindingAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+        durationMs:
+          type: integer
+          format: int64
+        cancelRequestedAt:
+          type: string
+          format: date-time
+          description: When a responder asked to stop the run, while it has not stopped yet.
+        confirmation:
+          $ref: "#/components/schemas/Confirmation"
+        report:
+          $ref: "#/components/schemas/Report"
+        eventCount:
+          type: integer
+          description: How many events the group has, which can be more than events lists.
+        events:
+          type: array
+          description: The first 50 events of the group, oldest first.
+          items:
+            $ref: "#/components/schemas/Event"
+        pendingFollowUps:
+          type: array
+          description: Follow-up questions that no run has answered yet, oldest first.
+          items:
+            $ref: "#/components/schemas/PendingFollowUp"
+    Confirmation:
+      type: object
+      required: [verdict, at]
+      description: The verdict people agree with.
+      properties:
+        verdict:
+          $ref: "#/components/schemas/Verdict"
+        cause:
+          type: string
+        at:
+          type: string
+          format: date-time
+    PendingFollowUp:
+      type: object
+      required: [text, createdAt]
+      properties:
+        text:
+          type: string
+        author:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    Event:
+      type: object
+      required: [id, kind, intake, labels, links, receivedAt]
+      description: |
+        An alert or message that joined the group. Its text came from the
+        sender, redacted but untrusted: show it as plain text, and open its
+        links only as web links.
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [alert, resolved, message, mention]
+        intake:
+          type: string
+          description: The webhook endpoint or Slack listener that took it.
+        alertName:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+          description: The text, cut to 2000 bytes.
+        service:
+          type: string
+        severity:
+          type: string
+        sender:
+          $ref: "#/components/schemas/Sender"
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        links:
+          type: array
+          description: The links the sender attached, with http or https addresses only.
+          items:
+            $ref: "#/components/schemas/EventLink"
+        receivedAt:
+          type: string
+          format: date-time
+    Sender:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [human, bot, system]
+        name:
+          type: string
+    EventLink:
+      type: object
+      required: [title, url]
+      properties:
+        title:
+          type: string
+        url:
+          type: string
+    Report:
+      type: object
+      required: [verdict, confidence, reason, summary, findings, checked, stopReason]
+      description: |
+        The result of the investigation. The model wrote its text from what
+        the sources returned, so show it as plain text.
+      properties:
+        verdict:
+          $ref: "#/components/schemas/Verdict"
+        confidence:
+          $ref: "#/components/schemas/Confidence"
+        reason:
+          type: string
+        summary:
+          type: string
+        cause:
+          type: string
+        impact:
+          type: string
+        findings:
+          type: array
+          items:
+            $ref: "#/components/schemas/Finding"
+        fixes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Fix"
+        falsePositive:
+          $ref: "#/components/schemas/FalsePositiveDetail"
+        checked:
+          type: array
+          description: What was checked in each source.
+          items:
+            $ref: "#/components/schemas/SourceCheck"
+        stopReason:
+          type: string
+          enum: [submitted, budget, cancelled, triage, error, no_verdict]
+        stopDetail:
+          type: string
+        followUps:
+          type: array
+          description: The follow-up runs after the first, oldest first.
+          items:
+            $ref: "#/components/schemas/FollowUp"
+    Finding:
+      type: object
+      required: [id, claim, evidence]
+      properties:
+        id:
+          type: string
+        claim:
+          type: string
+        evidence:
+          type: array
+          description: Empty for a hypothesis.
+          items:
+            $ref: "#/components/schemas/Evidence"
+    Evidence:
+      type: object
+      required: [kind, title]
+      properties:
+        kind:
+          type: string
+          description: What the link points at, such as log_query, metric or deploy.
+        title:
+          type: string
+        url:
+          type: string
+          description: A web link. Absent when the source gave none that is an http or https address.
+        toolCallId:
+          type: string
+          description: The tool call whose step produced the evidence.
+        at:
+          type: string
+          format: date-time
+    Fix:
+      type: object
+      required: [id, title, detail]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        detail:
+          type: string
+        actionProposalId:
+          type: string
+    FalsePositiveDetail:
+      type: object
+      required: [whyFired, prevention]
+      properties:
+        whyFired:
+          type: string
+        prevention:
+          type: array
+          items:
+            $ref: "#/components/schemas/Prevention"
+    Prevention:
+      type: object
+      required: [kind, detail]
+      properties:
+        kind:
+          type: string
+        detail:
+          type: string
+    SourceCheck:
+      type: object
+      required: [source, status, toolCalls]
+      properties:
+        source:
+          type: string
+        status:
+          type: string
+          enum: [ok, no_data, failed, unavailable]
+        toolCalls:
+          type: integer
+        error:
+          type: string
+    FollowUp:
+      type: object
+      required: [run, questions, answer, answered, at]
+      properties:
+        run:
+          type: integer
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/FollowUpQuestion"
+        answer:
+          type: string
+          description: The answer, or why there is none when answered is false.
+        answered:
+          type: boolean
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/Evidence"
+        previousVerdict:
+          $ref: "#/components/schemas/Verdict"
+        at:
+          type: string
+          format: date-time
+    FollowUpQuestion:
+      type: object
+      required: [text]
+      properties:
+        author:
+          type: string
+        text:
+          type: string
+    StepList:
+      type: object
+      required: [steps]
+      properties:
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/Step"
+        nextAfter:
+          type: integer
+          format: int32
+          description: The seq to pass as after for the next page. Absent on the last page.
+    Step:
+      type: object
+      required: [seq, run, kind, status, startedAt, durationMs, parts]
+      description: |
+        One step of the record. A prompt step has only the first message the
+        model got. Reasoning is shown when the provider returned it. Parts
+        hold text from alerts, sources and the model: show it as plain text.
+      properties:
+        seq:
+          type: integer
+          format: int32
+        run:
+          type: integer
+        kind:
+          type: string
+          enum:
+            - prompt
+            - model_turn
+            - tool_result
+            - note
+            - inbox
+            - summary
+            - triage_prompt
+            - triage_turn
+            - triage_result
+            - triage_override
+        status:
+          type: string
+          enum: [ok, no_data, error, timeout, unavailable, rejected, over_budget]
+        source:
+          type: string
+          description: For a tool result, the source that answered. Absent for a built-in tool.
+        tool:
+          type: string
+        callId:
+          type: string
+          description: For a tool result, the ID of the call it answers.
+        error:
+          type: string
+        connector:
+          type: string
+        model:
+          type: string
+        tokens:
+          $ref: "#/components/schemas/StepTokens"
+        costMicros:
+          type: integer
+          format: int64
+        startedAt:
+          type: string
+          format: date-time
+        durationMs:
+          type: integer
+          format: int32
+        parts:
+          type: array
+          items:
+            $ref: "#/components/schemas/StepPart"
+    StepTokens:
+      type: object
+      required: [input, output]
+      properties:
+        input:
+          type: integer
+          format: int64
+        output:
+          type: integer
+          format: int64
+        cacheRead:
+          type: integer
+          format: int64
+        cacheWrite:
+          type: integer
+          format: int64
+    StepPart:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [text, tool_call, tool_result, reasoning]
+        text:
+          type: string
+          description: For text and reasoning, cut to 32 KiB.
+        id:
+          type: string
+          description: For a tool call, its ID.
+        name:
+          type: string
+          description: For a tool call, the tool's name.
+        input:
+          description: For a tool call, the arguments, as JSON.
+        callId:
+          type: string
+          description: For a tool result, the ID of the call it answers.
+        content:
+          type: string
+          description: For a tool result, what the tool returned, redacted and cut to 32 KiB.
+        isError:
+          type: boolean
+        truncated:
+          type: boolean
+          description: Set when text or content was cut.
+    WatcherList:
+      type: object
+      required: [watchers]
+      properties:
+        watchers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Watcher"
+    Watcher:
+      type: object
+      required: [id, name, checkType, status, passesInARow, passesToRecover, intervalSeconds, checks, startedAt, recentChecks]
+      description: |
+        A check that runs on a schedule until the service is back up or its
+        time is over. The last result comes from the checked service, so
+        show it as plain text.
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        checkType:
+          type: string
+          description: http, tool or alert.
+        status:
+          $ref: "#/components/schemas/WatcherStatus"
+        passesInARow:
+          type: integer
+        passesToRecover:
+          type: integer
+        intervalSeconds:
+          type: integer
+        checks:
+          type: integer
+          description: How many checks have run.
+        lastCheckAt:
+          type: string
+          format: date-time
+        lastResult:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+        stopReason:
+          type: string
+          description: For a stopped watcher, group_resolved, responder or config_changed.
+        stoppedBy:
+          $ref: "#/components/schemas/Person"
+        recentChecks:
+          type: array
+          description: Up to the last 50 checks, newest first.
+          items:
+            $ref: "#/components/schemas/WatcherCheck"
+    Person:
+      type: object
+      description: Someone who acted, by their Slack user ID, or their user ID in the web UI.
+      properties:
+        slackUserId:
+          type: string
+        userId:
+          type: string
+          format: uuid
+    WatcherCheck:
+      type: object
+      required: [seq, at, result, durationMs]
+      properties:
+        seq:
+          type: integer
+        at:
+          type: string
+          format: date-time
+        result:
+          type: string
+          enum: [pass, fail, error]
+        detail:
+          type: string
+        durationMs:
+          type: integer
     Problem:
       type: object
       description: Problem details, as RFC 9457 describes.
