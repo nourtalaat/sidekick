@@ -359,7 +359,9 @@ func (q *Queries) HandBackJob(ctx context.Context, arg HandBackJobParams) (int64
 const listDeadJobs = `-- name: ListDeadJobs :many
 SELECT id, kind, route, attempts, max_attempts, last_error, created_at, finished_at
 FROM jobs
-WHERE status = 'dead' AND (finished_at, id) < ($1::timestamptz, $2::bigint)
+WHERE status = 'dead'
+  AND finished_at <= $1::timestamptz
+  AND (finished_at < $1::timestamptz OR id < $2::bigint)
 ORDER BY finished_at DESC, id DESC
 LIMIT $3
 `
@@ -382,7 +384,8 @@ type ListDeadJobsRow struct {
 }
 
 // ListDeadJobs returns up to page_size dead jobs that died before the job
-// (before_finished_at, before_id), newest first.
+// (before_finished_at, before_id), newest first. The finished_at bound is
+// written out so it can use the jobs_finished index; the id breaks ties.
 func (q *Queries) ListDeadJobs(ctx context.Context, arg ListDeadJobsParams) ([]ListDeadJobsRow, error) {
 	rows, err := q.db.Query(ctx, listDeadJobs, arg.BeforeFinishedAt, arg.BeforeID, arg.PageSize)
 	if err != nil {

@@ -163,7 +163,7 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: "jobs_dead",
+			wantIndex: "jobs_finished",
 		},
 		{
 			name: "RetryDeadJob",
