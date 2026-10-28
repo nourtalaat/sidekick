@@ -915,6 +915,67 @@ How it behaves:
   stops waiting for response headers after 60 seconds; `sidekick config
   validate` rejects a longer one.
 
+#### AWS sources (`type: aws`)
+
+An AWS source reads AWS accounts through CloudWatch Logs Insights and
+CloudTrail event history, with the default AWS credential chain (IRSA or
+EKS Pod Identity on EKS) and, for other accounts, a role it assumes. Its
+tools only read. [AWS source](sources/aws.md) lists the IAM policy the
+role needs and how to set it up.
+
+| Key | Meaning |
+|---|---|
+| `accounts` | The accounts the tools may read. Required; a call for any other account fails before anything is sent. Each has an `id` (12 digits; quote it in YAML) and, optionally, a `roleARN` in that account to assume and the `externalID` its trust policy asks for. At most one account may leave out `roleARN`: it is read with Sidekick's own credentials, which must belong to it. |
+| `regions` | The Regions the tools may read, in every account. Required; a call for any other Region fails before anything is sent. |
+| `logGroups` | The starts of the log group names `query_logs` may read, for example `/ecs/` or `/aws/eks/prod/`. Default: none, so `query_logs` reads nothing. |
+
+```yaml
+sources:
+  aws:
+    type: aws
+    regions: [us-east-1, eu-west-1]
+    logGroups: [/ecs/, /aws/eks/prod/]
+    accounts:
+      - id: "111122223333"
+      - id: "444455556666"
+        roleARN: arn:aws:iam::444455556666:role/sidekick-reader
+        externalID: sidekick-prod
+```
+
+The tools, as the model sees them with the source name `aws`:
+
+| Tool | Returns |
+|---|---|
+| `aws__query_logs` | The fields and rows of a Logs Insights query over named log groups or log group prefixes. |
+| `aws__list_changes` | CloudTrail write events: which API was called on which resources, by whom, and whether it failed. |
+
+How it behaves:
+
+- **Start-up never waits for AWS.** The first tool call for an account
+  reads the credentials, assumes its role or checks that Sidekick's own
+  credentials belong to it. Assumed credentials are kept until shortly
+  before they expire.
+- **Scope.** Tools take `account` and `region`, which may be left out
+  when the config lists one of each. `query_logs` takes log group names,
+  or prefixes ending in `*`, that start with one of `logGroups`. Anything
+  outside the config, or input that does not fit, such as a range longer
+  than 7 days, is a tool error, and nothing is sent.
+- **Queries.** The Logs Insights query goes to CloudWatch as the model
+  wrote it, so the role's policy is what limits what can be read. A query
+  with the `SOURCE` command, which picks its own log groups, is refused
+  before it is sent. The query is started, polled every second and
+  stopped when the call is about to run out of time.
+- **Results** are JSON with links to the query in Logs Insights and to
+  each CloudTrail event in the AWS console, which become evidence links in
+  the report. Lists are capped as [AWS source](sources/aws.md#limits)
+  describes, and say when they were cut.
+- **No data.** A query that returns no rows, an empty event list, and a
+  log group AWS does not have, are reported as no data.
+- **Errors.** A refused request, such as a query Logs Insights cannot
+  parse or a permission the role lacks, goes to the model as a tool error
+  with AWS's message. Rate limits, refused credentials, server errors and
+  a role that cannot be assumed count as failures of the source.
+
 #### Memory sources (`type: memory`)
 
 A memory source lets the model search Sidekick's own memory: the past
