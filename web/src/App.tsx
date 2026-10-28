@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router";
 import { LoginPage } from "./pages/LoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import InvestigationPage from "./pages/investigation/InvestigationPage";
 import InvestigationsPage from "./pages/investigations/InvestigationsPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
@@ -21,6 +22,7 @@ export function App() {
           <Route element={<Shell />}>
             <Route index element={<Navigate to="/investigations" replace />} />
             <Route path="/investigations" element={<InvestigationsPage />} />
+            <Route path="/investigations/:id" element={<InvestigationPage />} />
             {NAV_ITEMS.filter(({ to }) => to !== "/investigations").map(({ to, label }) => (
               <Route key={to} path={to} element={to === "/dashboard" ? <DashboardPage /> : <PlaceholderPage title={label} />} />
             ))}
