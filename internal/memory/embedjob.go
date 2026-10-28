@@ -129,8 +129,8 @@ func (j *EmbedJob) store(ctx context.Context, job db.Job, id uuid.UUID, vector [
 }
 
 // Backfill enqueues an embed_memory job for every memory entry that has no
-// embedding, or one from another model than vec's, in batches, and returns
-// how many entries it found. Call it once at start-up with vectors on. An
+// embedding, one from another model than vec's, or one of an older text of
+// the entry, in batches, and returns how many entries it found. Call it once at start-up with vectors on. An
 // entry that has a job already is left to it.
 func Backfill(ctx context.Context, pool *pgxpool.Pool, vec *Vectors) (int, error) {
 	var (
@@ -151,7 +151,7 @@ func Backfill(ctx context.Context, pool *pgxpool.Pool, vec *Vectors) (int, error
 		}
 
 		if err := enqueueAll(ctx, pool, ids); err != nil {
-			return total, err
+			return total, fmt.Errorf("enqueue the embedding of %d memory entries: %w", len(ids), err)
 		}
 
 		total += len(ids)

@@ -16,6 +16,9 @@ CREATE TABLE memory_embeddings (
   investigation_id uuid PRIMARY KEY REFERENCES memory_entries (investigation_id) ON DELETE CASCADE,
   -- The embeddings model, so a changed model embeds the entry again.
   model            text NOT NULL,
+  -- The md5 of the entry text that was embedded, so an entry that changed
+  -- while vector memory was off is embedded again.
+  text_hash        text NOT NULL,
   dimensions       int NOT NULL,
   embedding        vector NOT NULL,
   embedded_at      timestamptz NOT NULL

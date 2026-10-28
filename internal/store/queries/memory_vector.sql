@@ -17,33 +17,40 @@ WHERE investigation_id = @investigation_id;
 -- it changed or is gone. The share lock on the entry makes a change to it
 -- wait until this transaction ends, so a job that enqueues itself after
 -- the change is not missed.
-INSERT INTO memory_embeddings (investigation_id, model, dimensions, embedding, embedded_at)
-SELECT m.investigation_id, @model::text, @dimensions::int, @embedding::vector, now()
+INSERT INTO memory_embeddings (investigation_id, model, text_hash, dimensions, embedding, embedded_at)
+SELECT m.investigation_id, @model::text, @text_hash::text, @dimensions::int, @embedding::vector, now()
 FROM memory_entries AS m
 WHERE m.investigation_id = @investigation_id
   AND md5(concat_ws(E'\n', m.alert_name, m.service, m.summary, m.cause)) = @text_hash::text
 FOR SHARE OF m
 ON CONFLICT (investigation_id) DO UPDATE
 SET model = excluded.model,
+    text_hash = excluded.text_hash,
     dimensions = excluded.dimensions,
     embedding = excluded.embedding,
     embedded_at = excluded.embedded_at;
 
 -- name: ListMemoryNeedingEmbedding :many
 -- ListMemoryNeedingEmbedding returns, in order of their ID, up to max_rows
--- entries that come after the ID after and have no embedding or one from
--- another model, for the start-up backfill.
+-- entries that come after the ID after and have no embedding, one from
+-- another model, or one of an older text of the entry, for the start-up
+-- backfill.
 SELECT m.investigation_id
 FROM memory_entries AS m
 LEFT JOIN memory_embeddings AS e ON e.investigation_id = m.investigation_id
 WHERE m.investigation_id > @after
-  AND (e.investigation_id IS NULL OR e.model <> @model::text)
+  AND (
+    e.investigation_id IS NULL
+    OR e.model <> @model::text
+    OR e.text_hash <> md5(concat_ws(E'\n', m.alert_name, m.service, m.summary, m.cause))
+  )
 ORDER BY m.investigation_id
 LIMIT sqlc.arg(max_rows)::int;
 
 -- name: ListNearestMemory :many
 -- ListNearestMemory returns enabled entries nearest to the embedding query
--- by cosine distance, nearest first, leaving out the investigations in
+-- by cosine distance, nearest first, only among vectors of the embeddings
+-- model, since distances between vectors of two models mean nothing, leaving out the investigations in
 -- exclude, and optionally only those of one service or with one verdict.
 -- The nearest candidates are taken from the HNSW index first, then filtered,
 -- so the index decides the order; an index scan returns at most
@@ -51,6 +58,7 @@ LIMIT sqlc.arg(max_rows)::int;
 WITH nearest AS (
   SELECT e.investigation_id, e.embedding <=> @query::vector AS distance
   FROM memory_embeddings AS e
+  WHERE e.model = @model::text
   ORDER BY e.embedding <=> @query::vector
   LIMIT sqlc.arg(candidates)::int
 )

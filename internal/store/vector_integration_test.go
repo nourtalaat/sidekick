@@ -30,7 +30,7 @@ func insertEmbeddedEntry(t *testing.T, pool *pgxpool.Pool) string {
 	require.NoError(t, err)
 
 	_, err = pool.Exec(t.Context(),
-		`INSERT INTO memory_embeddings (investigation_id, model, dimensions, embedding, embedded_at) VALUES ($1, 'm', 3, '[1,2,3]', now())`, id)
+		`INSERT INTO memory_embeddings (investigation_id, model, text_hash, dimensions, embedding, embedded_at) VALUES ($1, 'm', 'x', 3, '[1,2,3]', now())`, id)
 	require.NoError(t, err)
 
 	return id

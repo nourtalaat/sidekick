@@ -300,28 +300,41 @@ func TestBackfill(t *testing.T) {
 
 	pool := setupVector(t, testDimensions, "fixture/entries.sql")
 
-	// e1 has a vector from the current model, e2 from an old one.
-	_, err := pool.Exec(t.Context(), `INSERT INTO memory_embeddings (investigation_id, model, dimensions, embedding, embedded_at)
-		VALUES ('0192d3a4-0000-7000-8000-0000000000e1', 'test-model', 3, '[1,2,3]', now()),
-		       ('0192d3a4-0000-7000-8000-0000000000e2', 'old-model', 3, '[1,2,3]', now())`)
+	// e1 and e5 have a vector from the current model of the current text.
+	// e2 has one from an old model, and e4 one of an older text of the entry,
+	// as when vector memory was off while the entry changed.
+	_, err := pool.Exec(t.Context(), `
+		INSERT INTO memory_embeddings (investigation_id, model, text_hash, dimensions, embedding, embedded_at)
+		SELECT investigation_id,
+		       CASE WHEN right(investigation_id::text, 2) = 'e2' THEN 'old-model' ELSE 'test-model' END,
+		       CASE WHEN right(investigation_id::text, 2) = 'e4' THEN 'older-text'
+		            ELSE md5(concat_ws(E'\n', alert_name, service, summary, cause)) END,
+		       3, '[1,2,3]', now()
+		FROM memory_entries
+		WHERE right(investigation_id::text, 2) IN ('e1', 'e2', 'e4', 'e5')`)
 	require.NoError(t, err)
 
 	vec := NewVectors(&recordingEmbedder{}, 0, testModel, nil)
 
-	// The fixture has eight entries; seven need an embedding. Disabled
-	// ones are embedded too, in case an admin enables them again.
+	// The fixture has eight entries; six need an embedding. Disabled ones
+	// are embedded too, in case an admin enables them again.
 	for range 2 {
 		n, err := Backfill(t.Context(), pool, vec)
 		require.NoError(t, err)
-		require.Equal(t, 7, n)
+		require.Equal(t, 6, n)
 
-		require.Equal(t, 7, countRows(t, pool, "SELECT count(*) FROM jobs WHERE kind = 'embed_memory' AND status = 'pending'"),
+		require.Equal(t, 6, countRows(t, pool, "SELECT count(*) FROM jobs WHERE kind = 'embed_memory' AND status = 'pending'"),
 			"an entry with a job is left to it")
 	}
 
-	require.Zero(t, countRows(t, pool, "SELECT count(*) FROM jobs WHERE kind = 'embed_memory' AND unique_key = 'embed_memory:0192d3a4-0000-7000-8000-0000000000e1'"))
-	require.Equal(t, 1, countRows(t, pool, "SELECT count(*) FROM jobs WHERE kind = 'embed_memory' AND unique_key = 'embed_memory:0192d3a4-0000-7000-8000-0000000000e2'"),
-		"an entry embedded by another model gets a job")
+	jobOf := func(suffix string) int {
+		return countRows(t, pool, "SELECT count(*) FROM jobs WHERE kind = 'embed_memory' AND unique_key = 'embed_memory:0192d3a4-0000-7000-8000-0000000000"+suffix+"'")
+	}
+
+	require.Zero(t, jobOf("e1"), "an entry with a current vector gets no job")
+	require.Zero(t, jobOf("e5"), "an entry with a current vector gets no job")
+	require.Equal(t, 1, jobOf("e2"), "an entry embedded by another model gets a job")
+	require.Equal(t, 1, jobOf("e4"), "an entry whose text changed since it was embedded gets a job")
 }
 
 // countRows runs a query that returns one number.

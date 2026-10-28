@@ -24,8 +24,8 @@ func TestMemoryRetentionRemovesEmbeddings(t *testing.T) {
 
 	// e1 and e2 are old, c1 is new; each has an embedding.
 	_, err := pool.Exec(t.Context(), `
-		INSERT INTO memory_embeddings (investigation_id, model, dimensions, embedding, embedded_at)
-		SELECT investigation_id, 'test-model', 3, '[1,2,3]', now() FROM memory_entries`)
+		INSERT INTO memory_embeddings (investigation_id, model, text_hash, dimensions, embedding, embedded_at)
+		SELECT investigation_id, 'test-model', 'x', 3, '[1,2,3]', now() FROM memory_entries`)
 	require.NoError(t, err)
 
 	handler := New(Options{Pool: pool, Periods: testPeriods, BatchSize: 100, Now: func() time.Time { return testNow }})

@@ -28,8 +28,8 @@ func TestVectorQueryPlans(t *testing.T) {
 	// Each embedding is a random vector; the correlated subquery makes
 	// Postgres draw new numbers for every row.
 	_, err := pool.Exec(t.Context(), `
-		INSERT INTO memory_embeddings (investigation_id, model, dimensions, embedding, embedded_at)
-		SELECT m.investigation_id, 'test-model', 8,
+		INSERT INTO memory_embeddings (investigation_id, model, text_hash, dimensions, embedding, embedded_at)
+		SELECT m.investigation_id, 'test-model', md5(concat_ws(E'\n', m.alert_name, m.service, m.summary, m.cause)), 8,
 		       ('[' || (SELECT string_agg(random()::text, ',') FROM generate_series(1, 8) AS g WHERE m.investigation_id IS NOT NULL) || ']')::vector,
 		       now()
 		FROM memory_entries AS m`)
@@ -56,7 +56,7 @@ func TestVectorQueryPlans(t *testing.T) {
 			name: "ListNearestMemory",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.ListNearestMemory(ctx, db.ListNearestMemoryParams{
-					Query: query, Candidates: nearestCandidates, Exclude: []uuid.UUID{busy}, MaxRows: fusionDepth,
+					Query: query, Model: "test-model", Candidates: nearestCandidates, Exclude: []uuid.UUID{busy}, MaxRows: fusionDepth,
 				})
 
 				return fmt.Errorf("run query: %w", err)
@@ -68,7 +68,7 @@ func TestVectorQueryPlans(t *testing.T) {
 			name: "ListNearestMemoryOfAService",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.ListNearestMemory(ctx, db.ListNearestMemoryParams{
-					Query: query, Candidates: nearestCandidates, Exclude: []uuid.UUID{busy}, MaxRows: fusionDepth,
+					Query: query, Model: "test-model", Candidates: nearestCandidates, Exclude: []uuid.UUID{busy}, MaxRows: fusionDepth,
 					Service: new("svc-42"), Verdict: new("true_positive"),
 				})
 

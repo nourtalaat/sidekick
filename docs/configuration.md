@@ -1803,7 +1803,9 @@ Changing `dimensions` later makes Sidekick refuse to start until you run
 `sidekick migrate vector-reset`, which empties the vectors so they are made
 again; see [the memory source](sources/memory.md#changing-the-length-of-the-vectors).
 Changing only the model, to one with the same `dimensions`, needs no reset:
-the start-up backfill embeds the entries again. The Postgres that the
+the start-up backfill embeds the entries again. Searches compare vectors of
+the current model only, so until an entry is embedded again by the new
+model, it is found by full text alone. The Postgres that the
 bundled chart runs does not have pgvector; see `postgres.image` in the
 chart's `values.yaml` for an image that does.
 

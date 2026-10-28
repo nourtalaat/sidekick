@@ -211,6 +211,7 @@ type Listener struct {
 type MemoryEmbedding struct {
 	InvestigationID uuid.UUID
 	Model           string
+	TextHash        string
 	Dimensions      int32
 	Embedding       string
 	EmbeddedAt      time.Time

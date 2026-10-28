@@ -72,9 +72,12 @@ How it behaves:
   embeddings call never holds up the click. An entry that changes is
   embedded again, a withdrawn one loses its vector at once, and the
   retention job's delete removes vectors with their entries. At start-up,
-  Sidekick queues jobs for entries that have no vector or one from another
-  model, so switching models needs no manual step when the new model
-  returns vectors of the same length.
+  Sidekick queues jobs for entries that have no vector, one from another
+  model, or one of an older text of the entry, such as an entry that
+  changed while vector memory was off. Switching to a model that returns
+  vectors of the same length needs no manual step. A search compares
+  vectors of the current model only, so until the backfill has embedded an
+  entry again with the new model, that entry is found by full text alone.
 - **Fall back to full text.** When the embeddings call fails, Sidekick
   logs a warning, without the text, and answers with full-text matches
   alone. An investigation never fails because of vectors.

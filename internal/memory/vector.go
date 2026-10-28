@@ -61,8 +61,10 @@ func (v *Vectors) Dimensions() int {
 }
 
 // Nearest returns up to limit enabled entries nearest in meaning to text,
-// nearest first, leaving out the investigations in exclude, and optionally
-// only those of one service or with one verdict. When the embeddings call
+// nearest first, among the vectors of the embeddings model only, leaving
+// out the investigations in exclude, and optionally only those of one
+// service or with one verdict. An entry that the model has not embedded
+// yet is not found. When the embeddings call
 // or the query fails it logs a warning and returns no entries, so a search
 // falls back to full text; vectors never fail a search or an investigation.
 func (v *Vectors) Nearest(ctx context.Context, q db.DBTX, text string, f NearestFilter, limit int32) []db.ListNearestMemoryRow {
@@ -79,6 +81,7 @@ func (v *Vectors) Nearest(ctx context.Context, q db.DBTX, text string, f Nearest
 
 	rows, err := db.New(q).ListNearestMemory(ctx, db.ListNearestMemoryParams{
 		Query:      FormatVector(res.Vectors[0]),
+		Model:      v.model,
 		Candidates: nearestCandidates,
 		Exclude:    f.Exclude,
 		Service:    f.Service,

@@ -43,7 +43,11 @@ SELECT m.investigation_id
 FROM memory_entries AS m
 LEFT JOIN memory_embeddings AS e ON e.investigation_id = m.investigation_id
 WHERE m.investigation_id > $1
-  AND (e.investigation_id IS NULL OR e.model <> $2::text)
+  AND (
+    e.investigation_id IS NULL
+    OR e.model <> $2::text
+    OR e.text_hash <> md5(concat_ws(E'\n', m.alert_name, m.service, m.summary, m.cause))
+  )
 ORDER BY m.investigation_id
 LIMIT $3::int
 `
@@ -55,8 +59,9 @@ type ListMemoryNeedingEmbeddingParams struct {
 }
 
 // ListMemoryNeedingEmbedding returns, in order of their ID, up to max_rows
-// entries that come after the ID after and have no embedding or one from
-// another model, for the start-up backfill.
+// entries that come after the ID after and have no embedding, one from
+// another model, or one of an older text of the entry, for the start-up
+// backfill.
 func (q *Queries) ListMemoryNeedingEmbedding(ctx context.Context, arg ListMemoryNeedingEmbeddingParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listMemoryNeedingEmbedding, arg.After, arg.Model, arg.MaxRows)
 	if err != nil {
@@ -81,8 +86,9 @@ const listNearestMemory = `-- name: ListNearestMemory :many
 WITH nearest AS (
   SELECT e.investigation_id, e.embedding <=> $5::vector AS distance
   FROM memory_embeddings AS e
+  WHERE e.model = $6::text
   ORDER BY e.embedding <=> $5::vector
-  LIMIT $6::int
+  LIMIT $7::int
 )
 SELECT m.investigation_id, m.service, m.alert_name, m.verdict, m.summary, m.cause, m.confirmed_at
 FROM nearest AS n
@@ -101,6 +107,7 @@ type ListNearestMemoryParams struct {
 	Verdict    *string
 	MaxRows    int32
 	Query      string
+	Model      string
 	Candidates int32
 }
 
@@ -115,7 +122,8 @@ type ListNearestMemoryRow struct {
 }
 
 // ListNearestMemory returns enabled entries nearest to the embedding query
-// by cosine distance, nearest first, leaving out the investigations in
+// by cosine distance, nearest first, only among vectors of the embeddings
+// model, since distances between vectors of two models mean nothing, leaving out the investigations in
 // exclude, and optionally only those of one service or with one verdict.
 // The nearest candidates are taken from the HNSW index first, then filtered,
 // so the index decides the order; an index scan returns at most
@@ -127,6 +135,7 @@ func (q *Queries) ListNearestMemory(ctx context.Context, arg ListNearestMemoryPa
 		arg.Verdict,
 		arg.MaxRows,
 		arg.Query,
+		arg.Model,
 		arg.Candidates,
 	)
 	if err != nil {
@@ -156,14 +165,15 @@ func (q *Queries) ListNearestMemory(ctx context.Context, arg ListNearestMemoryPa
 }
 
 const upsertMemoryEmbedding = `-- name: UpsertMemoryEmbedding :execrows
-INSERT INTO memory_embeddings (investigation_id, model, dimensions, embedding, embedded_at)
-SELECT m.investigation_id, $1::text, $2::int, $3::vector, now()
+INSERT INTO memory_embeddings (investigation_id, model, text_hash, dimensions, embedding, embedded_at)
+SELECT m.investigation_id, $1::text, $2::text, $3::int, $4::vector, now()
 FROM memory_entries AS m
-WHERE m.investigation_id = $4
-  AND md5(concat_ws(E'\n', m.alert_name, m.service, m.summary, m.cause)) = $5::text
+WHERE m.investigation_id = $5
+  AND md5(concat_ws(E'\n', m.alert_name, m.service, m.summary, m.cause)) = $2::text
 FOR SHARE OF m
 ON CONFLICT (investigation_id) DO UPDATE
 SET model = excluded.model,
+    text_hash = excluded.text_hash,
     dimensions = excluded.dimensions,
     embedding = excluded.embedding,
     embedded_at = excluded.embedded_at
@@ -171,10 +181,10 @@ SET model = excluded.model,
 
 type UpsertMemoryEmbeddingParams struct {
 	Model           string
+	TextHash        string
 	Dimensions      int32
 	Embedding       string
 	InvestigationID uuid.UUID
-	TextHash        string
 }
 
 // UpsertMemoryEmbedding stores the embedding of a memory entry when the
@@ -185,10 +195,10 @@ type UpsertMemoryEmbeddingParams struct {
 func (q *Queries) UpsertMemoryEmbedding(ctx context.Context, arg UpsertMemoryEmbeddingParams) (int64, error) {
 	result, err := q.db.Exec(ctx, upsertMemoryEmbedding,
 		arg.Model,
+		arg.TextHash,
 		arg.Dimensions,
 		arg.Embedding,
 		arg.InvestigationID,
-		arg.TextHash,
 	)
 	if err != nil {
 		return 0, err
