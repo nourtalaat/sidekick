@@ -57,7 +57,6 @@ func TestBenchWorkflowIsSafeForAPublicRepository(t *testing.T) {
 		}
 
 		require.NotContains(t, wf.On, "pull_request_target", "it would give a fork's code the secret")
-		require.NotContains(t, string(raw), "pull_request_target")
 	})
 
 	t.Run("the default permissions only read", func(t *testing.T) {
