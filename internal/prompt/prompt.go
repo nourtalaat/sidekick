@@ -18,7 +18,7 @@ import (
 // and the layout of the other parts. Each investigation records it, so
 // results always refer to an exact prompt. Change it whenever the prompt
 // changes; a test fails until system.tmpl and this version agree.
-const Version = "3"
+const Version = "4"
 
 //go:embed system.tmpl
 var systemTemplate string
