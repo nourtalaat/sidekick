@@ -274,6 +274,42 @@ func TestBuild(t *testing.T) {
 	}
 }
 
+func TestShippedGeminiRises(t *testing.T) {
+	t.Parallel()
+
+	argonStart := time.Date(2026, time.December, 1, 0, 0, 0, 0, time.UTC)
+	flashStart := time.Date(2027, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name  string
+		model string
+		at    time.Time
+		want  model.Price
+	}{
+		{name: "Argon before the rise", model: "gemini-4-argon", at: argonStart.Add(-time.Nanosecond), want: perMTok(2, 10, 0.10, 2)},
+		{name: "Argon on the rise", model: "gemini-4-argon", at: argonStart, want: perMTok(4, 20, 0.20, 4)},
+		{name: "Argon after the rise", model: "gemini-4-argon", at: flashStart, want: perMTok(4, 20, 0.20, 4)},
+		{name: "3.8 Flash before the rise", model: "gemini-3.8-flash", at: flashStart.Add(-time.Nanosecond), want: perMTok(0.75, 3.75, 0.075, 0.75)},
+		{name: "3.8 Flash on the rise", model: "gemini-3.8-flash", at: flashStart, want: perMTok(1.50, 7.50, 0.15, 1.50)},
+		{name: "3.8 Flash after the rise", model: "gemini-3.8-flash", at: flashStart.AddDate(1, 0, 0), want: perMTok(1.50, 7.50, 0.15, 1.50)},
+		{name: "3.6 Flash before the rise", model: "gemini-3.6-flash", at: flashStart.Add(-time.Nanosecond), want: perMTok(0.75, 3.75, 0.075, 0.75)},
+		{name: "3.6 Flash on the rise", model: "gemini-3.6-flash", at: flashStart, want: perMTok(1.50, 7.50, 0.15, 1.50)},
+		{name: "3.6 Flash after the rise", model: "gemini-3.6-flash", at: flashStart.AddDate(1, 0, 0), want: perMTok(1.50, 7.50, 0.15, 1.50)},
+		{name: "Argon does not move 3.8 Flash", model: "gemini-3.8-flash", at: argonStart, want: perMTok(0.75, 3.75, 0.075, 0.75)},
+		{name: "a model with no rise", model: "gemini-2.5-flash", at: flashStart.AddDate(1, 0, 0), want: perMTok(0.30, 2.50, 0.03, 0.30)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, ok := Shipped().LookupAt(tt.model, tt.at)
+			require.True(t, ok)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestShippedChangesAreSane(t *testing.T) {
 	t.Parallel()
 
