@@ -73,3 +73,8 @@ for module in $(go list -deps -f '{{if .Module}}{{.Module.Path}}{{end}}' "$packa
 
 	section "$module $version" "$dir"
 done
+
+# The npm packages bundled into the web UI, as the UI build listed them.
+if [ "$package" = ./cmd/sidekick ]; then
+	node "$(dirname "$0")/../web/build/notice.mjs"
+fi

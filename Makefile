@@ -123,12 +123,13 @@ GENERATE_TARGETS += sqlc-generate
 sqlc-generate: $(SQLC) ## Generate internal/store/db from the queries and migrations
 	$(SQLC) generate
 
-# NOTICE lists the modules linked into the binary, so a dependency change
-# that does not regenerate it fails verify-generated. The validator's
-# NOTICE gets its tools part when its image is built.
+# NOTICE lists the modules linked into the binary and the npm packages
+# bundled into the web UI, which the UI build lists. A dependency change that
+# does not regenerate it fails verify-generated. The validator's NOTICE gets
+# its tools part when its image is built.
 GENERATE_TARGETS += notice
 .PHONY: notice
-notice: ## Write NOTICE and cmd/sidekick-validate/NOTICE, the third-party notices that ship with the binaries and images
+notice: ui-build ## Write NOTICE and cmd/sidekick-validate/NOTICE, the third-party notices that ship with the binaries and images
 	sh scripts/notice.sh ./cmd/sidekick > NOTICE.tmp
 	mv NOTICE.tmp NOTICE
 	sh scripts/notice.sh ./cmd/sidekick-validate > cmd/sidekick-validate/NOTICE.tmp
