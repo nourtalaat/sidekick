@@ -83,6 +83,7 @@ model:
       apiKeySecret: { name: sidekick-anthropic, key: apiKey }
   roles:
     investigate: claude      # required, and the model must be able to call tools
+    triage: claude           # optional; see "Triage" in investigations.md
     summarize: claude
   prices:
     claude-opus-5-5: { inputPerMTok: 4, outputPerMTok: 20, cacheReadPerMTok: 0.2, cacheWritePerMTok: 5 }   # replaces the shipped price
@@ -117,7 +118,7 @@ claude:
 
   ```yaml
   capabilities:
-    toolCalling: true          # needed for the investigate role
+    toolCalling: true          # needed for the investigate and triage roles
     toolChoice: true           # the model accepts a forced tool choice
     thinkingModes: [adaptive]  # adaptive and/or enabled
     effortLevels: [low, medium, high]
@@ -292,9 +293,9 @@ gpt-with-a-key:
   - these Foundry models from other providers: `Kimi-K2.6`, `Kimi-K2.5`,
     `grok-4.7`, `grok-4.6` and `grok-4.3`, which call tools, and
     `DeepSeek-V4-Pro`, `DeepSeek-V4-Flash` and `DeepSeek-V3.2`, which
-    cannot be the `investigate` model. DeepSeek's thinking models fail a
-    tool call turn unless the reasoning of earlier turns is sent back, which
-    Sidekick does not do on Chat Completions; use them for `triage` or
+    cannot be the `investigate` or `triage` model. DeepSeek's thinking
+    models fail a tool call turn unless the reasoning of earlier turns is
+    sent back, which Sidekick does not do on Chat Completions; use them for
     `summarize`. Foundry does not say whether these models honour a forced
     tool choice, so Sidekick does not force one; when the model ends a turn
     without calling a tool, the investigation reminds it to call
@@ -1583,8 +1584,8 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
 - Every `provider`, source `type`, `adapter` and output `type` is one this
   version of Sidekick has, and its section passes that plugin's own checks.
 - `model.roles.investigate` is set, every role names a defined connector,
-  and the connector for `investigate`, globally or on a route, can call
-  tools.
+  and the connectors for `investigate` and `triage`, globally or on a
+  route, can call tools.
 - Every secret reference has a `name` and a `key`, each a plain name without
   `/`. At start-up, every referenced secret file must exist and be readable.
 - Every webhook endpoint sets exactly one of `bearer` and `hmac`. Every
