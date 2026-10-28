@@ -5,6 +5,8 @@ import { ListenerFormPage } from "./pages/ListenerFormPage";
 import { ListenersPage } from "./pages/ListenersPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { RouteFormPage } from "./pages/RouteFormPage";
+import { RoutesPage } from "./pages/RoutesPage";
 import { LOGIN_ROUTE } from "./routes";
 import { RequireSession } from "./session";
 import { NAV_ITEMS } from "./shell/Nav";
@@ -12,7 +14,7 @@ import { Shell } from "./shell/Shell";
 import { UnauthorizedRedirect } from "./UnauthorizedRedirect";
 
 /** The paths of the navigation that have their own routes below, so no placeholder is made for them. */
-const BUILT_PATHS = ["/listeners"];
+const BUILT_PATHS = ["/routes", "/listeners"];
 
 /** The routes of the app. Everything but the login page needs a session. */
 export function App() {
@@ -24,6 +26,9 @@ export function App() {
         <Route element={<RequireSession />}>
           <Route element={<Shell />}>
             <Route index element={<Navigate to="/investigations" replace />} />
+            <Route path="/routes" element={<RoutesPage />} />
+            <Route path="/routes/new" element={<RouteFormPage mode="new" />} />
+            <Route path="/routes/:name" element={<RouteFormPage mode="edit" />} />
             <Route path="/listeners" element={<ListenersPage />} />
             <Route path="/listeners/new" element={<ListenerFormPage mode="new" />} />
             <Route path="/listeners/:name" element={<ListenerFormPage mode="edit" />} />
