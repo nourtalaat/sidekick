@@ -976,6 +976,58 @@ How it behaves:
   stops waiting for response headers after 60 seconds; `sidekick config
   validate` rejects a longer one.
 
+#### LaunchDarkly sources (`type: launchdarkly`)
+
+A LaunchDarkly source reads feature flag changes from the LaunchDarkly
+audit log and the current state of flags, with an access token, so
+investigations can see that someone changed a flag. Its tools only read.
+[The LaunchDarkly source](sources/launchdarkly.md) lists its limits and
+how to make a token with the Reader role.
+
+| Key | Meaning |
+|---|---|
+| `tokenSecret` | `{ name, key }` of the Secret that holds the access token. Required. |
+| `projects` | The projects the tools may read, each with its `key` and the `environments` in it they may read. Required; a call for any other project or environment fails before anything is sent. |
+| `baseURL` | The root of the LaunchDarkly instance: `https://app.eu.launchdarkly.com` for EU, `https://app.launchdarkly.us` for Federal. It must use `https`; plain `http` is accepted only for `localhost` and loopback addresses. Default: `https://app.launchdarkly.com`. |
+
+```yaml
+sources:
+  flags:
+    type: launchdarkly
+    tokenSecret: { name: sidekick-launchdarkly, key: token }
+    projects:
+      - key: shop
+        environments: [production, staging]
+```
+
+The tools, as the model sees them with the source name `flags`:
+
+| Tool | Returns |
+|---|---|
+| `flags__list_flag_changes` | Audit log changes to the flags of one project and environment in a time range of at most 7 days, or to one flag: who, when, what was done, the summary, the comment and a link. |
+| `flags__get_flag` | One flag's state in one environment: on or off, the number of rules and targets, what it serves by default and when off, and when it last changed. |
+
+How it behaves:
+
+- **Start-up never waits for LaunchDarkly.** The token is read from its
+  Secret for each request, so a rotated token needs no restart.
+- **Scope.** Both tools take `project` and `environment`, which may be
+  left out when the config lists only one. Anything outside `projects`, a
+  key that is not one, or a range longer than 7 days is a tool error, and
+  nothing is sent.
+- **Results** are JSON with links to the flags' pages in LaunchDarkly,
+  which become evidence links in the report. Lists are capped as
+  [The LaunchDarkly source](sources/launchdarkly.md#limits) describes, and
+  say when they were cut.
+- **No data.** A range without changes, and a project or flag LaunchDarkly
+  does not have, are reported as no data.
+- **Errors.** A refused request, such as a 400 or a 403, goes to the model
+  as a tool error with LaunchDarkly's message. A refused token, rate
+  limits and server errors count as failures of the source.
+- **Timeout.** `timeout` may be at most `60s`, because the HTTP client
+  stops waiting for response headers after 60 seconds; `sidekick config
+  validate` rejects a longer one.
+
 #### Mock sources (`type: mock`)
 
 A mock source answers tool calls from fixtures instead of a real system.
