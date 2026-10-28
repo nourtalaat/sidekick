@@ -504,6 +504,7 @@ func watcherUpdate() output.Update {
 		Status:          output.WatcherRecovered,
 		PassesInARow:    2,
 		PassesToRecover: 2,
+		IntervalSeconds: 30,
 		Checks:          9,
 		LastCheckAt:     started.Add(4 * time.Minute),
 		LastResult:      "HTTP 200",
