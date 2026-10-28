@@ -2,6 +2,7 @@ package pricing
 
 import (
 	"maps"
+	"time"
 
 	"github.com/nourtalaat/sidekick/internal/model"
 )
@@ -11,7 +12,7 @@ import (
 const geminiLongPromptTokens = 200_000
 
 // shippedGoogle holds the Gemini prices of this release, checked on
-// 2026-10-27 against the Standard paid tier at
+// 2026-10-28 against the Standard paid tier at
 // https://ai.google.dev/gemini-api/docs/pricing, in US dollars per million
 // tokens, for text input. Output includes thinking. Caching is implicit and
 // has no write charge, so cache writes cost the input price; the google
@@ -22,12 +23,12 @@ const geminiLongPromptTokens = 200_000
 // endpoint prices. Regional endpoints, the Gemini API free tier and
 // Flex or Priority processing cost something else; set them with
 // model.prices in config.
+//
+// Google announced price rises for three models; they are in
+// shippedGoogleChanges and apply from their dates.
 var shippedGoogle = map[string]model.Price{
-	// TODO: [SK-74] Gemini 4 Argon doubles to 4, 20 and 0.40 on 2026-12-01.
-	"gemini-4-argon": perMTok(2, 10, 0.10, 2),
-	// TODO: [SK-74] Gemini 3.8 Flash doubles to 1.50, 7.50 and 0.15 on 2027-01-01.
-	"gemini-3.8-flash": perMTok(0.75, 3.75, 0.075, 0.75),
-	// TODO: [SK-74] Gemini 3.6 Flash doubles to 1.50, 7.50 and 0.15 on 2027-01-01.
+	"gemini-4-argon":         perMTok(2, 10, 0.10, 2),
+	"gemini-3.8-flash":       perMTok(0.75, 3.75, 0.075, 0.75),
 	"gemini-3.6-flash":       perMTok(0.75, 3.75, 0.075, 0.75),
 	"gemini-3.5-flash-lite":  perMTok(0.30, 2.50, 0.03, 0.30),
 	"gemini-3.1-flash-lite":  perMTok(0.25, 1.50, 0.025, 0.25),
@@ -38,9 +39,19 @@ var shippedGoogle = map[string]model.Price{
 	"gemini-2.5-flash-lite":  perMTok(0.10, 0.40, 0.01, 0.10),
 }
 
+// shippedGoogleChanges holds the price rises that Google announced on the
+// pricing page named above, with the dates they start. Cache writes follow
+// the input price, as in shippedGoogle.
+var shippedGoogleChanges = map[string][]period{
+	"gemini-4-argon":   {from(2026, time.December, 1, perMTok(4, 20, 0.20, 4))},
+	"gemini-3.8-flash": {from(2027, time.January, 1, perMTok(1.50, 7.50, 0.15, 1.50))},
+	"gemini-3.6-flash": {from(2027, time.January, 1, perMTok(1.50, 7.50, 0.15, 1.50))},
+}
+
 // init adds the Gemini prices to the shipped table.
 func init() {
 	maps.Copy(shipped, shippedGoogle)
+	maps.Copy(shippedChanges, shippedGoogleChanges)
 }
 
 // longPrompt returns base with above as its price for prompts longer than
