@@ -348,3 +348,55 @@ between its root-cause scores and the hand-graded ones.
 | `2` | A bad flag, config file or case file. |
 | `3` | The model provider is unreachable after the connector's retries. |
 
+
+## The benchmark workflow
+
+`.github/workflows/bench.yml` runs the public scenarios in
+`bench/scenarios/public` with the project's Anthropic key, with the config
+`bench/sidekick.yaml` (the quick-start model for the investigation and the
+judge, and the built-in strategies) and the thresholds of `bench/bench.yaml`.
+
+| When | What runs |
+|---|---|
+| Every night | The scenarios, on the default branch. |
+| A release tag (`v*`) | The scenarios, on the tagged commit. |
+| A pull request with the `bench` label | The scenarios on the pull request, again after each push to it, with the result in one comment. |
+| By hand (**Run workflow**) | The scenarios, with `repeat` as the number of runs of each. |
+
+The workflow is built for a public repository:
+
+- **Labels, not pushes.** A maintainer puts the `bench` label on a pull
+  request to run it. A pull request without the label does not run it, and
+  neither does one from a fork, even with the label, because a fork gets no
+  secrets and a stranger must not be able to read one. To benchmark a
+  contributor's change, a maintainer pushes it to a branch of this
+  repository and labels the pull request from there.
+  The workflow does not use `pull_request_target`.
+- **The key.** It is the repository secret `BENCH_ANTHROPIC_API_KEY`, and
+  only the job that runs the benchmark sees it. When the secret is not set,
+  the workflow skips the run with a notice in the log and the job summary
+  and does not fail.
+- **Permissions.** The job that runs the benchmark can only read the
+  repository. A second job, with no key and no checkout, writes the pull
+  request comment, and it is the only one allowed to.
+- **Actions** are pinned by commit SHA.
+
+Each run uploads the `bench-report` artifact, with `report.json`
+([schema](bench-report.schema.json)) and `junit.xml`, and adds the
+Markdown summary to the job summary. On a pull request the summary is one
+comment that later runs update in place. The run fails when a threshold in
+`bench/bench.yaml` is missed. When `bench/baseline.json` exists, the
+workflow also compares the run with it and fails when the overall score
+falls more than 0.02 below the baseline's; commit a `report.json` of a
+good run there to turn that on.
+
+Every run calls a paid model for each scenario three times, so each
+trigger costs money; the `maxCostPerRunUSD` threshold and each scenario's
+`limits` bound it. Run the same command by hand with your own key:
+
+```sh
+sidekick bench run --scenarios bench/scenarios/public --config bench/sidekick.yaml \
+  --bench-config bench/bench.yaml --repeat 3 --out report.json --markdown summary.md
+```
+
+with the key in `bench/.secrets/anthropic/apiKey`, which git ignores.
