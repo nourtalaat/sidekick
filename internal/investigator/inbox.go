@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/prompt"
 	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // The values of investigation_inbox.kind.
@@ -22,6 +24,9 @@ const (
 	InboxNewEvent = "new_event"
 	// InboxResolved is a recovery event of an alert in the group.
 	InboxResolved = "resolved"
+	// InboxWatcher is a change of a watcher's state, or a watcher that
+	// did not start.
+	InboxWatcher = watch.InboxKind
 )
 
 var errUnknownInboxKind = errors.New("unknown inbox kind")
@@ -87,27 +92,59 @@ func (r *run) deliverInbox(ctx context.Context) error {
 	return nil
 }
 
-// inboxText writes the message that delivers items. An item whose event no
-// longer exists is left out of the text but still marked delivered.
+// inboxText writes the message that delivers items: the events, then the
+// watchers. An item whose event no longer exists is left out of the text
+// but still marked delivered.
 func (r *run) inboxText(ctx context.Context, items []db.InvestigationInbox) (string, error) {
-	eventIDs := make([]uuid.UUID, 0, len(items))
+	var (
+		eventIDs []uuid.UUID
+		watchers []prompt.WatcherNote
+	)
 
 	for _, item := range items {
-		if item.Kind != InboxNewEvent && item.Kind != InboxResolved {
+		switch item.Kind {
+		case InboxNewEvent, InboxResolved:
+			var body inboxEvent
+			if err := json.Unmarshal(item.Body, &body); err != nil {
+				return "", fmt.Errorf("decode item %d: %w", item.ID, err)
+			}
+
+			eventIDs = append(eventIDs, body.EventID)
+		case InboxWatcher:
+			var body watch.InboxItem
+			if err := json.Unmarshal(item.Body, &body); err != nil {
+				return "", fmt.Errorf("decode item %d: %w", item.ID, err)
+			}
+
+			watchers = append(watchers, prompt.WatcherNote{State: body.State, NotStarted: body.NotStarted})
+		default:
 			return "", fmt.Errorf("item %d: %w %q", item.ID, errUnknownInboxKind, item.Kind)
 		}
-
-		var body inboxEvent
-		if err := json.Unmarshal(item.Body, &body); err != nil {
-			return "", fmt.Errorf("decode item %d: %w", item.ID, err)
-		}
-
-		eventIDs = append(eventIDs, body.EventID)
 	}
 
-	rows, err := db.New(r.h.opts.Pool).ListEventsByID(ctx, eventIDs)
+	var parts []string
+
+	if len(eventIDs) > 0 {
+		events, err := r.inboxEvents(ctx, eventIDs)
+		if err != nil {
+			return "", fmt.Errorf("load the events: %w", err)
+		}
+
+		parts = append(parts, prompt.Inbox(events))
+	}
+
+	if len(watchers) > 0 {
+		parts = append(parts, prompt.Watchers(watchers))
+	}
+
+	return strings.Join(parts, "\n"), nil
+}
+
+// inboxEvents loads the events with ids that still exist.
+func (r *run) inboxEvents(ctx context.Context, ids []uuid.UUID) ([]event.Event, error) {
+	rows, err := db.New(r.h.opts.Pool).ListEventsByID(ctx, ids)
 	if err != nil {
-		return "", fmt.Errorf("load the events: %w", err)
+		return nil, fmt.Errorf("list the events: %w", err)
 	}
 
 	events := make([]event.Event, 0, len(rows))
@@ -115,11 +152,11 @@ func (r *run) inboxText(ctx context.Context, items []db.InvestigationInbox) (str
 	for _, row := range rows {
 		ev, err := store.EventOf(row)
 		if err != nil {
-			return "", fmt.Errorf("read event %s: %w", row.ID, err)
+			return nil, fmt.Errorf("read event %s: %w", row.ID, err)
 		}
 
 		events = append(events, ev)
 	}
 
-	return prompt.Inbox(events), nil
+	return events, nil
 }
