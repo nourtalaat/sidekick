@@ -23,6 +23,18 @@ func (q *Queries) DeleteListener(ctx context.Context, name string) (int64, error
 	return result.RowsAffected(), nil
 }
 
+const deleteRoute = `-- name: DeleteRoute :execrows
+DELETE FROM routes WHERE name = $1
+`
+
+func (q *Queries) DeleteRoute(ctx context.Context, name string) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRoute, name)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const insertListener = `-- name: InsertListener :exec
 INSERT INTO listeners (name, slack_channel, match, trusted, enabled, version, updated_by, updated_at)
 VALUES ($1, $2, $3, false, true, 1, $4, $5)
@@ -200,6 +212,34 @@ SELECT pg_notify('rules_changed', $1::text)
 // Inside a transaction, Postgres sends the notification when it commits.
 func (q *Queries) NotifyRulesChanged(ctx context.Context, name string) error {
 	_, err := q.db.Exec(ctx, notifyRulesChanged, name)
+	return err
+}
+
+const updateListener = `-- name: UpdateListener :exec
+UPDATE listeners
+SET slack_channel = $1, match = $2, enabled = $3, version = version + 1,
+    updated_by = $4, updated_at = $5
+WHERE name = $6
+`
+
+type UpdateListenerParams struct {
+	SlackChannel string
+	Match        json.RawMessage
+	Enabled      bool
+	UpdatedBy    *string
+	UpdatedAt    time.Time
+	Name         string
+}
+
+func (q *Queries) UpdateListener(ctx context.Context, arg UpdateListenerParams) error {
+	_, err := q.db.Exec(ctx, updateListener,
+		arg.SlackChannel,
+		arg.Match,
+		arg.Enabled,
+		arg.UpdatedBy,
+		arg.UpdatedAt,
+		arg.Name,
+	)
 	return err
 }
 

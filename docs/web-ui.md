@@ -196,6 +196,42 @@ than this version) are filled in the background in batches of 5,000 when
 Sidekick starts; until that job has finished, they do not match the
 `service`, `model` and `q` filters.
 
+## Listeners and routes
+
+The listeners and routes that people add at runtime, and those of the
+config file, are under `/api/v1/listeners` and `/api/v1/routes`. A
+`viewer` can read both; a `responder` can add, replace and delete
+listeners; an `admin` can do the same for routes. Every change runs the
+checks the config file and the `/sidekick` commands run, is written to
+the audit log with the old and new values in the same transaction, and is
+used by every replica within seconds.
+
+- `GET /api/v1/listeners` and `GET /api/v1/routes` list every rule. Each
+  has a `layer`, `file` or `runtime`, and a `status`: `active`;
+  `shadowed`, a runtime rule with the name of a rule in the config file,
+  which wins; `invalid`, a runtime rule that no longer passes the checks,
+  with the reason in `statusReason`; or `disabled`. Rules in effect come
+  first, routes in the order they are tried (`position`), then the runtime
+  rules that are not in effect. A rule of the config file is `readOnly`.
+- `POST` adds a rule with its `name`, and `PUT /{name}` replaces a runtime
+  rule and turns it on or off with `enabled`. The body has the keys the
+  rule has in the config file: for a listener `channel`, `source`,
+  `match`, `extract` and `recovery`; for a route `priority`, `match`,
+  `strategy`, `sources`, `outputs`, `mode`, `budgets` and `grouping`.
+  Durations are written as `5m`. A route needs a `match`, uses only the
+  sources, outputs and strategies of the config file, keeps its budgets at
+  or below the global ones, and has the mode `read-only`, the only mode
+  there is for now. A runtime listener is never trusted.
+- `PUT` takes the `version` of the rule that was read. If the rule has
+  changed since, the answer is 409 with the code `stale`.
+- `DELETE /{name}` removes a runtime rule. It also removes a runtime rule
+  that a rule of the config file shadows, which nothing else can remove.
+- A rule that fails the checks answers 422 with the code `validation` and
+  an `errors` list, one entry for each problem, naming the `field` of the
+  body, such as `budgets.maxToolCalls` or `match.sender.bots[0]`. A rule of
+  the config file answers 409 with the code `file_rule`, a name that is
+  taken 409 with `exists`, and an unknown name 404 with `not_found`.
+
 ## Admin operations
 
 - `GET /api/v1/config` returns the config Sidekick runs with: `file`, the
@@ -206,6 +242,16 @@ Sidekick starts; until that job has finished, they do not match the
   written into the file by mistake, the user and password of every URL
   are removed, and strings the [redaction](configuration.md#redaction)
   rules match are redacted.
+- `GET /api/v1/audit` returns the audit log, newest first, 50 entries at
+  a time (`limit` takes up to 200); pass the answer's `nextCursor` as
+  `cursor` for the next page. The filters `from` (inclusive), `to`
+  (exclusive), `actor`, `action` and `investigation` must all match.
+  `actor` is the ID of a user, an API token or a Slack user; `sidekick`,
+  `policy` and `system` select what Sidekick did on its own. Each entry has
+  the actor, with the name of the user or token when it is still known,
+  the action, what it was done to, and for a change the `old` and `new`
+  values, masked the same way as the effective config. Rows are never
+  changed.
 - `GET /api/v1/jobs?status=dead` lists dead jobs, the background jobs
   that gave up, newest first, 50 at a time (`limit` takes up to 100);
   pass the answer's `nextCursor` as `cursor` for the next page. Each
@@ -231,5 +277,6 @@ role that may call it in `x-sidekick-role`. Errors are problem details
 | 400 | A parameter or body that is not valid. |
 | 401 | No session or API token, or one that expired or was revoked. |
 | 403 | A change without the CSRF token, or a role below the one the operation needs. |
-| 409 | The change conflicts with the current state, such as retrying a job that is not dead. |
+| 409 | The change conflicts with the current state, such as retrying a job that is not dead, or changing a rule of the config file. |
+| 422 | A listener or route that fails the config checks; the answer lists the fields. |
 | 404, 405 | No operation has this path, or this method on it. |

@@ -18,12 +18,6 @@ import (
 	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
-// The users and the token of fixture/sessions.sql that the actions use.
-const (
-	adminUserID = "01920000-0000-7000-8000-000000000040"
-	adminToken  = "01920000-0000-7000-8000-000000000042"
-)
-
 // The watchers of fixture/investigations.sql: d1 has recovered, and d2
 // still runs for inv3.
 const (
@@ -49,7 +43,7 @@ func (s server) post(t *testing.T, path string, who requestAs, body string) *htt
 	case asViewer:
 		return s.do(t, http.MethodPost, path, viSession, viCSRF, strings.NewReader(body))
 	case asToken:
-		return s.doWithToken(t, http.MethodPost, path, "skt_admin", strings.NewReader(body))
+		return s.doWithToken(t, http.MethodPost, path, adminToken, strings.NewReader(body))
 	case asAdminWithoutCSRF:
 		return s.do(t, http.MethodPost, path, adSession, "", strings.NewReader(body))
 	default:
@@ -118,7 +112,7 @@ func TestAskFollowUp(t *testing.T) {
 		},
 		{
 			name: "a token asks", id: inv1, who: asToken, body: `{"text": "Was it the cache?"}`,
-			wantStatus: http.StatusAccepted, wantAudit: [][2]string{{"token", adminToken}}, wantJob: true,
+			wantStatus: http.StatusAccepted, wantAudit: [][2]string{{"token", adminTokenID}}, wantJob: true,
 		},
 		{
 			name: "a question to a running investigation waits for its run", id: inv3, who: asAdmin, body: `{"text": "Check the cache too."}`,
@@ -224,7 +218,7 @@ func TestCancelInvestigation(t *testing.T) {
 		wantAudit     [][2]string
 	}{
 		{name: "a responder stops a running investigation", id: inv3, who: asAdmin, wantStatus: http.StatusOK, wantRequested: true, wantAudit: [][2]string{{"user", adminUserID}}},
-		{name: "a token stops a queued investigation", id: inv5, who: asToken, wantStatus: http.StatusOK, wantRequested: true, wantAudit: [][2]string{{"token", adminToken}}},
+		{name: "a token stops a queued investigation", id: inv5, who: asToken, wantStatus: http.StatusOK, wantRequested: true, wantAudit: [][2]string{{"token", adminTokenID}}},
 		{name: "an investigation that has ended", id: inv1, who: asAdmin, wantStatus: http.StatusOK},
 		{name: "a viewer is denied", id: inv3, who: asViewer, wantStatus: http.StatusForbidden},
 		{name: "no CSRF token", id: inv3, who: asAdminWithoutCSRF, wantStatus: http.StatusForbidden},
@@ -290,7 +284,7 @@ func TestResolveInvestigation(t *testing.T) {
 		wantAudit    [][2]string
 	}{
 		{name: "a responder resolves an open group", id: inv1, who: asAdmin, wantStatus: http.StatusOK, wantResolved: true, wantAudit: [][2]string{{"user", adminUserID}}},
-		{name: "a token resolves an open group", id: inv3, who: asToken, wantStatus: http.StatusOK, wantResolved: true, wantAudit: [][2]string{{"token", adminToken}}},
+		{name: "a token resolves an open group", id: inv3, who: asToken, wantStatus: http.StatusOK, wantResolved: true, wantAudit: [][2]string{{"token", adminTokenID}}},
 		{name: "a group that closed with its window", id: inv2, who: asAdmin, wantStatus: http.StatusConflict},
 		{name: "a viewer is denied", id: inv1, who: asViewer, wantStatus: http.StatusForbidden},
 		{name: "no CSRF token", id: inv1, who: asAdminWithoutCSRF, wantStatus: http.StatusForbidden},
@@ -350,7 +344,7 @@ func TestStopWatcher(t *testing.T) {
 		wantAudit   [][2]string
 	}{
 		{name: "a responder stops a running watcher", id: watcherRunning, who: asAdmin, wantStatus: http.StatusOK, wantStopped: true, wantAudit: [][2]string{{"user", adminUserID}}},
-		{name: "a token stops a running watcher", id: watcherRunning, who: asToken, wantStatus: http.StatusOK, wantStopped: true, wantAudit: [][2]string{{"token", adminToken}}},
+		{name: "a token stops a running watcher", id: watcherRunning, who: asToken, wantStatus: http.StatusOK, wantStopped: true, wantAudit: [][2]string{{"token", adminTokenID}}},
 		{name: "a watcher that has ended", id: watcherRecovered, who: asAdmin, wantStatus: http.StatusOK},
 		{name: "a viewer is denied", id: watcherRunning, who: asViewer, wantStatus: http.StatusForbidden},
 		{name: "no CSRF token", id: watcherRunning, who: asAdminWithoutCSRF, wantStatus: http.StatusForbidden},

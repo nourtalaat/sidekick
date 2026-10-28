@@ -32,17 +32,18 @@ const ActionJobRetried = "job.retried"
 // jobStatusDead is the only status GET /jobs lists.
 const jobStatusDead = "dead"
 
-// errBadCursor means a cursor is not one GET /jobs returned.
+// errBadCursor means a cursor is not one GET /jobs or GET /audit returned.
 var errBadCursor = errors.New("not a cursor")
 
 // firstPage is the cursor of the first page: after every job there is.
-var firstPage = jobCursor{finishedAt: time.Date(9999, time.December, 31, 0, 0, 0, 0, time.UTC), id: math.MaxInt64}
+var firstPage = pageCursor{at: time.Date(9999, time.December, 31, 0, 0, 0, 0, time.UTC), id: math.MaxInt64}
 
-// jobCursor is where a page of dead jobs starts: after the job that died
-// at finishedAt with id.
-type jobCursor struct {
-	finishedAt time.Time
-	id         int64
+// pageCursor is where a page of a list newest first starts: after the row
+// with id that is from the time at. GET /jobs counts the time a job died
+// and GET /audit the time of the entry.
+type pageCursor struct {
+	at time.Time
+	id int64
 }
 
 // ListJobs returns a page of dead jobs, newest first.
@@ -65,7 +66,7 @@ func (s *server) ListJobs(ctx context.Context, req apigen.ListJobsRequestObject)
 	from := firstPage
 
 	if params.Cursor != nil {
-		c, err := parseJobCursor(*params.Cursor)
+		c, err := parsePageCursor(*params.Cursor)
 		if err != nil {
 			return nil, problemf(http.StatusBadRequest, "cursor is not one this API returned.")
 		}
@@ -74,7 +75,7 @@ func (s *server) ListJobs(ctx context.Context, req apigen.ListJobsRequestObject)
 	}
 
 	rows, err := db.New(s.pool).ListDeadJobs(ctx, db.ListDeadJobsParams{
-		BeforeFinishedAt: from.finishedAt, BeforeID: from.id, PageSize: int32(limit + 1), //nolint:gosec // limit is at most maxJobsPage.
+		BeforeFinishedAt: from.at, BeforeID: from.id, PageSize: int32(limit + 1), //nolint:gosec // limit is at most maxJobsPage.
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list dead jobs: %w", err)
@@ -84,9 +85,9 @@ func (s *server) ListJobs(ctx context.Context, req apigen.ListJobsRequestObject)
 
 	for i, row := range rows {
 		if i == limit {
-			next := jobCursor{id: rows[i-1].ID}
+			next := pageCursor{id: rows[i-1].ID}
 			if f := rows[i-1].FinishedAt; f != nil {
-				next.finishedAt = *f
+				next.at = *f
 			}
 
 			cursor := next.String()
@@ -166,33 +167,33 @@ func (s *server) jobOf(row db.ListDeadJobsRow) apigen.Job {
 }
 
 // String encodes c for the nextCursor of a page.
-func (c jobCursor) String() string {
-	return base64.RawURLEncoding.EncodeToString([]byte(strconv.FormatInt(c.finishedAt.UnixNano(), 10) + "." + strconv.FormatInt(c.id, 10)))
+func (c pageCursor) String() string {
+	return base64.RawURLEncoding.EncodeToString([]byte(strconv.FormatInt(c.at.UnixNano(), 10) + "." + strconv.FormatInt(c.id, 10)))
 }
 
-// parseJobCursor decodes what jobCursor.String encoded.
-func parseJobCursor(s string) (jobCursor, error) {
+// parsePageCursor decodes what pageCursor.String encoded.
+func parsePageCursor(s string) (pageCursor, error) {
 	raw, err := base64.RawURLEncoding.DecodeString(s)
 	if err != nil {
-		return jobCursor{}, errBadCursor
+		return pageCursor{}, errBadCursor
 	}
 
 	at, id, ok := strings.Cut(string(raw), ".")
 	if !ok {
-		return jobCursor{}, errBadCursor
+		return pageCursor{}, errBadCursor
 	}
 
 	nanos, err := strconv.ParseInt(at, 10, 64)
 	if err != nil {
-		return jobCursor{}, errBadCursor
+		return pageCursor{}, errBadCursor
 	}
 
 	n, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
-		return jobCursor{}, errBadCursor
+		return pageCursor{}, errBadCursor
 	}
 
-	return jobCursor{finishedAt: time.Unix(0, nanos).UTC(), id: n}, nil
+	return pageCursor{at: time.Unix(0, nanos).UTC(), id: n}, nil
 }
 
 // actorKindOf is the audit actor kind of a caller.
