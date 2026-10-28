@@ -74,6 +74,18 @@ func TestActivityFlatText(t *testing.T) {
 	}{
 		{name: "plain text", a: activity{Text: "checkout is slow"}, want: "checkout is slow"},
 		{
+			name: "lines that repeat inside the text are kept",
+			a:    activity{Text: "service=checkout\nstatus: firing\n\nservice=payments\nstatus: firing"},
+			want: "service=checkout\nstatus: firing\nservice=payments\nstatus: firing",
+		},
+		{
+			name: "a card part that repeats the text is left out, one that repeats only a line is kept",
+			a: activity{Text: "[FIRING] Disk\nstatus: firing", Attachments: []attachment{{ContentType: contentAdaptiveCard, Content: json.RawMessage(`{
+				"body": [{"text": "[FIRING] Disk\nstatus: firing"}, {"text": "status: firing"}]
+			}`)}}},
+			want: "[FIRING] Disk\nstatus: firing\nstatus: firing",
+		},
+		{
 			name: "the bot's mention is left out, other mentions stay",
 			a: activity{
 				Recipient: botAccount, Text: "<at>Sidekick</at> ask <at>Bob</at> about it",

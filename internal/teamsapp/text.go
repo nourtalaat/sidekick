@@ -28,9 +28,13 @@ var actionKeys = []string{"actions", "buttons", "potentialAction"}
 // blockElements end a line in HTML text.
 var blockElements = []atom.Atom{atom.Br, atom.P, atom.Div, atom.Li, atom.Tr, atom.H1, atom.H2, atom.H3, atom.H4, atom.H5, atom.H6, atom.Blockquote, atom.Pre}
 
-// flattener collects the text parts of a message.
+// flattener collects the text parts of a message: its text, and each text
+// of its cards.
 type flattener struct {
 	parts []string
+	// seen holds the parts added so far, so a part that repeats one is
+	// left out.
+	seen map[string]struct{}
 }
 
 // String returns the parts, one per line.
@@ -38,11 +42,9 @@ func (f *flattener) String() string {
 	return strings.Join(f.parts, "\n")
 }
 
-// addHTML adds the text of s, which may hold HTML, one part per line.
+// addHTML adds the text of s, which may hold HTML, as one part.
 func (f *flattener) addHTML(s string) {
-	for line := range strings.SplitSeq(htmlText(s), "\n") {
-		f.add(line)
-	}
+	f.add(htmlText(s))
 }
 
 // addAttachment adds the text of a card, or of the message's HTML.
@@ -84,13 +86,24 @@ func (f *flattener) addCard(v any) {
 	}
 }
 
-// add appends s unless it is empty or already there.
+// add appends s as one part, with its lines trimmed and blank lines left
+// out, unless it is empty or repeats a whole part added before. Lines
+// inside a part are kept as they are, even when they repeat.
 func (f *flattener) add(s string) {
-	s = strings.TrimSpace(s)
-	if s == "" || slices.Contains(f.parts, s) {
+	s = tidyLines(s)
+	if s == "" {
 		return
 	}
 
+	if _, repeat := f.seen[s]; repeat {
+		return
+	}
+
+	if f.seen == nil {
+		f.seen = map[string]struct{}{}
+	}
+
+	f.seen[s] = struct{}{}
 	f.parts = append(f.parts, s)
 }
 
@@ -171,6 +184,19 @@ func walkActions(v any, out *[]link) {
 			walkActions(child, out)
 		}
 	}
+}
+
+// tidyLines trims each line of s and leaves out the blank ones.
+func tidyLines(s string) string {
+	lines := make([]string, 0, strings.Count(s, "\n")+1)
+
+	for line := range strings.SplitSeq(s, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			lines = append(lines, line)
+		}
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 // htmlText returns the text of s, which may hold HTML: tags are left out,
