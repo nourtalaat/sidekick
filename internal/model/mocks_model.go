@@ -107,10 +107,10 @@ func (mr *MockEmbedderMockRecorder) Dimensions() *gomock.Call {
 }
 
 // Embed mocks base method.
-func (m *MockEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+func (m *MockEmbedder) Embed(ctx context.Context, texts []string) (EmbedResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Embed", ctx, texts)
-	ret0, _ := ret[0].([][]float32)
+	ret0, _ := ret[0].(EmbedResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -119,6 +119,45 @@ func (m *MockEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, 
 func (mr *MockEmbedderMockRecorder) Embed(ctx, texts any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Embed", reflect.TypeOf((*MockEmbedder)(nil).Embed), ctx, texts)
+}
+
+// MockEmbeddingConfigured is a mock of EmbeddingConfigured interface.
+type MockEmbeddingConfigured struct {
+	ctrl     *gomock.Controller
+	recorder *MockEmbeddingConfiguredMockRecorder
+	isgomock struct{}
+}
+
+// MockEmbeddingConfiguredMockRecorder is the mock recorder for MockEmbeddingConfigured.
+type MockEmbeddingConfiguredMockRecorder struct {
+	mock *MockEmbeddingConfigured
+}
+
+// NewMockEmbeddingConfigured creates a new mock instance.
+func NewMockEmbeddingConfigured(ctrl *gomock.Controller) *MockEmbeddingConfigured {
+	mock := &MockEmbeddingConfigured{ctrl: ctrl}
+	mock.recorder = &MockEmbeddingConfiguredMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockEmbeddingConfigured) EXPECT() *MockEmbeddingConfiguredMockRecorder {
+	return m.recorder
+}
+
+// Embedding mocks base method.
+func (m *MockEmbeddingConfigured) Embedding() (int, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Embedding")
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// Embedding indicates an expected call of Embedding.
+func (mr *MockEmbeddingConfiguredMockRecorder) Embedding() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Embedding", reflect.TypeOf((*MockEmbeddingConfigured)(nil).Embedding))
 }
 
 // MockCapabilityDeclarer is a mock of CapabilityDeclarer interface.
