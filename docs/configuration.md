@@ -98,6 +98,14 @@ every step and for the budgets. An entry under `prices` replaces the shipped
 price of that model entirely, so set every field. A model with no price
 counts as free in the budgets, so add a price for any model the table lacks.
 
+A shipped price can change on a date. When a provider announces a price
+rise, the table holds the new price with the day it starts (UTC), and each
+step is priced at the time it is saved. For example, Gemini 4 Argon costs
+$2 for input and $10 for output per million tokens until 2026-11-30, and $4
+and $20 from 2026-12-01. No release is needed on that day. A price you set
+under `prices` has no dates: it replaces the shipped price, rises included,
+and stays as you set it.
+
 #### The `anthropic` provider
 
 ```yaml
