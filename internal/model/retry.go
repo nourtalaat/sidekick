@@ -44,21 +44,40 @@ func Generate(ctx context.Context, c Connector, req Request, retries int) (Respo
 	return Retrier{Retries: retries}.Generate(ctx, c, req)
 }
 
+// Embed embeds texts with e and repeats the call up to retries times while
+// it fails with a retryable *Error, as Generate does.
+func Embed(ctx context.Context, e Embedder, texts []string, retries int) (EmbedResult, error) {
+	return Retrier{Retries: retries}.Embed(ctx, e, texts)
+}
+
 // Generate runs req on c with the retry policy of r.
 func (r Retrier) Generate(ctx context.Context, c Connector, req Request) (Response, error) {
+	return retry(ctx, r, "generate", func() (Response, error) { return c.Generate(ctx, req) })
+}
+
+// Embed embeds texts with e with the retry policy of r.
+func (r Retrier) Embed(ctx context.Context, e Embedder, texts []string) (EmbedResult, error) {
+	return retry(ctx, r, "embed", func() (EmbedResult, error) { return e.Embed(ctx, texts) })
+}
+
+// retry runs call, and again while it fails with a retryable *Error and
+// retries are left. op names the call in error messages.
+func retry[T any](ctx context.Context, r Retrier, op string, call func() (T, error)) (T, error) {
+	var zero T
+
 	for attempt := 0; ; attempt++ {
-		resp, err := c.Generate(ctx, req)
+		out, err := call()
 		if err == nil {
-			return resp, nil
+			return out, nil
 		}
 
 		var merr *Error
 		if !errors.As(err, &merr) || !merr.Retryable() || attempt >= r.Retries {
-			return Response{}, fmt.Errorf("generate (attempt %d of %d): %w", attempt+1, r.Retries+1, err)
+			return zero, fmt.Errorf("%s (attempt %d of %d): %w", op, attempt+1, r.Retries+1, err)
 		}
 
 		if werr := r.waitFor(ctx, r.delay(attempt, merr)); werr != nil {
-			return Response{}, fmt.Errorf("wait to retry after %w: %w", err, werr)
+			return zero, fmt.Errorf("wait to retry after %w: %w", err, werr)
 		}
 	}
 }

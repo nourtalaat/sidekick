@@ -72,9 +72,15 @@ type Config struct {
 	// Declared describes a model the connector does not know. It replaces
 	// the known or preset capabilities when set.
 	Declared *DeclaredCapabilities `yaml:"capabilities"`
+	// Dimensions is the length of the vectors of an embedding model. It is
+	// valid only in memory.vector.embeddings, where it is required.
+	Dimensions int `yaml:"dimensions"`
 }
 
-var _ model.CapabilityDeclarer = (*Config)(nil)
+var (
+	_ model.CapabilityDeclarer  = (*Config)(nil)
+	_ model.EmbeddingConfigured = (*Config)(nil)
+)
 
 // DeclaredCapabilities is the capabilities block of a model the connector
 // does not know, in config.
@@ -105,6 +111,10 @@ func (c *Config) Capabilities() model.Capabilities {
 // preset or declared, and that the shared settings fit its capabilities.
 // Each error starts with the key of its field.
 func (c *Config) Validate() error {
+	if _, embedding := c.Embedding(); embedding {
+		return c.validateEmbedding()
+	}
+
 	var errs []error
 
 	errs = append(errs, c.checkEndpoint()...)

@@ -70,9 +70,19 @@ type Connector struct {
 	credentials func(ctx context.Context) ([]option.RequestOption, error)
 	responses   responses.ResponseService
 	chat        openai.ChatCompletionService
+	embeddings  openai.EmbeddingService
+	// dimensions is the length of the vectors of an embedding connector,
+	// and zero for a generation connector.
+	dimensions int
+	// sendDimensions asks the server for vectors of dimensions numbers,
+	// which only a model that can return shorter vectors takes.
+	sendDimensions bool
 }
 
-var _ model.Connector = (*Connector)(nil)
+var (
+	_ model.Connector = (*Connector)(nil)
+	_ model.Embedder  = (*Connector)(nil)
+)
 
 // Capabilities reports what the configured model supports.
 func (c *Connector) Capabilities() model.Capabilities {
@@ -90,6 +100,10 @@ func (c *Connector) ModelID() string {
 // request the model cannot take is an invalid_request error before any
 // network call.
 func (c *Connector) Generate(ctx context.Context, req model.Request) (model.Response, error) {
+	if c.dimensions != 0 {
+		return model.Response{}, &model.Error{Kind: model.ErrInvalid, Err: fmt.Errorf("connector %s: %w", c.name, errEmbeddingOnly)}
+	}
+
 	if err := c.checkRequest(req); err != nil {
 		return model.Response{}, &model.Error{Kind: model.ErrInvalid, Err: fmt.Errorf("connector %s: %w", c.name, err)}
 	}
@@ -135,13 +149,6 @@ func New(ctx context.Context, name string, cfg Config, deps registry.Deps) (mode
 		}
 	}
 
-	server, _ := cfg.ResolvedServer()
-
-	caps, ok := cfg.known(server)
-	if !ok {
-		return nil, fmt.Errorf("model %q: %w", cfg.Model, errUnknownModel)
-	}
-
 	baseURL := cfg.BaseURL
 	if baseURL == "" {
 		baseURL = openAIBaseURL
@@ -152,10 +159,24 @@ func New(ctx context.Context, name string, cfg Config, deps registry.Deps) (mode
 		settings:            cfg.Settings,
 		provider:            Provider,
 		model:               cfg.Model,
-		caps:                caps,
-		api:                 cfg.api(),
 		maxCompletionTokens: cfg.BaseURL == "",
 		credentials:         bearerKey(deps.Secrets, cfg.APIKeySecret),
+	}
+
+	if dims, embedding := cfg.Embedding(); embedding {
+		known, isKnown := knownEmbeddingModels[cfg.Model]
+		c.dimensions = dims
+		c.sendDimensions = isKnown && known.flexible
+	} else {
+		server, _ := cfg.ResolvedServer()
+
+		caps, ok := cfg.known(server)
+		if !ok {
+			return nil, fmt.Errorf("model %q: %w", cfg.Model, errUnknownModel)
+		}
+
+		c.caps = caps
+		c.api = cfg.api()
 	}
 
 	c.connect(deps.HTTP, baseURL)
@@ -181,6 +202,7 @@ func (c *Connector) connect(httpClient *http.Client, baseURL string) {
 
 	c.responses = responses.NewResponseService(opts...)
 	c.chat = openai.NewChatCompletionService(opts...)
+	c.embeddings = openai.NewEmbeddingService(opts...)
 }
 
 // bearerKey returns the credentials of a connector that sends the API key

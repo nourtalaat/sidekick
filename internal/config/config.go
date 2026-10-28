@@ -292,6 +292,10 @@ type Report struct {
 	MinFalsePositiveConfidence report.Confidence `yaml:"minFalsePositiveConfidence"`
 }
 
+// EmbeddingsName names the embeddings connector of vector memory in error
+// messages, metric labels and traces.
+const EmbeddingsName = "memory-embeddings"
+
 // Memory says how prompts use memory: the investigations people
 // confirmed.
 type Memory struct {
@@ -300,6 +304,22 @@ type Memory struct {
 	Enabled bool `yaml:"enabled"`
 	// Examples is the most similar investigations a prompt shows.
 	Examples int `yaml:"examples"`
+	// Vector turns on search by meaning next to full-text search. It is
+	// off unless enabled.
+	Vector Vector `yaml:"vector"`
+}
+
+// Vector configures vector memory: memory entries are embedded with a
+// model, and a prompt's examples and memory__search merge the entries
+// nearest in meaning with the full-text matches. It needs a Postgres with
+// the pgvector extension.
+type Vector struct {
+	// Enabled turns vector memory on.
+	Enabled bool `yaml:"enabled"`
+	// Embeddings is the connector that embeds text, a model connector
+	// section of its own: the provider, the embedding model, its
+	// dimensions and the credentials. It is required when enabled.
+	Embeddings Connector `yaml:"embeddings"`
 }
 
 // PromptExamples returns how many examples a prompt shows: zero when

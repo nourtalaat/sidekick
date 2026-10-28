@@ -1,0 +1,1 @@
+{"error": {"message": "Rate limit reached for text-embedding-3-small in organization org-test on tokens per min (TPM): Limit 1000000, Used 1000000, Requested 900.", "type": "tokens", "param": null, "code": "rate_limit_exceeded"}}

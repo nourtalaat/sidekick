@@ -23,8 +23,33 @@ type Connector interface {
 
 // Embedder is implemented by connectors that can embed text (optional vector memory).
 type Embedder interface {
-	Embed(ctx context.Context, texts []string) ([][]float32, error)
+	// Embed returns one vector for each text, in the order of texts. It
+	// returns a *Error for provider failures, and an invalid_request error
+	// for a vector whose length is not Dimensions.
+	Embed(ctx context.Context, texts []string) (EmbedResult, error)
+	// Dimensions is the length of every vector Embed returns.
 	Dimensions() int
+}
+
+// EmbedResult is the answer to one Embed call.
+type EmbedResult struct {
+	// Vectors holds one vector for each input text, in the order of the inputs.
+	Vectors [][]float32
+	// Usage counts the input tokens the call used, when the provider says.
+	Usage Usage
+	// RequestID is the provider's ID of the call, for support requests.
+	RequestID string
+}
+
+// EmbeddingConfigured is implemented by a connector's config struct that
+// can describe an embedding model, the way CapabilityDeclarer describes a
+// generation model. Config validation uses it to keep embedding settings
+// out of generation connectors and generation models out of
+// memory.vector.embeddings.
+type EmbeddingConfigured interface {
+	// Embedding reports whether the config names an embedding model, and
+	// the dimensions it sets, which is zero when it sets none.
+	Embedding() (dimensions int, ok bool)
 }
 
 // Role is the job a connector does for Sidekick.
@@ -36,6 +61,9 @@ const (
 	RoleInvestigate Role = "investigate"
 	RoleJudge       Role = "judge"
 	RoleSummarize   Role = "summarize"
+	// RoleEmbed labels embedding calls in telemetry. It is not a role to
+	// configure under model.roles.
+	RoleEmbed Role = "embed"
 )
 
 // Effort is the shared effort setting. Connectors map it to provider values.

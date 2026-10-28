@@ -7,6 +7,11 @@
 // which covers IRSA and EKS Pod Identity. The connector reports token usage
 // only; callers price it with the pricing package. The SDK's own retries
 // are off, since model.Generate retries for every connector.
+//
+// A connector whose model is an embedding model, Amazon Titan Text
+// Embeddings V2 or Cohere Embed v4, or that sets dimensions, embeds text
+// with InvokeModel instead of generating: it implements model.Embedder and
+// is valid only as memory.vector.embeddings.
 package bedrock
 
 import (
@@ -60,9 +65,17 @@ type Connector struct {
 	client      *bedrockruntime.Client
 	credentials aws.CredentialsProvider
 	logger      *slog.Logger
+	// embedding is the embedding model of an embedding connector, and nil
+	// for a generation connector.
+	embedding *embeddingModel
+	// dimensions is the length of the vectors of an embedding connector.
+	dimensions int
 }
 
-var _ model.Connector = (*Connector)(nil)
+var (
+	_ model.Connector = (*Connector)(nil)
+	_ model.Embedder  = (*Connector)(nil)
+)
 
 // Capabilities reports what the configured model supports.
 func (c *Connector) Capabilities() model.Capabilities {
@@ -79,6 +92,10 @@ func (c *Connector) ModelID() string {
 // *model.Error; a request the model cannot take is an invalid_request
 // error before any network call.
 func (c *Connector) Generate(ctx context.Context, req model.Request) (model.Response, error) {
+	if c.embedding != nil {
+		return model.Response{}, &model.Error{Kind: model.ErrInvalid, Err: fmt.Errorf("connector %s: %w", c.name, errEmbeddingOnly)}
+	}
+
 	in, err := c.input(req)
 	if err != nil {
 		return model.Response{}, &model.Error{Kind: model.ErrInvalid, Err: fmt.Errorf("connector %s: %w", c.name, err)}
@@ -194,9 +211,25 @@ func New(ctx context.Context, name string, cfg Config, deps registry.Deps) (mode
 // build is New with the AWS config loader to use. Tests give one with fixed
 // credentials, so they never read the environment or call AWS.
 func build(ctx context.Context, name string, cfg Config, deps registry.Deps, load awsauth.Loader) (*Connector, error) {
-	m, ok := cfg.known()
-	if !ok {
-		return nil, fmt.Errorf("model %q: %w", cfg.Model, errUnknownModel)
+	var (
+		m         knownModel
+		embedding *embeddingModel
+	)
+
+	if _, isEmbedding := cfg.Embedding(); isEmbedding {
+		e, ok := lookupEmbeddingModel(cfg.Model)
+		if !ok {
+			return nil, fmt.Errorf("model %q: %w", cfg.Model, errUnknownModel)
+		}
+
+		embedding = &e
+	} else {
+		var ok bool
+
+		m, ok = cfg.known()
+		if !ok {
+			return nil, fmt.Errorf("model %q: %w", cfg.Model, errUnknownModel)
+		}
 	}
 
 	httpClient := deps.HTTP
@@ -237,6 +270,8 @@ func build(ctx context.Context, name string, cfg Config, deps registry.Deps, loa
 		client:      client,
 		credentials: awsCfg.Credentials,
 		logger:      logger,
+		embedding:   embedding,
+		dimensions:  cfg.Dimensions,
 	}, nil
 }
 

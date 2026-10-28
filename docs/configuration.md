@@ -1755,6 +1755,56 @@ so investigations nobody confirmed are never shown. With
 investigation is deleted. To let the model search memory itself, add a
 [memory source](sources/memory.md).
 
+#### Vector memory (`memory.vector`)
+
+```yaml
+memory:
+  vector:
+    enabled: true      # default false
+    embeddings:        # required when enabled
+      provider: openai # openai, bedrock or voyage
+      model: text-embedding-3-small
+      dimensions: 1536
+      apiKeySecret: { name: sidekick-openai, key: apiKey }
+```
+
+`memory.vector` is optional and off by default. Turned on, it embeds memory
+entries with an embeddings model, so a search can find entries that mean
+the same thing as the alert in words the full-text search does not match.
+`embeddings` is a model connector section of its own, with the keys of the
+provider it names and `dimensions`, the length of the vectors the model
+returns. `dimensions` is valid only here: a connector under
+`model.connectors` that sets it, or that names an embedding model, is a
+configuration error. Pgvector indexes vectors of at most 2,000 dimensions,
+so `dimensions` is at most 2000.
+
+Sidekick checks the model and `dimensions` against its table of known
+embedding models when it reads the file, and every vector the provider
+returns against `dimensions` on each call, so a wrong value fails with a
+message that names the setting. The `retries`, `timeout` and
+`baseURL` rules of the other connectors apply. The texts sent are memory
+entries, which are redacted already, and are cut to 8,000 bytes, at most 64
+to a call.
+
+| Provider | Models | `dimensions` | Notes |
+|---|---|---|---|
+| `openai` | `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002` | Up to 1536 or 3072 for the `3` models, which Sidekick asks the API to shorten; 1536 for `ada-002` | `apiKeySecret`, or `baseURL` for an OpenAI-compatible server such as Ollama or vLLM. For a model Sidekick does not know, set `dimensions` to what the server returns; Sidekick does not ask the server to shorten the vectors. |
+| `bedrock` | `amazon.titan-embed-text-v2:0`, `cohere.embed-v4:0`, and their `us.`, `eu.` and other geo inference profile IDs | 256, 512 or 1024 for Titan; 256, 512, 1024 or 1536 for Cohere | `region`, and the same AWS credentials as a Bedrock generation connector, which also need `bedrock:InvokeModel`. |
+| `voyage` | `voyage-4-large`, `voyage-4`, `voyage-4-lite`, `voyage-3-large`, `voyage-3.5`, `voyage-3.5-lite`, `voyage-code-3` | 256, 512, 1024 or 2048 | `apiKeySecret` is required. `baseURL` replaces `https://api.voyageai.com/v1`; it must use https, except for a loopback host. |
+
+Settings that only mean something for generation, such as `maxTokens`,
+`temperature`, `thinking`, `effort`, `api` and `capabilities`, are errors
+in `embeddings`. Anthropic and Google connectors cannot embed.
+
+Embedding calls are counted in `sidekick_model_calls_total` with `role="embed"`,
+and their input tokens and cost in `sidekick_model_tokens_total` and
+`sidekick_model_cost_usd_total`. The cost comes from the shipped price
+table, which has the models above (input tokens only); `sidekick doctor`
+warns about an embedding model that has no price, and `model.prices` adds
+one. Cohere on Bedrock does not report tokens in its answer, so Sidekick
+reads them from a response header when Bedrock sends it, and the cost shows
+zero when it does not.
+
 ### `redaction`
 
 Redaction removes secrets and personal data from event text, raw webhook
@@ -2020,6 +2070,7 @@ with access to the database, who can turn the guard off.
 | `report.minFalsePositiveConfidence` | `high` |
 | `memory.enabled` | `true` |
 | `memory.examples` | `3` |
+| `memory.vector.enabled` | `false` |
 | `redaction.builtIn` | every built-in rule except `ip_addresses` |
 | `telemetry.logLevel` | `info` |
 | `routes[].watcherLimits.types` | every check type: `http`, `tool` and `alert` |
@@ -2091,6 +2142,12 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   `onDailyCap` is `wait` or `skip`, and `overLimit` is `delay` or `skip`.
   Each route's `grouping.window` is positive, and no
   `grouping.fingerprintLabels` entry is empty or listed twice.
+- With `memory.vector.enabled`, `memory.vector.embeddings` names a
+  provider that can embed (`openai`, `bedrock` or `voyage`) with an
+  embedding model it knows, or an OpenAI-compatible server's model with its
+  `dimensions`, and `dimensions` is a length the model returns and at most
+  2000. No `model.connectors` entry sets `dimensions` or names an embedding
+  model.
 - Every `redaction.builtIn` entry is a built-in rule. Every custom
   redaction rule has a unique name of the right shape that is not a
   built-in rule's name, and a pattern that parses.

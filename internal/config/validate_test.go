@@ -122,6 +122,15 @@ func TestValidateFixtures(t *testing.T) {
 		{file: "unknown-confidence", want: []string{`report.minFalsePositiveConfidence: unknown confidence "hgh" (did you mean "high"?)`}},
 		// Memory
 		{file: "memory-examples", want: []string{"memory.examples: must be between 1 and 10, got 11; set memory.enabled to false for none"}},
+		{file: "vector-no-embeddings", want: []string{"memory.vector.embeddings.provider: required when memory.vector.enabled is true"}},
+		{file: "vector-cannot-embed", want: []string{"memory.vector.embeddings.provider: the anthropic provider cannot embed text; use openai, bedrock or voyage"}},
+		{file: "vector-too-wide", want: []string{
+			"memory.vector.embeddings.dimensions: must be at most 2000, the most pgvector's HNSW index holds; use a model that returns shorter vectors, or ask it for fewer dimensions",
+		}},
+		{file: "embedding-connector", want: []string{
+			"model.connectors.embed-a.dimensions: valid only in memory.vector.embeddings, not in model.connectors",
+			"model.connectors.embed-b: this connector embeds text, which only memory.vector.embeddings can use, not model.connectors",
+		}},
 		// Intake
 		{file: "webhook-two-auth", want: []string{"intake.webhooks.ci.auth: set exactly one of bearer and hmac, not both"}},
 		{file: "webhook-bad-name", want: []string{`intake.webhooks["alerts/prod"]: name "alerts/prod" ` + nameRule}},
@@ -294,6 +303,7 @@ func TestValidateValidFixtures(t *testing.T) {
 		{name: "example", data: exampleYAML},
 		{name: "teams", data: func(t *testing.T) []byte { t.Helper(); return readFixture(t, "valid/teams.yaml") }},
 		{name: "oidc", data: func(t *testing.T) []byte { t.Helper(); return readFixture(t, "valid/oidc.yaml") }},
+		{name: "vector memory", data: func(t *testing.T) []byte { t.Helper(); return readFixture(t, "valid/vector.yaml") }},
 	}
 
 	for _, tt := range tests {

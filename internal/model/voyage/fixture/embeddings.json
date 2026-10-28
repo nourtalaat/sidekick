@@ -1,0 +1,1 @@
+{"object":"list","data":[{"object":"embedding","embedding":[0.5,0.25,-0.125],"index":1},{"object":"embedding","embedding":[1,0.75,0.0625],"index":0}],"model":"voyage-4","usage":{"total_tokens":11}}

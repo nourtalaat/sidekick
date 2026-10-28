@@ -153,6 +153,30 @@ func TestCheckPrices(t *testing.T) {
 			}},
 		},
 		{
+			name: "an embedding model with a price",
+			config: baseConfig + `
+memory:
+  vector:
+    enabled: true
+    embeddings: { provider: openai, model: text-embedding-3-small, dimensions: 1536, apiKeySecret: { name: anthropic, key: apiKey } }
+`,
+			want: []Result{{Check: "prices", Status: StatusOK, Message: "every configured model has a price"}},
+		},
+		{
+			name: "an embedding model without a price",
+			config: baseConfig + `
+memory:
+  vector:
+    enabled: true
+    embeddings: { provider: openai, model: nomic-embed-text, dimensions: 768, baseURL: "http://127.0.0.1:11434/v1" }
+`,
+			want: []Result{{
+				Check: "price memory-embeddings", Status: StatusWarn,
+				Message: "the embedding model nomic-embed-text has no price, so its calls show no cost in the metrics",
+				Fix:     `add model.prices."nomic-embed-text" with inputPerMTok, in US dollars per million tokens`,
+			}},
+		},
+		{
 			name:   "a price from config",
 			config: strings.Replace(baseConfig, "  roles:", strings.TrimPrefix(custom, "\n")+"  prices:\n    claude-custom-1: { inputPerMTok: 1, outputPerMTok: 5 }\n  roles:", 1),
 			want:   []Result{{Check: "prices", Status: StatusOK, Message: "every configured model has a price"}},
