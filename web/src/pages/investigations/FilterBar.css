@@ -1,0 +1,15 @@
+.sk-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sk-space-3) var(--sk-space-4);
+}
+
+.sk-filters .sk-field {
+  min-width: 9rem;
+}
+
+.sk-filters__actions {
+  display: flex;
+  gap: var(--sk-space-2);
+}

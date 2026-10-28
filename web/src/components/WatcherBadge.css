@@ -1,0 +1,23 @@
+.sk-watcher-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sk-space-1);
+  font: var(--sk-type-label);
+  white-space: nowrap;
+}
+
+.sk-watcher-badge--checking {
+  color: var(--sk-watcher-checking-fg);
+}
+
+.sk-watcher-badge--recovered {
+  color: var(--sk-watcher-recovered-fg);
+}
+
+.sk-watcher-badge--timedout {
+  color: var(--sk-watcher-timedout-fg);
+}
+
+.sk-watcher-badge--stopped {
+  color: var(--sk-watcher-stopped-fg);
+}

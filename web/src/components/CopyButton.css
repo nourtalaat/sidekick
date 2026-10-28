@@ -1,0 +1,24 @@
+.sk-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sk-space-1);
+  min-height: var(--sk-size-control-sm);
+  min-width: var(--sk-size-target-min);
+  padding: 0 var(--sk-space-3);
+  background: var(--sk-action-secondary-bg);
+  color: var(--sk-action-secondary-text);
+  border: 1px solid var(--sk-action-secondary-border);
+  border-radius: var(--sk-radius-full);
+  font: var(--sk-type-caption);
+  cursor: pointer;
+}
+
+.sk-copy:hover {
+  background: var(--sk-action-secondary-bg-hover);
+}
+
+@media (forced-colors: active) {
+  .sk-copy {
+    border-color: ButtonText;
+  }
+}

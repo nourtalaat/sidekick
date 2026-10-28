@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from "react-router";
 import { LoginPage } from "./pages/LoginPage";
 import { AuditPage } from "./pages/AuditPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import InvestigationPage from "./pages/investigation/InvestigationPage";
+import InvestigationsPage from "./pages/investigations/InvestigationsPage";
 import { ListenerFormPage } from "./pages/ListenerFormPage";
 import { ListenersPage } from "./pages/ListenersPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
@@ -15,7 +17,7 @@ import { Shell } from "./shell/Shell";
 import { UnauthorizedRedirect } from "./UnauthorizedRedirect";
 
 /** The paths of the navigation that have their own routes below, so no placeholder is made for them. */
-const BUILT_PATHS = ["/routes", "/listeners", "/audit"];
+const BUILT_PATHS = ["/investigations", "/routes", "/listeners", "/audit"];
 
 /** The routes of the app. Everything but the login page needs a session. */
 export function App() {
@@ -27,6 +29,8 @@ export function App() {
         <Route element={<RequireSession />}>
           <Route element={<Shell />}>
             <Route index element={<Navigate to="/investigations" replace />} />
+            <Route path="/investigations" element={<InvestigationsPage />} />
+            <Route path="/investigations/:id" element={<InvestigationPage />} />
             <Route path="/routes" element={<RoutesPage />} />
             <Route path="/routes/new" element={<RouteFormPage mode="new" />} />
             <Route path="/routes/:name" element={<RouteFormPage mode="edit" />} />

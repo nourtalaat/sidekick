@@ -1,0 +1,31 @@
+.sk-inv {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--sk-space-6);
+  align-items: start;
+}
+
+.sk-inv__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-5);
+  min-width: 0;
+}
+
+.sk-inv__heading {
+  margin: 0 0 var(--sk-space-2);
+  font: var(--sk-type-h2);
+  letter-spacing: var(--sk-tracking-h2);
+}
+
+.sk-inv__pending {
+  margin: 0;
+  padding-left: var(--sk-space-6);
+}
+
+/* Below 1024px the side column moves under the main column. */
+@media (max-width: 1023px) {
+  .sk-inv {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

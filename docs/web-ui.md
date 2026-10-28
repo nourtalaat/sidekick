@@ -196,6 +196,42 @@ than this version) are filled in the background in batches of 5,000 when
 Sidekick starts; until that job has finished, they do not match the
 `service`, `model` and `q` filters.
 
+## Investigation pages
+
+The web UI shows the investigations in two pages, which every role from
+`viewer` up can open.
+
+- **The list** (`/investigations`) has a row for each investigation,
+  newest first, with the verdict first so the list can be scanned: the
+  alert title, service, route, start time, duration, cost, how people
+  rated the verdict, and the state of the newest watcher. The filters
+  above the table are kept in the address (`q`, `verdict`, `status`,
+  `range`, `route`, `service` and `model`), so a view can be shared.
+  **Load more** adds the next page. **Compact rows** (`compact=1`) makes
+  the rows shorter.
+- **The investigation page** (`/investigations/<id>`, the address the
+  Slack link opens) shows the verdict, how sure Sidekick is, the reason,
+  the state of the watchers, the report, what was checked, the cost and
+  the model, the alerts of the group, and the record of the run, one line
+  for each step. A step opens to show the tool call or result in a box
+  with a copy button.
+
+A `responder` or higher also sees **Stop**, **Resolve**, **Stop watching**
+and the follow-up box at the bottom of the page. A `viewer` does not see
+these buttons. The server checks the role of every request again, and
+the page shows its reason when it refuses one.
+
+While a run goes, the page follows the investigation's stream and adds
+the new steps in batches every few seconds, so a screen reader announces
+them one batch at a time. The stream also opens when a follow-up question
+waits for its run, and when the page reads the investigation again (every
+30 seconds while nothing runs) and finds a new run, such as an answer to
+a question asked in Slack.
+
+Text from alerts, sources and the model is always shown as plain text,
+never as HTML. A link opens only when its address is `http` or `https`;
+any other address, such as `javascript:`, is shown as text.
+
 ## Listeners and routes
 
 The listeners and routes that people add at runtime, and those of the
