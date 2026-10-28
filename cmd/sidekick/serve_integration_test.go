@@ -366,7 +366,8 @@ type slackCall struct {
 }
 
 // fakeSlack is the Slack Web API for one test: each post gets the next
-// timestamp, and every call is recorded.
+// timestamp, and every call is recorded. A post to a channel ID is in that
+// channel, as in Slack; a post to a channel name is in C123.
 type fakeSlack struct {
 	api *fakehttp.Server
 
@@ -380,8 +381,14 @@ func newFakeSlack(t *testing.T) *fakeSlack {
 	f := &fakeSlack{api: fakehttp.New(t)}
 
 	f.api.HandleFunc(http.MethodPost, "/api/chat.postMessage", func(w http.ResponseWriter, r *http.Request) {
-		f.record(t, "chat.postMessage", r)
-		answerSlack(w, `{"ok":true,"channel":"C123","ts":"1793023321.%06d"}`, len(f.callsTo("chat.postMessage")))
+		call := f.record(t, "chat.postMessage", r)
+
+		channel := "C123"
+		if strings.HasPrefix(call.Channel, "C") {
+			channel = call.Channel
+		}
+
+		answerSlack(w, `{"ok":true,"channel":"%s","ts":"1793023321.%06d"}`, channel, len(f.callsTo("chat.postMessage")))
 	})
 
 	f.api.HandleFunc(http.MethodPost, "/api/chat.update", func(w http.ResponseWriter, r *http.Request) {

@@ -38,6 +38,14 @@ RETURNING id;
 -- name: GetEvent :one
 SELECT * FROM events WHERE id = @id;
 
+-- name: GetEventByKey :one
+-- GetEventByKey returns the event that one of intakes stored with key, the
+-- oldest when several did.
+SELECT * FROM events
+WHERE intake = ANY (@intakes::text[]) AND key = @key
+ORDER BY received_at, id
+LIMIT 1;
+
 -- name: ListEventsByID :many
 -- ListEventsByID returns the events with ids, in the order they arrived.
 SELECT * FROM events WHERE id = ANY (@ids::uuid[]) ORDER BY received_at, id;

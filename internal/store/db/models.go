@@ -151,6 +151,7 @@ type Investigation struct {
 	ConfirmedBy                *uuid.UUID
 	ConfirmedBySlackUser       *string
 	ConfirmedAt                *time.Time
+	RunKind                    string
 }
 
 type InvestigationInbox struct {
@@ -161,6 +162,7 @@ type InvestigationInbox struct {
 	Author          *uuid.UUID
 	CreatedAt       time.Time
 	DeliveredSeq    *int32
+	Key             *string
 }
 
 type Job struct {

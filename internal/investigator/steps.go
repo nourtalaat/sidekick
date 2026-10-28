@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/store"
@@ -23,8 +24,13 @@ const (
 	// reminder to submit a verdict.
 	kindNote = "note"
 	// kindInbox delivers what arrived while the investigation ran, such as
-	// new events in its group and recoveries.
+	// new events in its group, recoveries and follow-up questions.
 	kindInbox = "inbox"
+	// kindSummary replaces the content of an earlier tool result in the
+	// conversation with a short summary, when the conversation grows too
+	// long for the model. Its parts hold the tool result as it is sent
+	// now; the earlier step keeps the original.
+	kindSummary = "summary"
 )
 
 // The values of steps.status.
@@ -108,10 +114,60 @@ type history struct {
 	// turn, or -1, and finalBudget the budget it names.
 	finalNote   int
 	finalBudget string
+	// run is the run of the last step, or the run startRun began, and
+	// runFrom the index in steps of its first step. The checks of how a
+	// run goes, such as its reminders, its final turn and its tokens, look
+	// only at the steps from runFrom on.
+	run     int32
+	runFrom int
+	// resultAt is where each tool result is in req.Messages, by call ID:
+	// the message and the part. summarized holds the call IDs whose result
+	// a summary step replaced.
+	resultAt   map[string][2]int
+	summarized map[string]bool
+}
+
+// startRun makes run the current run, when it is newer than the run of
+// the last step: the steps saved from now on are its steps.
+func (h *history) startRun(run int32) {
+	if run <= h.run {
+		return
+	}
+
+	h.run, h.runFrom = run, len(h.steps)
+	h.finalNote, h.finalBudget = -1, ""
+}
+
+// runSteps returns the steps of the current run.
+func (h *history) runSteps() []db.Step {
+	return h.steps[h.runFrom:]
+}
+
+// runUse returns when the current run started, which is when its first
+// step started or, before it has one, now, and what the runs before it
+// used of inv's counters.
+func (h *history) runUse(now time.Time, inv db.Investigation) (time.Time, usage) {
+	before := usage{costMicros: inv.CostMicros, toolCalls: inv.ToolCalls}
+
+	for _, s := range h.runSteps() {
+		before.costMicros -= deref(s.CostMicros)
+
+		if countsAsToolCall(s) {
+			before.toolCalls--
+		}
+	}
+
+	if steps := h.runSteps(); len(steps) > 0 {
+		return steps[0].StartedAt, before
+	}
+
+	return now, before
 }
 
 // add appends a saved step and adds it to the conversation.
 func (h *history) add(s db.Step) error {
+	h.startRun(s.Run)
+
 	switch s.Kind {
 	case kindPrompt:
 		if len(h.steps) > 0 {
@@ -139,7 +195,13 @@ func (h *history) add(s db.Step) error {
 			return fmt.Errorf("decode step %d: %w", s.Seq, err)
 		}
 
-		h.addParts(s, parts)
+		if s.Kind == kindSummary {
+			if err := h.replaceResult(parts); err != nil {
+				return fmt.Errorf("step %d: %w", s.Seq, err)
+			}
+		} else {
+			h.addParts(s, parts)
+		}
 	}
 
 	if s.Kind == kindNote && s.Budget != nil && h.finalNote < 0 {
@@ -174,13 +236,41 @@ func (h *history) addParts(s db.Step, parts []model.Part) {
 	}
 
 	last := len(h.req.Messages) - 1
-	if last >= 0 && h.req.Messages[last].Role == model.User {
-		h.req.Messages[last].Parts = append(h.req.Messages[last].Parts, parts...)
-
-		return
+	if last < 0 || h.req.Messages[last].Role != model.User {
+		h.req.Messages = append(h.req.Messages, model.Message{Role: model.User})
+		last++
 	}
 
-	h.req.Messages = append(h.req.Messages, model.Message{Role: model.User, Parts: parts})
+	for _, p := range parts {
+		if r, ok := p.(model.ToolResult); ok {
+			h.resultAt[r.CallID] = [2]int{last, len(h.req.Messages[last].Parts)}
+		}
+
+		h.req.Messages[last].Parts = append(h.req.Messages[last].Parts, p)
+	}
+}
+
+// replaceResult puts the tool result of a summary step in place of the
+// result it summarizes.
+func (h *history) replaceResult(parts []model.Part) error {
+	if len(parts) != 1 {
+		return fmt.Errorf("a summary has %d parts, not 1", len(parts))
+	}
+
+	r, ok := parts[0].(model.ToolResult)
+	if !ok {
+		return errors.New("a summary that is not a tool result")
+	}
+
+	at, ok := h.resultAt[r.CallID]
+	if !ok {
+		return fmt.Errorf("a summary of call %q, which has no result", r.CallID)
+	}
+
+	h.req.Messages[at[0]].Parts[at[1]] = r
+	h.summarized[r.CallID] = true
+
+	return nil
 }
 
 // request returns the conversation to send the model next. The caller
@@ -228,10 +318,11 @@ func (h *history) turnCalls() []model.ToolCall {
 	return out
 }
 
-// needsReminder reports whether the last step is a model turn that called
-// no tool, so the model ended its turn without a verdict.
+// needsReminder reports whether the last step is a model turn of the
+// current run that called no tool, so the model ended its turn without a
+// verdict or an answer.
 func (h *history) needsReminder() bool {
-	return h.lastTurn >= 0 && h.lastTurn == len(h.steps)-1 && len(h.turnCalls()) == 0
+	return h.lastTurn >= h.runFrom && h.lastTurn == len(h.steps)-1 && len(h.turnCalls()) == 0
 }
 
 // finalTurn returns the budget of the final turn, when it has started.
@@ -245,13 +336,14 @@ func (h *history) finalTurnTaken() bool {
 	return h.finalNote >= 0 && h.lastTurn > h.finalNote
 }
 
-// tokens returns the tokens of every model turn: input, including those
-// read from or written to the prompt cache, and output.
+// tokens returns the tokens of every model call of the current run, model
+// turns and summaries: input, including those read from or written to the
+// prompt cache, and output.
 func (h *history) tokens() int64 {
 	var n int64
 
-	for _, s := range h.steps {
-		if s.Kind != kindModelTurn {
+	for _, s := range h.runSteps() {
+		if s.Kind != kindModelTurn && s.Kind != kindSummary {
 			continue
 		}
 
@@ -261,11 +353,12 @@ func (h *history) tokens() int64 {
 	return n
 }
 
-// count returns the number of steps for which match is true.
+// count returns the number of steps of the current run for which match
+// is true.
 func (h *history) count(match func(db.Step) bool) int {
 	n := 0
 
-	for _, s := range h.steps {
+	for _, s := range h.runSteps() {
 		if match(s) {
 			n++
 		}
@@ -276,7 +369,14 @@ func (h *history) count(match func(db.Step) bool) int {
 
 // newHistory returns the history of the saved steps, in seq order.
 func newHistory(steps []db.Step) (*history, error) {
-	h := &history{calls: map[string]model.ToolCall{}, results: map[string]db.Step{}, lastTurn: -1, finalNote: -1}
+	h := &history{
+		calls:      map[string]model.ToolCall{},
+		results:    map[string]db.Step{},
+		resultAt:   map[string][2]int{},
+		summarized: map[string]bool{},
+		lastTurn:   -1,
+		finalNote:  -1,
+	}
 
 	for _, s := range steps {
 		if int(s.Seq) != len(h.steps) {

@@ -34,10 +34,40 @@ SELECT * FROM investigations WHERE id = @id;
 -- with the token fence, and sets it running; the first run sets started_at
 -- to now, from the caller's clock. It returns no row when a newer
 -- claim owns the run already, or when the investigation has ended; a failed
--- investigation runs again when an admin retries its dead job.
+-- investigation runs again when an admin retries its dead job. A follow-up
+-- run is left to its follow_up job.
 UPDATE investigations
 SET fence = @fence, status = 'running', started_at = coalesce(started_at, @now::timestamptz)
-WHERE id = @id AND fence < @fence AND status IN ('queued', 'running', 'failed')
+WHERE id = @id AND fence < @fence AND status IN ('queued', 'running', 'failed') AND run_kind = 'investigate'
+RETURNING *;
+
+-- name: StartFollowUpRun :one
+-- StartFollowUpRun gives a follow-up run of an investigation to the job
+-- claim with the token fence. An investigation that has ended, final or
+-- cancelled, gets the next run number and the follow_up run kind, and is
+-- set running without the Stop of an earlier run; a follow-up run that is
+-- running already keeps its number and its Stop, so a new claim resumes
+-- it. It returns no row when a newer claim owns the run, or when the
+-- investigation is in neither state.
+UPDATE investigations
+SET fence = @fence,
+    run = CASE WHEN status = 'running' THEN run ELSE run + 1 END,
+    cancel_requested_at = CASE WHEN status = 'running' THEN cancel_requested_at END,
+    cancel_requested_by = CASE WHEN status = 'running' THEN cancel_requested_by END,
+    cancel_requested_by_slack_user = CASE WHEN status = 'running' THEN cancel_requested_by_slack_user END,
+    status = 'running',
+    run_kind = 'follow_up'
+WHERE id = @id AND fence < @fence AND (status IN ('final', 'cancelled') OR (status = 'running' AND run_kind = 'follow_up'))
+RETURNING *;
+
+-- name: EndFollowUpRun :one
+-- EndFollowUpRun ends the running follow-up run of an investigation whose
+-- job is dead, with status, final or cancelled as before the run, and the
+-- report that says it could not answer. It returns no row when no
+-- follow-up run is running.
+UPDATE investigations
+SET status = @status, report = @report, finished_at = now(), run_kind = 'investigate'
+WHERE id = @id AND status = 'running' AND run_kind = 'follow_up'
 RETURNING *;
 
 -- name: GetFirstEvent :one
@@ -68,11 +98,12 @@ RETURNING next_seq - 1 AS seq, first_finding_at, cancel_requested_at;
 
 -- name: FinishInvestigation :one
 -- FinishInvestigation stores the report of a running investigation and
--- ends it, when fence still owns the run. It returns the investigation, or
--- no row when the fence is stale.
+-- ends it, when fence still owns the run, and sets the run kind back to
+-- investigate, so the end of a follow-up run ends it too. It returns the
+-- investigation, or no row when the fence is stale.
 UPDATE investigations
 SET status = @status, verdict = @verdict, confidence = @confidence, report = @report,
-    stop_reason = @stop_reason, finished_at = now()
+    stop_reason = @stop_reason, finished_at = now(), run_kind = 'investigate'
 WHERE id = @id AND fence = @fence AND status = 'running'
 RETURNING *;
 
