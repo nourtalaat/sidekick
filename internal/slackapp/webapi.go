@@ -1,6 +1,7 @@
 package slackapp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/slack-go/slack"
 
 	"github.com/nourtalaat/sidekick/internal/registry"
 )
@@ -25,6 +27,7 @@ const (
 	methodReplies   = "conversations.replies"
 	methodInfo      = "conversations.info"
 	methodEphemeral = "chat.postEphemeral"
+	methodViewsOpen = "views.open"
 )
 
 const (
@@ -149,6 +152,23 @@ func (c *webAPI) postEphemeral(ctx context.Context, channel, user, threadTS, tex
 	return nil
 }
 
+// openView opens view as a modal for the user whose click carried
+// triggerID, which Slack accepts for 3 seconds after the click.
+func (c *webAPI) openView(ctx context.Context, triggerID string, view slack.ModalViewRequest) error {
+	var out struct{}
+
+	payload := struct {
+		TriggerID string                 `json:"trigger_id"`
+		View      slack.ModalViewRequest `json:"view"`
+	}{TriggerID: triggerID, View: view}
+
+	if err := c.callJSON(ctx, methodViewsOpen, payload, &out); err != nil {
+		return fmt.Errorf("open a form: %w", err)
+	}
+
+	return nil
+}
+
 // channelName returns the name of the channel with id, without "#". Names
 // are kept for channelNameTTL.
 func (c *webAPI) channelName(ctx context.Context, id string) (string, error) {
@@ -180,7 +200,24 @@ func (c *webAPI) channelName(ctx context.Context, id string) (string, error) {
 // call sends a GET to method with query and the bot token, and decodes a
 // successful response into out. Every failure is counted.
 func (c *webAPI) call(ctx context.Context, method string, query url.Values, out any) error {
-	body, err := c.send(ctx, method, query)
+	return c.request(ctx, method, query, nil, out)
+}
+
+// callJSON sends a POST of payload as JSON to method with the bot token,
+// and decodes a successful response into out. Every failure is counted.
+func (c *webAPI) callJSON(ctx context.Context, method string, payload, out any) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("call %s: encode the request: %w", method, err)
+	}
+
+	return c.request(ctx, method, nil, body, out)
+}
+
+// request sends a GET to method with query, or a POST of body when body is
+// not nil, and decodes a successful response into out.
+func (c *webAPI) request(ctx context.Context, method string, query url.Values, body []byte, out any) error {
+	resp, err := c.send(ctx, method, query, body)
 	if err != nil {
 		return fmt.Errorf("call %s: %w", method, err)
 	}
@@ -190,7 +227,7 @@ func (c *webAPI) call(ctx context.Context, method string, query url.Values, out 
 		Error string `json:"error"`
 	}
 
-	if err := json.Unmarshal(body, &env); err != nil {
+	if err := json.Unmarshal(resp, &env); err != nil {
 		c.count(method, errorBadResponse)
 
 		return fmt.Errorf("call %s: decode the response: %w", method, err)
@@ -207,7 +244,7 @@ func (c *webAPI) call(ctx context.Context, method string, query url.Values, out 
 		return fmt.Errorf("call %s: %w", method, &apiError{Code: code})
 	}
 
-	if err := json.Unmarshal(body, out); err != nil {
+	if err := json.Unmarshal(resp, out); err != nil {
 		c.count(method, errorBadResponse)
 
 		return fmt.Errorf("call %s: decode the response: %w", method, err)
@@ -216,19 +253,29 @@ func (c *webAPI) call(ctx context.Context, method string, query url.Values, out 
 	return nil
 }
 
-// send makes one request and returns the body of a 200 response.
-func (c *webAPI) send(ctx context.Context, method string, query url.Values) ([]byte, error) {
+// send makes one request, a GET with query or a POST of the JSON body, and
+// returns the body of a 200 response.
+func (c *webAPI) send(ctx context.Context, method string, query url.Values, payload []byte) ([]byte, error) {
 	token, err := c.token(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("read the bot token: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.apiURL+method+"?"+query.Encode(), nil)
+	httpMethod, target, reader := http.MethodGet, c.apiURL+method+"?"+query.Encode(), io.Reader(nil)
+	if payload != nil {
+		httpMethod, target, reader = http.MethodPost, c.apiURL+method, bytes.NewReader(payload)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, httpMethod, target, reader)
 	if err != nil {
 		return nil, fmt.Errorf("make the request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
+
+	if payload != nil {
+		req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {

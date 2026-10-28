@@ -28,6 +28,7 @@ import (
 	slackout "github.com/nourtalaat/sidekick/internal/output/slack"
 	"github.com/nourtalaat/sidekick/internal/publish"
 	"github.com/nourtalaat/sidekick/internal/roles"
+	"github.com/nourtalaat/sidekick/internal/store/db"
 	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
@@ -44,7 +45,7 @@ const payloadField = "payload"
 
 // The notes the user who clicked sees, only to them.
 const (
-	noteDenied         = "Only responders can rate verdicts, stop investigations or watchers, or start a full investigation."
+	noteDenied         = "Only responders can give feedback, stop investigations or watchers, or start a full investigation."
 	noteNoVerdict      = "This investigation has no verdict to rate yet."
 	noteStopping       = "Stopping the investigation. The message shows what it found so far once it stops."
 	noteEnded          = "This investigation has ended already, or someone stopped it."
@@ -54,7 +55,12 @@ const (
 	noteNotTriaged     = "This investigation is not a triage-only result, or its full investigation has started already."
 	noteBusy           = "The last run of this investigation is still finishing. Try again in a moment."
 	noteFailed         = "Sidekick could not record that click. Try again in a moment."
+	noteFormFailed     = "Sidekick could not open the feedback form. Press Details to try again."
 )
+
+// viewOpenTimeout bounds opening a form, which Slack only allows within 3
+// seconds of the click.
+const viewOpenTimeout = 2 * time.Second
 
 // refresher is a role lookup that can read a user's role again, for a
 // user it would refuse, such as one just added to a Slack user group.
@@ -95,15 +101,20 @@ type ButtonsOptions struct {
 	// Memory says how a rating syncs the investigation's memory entry; set
 	// Embed when vector memory is on.
 	Memory memory.SyncOptions
+	// PublicURL is server.publicURL. With it, the feedback form offers
+	// rating a tool call and links to the investigation page, where the
+	// tool calls are.
+	PublicURL string
 }
 
 // Buttons handles clicks on the buttons of Sidekick's messages: Correct
-// and Wrong store a rating of the verdict, Stop stops the run, Stop
+// and Wrong store a rating of the verdict, Wrong and Details open a form
+// for feedback on any part of the investigation, Stop stops the run, Stop
 // watching stops a watcher, and Investigate anyway starts a full
-// investigation after a triage-only result. Every click needs the
-// responder role at the time of the click. It answers
-// interactions from Socket Mode as an InteractionHandler, and at
-// POST /slack/interactivity in events mode.
+// investigation after a triage-only result. It also handles the sending
+// of that form. Every click and every sending needs the responder role at
+// that time. It answers interactions from Socket Mode as an
+// InteractionHandler, and at POST /slack/interactivity in events mode.
 type Buttons struct {
 	handler  *Handler
 	pool     *pgxpool.Pool
@@ -113,6 +124,8 @@ type Buttons struct {
 	http     *http.Client
 	log      *slog.Logger
 	memory   memory.SyncOptions
+	// publicURL is ButtonsOptions.PublicURL.
+	publicURL string
 }
 
 var _ InteractionHandler = (*Buttons)(nil)
@@ -133,6 +146,8 @@ func NewButtons(opts ButtonsOptions) *Buttons {
 		http:     hc,
 		log:      opts.Logger,
 		memory:   opts.Memory,
+
+		publicURL: opts.PublicURL,
 	}
 }
 
@@ -140,7 +155,8 @@ func NewButtons(opts ButtonsOptions) *Buttons {
 // request's signature before it parses the body, then handles the click
 // and answers 200 with an empty body. It answers 413 for a body over
 // MaxBodyBytes, 401 when the signature or its timestamp is wrong, and 400
-// for a body that is not an interaction.
+// for a body that is not an interaction. The answer is HandleInteraction's
+// response, if it has one, as the body.
 func (b *Buttons) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	h := b.handler
@@ -177,25 +193,46 @@ func (b *Buttons) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := b.HandleInteraction(ctx, cb); err != nil {
+	resp, err := b.HandleInteraction(ctx, cb)
+	if err != nil {
 		h.fail(ctx, w, "Slack interaction failed", err)
 
 		return
 	}
 
+	if resp != nil {
+		w.Header().Set("Content-Type", "application/json")
+	}
+
 	w.WriteHeader(http.StatusOK)
+
+	if resp != nil {
+		if _, err := w.Write(resp); err != nil {
+			b.log.WarnContext(ctx, "could not write the answer to a Slack interaction", "error", err.Error())
+		}
+	}
 }
 
 // HandleInteraction handles a click on one of Sidekick's buttons and
-// answers with an empty ack. Clicks on other buttons, and other kinds of
-// interaction, are acknowledged and ignored. What the user needs to know,
-// such as a denied role, is posted to them alone through the response
-// URL. It returns an error only when the click could not be recorded.
+// answers with an empty ack, or the sending of the feedback form and
+// answers with the errors to show in the form, if it has any. Clicks on
+// other buttons, and other kinds of interaction, are acknowledged and
+// ignored. What the user needs to know, such as a denied role, is posted
+// to them alone through the response URL. It returns an error only when
+// the click could not be recorded.
 func (b *Buttons) HandleInteraction(ctx context.Context, cb slack.InteractionCallback) ([]byte, error) {
-	if cb.Type != slack.InteractionTypeBlockActions {
+	switch cb.Type {
+	case slack.InteractionTypeBlockActions:
+		return b.handleClick(ctx, cb)
+	case slack.InteractionTypeViewSubmission:
+		return b.submitDetails(ctx, cb)
+	default:
 		return nil, nil
 	}
+}
 
+// handleClick handles a click on one of Sidekick's buttons.
+func (b *Buttons) handleClick(ctx context.Context, cb slack.InteractionCallback) ([]byte, error) {
 	action, ok := ourAction(cb.ActionCallback.BlockActions)
 	if !ok {
 		return nil, nil
@@ -243,8 +280,10 @@ func (b *Buttons) HandleInteraction(ctx context.Context, cb slack.InteractionCal
 		note, err = b.investigateAnyway(ctx, log, id, cb.User.ID)
 	case action.ActionID == slackout.ActionVerdictCorrect:
 		note, err = b.rate(ctx, log, id, cb.User.ID, output.RatingCorrect)
+	case action.ActionID == slackout.ActionFeedbackDetails:
+		note = b.openDetails(ctx, log, cb, id, "")
 	default:
-		note, err = b.rate(ctx, log, id, cb.User.ID, output.RatingWrong)
+		note, err = b.rateWrong(ctx, log, cb, id)
 	}
 
 	if err != nil {
@@ -305,6 +344,148 @@ func (b *Buttons) rate(ctx context.Context, log *slog.Logger, id uuid.UUID, user
 	log.InfoContext(ctx, "verdict rated", "rating", string(rating), "stored", res.Stored, "confirmation", string(res.Confirmation))
 
 	return "", nil
+}
+
+// rateWrong opens the feedback form with Wrong chosen, so the person can
+// say why, and then stores the Wrong rating of the verdict. The form comes
+// first because Slack only lets it open within 3 seconds of the click.
+func (b *Buttons) rateWrong(ctx context.Context, log *slog.Logger, cb slack.InteractionCallback, id uuid.UUID) (string, error) {
+	formNote := b.openDetails(ctx, log, cb, id, output.RatingWrong)
+
+	note, err := b.rate(ctx, log, id, cb.User.ID, output.RatingWrong)
+	if err != nil {
+		return "", fmt.Errorf("rate wrong: %w", err)
+	}
+
+	if note == "" && formNote != noteNoVerdict {
+		note = formNote
+	}
+
+	return note, nil
+}
+
+// openDetails opens the feedback form for the investigation with id, with
+// rating chosen when it is set, and returns the note for the user, if any:
+// that the investigation has no verdict yet, or that the form did not open.
+func (b *Buttons) openDetails(ctx context.Context, log *slog.Logger, cb slack.InteractionCallback, id uuid.UUID, rating output.Rating) string {
+	inv, err := db.New(b.pool).GetInvestigation(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return noteNoVerdict
+	}
+
+	if err != nil {
+		log.ErrorContext(ctx, "could not read the investigation for the feedback form", "error", err.Error())
+
+		return noteFormFailed
+	}
+
+	if inv.Status != investigator.StatusFinal || inv.Verdict == nil {
+		return noteNoVerdict
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, viewOpenTimeout)
+	defer cancel()
+
+	view := detailsView(inv, detailsOptions{Rating: rating, PublicURL: b.publicURL})
+	if err := b.handler.api.openView(ctx, cb.TriggerID, view); err != nil {
+		log.WarnContext(ctx, "could not open the feedback form", "error", err.Error())
+
+		return noteFormFailed
+	}
+
+	log.InfoContext(ctx, "feedback form opened")
+
+	return ""
+}
+
+// submitDetails stores the feedback in the form a person sent, for the
+// investigation named in the form, and answers with the errors to show in
+// the form when it cannot, which keeps the form open. The person's role is
+// checked at the time of the sending.
+func (b *Buttons) submitDetails(ctx context.Context, cb slack.InteractionCallback) ([]byte, error) {
+	if cb.View.CallbackID != callbackFeedbackDetails {
+		return nil, nil
+	}
+
+	log := b.log.With("callback_id", cb.View.CallbackID, "user_id", cb.User.ID)
+
+	id, err := uuid.Parse(cb.View.PrivateMetadata)
+	if err != nil {
+		log.WarnContext(ctx, "ignoring a feedback form whose investigation is not an ID")
+
+		return errorsResponse(map[string]string{blockPart: errorOutOfDate})
+	}
+
+	log = log.With("investigation_id", id.String())
+
+	role, err := b.role(ctx, cb.Team.ID, cb.User.ID)
+	if err != nil {
+		log.ErrorContext(ctx, "could not look up the role of the user who sent the feedback form", "error", err.Error())
+
+		return errorsResponse(map[string]string{blockPart: errorFailed})
+	}
+
+	if !role.Has(roles.Responder) {
+		log.InfoContext(ctx, "feedback form refused: the user is not a responder")
+
+		return errorsResponse(map[string]string{blockRating: errorDenied})
+	}
+
+	sub, errs := readDetails(cb.View.State).submission(id, cb.User.ID, b.memory)
+	if errs != nil {
+		return errorsResponse(errs)
+	}
+
+	res, err := b.storeFeedback(ctx, sub)
+	if errs := submissionErrors(sub.Target, err); errs != nil {
+		log.InfoContext(ctx, "feedback form refused", "error", err.Error())
+
+		return errorsResponse(errs)
+	}
+
+	if err != nil {
+		log.ErrorContext(ctx, "could not store the feedback", "error", err.Error())
+
+		return errorsResponse(map[string]string{blockPart: errorFailed})
+	}
+
+	if res.RatingChanged {
+		b.metrics.Stored(sub.Target.Kind, sub.Rating)
+	}
+
+	log.InfoContext(ctx, "feedback stored", "target_kind", sub.Target.Kind, "rating", string(sub.Rating), "confirmation", string(res.Confirmation))
+
+	return nil, nil
+}
+
+// storeFeedback stores sub in one transaction. A changed rating of the
+// verdict is shown in the outputs in the same one.
+func (b *Buttons) storeFeedback(ctx context.Context, sub feedback.Submission) (feedback.Submitted, error) {
+	var res feedback.Submitted
+
+	err := pgx.BeginFunc(ctx, b.pool, func(tx pgx.Tx) error {
+		var err error
+
+		res, err = feedback.Submit(ctx, tx, sub)
+		if err != nil {
+			return fmt.Errorf("submit: %w", err)
+		}
+
+		if !res.RatingChanged || sub.Target.Kind != feedback.TargetVerdict {
+			return nil
+		}
+
+		if err := publish.Refresh(ctx, tx, sub.InvestigationID); err != nil {
+			return fmt.Errorf("show the rating: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return feedback.Submitted{}, fmt.Errorf("store the feedback: %w", err)
+	}
+
+	return res, nil
 }
 
 // stop asks the run to stop and returns the note for the user.
@@ -444,7 +625,7 @@ func ourAction(actions []*slack.BlockAction) (*slack.BlockAction, bool) {
 	for _, a := range actions {
 		switch {
 		case a.ActionID == slackout.ActionVerdictCorrect, a.ActionID == slackout.ActionVerdictWrong,
-			a.ActionID == slackout.ActionStop, a.ActionID == slackout.ActionInvestigateAnyway,
+			a.ActionID == slackout.ActionFeedbackDetails, a.ActionID == slackout.ActionStop, a.ActionID == slackout.ActionInvestigateAnyway,
 			slackout.IsStopWatcher(a.ActionID):
 			return a, true
 		}

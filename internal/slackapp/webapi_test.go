@@ -9,6 +9,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/slack-go/slack"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
@@ -81,6 +82,62 @@ func TestThreadParent(t *testing.T) {
 			require.Equal(t, "Bearer xoxb-test", req.Header.Get("Authorization"))
 			require.Equal(t, "1.1", req.Query.Get("ts"))
 			require.Equal(t, "true", req.Query.Get("inclusive"))
+		})
+	}
+}
+
+func TestOpenView(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		responses []fakehttp.Response
+		tokenErr  error
+		wantErr   error
+		wantCode  string
+	}{
+		{name: "opened", responses: []fakehttp.Response{{Body: []byte(`{"ok": true}`)}}},
+		{
+			name:      "the trigger ID expired",
+			responses: []fakehttp.Response{{Body: []byte(`{"ok": false, "error": "expired_trigger_id"}`)}},
+			wantCode:  "expired_trigger_id",
+		},
+		{name: "rate limited", responses: []fakehttp.Response{{Status: http.StatusTooManyRequests}}, wantErr: errRateLimited, wantCode: errorRateLimited},
+		{name: "the token cannot be read", tokenErr: errNoToken, wantErr: errNoToken},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			api := fakehttp.New(t)
+			if tt.responses != nil {
+				api.Handle(http.MethodPost, "/"+methodViewsOpen, tt.responses...)
+			}
+
+			c := newTestWebAPI(t, api, tt.tokenErr)
+
+			err := c.openView(t.Context(), "T1.trigger", slack.ModalViewRequest{Type: slack.VTModal, CallbackID: "form"})
+			if tt.wantCode != "" {
+				require.InDelta(t, 1, testutil.ToFloat64(c.errors.WithLabelValues(methodViewsOpen, tt.wantCode)), 0)
+			}
+
+			if tt.wantErr != nil || tt.wantCode != "" {
+				require.Error(t, err)
+
+				if tt.wantErr != nil {
+					require.ErrorIs(t, err, tt.wantErr)
+				}
+
+				return
+			}
+
+			require.NoError(t, err)
+
+			req := api.Requests()[0]
+			require.Equal(t, "Bearer xoxb-test", req.Header.Get("Authorization"))
+			require.Equal(t, "application/json; charset=utf-8", req.Header.Get("Content-Type"))
+			require.JSONEq(t, `{"trigger_id": "T1.trigger", "view": {"type": "modal", "blocks": null, "callback_id": "form"}}`, string(req.Body))
 		})
 	}
 }

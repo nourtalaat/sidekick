@@ -20,7 +20,10 @@ INSERT INTO investigations (id, group_id, route, strategy, strategy_version, mod
 VALUES
   ('0192d3a4-0000-7000-8000-0000000000c1', '0192d3a4-0000-7000-8000-0000000000b1', 'default', 'generic-alert',
    'stored-version', 'read-only', 'final', 1, 'true_positive', 'high',
-   '{"verdict": "true_positive", "confidence": "high", "reason": "Errors after a deploy.", "cause": "Deploy 4f2c1a", "stopReason": "submitted"}',
+   '{"verdict": "true_positive", "confidence": "high", "reason": "Errors after a deploy.", "cause": "Deploy 4f2c1a",
+     "findings": [{"id": "f1", "claim": "Errors rose at 14:02.", "evidence": []}],
+     "fixes": [{"id": "x1", "title": "Roll back 4f2c1a", "detail": "Revert the deploy."}],
+     "stopReason": "submitted"}',
    'submitted', '{"investigate": {"connector": "fake", "model": "claude-opus-5-5"}}',
    '{"max_tool_calls": 40, "max_wall_time_ms": 600000}', '2026-10-26 14:02:01+00', '2026-10-26 14:02:02+00',
    '2026-10-26 14:04:00+00'),
@@ -83,3 +86,9 @@ VALUES
   ('0192d3a4-0000-7000-8000-0000000000c3', '{slack-thread}', 4, 'final',
    '{"report": {"verdict": "duplicate", "confidence": "high", "reason": "Same as the open incident.", "stopReason": "triage"}}',
    '2026-10-26 14:10:05+00');
+
+-- The final investigation made one tool call.
+INSERT INTO steps (investigation_id, seq, run, kind, parts, source, tool, tool_call_id, status, started_at, duration_ms)
+VALUES
+  ('0192d3a4-0000-7000-8000-0000000000c1', 0, 1, 'tool_result', '[{"type": "tool_result", "callId": "call-1", "content": "ok"}]',
+   'signoz', 'search_logs', 'call-1', 'ok', '2026-10-26 14:02:10+00', 120);

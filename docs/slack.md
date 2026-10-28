@@ -88,12 +88,29 @@ the sources returned.
   or a run that could not finish. Each person has one rating per verdict:
   clicking the same button again changes nothing, and clicking the other
   one changes the rating. The message then says who marked the verdict
-  correct or wrong.
+  correct or wrong. A Wrong also opens the feedback form, so you can say
+  why.
+- **Details** is next to them. It opens the feedback form, to say that a
+  single part of the investigation is correct or wrong.
 
 - **Investigate anyway** is on a triage-only result, next to Correct and
   Wrong. It starts the full investigation, with the strategy triage chose,
   and the same message then shows its progress and its verdict. It works
   once: a second click, or one on any other result, changes nothing.
+
+The feedback form asks which part it is about: the verdict, a finding, a
+fix, or, when `server.publicURL` is set, a tool call (enter its ID, which
+the investigation page in the web UI shows next to the call, and the form
+links to that page). It then asks whether the part is correct or wrong,
+why, and, if you know them, the real verdict and cause. Each person has
+one opinion per part, so sending the form again replaces the earlier one.
+Giving the real verdict confirms the investigation with that verdict,
+whichever part the form is about, and writes the change to the audit log;
+see [Feedback](web-ui.md#feedback) for how the confirmation changes. The
+form is the same one the web UI's API takes, so feedback from both places
+is counted together. If a part is no longer in the report, for example
+because a follow-up run replaced it, the form says so and stays open;
+close it and press Details again.
 
 A Correct confirms the verdict, which marks the investigation as one whose
 verdict people agree with, and puts it in memory, so later investigations
@@ -104,9 +121,10 @@ Investigate anyway clears the confirmation of the triage verdict, and so
 takes it out of memory too, since the full investigation gives a verdict
 of its own; the ratings of the triage verdict are kept.
 
-Every click is checked against the clicker's role at the time of the
-click: **Stop**, **Correct**, **Wrong**, **Stop watching** and
-**Investigate anyway** need the `responder` role, so a `viewer` cannot
+Every click, and the sending of the feedback form, is checked against the
+person's role at that time: **Stop**, **Correct**, **Wrong**,
+**Details**, **Stop watching** and **Investigate anyway** need the
+`responder` role, so a `viewer` cannot
 press them. Roles come from `slack.roleGroups` and `slack.roleUsers`, and
 a Slack user in neither is a `responder`; see [Roles](#roles). A refused
 user's groups are read again before the click is refused, so someone just
@@ -114,8 +132,10 @@ added to a group can press at once. When a click cannot do anything, for
 example a Correct before there is a verdict, or a Stop on an investigation
 that has ended, Sidekick says so in a note only the clicker sees.
 
-Ratings are counted in `sidekick_feedback_total`, by target (`verdict`)
-and rating (`correct` or `wrong`); a repeated click is not counted.
+Ratings are counted in `sidekick_feedback_total`, by target (`verdict`,
+`finding`, `fix` or `tool_call`) and rating (`correct` or `wrong`); a
+repeated click, or a form that only adds a reason to the same rating, is
+not counted.
 
 ## Set up the Slack app
 
