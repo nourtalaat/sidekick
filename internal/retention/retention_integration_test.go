@@ -23,6 +23,7 @@ const (
 	listPublishStates  = "SELECT right(investigation_id::text, 2) FROM publish_states ORDER BY 1"
 	listFeedback       = "SELECT right(investigation_id::text, 2) FROM feedback ORDER BY 1"
 	listWatchers       = "SELECT right(id::text, 2) FROM watchers ORDER BY 1"
+	listWatcherChanges = "SELECT right(investigation_id::text, 2) FROM watcher_changes ORDER BY 1"
 	listWatcherChecks  = "SELECT right(watcher_id::text, 2) || '/' || seq FROM watcher_checks ORDER BY 1"
 	listEvents         = "SELECT key FROM events ORDER BY key"
 	listAuditLog       = "SELECT action FROM audit_log ORDER BY action"
@@ -56,6 +57,7 @@ func TestHandleDeletesOnlyOldRows(t *testing.T) {
 		{listPublishStates, []string{"c4"}},
 		{listFeedback, nil},
 		{listWatchers, []string{"d4"}},
+		{listWatcherChanges, []string{"c4"}},
 		{listWatcherChecks, []string{"d4/3"}},
 		{listEvents, []string{"ev-3"}},
 		{listAuditLog, []string{"audit-3"}},
@@ -199,6 +201,7 @@ func TestDeletingAnInvestigationTakesWhatBelongsToIt(t *testing.T) {
 		{listPublishStates, []string{"c4"}},
 		{listFeedback, nil},
 		{listWatchers, []string{"d4"}},
+		{listWatcherChanges, []string{"c4"}},
 		{listWatcherChecks, []string{"d4/1", "d4/2", "d4/3"}},
 		{listEvents, []string{"ev-1", "ev-2", "ev-3", "ev-4"}},
 	}

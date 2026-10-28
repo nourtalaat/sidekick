@@ -62,6 +62,11 @@ VALUES
   ('0192d3a4-0000-7000-8000-0000000000d4', '0192d3a4-0000-7000-8000-0000000000b4', '0192d3a4-0000-7000-8000-0000000000c4',
    'health', 'model', 'alert', '{}', 30, 2, 10, 'running', '2026-10-24 12:00:00+00', '2026-10-29 12:00:00+00');
 
+INSERT INTO watcher_changes (investigation_id, seq, state, created_at)
+VALUES
+  ('0192d3a4-0000-7000-8000-0000000000c1', 2, '{}', '2026-09-18 12:05:00+00'),
+  ('0192d3a4-0000-7000-8000-0000000000c4', 2, '{}', '2026-10-24 12:00:00+00');
+
 -- Watcher checks: d1's is the oldest; d4 has two old checks and one new.
 INSERT INTO watcher_checks (watcher_id, seq, at, result, duration_ms)
 VALUES

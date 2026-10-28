@@ -76,8 +76,8 @@ DELETE FROM investigations WHERE id = ANY ($1::uuid[])
 `
 
 // DeleteInvestigations deletes the investigations. Their steps, inbox rows,
-// output refs, publish states and feedback go with them through their
-// foreign keys.
+// output refs, publish states, feedback and watcher changes go with them
+// through their foreign keys.
 func (q *Queries) DeleteInvestigations(ctx context.Context, ids []uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteInvestigations, ids)
 	if err != nil {

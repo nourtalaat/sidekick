@@ -187,9 +187,9 @@ func (h *Handler) deleteAll(ctx context.Context, t table, before time.Time) (int
 
 // deleteInvestigations deletes one batch of old investigations in one
 // transaction, with what belongs to them: their steps, inbox rows, output
-// refs, publish states and feedback through the foreign keys, and their
-// watchers and event groups here. It returns how many investigations it
-// took.
+// refs, publish states, feedback and watcher changes through the foreign
+// keys, and their watchers and event groups here. It returns how many
+// investigations it took.
 func (h *Handler) deleteInvestigations(ctx context.Context, before time.Time, batch int32) (int64, error) {
 	var locked, watchers, groups int64
 

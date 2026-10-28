@@ -42,8 +42,8 @@ WHERE investigation_id = ANY (@investigation_ids::uuid[]) OR group_id = ANY (@gr
 
 -- name: DeleteInvestigations :execrows
 -- DeleteInvestigations deletes the investigations. Their steps, inbox rows,
--- output refs, publish states and feedback go with them through their
--- foreign keys.
+-- output refs, publish states, feedback and watcher changes go with them
+-- through their foreign keys.
 DELETE FROM investigations WHERE id = ANY (@ids::uuid[]);
 
 -- name: DeleteUnusedEventGroups :execrows
