@@ -173,6 +173,14 @@ type Listener struct {
 	UpdatedAt    time.Time
 }
 
+type MemoryEmbedding struct {
+	InvestigationID uuid.UUID
+	Model           string
+	Dimensions      int32
+	Embedding       string
+	EmbeddedAt      time.Time
+}
+
 type MemoryEntry struct {
 	InvestigationID uuid.UUID
 	Service         *string
