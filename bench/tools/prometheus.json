@@ -1,0 +1,180 @@
+{
+  "tools": [
+    {
+      "name": "query",
+      "description": "Run an instant PromQL query at one time, by default now, for example sum by (service) (rate(http_requests_total{code=~\"5..\"}[5m])). Returns each series' labels and value, at most 50 series. A range selector such as up[10m] returns each series' points instead, as [unix seconds, value].",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The PromQL query. It is checked with the Prometheus parser before it is sent."
+          },
+          "time": {
+            "type": "string",
+            "description": "The time to evaluate the query at, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "query_range",
+      "description": "Run a PromQL range query, for example sum by (service) (rate(http_requests_total{code=~\"5..\"}[5m])). The step is picked so each series has at most 250 points. Returns at most 50 series, each with its labels, the min, max, avg and last of its values, and its points as [unix seconds, value], oldest first. Narrow a query that matches more series with label matchers, sum by or topk.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The PromQL query. It must return an instant vector or a scalar, not a range vector such as x[5m]."
+          },
+          "since": {
+            "type": "string",
+            "description": "The start of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: one hour before until.",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "description": "The end of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_alerts",
+      "description": "List the alerts that are firing or pending now, firing first and newest first: name, state, since when, labels and annotations. When Sidekick reads an Alertmanager, list its alerts instead, with the silences and inhibitions that mute them.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "alertname": {
+            "type": "string",
+            "description": "Only alerts with this alertname label."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 200. Default 50.",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_rules",
+      "description": "Get the alerting rules with one alert name: their group, PromQL expression, for, labels, annotations, health, last error and last evaluation. Run the expression with query_range to see when and why it fired.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "alertname": {
+            "type": "string",
+            "description": "The alert name, the alertname label of the alert."
+          }
+        },
+        "required": [
+          "alertname"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_series",
+      "description": "List the series that match a series selector, such as http_requests_total{service=\"checkout\"}, in a time range: each series' labels. Use it to find metric and label names before writing a query.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 500. Default 100.",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "match": {
+            "type": "string",
+            "description": "The series selector, a metric name and label matchers, for example up{job=\"api\"}."
+          },
+          "since": {
+            "type": "string",
+            "description": "The start of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: one hour before until.",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "description": "The end of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "match"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_label_values",
+      "description": "List the values of one label, such as service, namespace or __name__ for metric names, in a time range, optionally only on the series that match a series selector.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "The label name, for example service."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 1000. Default 100.",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "match": {
+            "type": "string",
+            "description": "Only values on series that match this series selector, for example up{job=\"api\"}."
+          },
+          "since": {
+            "type": "string",
+            "description": "The start of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: one hour before until.",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "description": "The end of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_targets",
+      "description": "List the scrape targets that are down or unknown, with their scrape pool, URL, health, last error and last scrape. Healthy targets are left out; the result counts them.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 200. Default 50.",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "pool": {
+            "type": "string",
+            "description": "Only targets of this scrape pool, for example the job name."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}

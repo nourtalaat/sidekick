@@ -2,6 +2,8 @@ package fakehttp_test
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net/http"
@@ -343,6 +345,94 @@ func TestWithTLS(t *testing.T) {
 	status, _, body := send(t, s.Client(), http.MethodGet, s.URL()+"/a", "")
 	require.Equal(t, http.StatusOK, status)
 	require.Equal(t, "secure", body)
+}
+
+func TestCertificatePEM(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		opts []fakehttp.Option
+	}{
+		{name: "a client that trusts only the certificate reaches a TLS server", opts: []fakehttp.Option{fakehttp.WithTLS()}},
+		{name: "a server without TLS has no certificate"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := fakehttp.New(t, tt.opts...)
+
+			certPEM := s.CertificatePEM()
+			if len(tt.opts) == 0 {
+				require.Nil(t, certPEM)
+
+				return
+			}
+
+			pool := x509.NewCertPool()
+			require.True(t, pool.AppendCertsFromPEM(certPEM))
+
+			s.Handle(http.MethodGet, "/a", fakehttp.Response{Body: []byte("secure")})
+
+			client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}}}
+
+			status, _, body := send(t, client, http.MethodGet, s.URL()+"/a", "")
+			require.Equal(t, http.StatusOK, status)
+			require.Equal(t, "secure", body)
+		})
+	}
+}
+
+func TestWithClientCertificates(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		withCert bool
+	}{
+		{name: "the certificate the client sent is recorded", withCert: true},
+		{name: "a client without a certificate is still served"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := fakehttp.New(t, fakehttp.WithClientCertificates())
+			s.Handle(http.MethodGet, "/a", fakehttp.Response{Body: []byte("secure")})
+
+			client := s.Client()
+
+			if tt.withCert {
+				certPEM, keyPEM := fakehttp.NewCertificate(t, "sidekick")
+				cert, err := tls.X509KeyPair(certPEM, keyPEM)
+				require.NoError(t, err)
+
+				transport, ok := client.Transport.(*http.Transport)
+				require.True(t, ok)
+
+				transport = transport.Clone()
+				transport.TLSClientConfig.Certificates = []tls.Certificate{cert}
+				client = &http.Client{Transport: transport}
+			}
+
+			status, _, body := send(t, client, http.MethodGet, s.URL()+"/a", "")
+			require.Equal(t, http.StatusOK, status)
+			require.Equal(t, "secure", body)
+
+			got := s.Requests()[0].ClientCertificate
+			if !tt.withCert {
+				require.Nil(t, got)
+
+				return
+			}
+
+			require.NotNil(t, got)
+			require.Equal(t, "sidekick", got.Subject.CommonName)
+		})
+	}
 }
 
 // send sends one request and returns the status, headers and body of the
