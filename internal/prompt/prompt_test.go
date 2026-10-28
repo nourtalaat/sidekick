@@ -25,7 +25,7 @@ import (
 var update = flag.Bool("update", false, "rewrite the golden files in fixture/")
 
 // systemTemplateSum is the SHA-256 of system.tmpl at the current Version.
-const systemTemplateSum = "d9bef8c05125dac15b2516a7a94d0782f212cd47d3a933779f4594d9ba6d42f1"
+const systemTemplateSum = "190458e94bccc68d76ebe52e0ac3a9a0698f34da722f54cbac6a11b31e07362a"
 
 func TestBuildGolden(t *testing.T) {
 	t.Parallel()

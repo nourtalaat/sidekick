@@ -147,6 +147,8 @@ func (h *history) progressLine(s db.Step) (output.Progress, bool) {
 		}
 	case s.Kind == kindToolResult && s.Source != nil:
 		line.Text = callLine(*s.Source, deref(s.Tool), s.Status)
+	case s.Kind == kindTriageResult || s.Kind == kindTriageOverride:
+		line.Text = stepText(s)
 	}
 
 	return line, line.Text != ""

@@ -264,7 +264,7 @@ func (h *Handler) startFollowUp(ctx context.Context, job db.Job, id uuid.UUID) (
 // question; the question gets a job when the next one arrives or a run
 // ends.
 func (h *Handler) waitingQuestion(ctx context.Context, queries *db.Queries, inv db.Investigation) bool {
-	if !answers(inv.Status) {
+	if !answers(inv) {
 		return false
 	}
 
