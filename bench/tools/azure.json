@@ -1,0 +1,79 @@
+{
+  "tools": [
+    {
+      "name": "query_logs",
+      "description": "Run a KQL query on a Log Analytics workspace over a time range, for example AppRequests | where Success == false | summarize count() by bin(TimeGenerated, 5m), Name. Returns each table's columns and rows, at most 500 rows, and a link to the workspace's logs.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 500. Default 100.",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "query": {
+            "type": "string",
+            "description": "The KQL query, passed to Log Analytics as given. Use take or summarize to keep the result small."
+          },
+          "since": {
+            "type": "string",
+            "description": "The start of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: one hour before until.",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "description": "The end of the range, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          },
+          "workspace": {
+            "type": "string",
+            "description": "The workspace name or ID. It may be left out when Sidekick reads only one workspace."
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_changes",
+      "description": "List what changed in a subscription in a time range, newest first, from its Activity Log: deployments, writes, deletes and actions on resources, with who made them and whether they failed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 500. Default 100.",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "resource": {
+            "type": "string",
+            "description": "Only changes to this resource. Its full resource ID, for example /subscriptions/\u003cid\u003e/resourceGroups/shop/providers/Microsoft.Web/sites/checkout."
+          },
+          "resourceGroup": {
+            "type": "string",
+            "description": "Only changes in this resource group."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only changes at or after this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: 24 hours before until.",
+            "format": "date-time"
+          },
+          "subscription": {
+            "type": "string",
+            "description": "The subscription ID. It may be left out when Sidekick reads only one subscription."
+          },
+          "until": {
+            "type": "string",
+            "description": "Only changes before this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z. Default: now.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}
