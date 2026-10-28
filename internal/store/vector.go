@@ -138,7 +138,7 @@ func ResetVectors(ctx context.Context, pool *pgxpool.Pool, record func(ctx conte
 		}
 	}()
 
-	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", int64(lock.DefaultLockID)); err != nil {
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", lock.DefaultLockID); err != nil {
 		return 0, fmt.Errorf("reset vector memory: take the migration lock: %w", err)
 	}
 
@@ -186,7 +186,7 @@ func ensureVectorColumn(ctx context.Context, pool *pgxpool.Pool, dimensions int)
 		}
 	}()
 
-	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", int64(lock.DefaultLockID)); err != nil {
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", lock.DefaultLockID); err != nil {
 		return fmt.Errorf("take the migration lock: %w", err)
 	}
 

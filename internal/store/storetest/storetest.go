@@ -25,6 +25,13 @@ import (
 // databases. When it is empty, storetest starts Postgres in a container.
 const EnvDatabaseURL = "SIDEKICK_TEST_DATABASE_URL"
 
+// EnvVectorDatabaseURL names the environment variable with the URL of an
+// existing Postgres server that has the pgvector extension, for the tests
+// of vector memory (NewVector). Every other test uses the plain server, so
+// they keep proving that nothing needs pgvector when vector memory is off.
+// When it is empty, storetest starts a pgvector container.
+const EnvVectorDatabaseURL = "SIDEKICK_TEST_VECTOR_DATABASE_URL"
+
 const (
 	testMaxConns       int32 = 4
 	adminMaxConns      int32 = 4
@@ -43,7 +50,10 @@ type sharedServer struct {
 	stop     func(context.Context) error
 }
 
-var server sharedServer
+var (
+	server       sharedServer
+	vectorServer sharedServer
+)
 
 // Main runs the tests of a package, then closes the shared connections and
 // stops the Postgres container if one was started. Call it from TestMain in
@@ -55,11 +65,13 @@ var server sharedServer
 func Main(m *testing.M) int {
 	code := m.Run()
 
-	if err := shutdown(); err != nil {
-		fmt.Fprintf(os.Stderr, "storetest: %v\n", err)
+	for _, s := range []*sharedServer{&server, &vectorServer} {
+		if err := s.shutdown(); err != nil {
+			fmt.Fprintf(os.Stderr, "storetest: %v\n", err)
 
-		if code == 0 {
-			code = 1
+			if code == 0 {
+				code = 1
+			}
 		}
 	}
 
@@ -84,9 +96,26 @@ func New(t testing.TB) *pgxpool.Pool {
 func NewURL(t testing.TB) string {
 	t.Helper()
 
-	setup(t)
+	server.setup(t, plainKind)
 
-	return createDatabase(t, server.template)
+	return server.createDatabase(t, server.template)
+}
+
+// NewVector is New for the tests of vector memory. The pool is on a new
+// database of a Postgres that has pgvector, with the main migrations and
+// the vector migrations applied for vectors of the given length.
+func NewVector(t testing.TB, dimensions int) *pgxpool.Pool {
+	t.Helper()
+
+	vectorServer.setup(t, vectorKind)
+
+	pool, err := store.Open(t.Context(), vectorServer.createDatabase(t, vectorServer.template), testMaxConns)
+	require.NoError(t, err, "open the test database")
+	t.Cleanup(pool.Close)
+
+	require.NoError(t, store.MigrateVector(t.Context(), pool, dimensions), "migrate vector memory")
+
+	return pool
 }
 
 // NewEmptyURL returns the URL of a new database with no migrations applied,
@@ -94,9 +123,9 @@ func NewURL(t testing.TB) string {
 func NewEmptyURL(t testing.TB) string {
 	t.Helper()
 
-	setup(t)
+	server.setup(t, plainKind)
 
-	return createDatabase(t, "template0")
+	return server.createDatabase(t, "template0")
 }
 
 // LoadFixture runs the SQL file at path, relative to the test's package
@@ -114,33 +143,33 @@ func LoadFixture(t testing.TB, pool *pgxpool.Pool, path string) {
 
 // setup starts or connects to the shared server and builds the template
 // database the first time it is called, and fails the test if that failed.
-func setup(t testing.TB) {
+func (s *sharedServer) setup(t testing.TB, kind serverKind) {
 	t.Helper()
 
-	server.once.Do(func() {
-		server.err = start()
+	s.once.Do(func() {
+		s.err = s.start(kind)
 	})
-	require.NoError(t, server.err, "set up the test Postgres")
+	require.NoError(t, s.err, "set up the test Postgres")
 }
 
-func createDatabase(t testing.TB, template string) string {
+func (s *sharedServer) createDatabase(t testing.TB, template string) string {
 	t.Helper()
 
 	name := testDatabasePrefix + strings.ReplaceAll(ids.New().String(), "-", "")
 
-	_, err := server.admin.Exec(t.Context(), "CREATE DATABASE "+quote(name)+" TEMPLATE "+quote(template))
+	_, err := s.admin.Exec(t.Context(), "CREATE DATABASE "+quote(name)+" TEMPLATE "+quote(template))
 	require.NoError(t, err, "create test database %s", name)
 
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 		defer cancel()
 
-		if _, err := server.admin.Exec(ctx, "DROP DATABASE IF EXISTS "+quote(name)+" WITH (FORCE)"); err != nil {
+		if _, err := s.admin.Exec(ctx, "DROP DATABASE IF EXISTS "+quote(name)+" WITH (FORCE)"); err != nil {
 			t.Errorf("drop test database %s: %v", name, err)
 		}
 	})
 
-	dbURL, err := databaseURL(server.adminURL, name)
+	dbURL, err := databaseURL(s.adminURL, name)
 	require.NoError(t, err)
 
 	return dbURL

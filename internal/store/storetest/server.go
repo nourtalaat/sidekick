@@ -22,7 +22,11 @@ import (
 )
 
 const (
-	postgresImage     = "postgres:16-alpine"
+	postgresImage = "postgres:16-alpine"
+	// pgvectorImage is the Postgres image with the pgvector extension that
+	// vector memory tests use when no server is given, pinned by digest like
+	// the CI service container.
+	pgvectorImage     = "pgvector/pgvector:pg16@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a"
 	containerUser     = "sidekick"
 	containerPassword = "sidekick"
 	containerDatabase = "sidekick"
@@ -39,25 +43,40 @@ const (
 	templateLockKey int64 = 0x736b2d746d706c21
 )
 
+// serverKind says which Postgres server a sharedServer is: the variable
+// that names an existing server and the image to start when it is empty.
+type serverKind struct {
+	env   string
+	image string
+}
+
+// Server kinds. The plain one serves every test; the one with pgvector
+// serves only the tests of vector memory, so every other test runs on a
+// Postgres that has no pgvector.
+var (
+	plainKind  = serverKind{env: EnvDatabaseURL, image: postgresImage}
+	vectorKind = serverKind{env: EnvVectorDatabaseURL, image: pgvectorImage}
+)
+
 // start finds or starts the Postgres server, opens the admin pool and makes
 // sure the template database exists.
-func start() error {
+func (s *sharedServer) start(kind serverKind) error {
 	ctx, cancel := context.WithTimeout(context.Background(), setupTimeout)
 	defer cancel()
 
-	adminURL, stop, err := startServer(ctx)
+	adminURL, stop, err := startServer(ctx, kind)
 	if err != nil {
 		return fmt.Errorf("find the test Postgres: %w", err)
 	}
 
-	server.adminURL, server.stop = adminURL, stop
+	s.adminURL, s.stop = adminURL, stop
 
-	server.admin, err = store.Open(ctx, adminURL, adminMaxConns)
+	s.admin, err = store.Open(ctx, adminURL, adminMaxConns)
 	if err != nil {
 		return fmt.Errorf("connect to the test Postgres: %w", err)
 	}
 
-	server.template, err = buildTemplate(ctx, adminURL)
+	s.template, err = buildTemplate(ctx, adminURL)
 	if err != nil {
 		return fmt.Errorf("build the template database: %w", err)
 	}
@@ -66,19 +85,19 @@ func start() error {
 }
 
 // shutdown closes the admin pool and stops the container, if any.
-func shutdown() error {
-	if server.admin != nil {
-		server.admin.Close()
+func (s *sharedServer) shutdown() error {
+	if s.admin != nil {
+		s.admin.Close()
 	}
 
-	if server.stop == nil {
+	if s.stop == nil {
 		return nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
-	if err := server.stop(ctx); err != nil {
+	if err := s.stop(ctx); err != nil {
 		return fmt.Errorf("stop the Postgres container: %w", err)
 	}
 
@@ -87,12 +106,12 @@ func shutdown() error {
 
 // startServer returns the admin URL of the Postgres server, and a function
 // that stops it when storetest started it.
-func startServer(ctx context.Context) (string, func(context.Context) error, error) {
-	if envURL := os.Getenv(EnvDatabaseURL); envURL != "" {
+func startServer(ctx context.Context, kind serverKind) (string, func(context.Context) error, error) {
+	if envURL := os.Getenv(kind.env); envURL != "" {
 		return envURL, nil, nil
 	}
 
-	container, err := postgres.Run(ctx, postgresImage,
+	container, err := postgres.Run(ctx, kind.image,
 		postgres.WithUsername(containerUser),
 		postgres.WithPassword(containerPassword),
 		postgres.WithDatabase(containerDatabase),
@@ -100,7 +119,7 @@ func startServer(ctx context.Context) (string, func(context.Context) error, erro
 	)
 	if err != nil {
 		return "", nil, errors.Join(
-			fmt.Errorf("start a Postgres container (or set %s): %w", EnvDatabaseURL, err),
+			fmt.Errorf("start a Postgres container (or set %s): %w", kind.env, err),
 			testcontainers.TerminateContainer(container),
 		)
 	}
