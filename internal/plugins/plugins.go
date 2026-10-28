@@ -33,4 +33,5 @@ import (
 	_ "github.com/nourtalaat/sidekick/internal/source/mock"          // Source type "mock", for benchmarks.
 	_ "github.com/nourtalaat/sidekick/internal/source/postgres"      // Source type "postgres".
 	_ "github.com/nourtalaat/sidekick/internal/source/prometheus"    // Source type "prometheus".
+	_ "github.com/nourtalaat/sidekick/internal/source/unleash"       // Source type "unleash".
 )

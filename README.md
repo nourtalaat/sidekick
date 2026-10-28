@@ -25,6 +25,7 @@ Sidekick receives alerts from webhooks or Slack, investigates them with the LLM 
 - [LaunchDarkly source](docs/sources/launchdarkly.md): the keys and tools of the LaunchDarkly feature flag source, and the read-only access token it needs.
 - [Postgres source](docs/sources/postgres.md): the read-only role the Postgres source needs, the TLS rules for its URL, and how to turn on `pg_stat_statements`.
 - [Prometheus source](docs/sources/prometheus.md): the keys and tools of the source for Prometheus, Thanos, Mimir and other compatible servers, their credentials, and the API paths it reads.
+- [Unleash source](docs/sources/unleash.md): the keys and tools of the Unleash feature flag source, and the read-only service account token it needs.
 - [Running Sidekick](docs/running.md): `sidekick serve`, `sidekick doctor`, start-up and shutdown, health and readiness probes, metrics, logs and traces.
 - [Sending alerts to Sidekick](docs/webhooks.md): webhook endpoints, the Alertmanager and generic adapters, how deliveries are authenticated, and `sidekick test-alert`.
 - [Setting up senders](docs/senders.md): pointing SigNoz, Datadog, Sentry and Grafana at Sidekick, and what each of their alerts becomes.
