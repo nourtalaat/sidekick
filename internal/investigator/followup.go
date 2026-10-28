@@ -127,7 +127,7 @@ func (f *FollowUpHandler) OnDead(ctx context.Context, job db.Job) error {
 		return fmt.Errorf("load investigation %s: %w", id, err)
 	}
 
-	if inv.Status != StatusRunning || inv.Run <= 1 {
+	if inv.Status != StatusRunning || inv.RunKind != RunKindFollowUp {
 		return nil
 	}
 
@@ -207,7 +207,7 @@ func (h *Handler) startFollowUp(ctx context.Context, job db.Job, id uuid.UUID) (
 			return fmt.Errorf("investigation %s: a newer claim owns the run: %w", id, queue.ErrLeaseLost)
 		}
 
-		resume := locked.Status == StatusRunning && locked.Run > 1
+		resume := locked.Status == StatusRunning && locked.RunKind == RunKindFollowUp
 
 		// A new run starts without the Stop of an earlier run, which
 		// StartFollowUpRun clears; a resumed run keeps its own.

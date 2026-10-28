@@ -33,6 +33,17 @@ const (
 // uniqueKeyPrefix starts the unique key of an investigate job.
 const uniqueKeyPrefix = "investigate:"
 
+// The values of investigations.run_kind: what the current run does. The
+// run number only counts runs.
+const (
+	// RunKindInvestigate is a full investigation, run by an investigate
+	// job.
+	RunKindInvestigate = "investigate"
+	// RunKindFollowUp is a follow-up run that answers questions, run by a
+	// follow_up job.
+	RunKindFollowUp = "follow_up"
+)
+
 // followUpKeyPrefix starts the unique key of a follow_up job.
 const followUpKeyPrefix = "follow_up:"
 

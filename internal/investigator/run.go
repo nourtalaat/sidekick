@@ -80,7 +80,7 @@ type usage struct {
 
 // newRun loads the saved steps of a started investigation and prepares
 // its run. On the first run it builds the prompt and saves it as step 0.
-// A follow-up run, whose run number is above 1, gets the follow-up budget
+// A follow-up run, whose run kind is follow_up, gets the follow-up budget
 // and counts its use from its own first step.
 func (h *Handler) newRun(ctx context.Context, inv db.Investigation, log *slog.Logger) (*run, error) {
 	r := &run{h: h, inv: inv, log: log}
@@ -123,10 +123,10 @@ func (h *Handler) newRun(ctx context.Context, inv db.Investigation, log *slog.Lo
 	return r, nil
 }
 
-// followUp reports whether the run is a follow-up run: any run after the
-// first.
+// followUp reports whether the run is a follow-up run, by the
+// investigation's run kind.
 func (r *run) followUp() bool {
-	return r.inv.Run > 1
+	return r.inv.RunKind == RunKindFollowUp
 }
 
 // settings reads the investigation's stored settings and finds the

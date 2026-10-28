@@ -92,6 +92,7 @@ func TestFollowUp(t *testing.T) {
 				inv := h.investigation(t)
 				require.Equal(t, StatusFinal, inv.Status)
 				require.EqualValues(t, 2, inv.Run)
+				require.Equal(t, RunKindInvestigate, inv.RunKind, "the end of a follow-up run ends its run kind")
 				require.Equal(t, "true_positive", deref(inv.Verdict))
 
 				r := h.report(t)
@@ -272,6 +273,7 @@ func TestFollowUp(t *testing.T) {
 
 				job := h.claimFollowUp(t)
 				require.Error(t, h.handler.FollowUps().Handle(t.Context(), job))
+				require.Equal(t, RunKindFollowUp, h.investigation(t).RunKind)
 				require.Equal(t, StatusRunning, h.investigation(t).Status)
 
 				require.NoError(t, h.handler.FollowUps().OnDead(t.Context(), job))
@@ -308,6 +310,43 @@ func TestFollowUp(t *testing.T) {
 			require.Equal(t, tt.steps, summary(h.steps(t)[from:]))
 		})
 	}
+}
+
+// TestRunNumberIsNotTheRunKind checks that an investigation whose run
+// number was raised for another full run, such as one started again after
+// triage, runs as a full investigation: the run kind, not the number,
+// makes a run a follow-up.
+func TestRunNumberIsNotTheRunKind(t *testing.T) {
+	t.Parallel()
+
+	h := setup(t, options{turns: firstRun()})
+
+	_, err := h.pool.Exec(t.Context(), "UPDATE investigations SET run = 2 WHERE id = $1", testInvestigation)
+	require.NoError(t, err)
+
+	require.NoError(t, h.run(t))
+
+	inv := h.investigation(t)
+	require.Equal(t, StatusFinal, inv.Status)
+	require.EqualValues(t, 2, inv.Run)
+	require.Equal(t, RunKindInvestigate, inv.RunKind)
+
+	for _, req := range h.conn.Requests() {
+		require.NotContains(t, toolNames(req), report.AnswerFollowUpTool, "a full investigation offers no answer_follow_up")
+	}
+
+	steps := h.steps(t)
+	require.Len(t, steps, firstRunSteps)
+	require.Equal(t, kindPrompt, steps[0].Kind)
+	require.EqualValues(t, 2, steps[0].Run)
+
+	r := h.report(t)
+	require.Equal(t, report.TruePositive, r.Verdict)
+	require.Empty(t, r.FollowUps)
+
+	_, phase, body := h.publishState(t)
+	require.Equal(t, "final", phase)
+	require.Equal(t, []string{"Checked signoz (search_logs)"}, progressTexts(body), "a full run publishes its progress")
 }
 
 func TestFollowUpStops(t *testing.T) {

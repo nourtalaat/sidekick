@@ -104,6 +104,7 @@ type Investigation struct {
 	ConfirmedBy                *uuid.UUID
 	ConfirmedBySlackUser       *string
 	ConfirmedAt                *time.Time
+	RunKind                    string
 }
 
 type InvestigationInbox struct {
