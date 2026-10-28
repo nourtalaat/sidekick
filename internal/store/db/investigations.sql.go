@@ -612,8 +612,9 @@ RETURNING id, group_id, route, strategy, strategy_version, mode, status, run, ne
 `
 
 // RestartTriagedInvestigation sets an investigation whose run ended with a
-// triage-only result back to queued for a full run. The run number goes
-// up, and how the last run ended is cleared: the verdict, the report, the
+// triage-only result back to queued for a full run, of run kind
+// investigate. The run number goes up, and how the last run ended is
+// cleared: the verdict, the report, the
 // stop flag and the confirmation of the triage verdict, so none of them
 // carries over to the full run. started_at is cleared too, so the full
 // run's wall time counts from when it starts. Feedback rows stay, as
