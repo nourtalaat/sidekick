@@ -1580,7 +1580,10 @@ An investigation older than `events` and `steps` keeps its verdict,
 report, costs and feedback, but no longer has the alert or message that
 started it, nor the full record of its tool calls and model turns.
 Responders can still rate it, and its message is still updated; it then
-names its subject "the alert", since the alert's title is gone.
+names its subject "the alert", since the alert's title is gone. A
+follow-up question on an investigation that lost any of its steps is not
+investigated: it gets a short answer that the investigation is past its
+retention period and its details were deleted.
 
 The audit log can be deleted only by the retention job: the database
 rejects any other `DELETE` or `TRUNCATE` of it, as it rejects every
