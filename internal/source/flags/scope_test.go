@@ -97,7 +97,7 @@ func TestAllowlistScope(t *testing.T) {
 		{name: "an environment outside the allowlist", list: two, project: "billing", environment: "staging",
 			wantErr: `environment "staging" of project billing is not one Sidekick may read; allowed: production`},
 		{name: "a wildcard is not an environment", list: one, environment: "*",
-			wantErr: `environment "*" of project shop is not one Sidekick may read`},
+			wantErr: `environment "*" of project shop is not one Sidekick may read; allowed: production`},
 	}
 
 	for _, tt := range tests {
