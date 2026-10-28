@@ -359,6 +359,10 @@ func TestSourceCallInput(t *testing.T) {
 		{name: "a query that picks its own log groups", tool: toolQueryLogs,
 			input: `{"logGroups":["/ecs/checkout"],"query":"SOURCE logGroups(namePrefix: ['/']) | fields @message","since":"2026-05-04T09:00:00Z","until":"2026-05-04T10:00:00Z"}`,
 			want:  "the SOURCE command picks other log groups"},
+		{name: "SOURCE after a comment line", tool: toolQueryLogs,
+			input: `{"logGroups":["/ecs/checkout"],"query":"# find errors\nSOURCE logGroups(namePrefix: ['/secret']) | fields @message",` +
+				`"since":"2026-05-04T09:00:00Z","until":"2026-05-04T10:00:00Z"}`,
+			want: "the SOURCE command picks other log groups"},
 		{name: "an empty query", tool: toolQueryLogs,
 			input: `{"logGroups":["/ecs/checkout"],"query":" ","since":"2026-05-04T09:00:00Z","until":"2026-05-04T10:00:00Z"}`,
 			want:  "query: required"},
@@ -724,6 +728,45 @@ func TestJSURL(t *testing.T) {
 			t.Parallel()
 
 			require.Equal(t, tt.want, jsurl(tt.in))
+		})
+	}
+}
+
+func TestCheckQuery(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		query   string
+		wantErr bool
+	}{
+		{name: "SOURCE at the start", query: "SOURCE logGroups(namePrefix: ['/']) | fields @message", wantErr: true},
+		{name: "SOURCE after a comment line", query: "# find errors\nSOURCE logGroups(namePrefix: ['/secret'])", wantErr: true},
+		{name: "SOURCE at the start of a later line", query: "fields @message\n  source logGroups(class: 'STANDARD')", wantErr: true},
+		{name: "SOURCE followed by a tab", query: "SOURCE\tlogGroups(namePrefix: ['/'])", wantErr: true},
+		{name: "SOURCE followed by a parenthesis", query: "fields @message | source(logGroups)", wantErr: true},
+		{name: "SOURCE after a pipe", query: "fields @message | SOURCE logGroups()", wantErr: true},
+		{name: "SOURCE alone at the end", query: "fields @message | source", wantErr: true},
+		{name: "a field named sourceIP", query: "fields sourceIP, @message | filter sourceIP like /10\\./"},
+		{name: "a field named source_ip at the start", query: "source_ip = '10.0.0.1'"},
+		{name: "a message that holds | fields source", query: "fields @message | filter @message like '| fields source'"},
+		{name: "a field named source in a list", query: "fields @timestamp, source | sort @timestamp desc"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := checkQuery(tt.query)
+			if !tt.wantErr {
+				require.NoError(t, err)
+
+				return
+			}
+
+			toolErr, ok := errors.AsType[*source.ToolError](err)
+			require.True(t, ok, "want a tool error, got %v", err)
+			require.Contains(t, toolErr.Message, "the SOURCE command picks other log groups")
 		})
 	}
 }

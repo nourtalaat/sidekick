@@ -49,8 +49,10 @@ const (
 const ptrField = "@ptr"
 
 // sourceCommand matches the SOURCE command, which picks log groups inside
-// the query instead of the log groups the call names.
-var sourceCommand = regexp.MustCompile(`(?i)(^|\|)\s*source\s`)
+// the query instead of the log groups the call names: the word source, in
+// any case, at the start of any line, such as after a # comment line, or
+// after a pipe, followed by anything but a letter, digit or _.
+var sourceCommand = regexp.MustCompile(`(?im)(^|\|)\s*source([^A-Za-z0-9_]|$)`)
 
 // logsResult is the result of query_logs.
 type logsResult struct {

@@ -13,6 +13,16 @@
 // writes nothing more, and the next worker resumes from the last saved
 // step with no gaps and no repeats.
 //
+// When the investigation's route has a triage role, the run starts with
+// triage: one call to the triage model, which answers with submit_triage.
+// Its request, its answer and Sidekick's decision are saved as steps
+// before the prompt, and are not part of the conversation. The decision
+// either picks the strategy of the full investigation, or ends the run
+// with a triage-only result (duplicate, known_issue or flapping). An
+// answer that cannot be used leads to a full investigation with the
+// route's strategy. InvestigateAnyway sets a triage-only investigation
+// back to queued for a full run, which follows the triage's strategy.
+//
 // The run ends when the model submits a report that passes its checks,
 // when it gives no such report, or when a limit is reached; the last two
 // end as inconclusive, with a report built from the saved steps. Progress

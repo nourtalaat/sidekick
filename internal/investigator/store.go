@@ -105,7 +105,7 @@ func (r *run) save(ctx context.Context, s newStep) (db.Step, error) {
 			return fmt.Errorf("insert step %d: %w", step.Seq, err)
 		}
 
-		if s.kind == kindModelTurn || s.kind == kindSummary {
+		if s.kind == kindModelTurn || s.kind == kindSummary || s.kind == kindTriageTurn {
 			if err := r.addSpend(ctx, tx, s); err != nil {
 				return fmt.Errorf("step %d: %w", step.Seq, err)
 			}
@@ -116,7 +116,7 @@ func (r *run) save(ctx context.Context, s newStep) (db.Step, error) {
 		}
 
 		// A follow-up run leaves the report on show while it runs.
-		if r.followUp() || (s.kind != kindPrompt && !hasLine) {
+		if r.followUp() || (s.kind != kindPrompt && s.kind != kindTriagePrompt && !hasLine) {
 			return nil
 		}
 
@@ -260,7 +260,7 @@ func (r *run) finish(ctx context.Context, end ending) error {
 			return fmt.Errorf("end the run: %w", err)
 		}
 
-		if !answers(status) {
+		if !answers(finished) {
 			return nil
 		}
 
