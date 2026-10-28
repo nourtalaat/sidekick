@@ -1,6 +1,10 @@
 package pricing
 
-import "github.com/nourtalaat/sidekick/internal/model"
+import (
+	"time"
+
+	"github.com/nourtalaat/sidekick/internal/model"
+)
 
 // CheckedOn is the date the shipped prices were last checked against
 // https://platform.claude.com/docs/en/about-claude/pricing and the
@@ -48,6 +52,16 @@ var shipped = map[string]model.Price{
 	),
 	"claude-haiku-4-5":          perMTok(1, 5, 0.10, 1.25),
 	"claude-haiku-4-5-20251001": perMTok(1, 5, 0.10, 1.25),
+}
+
+// shippedChanges holds the prices that a provider has announced for a later
+// date, by model ID, sorted by date. Each applies from its date in place of
+// the price in shipped, which applies until the first one.
+var shippedChanges = map[string][]period{}
+
+// from makes the period of a price that starts on the given UTC date.
+func from(year int, month time.Month, day int, price model.Price) period {
+	return period{from: time.Date(year, month, day, 0, 0, 0, 0, time.UTC), price: price}
 }
 
 // perMTok makes a Price from US dollars per million tokens.
