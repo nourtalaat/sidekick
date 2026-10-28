@@ -22,6 +22,8 @@ func TestCommands(t *testing.T) {
 		name string
 		user string
 		text string
+		// seed is SQL that runs before the command.
+		seed string
 		// slack is the response file of conversations.replies, if the
 		// command reads a message.
 		slack        string
@@ -86,6 +88,14 @@ func TestCommands(t *testing.T) {
 			user:         responder,
 			text:         "unlisten alerts",
 			wantContains: []string{"Listener `alerts` is set in the Sidekick config file"},
+		},
+		{
+			name:         "unlisten a listener that a file listener shadows",
+			user:         responder,
+			text:         "unlisten alerts",
+			seed:         `INSERT INTO listeners (name, slack_channel, match, version, updated_at) VALUES ('alerts', '#old', '{}', 1, now())`,
+			wantContains: []string{"Removed the copy of listener `alerts` that was added from Slack and was not in use.", "The listener `alerts` in the Sidekick config file is unchanged."},
+			wantAudit:    []string{"listener.deleted listener:alerts by " + responder},
 		},
 		{
 			name: "listeners",
@@ -197,6 +207,11 @@ func TestCommands(t *testing.T) {
 			t.Parallel()
 
 			h := setup(t)
+
+			if tt.seed != "" {
+				_, err := h.pool.Exec(t.Context(), tt.seed)
+				require.NoError(t, err)
+			}
 
 			if tt.slack != "" {
 				h.slack.Handle(http.MethodGet, "/conversations.replies", fakehttp.Response{BodyFile: tt.slack, Headers: map[string]string{"Content-Type": "application/json"}})
