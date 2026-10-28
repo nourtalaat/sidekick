@@ -17,21 +17,30 @@ func TestSlackConnects(t *testing.T) {
 		name     string
 		yaml     string
 		wantMode SlackMode
-		want     bool
+		// wantFollowUps is checked together with wantMode.
+		wantFollowUps SlackFollowUps
+		want          bool
 	}{
 		{name: "no slack section", want: false},
-		{name: "socket mode by default, without an app token: posts only", yaml: "slack:\n" + bot, wantMode: SlackModeSocket},
 		{
-			name:     "socket mode with an app token",
-			yaml:     "slack:\n" + bot + "  appTokenSecret: {name: sidekick-slack, key: appToken}\n",
-			wantMode: SlackModeSocket,
-			want:     true,
+			name:          "socket mode by default, without an app token: posts only",
+			yaml:          "slack:\n" + bot,
+			wantMode:      SlackModeSocket,
+			wantFollowUps: SlackFollowUpsMention,
 		},
 		{
-			name:     "events mode with a signing secret",
-			yaml:     "slack:\n" + bot + "  mode: events\n  signingSecret: {name: sidekick-slack, key: signingSecret}\n",
-			wantMode: SlackModeEvents,
-			want:     true,
+			name:          "socket mode with an app token, and every reply a follow-up",
+			yaml:          "slack:\n" + bot + "  appTokenSecret: {name: sidekick-slack, key: appToken}\n  followUps: any\n",
+			wantMode:      SlackModeSocket,
+			wantFollowUps: SlackFollowUpsAny,
+			want:          true,
+		},
+		{
+			name:          "events mode with a signing secret",
+			yaml:          "slack:\n" + bot + "  mode: events\n  signingSecret: {name: sidekick-slack, key: signingSecret}\n",
+			wantMode:      SlackModeEvents,
+			wantFollowUps: SlackFollowUpsMention,
+			want:          true,
 		},
 	}
 
@@ -45,6 +54,7 @@ func TestSlackConnects(t *testing.T) {
 
 			if tt.wantMode != "" {
 				require.Equal(t, tt.wantMode, cfg.Slack.Mode)
+				require.Equal(t, tt.wantFollowUps, cfg.Slack.FollowUps)
 			}
 		})
 	}

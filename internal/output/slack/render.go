@@ -3,6 +3,7 @@ package slack
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -102,14 +103,17 @@ type view struct {
 }
 
 // mainView renders the main message for u: "Looking into it" while
-// queued, the progress while running, and the report once final.
+// queued, the progress while running, and the report once final, also
+// after a follow-up answer.
 func mainView(u output.Update) view {
 	title := eventTitle(u)
 
+	ended := u.Phase == output.PhaseFinal || u.Phase == output.PhaseFollowUp
+
 	switch {
-	case u.Phase == output.PhaseFinal && failed(u.Report):
+	case ended && failed(u.Report):
 		return failedView(u, title)
-	case u.Phase == output.PhaseFinal:
+	case ended:
 		return finalView(u, title)
 	case u.Phase == output.PhaseRunning:
 		return runningView(u, title)
@@ -161,6 +165,61 @@ func continuationView(u output.Update) (view, bool) {
 		text:       escape("More of the report: " + eventTitle(u)),
 		attachment: attachment{Color: style.color, Blocks: blocks},
 	}, true
+}
+
+// answerView renders the thread reply with one follow-up answer: who
+// asked, the answer with links to its evidence, and, when the run changed
+// the verdict, the old and the new verdict. An answer the run could not
+// give shows why, with the warning style.
+func answerView(u output.Update, f report.FollowUp) view {
+	style := styleOf(u.Report.Verdict)
+	heading := ":speech_balloon: *Answer*"
+
+	if !f.Answered {
+		style, heading = failedStyle, failedStyle.emoji+" *No answer*"
+	}
+
+	if askers := askerNames(f.Questions); askers != "" {
+		heading += " for " + askers
+	}
+
+	text := escape(cut(f.Answer, maxReasonChars))
+	if links := evidenceLinks(f.Evidence); len(links) > 0 {
+		text += "\n" + strings.Join(links, " · ")
+	}
+
+	blocks := []block{section(heading + "\n" + text)}
+
+	if f.VerdictChanged() {
+		_, now := verdictLine(u.Report)
+		was := styleOf(f.PreviousVerdict)
+		blocks = append(blocks, contextBlock("Verdict changed from "+was.emoji+" "+was.label+" to "+now))
+	}
+
+	return view{
+		text:       escape("Answer: " + cut(f.Answer, maxTitleChars)),
+		attachment: attachment{Color: style.color, Blocks: blocks},
+	}
+}
+
+// askerNames returns who asked the questions, each once, in the order
+// they asked, escaped: their names, or a mention of a Slack user known
+// only by ID, which also lets them know of the answer.
+func askerNames(questions []report.FollowUpQuestion) string {
+	var names []string
+
+	for _, q := range questions {
+		name := escape(q.Author)
+		if name == "" && slackUserID.MatchString(q.AuthorID) {
+			name = "<@" + q.AuthorID + ">"
+		}
+
+		if name != "" && !slices.Contains(names, name) {
+			names = append(names, name)
+		}
+	}
+
+	return strings.Join(names, ", ")
 }
 
 // queuedView is the first message, posted when the investigation is

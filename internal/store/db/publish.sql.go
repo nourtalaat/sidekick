@@ -12,6 +12,28 @@ import (
 	"github.com/google/uuid"
 )
 
+const findInvestigationByExternal = `-- name: FindInvestigationByExternal :one
+SELECT investigation_id FROM output_refs
+WHERE sink = ANY ($1::text[]) AND external = $2
+ORDER BY published_at DESC
+LIMIT 1
+`
+
+type FindInvestigationByExternalParams struct {
+	Sinks    []string
+	External string
+}
+
+// FindInvestigationByExternal returns the investigation that one of sinks
+// published at external, such as the Slack thread a reply is in. When
+// several did, it returns the one published to last.
+func (q *Queries) FindInvestigationByExternal(ctx context.Context, arg FindInvestigationByExternalParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, findInvestigationByExternal, arg.Sinks, arg.External)
+	var investigation_id uuid.UUID
+	err := row.Scan(&investigation_id)
+	return investigation_id, err
+}
+
 const getPublishState = `-- name: GetPublishState :one
 SELECT
   publish_states.seq,

@@ -89,7 +89,7 @@ func TestSetListeners(t *testing.T) {
 
 			names := []string{}
 			for _, l := range *h.listeners.Load() {
-				names = append(names, l.name)
+				names = append(names, l.Name)
 			}
 
 			require.Equal(t, tt.want, names)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
@@ -144,7 +145,8 @@ func TestTriage(t *testing.T) {
 }
 
 // TestInvestigateAnyway ends a run with a triage-only result, confirms its
-// verdict, asks for a full investigation, and runs it.
+// verdict, asks for a full investigation, runs it with the whole budget
+// although earlier runs used it all, and answers a follow-up question.
 func TestInvestigateAnyway(t *testing.T) {
 	t.Parallel()
 
@@ -159,16 +161,22 @@ func TestInvestigateAnyway(t *testing.T) {
 			t.Parallel()
 
 			h := setup(t, options{
+				budget:      Budget{MaxToolCalls: 40, MaxWallTime: 10 * time.Minute, MaxCostMicros: 1_000_000},
 				triageTurns: []modeltest.Turn{triageTurn(triageDuplicate)},
-				turns:       []modeltest.Turn{turn(modeltest.Call("v1", report.SubmitVerdictTool, goodReportNoCitations))},
+				turns: []modeltest.Turn{
+					turn(search("c1")),
+					turn(modeltest.Call("v1", report.SubmitVerdictTool, goodReport)),
+					turn(modeltest.Call("a1", report.AnswerFollowUpTool, answerC1)),
+				},
 			})
 
 			first := h.claim(t)
 			require.NoError(t, h.handler.Handle(t.Context(), first))
 			h.complete(t, first)
 
+			// Earlier runs used the whole budget; the full run has its own.
 			_, err := h.pool.Exec(t.Context(), `UPDATE investigations SET confirmed_verdict = 'duplicate', confirmed_by_slack_user = 'U01ANA',
-				confirmed_at = now() WHERE id = $1`, testInvestigation)
+				confirmed_at = now(), cost_micros = 1000000, tool_calls = 40 WHERE id = $1`, testInvestigation)
 			require.NoError(t, err)
 
 			started := h.anyway(t)
@@ -178,6 +186,7 @@ func TestInvestigateAnyway(t *testing.T) {
 			inv := h.investigation(t)
 			require.Equal(t, StatusQueued, inv.Status)
 			require.EqualValues(t, 2, inv.Run)
+			require.Equal(t, RunKindInvestigate, inv.RunKind)
 			require.Nil(t, inv.Verdict)
 			require.Nil(t, inv.Report)
 			require.Nil(t, inv.StopReason)
@@ -192,7 +201,8 @@ func TestInvestigateAnyway(t *testing.T) {
 
 			steps := h.steps(t)
 			require.Equal(t, append(append([]string(nil), usedTriageSteps...),
-				"triage_override ok ", "prompt ok ", "model_turn ok ", "tool_result ok submit_verdict"), summary(steps))
+				"triage_override ok ", "prompt ok ", "model_turn ok ", "tool_result ok search_logs",
+				"model_turn ok ", "tool_result ok submit_verdict"), summary(steps))
 
 			for _, s := range steps[len(usedTriageSteps):] {
 				require.EqualValues(t, 2, s.Run, "step %d belongs to the full run", s.Seq)
@@ -202,7 +212,7 @@ func TestInvestigateAnyway(t *testing.T) {
 
 			inv = h.investigation(t)
 			require.Equal(t, StatusFinal, inv.Status)
-			require.Equal(t, string(report.TruePositive), *inv.Verdict)
+			require.Equal(t, string(report.TruePositive), *inv.Verdict, "the earlier runs' use does not count against the full run")
 			require.Equal(t, string(report.StopSubmitted), *inv.StopReason)
 
 			_, phase, body := h.publishState(t)
@@ -211,7 +221,16 @@ func TestInvestigateAnyway(t *testing.T) {
 			require.Equal(t, []string{
 				"Triage: duplicate, so no full investigation runs.",
 				triageOverrideText,
+				"Checked signoz (search_logs)",
 			}, progressTexts(body))
+
+			require.True(t, h.ask(t, "Ev1", askPods), "the full investigation takes follow-up questions")
+			require.NoError(t, h.runFollowUp(t))
+
+			inv = h.investigation(t)
+			require.Equal(t, StatusFinal, inv.Status)
+			require.EqualValues(t, 3, inv.Run)
+			require.Len(t, h.report(t).FollowUps, 1)
 		})
 	}
 }
@@ -276,12 +295,6 @@ func TestInvestigateAnywayWhileTheJobFinishes(t *testing.T) {
 		})
 	}
 }
-
-// goodReportNoCitations is a true positive whose finding cites no call.
-const goodReportNoCitations = `{"verdict": "true_positive", "confidence": "high", "reason": "Latency rose after the deploy.",
-	"summary": "Slow after a deploy.", "cause": "Deploy 4f2c1a", "impact": "Checkouts are slow",
-	"findings": [{"claim": "p99 rose at 14:02.", "evidenceToolCallIds": []}],
-	"fixes": [{"title": "Roll back 4f2c1a", "detail": "Revert the deploy."}]}`
 
 // requireTriageRejected checks that the triage decision was saved as
 // rejected with a problem holding want, and that the full investigation

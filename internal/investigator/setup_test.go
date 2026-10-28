@@ -82,6 +82,8 @@ type options struct {
 	// route is the payments route's settings, and daily the daily caps.
 	route Route
 	daily DailyCaps
+	// source replaces the fake signoz source when it is set.
+	source source.Source
 	// triageTurns, when set, give the investigation a triage role filled
 	// by a scripted connector of its own, cheap, that answers with them.
 	triageTurns []modeltest.Turn
@@ -126,8 +128,13 @@ func setup(t *testing.T, o options) *harness {
 	conn := modeltest.New(t, o.caps, o.turns...)
 	conn.ExpectAllUsed()
 
+	src := o.source
+	if src == nil {
+		src = fakeSignoz(t)
+	}
+
 	h := &harness{pool: pool, conn: conn, spans: tracetest.NewSpanRecorder(), registry: prometheus.NewRegistry()}
-	h.handler = newHandler(t, pool, conn, fakeSignoz(t), h.spans, h.registry)
+	h.handler = newHandler(t, pool, conn, src, h.spans, h.registry)
 	h.handler.opts.Routes["payments"] = o.route
 	h.handler.opts.Daily = o.daily
 
