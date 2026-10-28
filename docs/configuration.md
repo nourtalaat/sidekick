@@ -665,6 +665,68 @@ The tools, as the model sees them with the source name `backstage`, are
 `backstage__get_service`, `backstage__get_owner` and
 `backstage__get_system`.
 
+#### Elasticsearch and OpenSearch sources (`type: elasticsearch`)
+
+An Elasticsearch source searches the logs an Elasticsearch or OpenSearch
+cluster keeps, through the `_search` and `_field_caps` APIs, with an API
+key or a user and password. Its tools only read, and only the index
+patterns it lists. [The Elasticsearch and OpenSearch
+source](sources/elasticsearch.md) lists every key, the read-only role it
+needs and how to set up links to Kibana or OpenSearch Dashboards.
+
+| Key | Meaning |
+|---|---|
+| `flavor` | `elasticsearch` or `opensearch`. Default: `elasticsearch`. |
+| `baseURL` | The root of the cluster's REST API, for example `https://logs.example.com:9200`. Required. It must use `https`; plain `http` is accepted only for `localhost` and loopback addresses. |
+| `apiKeySecret` | `{ name, key }` of the Secret that holds an Elasticsearch API key, encoded. Only with `flavor: elasticsearch`. |
+| `basicAuth` | `username` and `passwordSecret`, `{ name, key }` of the Secret that holds the password. Set exactly one of `apiKeySecret` and `basicAuth`. |
+| `indexPatterns` | The index patterns the tools may read, such as `logs-*`. Required; a call for an index no pattern covers fails before anything is sent. |
+| `timeField`, `messageField` | The fields that hold each log's time and message. Default: `@timestamp` and `message`. |
+| `defaultFields` | The fields `search_logs` returns when the call names none. Default: a few Elastic Common Schema fields such as `log.level` and `service.name`. |
+| `discoverURL` | A Go template for evidence links to Kibana Discover or OpenSearch Dashboards, with `.Index`, `.Query`, `.From` and `.To`. |
+
+```yaml
+sources:
+  logs:
+    type: elasticsearch
+    flavor: opensearch
+    baseURL: https://opensearch.example.com:9200
+    basicAuth:
+      username: sidekick
+      passwordSecret: { name: sidekick-opensearch, key: password }
+    indexPatterns: [logs-*]
+```
+
+The tools, as the model sees them with the source name `logs`:
+
+| Tool | Returns |
+|---|---|
+| `logs__search_logs` | The newest logs that match a Lucene query string in a time range, with the chosen fields. |
+| `logs__count_logs` | Counts of matching logs over time, optionally split by the 10 most common values of one field. |
+| `logs__list_fields` | The fields of an index pattern with their types. |
+
+How it behaves:
+
+- **Start-up never waits for the cluster.** The first tool call is the
+  first request, and the API key or password is read from its Secret for
+  each request.
+- **Input.** An index outside `indexPatterns`, an `_index` clause in the
+  query string that points outside it, a range longer than 7 days or with
+  no `since`, or input that does not fit is a tool error, and nothing is
+  sent.
+- **Results** are JSON. `search_logs` returns at most 200 hits, with long
+  values cut, and says when hits were left out. Searches and counts link
+  to Kibana or OpenSearch Dashboards when `discoverURL` is set.
+- **No data.** A search that matches nothing and an index that does not
+  exist are reported as no data.
+- **Errors.** A query string the cluster cannot parse or a privilege the
+  role lacks goes to the model as a tool error with the cluster's message.
+  Refused credentials, rate limits and server errors count as failures of
+  the source.
+- **Timeout.** `timeout` may be at most `60s`, because the HTTP client
+  stops waiting for response headers after 60 seconds; `sidekick config
+  validate` rejects a longer one.
+
 #### Google Cloud sources (`type: gcp`)
 
 A Google Cloud source reads Google Cloud projects through the Cloud
@@ -1003,8 +1065,10 @@ investigations:
 - `roleGroups` and `roleUsers` give Slack users their Sidekick role, one
   of `viewer`, `responder`, `approver` and `admin`. `roleGroups` maps
   Slack user group IDs (`S...`) to roles, and `roleUsers` maps user IDs
-  (`U...` or `W...`) to roles, for teams without user groups. A user gets
-  the highest role from either map; a user in neither is a `responder`.
+  (`U...` or `W...`) to roles, for teams without user groups. With the
+  [`oidc` section](#oidc) set, a Slack user whose email a web UI user has
+  also gets that user's role. A user gets the highest of these roles; a
+  user none of them gives a role is a `responder`.
   [Roles](slack.md#roles) says what each role may do.
 
 [Investigations in Slack](slack.md) describes how to set up the app.

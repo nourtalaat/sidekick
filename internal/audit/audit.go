@@ -19,6 +19,8 @@ import (
 const (
 	// ActorUser is a person, through Slack or the web UI.
 	ActorUser = "user"
+	// ActorToken is an API token an admin created; its ID is the token's.
+	ActorToken = "token"
 	// ActorSidekick is Sidekick acting on its own, for example the model
 	// proposing an action.
 	ActorSidekick = "sidekick"

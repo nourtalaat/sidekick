@@ -132,8 +132,8 @@ func TestLogout(t *testing.T) {
 	}
 }
 
-// TestQueryPlans runs EXPLAIN ANALYZE on the users and sessions queries
-// over 5,000 users with a session each.
+// TestQueryPlans runs EXPLAIN ANALYZE on the users, sessions and API
+// token queries over 5,000 users with a session each and 500 tokens.
 func TestQueryPlans(t *testing.T) {
 	t.Parallel()
 
@@ -143,11 +143,15 @@ func TestQueryPlans(t *testing.T) {
 	now := time.Now()
 	userID := uuid.MustParse("01920000-0000-7000-8000-000000000100")
 	hash := []byte("0123456789abcdef0123456789abcdef")
+	tokenID := uuid.MustParse("01920000-0000-7000-9000-000000000100")
 
 	tests := []struct {
 		name      string
 		run       func(ctx context.Context, q *db.Queries) error
 		wantIndex string
+		// seqScan allows a sequential scan, for a query that reads a
+		// small table whole.
+		seqScan bool
 	}{
 		{
 			name: "ReleaseUserEmail",
@@ -223,6 +227,54 @@ func TestQueryPlans(t *testing.T) {
 			},
 			wantIndex: "sessions_expires_at",
 		},
+		{
+			name: "CreateAPIToken",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.CreateAPIToken(ctx, db.CreateAPITokenParams{
+					ID: uuid.New(), Name: "new", TokenHash: hash, Role: "viewer", CreatedBy: userID, CreatedAt: now, ExpiresAt: now.Add(time.Hour),
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "Insert on api_tokens",
+		},
+		{
+			name: "GetActiveAPIToken",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.GetActiveAPIToken(ctx, db.GetActiveAPITokenParams{TokenHash: hash, Now: now})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "api_tokens_hash",
+		},
+		{
+			name: "TouchAPIToken",
+			run: func(ctx context.Context, q *db.Queries) error {
+				err := q.TouchAPIToken(ctx, db.TouchAPITokenParams{ID: tokenID, Now: now, LastUsedBefore: now.Add(-time.Minute)})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "api_tokens_pkey",
+		},
+		{
+			name: "RevokeAPIToken",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.RevokeAPIToken(ctx, db.RevokeAPITokenParams{ID: tokenID, Now: now})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "api_tokens_pkey",
+		},
+		{
+			name: "ListAPITokens",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListAPITokens(ctx)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "api_tokens",
+			seqScan:   true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -238,7 +290,10 @@ func TestQueryPlans(t *testing.T) {
 
 			require.ErrorIs(t, tt.run(t.Context(), db.New(explain)), storetest.ErrExplained)
 			require.Contains(t, explain.Plan, tt.wantIndex)
-			require.NotContains(t, explain.Plan, "Seq Scan")
+
+			if !tt.seqScan {
+				require.NotContains(t, explain.Plan, "Seq Scan")
+			}
 		})
 	}
 }

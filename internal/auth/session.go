@@ -20,11 +20,23 @@ import (
 // know.
 var errUnknownRole = errors.New("the user's stored role is not a known role")
 
-// Authenticate returns the signed-in user of r from its session cookie.
-// It returns an error wrapping ErrUnauthenticated when r has no session
-// that is valid now, and ErrCSRF when r changes something without the
-// session's CSRF token in the CSRFHeader header.
+// Authenticate returns the caller of r: the API token in its
+// Authorization header when it has one, else the signed-in user of its
+// session cookie. It returns an error wrapping ErrUnauthenticated when r
+// has no token or session that is valid now, and ErrCSRF when r changes
+// something with a session but without the session's CSRF token in the
+// CSRFHeader header. A token needs no CSRF token, since browsers never
+// send one on their own.
 func (s *Service) Authenticate(r *http.Request) (Principal, error) {
+	if h := r.Header.Get("Authorization"); h != "" {
+		p, err := s.tokenPrincipal(r, h)
+		if err != nil {
+			return Principal{}, fmt.Errorf("authenticate: %w", err)
+		}
+
+		return p, nil
+	}
+
 	p, _, err := s.session(r)
 	if err != nil {
 		return Principal{}, fmt.Errorf("authenticate: %w", err)

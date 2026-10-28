@@ -18,6 +18,7 @@ Sidekick receives alerts from webhooks or Slack, investigates them with the LLM 
 - [AWS source](docs/sources/aws.md): the read-only IAM policy the AWS source needs, and how to give Sidekick its AWS identity in each account.
 - [Azure source](docs/sources/azure.md): the read-only role the Azure source needs, and how to give Sidekick its Azure identity.
 - [Backstage source](docs/sources/backstage.md): the keys and tools of the Backstage service catalog source, and the token it needs.
+- [Elasticsearch and OpenSearch source](docs/sources/elasticsearch.md): the keys and tools of the logs source for Elasticsearch and OpenSearch, the read-only role it needs, and links to Kibana or OpenSearch Dashboards.
 - [GitHub source](docs/sources/github.md): the GitHub App permissions the GitHub source needs, and how to set the app up.
 - [Google Cloud source](docs/sources/gcp.md): the permissions the Google Cloud source needs, and how to give Sidekick its Google Cloud identity.
 - [Kubernetes source](docs/sources/kubernetes.md): the keys and tools of the Kubernetes source, and the read-only RBAC it needs.
