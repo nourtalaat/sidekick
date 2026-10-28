@@ -1316,6 +1316,11 @@ result is still valid JSON. A string value under a key that names a secret,
 such as `password` or `Authorization`, is redacted as a whole. Text and tool
 results longer than 256 KiB are cut and marked as truncated.
 
+The IDs that locate a Slack or Teams message (the team, tenant, channel,
+message and thread IDs or timestamps, the sender's user ID and the Teams
+service URL) are stored as received, even when a rule matches them, because
+replies are sent to them. The message text is redacted like any other.
+
 ### `telemetry`
 
 ```yaml
