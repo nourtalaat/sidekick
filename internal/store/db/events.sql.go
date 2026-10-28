@@ -31,7 +31,7 @@ func (q *Queries) FindGroupOfAlert(ctx context.Context, fingerprint string) (uui
 }
 
 const getEvent = `-- name: GetEvent :one
-SELECT id, intake, key, kind, sender_kind, sender_id, sender_name, trusted, alert_name, title, body, service, severity, labels, links, fingerprint, slack, raw, status, skip_reason, route, group_id, starts_at, ends_at, received_at FROM events WHERE id = $1
+SELECT id, intake, key, kind, sender_kind, sender_id, sender_name, trusted, alert_name, title, body, service, severity, labels, links, fingerprint, slack, raw, status, skip_reason, route, group_id, starts_at, ends_at, received_at, teams FROM events WHERE id = $1
 `
 
 func (q *Queries) GetEvent(ctx context.Context, id uuid.UUID) (Event, error) {
@@ -63,6 +63,7 @@ func (q *Queries) GetEvent(ctx context.Context, id uuid.UUID) (Event, error) {
 		&i.StartsAt,
 		&i.EndsAt,
 		&i.ReceivedAt,
+		&i.Teams,
 	)
 	return i, err
 }
@@ -71,7 +72,7 @@ const insertEvent = `-- name: InsertEvent :one
 INSERT INTO events (
   id, intake, key, kind, sender_kind, sender_id, sender_name, trusted,
   alert_name, title, body, service, severity, labels, links, fingerprint,
-  slack, raw, status, skip_reason, starts_at, ends_at, received_at
+  slack, teams, raw, status, skip_reason, starts_at, ends_at, received_at
 )
 VALUES (
   $1,
@@ -96,7 +97,8 @@ VALUES (
   $20,
   $21,
   $22,
-  $23
+  $23,
+  $24
 )
 ON CONFLICT (intake, key) DO NOTHING
 RETURNING id
@@ -120,6 +122,7 @@ type InsertEventParams struct {
 	Links       []byte
 	Fingerprint string
 	Slack       []byte
+	Teams       []byte
 	Raw         []byte
 	Status      string
 	SkipReason  *string
@@ -149,6 +152,7 @@ func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) (uuid.
 		arg.Links,
 		arg.Fingerprint,
 		arg.Slack,
+		arg.Teams,
 		arg.Raw,
 		arg.Status,
 		arg.SkipReason,
@@ -162,7 +166,7 @@ func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) (uuid.
 }
 
 const listEventsByID = `-- name: ListEventsByID :many
-SELECT id, intake, key, kind, sender_kind, sender_id, sender_name, trusted, alert_name, title, body, service, severity, labels, links, fingerprint, slack, raw, status, skip_reason, route, group_id, starts_at, ends_at, received_at FROM events WHERE id = ANY ($1::uuid[]) ORDER BY received_at, id
+SELECT id, intake, key, kind, sender_kind, sender_id, sender_name, trusted, alert_name, title, body, service, severity, labels, links, fingerprint, slack, raw, status, skip_reason, route, group_id, starts_at, ends_at, received_at, teams FROM events WHERE id = ANY ($1::uuid[]) ORDER BY received_at, id
 `
 
 // ListEventsByID returns the events with ids, in the order they arrived.
@@ -201,6 +205,7 @@ func (q *Queries) ListEventsByID(ctx context.Context, ids []uuid.UUID) ([]Event,
 			&i.StartsAt,
 			&i.EndsAt,
 			&i.ReceivedAt,
+			&i.Teams,
 		); err != nil {
 			return nil, err
 		}

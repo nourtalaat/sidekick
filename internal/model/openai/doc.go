@@ -7,4 +7,9 @@
 // either. Known OpenAI models and the local model presets carry their
 // capabilities, so they need no capabilities block. A preset gets a forced
 // tool choice only on a server known to honour it.
+//
+// The package also registers the model provider "azure", for model
+// deployments on Azure OpenAI and Microsoft Foundry. It uses the same
+// connector on Azure's v1 API, with the deployment name as the model and
+// an api-key header or a Microsoft Entra ID token as the credentials.
 package openai

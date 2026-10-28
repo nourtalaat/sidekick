@@ -50,6 +50,7 @@ type Event struct {
 	StartsAt    *time.Time
 	EndsAt      *time.Time
 	ReceivedAt  time.Time
+	Teams       []byte
 }
 
 type EventGroup struct {

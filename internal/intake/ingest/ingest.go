@@ -199,6 +199,15 @@ func (w *Writer) row(d Delivery, ev event.Event) (db.InsertEventParams, error) {
 		p.Slack = w.redactedJSON(slack)
 	}
 
+	if ev.Teams != nil {
+		teams, err := json.Marshal(ev.Teams)
+		if err != nil {
+			return db.InsertEventParams{}, fmt.Errorf("encode the Teams reference: %w", err)
+		}
+
+		p.Teams = w.redactedJSON(teams)
+	}
+
 	return p, nil
 }
 

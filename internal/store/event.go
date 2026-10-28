@@ -66,6 +66,13 @@ func EventOf(row db.Event) (event.Event, error) {
 		}
 	}
 
+	if row.Teams != nil {
+		ev.Teams = &event.TeamsRef{}
+		if err := json.Unmarshal(row.Teams, ev.Teams); err != nil {
+			return event.Event{}, fmt.Errorf("decode the Teams reference: %w", err)
+		}
+	}
+
 	return ev, nil
 }
 
