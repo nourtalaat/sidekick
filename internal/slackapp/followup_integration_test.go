@@ -37,9 +37,11 @@ func TestFollowUpQuestions(t *testing.T) {
 		wantAuthor string
 		// roles finds the askers' roles; nil lets everyone ask.
 		roles func(t *testing.T, refreshes *int) roles.Lookup
-		// wantRefused expects the note that refuses the question, and
-		// wantRefreshes how often the role was read again.
-		wantRefused   bool
+		// triageOnly makes the investigation a triage-only result.
+		triageOnly bool
+		// wantNote is the note only the asker sees, when the question is
+		// not sent, and wantRefreshes how often the role was read again.
+		wantNote      string
 		wantRefreshes int
 	}{
 		{
@@ -52,8 +54,14 @@ func TestFollowUpQuestions(t *testing.T) {
 
 				return lookup
 			},
-			send:        []string{"follow-up-mention"},
-			wantRefused: true,
+			send:     []string{"follow-up-mention"},
+			wantNote: noteQuestionDenied,
+		},
+		{
+			name:       "a question to a triage-only result points to Investigate anyway and starts no run",
+			triageOnly: true,
+			send:       []string{"follow-up-mention"},
+			wantNote:   noteQuestionTriageOnly,
 		},
 		{
 			name: "a viewer whose role is read again as responder asks",
@@ -111,7 +119,13 @@ func TestFollowUpQuestions(t *testing.T) {
 				h.handler.followUps.roles = tt.roles(t, &refreshes)
 			}
 
-			if tt.wantRefused {
+			if tt.triageOnly {
+				_, err := h.pool.Exec(t.Context(), "UPDATE investigations SET verdict = 'duplicate', stop_reason = 'triage' WHERE id = $1",
+					followUpInvestigation)
+				require.NoError(t, err)
+			}
+
+			if tt.wantNote != "" {
 				h.slack.Handle(http.MethodGet, "/"+methodEphemeral, fakehttp.Response{Body: []byte(`{"ok":true}`)})
 				h.slack.ExpectAllCalled()
 			}
@@ -142,7 +156,7 @@ func TestFollowUpQuestions(t *testing.T) {
 			require.Equal(t, min(len(tt.want), 1), followUpJobs(t, h), "an investigation that has ended gets one follow_up job")
 			require.Equal(t, tt.wantRefreshes, refreshes)
 
-			if !tt.wantRefused {
+			if tt.wantNote == "" {
 				require.Empty(t, h.slack.Requests(), "the thread's first message is not fetched")
 
 				return
@@ -154,7 +168,7 @@ func TestFollowUpQuestions(t *testing.T) {
 			require.Equal(t, "C01OPS", calls[0].Query.Get("channel"))
 			require.Equal(t, "U03BOB", calls[0].Query.Get("user"))
 			require.Equal(t, "1761472960.000500", calls[0].Query.Get("thread_ts"))
-			require.Equal(t, noteQuestionDenied, calls[0].Query.Get("text"))
+			require.Equal(t, tt.wantNote, calls[0].Query.Get("text"))
 		})
 	}
 }

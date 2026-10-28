@@ -599,6 +599,100 @@ func (q *Queries) RequestInvestigationCancel(ctx context.Context, arg RequestInv
 	return cancel_requested_at, err
 }
 
+const restartTriagedInvestigation = `-- name: RestartTriagedInvestigation :one
+UPDATE investigations
+SET status = 'queued', run = run + 1, run_kind = 'investigate',
+    verdict = NULL, confidence = NULL, report = NULL, stop_reason = NULL,
+    started_at = NULL, finished_at = NULL,
+    cancel_requested_at = NULL, cancel_requested_by = NULL, cancel_requested_by_slack_user = NULL,
+    confirmed_verdict = NULL, confirmed_cause = NULL, confirmed_by = NULL, confirmed_by_slack_user = NULL,
+    confirmed_at = NULL
+WHERE id = $1 AND status = 'final' AND stop_reason = 'triage'
+RETURNING id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at, cancel_requested_at, cancel_requested_by, cancel_requested_by_slack_user, confirmed_verdict, confirmed_cause, confirmed_by, confirmed_by_slack_user, confirmed_at, run_kind
+`
+
+// RestartTriagedInvestigation sets an investigation whose run ended with a
+// triage-only result back to queued for a full run, of run kind
+// investigate. The run number goes up, and how the last run ended is
+// cleared: the verdict, the report, the
+// stop flag and the confirmation of the triage verdict, so none of them
+// carries over to the full run. started_at is cleared too, so the full
+// run's wall time counts from when it starts. Feedback rows stay, as
+// history of the earlier run. It returns no row for any other
+// investigation, so a second click changes nothing.
+func (q *Queries) RestartTriagedInvestigation(ctx context.Context, id uuid.UUID) (Investigation, error) {
+	row := q.db.QueryRow(ctx, restartTriagedInvestigation, id)
+	var i Investigation
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.Route,
+		&i.Strategy,
+		&i.StrategyVersion,
+		&i.Mode,
+		&i.Status,
+		&i.Run,
+		&i.NextSeq,
+		&i.Fence,
+		&i.Verdict,
+		&i.Confidence,
+		&i.Report,
+		&i.StopReason,
+		&i.Connectors,
+		&i.Budget,
+		&i.InputTokens,
+		&i.OutputTokens,
+		&i.CostMicros,
+		&i.ToolCalls,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.FirstFindingAt,
+		&i.FinishedAt,
+		&i.CancelRequestedAt,
+		&i.CancelRequestedBy,
+		&i.CancelRequestedBySlackUser,
+		&i.ConfirmedVerdict,
+		&i.ConfirmedCause,
+		&i.ConfirmedBy,
+		&i.ConfirmedBySlackUser,
+		&i.ConfirmedAt,
+		&i.RunKind,
+	)
+	return i, err
+}
+
+const setInvestigationStrategy = `-- name: SetInvestigationStrategy :one
+UPDATE investigations
+SET strategy = $1, strategy_version = $2, budget = $3
+WHERE id = $4 AND fence = $5 AND status = 'running'
+RETURNING id
+`
+
+type SetInvestigationStrategyParams struct {
+	Strategy        *string
+	StrategyVersion *string
+	Budget          json.RawMessage
+	ID              uuid.UUID
+	Fence           int64
+}
+
+// SetInvestigationStrategy records the strategy triage chose for a running
+// investigation, with its version and the budget that follows from it,
+// when fence still owns the run. It returns no row when the fence is
+// stale.
+func (q *Queries) SetInvestigationStrategy(ctx context.Context, arg SetInvestigationStrategyParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, setInvestigationStrategy,
+		arg.Strategy,
+		arg.StrategyVersion,
+		arg.Budget,
+		arg.ID,
+		arg.Fence,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const startFollowUpRun = `-- name: StartFollowUpRun :one
 UPDATE investigations
 SET fence = $1,

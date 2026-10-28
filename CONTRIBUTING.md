@@ -159,7 +159,11 @@ client := NewClient(api.URL(), api.Client())
 - `Handle` serves its responses once each, in order. `HandleFunc` takes a
   handler function for anything canned responses cannot do. `Response`
   also has `Body` and `Delay`, and `fakehttp.New(t, fakehttp.WithTLS())`
-  starts an HTTPS server.
+  starts an HTTPS server. `fakehttp.WithClientCertificates()` starts one
+  that also asks for a client certificate and records the one it gets;
+  `fakehttp.NewCertificate` makes one for the client to send, and
+  `CertificatePEM` returns the server's own certificate, for a client told
+  which CA to trust.
 - A request that no route expects fails the test and gets a 501, so a
   missing mock never passes silently. `ExpectAllCalled` also fails the test
   when a response goes unused.

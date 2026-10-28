@@ -3,6 +3,7 @@ package slackapp
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -24,6 +25,11 @@ const maxQuestionBytes = 4000
 // noteQuestionDenied is what a Slack user below responder sees, only to
 // them, when they ask a follow-up question.
 const noteQuestionDenied = "Only responders can ask Sidekick follow-up questions, so this one was not sent."
+
+// noteQuestionTriageOnly is what the asker sees, only to them, when they
+// ask about a triage-only result.
+const noteQuestionTriageOnly = "This was a triage-only result, so there is no investigation to ask about yet, and " +
+	"this question was not sent. Press Investigate anyway on the message to start a full investigation, then ask again."
 
 // followUps is what turns thread replies into follow-up questions.
 type followUps struct {
@@ -100,6 +106,12 @@ func (h *Handler) followUp(ctx context.Context, env envelope, m message) (bool, 
 		AuthorID: m.User,
 		Text:     f.redactor.Text(source.CutText(text, maxQuestionBytes)).Text,
 	})
+	if errors.Is(err, investigator.ErrTriageOnly) {
+		h.tellTriageOnly(ctx, id.String(), m)
+
+		return true, nil
+	}
+
 	if err != nil {
 		return true, fmt.Errorf("add the follow-up question: %w", err)
 	}
@@ -134,5 +146,17 @@ func (h *Handler) refuseQuestion(ctx context.Context, investigationID string, m 
 
 	if err := h.api.postEphemeral(ctx, m.Channel, m.User, m.ThreadTS, noteQuestionDenied); err != nil {
 		log.WarnContext(ctx, "could not tell the user that their follow-up question was refused", "error", err.Error())
+	}
+}
+
+// tellTriageOnly tells the author of m, and only them, that their question
+// was about a triage-only result and was not sent. A note that cannot be
+// posted is logged.
+func (h *Handler) tellTriageOnly(ctx context.Context, investigationID string, m message) {
+	log := h.log.With("investigation_id", investigationID, "slack_user", m.User)
+	log.InfoContext(ctx, "Slack follow-up question not sent: the investigation has a triage-only result")
+
+	if err := h.api.postEphemeral(ctx, m.Channel, m.User, m.ThreadTS, noteQuestionTriageOnly); err != nil {
+		log.WarnContext(ctx, "could not tell the user that their follow-up question was not sent", "error", err.Error())
 	}
 }

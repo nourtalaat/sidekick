@@ -83,6 +83,7 @@ model:
       apiKeySecret: { name: sidekick-anthropic, key: apiKey }
   roles:
     investigate: claude      # required, and the model must be able to call tools
+    triage: claude           # optional; see "Triage" in investigations.md
     summarize: claude
   prices:
     claude-opus-5-5: { inputPerMTok: 4, outputPerMTok: 20, cacheReadPerMTok: 0.2, cacheWritePerMTok: 5 }   # replaces the shipped price
@@ -117,7 +118,7 @@ claude:
 
   ```yaml
   capabilities:
-    toolCalling: true          # needed for the investigate role
+    toolCalling: true          # needed for the investigate and triage roles
     toolChoice: true           # the model accepts a forced tool choice
     thinkingModes: [adaptive]  # adaptive and/or enabled
     effortLevels: [low, medium, high]
@@ -292,9 +293,9 @@ gpt-with-a-key:
   - these Foundry models from other providers: `Kimi-K2.6`, `Kimi-K2.5`,
     `grok-4.7`, `grok-4.6` and `grok-4.3`, which call tools, and
     `DeepSeek-V4-Pro`, `DeepSeek-V4-Flash` and `DeepSeek-V3.2`, which
-    cannot be the `investigate` model. DeepSeek's thinking models fail a
-    tool call turn unless the reasoning of earlier turns is sent back, which
-    Sidekick does not do on Chat Completions; use them for `triage` or
+    cannot be the `investigate` or `triage` model. DeepSeek's thinking
+    models fail a tool call turn unless the reasoning of earlier turns is
+    sent back, which Sidekick does not do on Chat Completions; use them for
     `summarize`. Foundry does not say whether these models honour a forced
     tool choice, so Sidekick does not force one; when the model ends a turn
     without calling a tool, the investigation reminds it to call
@@ -914,6 +915,68 @@ How it behaves:
   stops waiting for response headers after 60 seconds; `sidekick config
   validate` rejects a longer one.
 
+#### Prometheus sources (`type: prometheus`)
+
+A Prometheus source reads Prometheus or a server that shares its HTTP API,
+such as Thanos, Mimir, Cortex or VictoriaMetrics, and optionally an
+Alertmanager, with a bearer token, basic auth or a client certificate from
+Secrets, or none. Its tools only read. [Prometheus
+source](sources/prometheus.md) lists every key, the access it needs and
+its limits.
+
+| Key | Meaning |
+|---|---|
+| `baseURL` | The root of the Prometheus HTTP API, the part before `/api/v1`. Required. It must use `https` when credentials are sent, except for `localhost` and loopback addresses. |
+| `alertmanagerURL` | The root of an Alertmanager API, the part before `/api/v2`. When set, `list_alerts` reads Alertmanager, with silences. |
+| `bearerTokenSecret` | `{ name, key }` of the Secret that holds a bearer token. |
+| `basicAuth` | `username`, and `passwordSecret`, the `{ name, key }` of the Secret that holds the password. Not with `bearerTokenSecret`. |
+| `tls` | `certSecret` and `keySecret` for a client certificate, and `caSecret` for the CAs to trust, each a `{ name, key }`. |
+| `headers` | Extra headers for every request, such as `X-Scope-OrgID`. Never credentials. |
+| `links` | `prometheusURL`, the web UI for evidence links (default: `baseURL`), or `grafanaURL` and `grafanaDatasource` for links to Grafana Explore. |
+
+```yaml
+sources:
+  prometheus:
+    type: prometheus
+    baseURL: http://prometheus-operated.monitoring:9090
+    alertmanagerURL: http://alertmanager-operated.monitoring:9093
+```
+
+The tools, as the model sees them with the source name `prometheus`:
+
+| Tool | Returns |
+|---|---|
+| `prometheus__query` | An instant PromQL query: each series' labels and value. |
+| `prometheus__query_range` | A PromQL range query with a step picked for at most 250 points per series: the min, max, average and last of each series, and its points. |
+| `prometheus__list_alerts` | The firing and pending alerts, or the Alertmanager alerts with their silences. |
+| `prometheus__get_rules` | The alerting rules with one name: expression, `for`, labels, health and last error. |
+| `prometheus__list_series` | The series that match a series selector. |
+| `prometheus__list_label_values` | The values of one label. |
+| `prometheus__list_targets` | The scrape targets that are not up. |
+
+How it behaves:
+
+- **Start-up never waits for Prometheus.** The first tool call is the
+  first request. Secrets are read again for each request, so a rotated
+  one needs no restart.
+- **Queries.** Every PromQL query and series selector is parsed with the
+  Prometheus parser before it is sent; one that does not parse is a tool
+  error, and nothing is sent.
+- **Results** are JSON with links to the query in the Prometheus web UI or
+  Grafana Explore, or to the alerts or targets page, which become evidence
+  links in the report. Lists are capped as
+  [Prometheus source](sources/prometheus.md#limits) describes, and say
+  when they were cut.
+- **No data.** A query with no series, an empty list, and an API the
+  server does not have, are reported as no data.
+- **Errors.** A query the server refuses or cannot run, a `403`, and an
+  answer larger than 16 MiB go to the model as a tool error with the
+  server's message. A refused credential, rate limits, server errors and
+  secrets that cannot be read count as failures of the source.
+- **Timeout.** `timeout` may be at most `60s`, because the HTTP client
+  stops waiting for response headers after 60 seconds; `sidekick config
+  validate` rejects a longer one.
+
 #### LaunchDarkly sources (`type: launchdarkly`)
 
 A LaunchDarkly source reads feature flag changes from the LaunchDarkly
@@ -1246,8 +1309,16 @@ strategies:
   dir: /etc/sidekick/strategies   # extra strategy files, read-only
 ```
 
-Sidekick ships with built-in strategies; this release has `generic-alert`,
-which fits any alert. `dir` adds your own: every `*.yaml` or `*.yml` file at
+Sidekick ships with these built-in strategies:
+
+| Strategy | For |
+|---|---|
+| `generic-alert` | Any alert or event that no more specific strategy covers. |
+| `latency-alert` | A latency monitor, such as p95 or p99 response time, for an HTTP or RPC service. |
+| `error-rate-alert` | An error rate monitor, such as the share of failed requests or 5xx responses. |
+| `service-down` | A service, host or endpoint that stopped answering, such as a failed health check or uptime probe. |
+
+`dir` adds your own: every `*.yaml` or `*.yml` file at
 the top of the directory is one strategy. Hidden files and other files are
 skipped. A `dir` that is not set, or does not exist, adds none; one that
 exists but cannot be read stops Sidekick from starting.
@@ -1265,8 +1336,8 @@ A strategy file looks like this. Unknown keys are errors, as in
 ```yaml
 name: latency-alert                # required; lower-case letters, digits and "-"
 description: A latency monitor fired for an HTTP or RPC service.   # required
-match:                             # the events the strategy fits; used to pick
-  alertNames: ["*Latency*"]        # a strategy in a later release
+match:                             # the events the strategy fits; triage is
+  alertNames: ["*Latency*"]        # told which strategies fit an event
   textPattern: "(?i)latency|slow"  # a regular expression
 sources:
   prefer: [signoz, k8s]            # sources to try first; unknown names are skipped
@@ -1820,8 +1891,8 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
 - Every `provider`, source `type`, `adapter` and output `type` is one this
   version of Sidekick has, and its section passes that plugin's own checks.
 - `model.roles.investigate` is set, every role names a defined connector,
-  and the connector for `investigate`, globally or on a route, can call
-  tools.
+  and the connectors for `investigate` and `triage`, globally or on a
+  route, can call tools.
 - Every secret reference has a `name` and a `key`, each a plain name without
   `/`. At start-up, every referenced secret file must exist and be readable.
 - Every webhook endpoint sets exactly one of `bearer` and `hmac`. Every

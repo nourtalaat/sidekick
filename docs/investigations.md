@@ -17,6 +17,14 @@ then loops:
 3. The loop goes on until the model submits its report, or a limit is
    reached.
 
+Whatever the strategy says, the model is told to check what changed shortly
+before the event started: deploys, config changes and feature flags, with
+every tool that can show them, such as the
+[GitHub source](sources/github.md) or the rollout history of the
+[Kubernetes source](sources/kubernetes.md). It records what it found as a
+finding, also when nothing changed. When no tool can show recent changes,
+the report's reason says they could not be checked.
+
 Events that join the investigation's group while it runs, and recoveries
 of its alerts, wait in the investigation's inbox. Before the model's next
 answer, Sidekick sends everything that waits as one message, with what the
@@ -33,6 +41,35 @@ is evidence and never decides the verdict by itself.
 The model uses the connector that `model.roles.investigate` names, or the
 route's own `roles.investigate`. A call that fails because the provider is
 busy or rate limited is repeated up to the connector's `retries`.
+
+## Triage
+
+When the route has a `triage` role, in `model.roles` or the route's own
+`roles`, a cheaper model takes a first look before the investigation. It
+sees the event group, the list of strategies and which strategies' `match`
+fits the first event, and answers with one tool call, `submit_triage`:
+
+- **`investigate: true`** with a strategy: the investigation runs with
+  that strategy instead of the route's. Where the strategy sets a lower
+  budget than the investigation has, the lower one applies; choosing a
+  strategy never raises a budget.
+- **`investigate: false`**: the investigation ends at once with the
+  triage's verdict, which can only be `duplicate`, `known_issue` or
+  `flapping`, marked "triage only". In Slack, the message has an
+  **Investigate anyway** button that starts the full investigation (see
+  [Buttons](slack.md#buttons)). That investigation has the whole budget:
+  it counts only its own tokens, tool calls, cost and time.
+
+Triage never calls an alert a real issue or a false alarm. An answer that
+gives any other verdict, names a strategy that does not exist, or is no
+`submit_triage` call at all is not used: the full investigation runs with
+the route's strategy, and the steps record why. The same happens when the
+triage connector is no longer configured or the model refuses the request.
+The triage model's tokens and cost count toward the investigation's
+budgets, and the connector must be able to call tools.
+
+Without a `triage` role, investigations start with the route's strategy, as
+before.
 
 ## Tools
 
@@ -90,9 +127,10 @@ either.
 | `budget` | A budget ran out: tokens, tool calls, time or cost, or a daily cap was reached. | Not sure yet |
 | `error` | The model refused the request for good, for example because it was too long, or the job failed on every attempt. | Could not finish |
 | `cancelled` | A responder pressed Stop. | Not sure yet |
+| `triage` | Triage found that no full investigation is needed. | Triage's: Duplicate, Known issue or Flapping |
 
-The first three end in status `final`, `error` ends in status `failed`, and
-`cancelled` in status `cancelled`.
+`submitted`, `no_verdict`, `budget` and `triage` end in status `final`,
+`error` ends in status `failed`, and `cancelled` in status `cancelled`.
 When the investigation ends without an accepted report, its report holds
 the findings recorded with `record_finding` and what was checked.
 
@@ -108,7 +146,8 @@ every step, so a restarted investigation goes on counting.
 - **`maxToolCalls`** counts the calls to source tools. A call past the
   limit is not run, and the model is told so.
 - **`maxWallTime`** counts from when the investigation first started,
-  including any time a restart took.
+  including any time a restart took. After **Investigate anyway** it
+  counts from when the full investigation starts.
 - **`maxCostUSD`** counts the cost of the model calls, from the price
   table.
 
@@ -148,7 +187,8 @@ the same tools, and `answer_follow_up` to answer without changing the
 verdict; it calls `submit_verdict` with a full new report when the answer
 changes the verdict. Questions are what to look at: they cannot change the
 tools, the action mode or the verdict rules. Questions that arrive while a
-run is going on wait for the next run.
+run is going on wait for the next run. A triage-only result takes no
+questions until **Investigate anyway** has started a full investigation.
 
 Each follow-up run has half of each of the investigation's limits, at
 least 1 of a limit that is set, and counts only its own use: its tokens,
