@@ -34,6 +34,7 @@ func TestRouteEvent(t *testing.T) {
 		wantMode    string
 		wantBudget  string
 		wantService *string
+		wantTitle   string
 	}{
 		{
 			name:        "a trusted event on its own route",
@@ -42,6 +43,7 @@ func TestRouteEvent(t *testing.T) {
 			wantMode:    "read-only",
 			wantBudget:  `{"max_tokens": 400000, "max_tool_calls": 30, "max_wall_time_ms": 300000, "max_cost_micros": 1000000}`,
 			wantService: ptr("checkout-api"),
+			wantTitle:   "High p99 latency",
 		},
 		{
 			name:        "an untrusted event",
@@ -50,6 +52,7 @@ func TestRouteEvent(t *testing.T) {
 			wantMode:    "read-only",
 			wantBudget:  `{"max_tokens": 400000, "max_tool_calls": 40, "max_wall_time_ms": 600000, "max_cost_micros": 1000000}`,
 			wantService: ptr("db"),
+			wantTitle:   "Disk almost full",
 		},
 		{
 			name:       "an event only the default route fits",
@@ -66,6 +69,7 @@ func TestRouteEvent(t *testing.T) {
 			wantMode:    "read-only",
 			wantBudget:  `{"max_tokens": 400000, "max_tool_calls": 30, "max_wall_time_ms": 300000, "max_cost_micros": 1000000}`,
 			wantService: ptr("checkout-api"),
+			wantTitle:   "High p99 latency",
 		},
 	}
 
@@ -110,6 +114,8 @@ func TestRouteEvent(t *testing.T) {
 			require.Equal(t, group.ID, inv.GroupID)
 			require.Equal(t, tt.wantRoute, inv.Route)
 			require.Equal(t, tt.wantMode, inv.Mode)
+			require.Equal(t, &tt.wantTitle, inv.AlertTitle, "the title is empty, not NULL, when the event has none")
+			require.Equal(t, tt.wantService, inv.Service)
 			require.Equal(t, investigator.StatusQueued, inv.Status)
 			require.Equal(t, int32(1), inv.Run)
 			require.Len(t, *inv.StrategyVersion, 16)

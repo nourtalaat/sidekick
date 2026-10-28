@@ -126,6 +126,46 @@ An admin signed in to the web UI creates tokens with
 - Requests with a token need no CSRF token.
 - Creating and revoking a token are written to the audit log.
 
+## Investigations
+
+Every role from `viewer` up can read investigations:
+
+- `GET /api/v1/investigations` lists them, newest first, 50 at a time
+  (`limit` takes up to 200); pass the answer's `nextCursor` as `cursor`
+  for the next page. The filters `from`, `to`, `route`, `service`,
+  `model`, `verdict` and `status` must all match, and `q` matches the
+  words of the alert title (`"quotes"` match a phrase, `-word` leaves a
+  word out). Each row has the verdict, status, cost, how the verdict was
+  rated (`correct`, `wrong`, `mixed` or `none`) and the state of the
+  newest watcher.
+- `GET /api/v1/investigations/{id}` returns one investigation with its
+  report, the first 50 events of its group and the follow-up questions no
+  run has answered yet.
+- `GET /api/v1/investigations/{id}/steps` returns the record of the run,
+  100 steps at a time (`limit` takes up to 500), with `run` and `after`
+  to choose which. The tool results are redacted already. Text over 32
+  KiB is cut in the answer (marked `truncated`); the database keeps all
+  of it. A reasoning step shows the text the provider returned, never
+  its signature.
+- `GET /api/v1/investigations/{id}/watchers` returns the watchers of the
+  investigation's group with their last 50 checks.
+- `GET /api/v1/investigations/{id}/stream` is a stream of server-sent
+  events: `step` for each new step, `status` when the status, the run,
+  the stop request or the confirmed verdict changes, and `watchers` when
+  a watcher changed. Any replica serves it, not only the one that runs
+  the investigation, because each replica listens for changes in the
+  database. It sends a comment every 15 seconds and ends after 30
+  minutes; the browser reconnects with `Last-Event-ID`, and the stream
+  resumes after that step. A replica serves at most 100 streams at once
+  and answers 429 above that. The session or token is checked when the
+  stream opens, so a revoked one can keep a stream for up to 30 minutes.
+
+The list's service, model and title columns are filled when an
+investigation is created. Investigations from before they existed (older
+than this version) are filled in the background in batches of 5,000 when
+Sidekick starts; until that job has finished, they do not match the
+`service`, `model` and `q` filters.
+
 ## Admin operations
 
 - `GET /api/v1/config` returns the config Sidekick runs with: `file`, the

@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -21,6 +23,11 @@ type server struct {
 	redactor *redact.Redactor
 	pool     *pgxpool.Pool
 	audit    *audit.Writer
+	hub      *Hub
+	log      *slog.Logger
+
+	streamHeartbeat time.Duration
+	streamLifetime  time.Duration
 }
 
 var _ apigen.StrictServerInterface = (*server)(nil)

@@ -5,10 +5,12 @@
 package api
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -50,6 +52,16 @@ type Options struct {
 	Pool *pgxpool.Pool
 	// Audit records retried jobs.
 	Audit *audit.Writer
+	// Hub brings the database's notifications to the event streams. Run
+	// it as a task. Without it, a stream answers 503.
+	Hub *Hub
+	// StreamHeartbeat is how often an event stream sends a comment and
+	// reads the database for what a missed notification left out. Zero
+	// means DefaultStreamHeartbeat.
+	StreamHeartbeat time.Duration
+	// StreamLifetime is how long an event stream stays open. Zero means
+	// DefaultStreamLifetime.
+	StreamLifetime time.Duration
 	// Logger gets the errors that answer 500. Nil logs nothing.
 	Logger *slog.Logger
 }
@@ -82,7 +94,14 @@ func New(opts Options) (http.Handler, error) {
 
 	h := &handler{auth: opts.Auth, routes: http.NewServeMux(), log: log}
 
-	strict := apigen.NewStrictHandlerWithOptions(&server{tokens: opts.Tokens, cfg: opts.Config, rules: opts.Rules, redactor: opts.Redactor, pool: opts.Pool, audit: opts.Audit}, []apigen.StrictMiddlewareFunc{requireRoles(need)},
+	srv := &server{
+		tokens: opts.Tokens, cfg: opts.Config, rules: opts.Rules, redactor: opts.Redactor, pool: opts.Pool, audit: opts.Audit,
+		hub: opts.Hub, log: log,
+		streamHeartbeat: cmp.Or(opts.StreamHeartbeat, DefaultStreamHeartbeat),
+		streamLifetime:  cmp.Or(opts.StreamLifetime, DefaultStreamLifetime),
+	}
+
+	strict := apigen.NewStrictHandlerWithOptions(srv, []apigen.StrictMiddlewareFunc{requireRoles(need)},
 		apigen.StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  h.requestError,
 			ResponseErrorHandlerFunc: h.responseError,

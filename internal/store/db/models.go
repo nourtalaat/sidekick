@@ -164,6 +164,9 @@ type Investigation struct {
 	ConfirmedBySlackUser       *string
 	ConfirmedAt                *time.Time
 	RunKind                    string
+	AlertTitle                 *string
+	Service                    *string
+	Model                      *string
 }
 
 type InvestigationInbox struct {

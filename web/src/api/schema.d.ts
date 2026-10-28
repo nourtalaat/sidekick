@@ -122,6 +122,126 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Investigations, newest first, a page at a time
+         * @description Every filter that is given must match. The investigations are
+         *     ordered by the time they were created, newest first, and a page
+         *     starts after the investigation the cursor names. Investigations
+         *     from before the list's service, model and title columns existed are
+         *     filled in the background when Sidekick starts; until that has
+         *     finished they do not match the service, model and q filters.
+         */
+        get: operations["ListInvestigations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One investigation, with its report and the events of its group */
+        get: operations["GetInvestigation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{id}/steps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The steps of an investigation, in order, a page at a time
+         * @description The record of the run: the prompt, each model turn, each tool call
+         *     and its result, as the model saw them. Tool results are redacted
+         *     already. Steps the retention job deleted are missing from the
+         *     list.
+         */
+        get: operations["ListInvestigationSteps"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{id}/watchers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The watchers of the investigation's group, with their last checks */
+        get: operations["ListInvestigationWatchers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{id}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A stream of server-sent events about one investigation
+         * @description Server-sent events (text/event-stream) while the investigation
+         *     changes. Any replica serves the stream, not only the one that runs
+         *     the investigation. The events are:
+         *
+         *     - `step`, with the seq as its id and a Step as its data, for each
+         *       step saved after the one the client has.
+         *     - `status`, with no id and a StreamStatus as its data, once when
+         *       the stream starts and again whenever the status, the run, the
+         *       stop request or the confirmed verdict changes.
+         *     - `watchers`, with `{}` as its data, when a watcher of the
+         *       investigation started, ran a check or ended; get the watchers
+         *       again.
+         *
+         *     A comment line every 15 seconds keeps the connection open. The
+         *     stream ends after 30 minutes, and the browser's EventSource then
+         *     reconnects with the Last-Event-ID header, which resumes after that
+         *     step. A client that connects the first time can pass `after`, the
+         *     last seq it has, instead. At most 100 streams are open on a
+         *     replica; above that the answer is 429.
+         */
+        get: operations["StreamInvestigation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -234,6 +354,393 @@ export interface components {
             /** @description The token, sent as "Authorization: Bearer <secret>". It is shown only here. */
             secret: string;
         };
+        /** @enum {string} */
+        Verdict: "true_positive" | "false_positive" | "inconclusive" | "duplicate" | "known_issue" | "flapping";
+        /** @enum {string} */
+        Confidence: "low" | "medium" | "high";
+        /** @enum {string} */
+        InvestigationStatus: "queued" | "running" | "final" | "failed" | "cancelled";
+        /**
+         * @description What the current run does: a full investigation, or the answer to follow-up questions.
+         * @enum {string}
+         */
+        RunKind: "investigate" | "follow_up";
+        /** @description The ratings responders gave the verdict of the current run. */
+        FeedbackSummary: {
+            correct: number;
+            wrong: number;
+            /**
+             * @description correct or wrong when every rating says so, mixed when both
+             *     kinds exist, and none when nobody rated.
+             * @enum {string}
+             */
+            summary: "correct" | "wrong" | "mixed" | "none";
+        };
+        /** @enum {string} */
+        WatcherStatus: "running" | "recovered" | "timed_out" | "stopped";
+        /** @description The newest watcher of the investigation's group. */
+        WatcherSummary: {
+            name: string;
+            status: components["schemas"]["WatcherStatus"];
+        };
+        /**
+         * @description One row of the list. The title comes from the alert, so it is text
+         *     a sender wrote: show it as plain text.
+         */
+        InvestigationSummary: {
+            /** Format: uuid */
+            id: string;
+            /** @description The title of the event that opened the group. Absent when it has none. */
+            title?: string;
+            service?: string;
+            route: string;
+            verdict?: components["schemas"]["Verdict"];
+            confidence?: components["schemas"]["Confidence"];
+            status: components["schemas"]["InvestigationStatus"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            finishedAt?: string;
+            /**
+             * Format: int64
+             * @description From the start to the end of the run. Absent while it runs.
+             */
+            durationMs?: number;
+            /**
+             * Format: int64
+             * @description The cost so far, in millionths of a US dollar.
+             */
+            costMicros: number;
+            feedback: components["schemas"]["FeedbackSummary"];
+            watcher?: components["schemas"]["WatcherSummary"];
+        };
+        InvestigationList: {
+            investigations: components["schemas"]["InvestigationSummary"][];
+            /** @description Pass as cursor for the next page. Absent on the last page. */
+            nextCursor?: string;
+        };
+        Investigation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            groupId: string;
+            title?: string;
+            service?: string;
+            route: string;
+            strategy?: string;
+            strategyVersion?: string;
+            /** @description The action mode in effect, such as read-only. */
+            mode: string;
+            status: components["schemas"]["InvestigationStatus"];
+            /** @description The number of the current run; follow-up runs count too. */
+            run: number;
+            runKind: components["schemas"]["RunKind"];
+            verdict?: components["schemas"]["Verdict"];
+            confidence?: components["schemas"]["Confidence"];
+            /** @description Why the run ended, such as submitted, budget, cancelled or triage. */
+            stopReason?: string;
+            /** @description The model of the first model turn. */
+            model?: string;
+            /** @description The model connector the investigation runs on. */
+            connector?: string;
+            /** Format: int64 */
+            inputTokens: number;
+            /** Format: int64 */
+            outputTokens: number;
+            /** Format: int64 */
+            costMicros: number;
+            toolCalls: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            firstFindingAt?: string;
+            /** Format: date-time */
+            finishedAt?: string;
+            /** Format: int64 */
+            durationMs?: number;
+            /**
+             * Format: date-time
+             * @description When a responder asked to stop the run, while it has not stopped yet.
+             */
+            cancelRequestedAt?: string;
+            confirmation?: components["schemas"]["Confirmation"];
+            report?: components["schemas"]["Report"];
+            /** @description How many events the group has, which can be more than events lists. */
+            eventCount: number;
+            /** @description The first 50 events of the group, oldest first. */
+            events: components["schemas"]["Event"][];
+            /** @description Follow-up questions that no run has answered yet, oldest first. */
+            pendingFollowUps: components["schemas"]["PendingFollowUp"][];
+        };
+        /** @description The verdict people agree with. */
+        Confirmation: {
+            verdict: components["schemas"]["Verdict"];
+            cause?: string;
+            /** Format: date-time */
+            at: string;
+        };
+        PendingFollowUp: {
+            text: string;
+            author?: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /**
+         * @description An alert or message that joined the group. Its text came from the
+         *     sender, redacted but untrusted: show it as plain text, and open its
+         *     links only as web links.
+         */
+        Event: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "alert" | "resolved" | "message" | "mention";
+            /** @description The webhook endpoint or Slack listener that took it. */
+            intake: string;
+            alertName?: string;
+            title?: string;
+            /** @description The text, cut to 2000 bytes. */
+            body?: string;
+            service?: string;
+            severity?: string;
+            sender?: components["schemas"]["Sender"];
+            labels: {
+                [key: string]: string;
+            };
+            /** @description The links the sender attached, with http or https addresses only. */
+            links: components["schemas"]["EventLink"][];
+            /** Format: date-time */
+            receivedAt: string;
+        };
+        Sender: {
+            /** @enum {string} */
+            kind?: "human" | "bot" | "system";
+            name?: string;
+        };
+        EventLink: {
+            title: string;
+            url: string;
+        };
+        /**
+         * @description The result of the investigation. The model wrote its text from what
+         *     the sources returned, so show it as plain text.
+         */
+        Report: {
+            verdict: components["schemas"]["Verdict"];
+            confidence: components["schemas"]["Confidence"];
+            reason: string;
+            summary: string;
+            cause?: string;
+            impact?: string;
+            findings: components["schemas"]["Finding"][];
+            fixes?: components["schemas"]["Fix"][];
+            falsePositive?: components["schemas"]["FalsePositiveDetail"];
+            /** @description What was checked in each source. */
+            checked: components["schemas"]["SourceCheck"][];
+            /** @enum {string} */
+            stopReason: "submitted" | "budget" | "cancelled" | "triage" | "error" | "no_verdict";
+            stopDetail?: string;
+            /** @description The follow-up runs after the first, oldest first. */
+            followUps?: components["schemas"]["FollowUp"][];
+        };
+        Finding: {
+            id: string;
+            claim: string;
+            /** @description Empty for a hypothesis. */
+            evidence: components["schemas"]["Evidence"][];
+        };
+        Evidence: {
+            /** @description What the link points at, such as log_query, metric or deploy. */
+            kind: string;
+            title: string;
+            /** @description A web link. Absent when the source gave none that is an http or https address. */
+            url?: string;
+            /** @description The tool call whose step produced the evidence. */
+            toolCallId?: string;
+            /** Format: date-time */
+            at?: string;
+        };
+        Fix: {
+            id: string;
+            title: string;
+            detail: string;
+            actionProposalId?: string;
+        };
+        FalsePositiveDetail: {
+            whyFired: string;
+            prevention: components["schemas"]["Prevention"][];
+        };
+        Prevention: {
+            kind: string;
+            detail: string;
+        };
+        SourceCheck: {
+            source: string;
+            /** @enum {string} */
+            status: "ok" | "no_data" | "failed" | "unavailable";
+            toolCalls: number;
+            error?: string;
+        };
+        FollowUp: {
+            run: number;
+            questions: components["schemas"]["FollowUpQuestion"][];
+            /** @description The answer, or why there is none when answered is false. */
+            answer: string;
+            answered: boolean;
+            evidence?: components["schemas"]["Evidence"][];
+            previousVerdict?: components["schemas"]["Verdict"];
+            /** Format: date-time */
+            at: string;
+        };
+        FollowUpQuestion: {
+            author?: string;
+            text: string;
+        };
+        StepList: {
+            steps: components["schemas"]["Step"][];
+            /**
+             * Format: int32
+             * @description The seq to pass as after for the next page. Absent on the last page.
+             */
+            nextAfter?: number;
+        };
+        /**
+         * @description One step of the record. A prompt step has only the first message the
+         *     model got. Reasoning is shown when the provider returned it. Parts
+         *     hold text from alerts, sources and the model: show it as plain text.
+         */
+        Step: {
+            /** Format: int32 */
+            seq: number;
+            run: number;
+            /** @enum {string} */
+            kind: "prompt" | "model_turn" | "tool_result" | "note" | "inbox" | "summary" | "triage_prompt" | "triage_turn" | "triage_result" | "triage_override";
+            /** @enum {string} */
+            status: "ok" | "no_data" | "error" | "timeout" | "unavailable" | "rejected" | "over_budget";
+            /** @description For a tool result, the source that answered. Absent for a built-in tool. */
+            source?: string;
+            tool?: string;
+            /** @description For a tool result, the ID of the call it answers. */
+            callId?: string;
+            error?: string;
+            connector?: string;
+            model?: string;
+            tokens?: components["schemas"]["StepTokens"];
+            /** Format: int64 */
+            costMicros?: number;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: int32 */
+            durationMs: number;
+            parts: components["schemas"]["StepPart"][];
+        };
+        StepTokens: {
+            /** Format: int64 */
+            input: number;
+            /** Format: int64 */
+            output: number;
+            /** Format: int64 */
+            cacheRead?: number;
+            /** Format: int64 */
+            cacheWrite?: number;
+        };
+        StepPart: {
+            /** @enum {string} */
+            type: "text" | "tool_call" | "tool_result" | "reasoning";
+            /** @description For text and reasoning, cut to 32 KiB. */
+            text?: string;
+            /** @description For a tool call, its ID. */
+            id?: string;
+            /** @description For a tool call, the tool's name. */
+            name?: string;
+            /** @description For a tool call, the arguments, as JSON. */
+            input?: unknown;
+            /** @description For a tool result, the ID of the call it answers. */
+            callId?: string;
+            /** @description For a tool result, what the tool returned, redacted and cut to 32 KiB. */
+            content?: string;
+            isError?: boolean;
+            /** @description Set when text or content was cut. */
+            truncated?: boolean;
+        };
+        /**
+         * @description The data of a `status` event of the stream: what changes while the
+         *     investigation runs. When it differs from the page, get the
+         *     investigation again for the report.
+         */
+        StreamStatus: {
+            status: components["schemas"]["InvestigationStatus"];
+            run: number;
+            runKind: components["schemas"]["RunKind"];
+            verdict?: components["schemas"]["Verdict"];
+            confidence?: components["schemas"]["Confidence"];
+            stopReason?: string;
+            /** Format: date-time */
+            finishedAt?: string;
+            /** Format: date-time */
+            cancelRequestedAt?: string;
+            /** @description Whether people confirmed the verdict. */
+            confirmed: boolean;
+            /** Format: int64 */
+            costMicros: number;
+            /** Format: int64 */
+            inputTokens: number;
+            /** Format: int64 */
+            outputTokens: number;
+            toolCalls: number;
+        };
+        WatcherList: {
+            watchers: components["schemas"]["Watcher"][];
+        };
+        /**
+         * @description A check that runs on a schedule until the service is back up or its
+         *     time is over. The last result comes from the checked service, so
+         *     show it as plain text.
+         */
+        Watcher: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @description http, tool or alert. */
+            checkType: string;
+            status: components["schemas"]["WatcherStatus"];
+            passesInARow: number;
+            passesToRecover: number;
+            intervalSeconds: number;
+            /** @description How many checks have run. */
+            checks: number;
+            /** Format: date-time */
+            lastCheckAt?: string;
+            lastResult?: string;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            endedAt?: string;
+            /** @description For a stopped watcher, group_resolved, responder or config_changed. */
+            stopReason?: string;
+            stoppedBy?: components["schemas"]["Person"];
+            /** @description Up to the last 50 checks, newest first. */
+            recentChecks: components["schemas"]["WatcherCheck"][];
+        };
+        /** @description Someone who acted, by their Slack user ID, or their user ID in the web UI. */
+        Person: {
+            slackUserId?: string;
+            /** Format: uuid */
+            userId?: string;
+        };
+        WatcherCheck: {
+            seq: number;
+            /** Format: date-time */
+            at: string;
+            /** @enum {string} */
+            result: "pass" | "fail" | "error";
+            detail?: string;
+            durationMs: number;
+        };
         /** @description Problem details, as RFC 9457 describes. */
         Problem: {
             /** @description A URI that names the kind of problem; about:blank when the status says it all. */
@@ -259,7 +766,9 @@ export interface components {
             };
         };
     };
-    parameters: never;
+    parameters: {
+        InvestigationID: string;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -419,6 +928,150 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListInvestigations: {
+        parameters: {
+            query?: {
+                /** @description Only investigations created at or after this time. */
+                from?: string;
+                /** @description Only investigations created before this time. */
+                to?: string;
+                route?: string;
+                service?: string;
+                /** @description The model of the investigation's first model turn. */
+                model?: string;
+                verdict?: components["schemas"]["Verdict"];
+                status?: components["schemas"]["InvestigationStatus"];
+                /**
+                 * @description Words of the alert title. Every word must be in it; quotes match
+                 *     a phrase, and a minus sign leaves a word out.
+                 */
+                q?: string;
+                /** @description The nextCursor of the page before. */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of investigations. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvestigationList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetInvestigation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["InvestigationID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The investigation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Investigation"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListInvestigationSteps: {
+        parameters: {
+            query?: {
+                /** @description Only the steps of this run. */
+                run?: number;
+                /** @description Only the steps with a seq above this one; the nextAfter of the page before. */
+                after?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["InvestigationID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of steps. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListInvestigationWatchers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["InvestigationID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The watchers, oldest first, each with up to its last 50 checks, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatcherList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    StreamInvestigation: {
+        parameters: {
+            query?: {
+                /** @description The last seq the client has. Last-Event-ID wins when both are given. */
+                after?: number;
+            };
+            header?: {
+                /** @description The seq of the last step the client received, sent by EventSource when it reconnects. */
+                "Last-Event-ID"?: string;
+            };
+            path: {
+                id: components["parameters"]["InvestigationID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The event stream. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
             };
             default: components["responses"]["Problem"];
         };

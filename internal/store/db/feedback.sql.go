@@ -60,7 +60,7 @@ func (q *Queries) ListTargetFeedback(ctx context.Context, arg ListTargetFeedback
 }
 
 const lockInvestigation = `-- name: LockInvestigation :one
-SELECT id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at, cancel_requested_at, cancel_requested_by, cancel_requested_by_slack_user, confirmed_verdict, confirmed_cause, confirmed_by, confirmed_by_slack_user, confirmed_at, run_kind FROM investigations WHERE id = $1 FOR UPDATE
+SELECT id, group_id, route, strategy, strategy_version, mode, status, run, next_seq, fence, verdict, confidence, report, stop_reason, connectors, budget, input_tokens, output_tokens, cost_micros, tool_calls, created_at, started_at, first_finding_at, finished_at, cancel_requested_at, cancel_requested_by, cancel_requested_by_slack_user, confirmed_verdict, confirmed_cause, confirmed_by, confirmed_by_slack_user, confirmed_at, run_kind, alert_title, service, model FROM investigations WHERE id = $1 FOR UPDATE
 `
 
 // LockInvestigation returns an investigation and holds a lock on its row
@@ -102,6 +102,9 @@ func (q *Queries) LockInvestigation(ctx context.Context, id uuid.UUID) (Investig
 		&i.ConfirmedBySlackUser,
 		&i.ConfirmedAt,
 		&i.RunKind,
+		&i.AlertTitle,
+		&i.Service,
+		&i.Model,
 	)
 	return i, err
 }

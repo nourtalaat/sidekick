@@ -396,6 +396,22 @@ func (h *history) count(match func(db.Step) bool) int {
 	return n
 }
 
+// StepParts returns the parts of a saved step as the model saw them. A
+// prompt step, of the investigation or of triage, returns the parts of its
+// first message; its system text and its tools are left out.
+func StepParts(s db.Step) ([]model.Part, error) {
+	if s.Kind != kindPrompt && s.Kind != kindTriagePrompt {
+		return decodeParts(s.Parts)
+	}
+
+	var p storedPrompt
+	if err := json.Unmarshal(s.Parts, &p); err != nil {
+		return nil, fmt.Errorf("decode the prompt of step %d: %w", s.Seq, err)
+	}
+
+	return decodeStoredParts(p.Parts)
+}
+
 // newHistory returns the history of the saved steps, in seq order.
 func newHistory(steps []db.Step) (*history, error) {
 	h := &history{

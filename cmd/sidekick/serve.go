@@ -133,6 +133,10 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
+	if err := registerBackfill(a); err != nil {
+		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
+	}
+
 	guard, err := newGuard(a)
 	if err != nil {
 		return errors.Join(fmt.Errorf("start: set up the tool guard: %w", err), a.Close())

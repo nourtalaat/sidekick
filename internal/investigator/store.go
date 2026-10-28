@@ -85,6 +85,7 @@ func (r *run) save(ctx context.Context, s newStep) (db.Step, error) {
 			OutputTokens: usage.OutputTokens,
 			CostMicros:   deref(s.cost),
 			ToolCalls:    s.toolCalls,
+			Model:        modelOf(s),
 			Finding:      s.finding,
 			ID:           r.inv.ID,
 			Fence:        r.inv.Fence,
@@ -334,6 +335,16 @@ func markDelivered(ctx context.Context, queries *db.Queries, investigationID uui
 	}
 
 	return nil
+}
+
+// modelOf returns the model of a model turn, which the investigation keeps
+// the first of, and nil for any other step.
+func modelOf(s newStep) *string {
+	if s.kind != kindModelTurn {
+		return nil
+	}
+
+	return optional(s.model)
 }
 
 // optional turns "" into NULL.
