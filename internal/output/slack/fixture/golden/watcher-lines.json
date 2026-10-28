@@ -1,0 +1,59 @@
+{
+  "text": "",
+  "attachments": [
+    {
+      "color": "",
+      "blocks": [
+        {
+          "type": "context",
+          "block_id": "watcher",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": ":eyes: *Watching* checkout-health · checking every 30s since <!date^1793023350^{time}|14:02 UTC>\n:white_check_mark: *Back up* alerts-cleared · at <!date^1793024070^{time}|14:14 UTC>, watched for 12 min\n:hourglass: *Stopped watching* payments-health · after 60 min, still down\n:black_square_for_stop: *Stopped watching* db-health · stopped by <@U123> at <!date^1793023680^{time}|14:08 UTC>\n:black_square_for_stop: *Stopped watching* queue-depth · every alert recovered, at <!date^1793023680^{time}|14:08 UTC>\n:black_square_for_stop: *Stopped watching* cache-health · the config no longer allows its check, at <!date^1793023680^{time}|14:08 UTC>",
+              "verbatim": true
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "block_id": "watchers",
+          "elements": [
+            {
+              "type": "button",
+              "action_id": "stop_watcher:1",
+              "text": {
+                "type": "plain_text",
+                "text": "Stop watching checkout-health",
+                "emoji": true
+              },
+              "value": "0192d3a4-0000-7000-8000-0000000000d1",
+              "confirm": {
+                "title": {
+                  "type": "plain_text",
+                  "text": "Stop watching?",
+                  "emoji": true
+                },
+                "text": {
+                  "type": "plain_text",
+                  "text": "Sidekick stops checking checkout-health. The investigation and its verdict stay as they are.",
+                  "emoji": true
+                },
+                "confirm": {
+                  "type": "plain_text",
+                  "text": "Stop watching",
+                  "emoji": true
+                },
+                "deny": {
+                  "type": "plain_text",
+                  "text": "Keep watching",
+                  "emoji": true
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

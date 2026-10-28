@@ -1,0 +1,28 @@
+{
+  "text": "Watching checkout-health: checkout-api p99 latency above 2s",
+  "attachments": [
+    {
+      "color": "#2C57CD",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": ":eyes: *Watching* checkout-health · checking every 30s since <!date^1793023350^{time}|14:02 UTC>",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "checkout-api p99 latency above 2s · <https://example.slack.com/archives/C123/p1793023321000200|See the investigation>",
+              "verbatim": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

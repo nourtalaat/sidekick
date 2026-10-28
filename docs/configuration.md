@@ -1495,9 +1495,18 @@ A watcher ends in one of these states:
   one that could not run, starts the count again.
 - `timed_out`: it ran for `timeout` without recovering.
 - `stopped`: every alert of the group recovered (`group_resolved`; an `alert`
-  watcher counts as recovered instead), or a config change no longer allows
-  its check, for example a host taken off `allowHosts` or a source removed
-  (`config_changed`).
+  watcher counts as recovered instead), a responder stopped it with the
+  Stop watching button in Slack (`responder`), or a config change no longer
+  allows its check, for example a host taken off `allowHosts` or a source
+  removed (`config_changed`).
+
+Each change of a watcher's state, from its start to its end, is shown in
+the investigation's outputs, such as the
+[Slack message](slack.md#what-it-posts) and
+[webhook callbacks](webhook-callbacks.md#watcher-events), and goes to the
+investigation's inbox, so a running investigation sees it before the
+model's next answer. The model weighs it as evidence; a watcher never
+decides the verdict by itself.
 
 A group whose grouping window ends while one of its watchers runs stays
 open, so events with the same fingerprint still join it, and closes when
@@ -1509,7 +1518,8 @@ With `allowModel: true`, investigations can start watchers with the
 [Watchers](#watchers)). A request outside the limits or the bounds, or over
 `maxPerGroup` or `maxTotal`, gets an error that names the limit, and
 nothing starts. A route or strategy watcher over `maxPerGroup` or
-`maxTotal` is not started, and a line is logged.
+`maxTotal` is not started: a line is logged, and the investigation's inbox
+says which watcher did not start and why.
 
 `allowHosts` lists the hosts an HTTP check may reach: exact host names or
 IP addresses, or `*.` and a name, which matches every name below it

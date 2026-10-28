@@ -10,6 +10,12 @@
 // message notifies nobody, and a report too long for the main message
 // continues in a thread reply.
 //
+// The message shows a line for each watcher of the investigation's group,
+// with a Stop watching button for each one that runs, and each change of a
+// watcher's state posts a short thread reply too. A watcher line gives
+// times of day rather than durations up to now, so it stays true between
+// edits.
+//
 // Edits of one message are at most one every 3 seconds, and an update with
 // a Seq no newer than the one the message shows is dropped. Each replica
 // limits its calls per channel, and a 429 is retried after its

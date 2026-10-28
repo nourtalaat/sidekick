@@ -227,11 +227,10 @@ func askerNames(questions []report.FollowUpQuestion) string {
 func queuedView(u output.Update, title string) view {
 	return view{
 		text: escape("Looking into it: " + title),
-		attachment: attachment{Color: colorRunning, Blocks: []block{
+		attachment: attachment{Color: colorRunning, Blocks: slices.Concat([]block{
 			section("*Looking into it* " + escape(title)),
 			contextBlock(runningContext(u)),
-			stopButtons(u),
-		}},
+		}, watcherContext(u), []block{stopButtons(u)}, watcherButtons(u))},
 	}
 }
 
@@ -253,7 +252,8 @@ func runningView(u output.Update, title string) view {
 		blocks = append(blocks, section(strings.Join(lines, "\n")))
 	}
 
-	blocks = append(blocks, contextBlock(runningContext(u)), stopButtons(u))
+	blocks = append(blocks, contextBlock(runningContext(u)))
+	blocks = slices.Concat(blocks, watcherContext(u), []block{stopButtons(u)}, watcherButtons(u))
 
 	return view{
 		text:       escape("Investigating: " + title),
@@ -263,10 +263,10 @@ func runningView(u output.Update, title string) view {
 
 // finalView shows the report, in the order of the design: the verdict and
 // confidence with the reason, the cause and impact, the findings, the
-// fixes, what was checked, who rated the verdict, then the Correct and
-// Wrong buttons. A run a responder stopped says who stopped it instead of
-// asking for a rating. A triage-only result says so, and adds the
-// Investigate anyway button.
+// fixes, what was checked, the watchers, who rated the verdict, then the
+// Correct and Wrong buttons and the Stop watching buttons. A run a
+// responder stopped says who stopped it instead of asking for a rating. A
+// triage-only result says so, and adds the Investigate anyway button.
 func finalView(u output.Update, title string) view {
 	r := u.Report
 	style, line := verdictLine(r)
@@ -298,6 +298,8 @@ func finalView(u output.Update, title string) view {
 		blocks = append(blocks, contextBlock(checked))
 	}
 
+	blocks = append(blocks, watcherContext(u)...)
+
 	if r.StopReason != report.StopCancelled {
 		if line := feedbackLine(u.Feedback); line != "" {
 			blocks = append(blocks, contextBlock(line))
@@ -305,6 +307,8 @@ func finalView(u output.Update, title string) view {
 
 		blocks = append(blocks, feedbackButtons(u))
 	}
+
+	blocks = append(blocks, watcherButtons(u)...)
 
 	return view{
 		text:       escape(notificationText(r, title)),
@@ -324,6 +328,8 @@ func failedView(u output.Update, title string) view {
 	if checked := checkedLine(u.Report); checked != "" {
 		blocks = append(blocks, contextBlock(checked))
 	}
+
+	blocks = slices.Concat(blocks, watcherContext(u), watcherButtons(u))
 
 	return view{
 		text:       escape(failedStyle.label + ": " + title),

@@ -1,0 +1,28 @@
+{
+  "text": "Stopped watching db-health: checkout-api p99 latency above 2s",
+  "attachments": [
+    {
+      "color": "#7C85A3",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": ":black_square_for_stop: *Stopped watching* db-health · stopped by <@U123> at <!date^1793023680^{time}|14:08 UTC>",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "checkout-api p99 latency above 2s · Checked every 30s, 12 checks · Last check: HTTP 502 · <https://example.slack.com/archives/C123/p1793023321000200|See the investigation>",
+              "verbatim": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

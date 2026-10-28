@@ -19,6 +19,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // The values of investigation_inbox.kind.
@@ -30,6 +31,9 @@ const (
 	// InboxFollowUp is a follow-up question from a responder. It always
 	// has a key.
 	InboxFollowUp = "follow_up"
+	// InboxWatcher is a change of a watcher's state, or a watcher that
+	// did not start.
+	InboxWatcher = watch.InboxKind
 )
 
 // followUpJobAttempts is how many failures make a follow_up job dead.
@@ -228,11 +232,12 @@ func (r *run) deliverInbox(ctx context.Context) error {
 }
 
 // inboxText writes the message that delivers items: the events, then the
-// follow-up questions. An item whose event no longer exists is left out of
-// the text but still marked delivered.
+// watchers, then the follow-up questions. An item whose event no longer
+// exists is left out of the text but still marked delivered.
 func (r *run) inboxText(ctx context.Context, items []db.InvestigationInbox) (string, error) {
 	var (
 		eventIDs  []uuid.UUID
+		watchers  []prompt.WatcherNote
 		questions []report.FollowUpQuestion
 	)
 
@@ -245,6 +250,13 @@ func (r *run) inboxText(ctx context.Context, items []db.InvestigationInbox) (str
 			}
 
 			eventIDs = append(eventIDs, body.EventID)
+		case InboxWatcher:
+			var body watch.InboxItem
+			if err := json.Unmarshal(item.Body, &body); err != nil {
+				return "", fmt.Errorf("decode item %d: %w", item.ID, err)
+			}
+
+			watchers = append(watchers, prompt.WatcherNote{State: body.State, NotStarted: body.NotStarted})
 		case InboxFollowUp:
 			q, err := questionOf(item)
 			if err != nil {
@@ -266,6 +278,10 @@ func (r *run) inboxText(ctx context.Context, items []db.InvestigationInbox) (str
 		}
 
 		parts = append(parts, prompt.Inbox(events))
+	}
+
+	if len(watchers) > 0 {
+		parts = append(parts, prompt.Watchers(watchers))
 	}
 
 	if len(questions) > 0 {

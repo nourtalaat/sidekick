@@ -1,6 +1,7 @@
 -- A busy database for the query plan tests: 50,000 investigations, each
--- with a group of two events, a publish state and a Slack output ref, and
--- 10,000 sent notices, on top of fixture/investigations.sql.
+-- with a group of two events, a publish state, a Slack output ref and two
+-- watcher changes sent to it, and 10,000 sent notices, on top of
+-- fixture/investigations.sql.
 INSERT INTO event_groups (id, fingerprint, route, status, opened_at, last_event_at, investigation_id)
 SELECT md5('group' || i)::uuid, 'fp-' || i, 'default', 'open', now(), now(), md5('inv' || i)::uuid
 FROM generate_series(1, 50000) AS i;
@@ -23,6 +24,10 @@ INSERT INTO output_refs (investigation_id, sink, external, ref, last_seq, publis
 SELECT md5('inv' || i)::uuid, 'slack-thread', 'C123:1793023321.' || lpad(i::text, 6, '0'),
        '{"sink": "slack-thread", "external": "C123:1793023321.000001", "data": {"seq": "4"}}', 4, now()
 FROM generate_series(1, 50000) AS i;
+
+INSERT INTO watcher_changes (investigation_id, seq, state, sent_to, created_at)
+SELECT md5('inv' || i)::uuid, n * 2 - 1, '{"name": "checkout-health", "status": "running"}', ARRAY['slack-thread'], now()
+FROM generate_series(1, 50000) AS i, generate_series(1, 2) AS n;
 
 INSERT INTO notices (key, sent_at)
 SELECT 'daily_cap:route:route-' || i, now() - make_interval(secs => i)
