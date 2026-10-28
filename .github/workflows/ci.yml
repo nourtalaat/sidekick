@@ -14,10 +14,19 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # `make ci` split into four jobs that run at the same time, which
+  # together run what `make ci` runs: the Makefile names the targets of the
+  # first three, and ci-checks runs every other one. One job took up to 19
+  # minutes on one runner, close to its limit of 20; the slowest of the four
+  # takes about half of that.
   ci:
-    name: make ci
+    name: make ci-${{ matrix.group }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [lint, unit, integration, checks]
     services:
       postgres:
         image: postgres:16
@@ -75,7 +84,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: bin/tools
-          key: tools-${{ runner.os }}-${{ hashFiles('Makefile') }}
+          key: tools-${{ runner.os }}-${{ matrix.group }}-${{ hashFiles('Makefile') }}
 
       - name: Cache the validator tools
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -90,7 +99,7 @@ jobs:
       - name: Install the validator tools
         run: make validator-tools
 
-      - run: make ci
+      - run: make ci-${{ matrix.group }}
         env:
           SIDEKICK_PLANS_DIR: ${{ runner.temp }}/query-plans
           SIDEKICK_VALIDATE_TOOLS: ${{ github.workspace }}/bin/validator-tools
@@ -98,7 +107,7 @@ jobs:
       # The plan tests write each query and its EXPLAIN ANALYZE plan here, for
       # pull request descriptions.
       - name: Upload the query plans
-        if: always()
+        if: always() && matrix.group == 'integration'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: query-plans
@@ -106,7 +115,7 @@ jobs:
           if-no-files-found: warn
 
       - name: List the query plans in the job summary
-        if: always()
+        if: always() && matrix.group == 'integration'
         shell: bash
         env:
           PLANS_DIR: ${{ runner.temp }}/query-plans
