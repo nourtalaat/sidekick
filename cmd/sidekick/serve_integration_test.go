@@ -236,13 +236,7 @@ func TestServeAPI(t *testing.T) {
 
 	provider := authtest.NewProvider(t, "sidekick")
 
-	content := strings.Replace(serveConfig(fakeAnthropic(t).URL()), "server: { listen:", `server: { publicURL: "http://127.0.0.1", listen:`, 1) + `
-oidc:
-  issuer: "` + provider.Issuer() + `"
-  clientID: sidekick
-  clientSecret: { name: oidc, key: clientSecret }
-  roles: { viewer: ["*"] }
-`
+	content := oidcServeConfig(fakeAnthropic(t).URL(), provider.Issuer())
 
 	cmd, lines, started := startServe(t, writeConfig(t, content, storetest.NewURL(t), "oidc/clientSecret"))
 
@@ -324,6 +318,18 @@ sources:
 	}
 
 	stopServe(t, cmd, lines, syscall.SIGTERM)
+}
+
+// oidcServeConfig is serveConfig with an oidc section for the provider at
+// issuer, where every user is a viewer.
+func oidcServeConfig(anthropicURL, issuer string) string {
+	return strings.Replace(serveConfig(anthropicURL), "server: { listen:", `server: { publicURL: "http://127.0.0.1", listen:`, 1) + `
+oidc:
+  issuer: "` + issuer + `"
+  clientID: sidekick
+  clientSecret: { name: oidc, key: clientSecret }
+  roles: { viewer: ["*"] }
+`
 }
 
 // serveConfig is validConfig listening on ports the system picks, with the
