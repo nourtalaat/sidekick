@@ -76,7 +76,7 @@ func openStream(t *testing.T, srv *httptest.Server, path, session string, header
 	resp, err := srv.Client().Do(req) //nolint:bodyclose // The goroutine below reads the stream and closes the body.
 	require.NoError(t, err)
 
-	stream :=&sseStream{status: resp.StatusCode, header: resp.Header, events: make(chan sseEvent, 1000), cancel: cancel}
+	stream := &sseStream{status: resp.StatusCode, header: resp.Header, events: make(chan sseEvent, 1000), cancel: cancel}
 
 	go func() {
 		defer close(stream.events)
