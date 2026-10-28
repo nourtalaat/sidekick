@@ -8,7 +8,9 @@ import (
 	"github.com/nourtalaat/sidekick/internal/app"
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/feedback"
+	"github.com/nourtalaat/sidekick/internal/grouper"
 	"github.com/nourtalaat/sidekick/internal/slackapp"
+	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // registerSlackApp receives Slack events when the slack section lets the
@@ -75,19 +77,30 @@ func registerSlackApp(ctx context.Context, a *app.App) error {
 }
 
 // newButtons handles clicks on the buttons of Sidekick's messages, with
-// sidekick_feedback_total. Every Slack user is a responder until roles
-// can be set for Slack users.
+// sidekick_feedback_total, and stops watchers for Stop watching. Every
+// Slack user is a responder until roles can be set for Slack users.
 func newButtons(a *app.App, h *slackapp.Handler) (*slackapp.Buttons, error) {
 	metrics, err := feedback.NewMetrics(a.Telemetry().Registry())
 	if err != nil {
 		return nil, fmt.Errorf("set up feedback metrics: %w", err)
 	}
 
+	recorder, err := newWatchRecorder(a)
+	if err != nil {
+		return nil, fmt.Errorf("set up Stop watching: %w", err)
+	}
+
+	stopper, err := watch.NewStopper(watch.StopperOptions{Pool: a.Pool(), CloseGroup: grouper.EnqueueClose, Recorder: recorder})
+	if err != nil {
+		return nil, fmt.Errorf("set up Stop watching: %w", err)
+	}
+
 	return slackapp.NewButtons(slackapp.ButtonsOptions{
-		Handler: h,
-		Pool:    a.Pool(),
-		Roles:   slackapp.EveryoneResponds{},
-		Metrics: metrics,
-		Logger:  a.Logger().With("component", "slackapp"),
+		Handler:  h,
+		Pool:     a.Pool(),
+		Roles:    slackapp.EveryoneResponds{},
+		Metrics:  metrics,
+		Watchers: stopper,
+		Logger:   a.Logger().With("component", "slackapp"),
 	}), nil
 }
