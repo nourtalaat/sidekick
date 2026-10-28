@@ -80,7 +80,7 @@ func (h *Handler) route(ctx context.Context, cmd slack.SlashCommand, args []stri
 
 	field := routeFields[i]
 
-	res, err := h.store.SetRoute(ctx, cmd.UserID, name, func(r *rules.Route) error { return field.set(r, value) })
+	res, err := h.store.SetRoute(ctx, rules.SlackUser(cmd.UserID), name, func(r *rules.Route) error { return field.set(r, value) })
 
 	switch {
 	case errors.Is(err, rules.ErrFileRule):

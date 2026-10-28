@@ -157,6 +157,238 @@ paths:
           description: The token is revoked.
         default:
           $ref: "#/components/responses/Problem"
+  /listeners:
+    get:
+      operationId: ListListeners
+      summary: The listeners, from the config file and from runtime, with their status
+      description: |
+        Every listener in effect, in name order, then the runtime listeners
+        that are stored but not in effect. A listener of the config file is
+        read-only. A runtime listener with the name of a file listener is
+        shadowed: the file listener is used and the runtime one is shown
+        with status shadowed.
+      x-sidekick-role: viewer
+      responses:
+        "200":
+          description: The listeners.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListenerList"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: CreateListener
+      summary: Add a runtime listener
+      description: |
+        Runs the checks that the config file and the `/sidekick listen`
+        command run. A failed check answers 422 with the field of each
+        problem. The name of a file listener answers 409. Every replica uses
+        the listener within seconds. The change is written to the audit log.
+      x-sidekick-role: responder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewListener"
+      responses:
+        "201":
+          description: The new listener.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Listener"
+        default:
+          $ref: "#/components/responses/Problem"
+  /listeners/{name}:
+    put:
+      operationId: UpdateListener
+      summary: Replace a runtime listener
+      description: |
+        Replaces the listener and turns it on or off. `version` is the
+        version that was read; if the listener changed since, the answer is
+        409 with code `stale`. A listener of the config file answers 409.
+      x-sidekick-role: responder
+      parameters:
+        - $ref: "#/components/parameters/RuleName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ListenerUpdate"
+      responses:
+        "200":
+          description: The listener as saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Listener"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: DeleteListener
+      summary: Delete a runtime listener
+      description: |
+        Deletes the runtime listener. This also deletes a runtime listener
+        that a file listener shadows. A file listener that no runtime
+        listener shadows answers 409.
+      x-sidekick-role: responder
+      parameters:
+        - $ref: "#/components/parameters/RuleName"
+      responses:
+        "204":
+          description: The listener is deleted.
+        default:
+          $ref: "#/components/responses/Problem"
+  /routes:
+    get:
+      operationId: ListRoutes
+      summary: The routes, from the config file and from runtime, with their status
+      description: |
+        The routes in effect in the order they are tried, then the runtime
+        routes that are stored but not in effect. A route of the config
+        file is read-only. A runtime route with the name of a file route is
+        shadowed.
+      x-sidekick-role: viewer
+      responses:
+        "200":
+          description: The routes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RouteList"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: CreateRoute
+      summary: Add a runtime route
+      description: |
+        Runs the checks of the config file and of `/sidekick route set`,
+        with the runtime ceilings: only sources, outputs and strategies of
+        the config file, and budgets at or below its ceilings. A failed
+        check answers 422 with the field of each problem.
+      x-sidekick-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewRoute"
+      responses:
+        "201":
+          description: The new route.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Route"
+        default:
+          $ref: "#/components/responses/Problem"
+  /routes/{name}:
+    put:
+      operationId: UpdateRoute
+      summary: Replace a runtime route
+      description: |
+        Replaces the route and turns it on or off. `version` is the version
+        that was read; if the route changed since, the answer is 409 with
+        code `stale`. A route of the config file answers 409.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/RuleName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RouteUpdate"
+      responses:
+        "200":
+          description: The route as saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Route"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: DeleteRoute
+      summary: Delete a runtime route
+      description: |
+        Deletes the runtime route. This also deletes a runtime route that a
+        file route shadows. A file route that no runtime route shadows
+        answers 409.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/RuleName"
+      responses:
+        "204":
+          description: The route is deleted.
+        default:
+          $ref: "#/components/responses/Problem"
+  /audit:
+    get:
+      operationId: ListAudit
+      summary: The audit log, newest first, a page at a time
+      description: |
+        Every proposal, approval, investigation, feedback, rule change, login
+        and role change, with who made it and, for a change, the old and new
+        values. Rows are never changed. The filters must all match. Values
+        that a redaction rule matches are redacted.
+      x-sidekick-role: admin
+      parameters:
+        - name: from
+          in: query
+          description: Only entries made at or after this time.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: Only entries made before this time.
+          schema:
+            type: string
+            format: date-time
+        - name: actor
+          in: query
+          description: |
+            The ID of the user, API token or Slack user that made the change.
+            sidekick, policy and system select the entries Sidekick made on
+            its own.
+          schema:
+            type: string
+        - name: action
+          in: query
+          description: The action, such as route.updated or job.retried.
+          schema:
+            type: string
+        - name: investigation
+          in: query
+          description: Only entries of this investigation.
+          schema:
+            type: string
+            format: uuid
+        - name: cursor
+          in: query
+          description: The nextCursor of the page before.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: A page of audit entries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditList"
+        default:
+          $ref: "#/components/responses/Problem"
   /investigations:
     get:
       operationId: ListInvestigations
@@ -369,6 +601,13 @@ components:
       scheme: bearer
       description: An API token an admin created.
   parameters:
+    RuleName:
+      name: name
+      in: path
+      required: true
+      description: The name of a listener or route.
+      schema:
+        type: string
     InvestigationID:
       name: id
       in: path
@@ -453,6 +692,315 @@ components:
           type: object
           additionalProperties: true
           description: The rule, with the keys a listener or route has in sidekick.yaml.
+    RuleLayer:
+      type: string
+      enum: [file, runtime]
+      description: Where the rule is defined. A rule of the file layer is read-only.
+    RuleStatus:
+      type: string
+      enum: [active, shadowed, invalid, disabled]
+      description: |
+        active: in effect. shadowed: a rule of the config file has the same
+        name and is used instead. invalid: it no longer passes the config
+        checks. disabled: turned off.
+    ListenerSender:
+      type: object
+      properties:
+        kind:
+          type: string
+          description: human or bot; empty matches both.
+        names:
+          type: array
+          items:
+            type: string
+        bots:
+          type: array
+          items:
+            type: string
+        users:
+          type: array
+          items:
+            type: string
+    ListenerMatch:
+      type: object
+      properties:
+        sender:
+          $ref: "#/components/schemas/ListenerSender"
+        text:
+          type: string
+          description: A regular expression over the message text.
+    ListenerSpec:
+      type: object
+      required: [channel]
+      description: The parts of a listener that a person sets, with the keys they have in sidekick.yaml.
+      properties:
+        source:
+          type: string
+          description: The chat app, slack or teams. Empty means slack.
+        channel:
+          type: string
+          description: A channel name such as "#alerts" or a channel ID.
+        match:
+          $ref: "#/components/schemas/ListenerMatch"
+        extract:
+          type: array
+          items:
+            type: string
+          description: Regular expressions with named groups that set the alert's fields.
+        recovery:
+          type: string
+          description: A regular expression. A message it matches is a recovery.
+    NewListener:
+      allOf:
+        - type: object
+          required: [name]
+          properties:
+            name:
+              type: string
+        - $ref: "#/components/schemas/ListenerSpec"
+    ListenerUpdate:
+      allOf:
+        - $ref: "#/components/schemas/ListenerSpec"
+        - type: object
+          required: [enabled, version]
+          properties:
+            enabled:
+              type: boolean
+            version:
+              type: integer
+              description: The version of the listener that was read.
+    Listener:
+      allOf:
+        - $ref: "#/components/schemas/ListenerSpec"
+        - type: object
+          required: [name, layer, status, readOnly, enabled, trusted]
+          properties:
+            name:
+              type: string
+            layer:
+              $ref: "#/components/schemas/RuleLayer"
+            status:
+              $ref: "#/components/schemas/RuleStatus"
+            statusReason:
+              type: string
+              description: Why the rule is not active.
+            readOnly:
+              type: boolean
+              description: True for a listener of the config file.
+            enabled:
+              type: boolean
+            trusted:
+              type: boolean
+              description: Whether its senders are trusted. Runtime listeners are never trusted.
+            version:
+              type: integer
+              description: The version of a runtime listener; it grows with every change.
+            updatedBy:
+              type: string
+            updatedAt:
+              type: string
+              format: date-time
+    ListenerList:
+      type: object
+      required: [listeners]
+      properties:
+        listeners:
+          type: array
+          items:
+            $ref: "#/components/schemas/Listener"
+    RouteMatch:
+      type: object
+      properties:
+        intake:
+          type: array
+          items:
+            type: string
+          description: Names of webhook endpoints and listeners.
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        service:
+          type: string
+          description: A glob.
+        severity:
+          type: array
+          items:
+            type: string
+          description: unknown, info, warning or critical.
+        text:
+          type: string
+          description: A regular expression over the event text.
+    RouteBudgets:
+      type: object
+      description: Limits of one investigation. Zero or empty uses the global value.
+      properties:
+        maxTokens:
+          type: integer
+        maxToolCalls:
+          type: integer
+        maxWallTime:
+          type: string
+          description: A duration such as 5m.
+        maxCostUSD:
+          type: number
+          format: double
+    RouteGrouping:
+      type: object
+      properties:
+        window:
+          type: string
+          description: A duration such as 30m.
+        fingerprintLabels:
+          type: array
+          items:
+            type: string
+        relatedWindow:
+          type: string
+          description: A duration such as 15m. Empty turns it off.
+    RouteMode:
+      type: string
+      enum: [read-only]
+      description: The action mode. Only read-only exists until action modes arrive.
+    RouteSpec:
+      type: object
+      description: The parts of a route that a person sets, with the keys they have in sidekick.yaml.
+      properties:
+        priority:
+          type: integer
+          description: Lower is tried first. Defaults to 100.
+        match:
+          $ref: "#/components/schemas/RouteMatch"
+        strategy:
+          type: string
+        sources:
+          type: array
+          items:
+            type: string
+        outputs:
+          type: array
+          items:
+            type: string
+        mode:
+          $ref: "#/components/schemas/RouteMode"
+        budgets:
+          $ref: "#/components/schemas/RouteBudgets"
+        grouping:
+          $ref: "#/components/schemas/RouteGrouping"
+    NewRoute:
+      allOf:
+        - type: object
+          required: [name]
+          properties:
+            name:
+              type: string
+        - $ref: "#/components/schemas/RouteSpec"
+    RouteUpdate:
+      allOf:
+        - $ref: "#/components/schemas/RouteSpec"
+        - type: object
+          required: [enabled, version]
+          properties:
+            enabled:
+              type: boolean
+            version:
+              type: integer
+              description: The version of the route that was read.
+    Route:
+      allOf:
+        - $ref: "#/components/schemas/RouteSpec"
+        - type: object
+          required: [name, layer, status, readOnly, enabled]
+          properties:
+            name:
+              type: string
+            layer:
+              $ref: "#/components/schemas/RuleLayer"
+            status:
+              $ref: "#/components/schemas/RuleStatus"
+            statusReason:
+              type: string
+              description: Why the rule is not active.
+            readOnly:
+              type: boolean
+              description: True for a route of the config file.
+            enabled:
+              type: boolean
+            position:
+              type: integer
+              description: The place of a route in effect in the order routes are tried, from 1.
+            version:
+              type: integer
+              description: The version of a runtime route; it grows with every change.
+            updatedBy:
+              type: string
+            updatedAt:
+              type: string
+              format: date-time
+    RouteList:
+      type: object
+      required: [routes]
+      properties:
+        routes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Route"
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          description: |
+            The path of the field in the request body, such as
+            budgets.maxTokens or match.sender.bots[0]. Empty for a problem
+            with the whole body.
+        message:
+          type: string
+    AuditEntry:
+      type: object
+      required: [id, at, actorKind, action]
+      properties:
+        id:
+          type: integer
+          format: int64
+        at:
+          type: string
+          format: date-time
+        actorKind:
+          type: string
+          enum: [user, token, sidekick, policy, system]
+        actorId:
+          type: string
+          description: A user ID, an API token ID or a Slack user ID. Absent for sidekick, policy and system.
+        actorName:
+          type: string
+          description: The name of the user or token, when it is still known.
+        action:
+          type: string
+          description: What happened, such as route.updated.
+        targetKind:
+          type: string
+        targetId:
+          type: string
+        investigationId:
+          type: string
+          format: uuid
+        old:
+          description: The value before the change, of any JSON type. Absent when there was none.
+        new:
+          description: The value after the change, of any JSON type. Absent when there was none.
+    AuditList:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditEntry"
+        nextCursor:
+          type: string
+          description: Pass it as cursor to get the next page. Absent on the last page.
     Job:
       type: object
       required: [id, kind, attempts, maxAttempts, createdAt]
@@ -1232,6 +1780,17 @@ components:
         detail:
           type: string
           description: What went wrong with this request.
+        code:
+          type: string
+          description: |
+            Names the kind of problem for a program. Only some answers have
+            it: validation (422), file_rule, exists, stale, conflict
+            (409) and not_found (404) on listeners and routes.
+        errors:
+          type: array
+          description: The fields of the request that were refused, when code is validation.
+          items:
+            $ref: "#/components/schemas/FieldError"
         instance:
           type: string
           description: The path of the request.

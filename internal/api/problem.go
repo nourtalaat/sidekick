@@ -13,6 +13,10 @@ import (
 type Error struct {
 	Status int
 	Detail string
+	// Code names the kind of problem for a program; empty for none.
+	Code string
+	// Fields lists the fields of the request that were refused.
+	Fields []problem.FieldError
 }
 
 func (e *Error) Error() string {
@@ -39,7 +43,7 @@ func (h *handler) requestError(w http.ResponseWriter, r *http.Request, err error
 // an Error, or with 500.
 func (h *handler) responseError(w http.ResponseWriter, r *http.Request, err error) {
 	if e, ok := errors.AsType[*Error](err); ok {
-		problem.Write(w, r, e.Status, e.Detail)
+		problem.WriteCoded(w, r, e.Status, e.Detail, e.Code, e.Fields)
 
 		return
 	}

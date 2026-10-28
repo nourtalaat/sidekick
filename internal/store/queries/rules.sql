@@ -11,6 +11,12 @@ SELECT * FROM listeners WHERE name = @name FOR UPDATE;
 INSERT INTO listeners (name, slack_channel, match, trusted, enabled, version, updated_by, updated_at)
 VALUES (@name, @slack_channel, @match, false, true, 1, @updated_by, @updated_at);
 
+-- name: UpdateListener :exec
+UPDATE listeners
+SET slack_channel = @slack_channel, match = @match, enabled = @enabled, version = version + 1,
+    updated_by = @updated_by, updated_at = @updated_at
+WHERE name = @name;
+
 -- name: DeleteListener :execrows
 DELETE FROM listeners WHERE name = @name;
 
@@ -32,6 +38,9 @@ UPDATE routes
 SET priority = @priority, spec = @spec, enabled = @enabled, version = version + 1,
     updated_by = @updated_by, updated_at = @updated_at
 WHERE name = @name;
+
+-- name: DeleteRoute :execrows
+DELETE FROM routes WHERE name = @name;
 
 -- name: NotifyRulesChanged :exec
 -- NotifyRulesChanged tells every replica to reload the runtime rules.

@@ -122,6 +122,146 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/listeners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The listeners, from the config file and from runtime, with their status
+         * @description Every listener in effect, in name order, then the runtime listeners
+         *     that are stored but not in effect. A listener of the config file is
+         *     read-only. A runtime listener with the name of a file listener is
+         *     shadowed: the file listener is used and the runtime one is shown
+         *     with status shadowed.
+         */
+        get: operations["ListListeners"];
+        put?: never;
+        /**
+         * Add a runtime listener
+         * @description Runs the checks that the config file and the `/sidekick listen`
+         *     command run. A failed check answers 422 with the field of each
+         *     problem. The name of a file listener answers 409. Every replica uses
+         *     the listener within seconds. The change is written to the audit log.
+         */
+        post: operations["CreateListener"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/listeners/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace a runtime listener
+         * @description Replaces the listener and turns it on or off. `version` is the
+         *     version that was read; if the listener changed since, the answer is
+         *     409 with code `stale`. A listener of the config file answers 409.
+         */
+        put: operations["UpdateListener"];
+        post?: never;
+        /**
+         * Delete a runtime listener
+         * @description Deletes the runtime listener. This also deletes a runtime listener
+         *     that a file listener shadows. A file listener that no runtime
+         *     listener shadows answers 409.
+         */
+        delete: operations["DeleteListener"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/routes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The routes, from the config file and from runtime, with their status
+         * @description The routes in effect in the order they are tried, then the runtime
+         *     routes that are stored but not in effect. A route of the config
+         *     file is read-only. A runtime route with the name of a file route is
+         *     shadowed.
+         */
+        get: operations["ListRoutes"];
+        put?: never;
+        /**
+         * Add a runtime route
+         * @description Runs the checks of the config file and of `/sidekick route set`,
+         *     with the runtime ceilings: only sources, outputs and strategies of
+         *     the config file, and budgets at or below its ceilings. A failed
+         *     check answers 422 with the field of each problem.
+         */
+        post: operations["CreateRoute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/routes/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace a runtime route
+         * @description Replaces the route and turns it on or off. `version` is the version
+         *     that was read; if the route changed since, the answer is 409 with
+         *     code `stale`. A route of the config file answers 409.
+         */
+        put: operations["UpdateRoute"];
+        post?: never;
+        /**
+         * Delete a runtime route
+         * @description Deletes the runtime route. This also deletes a runtime route that a
+         *     file route shadows. A file route that no runtime route shadows
+         *     answers 409.
+         */
+        delete: operations["DeleteRoute"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The audit log, newest first, a page at a time
+         * @description Every proposal, approval, investigation, feedback, rule change, login
+         *     and role change, with who made it and, for a change, the old and new
+         *     values. Rows are never changed. The filters must all match. Values
+         *     that a redaction rule matches are redacted.
+         */
+        get: operations["ListAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/investigations": {
         parameters: {
             query?: never;
@@ -290,6 +430,180 @@ export interface components {
             config: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * @description Where the rule is defined. A rule of the file layer is read-only.
+         * @enum {string}
+         */
+        RuleLayer: "file" | "runtime";
+        /**
+         * @description active: in effect. shadowed: a rule of the config file has the same
+         *     name and is used instead. invalid: it no longer passes the config
+         *     checks. disabled: turned off.
+         * @enum {string}
+         */
+        RuleStatus: "active" | "shadowed" | "invalid" | "disabled";
+        ListenerSender: {
+            /** @description human or bot; empty matches both. */
+            kind?: string;
+            names?: string[];
+            bots?: string[];
+            users?: string[];
+        };
+        ListenerMatch: {
+            sender?: components["schemas"]["ListenerSender"];
+            /** @description A regular expression over the message text. */
+            text?: string;
+        };
+        /** @description The parts of a listener that a person sets, with the keys they have in sidekick.yaml. */
+        ListenerSpec: {
+            /** @description The chat app, slack or teams. Empty means slack. */
+            source?: string;
+            /** @description A channel name such as "#alerts" or a channel ID. */
+            channel: string;
+            match?: components["schemas"]["ListenerMatch"];
+            /** @description Regular expressions with named groups that set the alert's fields. */
+            extract?: string[];
+            /** @description A regular expression. A message it matches is a recovery. */
+            recovery?: string;
+        };
+        NewListener: {
+            name: string;
+        } & components["schemas"]["ListenerSpec"];
+        ListenerUpdate: components["schemas"]["ListenerSpec"] & {
+            enabled: boolean;
+            /** @description The version of the listener that was read. */
+            version: number;
+        };
+        Listener: components["schemas"]["ListenerSpec"] & {
+            name: string;
+            layer: components["schemas"]["RuleLayer"];
+            status: components["schemas"]["RuleStatus"];
+            /** @description Why the rule is not active. */
+            statusReason?: string;
+            /** @description True for a listener of the config file. */
+            readOnly: boolean;
+            enabled: boolean;
+            /** @description Whether its senders are trusted. Runtime listeners are never trusted. */
+            trusted: boolean;
+            /** @description The version of a runtime listener; it grows with every change. */
+            version?: number;
+            updatedBy?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        ListenerList: {
+            listeners: components["schemas"]["Listener"][];
+        };
+        RouteMatch: {
+            /** @description Names of webhook endpoints and listeners. */
+            intake?: string[];
+            labels?: {
+                [key: string]: string;
+            };
+            /** @description A glob. */
+            service?: string;
+            /** @description unknown, info, warning or critical. */
+            severity?: string[];
+            /** @description A regular expression over the event text. */
+            text?: string;
+        };
+        /** @description Limits of one investigation. Zero or empty uses the global value. */
+        RouteBudgets: {
+            maxTokens?: number;
+            maxToolCalls?: number;
+            /** @description A duration such as 5m. */
+            maxWallTime?: string;
+            /** Format: double */
+            maxCostUSD?: number;
+        };
+        RouteGrouping: {
+            /** @description A duration such as 30m. */
+            window?: string;
+            fingerprintLabels?: string[];
+            /** @description A duration such as 15m. Empty turns it off. */
+            relatedWindow?: string;
+        };
+        /**
+         * @description The action mode. Only read-only exists until action modes arrive.
+         * @enum {string}
+         */
+        RouteMode: "read-only";
+        /** @description The parts of a route that a person sets, with the keys they have in sidekick.yaml. */
+        RouteSpec: {
+            /** @description Lower is tried first. Defaults to 100. */
+            priority?: number;
+            match?: components["schemas"]["RouteMatch"];
+            strategy?: string;
+            sources?: string[];
+            outputs?: string[];
+            mode?: components["schemas"]["RouteMode"];
+            budgets?: components["schemas"]["RouteBudgets"];
+            grouping?: components["schemas"]["RouteGrouping"];
+        };
+        NewRoute: {
+            name: string;
+        } & components["schemas"]["RouteSpec"];
+        RouteUpdate: components["schemas"]["RouteSpec"] & {
+            enabled: boolean;
+            /** @description The version of the route that was read. */
+            version: number;
+        };
+        Route: components["schemas"]["RouteSpec"] & {
+            name: string;
+            layer: components["schemas"]["RuleLayer"];
+            status: components["schemas"]["RuleStatus"];
+            /** @description Why the rule is not active. */
+            statusReason?: string;
+            /** @description True for a route of the config file. */
+            readOnly: boolean;
+            enabled: boolean;
+            /** @description The place of a route in effect in the order routes are tried, from 1. */
+            position?: number;
+            /** @description The version of a runtime route; it grows with every change. */
+            version?: number;
+            updatedBy?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        RouteList: {
+            routes: components["schemas"]["Route"][];
+        };
+        FieldError: {
+            /**
+             * @description The path of the field in the request body, such as
+             *     budgets.maxTokens or match.sender.bots[0]. Empty for a problem
+             *     with the whole body.
+             */
+            field: string;
+            message: string;
+        };
+        AuditEntry: {
+            /** Format: int64 */
+            id: number;
+            /** Format: date-time */
+            at: string;
+            /** @enum {string} */
+            actorKind: "user" | "token" | "sidekick" | "policy" | "system";
+            /** @description A user ID, an API token ID or a Slack user ID. Absent for sidekick, policy and system. */
+            actorId?: string;
+            /** @description The name of the user or token, when it is still known. */
+            actorName?: string;
+            /** @description What happened, such as route.updated. */
+            action: string;
+            targetKind?: string;
+            targetId?: string;
+            /** Format: uuid */
+            investigationId?: string;
+            /** @description The value before the change, of any JSON type. Absent when there was none. */
+            old?: unknown;
+            /** @description The value after the change, of any JSON type. Absent when there was none. */
+            new?: unknown;
+        };
+        AuditList: {
+            entries: components["schemas"]["AuditEntry"][];
+            /** @description Pass it as cursor to get the next page. Absent on the last page. */
+            nextCursor?: string;
         };
         Job: {
             /** Format: int64 */
@@ -751,6 +1065,14 @@ export interface components {
             status: number;
             /** @description What went wrong with this request. */
             detail?: string;
+            /**
+             * @description Names the kind of problem for a program. Only some answers have
+             *     it: validation (422), file_rule, exists, stale, conflict
+             *     (409) and not_found (404) on listeners and routes.
+             */
+            code?: string;
+            /** @description The fields of the request that were refused, when code is validation. */
+            errors?: components["schemas"]["FieldError"][];
             /** @description The path of the request. */
             instance?: string;
         };
@@ -767,6 +1089,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description The name of a listener or route. */
+        RuleName: string;
         InvestigationID: string;
     };
     requestBodies: never;
@@ -928,6 +1252,237 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListListeners: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The listeners. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListenerList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateListener: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewListener"];
+            };
+        };
+        responses: {
+            /** @description The new listener. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Listener"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateListener: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The name of a listener or route. */
+                name: components["parameters"]["RuleName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListenerUpdate"];
+            };
+        };
+        responses: {
+            /** @description The listener as saved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Listener"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteListener: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The name of a listener or route. */
+                name: components["parameters"]["RuleName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The listener is deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListRoutes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The routes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RouteList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateRoute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewRoute"];
+            };
+        };
+        responses: {
+            /** @description The new route. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Route"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateRoute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The name of a listener or route. */
+                name: components["parameters"]["RuleName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RouteUpdate"];
+            };
+        };
+        responses: {
+            /** @description The route as saved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Route"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteRoute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The name of a listener or route. */
+                name: components["parameters"]["RuleName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The route is deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListAudit: {
+        parameters: {
+            query?: {
+                /** @description Only entries made at or after this time. */
+                from?: string;
+                /** @description Only entries made before this time. */
+                to?: string;
+                /**
+                 * @description The ID of the user, API token or Slack user that made the change.
+                 *     sidekick, policy and system select the entries Sidekick made on
+                 *     its own.
+                 */
+                actor?: string;
+                /** @description The action, such as route.updated or job.retried. */
+                action?: string;
+                /** @description Only entries of this investigation. */
+                investigation?: string;
+                /** @description The nextCursor of the page before. */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of audit entries. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditList"];
+                };
             };
             default: components["responses"]["Problem"];
         };
