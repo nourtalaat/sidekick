@@ -83,8 +83,10 @@ either.
 | `no_verdict` | The report failed its checks 3 times, or the model ended its turn without calling a tool 3 times (after 2 reminders). | Not sure yet |
 | `budget` | A budget ran out: tokens, tool calls, time or cost, or a daily cap was reached. | Not sure yet |
 | `error` | The model refused the request for good, for example because it was too long, or the job failed on every attempt. | Could not finish |
+| `cancelled` | A responder pressed Stop. | Not sure yet |
 
-The first three end in status `final`; `error` ends in status `failed`.
+The first three end in status `final`, `error` ends in status `failed`, and
+`cancelled` in status `cancelled`.
 When the investigation ends without an accepted report, its report holds
 the findings recorded with `record_finding` and what was checked.
 
@@ -144,6 +146,13 @@ investigation.
 A job that fails on every attempt (5 by default) ends its investigation as
 `failed` with stop reason `error`, and the outputs show "Could not finish"
 with what was found.
+
+A Stop pressed in Slack reaches the run from any replica: it is saved in
+the database, and every replica is told at once. The replica running the
+investigation stops the model or tool call in progress, and the
+investigation ends with stop reason `cancelled` and a report built from the
+saved steps. A replica that missed the message sees the Stop at the run's
+next step.
 
 ## Cost
 

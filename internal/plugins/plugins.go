@@ -19,6 +19,7 @@ import (
 	_ "github.com/nourtalaat/sidekick/internal/output/linear"       // Output type "linear.comment".
 	_ "github.com/nourtalaat/sidekick/internal/output/slack"        // Output type "slack".
 	_ "github.com/nourtalaat/sidekick/internal/output/webhook"      // Output type "webhook".
+	_ "github.com/nourtalaat/sidekick/internal/source/azure"        // Source type "azure".
 	_ "github.com/nourtalaat/sidekick/internal/source/backstage"    // Source type "backstage".
 	_ "github.com/nourtalaat/sidekick/internal/source/gcp"          // Source type "gcp".
 	_ "github.com/nourtalaat/sidekick/internal/source/github"       // Source type "github".

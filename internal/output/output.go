@@ -93,8 +93,12 @@ type Update struct {
 	// Watchers is the current state of every watcher on the group, for live display (WT-6).
 	Watchers []WatcherState
 	// Watcher is the watcher whose state changed, set only with PhaseWatcher.
-	Watcher  *WatcherState
-	Previous *Ref
+	Watcher *WatcherState
+	// Feedback is each responder's rating of the verdict, oldest first (FB-1).
+	Feedback []Feedback
+	// StoppedBy is the responder who stopped the run, when one did.
+	StoppedBy *Person
+	Previous  *Ref
 	// Seq increases with every update, so a sink can ignore an older one that arrives late.
 	Seq int64
 }
@@ -104,6 +108,27 @@ type Ref struct {
 	Sink     string            `json:"sink"`
 	External string            `json:"external"`
 	Data     map[string]string `json:"data,omitempty"`
+}
+
+// Rating is what a responder says about a verdict or another part of a report.
+type Rating string
+
+// Ratings.
+const (
+	RatingCorrect Rating = "correct"
+	RatingWrong   Rating = "wrong"
+)
+
+// Feedback is one responder's rating of the verdict.
+type Feedback struct {
+	Rating Rating
+	By     Person
+}
+
+// Person is someone who acted on an investigation.
+type Person struct {
+	// SlackUserID is set for someone who acted in Slack, such as U01ABCDEF.
+	SlackUserID string
 }
 
 // WatcherStatus is the state of one watcher (WT-4).

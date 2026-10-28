@@ -767,6 +767,68 @@ How it behaves:
   A database that cannot be reached, a refused login and a refused URL
   count as failures of the source.
 
+#### Azure sources (`type: azure`)
+
+An Azure source reads Azure subscriptions and Log Analytics workspaces
+through the Log Analytics query API and Azure Resource Manager, with AKS
+Workload Identity or a client secret. Its tools only read. [Azure
+source](sources/azure.md) lists the role the identity needs and how to set
+it up.
+
+| Key | Meaning |
+|---|---|
+| `subscriptions` | The IDs of the subscriptions the tools may read. Required; a call for any other subscription, or a resource in one, fails before anything is sent. |
+| `workspaces` | The Log Analytics workspaces `query_logs` may read, each with its workspace `id` (a GUID) and its `resourceID`. The model names a workspace by the last part of its resource ID. |
+| `tenantID` | The Microsoft Entra tenant of the identity. Default: `AZURE_TENANT_ID`, which the AKS webhook sets. |
+| `clientID` | The client ID of the identity. Default: `AZURE_CLIENT_ID`, which the AKS webhook sets. |
+| `clientSecret` | `{ name, key }` of a Secret that holds an app registration's client secret, for running outside AKS. Needs `tenantID` and `clientID`. Default: AKS Workload Identity. |
+
+```yaml
+sources:
+  azure:
+    type: azure
+    subscriptions: [11111111-2222-3333-4444-555555555555]
+    workspaces:
+      - id: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+        resourceID: /subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/shop/providers/Microsoft.OperationalInsights/workspaces/prod-logs
+```
+
+The tools, as the model sees them with the source name `azure`:
+
+| Tool | Returns |
+|---|---|
+| `azure__query_logs` | The tables and rows of a KQL query on a Log Analytics workspace. |
+| `azure__list_changes` | Activity Log writes, deletes and actions: deployments and config changes, with who made them. |
+
+How it behaves:
+
+- **Start-up never waits for Azure.** The first tool call sets up the
+  credential and makes the first token. Tokens are kept until five
+  minutes before they expire; a client secret is read again for each new
+  token.
+- **Scope.** Tools take `subscription`, which may be left out when
+  `subscriptions` lists one, a full `resource` ID, or a `workspace`. Any
+  of them outside the config, or input that does not fit, such as a range
+  longer than 7 days, is a tool error, and nothing is sent.
+- **Queries.** The KQL of `query_logs` goes to Log Analytics as the model
+  wrote it, so the identity's role assignments are what limit what can be
+  read. A query that calls `workspace()`, `app()`, `resource()`, `adx()`,
+  `arg()`, `cluster()` or `database()`, or uses `externaldata`, is refused
+  before it is sent, because those reach beyond the workspace.
+- **Results** are JSON with links to the workspace's logs or the Activity
+  Log in the Azure portal, which become evidence links in the report. Lists are
+  capped as [Azure source](sources/azure.md#limits) describes, and say
+  when they were cut.
+- **No data.** A query that returns no rows, an empty list, and a
+  workspace Azure does not have, are reported as no data.
+- **Errors.** A refused request, such as a query Log Analytics cannot
+  parse or a permission the identity lacks, goes to the model as a tool
+  error with Azure's message. A refused token, rate limits, server errors
+  and a credential that cannot be set up count as failures of the source.
+- **Timeout.** `timeout` may be at most `60s`, because the HTTP client
+  stops waiting for response headers after 60 seconds; `sidekick config
+  validate` rejects a longer one.
+
 #### Mock sources (`type: mock`)
 
 A mock source answers tool calls from fixtures instead of a real system.
