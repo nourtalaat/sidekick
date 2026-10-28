@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/model/pricing"
+	"github.com/nourtalaat/sidekick/internal/prompt"
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/registry"
@@ -153,6 +155,75 @@ func (r *Runner) Run(ctx context.Context, database *Database) (*Results, error) 
 	}
 
 	return results, nil
+}
+
+// Judge returns the judge that grades the runs' root causes, with the
+// model of the config's judge role, or of the investigate role when no
+// judge role is set.
+func (r *Runner) Judge() (*Judge, error) {
+	name := cmp.Or(r.cfg.Model.Roles[model.RoleJudge], r.cfg.Model.Roles[model.RoleInvestigate])
+
+	conn, ok := r.connectors[name]
+	if !ok {
+		return nil, fmt.Errorf("judge: no model connector is called %q", name)
+	}
+
+	judge, err := NewJudge(JudgeOptions{
+		Connector: conn.Connector,
+		Retries:   conn.Retries,
+		Name:      name,
+		Model:     r.models.ModelSettings[name].Model,
+		Prices:    r.prices,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("judge: %w", err)
+	}
+
+	return judge, nil
+}
+
+// Info returns what the runs record about how they run: the connector and
+// model settings of each role, the judge's included, the version of each
+// strategy the scenarios use, and the prompt versions. The caller adds the
+// build, the config hash and the scenario set.
+func (r *Runner) Info() RunInfo {
+	info := RunInfo{
+		Connectors:         map[model.Role]ConnectorInfo{},
+		Strategies:         map[string]string{},
+		PromptVersion:      prompt.Version,
+		JudgePromptVersion: JudgePromptVersion,
+	}
+
+	roles := maps.Clone(r.cfg.Model.Roles)
+	if roles == nil {
+		roles = map[model.Role]string{}
+	}
+
+	if roles[model.RoleJudge] == "" {
+		roles[model.RoleJudge] = roles[model.RoleInvestigate]
+	}
+
+	for role, name := range roles {
+		settings := r.models.ModelSettings[name]
+		info.Connectors[role] = ConnectorInfo{
+			Connector:   name,
+			Provider:    r.cfg.Model.Connectors[name].Type,
+			Model:       settings.Model,
+			MaxTokens:   settings.MaxTokens,
+			Temperature: settings.Temperature,
+			Thinking:    settings.Thinking.Mode,
+			Effort:      settings.Effort,
+		}
+	}
+
+	for _, sc := range r.scenarios {
+		name := r.strategy(sc)
+		if st, ok := r.cfg.StrategySet().Get(name); ok {
+			info.Strategies[name] = st.Version
+		}
+	}
+
+	return info
 }
 
 // New builds the model connectors of opts.Config and checks every

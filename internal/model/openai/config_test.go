@@ -213,25 +213,25 @@ func TestConfigCapabilities(t *testing.T) {
 		{
 			name:           "preset on Ollama has no forced tool choice",
 			cfg:            Config{Settings: model.Settings{Model: "qwen3.8:27b-q4_K_M"}, BaseURL: ollamaURL},
-			want:           model.Capabilities{ToolCalling: true, EffortLevels: presets[0].effort, ContextTokens: presetContextTokens},
+			want:           model.Capabilities{ToolCalling: true, EffortLevels: presets[0].effort, ContextTokens: presetContextTokens, Temperature: true},
 			wantMinContext: presetMinContextTokens,
 		},
 		{
 			name:           "preset on vLLM has forced tool choice",
 			cfg:            Config{Settings: model.Settings{Model: "google/gemma-4-31B-it"}, BaseURL: "http://vllm:8000/v1", Server: ServerVLLM},
-			want:           model.Capabilities{ToolCalling: true, ToolChoice: true, ContextTokens: presetContextTokens},
+			want:           model.Capabilities{ToolCalling: true, ToolChoice: true, ContextTokens: presetContextTokens, Temperature: true},
 			wantMinContext: presetMinContextTokens,
 		},
 		{
 			name:           "preset on an unknown server has no forced tool choice",
 			cfg:            Config{Settings: model.Settings{Model: "google/gemma-4-31B-it"}, BaseURL: "http://vllm:8000/v1"},
-			want:           model.Capabilities{ToolCalling: true, ContextTokens: presetContextTokens},
+			want:           model.Capabilities{ToolCalling: true, ContextTokens: presetContextTokens, Temperature: true},
 			wantMinContext: presetMinContextTokens,
 		},
 		{
 			name:           "preset on llama.cpp has no forced tool choice",
 			cfg:            Config{Settings: model.Settings{Model: "Qwen/Qwen3.8-27B"}, BaseURL: "http://llama:8080/v1", Server: ServerLlamaCPP},
-			want:           model.Capabilities{ToolCalling: true, EffortLevels: presets[0].effort, ContextTokens: presetContextTokens},
+			want:           model.Capabilities{ToolCalling: true, EffortLevels: presets[0].effort, ContextTokens: presetContextTokens, Temperature: true},
 			wantMinContext: presetMinContextTokens,
 		},
 		{
@@ -239,6 +239,14 @@ func TestConfigCapabilities(t *testing.T) {
 			cfg: Config{
 				Settings: model.Settings{Model: "qwen3.8:27b"},
 				BaseURL:  ollamaURL,
+				Declared: &DeclaredCapabilities{ToolCalling: true, ToolChoice: true, ContextTokens: 32_768},
+			},
+			want: model.Capabilities{ToolCalling: true, ToolChoice: true, ContextTokens: 32_768, Temperature: true},
+		},
+		{
+			name: "declared block on api.openai.com takes no temperature",
+			cfg: Config{
+				Settings: model.Settings{Model: "gpt-9"},
 				Declared: &DeclaredCapabilities{ToolCalling: true, ToolChoice: true, ContextTokens: 32_768},
 			},
 			want: model.Capabilities{ToolCalling: true, ToolChoice: true, ContextTokens: 32_768},

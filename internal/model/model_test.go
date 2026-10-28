@@ -199,7 +199,8 @@ func TestCheckRole(t *testing.T) {
 		{name: "investigate without tool calling", role: RoleInvestigate, caps: Capabilities{}, wantErr: ErrNoToolCalling},
 		{name: "triage with tool calling", role: RoleTriage, caps: Capabilities{ToolCalling: true}},
 		{name: "triage without tool calling", role: RoleTriage, caps: Capabilities{}, wantErr: ErrNoToolCalling},
-		{name: "judge without tool calling", role: RoleJudge, caps: Capabilities{}},
+		{name: "judge with tool calling", role: RoleJudge, caps: Capabilities{ToolCalling: true}},
+		{name: "judge without tool calling", role: RoleJudge, caps: Capabilities{}, wantErr: ErrNoToolCalling},
 		{name: "summarize without tool calling", role: RoleSummarize, caps: Capabilities{}},
 	}
 

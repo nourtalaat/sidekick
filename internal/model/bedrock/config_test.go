@@ -265,6 +265,11 @@ func TestCapabilities(t *testing.T) {
 			want: model.Capabilities{ToolCalling: true, ContextTokens: 300_000, MaxOutputTokens: 10_000, PromptCaching: true},
 		},
 		{
+			name: "a declared model that is not Claude takes a temperature",
+			cfg:  Config{Settings: model.Settings{Model: "meta.llama4-maverick-17b-instruct-v1:0"}, Declared: declared},
+			want: model.Capabilities{ToolCalling: true, ContextTokens: 300_000, MaxOutputTokens: 10_000, PromptCaching: true, Temperature: true},
+		},
+		{
 			name: "an unknown model has no capabilities",
 			cfg:  Config{Settings: model.Settings{Model: "cohere.command-r-v1:0"}},
 			want: model.Capabilities{},

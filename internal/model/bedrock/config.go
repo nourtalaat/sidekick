@@ -123,7 +123,12 @@ func (c *Config) Validate() error {
 // table.
 func (c *Config) known() (knownModel, bool) {
 	if c.Declared != nil {
-		return knownModel{caps: c.Declared.capabilities(), off: offDisable}, true
+		caps := c.Declared.capabilities()
+		// Claude models get Anthropic's request shape, which takes no
+		// temperature; the other Bedrock models take one.
+		caps.Temperature = !isAnthropic(c.Model)
+
+		return knownModel{caps: caps, off: offDisable}, true
 	}
 
 	return lookupModel(c.Model)

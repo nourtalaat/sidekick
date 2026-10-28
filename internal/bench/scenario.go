@@ -165,7 +165,7 @@ func (s Scenario) SourceConfig(name string) mock.Config {
 // Problems in the files give one error that wraps ErrInvalidScenario and
 // lists every problem, one per line, as "<file>: <field>: <problem>".
 func LoadScenarios(path string, opts LoadOptions) ([]Scenario, error) {
-	files, err := scenarioFiles(path)
+	files, err := findFiles(path, scenarioExtensions)
 	if err != nil {
 		return nil, fmt.Errorf("find the scenario files: %w", err)
 	}
@@ -210,7 +210,9 @@ func loadScenario(file string, opts LoadOptions) (Scenario, []string) {
 		return Scenario{}, []string{fmt.Sprintf("%s: %v", file, err)}
 	}
 
-	sc, problems := decodeScenario(raw)
+	var sc Scenario
+
+	problems := decodeStrict(raw, &sc)
 	if len(problems) == 0 {
 		problems = sc.validate()
 	}
@@ -340,10 +342,36 @@ func (e Expected) validate(sources map[string]mock.Config) []string {
 		}
 	}
 
+	problems = append(problems, validateRubric("expected.rootCause.rubric", e.RootCause.Rubric)...)
+
+	for i, check := range e.Evidence {
+		if (check.CalledTool == "") == (check.CitedURL == "") {
+			add("expected.evidence[%d]: set calledTool or citedURL, not both", i)
+		}
+	}
+
+	for i, name := range e.UnavailableReported {
+		if _, ok := sources[name]; !ok {
+			add("expected.unavailableReported[%d]: %q is not a source of the scenario", i, name)
+		}
+	}
+
+	return problems
+}
+
+// validateRubric checks the rubric at path: each item has a unique ID, a
+// text and a weight above 0.
+func validateRubric(path string, rubric []RubricItem) []string {
+	var problems []string
+
+	add := func(format string, args ...any) {
+		problems = append(problems, fmt.Sprintf(format, args...))
+	}
+
 	ids := map[string]bool{}
 
-	for i, item := range e.RootCause.Rubric {
-		p := fmt.Sprintf("expected.rootCause.rubric[%d]", i)
+	for i, item := range rubric {
+		p := fmt.Sprintf("%s[%d]", path, i)
 
 		switch {
 		case item.ID == "":
@@ -360,18 +388,6 @@ func (e Expected) validate(sources map[string]mock.Config) []string {
 
 		if item.Weight <= 0 {
 			add("%s.weight: must be more than 0", p)
-		}
-	}
-
-	for i, check := range e.Evidence {
-		if (check.CalledTool == "") == (check.CitedURL == "") {
-			add("expected.evidence[%d]: set calledTool or citedURL, not both", i)
-		}
-	}
-
-	for i, name := range e.UnavailableReported {
-		if _, ok := sources[name]; !ok {
-			add("expected.unavailableReported[%d]: %q is not a source of the scenario", i, name)
 		}
 	}
 
@@ -399,35 +415,33 @@ func (l Limits) validate() []string {
 	return problems
 }
 
-// decodeScenario decodes one YAML document strictly: an unknown key is a
-// problem.
-func decodeScenario(raw []byte) (Scenario, []string) {
+// decodeStrict decodes one YAML document into target strictly: an unknown
+// key is a problem. Scenario files and bench.yaml are read with it.
+func decodeStrict(raw []byte, target any) []string {
 	dec := yaml.NewDecoder(bytes.NewReader(raw))
 
 	var doc yaml.Node
 	if err := dec.Decode(&doc); err != nil {
 		if errors.Is(err, io.EOF) {
-			return Scenario{}, []string{"the file is empty"}
+			return []string{"the file is empty"}
 		}
 
-		return Scenario{}, []string{"invalid YAML: " + strings.TrimPrefix(err.Error(), "yaml: ")}
+		return []string{"invalid YAML: " + strings.TrimPrefix(err.Error(), "yaml: ")}
 	}
 
 	var extra yaml.Node
 	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
-		return Scenario{}, []string{"the file must hold one YAML document"}
+		return []string{"the file must hold one YAML document"}
 	}
 
-	var sc Scenario
-
-	err := config.Section{Node: &doc}.Decode(&sc)
+	err := config.Section{Node: &doc}.Decode(target)
 	if err == nil {
-		return sc, nil
+		return nil
 	}
 
 	var decodeErrs config.Errors
 	if !errors.As(err, &decodeErrs) {
-		return Scenario{}, []string{err.Error()}
+		return []string{err.Error()}
 	}
 
 	problems := make([]string, len(decodeErrs))
@@ -435,12 +449,13 @@ func decodeScenario(raw []byte) (Scenario, []string) {
 		problems[i] = e.String()
 	}
 
-	return Scenario{}, problems
+	return problems
 }
 
-// scenarioFiles returns path when it is a file, or the scenario files
-// under it, in name order, when it is a directory.
-func scenarioFiles(path string) ([]string, error) {
+// findFiles returns path when it is a file, or the files under it with
+// one of the extensions exts, in name order, when it is a directory.
+// Problems give an error that wraps ErrInvalidScenario.
+func findFiles(path string, exts []string) ([]string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidScenario, err)
@@ -457,7 +472,7 @@ func scenarioFiles(path string) ([]string, error) {
 			return fmt.Errorf("walk %s: %w", p, err)
 		}
 
-		if !entry.IsDir() && slices.Contains(scenarioExtensions, filepath.Ext(p)) {
+		if !entry.IsDir() && slices.Contains(exts, filepath.Ext(p)) {
 			files = append(files, p)
 		}
 
@@ -468,7 +483,7 @@ func scenarioFiles(path string) ([]string, error) {
 	}
 
 	if len(files) == 0 {
-		return nil, fmt.Errorf("%w: no .yaml or .yml files under %s", ErrInvalidScenario, path)
+		return nil, fmt.Errorf("%w: no %s files under %s", ErrInvalidScenario, strings.Join(exts, " or "), path)
 	}
 
 	return files, nil
