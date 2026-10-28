@@ -27,6 +27,13 @@ const uiContentSecurityPolicy = "default-src 'self'; script-src 'self'; style-sr
 // rootElement is where the app mounts, in index.html.
 const rootElement = `<div id="root"></div>`
 
+// fetched is an HTTP answer that has been read to the end.
+type fetched struct {
+	status int
+	header http.Header
+	body   string
+}
+
 var scriptSrc = regexp.MustCompile(`src="(/assets/[^"]+\.js)"`)
 
 // TestServeWebUI runs `sidekick serve` with an oidc section and checks that
@@ -48,40 +55,40 @@ func TestServeWebUI(t *testing.T) {
 		uiRequired := os.Getenv(uiBuiltEnv) != ""
 
 		for _, urlPath := range []string{"/", "/investigations/42", "/settings"} {
-			resp, body := fetch(t, base+urlPath)
-			require.Equal(t, http.StatusOK, resp.StatusCode, urlPath)
-			requireUIHeaders(t, resp)
-			require.Equal(t, "no-cache", resp.Header.Get("Cache-Control"), urlPath)
-			require.Contains(t, resp.Header.Get("Content-Type"), "text/html")
+			page := fetch(t, base+urlPath)
+			require.Equal(t, http.StatusOK, page.status, urlPath)
+			requireUIHeaders(t, page)
+			require.Equal(t, "no-cache", page.header.Get("Cache-Control"), urlPath)
+			require.Contains(t, page.header.Get("Content-Type"), "text/html")
 
-			hasUI := strings.Contains(body, rootElement)
+			hasUI := strings.Contains(page.body, rootElement)
 			require.True(t, hasUI || !uiRequired, "the UI is built into the binary")
 
 			if urlPath != "/" || !hasUI {
 				continue
 			}
 
-			match := scriptSrc.FindStringSubmatch(body)
+			match := scriptSrc.FindStringSubmatch(page.body)
 			require.NotNil(t, match, "index.html loads a hashed script")
 
-			asset, _ := fetch(t, base+match[1])
-			require.Equal(t, http.StatusOK, asset.StatusCode)
-			require.Equal(t, "public, max-age=31536000, immutable", asset.Header.Get("Cache-Control"))
-			require.Contains(t, asset.Header.Get("Content-Type"), "javascript")
+			asset := fetch(t, base+match[1])
+			require.Equal(t, http.StatusOK, asset.status)
+			require.Equal(t, "public, max-age=31536000, immutable", asset.header.Get("Cache-Control"))
+			require.Contains(t, asset.header.Get("Content-Type"), "javascript")
 			requireUIHeaders(t, asset)
 		}
 
-		missing, _ := fetch(t, base+"/assets/index-no-such-file.js")
-		require.Equal(t, http.StatusNotFound, missing.StatusCode, "a file of an earlier build is not answered with index.html")
+		missing := fetch(t, base+"/assets/index-no-such-file.js")
+		require.Equal(t, http.StatusNotFound, missing.status, "a file of an earlier build is not answered with index.html")
 
-		resp, body := fetch(t, base+"/api/v1/me")
-		require.Equal(t, http.StatusUnauthorized, resp.StatusCode, "the API answers, not the UI")
-		require.Contains(t, body, `"status":401`)
+		me := fetch(t, base+"/api/v1/me")
+		require.Equal(t, http.StatusUnauthorized, me.status, "the API answers, not the UI")
+		require.Contains(t, me.body, `"status":401`)
 
 		for _, urlPath := range []string{"/api/v1/nothing", "/api/nothing", "/auth/nothing", "/hooks/nothing", "/hooks/", "/slack/events", "/teams/messages", "/healthz", "/readyz"} {
-			resp, body := fetch(t, base+urlPath)
-			require.NotContains(t, body, rootElement, urlPath)
-			require.Empty(t, resp.Header.Get("Content-Security-Policy"), urlPath)
+			other := fetch(t, base+urlPath)
+			require.NotContains(t, other.body, rootElement, urlPath)
+			require.Empty(t, other.header.Get("Content-Security-Policy"), urlPath)
 		}
 
 		stopServe(t, cmd, lines, syscall.SIGTERM)
@@ -92,27 +99,26 @@ func TestServeWebUI(t *testing.T) {
 
 		cmd, lines, started := startServe(t, writeConfig(t, serveConfig(fakeAnthropic(t).URL()), storetest.NewURL(t)))
 
-		resp, body := fetch(t, "http://"+started.Listen+"/investigations")
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-		requireUIHeaders(t, resp)
-		require.Contains(t, body, "needs an oidc section")
-		require.Contains(t, body, "docs/web-ui.md")
+		page := fetch(t, "http://"+started.Listen+"/investigations")
+		require.Equal(t, http.StatusOK, page.status)
+		requireUIHeaders(t, page)
+		require.Contains(t, page.body, "needs an oidc section")
+		require.Contains(t, page.body, "docs/web-ui.md")
 
 		stopServe(t, cmd, lines, syscall.SIGTERM)
 	})
 }
 
-func requireUIHeaders(t *testing.T, resp *http.Response) {
+func requireUIHeaders(t *testing.T, page fetched) {
 	t.Helper()
 
-	require.Equal(t, uiContentSecurityPolicy, resp.Header.Get("Content-Security-Policy"))
-	require.Equal(t, "nosniff", resp.Header.Get("X-Content-Type-Options"))
-	require.Equal(t, "same-origin", resp.Header.Get("Referrer-Policy"))
+	require.Equal(t, uiContentSecurityPolicy, page.header.Get("Content-Security-Policy"))
+	require.Equal(t, "nosniff", page.header.Get("X-Content-Type-Options"))
+	require.Equal(t, "same-origin", page.header.Get("Referrer-Policy"))
 }
 
-// fetch gets url and returns the response, whose body is already read, and
-// the body.
-func fetch(t *testing.T, url string) (*http.Response, string) {
+// fetch gets url and reads the whole answer.
+func fetch(t *testing.T, url string) fetched {
 	t.Helper()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
@@ -126,5 +132,5 @@ func fetch(t *testing.T, url string) (*http.Response, string) {
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 
-	return resp, string(body)
+	return fetched{status: resp.StatusCode, header: resp.Header, body: string(body)}
 }
