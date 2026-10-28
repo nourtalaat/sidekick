@@ -17,6 +17,7 @@ const (
 	DefaultStepsRetention          = 90 * Day
 	DefaultAuditLogRetention       = 730 * Day
 	DefaultWatcherChecksRetention  = 30 * Day
+	DefaultMemoryRetention         = 730 * Day
 )
 
 // Day is 24 hours, the unit of the d suffix in retention periods.
@@ -46,6 +47,10 @@ type Retention struct {
 	// WatcherChecks are the results of single watcher checks, by when each
 	// ran. The watcher itself stays with the investigation.
 	WatcherChecks Period `yaml:"watcherChecks"`
+	// Memory are the memory entries of confirmed investigations, by when
+	// they were confirmed. They keep their own copy of what they show, so
+	// they may outlive their investigations.
+	Memory Period `yaml:"memory"`
 }
 
 // Period is a retention period: a whole number of days such as 90d, or a
@@ -86,6 +91,7 @@ func (r *Retention) setDefaults() {
 	r.Steps = Period(DefaultStepsRetention)
 	r.AuditLog = Period(DefaultAuditLogRetention)
 	r.WatcherChecks = Period(DefaultWatcherChecksRetention)
+	r.Memory = Period(DefaultMemoryRetention)
 }
 
 // checkRetention checks that every period is positive, and that steps and
@@ -100,6 +106,7 @@ func (v *validator) checkRetention() {
 		{"steps", r.Steps},
 		{"auditLog", r.AuditLog},
 		{"watcherChecks", r.WatcherChecks},
+		{"memory", r.Memory},
 	}
 
 	for _, p := range periods {

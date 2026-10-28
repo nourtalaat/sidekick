@@ -28,6 +28,7 @@ func registerRetention(a *app.App) error {
 			Steps:          r.Steps.Duration(),
 			AuditLog:       r.AuditLog.Duration(),
 			WatcherChecks:  r.WatcherChecks.Duration(),
+			MemoryEntries:  r.Memory.Duration(),
 		},
 		Metrics: metrics,
 		Logger:  log,

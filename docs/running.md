@@ -83,7 +83,7 @@ Sidekick serves two listeners:
 
 | Listener | Setting | Default | Serves |
 |---|---|---|---|
-| Main | `server.listen` | `:8080` | Webhooks at `POST /hooks/<name>` (see [Sending alerts to Sidekick](webhooks.md)) and, with the `oidc` section, the login at `/auth/login`, `/auth/callback` and `/auth/logout` and the JSON API under `/api/v1` (see [Web UI and API](web-ui.md)). Every other path answers 404. |
+| Main | `server.listen` | `:8080` | Webhooks at `POST /hooks/<name>` (see [Sending alerts to Sidekick](webhooks.md)) and, with the `oidc` section, the login at `/auth/login`, `/auth/callback` and `/auth/logout` and the JSON API under `/api/v1` (see [Web UI and API](web-ui.md)). Every other `GET` path returns the web UI's `index.html`, or, without an `oidc` section, a page that says the web UI needs one. Paths under `/api`, `/auth`, `/hooks`, `/slack` and `/teams` that nothing serves answer 404. |
 | Metrics | `server.metricsListen` | `:9090` | `/metrics`, `/healthz` and `/readyz`. |
 
 Keep the metrics listener off the public network.

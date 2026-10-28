@@ -7,10 +7,15 @@ bin/
 dist/
 charts/
 docs/
-assets/
+assets/*
+!assets/tokens
+!assets/favicon
 examples/
 *.test
 *.out
 .env
 .env.*
 *.local.yaml
+web/node_modules/
+web/.build/
+internal/web/dist/

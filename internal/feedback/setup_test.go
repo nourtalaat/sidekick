@@ -3,6 +3,7 @@
 package feedback
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -66,4 +67,32 @@ func investigation(t *testing.T, pool *pgxpool.Pool, id uuid.UUID) db.Investigat
 	require.NoError(t, err)
 
 	return inv
+}
+
+// memoryRow is a memory entry as the feedback tests check it.
+type memoryRow struct {
+	verdict, summary, cause string
+}
+
+// memoryEntry returns the memory entry of the investigation with id, or
+// nil when it has none.
+func memoryEntry(t *testing.T, pool *pgxpool.Pool, id uuid.UUID) *memoryRow {
+	t.Helper()
+
+	var (
+		row   memoryRow
+		cause *string
+	)
+
+	err := pool.QueryRow(t.Context(), "SELECT verdict, summary, cause FROM memory_entries WHERE investigation_id = $1", id).
+		Scan(&row.verdict, &row.summary, &cause)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+
+	require.NoError(t, err)
+
+	row.cause = deref(cause)
+
+	return &row
 }

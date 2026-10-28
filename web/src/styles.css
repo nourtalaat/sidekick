@@ -1,0 +1,22 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--sk-bg-page);
+  color: var(--sk-text-primary);
+  font: var(--sk-type-body);
+}
+
+h1 {
+  margin: 0 0 var(--sk-space-2);
+  font: var(--sk-type-h1);
+  letter-spacing: var(--sk-tracking-h1);
+}
+
+.page {
+  padding: var(--sk-space-8) var(--sk-space-6);
+}

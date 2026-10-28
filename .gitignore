@@ -21,3 +21,9 @@ coverage.*
 
 # Agent worktrees
 .claude/worktrees/
+
+# Web UI build output and dependencies
+/internal/web/dist/*
+!/internal/web/dist/.gitkeep
+/web/node_modules/
+/web/.build/

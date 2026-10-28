@@ -64,6 +64,7 @@ func TestExampleConfig(t *testing.T) {
 					Steps:          Period(90 * Day),
 					AuditLog:       Period(730 * Day),
 					WatcherChecks:  Period(30 * Day),
+					Memory:         Period(730 * Day),
 				}, cfg.Retention)
 			},
 		},

@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
+	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/model/modeltest"
 	"github.com/nourtalaat/sidekick/internal/prompt"
@@ -186,6 +187,14 @@ func TestInvestigateAnyway(t *testing.T) {
 			_, err = h.pool.Exec(t.Context(), `UPDATE investigations SET confirmed_verdict = 'duplicate', confirmed_by_slack_user = 'U01ANA',
 				confirmed_at = now(), cost_micros = 1000000, tool_calls = 40 WHERE id = $1`, testInvestigation)
 			require.NoError(t, err)
+			require.NoError(t, pgx.BeginFunc(t.Context(), h.pool, func(tx pgx.Tx) error {
+				if err := memory.Sync(t.Context(), tx, testInvestigation); err != nil {
+					return fmt.Errorf("sync memory: %w", err)
+				}
+
+				return nil
+			}))
+			require.Equal(t, 1, h.memoryEntries(t), "the confirmed triage verdict is in memory")
 
 			started := h.anyway(t)
 			require.True(t, started)
@@ -202,6 +211,7 @@ func TestInvestigateAnyway(t *testing.T) {
 			require.Nil(t, inv.ConfirmedVerdict, "the confirmation of the triage verdict does not carry over")
 			require.Nil(t, inv.ConfirmedBySlackUser)
 			require.Nil(t, inv.ConfirmedAt)
+			require.Zero(t, h.memoryEntries(t), "an investigation without a confirmation leaves memory")
 			require.Equal(t, []string{`user U01BEN investigation.investigate_anyway {"new": {"run": 2, "status": "queued"}, "old": {"run": 1, "stopReason": "triage"}}`},
 				h.auditRows(t))
 
@@ -392,4 +402,15 @@ func spanNames(h *harness) []string {
 	}
 
 	return out
+}
+
+// memoryEntries returns how many memory entries the test investigation
+// has.
+func (h *harness) memoryEntries(t *testing.T) int {
+	t.Helper()
+
+	var n int
+	require.NoError(t, h.pool.QueryRow(t.Context(), "SELECT count(*) FROM memory_entries WHERE investigation_id = $1", testInvestigation).Scan(&n))
+
+	return n
 }
