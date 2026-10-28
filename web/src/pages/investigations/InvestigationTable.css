@@ -1,41 +1,16 @@
-.sk-table-wrap {
-  overflow-x: auto;
-  background: var(--sk-bg-surface);
-  border: 1px solid var(--sk-border-subtle);
-  border-radius: var(--sk-radius-lg);
-}
-
-.sk-table {
-  width: 100%;
-  border-collapse: collapse;
-  font: var(--sk-type-body);
-}
-
-.sk-table th {
-  padding: var(--sk-space-2) var(--sk-space-3);
-  color: var(--sk-text-secondary);
-  border-bottom: 1px solid var(--sk-border-subtle);
-  font: var(--sk-type-label);
-  text-align: left;
-  white-space: nowrap;
-}
-
-.sk-table td {
+/* Rows of a fixed height, 40px, or 32px in compact mode, on top of the shared table. */
+.sk-table--rows td {
   height: 40px;
-  padding: 0 var(--sk-space-3);
-  border-bottom: 1px solid var(--sk-border-subtle);
+  padding-block: 0;
+  vertical-align: middle;
   white-space: nowrap;
 }
 
-.sk-table--compact td {
+.sk-table--rows.sk-table--compact td {
   height: 32px;
 }
 
-.sk-table tbody tr:last-child td {
-  border-bottom: 0;
-}
-
-.sk-table tbody tr:hover {
+.sk-table--rows tbody tr:hover {
   background: var(--sk-bg-hover);
 }
 

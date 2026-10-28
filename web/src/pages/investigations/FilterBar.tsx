@@ -1,5 +1,5 @@
 import { Button } from "../../components/Button";
-import { SelectField } from "../../components/SelectField";
+import { Select } from "../../components/Select";
 import { TextField } from "../../components/TextField";
 import type { ListFilters } from "../../api/investigations";
 import { RANGE_OPTIONS, STATUS_OPTIONS, VERDICT_OPTIONS } from "./filters";
@@ -46,19 +46,19 @@ export function FilterBar({ filters, onChange }: FilterBarProps) {
       }}
     >
       <TextField label="Alert title" name="q" defaultValue={filters.q ?? ""} maxLength={200} />
-      <SelectField
+      <Select
         label="Verdict"
         value={filters.verdict ?? ANY}
         options={[{ value: ANY, label: "Any verdict" }, ...VERDICT_OPTIONS]}
         onChange={(event) => onChange({ ...filters, ...typed(event.target.form), verdict: VERDICT_OPTIONS.find((o) => o.value === event.target.value)?.value })}
       />
-      <SelectField
+      <Select
         label="Status"
         value={filters.status ?? ANY}
         options={[{ value: ANY, label: "Any status" }, ...STATUS_OPTIONS]}
         onChange={(event) => onChange({ ...filters, ...typed(event.target.form), status: STATUS_OPTIONS.find((o) => o.value === event.target.value)?.value })}
       />
-      <SelectField
+      <Select
         label="Started"
         value={filters.range ?? ANY}
         options={[{ value: ANY, label: "Any time" }, ...RANGE_OPTIONS]}

@@ -2,6 +2,7 @@ import { ThumbsDown, ThumbsUp, type LucideIcon } from "lucide-react";
 import { Link } from "react-router";
 import type { InvestigationStatus, InvestigationSummary } from "../../api/investigations";
 import { StatusBadge, VerdictBadge, type Status } from "../../components/Badge";
+import { Table } from "../../components/Table";
 import { WatcherBadge } from "../../components/WatcherBadge";
 import { formatCost, formatDuration, formatTime } from "../../format";
 import "./InvestigationTable.css";
@@ -23,29 +24,27 @@ const FEEDBACK: Record<string, { label: string; Icon: LucideIcon } | undefined> 
 /** The investigations as a table, one row each, with the verdict first so the list can be scanned. */
 export function InvestigationTable({ rows, compact }: { rows: readonly InvestigationSummary[]; compact: boolean }) {
   return (
-    <div className="sk-table-wrap">
-      <table className={compact ? "sk-table sk-table--compact" : "sk-table"}>
-        <caption className="sk-visually-hidden">Investigations, newest first</caption>
-        <thead>
-          <tr>
-            <th scope="col">Verdict</th>
-            <th scope="col">Alert</th>
-            <th scope="col">Service</th>
-            <th scope="col">Route</th>
-            <th scope="col">Started</th>
-            <th scope="col">Duration</th>
-            <th scope="col">Cost</th>
-            <th scope="col">Feedback</th>
-            <th scope="col">Watcher</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <InvestigationRow key={row.id} row={row} />
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Table label="Investigations" className={compact ? "sk-table--rows sk-table--compact" : "sk-table--rows"}>
+      <caption className="sk-visually-hidden">Investigations, newest first</caption>
+      <thead>
+        <tr>
+          <th scope="col">Verdict</th>
+          <th scope="col">Alert</th>
+          <th scope="col">Service</th>
+          <th scope="col">Route</th>
+          <th scope="col">Started</th>
+          <th scope="col">Duration</th>
+          <th scope="col">Cost</th>
+          <th scope="col">Feedback</th>
+          <th scope="col">Watcher</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <InvestigationRow key={row.id} row={row} />
+        ))}
+      </tbody>
+    </Table>
   );
 }
 

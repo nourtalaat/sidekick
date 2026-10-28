@@ -1,14 +1,10 @@
-import type { Me } from "./session";
+import type { components } from "./api/schema";
 
-export type Role = Me["role"];
+export type Role = components["schemas"]["Role"];
 
-const RANK: Record<Role, number> = { viewer: 1, responder: 2, approver: 3, admin: 4 };
+const ROLE_ORDER: readonly Role[] = ["viewer", "responder", "approver", "admin"];
 
-/**
- * Whether role includes needed: a higher role includes every lower one. The
- * server checks the role of every request again; this only decides which
- * buttons the page shows.
- */
-export function hasRole(role: Role, needed: Role): boolean {
-  return RANK[role] >= RANK[needed];
+/** Whether have includes need: a higher role includes every lower one. */
+export function hasRole(have: Role, need: Role): boolean {
+  return ROLE_ORDER.indexOf(have) >= ROLE_ORDER.indexOf(need);
 }

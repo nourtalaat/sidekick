@@ -297,6 +297,30 @@ used by every replica within seconds.
   not dead, or whose unique key a pending or running job holds, answers
   409.
 
+## Listeners, routes and the audit log in the UI
+
+The navigation has a page for each:
+
+- **Listeners** (`/listeners`) and **Routes** (`/routes`) list the rules of
+  the config file and those added at runtime. Each row says where the rule
+  is defined and its status: active, shadowed (a rule of the config file
+  has the same name and is used instead), invalid (it no longer passes the
+  checks, with the reason) or turned off. Routes show the order they are
+  tried in. Rules of the config file have no buttons; only a config change
+  alters them. A shadowed runtime copy can be deleted.
+- **Add**, **Change** and **Delete** are shown to a responder for
+  listeners and to an admin for routes; a viewer sees the lists only.
+  Delete asks first. A save runs the same checks as the config file and
+  the `/sidekick` commands, and the form shows each problem under its
+  field, with problems that belong to no field in a message at the top.
+  The mode of a route can only be read-only for now. If someone else
+  changed the rule while the form was open, the form says so and offers
+  to load the new version.
+- **Audit log** (`/audit`, admins) shows the entries newest first, with
+  filters for the time, who, the action and the investigation. The
+  filters are in the address, so a view can be shared with a link. An
+  entry with an old or new value has a **Show change** button.
+
 ## The JSON API
 
 The API is under `/api/v1`, described in OpenAPI 3.1 in

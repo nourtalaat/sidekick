@@ -1,6 +1,7 @@
 import { useSearchParams } from "react-router";
 import { useInvestigationList, type ListFilters } from "../../api/investigations";
 import { Button } from "../../components/Button";
+import { Checkbox } from "../../components/Checkbox";
 import { EmptyState } from "../../components/EmptyState";
 import { QueryError } from "../../components/QueryError";
 import { COMPACT_PARAM, filtersFromParams, paramsFromFilters } from "./filters";
@@ -24,10 +25,7 @@ export default function InvestigationsPage() {
     <div className="sk-page">
       <h1 className="sk-page__title">Investigations</h1>
       <FilterBar filters={filters} onChange={setFilters} />
-      <label className="sk-compact">
-        <input type="checkbox" checked={compact} onChange={(event) => setCompact(event.target.checked)} />
-        Compact rows
-      </label>
+      <Checkbox label="Compact rows" checked={compact} onChange={(event) => setCompact(event.target.checked)} />
       {list.isPending && (
         <p role="status" className="sk-loading">
           Loading
