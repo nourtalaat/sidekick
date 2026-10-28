@@ -1,0 +1,59 @@
+.sk-chart {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sk-space-3);
+  margin: 0;
+}
+
+.sk-chart > .recharts-responsive-container {
+  align-self: stretch;
+}
+
+.sk-chart__summary {
+  color: var(--sk-text-secondary);
+}
+
+.sk-chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sk-space-2) var(--sk-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sk-chart__legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--sk-space-2);
+}
+
+.sk-chart__table-wrap {
+  align-self: stretch;
+  overflow-x: auto;
+}
+
+.sk-chart__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.sk-chart__table caption {
+  padding-bottom: var(--sk-space-2);
+  color: var(--sk-text-secondary);
+  font: var(--sk-type-caption);
+  text-align: left;
+}
+
+.sk-chart__table th,
+.sk-chart__table td {
+  padding: var(--sk-space-2) var(--sk-space-3);
+  border-bottom: 1px solid var(--sk-border-subtle);
+  text-align: right;
+}
+
+.sk-chart__table th:first-child {
+  text-align: left;
+}

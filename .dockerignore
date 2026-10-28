@@ -10,6 +10,8 @@ docs/
 assets/*
 !assets/tokens
 !assets/favicon
+!assets/logo
+!assets/states
 examples/
 *.test
 *.out

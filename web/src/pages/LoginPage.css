@@ -1,0 +1,32 @@
+.sk-login {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: var(--sk-space-4);
+  background: var(--sk-gradient-brand);
+}
+
+.sk-login__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sk-space-4);
+  max-width: 28rem;
+  padding: var(--sk-space-10) var(--sk-space-8);
+  background: var(--sk-bg-surface);
+  border-radius: var(--sk-radius-xl);
+  box-shadow: var(--sk-shadow-raised-lg);
+  text-align: center;
+}
+
+.sk-login__title {
+  margin: 0;
+  font: var(--sk-type-display);
+  letter-spacing: var(--sk-tracking-display);
+}
+
+.sk-login__text {
+  margin: 0;
+  color: var(--sk-text-secondary);
+  font: var(--sk-type-body-lg);
+}

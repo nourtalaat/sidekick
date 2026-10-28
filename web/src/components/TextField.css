@@ -1,0 +1,43 @@
+.sk-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-1);
+}
+
+.sk-field__label {
+  font: var(--sk-type-label);
+}
+
+.sk-field__input {
+  min-height: var(--sk-size-control-md);
+  padding: 0 var(--sk-space-3);
+  background: var(--sk-bg-surface);
+  color: var(--sk-text-primary);
+  border: 1px solid var(--sk-border-strong);
+  border-radius: var(--sk-radius-md);
+  font: var(--sk-type-body);
+}
+
+.sk-field__input:disabled {
+  color: var(--sk-text-disabled);
+  cursor: not-allowed;
+}
+
+.sk-field__input[aria-invalid="true"] {
+  border-color: var(--sk-status-danger-border);
+}
+
+.sk-field__help {
+  margin: 0;
+  color: var(--sk-text-secondary);
+  font: var(--sk-type-caption);
+}
+
+.sk-field__error {
+  display: flex;
+  align-items: center;
+  gap: var(--sk-space-1);
+  margin: 0;
+  color: var(--sk-status-danger-fg);
+  font: var(--sk-type-caption);
+}
