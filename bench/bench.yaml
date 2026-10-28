@@ -1,0 +1,11 @@
+# The thresholds of the benchmark workflow (.github/workflows/bench.yml). A
+# run that misses one fails the workflow. The workflow adds the lines
+#   baseline: bench/baseline.json
+#   maxDrop: 0.02
+# below `thresholds` when bench/baseline.json exists, so `thresholds` stays
+# the last block of this file.
+thresholds:
+  verdictAccuracy: 0.8
+  fpPrecision: 0.95
+  rootCauseMatch: 0.7
+  maxCostPerRunUSD: 0.5
