@@ -28,10 +28,47 @@ var receivedAt = time.Date(2026, 10, 26, 14, 2, 0, 0, time.UTC)
 func TestRenderGolden(t *testing.T) {
 	t.Parallel()
 
-	type rendered struct {
-		name string
-		view view
+	for _, tt := range renderedViews(t) {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := goldenJSON(t, tt.view)
+
+			path := filepath.Join("fixture", "golden", tt.name+".json")
+			if *update {
+				require.NoError(t, os.WriteFile(path, []byte(got), 0o600))
+			}
+
+			want, err := os.ReadFile(path) //nolint:gosec // A fixture path chosen by the test.
+			require.NoError(t, err, "run go test ./internal/output/slack -update to create the golden file")
+			require.Equal(t, string(want), got)
+		})
 	}
+}
+
+func TestNoViewCarriesTheTestAlertBlockID(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range renderedViews(t) {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.NotContains(t, goldenJSON(t, tt.view), TestAlertBlockID)
+			require.NotContains(t, tt.view.text, TestAlertBlockID)
+		})
+	}
+}
+
+// rendered is one view with the name of its golden file.
+type rendered struct {
+	name string
+	view view
+}
+
+// renderedViews renders every kind of message the sink posts: each phase,
+// each verdict, the notices, the watcher lines and the replies.
+func renderedViews(t *testing.T) []rendered {
+	t.Helper()
 
 	cases := []rendered{
 		{name: "queued", view: mainView(testUpdate(output.PhaseQueued, nil))},
@@ -89,22 +126,7 @@ func TestRenderGolden(t *testing.T) {
 		cases = append(cases, rendered{name: "watcher-reply-" + name, view: watcherReplyView(u, "https://example.slack.com/archives/C123/p1793023321000200")})
 	}
 
-	for _, tt := range cases {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := goldenJSON(t, tt.view)
-
-			path := filepath.Join("fixture", "golden", tt.name+".json")
-			if *update {
-				require.NoError(t, os.WriteFile(path, []byte(got), 0o600))
-			}
-
-			want, err := os.ReadFile(path) //nolint:gosec // A fixture path chosen by the test.
-			require.NoError(t, err, "run go test ./internal/output/slack -update to create the golden file")
-			require.Equal(t, string(want), got)
-		})
-	}
+	return cases
 }
 
 func TestEveryVerdictShowsAnEmojiAndALabel(t *testing.T) {

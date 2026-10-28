@@ -220,11 +220,16 @@ func (h *Handler) Handle(ctx context.Context, payload []byte) error {
 
 // handleMessage stores a channel message that a listener matches. Edits,
 // Sidekick's own messages and messages that mention Sidekick, which arrive
-// as app_mention too, are left out. A thread reply is only ever a
-// follow-up question, with slack.followUps set to any.
+// as app_mention too, are left out. The one exception is the sample alert
+// of `sidekick test-alert --channel`, which Sidekick posts as itself; it
+// goes through the listeners like any other message, but is never trusted.
+// A thread reply is only ever a follow-up question, with slack.followUps
+// set to any.
 func (h *Handler) handleMessage(ctx context.Context, env envelope, m message) error {
 	bot := env.botUserID()
-	if !m.isPost() || m.fromApp(env.APIAppID, bot) || m.mentions(bot) {
+	testAlert := m.isTestAlert(env.APIAppID)
+
+	if !m.isPost() || (m.fromApp(env.APIAppID, bot) && !testAlert) || m.mentions(bot) {
 		return nil
 	}
 
@@ -252,7 +257,7 @@ func (h *Handler) handleMessage(ctx context.Context, env envelope, m message) er
 	}
 
 	ev := buildEvent(env.EventID, env.TeamID, m, text, l, env.Event)
-	trusted := l.Trusted && m.isBot() && slices.Contains(h.trustedBots, m.botID())
+	trusted := !testAlert && l.Trusted && m.isBot() && slices.Contains(h.trustedBots, m.botID())
 
 	return h.store(ctx, l.Name, trusted, ev)
 }

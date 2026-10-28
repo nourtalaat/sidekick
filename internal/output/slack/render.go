@@ -62,6 +62,13 @@ const (
 	blockIDRun      = "run"
 )
 
+// TestAlertBlockID is the block_id of the first block of the sample alert
+// that `sidekick test-alert --channel` posts as the bot. The Slack app
+// treats a message of its own app that carries it as an alert, and skips
+// every other message of its own. It is for that command only: nothing the
+// sink renders sets it, which a test over every view checks.
+const TestAlertBlockID = "sidekick_test_alert"
+
 // slackUserID is a Slack user ID. Only IDs of this form are shown as
 // mentions, so a stored value can never add other markup.
 var slackUserID = regexp.MustCompile(`^[UW][A-Z0-9]{2,}$`)

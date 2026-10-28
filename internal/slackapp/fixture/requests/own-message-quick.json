@@ -1,0 +1,36 @@
+{
+  "token": "unused-verification-token",
+  "team_id": "T01TEAM",
+  "api_app_id": "A01SIDEKICK",
+  "type": "event_callback",
+  "event_id": "Ev12OWNQUICK",
+  "event_time": 1761472800,
+  "authorizations": [
+    {
+      "team_id": "T01TEAM",
+      "user_id": "U01SIDEKICK",
+      "is_bot": true
+    }
+  ],
+  "event": {
+    "type": "message",
+    "subtype": "bot_message",
+    "channel": "C01QUICK",
+    "team": "T01TEAM",
+    "bot_id": "B09SIDEKICK",
+    "app_id": "A01SIDEKICK",
+    "user": "U01SIDEKICK",
+    "text": "Looking into it",
+    "ts": "1761472990.000800",
+    "blocks": [
+      {
+        "type": "section",
+        "block_id": "run",
+        "text": {
+          "type": "mrkdwn",
+          "text": "Looking into it"
+        }
+      }
+    ]
+  }
+}

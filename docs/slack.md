@@ -211,7 +211,9 @@ bot posts. For each new message in the channel:
 
 - Edits, deletions, joins, replies in threads and Sidekick's own messages
   are skipped. A message that mentions `@Sidekick` is handled as a
-  mention instead.
+  mention instead. The one message of its own that Sidekick takes is the
+  sample alert of `sidekick test-alert --channel` (see
+  [The test alert](#the-test-alert)).
 - The text Sidekick sees is the message text with the text of its
   attachments (pretext, title, text, fields and footer) and its blocks
   added, one part per line. `match.text`, `extract` and `recovery` all run
@@ -234,6 +236,27 @@ bot posts. For each new message in the channel:
 
 The listener's name is the event's intake, so routes can pick listener
 events with `match.intake`.
+
+#### The test alert
+
+`sidekick test-alert --channel '#alerts'` posts a sample alert into a
+channel with the bot token, so that you can see a listener take up an
+alert and Sidekick answer it ([Sending a test
+alert](webhooks.md#sending-a-test-alert)). Because the bot posts it, it
+would be one of Sidekick's own messages, which are skipped. To let it
+through, the command gives the first block of the message the block ID
+`sidekick_test_alert`, and the app takes a message of its own app with
+that block ID as an alert:
+
+- It is for the test alert only. Sidekick's own messages and replies never
+  carry the block ID (a test checks every message the `slack` output
+  renders), and only this app can post as itself, so no one else can make
+  a message that passes as the test alert.
+- The alert still has to match a listener's channel, sender and text like
+  any other message. A listener for other bots does not take it; the
+  command says so when no listener in the config would.
+- It is never trusted, even when its listener has `trusted: true` and the
+  bot is in `slack.trustedBots`.
 
 ### Mentions
 

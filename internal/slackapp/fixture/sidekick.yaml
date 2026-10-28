@@ -18,7 +18,7 @@ slack:
   appTokenSecret: { name: slack, key: appToken }
   signingSecret: { name: slack, key: signingSecret }
   mode: events
-  trustedBots: [B01SIGNOZ]
+  trustedBots: [B01SIGNOZ, B09SIDEKICK]
 
 listeners:
   alerts:
@@ -37,6 +37,11 @@ listeners:
     channel: C01OPS
     match:
       sender: { kind: human }
+  quick:
+    channel: C01QUICK
+    match:
+      sender: { kind: bot }
+    trusted: true
 
 outputs:
   slack-thread: { type: slack, channel: "#alerts" }
