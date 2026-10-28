@@ -12,6 +12,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AuditLog struct {
+	ID              int64
+	At              time.Time
+	ActorKind       string
+	ActorID         *string
+	Action          string
+	TargetKind      *string
+	TargetID        *string
+	InvestigationID *uuid.UUID
+	Details         json.RawMessage
+}
+
 type Event struct {
 	ID          uuid.UUID
 	Intake      string
@@ -136,6 +148,17 @@ type Job struct {
 	FinishedAt  *time.Time
 }
 
+type Listener struct {
+	Name         string
+	SlackChannel string
+	Match        json.RawMessage
+	Trusted      bool
+	Enabled      bool
+	Version      int32
+	UpdatedBy    *string
+	UpdatedAt    time.Time
+}
+
 type MemoryEntry struct {
 	InvestigationID uuid.UUID
 	Service         *string
@@ -179,11 +202,31 @@ type RateAdmission struct {
 	AdmittedAt time.Time
 }
 
+type Route struct {
+	Name      string
+	Priority  int32
+	Spec      json.RawMessage
+	Enabled   bool
+	Version   int32
+	UpdatedBy *string
+	UpdatedAt time.Time
+}
+
 type ServiceNote struct {
 	Service   string
 	Text      string
 	UpdatedBy *uuid.UUID
 	UpdatedAt time.Time
+}
+
+type SlackIdentity struct {
+	SlackUserID string
+	TeamID      *string
+	Email       *string
+	UserID      *uuid.UUID
+	Groups      []string
+	Role        *string
+	RefreshedAt time.Time
 }
 
 type SpendDaily struct {
