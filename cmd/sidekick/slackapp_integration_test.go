@@ -34,6 +34,18 @@ const followUpAnswer = "No source is configured, so neither the deploy nor the p
 // takes, so both replies arrive while the investigation runs.
 const slowFirstAnswer = 3 * time.Second
 
+// The texts of the main message in the thread of slackMessage. A publish
+// job shows the newest state of the investigation, so the first post can be
+// any of the three.
+const (
+	textQueued  = "Looking into it: Checkout returns 502"
+	textRunning = "Investigating: Checkout returns 502"
+	textFinal   = "Not sure yet: Checkout returns 502"
+)
+
+// firstPostTS is the ts the fake Slack gives the first post.
+const firstPostTS = "1793023321.000001"
+
 // slackMention returns an app_mention payload with eventID, a reply that
 // mentions Sidekick in the thread of slackMessage.
 func slackMention(eventID, ts, text string) string {
@@ -98,10 +110,29 @@ listeners:
 
 				require.Eventually(t, func() bool { return len(slackAPI.callsTo("chat.postMessage")) > 0 }, serveStartTimeout, 50*time.Millisecond)
 
-				first := slackAPI.callsTo("chat.postMessage")[0]
+				posts := slackAPI.callsTo("chat.postMessage")
+				first := posts[0]
 				require.Equal(t, "C01OPS", first.Channel)
 				require.Equal(t, "1761472960.000500", first.ThreadTS, "the reply goes in the thread of the message")
-				require.Equal(t, "Looking into it: Checkout returns 502", first.Text)
+				require.Contains(t, []string{textQueued, textRunning, textFinal}, first.Text,
+					"a publish job shows the newest state, so the queued phase can be skipped")
+
+				require.Eventually(t, func() bool { return mainMessageShows(slackAPI, textFinal) }, serveStartTimeout, 50*time.Millisecond)
+
+				var mainPosts int
+
+				for _, c := range slackAPI.callsTo("chat.postMessage") {
+					if c.Text == textQueued || c.Text == textRunning {
+						mainPosts++
+					}
+				}
+
+				require.LessOrEqual(t, mainPosts, 1, "the message is posted once; later states edit it")
+
+				for _, c := range slackAPI.callsTo("chat.update") {
+					require.Equal(t, firstPostTS, c.TS, "every edit is of the first message")
+					require.Equal(t, "C01OPS", c.Channel)
+				}
 			},
 		},
 		{
@@ -191,6 +222,16 @@ slack:
 			stopServe(t, cmd, lines, syscall.SIGTERM)
 		})
 	}
+}
+
+// mainMessageShows reports whether the first message shows text: it was
+// posted with it, or an edit set it.
+func mainMessageShows(f *fakeSlack, text string) bool {
+	if posts := f.callsTo("chat.postMessage"); len(posts) > 0 && posts[0].Text == text {
+		return true
+	}
+
+	return f.has("chat.update", text)
 }
 
 // served is a started `sidekick serve` with its fakes and database.
