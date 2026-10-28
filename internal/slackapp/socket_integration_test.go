@@ -36,6 +36,11 @@ const (
 	// test. It is longer than the test waits, so a replica whose connection
 	// ended cannot take its slot back before the spare replica takes it.
 	takeoverReconnectWait = 2 * socketTimeout
+	// failedConnections is how many failing connections the close test
+	// waits for, and failedWait the short wait between them and between
+	// slot checks.
+	failedConnections = 40
+	failedWait        = time.Millisecond
 )
 
 // The Socket Mode payloads of a slash command and a button click.
@@ -390,6 +395,24 @@ func TestSocketWithABadAppToken(t *testing.T) {
 	}
 }
 
+// TestSocketClosesTheSlotAfterTheConnectionFails runs many connections that
+// fail by themselves while the slot check runs all the time. Without the
+// wait for the check before the slot's session is closed, the race detector
+// sees the check use the session while it is closed.
+func TestSocketClosesTheSlotAfterTheConnectionFails(t *testing.T) {
+	t.Parallel()
+
+	h := setup(t)
+	newFakeSocket(t, h.slack)
+	h.cfg.Slack.AppTokenSecret.Key = "signingSecret"
+
+	r := startSocketChecking(t, h, h.pool, &holders{}, failedWait, failedWait)
+
+	waitFor(t, func() bool { return opens(h.slack) >= failedConnections })
+
+	r.stop()
+}
+
 // fakeAnswers is a CommandHandler and InteractionHandler that answers
 // with resp and err, and records what it is given.
 type fakeAnswers struct {
@@ -493,6 +516,14 @@ func startSocket(t *testing.T, h *harness, pool *pgxpool.Pool, hs *holders, with
 func startSocketWith(t *testing.T, h *harness, pool *pgxpool.Pool, hs *holders, reconnect time.Duration, with ...func(*SocketOptions)) *replica {
 	t.Helper()
 
+	return startSocketChecking(t, h, pool, hs, reconnect, testSlotWait, with...)
+}
+
+// startSocketChecking is startSocketWith with check as how often the
+// session that holds the slot is checked.
+func startSocketChecking(t *testing.T, h *harness, pool *pgxpool.Pool, hs *holders, reconnect, check time.Duration, with ...func(*SocketOptions)) *replica {
+	t.Helper()
+
 	opts := SocketOptions{
 		Handler:  h.handler,
 		Pool:     pool,
@@ -508,7 +539,7 @@ func startSocketWith(t *testing.T, h *harness, pool *pgxpool.Pool, hs *holders, 
 	}
 
 	s := NewSocket(opts)
-	s.slotRetry, s.slotCheck, s.reconnectWait = testSlotWait, testSlotWait, reconnect
+	s.slotRetry, s.slotCheck, s.reconnectWait = testSlotWait, check, reconnect
 	s.clientOptions = []socketmode.Option{socketmode.OptionPingInterval(socketTimeout)}
 
 	r := &replica{}
