@@ -65,6 +65,8 @@ type Link struct {
 }
 
 // SlackRef locates a Slack message that produced or carries the event.
+// Its fields are stored without redaction, so replies reach the message;
+// a new field is redacted unless the event writer lists it as an ID.
 type SlackRef struct {
 	TeamID   string
 	Channel  string
@@ -74,7 +76,9 @@ type SlackRef struct {
 }
 
 // TeamsRef locates a Microsoft Teams channel message that produced or
-// carries the event.
+// carries the event. Its fields are stored without redaction, so replies
+// reach the message; a new field is redacted unless the event writer lists
+// it as an ID.
 type TeamsRef struct {
 	// TenantID is the Microsoft Entra tenant of the team.
 	TenantID string

@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/ids"
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/store/db"
@@ -48,6 +49,17 @@ const (
 	// recovery events are final, so one pass is enough.
 	alertPassesToRecover = 1
 )
+
+// The audit log names of watcher changes. An ended watcher's action is
+// auditActionPrefix and its final status, such as watcher.recovered.
+const (
+	auditTarget        = "watcher"
+	auditActionPrefix  = "watcher."
+	auditActionStarted = "watcher.started"
+)
+
+// auditor writes the audit rows of watcher changes.
+var auditor = audit.NewWriter()
 
 var (
 	// ErrNameTaken means the group has a watcher with the same name.
@@ -134,7 +146,9 @@ func Start(ctx context.Context, tx pgx.Tx, p Policy, w NewWatcher, now time.Time
 		return db.Watcher{}, fmt.Errorf("watcher %s: %w", w.Name, err)
 	}
 
-	stateChanged(ctx, log, nil, started)
+	if err := stateChanged(ctx, tx, log, nil, started); err != nil {
+		return db.Watcher{}, fmt.Errorf("watcher %s: %w", w.Name, err)
+	}
 
 	return started, nil
 }
@@ -151,7 +165,10 @@ func EndGroupResolved(ctx context.Context, tx pgx.Tx, groupID uuid.UUID, now tim
 	for _, w := range ended {
 		before := w
 		before.Status = StatusRunning
-		stateChanged(ctx, log, &before, w)
+
+		if err := stateChanged(ctx, tx, log, &before, w); err != nil {
+			return nil, fmt.Errorf("end watcher %s: %w", w.Name, err)
+		}
 	}
 
 	return ended, nil
@@ -293,10 +310,10 @@ func enqueueTick(ctx context.Context, q db.DBTX, id uuid.UUID, runAt time.Time) 
 }
 
 // stateChanged records that a watcher's state changed from old, nil for a
-// watcher that just started, to w. The watcher row holds the new state
-// already.
-func stateChanged(ctx context.Context, log *slog.Logger, old *db.Watcher, w db.Watcher) {
-	// TODO: [SK-18] Write an audit row for watcher state changes
+// watcher that just started, to w: it logs a line and writes an audit
+// row through q, the transaction that changed the watcher row, which holds
+// the new state already.
+func stateChanged(ctx context.Context, q db.DBTX, log *slog.Logger, old *db.Watcher, w db.Watcher) error {
 	from := ""
 	if old != nil {
 		from = old.Status
@@ -305,6 +322,58 @@ func stateChanged(ctx context.Context, log *slog.Logger, old *db.Watcher, w db.W
 	log.InfoContext(ctx, "watcher state changed",
 		"watcher_id", w.ID.String(), "group_id", w.GroupID.String(), "watcher", w.Name,
 		"from", from, "status", w.Status, "stop_reason", deref(w.StopReason))
+
+	if err := auditor.Write(ctx, q, auditEntry(old, w)); err != nil {
+		return fmt.Errorf("audit the state change: %w", err)
+	}
+
+	return nil
+}
+
+// auditEntry is the audit row of a watcher's change from old, nil for a
+// start, to w. Sidekick starts watchers; a person who stopped one is the
+// actor of that change, and Sidekick's checks and limits end the others.
+// The check itself is left out, since an HTTP check can carry headers.
+func auditEntry(old *db.Watcher, w db.Watcher) audit.Entry {
+	e := audit.Entry{
+		ActorKind:       audit.ActorSystem,
+		Action:          auditActionPrefix + w.Status,
+		TargetKind:      auditTarget,
+		TargetID:        w.ID.String(),
+		InvestigationID: w.InvestigationID,
+		New:             viewOf(w),
+	}
+
+	switch {
+	case old == nil:
+		e.ActorKind, e.Action = audit.ActorSidekick, auditActionStarted
+	case w.StoppedBy != nil:
+		e.ActorKind, e.ActorID = audit.ActorUser, w.StoppedBy.String()
+	}
+
+	if old != nil {
+		e.Old = viewOf(*old)
+	}
+
+	return e
+}
+
+// watcherView is what the audit log records of a watcher.
+type watcherView struct {
+	Name       string `json:"name"`
+	GroupID    string `json:"group_id"`
+	Origin     string `json:"origin"`
+	CheckType  string `json:"check_type"`
+	Status     string `json:"status"`
+	StopReason string `json:"stop_reason,omitempty"`
+	Checks     int32  `json:"checks"`
+}
+
+func viewOf(w db.Watcher) watcherView {
+	return watcherView{
+		Name: w.Name, GroupID: w.GroupID.String(), Origin: w.Origin, CheckType: w.CheckType,
+		Status: w.Status, StopReason: deref(w.StopReason), Checks: w.Checks,
+	}
 }
 
 // decodeSpec returns the check a watcher stored.

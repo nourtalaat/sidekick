@@ -38,8 +38,61 @@ func TestNew(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			require.Len(t, h.listeners, len(tt.cfg.Listeners))
+			require.Len(t, *h.listeners.Load(), len(tt.cfg.Listeners))
 			require.Equal(t, AckBudget, h.ackBudget)
+		})
+	}
+}
+
+func TestSetListeners(t *testing.T) {
+	t.Parallel()
+
+	slack := &config.Slack{BotTokenSecret: registry.SecretRef{Name: "slack", Key: "botToken"}}
+
+	tests := []struct {
+		name      string
+		listeners map[string]config.Listener
+		want      []string
+		wantErr   string
+	}{
+		{
+			name:      "new listeners in name order",
+			listeners: map[string]config.Listener{"ops": {Channel: "#ops"}, "billing": {Channel: "C01BILLING"}},
+			want:      []string{"billing", "ops"},
+		},
+		{name: "no listeners", listeners: nil, want: []string{}},
+		{
+			name:      "a listener that does not compile",
+			listeners: map[string]config.Listener{"ops": {Channel: "#ops", Recovery: "("}},
+			want:      []string{"alerts"},
+			wantErr:   "compile the listeners",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h, err := New(Options{
+				Config:  &config.Config{Slack: slack, Listeners: map[string]config.Listener{"alerts": {Channel: "#alerts"}}},
+				Logger:  slog.New(slog.DiscardHandler),
+				Metrics: prometheus.NewRegistry(),
+			})
+			require.NoError(t, err)
+
+			err = h.SetListeners(tt.listeners)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+
+			names := []string{}
+			for _, l := range *h.listeners.Load() {
+				names = append(names, l.name)
+			}
+
+			require.Equal(t, tt.want, names)
 		})
 	}
 }

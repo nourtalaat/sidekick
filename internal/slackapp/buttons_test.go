@@ -1,6 +1,7 @@
 package slackapp
 
 import (
+	"context"
 	"log/slog"
 	"net/url"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	slackout "github.com/nourtalaat/sidekick/internal/output/slack"
+	"github.com/nourtalaat/sidekick/internal/roles"
 )
 
 func TestSlackURL(t *testing.T) {
@@ -110,5 +112,75 @@ func clickOn(actionID, value string) slack.InteractionCallback {
 		Type:           slack.InteractionTypeBlockActions,
 		User:           slack.User{ID: "U01ANA"},
 		ActionCallback: slack.ActionCallbacks{BlockActions: []*slack.BlockAction{{ActionID: actionID, Value: value}}},
+	}
+}
+
+// refreshingRoles has one role for Role and another for Refresh, and
+// counts the refreshes.
+type refreshingRoles struct {
+	role, refreshed roles.Role
+	refreshes       *int
+}
+
+func (r refreshingRoles) Role(context.Context, string, string) (roles.Role, error) {
+	return r.role, nil
+}
+
+func (r refreshingRoles) Refresh(context.Context, string, string) (roles.Role, error) {
+	*r.refreshes++
+
+	return r.refreshed, nil
+}
+
+// plainRoles has a role and no Refresh method.
+type plainRoles roles.Role
+
+func (r plainRoles) Role(context.Context, string, string) (roles.Role, error) {
+	return roles.Role(r), nil
+}
+
+func TestButtonsRole(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		lookup        func(refreshes *int) roles.Lookup
+		want          roles.Role
+		wantRefreshes int
+	}{
+		{
+			name: "a responder is not looked up again",
+			lookup: func(n *int) roles.Lookup {
+				return refreshingRoles{role: roles.Responder, refreshed: roles.Viewer, refreshes: n}
+			},
+			want: roles.Responder,
+		},
+		{
+			name: "a viewer is looked up again and may now respond",
+			lookup: func(n *int) roles.Lookup {
+				return refreshingRoles{role: roles.Viewer, refreshed: roles.Responder, refreshes: n}
+			},
+			want:          roles.Responder,
+			wantRefreshes: 1,
+		},
+		{
+			name:   "a lookup without Refresh keeps its answer",
+			lookup: func(*int) roles.Lookup { return plainRoles(roles.Viewer) },
+			want:   roles.Viewer,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			refreshes := 0
+			b := NewButtons(ButtonsOptions{Roles: tt.lookup(&refreshes), Logger: slog.New(slog.DiscardHandler)})
+
+			got, err := b.role(t.Context(), "T01TEAM", "U01ANA")
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+			require.Equal(t, tt.wantRefreshes, refreshes)
+		})
 	}
 }

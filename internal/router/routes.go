@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"time"
 
 	"github.com/nourtalaat/sidekick/internal/action"
@@ -44,14 +45,20 @@ type route struct {
 
 // newRoutes prepares the routes of cfg in the order they are tried.
 // modelSettings are the shared settings of each built connector, for the
-// model IDs, and policy holds the watchers of each route.
+// model IDs, and policy holds the watchers of each file route.
 func newRoutes(cfg *config.Config, modelSettings map[string]model.Settings, policy watch.Policy) ([]route, error) {
+	return compileRoutes(cfg, cfg.RoutesInOrder(), modelSettings, policy)
+}
+
+// compileRoutes prepares ordered, routes already in the order they are
+// tried, with the roles and strategies of cfg. A route that policy does not
+// list, one added at runtime, gets its watchers from its strategy.
+func compileRoutes(cfg *config.Config, ordered []config.Route, modelSettings map[string]model.Settings, policy watch.Policy) ([]route, error) {
 	strategies := cfg.StrategySet()
 	if strategies == nil {
 		return nil, errNoStrategies
 	}
 
-	ordered := cfg.RoutesInOrder()
 	routes := make([]route, 0, len(ordered))
 
 	for _, rc := range ordered {
@@ -60,7 +67,12 @@ func newRoutes(cfg *config.Config, modelSettings map[string]model.Settings, poli
 			return nil, fmt.Errorf("route %q: %w", rc.Name, err)
 		}
 
-		r.watchers = policy.Routes[rc.Name].Definitions
+		rp, ok := policy.Routes[rc.Name]
+		if !ok && !slices.ContainsFunc(cfg.Routes, func(f config.Route) bool { return f.Name == rc.Name }) {
+			rp = cfg.RuntimeRoutePolicy(rc)
+		}
+
+		r.watchers = rp.Definitions
 
 		routes = append(routes, r)
 	}

@@ -60,7 +60,7 @@ var deploymentPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 var errAzureThinking = errors.New("thinking: not accepted by the azure provider; OpenAI-style APIs control reasoning with effort instead (none turns it off where the model supports it)")
 
 // errNoAzureModel explains which models an Azure connector knows.
-var errNoAzureModel = errors.New("not an OpenAI model the azure provider knows; describe it in a capabilities block")
+var errNoAzureModel = errors.New("not a model the azure provider knows; describe it in a capabilities block")
 
 func init() {
 	registry.Models.Register(AzureProvider, registry.Typed(NewAzure))
@@ -79,7 +79,8 @@ type AzureConfig struct {
 	// Deployment is the deployment name, sent as the request's model.
 	// Empty means the same as Model.
 	Deployment string `yaml:"deployment"`
-	// API picks the API; empty means responses.
+	// API picks the API; empty means responses for OpenAI models and
+	// chat_completions for any other model.
 	API API `yaml:"api"`
 	// Auth is apiKey (the default) or entra.
 	Auth AzureAuth `yaml:"auth"`
@@ -182,13 +183,34 @@ func (c *AzureConfig) deployment() string {
 	return c.Deployment
 }
 
-// api returns the API the connector calls.
+// api returns the API the connector calls: the api setting, or the
+// Responses API for a known OpenAI model and Chat Completions, which every
+// Foundry model has, for any other.
 func (c *AzureConfig) api() API {
-	if c.API == "" {
+	switch {
+	case c.API != "":
+		return c.API
+	case c.isOpenAIModel():
 		return APIResponses
+	default:
+		return APIChatCompletions
 	}
+}
 
-	return c.API
+// isOpenAIModel reports whether the model is a known OpenAI model, rather
+// than a Foundry model from another provider or a declared one.
+func (c *AzureConfig) isOpenAIModel() bool {
+	_, ok := knownModels[c.Model]
+
+	return ok && c.Declared == nil
+}
+
+// isFoundryModel reports whether the model is a known Foundry model from
+// another provider.
+func (c *AzureConfig) isFoundryModel() bool {
+	_, ok := foundryModels[c.Model]
+
+	return ok && c.Declared == nil
 }
 
 // baseURL returns the address of the v1 API under the endpoint. An endpoint
@@ -200,14 +222,19 @@ func (c *AzureConfig) baseURL() string {
 	return base + azureAPIPath + "/"
 }
 
-// known returns the capabilities of the configured model, and false when
-// the connector knows nothing about it.
+// known returns the capabilities of the configured model: the declared
+// block, a known OpenAI model or a known Foundry model, and false when the
+// connector knows nothing about it.
 func (c *AzureConfig) known() (model.Capabilities, bool) {
 	if c.Declared != nil {
 		return c.Declared.capabilities(), true
 	}
 
-	caps, ok := knownModels[c.Model]
+	if caps, ok := knownModels[c.Model]; ok {
+		return caps, true
+	}
+
+	caps, ok := foundryModels[c.Model]
 
 	return caps, ok
 }
@@ -288,7 +315,7 @@ func buildAzure(ctx context.Context, name string, cfg AzureConfig, deps registry
 		model:               cfg.deployment(),
 		caps:                caps,
 		api:                 cfg.api(),
-		maxCompletionTokens: true,
+		maxCompletionTokens: !cfg.isFoundryModel(),
 		credentials:         credentials,
 	}
 

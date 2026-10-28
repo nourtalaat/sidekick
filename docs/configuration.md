@@ -287,19 +287,36 @@ gpt-with-a-key:
   for local runs. The identity needs the Cognitive Services OpenAI User
   role on the resource. Otherwise the key in `apiKeySecret` is sent in the
   `api-key` header, read again on every call.
-- **Known models** are the OpenAI models of the `openai` provider, named by
-  their model ID in `model`, whatever the deployment is called. For any
-  other model, add a `capabilities` block like the `openai` one.
-- **API.** The Responses API is the default, as Microsoft recommends for
-  Azure OpenAI models; set `api: chat_completions` to use Chat Completions.
+- **Known models** are named by their model ID in `model`, whatever the
+  deployment is called:
+  - the OpenAI models of the `openai` provider;
+  - these Foundry models from other providers: `Kimi-K2.6`, `Kimi-K2.5`,
+    `grok-4.7`, `grok-4.6` and `grok-4.3`, which call tools, and
+    `DeepSeek-V4-Pro`, `DeepSeek-V4-Flash` and `DeepSeek-V3.2`, which
+    cannot be the `investigate` model. DeepSeek's thinking models fail a
+    tool call turn unless the reasoning of earlier turns is sent back, which
+    Sidekick does not do on Chat Completions; use them for `triage` or
+    `summarize`. Foundry does not say whether these models honour a forced
+    tool choice, so Sidekick does not force one; when the model ends a turn
+    without calling a tool, the investigation reminds it to call
+    `submit_verdict`. They take no `effort`. MAI-Thinking-1 is served under
+    another path (`/mai/v1`) and does not work with this provider.
+
+  For any other model, add a `capabilities` block like the `openai` one.
+- **API.** OpenAI models use the Responses API by default, as Microsoft
+  recommends; every other model uses Chat Completions. Set `api` to choose.
   Reasoning is kept by Sidekick, as for the `openai` provider, and is not
-  shared with OpenAI's own API.
+  shared with OpenAI's own API. Chat Completions does not carry reasoning
+  back, so models that return reasoning there start each turn without it.
 - **Thinking** is not accepted; use `effort`.
 - **Errors.** A prompt that Azure's content filter blocks, and a
   deployment that does not exist, fail the step without retries.
-- **Prices.** The shipped OpenAI prices apply, by `model`. They are the
-  prices of Global Standard deployments; Data Zone and Regional
-  deployments cost 10% more, so set them with `prices`.
+- **Prices.** The shipped OpenAI prices apply, by `model`, and the shipped
+  table also has DeepSeek-V4-Pro, DeepSeek-V4-Flash, Kimi-K2.6 and
+  Kimi-K2.5. They are the prices of Global Standard deployments;
+  Data Zone and Regional deployments cost 10% more, so set them with
+  `prices`. The Grok models and DeepSeek-V3.2 have no shipped price; set
+  one with `prices`, or their calls count as free in the budgets.
 
 #### The `bedrock` provider
 
@@ -768,6 +785,74 @@ How it behaves:
   A database that cannot be reached, a refused login and a refused URL
   count as failures of the source.
 
+#### Azure sources (`type: azure`)
+
+An Azure source reads Azure subscriptions and Log Analytics workspaces
+through the Log Analytics query API and Azure Resource Manager, with AKS
+Workload Identity or a client secret. Its tools only read. [Azure
+source](sources/azure.md) lists the role the identity needs and how to set
+it up.
+
+| Key | Meaning |
+|---|---|
+| `subscriptions` | The IDs of the subscriptions the tools may read. Required; a call for any other subscription, or a resource in one, fails before anything is sent. |
+| `workspaces` | The Log Analytics workspaces `query_logs` may read, each with its workspace `id` (a GUID) and its `resourceID`. The model names a workspace by the last part of its resource ID. |
+| `tenantID` | The Microsoft Entra tenant of the identity. Default: `AZURE_TENANT_ID`, which the AKS webhook sets. |
+| `clientID` | The client ID of the identity. Default: `AZURE_CLIENT_ID`, which the AKS webhook sets. |
+| `clientSecret` | `{ name, key }` of a Secret that holds an app registration's client secret, for running outside AKS. Needs `tenantID` and `clientID`. Default: AKS Workload Identity. |
+
+```yaml
+sources:
+  azure:
+    type: azure
+    subscriptions: [11111111-2222-3333-4444-555555555555]
+    workspaces:
+      - id: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+        resourceID: /subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/shop/providers/Microsoft.OperationalInsights/workspaces/prod-logs
+```
+
+The tools, as the model sees them with the source name `azure`:
+
+| Tool | Returns |
+|---|---|
+| `azure__query_logs` | The tables and rows of a KQL query on a Log Analytics workspace. |
+| `azure__query_metrics` | Azure Monitor platform metrics of one resource, optionally split by dimension. |
+| `azure__list_alerts` | Azure Monitor alerts that started in a range, with severity, state and target. |
+| `azure__list_changes` | Activity Log writes, deletes and actions: deployments and config changes, with who made them. |
+| `azure__get_resource_health` | The Resource Health of one resource, or the subscription's unavailable resources and Azure service health events. |
+| `azure__get_aks_cluster` | An AKS cluster's state, versions, upgrade channel and node pools, or the list of clusters. |
+
+How it behaves:
+
+- **Start-up never waits for Azure.** The first tool call sets up the
+  credential and makes the first token. Tokens are kept until five
+  minutes before they expire; a client secret is read again for each new
+  token.
+- **Scope.** Tools take `subscription`, which may be left out when
+  `subscriptions` lists one, a full `resource` ID, or a `workspace`. Any
+  of them outside the config, or input that does not fit, such as a range
+  longer than 7 days, is a tool error, and nothing is sent.
+- **Queries.** The KQL of `query_logs` and the dimension filter of
+  `query_metrics` go to Azure as the model wrote them, so the identity's
+  role assignments are what limit what can be read. A query that calls
+  `workspace()`, `app()`, `resource()`, `adx()`, `arg()`, `cluster()` or
+  `database()`, or uses `externaldata`, is refused before it is sent,
+  because those reach beyond the workspace.
+- **Results** are JSON with links to the workspace's logs, the resource's
+  metrics or health page, the alert, the Activity Log or the cluster in
+  the Azure portal, which become evidence links in the report. Lists are
+  capped as [Azure source](sources/azure.md#limits) describes, and say
+  when they were cut.
+- **No data.** A query that returns no rows, metrics without values, an
+  empty list, and a resource Azure does not have, are reported as no data.
+- **Errors.** A refused request, such as a query Log Analytics cannot
+  parse or a permission the identity lacks, goes to the model as a tool
+  error with Azure's message. A refused token, rate limits, server errors
+  and a credential that cannot be set up count as failures of the source.
+- **Timeout.** `timeout` may be at most `60s`, because the HTTP client
+  stops waiting for response headers after 60 seconds; `sidekick config
+  validate` rejects a longer one.
+
 #### Mock sources (`type: mock`)
 
 A mock source answers tool calls from fixtures instead of a real system.
@@ -823,6 +908,11 @@ slack:
   signingSecret: { name: sidekick-slack, key: signingSecret }   # required with mode: events
   trustedBots: [B01SIGNOZ]                                  # bot IDs whose messages can be trusted
   apiURL: https://slack.com/api/                            # optional
+  roleGroups:                                               # Slack user group ID to role
+    S01ONCALL: responder
+    S01SRE: admin
+  roleUsers:                                                # Slack user ID to role
+    U01LEAD: approver
 ```
 
 `botTokenSecret` is the bot token of the Slack app. Every `slack` output
@@ -844,6 +934,12 @@ investigations:
   listener marked `trusted: true`. Every other message is untrusted.
 - `apiURL` is the Slack Web API base URL, ending in `/`. GovSlack
   workspaces use `https://slack-gov.com/api/`.
+- `roleGroups` and `roleUsers` give Slack users their Sidekick role, one
+  of `viewer`, `responder`, `approver` and `admin`. `roleGroups` maps
+  Slack user group IDs (`S...`) to roles, and `roleUsers` maps user IDs
+  (`U...` or `W...`) to roles, for teams without user groups. A user gets
+  the highest role from either map; a user in neither is a `responder`.
+  [Roles](slack.md#roles) says what each role may do.
 
 [Investigations in Slack](slack.md) describes how to set up the app.
 
@@ -912,7 +1008,8 @@ text of its attachments and blocks added, one part per line.
 [Listeners and mentions](slack.md#listeners-and-mentions) says which
 messages a listener sees and how events are built from them. Listeners
 need the Slack app to receive events, so `slack.appTokenSecret` (or
-`mode: events`) must be set.
+`mode: events`) must be set. Listeners can also be added from Slack with
+[`/sidekick listen`](slack.md#the-sidekick-command).
 
 `source: teams` makes a listener watch a Teams channel instead, through
 the bot in the [`teams`](#teams) section. Its keys are the same, with
@@ -1317,6 +1414,11 @@ result is still valid JSON. A string value under a key that names a secret,
 such as `password` or `Authorization`, is redacted as a whole. Text and tool
 results longer than 256 KiB are cut and marked as truncated.
 
+The IDs that locate a Slack or Teams message (the team, tenant, channel,
+message and thread IDs or timestamps, the sender's user ID and the Teams
+service URL) are stored as received, even when a rule matches them, because
+replies are sent to them. The message text is redacted like any other.
+
 ### `telemetry`
 
 ```yaml
@@ -1497,9 +1599,11 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   output, intake and strategy a route names is defined. Glob and regular
   expression matches parse.
 - `slack.mode` is `socket` or `events`, and `events` has `signingSecret`.
-  `trustedBots` are bot IDs, and listeners are set only when the Slack app
-  receives events. Each listener has a channel name or ID, a `sender.kind`
-  of `human` or `bot`, bot and user IDs of the right shape, regular
+  `trustedBots` are bot IDs, `roleGroups` keys are user group IDs,
+  `roleUsers` keys are user IDs, every role is a known role, and listeners
+  are set only when the Slack app receives events. Each listener has a
+  channel name or ID, a `sender.kind` of `human` or `bot`, bot and user
+  IDs of the right shape, regular
   expressions that parse, `extract` patterns with at least one named
   group, and `trusted: true` only when `slack.trustedBots` is set.
 - `teams` has an `appID` and a `tenantID` of the right shape and exactly

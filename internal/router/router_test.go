@@ -97,9 +97,68 @@ func TestNew(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			require.Len(t, r.routes, len(cfg.Routes))
+			require.Len(t, *r.routes.Load(), len(cfg.Routes))
 			require.NotNil(t, r.log)
 			require.NotNil(t, r.tracer)
 		})
 	}
+}
+
+func TestSetRoutes(t *testing.T) {
+	t.Parallel()
+
+	cfg, in := loadConfig(t)
+
+	runtime := config.NewRoute("runtime-first")
+	runtime.Priority = 1
+	runtime.Match = &config.Match{Service: "search-*"}
+
+	unknown := config.NewRoute("bad-strategy")
+	unknown.Strategy = "nope"
+
+	tests := []struct {
+		name    string
+		ordered []config.Route
+		wantErr bool
+	}{
+		{name: "a runtime route first", ordered: append([]config.Route{runtime}, cfg.RoutesInOrder()...)},
+		{name: "a route whose strategy is not loaded", ordered: []config.Route{unknown}, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			r, err := New(Options{Config: cfg, ModelSettings: in.ModelSettings})
+			require.NoError(t, err)
+
+			before := routeNames(*r.routes.Load())
+
+			err = r.SetRoutes(tt.ordered)
+			if tt.wantErr {
+				require.Error(t, err)
+				require.Equal(t, before, routeNames(*r.routes.Load()))
+
+				return
+			}
+
+			require.NoError(t, err)
+
+			want := make([]string, len(tt.ordered))
+			for i, rc := range tt.ordered {
+				want[i] = rc.Name
+			}
+
+			require.Equal(t, want, routeNames(*r.routes.Load()))
+		})
+	}
+}
+
+func routeNames(routes []route) []string {
+	names := make([]string, len(routes))
+	for i, r := range routes {
+		names[i] = r.name
+	}
+
+	return names
 }

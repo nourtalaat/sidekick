@@ -69,3 +69,35 @@ func TestVerdictRef(t *testing.T) {
 		})
 	}
 }
+
+func TestConfirmationView(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2026, 10, 26, 14, 10, 0, 0, time.UTC)
+
+	tests := []struct {
+		name string
+		c    confirmation
+		want any
+	}{
+		{name: "nothing confirmed", c: confirmation{}, want: nil},
+		{
+			name: "a confirmed verdict",
+			c:    confirmation{verdict: new("true_positive"), cause: new("Deploy 4f2c1a"), bySlackUser: new("U01ANA"), at: &at},
+			want: &confirmationView{Verdict: "true_positive", Cause: "Deploy 4f2c1a", BySlackUser: "U01ANA", At: "2026-10-26T14:10:00Z"},
+		},
+		{
+			name: "a verdict without a cause",
+			c:    confirmation{verdict: new("false_positive"), bySlackUser: new("U01BEN"), at: &at},
+			want: &confirmationView{Verdict: "false_positive", BySlackUser: "U01BEN", At: "2026-10-26T14:10:00Z"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tt.want, tt.c.view())
+		})
+	}
+}
