@@ -324,12 +324,24 @@ outputs and credentials, is set only in the file.
 
 ### Roles
 
-Until web UI login arrives, roles come from the `slack` section:
-`roleGroups` maps Slack user groups to roles, and `roleUsers` maps single
-users, for teams without user groups. A user gets the highest role from
-either; anyone else is a `responder`. Each role can do everything the
-roles below it can: `viewer`, then `responder`, then `approver`, then
-`admin`.
+A Slack user's role comes from up to three places, and the highest one
+wins:
+
+- `roleGroups` in the `slack` section maps Slack user groups to roles.
+- `roleUsers` maps single users, for teams without user groups.
+- With [web UI login](web-ui.md) on (the `oidc` section), Sidekick reads
+  the user's email from Slack and, when a web UI user with the same email
+  has signed in at least once, that user's role applies in Slack too.
+  This needs the `users:read.email` scope, which the manifest asks for;
+  without it, Sidekick logs a warning and matches nobody by email.
+
+A user none of these gives a role is a `responder`. A user matched by
+email gets the web UI user's role even when it is `viewer`: a Slack user
+who signs in to the web UI as a viewer loses the `responder` default in
+Slack, and can no longer give feedback or ask follow-ups there, unless
+`roleGroups` or `roleUsers` gives them more. Each role can
+do everything the roles below it can: `viewer`, then `responder`, then
+`approver`, then `admin`.
 
 ```yaml
 slack:
@@ -340,9 +352,11 @@ slack:
 ```
 
 Sidekick reads a user's groups with `usergroups.users.list`, one call per
-group in `roleGroups`, and keeps them for a day. When someone is refused
-for their role, it reads their groups again at once, so a person just
-added to a group does not wait.
+group in `roleGroups`, and their email with `users.info`, and keeps both
+for a day; the matched web UI user's role is read fresh every time. When
+someone is refused for their role, it reads their groups and email again
+at once, so a person just added to a group, or who just signed in to the
+web UI, does not wait.
 
 ## Output keys
 

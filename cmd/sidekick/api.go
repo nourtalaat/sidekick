@@ -9,6 +9,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/app"
 	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/auth"
+	"github.com/nourtalaat/sidekick/internal/rules"
 )
 
 // registerAPI serves the login endpoints under /auth and the JSON API
@@ -36,7 +37,16 @@ func registerAPI(ctx context.Context, a *app.App) error {
 		return fmt.Errorf("set up login: %w", err)
 	}
 
-	handler, err := api.New(api.Options{Auth: sessions, Logger: log})
+	handler, err := api.New(api.Options{
+		Auth:     sessions,
+		Tokens:   sessions,
+		Config:   cfg,
+		Rules:    rules.NewStore(a.Pool(), cfg),
+		Redactor: a.Redactor(),
+		Pool:     a.Pool(),
+		Audit:    audit.NewWriter(),
+		Logger:   log,
+	})
 	if err != nil {
 		return fmt.Errorf("set up the API: %w", err)
 	}

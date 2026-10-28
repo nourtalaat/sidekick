@@ -41,6 +41,9 @@ func registerSlackApp(ctx context.Context, a *app.App, cache *rules.Cache) error
 		Secrets: a.Secrets(),
 		Pool:    a.Pool(),
 		Logger:  a.Logger().With("component", "slackroles"),
+		// With web UI login on, a Slack user gets the role of the web UI
+		// user with the same email.
+		MatchEmails: cfg.OIDC != nil,
 	})
 	if err != nil {
 		return fmt.Errorf("set up Slack roles: %w", err)
