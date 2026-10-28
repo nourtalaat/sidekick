@@ -125,12 +125,14 @@ An admin signed in to the web UI creates tokens with
   config file with its defaults, which only a config change can alter,
   and `runtime`, the listeners and routes changed at runtime, with their
   version and who changed them last. Secrets appear only as references
-  to a Secret's name and key, never as values, and strings the
-  [redaction](configuration.md#redaction) rules match are redacted.
+  to a Secret's name and key, never as values. In case a credential was
+  written into the file by mistake, the user and password of every URL
+  are removed, and strings the [redaction](configuration.md#redaction)
+  rules match are redacted.
 - `GET /api/v1/jobs?status=dead` lists dead jobs, the background jobs
   that gave up, newest first, 50 at a time (`limit` takes up to 100);
   pass the answer's `nextCursor` as `cursor` for the next page. Each
-  job's last error is redacted.
+  job's last error is masked the same way.
 - `POST /api/v1/jobs/{id}/retry` sets a dead job back to pending with its
   attempts reset. The retry is written to the audit log. A job that is
   not dead, or whose unique key a pending or running job holds, answers

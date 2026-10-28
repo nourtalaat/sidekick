@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/nourtalaat/sidekick/internal/api"
 	"github.com/nourtalaat/sidekick/internal/audit"
@@ -42,6 +43,15 @@ const (
 	adCSRF = "csrf-ad"
 )
 
+// sourceYAML is a source section with credentials written in by mistake:
+// a URL with a user and password, and a header value the email rule
+// matches. GET /config must mask both.
+const sourceYAML = `
+url: https://mcp-bot:hunter2@mcp.internal/mcp
+headers:
+  X-Contact: { value: pager@example.com }
+`
+
 // TestMain runs the tests, then lets storetest stop the Postgres container
 // it may have started.
 func TestMain(m *testing.M) {
@@ -66,8 +76,13 @@ func setup(t *testing.T) server {
 
 	provider := authtest.NewProvider(t, "sidekick")
 
+	var source yaml.Node
+
+	require.NoError(t, yaml.Unmarshal([]byte(sourceYAML), &source))
+
 	cfg := &config.Config{
 		Server:   config.Server{PublicURL: "https://sidekick.example.com", Listen: ":8080"},
+		Sources:  map[string]config.Section{"signoz": {Type: "mcp", Node: source.Content[0]}},
 		Database: config.Database{URLSecret: registry.SecretRef{Name: "sidekick-db", Key: "url"}, MaxConns: 20},
 		OIDC: &config.OIDC{
 			Issuer:       provider.Issuer(),

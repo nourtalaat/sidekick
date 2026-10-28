@@ -150,7 +150,7 @@ func (s *server) RetryJob(ctx context.Context, req apigen.RetryJobRequestObject)
 	return apigen.RetryJob204Response{}, nil
 }
 
-// jobOf is the API's view of a dead job, with its last error redacted.
+// jobOf is the API's view of a dead job, with its last error masked.
 func (s *server) jobOf(row db.ListDeadJobsRow) apigen.Job {
 	j := apigen.Job{
 		Id: row.ID, Kind: row.Kind, Route: row.Route, Attempts: int(row.Attempts), MaxAttempts: int(row.MaxAttempts),
@@ -158,11 +158,7 @@ func (s *server) jobOf(row db.ListDeadJobsRow) apigen.Job {
 	}
 
 	if row.LastError != nil {
-		text := *row.LastError
-		if s.redactor != nil {
-			text = s.redactor.Text(text).Text
-		}
-
+		text := s.mask(*row.LastError)
 		j.LastError = &text
 	}
 

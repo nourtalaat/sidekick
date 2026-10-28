@@ -3,11 +3,16 @@ package api
 import (
 	"context"
 	"fmt"
+	"regexp"
 
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/rules"
 )
+
+// urlUserinfo matches the scheme and the user and password of a URL, such
+// as "https://" and "user:token@" in https://user:token@mcp.internal/.
+var urlUserinfo = regexp.MustCompile(`(?i)\b([a-z][a-z0-9+.-]*://)[^/\s?#@]+@`)
 
 // RuntimeRules reads the listeners and routes stored at runtime.
 // *rules.Store is one.
@@ -16,9 +21,10 @@ type RuntimeRules interface {
 }
 
 // GetConfig returns the file config with its defaults and the runtime
-// rules. The config holds secrets only as references; strings the
-// redaction rules match are redacted too, in case a value that should
-// have been a secret was written into the file.
+// rules. The config holds secrets only as references; in case a
+// credential was written into the file anyway, every string is masked:
+// URLs lose their user and password, and what the redaction rules match
+// is redacted.
 func (s *server) GetConfig(ctx context.Context, _ apigen.GetConfigRequestObject) (apigen.GetConfigResponseObject, error) {
 	rt, err := s.rules.Load(ctx)
 	if err != nil {
@@ -59,16 +65,13 @@ func (s *server) ruleDocument(rule any) map[string]any {
 	return doc
 }
 
-// redacted returns doc with every string, map keys aside, passed through
-// the redactor.
+// redacted returns doc with every string, map keys aside, masked: the
+// user and password of every URL in it removed, and the rest passed
+// through the redactor.
 func (s *server) redacted(doc any) any {
-	if s.redactor == nil {
-		return doc
-	}
-
 	switch x := doc.(type) {
 	case string:
-		return s.redactor.Text(x).Text
+		return s.mask(x)
 	case map[string]any:
 		for k, v := range x {
 			x[k] = s.redacted(v)
@@ -84,4 +87,15 @@ func (s *server) redacted(doc any) any {
 	default:
 		return x
 	}
+}
+
+// mask removes the user and password of every URL in text, which are
+// credentials whatever the redaction rules say, then redacts the rest.
+func (s *server) mask(text string) string {
+	text = urlUserinfo.ReplaceAllString(text, "${1}")
+	if s.redactor == nil {
+		return text
+	}
+
+	return s.redactor.Text(text).Text
 }

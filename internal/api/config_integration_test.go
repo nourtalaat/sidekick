@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -58,6 +57,7 @@ func TestGetConfig(t *testing.T) {
 						ClientSecret map[string]string   `json:"clientSecret"`
 						Roles        map[string][]string `json:"roles"`
 					} `json:"oidc"`
+					Sources map[string]map[string]any `json:"sources"`
 				} `json:"file"`
 				Runtime struct {
 					Listeners []struct {
@@ -92,7 +92,12 @@ func TestGetConfig(t *testing.T) {
 			require.Equal(t, "checkout", got.Runtime.Routes[0].Name)
 			require.False(t, got.Runtime.Routes[0].Enabled)
 
-			require.False(t, strings.Contains(rec.Body.String(), "client-secret"), "no secret value is shown")
+			require.NotContains(t, rec.Body.String(), "client-secret", "no secret value is shown")
+			require.NotContains(t, rec.Body.String(), "hunter2", "a URL's password is removed")
+			require.NotContains(t, rec.Body.String(), "mcp-bot", "a URL's user is removed")
+			require.NotContains(t, rec.Body.String(), "pager@example.com", "a header value a redaction rule matches is redacted")
+			require.Equal(t, "https://mcp.internal/mcp", got.File.Sources["signoz"]["url"])
+			require.Equal(t, "mcp", got.File.Sources["signoz"]["type"])
 		})
 	}
 }
