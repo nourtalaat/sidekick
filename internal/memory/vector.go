@@ -79,6 +79,12 @@ func (v *Vectors) Nearest(ctx context.Context, q db.DBTX, text string, f Nearest
 		return nil
 	}
 
+	// A NULL array makes "<> ALL" unknown and the query return nothing, so a
+	// search that excludes no investigation sends an empty one.
+	if f.Exclude == nil {
+		f.Exclude = []uuid.UUID{}
+	}
+
 	rows, err := db.New(q).ListNearestMemory(ctx, db.ListNearestMemoryParams{
 		Query:      FormatVector(res.Vectors[0]),
 		Model:      v.model,
