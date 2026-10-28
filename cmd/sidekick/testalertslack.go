@@ -75,7 +75,7 @@ func sendSlackTestAlert(ctx context.Context, out io.Writer, cfg *config.Config, 
 	namespace, pod, exists, err := find(ctx, cfg, regs)
 	if err != nil {
 		if werr := writeLine(out, "No pod could be read from the cluster: "+err.Error()); werr != nil {
-			return werr
+			return fmt.Errorf("print why no pod was read: %w", werr)
 		}
 	}
 
@@ -114,7 +114,7 @@ func reportSlackAlert(out io.Writer, cfg *config.Config, channel, namespace, pod
 
 	for _, line := range lines {
 		if err := writeLine(out, line); err != nil {
-			return err
+			return fmt.Errorf("print the result: %w", err)
 		}
 	}
 
