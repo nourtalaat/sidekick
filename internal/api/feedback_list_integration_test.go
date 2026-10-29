@@ -46,7 +46,7 @@ func TestListInvestigationFeedback(t *testing.T) {
 	}
 
 	require.Equal(t, []feedbackPart{verdict}, read(t, inv1, viSession), "a viewer sees the counts of the current run")
-	require.Empty(t, read(t, inv2, viSession), "no feedback gives an empty list")
+	require.Empty(t, read(t, inv4, viSession), "no feedback gives an empty list")
 
 	for _, body := range []string{
 		`{"targetKind":"verdict","targetRef":"run:2/verdict","rating":"wrong","reason":"It was a load test.","correctVerdict":"false_positive","correctCause":"A load test."}`,
