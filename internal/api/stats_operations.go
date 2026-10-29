@@ -3,11 +3,11 @@ package api
 import (
 	"context"
 	"fmt"
-	"math"
 	"net/http"
 
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/report"
+	"github.com/nourtalaat/sidekick/internal/rollup"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
@@ -17,14 +17,6 @@ const (
 	maxHourlyDays = 7
 	// verdictNone names the investigations that have no verdict.
 	verdictNone = "none"
-	// histBase and histGrowth define the buckets of the histograms of
-	// stats_hourly: bucket 0 holds times up to histBase milliseconds, and
-	// each later bucket ends histGrowth times as late as the one before.
-	// They are the numbers rollup_hist_bucket uses.
-	histBase   = 500.0
-	histGrowth = 1.6
-	// histBuckets is the number of buckets of a histogram.
-	histBuckets = 24
 )
 
 // opsFigures are the counts the operations panels add up.
@@ -208,8 +200,8 @@ func operationsTotals(ctx context.Context, q *db.Queries, w statsWindow, f stats
 		WatchTimeouts: total.watchTimeouts,
 	}
 
-	out.MedianFirstFindingMs = histMedian(histCounts(firstFinding, func(r db.FirstFindingHistogramRow) (int32, int64) { return r.Bucket, r.N }))
-	out.MedianDowntimeMs = histMedian(histCounts(downtime, func(r db.DowntimeHistogramRow) (int32, int64) { return r.Bucket, r.N }))
+	out.MedianFirstFindingMs = rollup.HistMedian(rollup.HistCounts(firstFinding, func(r db.FirstFindingHistogramRow) (int32, int64) { return r.Bucket, r.N }))
+	out.MedianDowntimeMs = rollup.HistMedian(rollup.HistCounts(downtime, func(r db.DowntimeHistogramRow) (int32, int64) { return r.Bucket, r.N }))
 
 	return out, nil
 }
@@ -238,10 +230,10 @@ func downtimeRows(ctx context.Context, q *db.Queries, w statsWindow, f statsFilt
 	for _, h := range hists {
 		k := key{h.Route, h.Service}
 		if counts[k] == nil {
-			counts[k] = make([]int64, histBuckets)
+			counts[k] = make([]int64, rollup.HistBuckets)
 		}
 
-		if h.Bucket >= 1 && h.Bucket <= histBuckets {
+		if h.Bucket >= 1 && h.Bucket <= rollup.HistBuckets {
 			counts[k][h.Bucket-1] += h.N
 		}
 	}
@@ -253,72 +245,13 @@ func downtimeRows(ctx context.Context, q *db.Queries, w statsWindow, f statsFilt
 		}
 
 		if c := counts[key{r.Route, r.Service}]; c != nil {
-			row.MedianDowntimeMs = histMedian(c)
+			row.MedianDowntimeMs = rollup.HistMedian(c)
 		}
 
 		out = append(out, row)
 	}
 
 	return out, nil
-}
-
-// histCounts puts the rows of a histogram, whose buckets count from 1, in
-// a slice of histBuckets counts.
-func histCounts[T any](rows []T, of func(T) (int32, int64)) []int64 {
-	counts := make([]int64, histBuckets)
-
-	for _, r := range rows {
-		bucket, n := of(r)
-		if bucket >= 1 && bucket <= histBuckets {
-			counts[bucket-1] += n
-		}
-	}
-
-	return counts
-}
-
-// histMedian returns about the median of the values a histogram counts, in
-// milliseconds, or nil when it counts none. It finds the bucket the middle
-// value is in and places the value in it in proportion to its rank among
-// the bucket's values, so it is exact only to the width of a bucket.
-func histMedian(counts []int64) *float64 {
-	var total int64
-	for _, n := range counts {
-		total += n
-	}
-
-	if total == 0 {
-		return nil
-	}
-
-	target := float64(total) / 2
-
-	var before int64
-
-	for i, n := range counts {
-		if n == 0 || float64(before+n) < target {
-			before += n
-
-			continue
-		}
-
-		lo, hi := histBounds(i)
-		fraction := (target - float64(before)) / float64(n)
-
-		return new(lo + fraction*(hi-lo))
-	}
-
-	return nil
-}
-
-// histBounds returns the lower and upper end of bucket i, in milliseconds.
-func histBounds(i int) (float64, float64) {
-	hi := histBase * math.Pow(histGrowth, float64(i))
-	if i == 0 {
-		return 0, hi
-	}
-
-	return histBase * math.Pow(histGrowth, float64(i-1)), hi
 }
 
 // verdictName is the name of a verdict in the series, with none for the
