@@ -844,6 +844,41 @@ paths:
                 $ref: "#/components/schemas/CostStats"
         default:
           $ref: "#/components/responses/Problem"
+  /stats/operations:
+    get:
+      operationId: GetOperationsStats
+      summary: Volume, speed, tool calls, false positives, fixes, actions and downtime
+      description: |
+        What the investigations created in the range did, from the hourly
+        rollup, by UTC day or hour. A median is worked out from counts in
+        buckets of growing width, so it is about right (within a third),
+        not exact. The downtime is the time from the first event of a group
+        to the last recovery of its watchers, for groups whose watchers all
+        recovered. Actions are 0 until actions exist.
+      x-sidekick-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/StatsFrom"
+        - $ref: "#/components/parameters/StatsTo"
+        - $ref: "#/components/parameters/StatsRoute"
+        - $ref: "#/components/parameters/StatsService"
+        - $ref: "#/components/parameters/StatsModel"
+        - $ref: "#/components/parameters/StatsVerdict"
+        - name: interval
+          in: query
+          description: The width of a bucket of the series. An hour needs a range of at most 7 days.
+          schema:
+            type: string
+            enum: [day, hour]
+            default: day
+      responses:
+        "200":
+          description: The numbers of the range and of the range before it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsStats"
+        default:
+          $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
     session:
@@ -2504,3 +2539,165 @@ components:
           type: integer
           format: int64
           description: The route's daily cap; left out when it has none.
+    OperationsStats:
+      type: object
+      required: [from, to, interval, series, totals, previous, verdicts, downtime]
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        interval:
+          type: string
+          enum: [day, hour]
+        series:
+          type: array
+          description: One entry for each bucket that has investigations, oldest first.
+          items:
+            $ref: "#/components/schemas/OperationsBucket"
+        totals:
+          $ref: "#/components/schemas/OperationsTotals"
+        previous:
+          allOf:
+            - $ref: "#/components/schemas/OperationsTotals"
+          description: The same totals for the range of equal length that ends the day before `from`.
+        verdicts:
+          type: array
+          description: The investigations of the range by verdict.
+          items:
+            $ref: "#/components/schemas/VerdictCount"
+        downtime:
+          type: array
+          description: Recoveries and downtime by route and service.
+          items:
+            $ref: "#/components/schemas/DowntimeRow"
+    OperationsFigures:
+      type: object
+      required:
+        - investigations
+        - finished
+        - durationN
+        - durationMsSum
+        - firstFindingN
+        - firstFindingMsSum
+        - toolCalls
+        - noisyFixed
+        - actionsProposed
+        - actionsApproved
+        - actionsExecuted
+        - recoveries
+        - downtimeMsSum
+        - watchTimeouts
+      properties:
+        investigations:
+          type: integer
+          format: int64
+          description: Investigations created.
+        finished:
+          type: integer
+          format: int64
+          description: Those that ended, as final, failed or cancelled.
+        durationN:
+          type: integer
+          format: int64
+          description: Those with a duration, which started and ended.
+        durationMsSum:
+          type: integer
+          format: int64
+        firstFindingN:
+          type: integer
+          format: int64
+          description: Those with a first finding.
+        firstFindingMsSum:
+          type: integer
+          format: int64
+          description: The time from creation to the first finding, added up. Divide by firstFindingN for the mean.
+        toolCalls:
+          type: integer
+          format: int64
+        noisyFixed:
+          type: integer
+          format: int64
+          description: False positives whose fix a responder marked as applied.
+        actionsProposed:
+          type: integer
+          format: int64
+        actionsApproved:
+          type: integer
+          format: int64
+        actionsExecuted:
+          type: integer
+          format: int64
+        recoveries:
+          type: integer
+          format: int64
+          description: Groups whose watchers all recovered.
+        downtimeMsSum:
+          type: integer
+          format: int64
+          description: Their downtime added up.
+        watchTimeouts:
+          type: integer
+          format: int64
+          description: Watchers that timed out.
+    OperationsBucket:
+      allOf:
+        - $ref: "#/components/schemas/OperationsFigures"
+        - type: object
+          required: [bucket, verdicts]
+          properties:
+            bucket:
+              type: string
+              format: date-time
+              description: The start of the UTC day or hour.
+            verdicts:
+              type: array
+              items:
+                $ref: "#/components/schemas/VerdictCount"
+    OperationsTotals:
+      allOf:
+        - $ref: "#/components/schemas/OperationsFigures"
+        - type: object
+          properties:
+            medianFirstFindingMs:
+              type: number
+              format: double
+              description: About the median time from creation to the first finding; left out when there is none.
+            medianDowntimeMs:
+              type: number
+              format: double
+              description: About the median downtime of a recovery; left out when there is none.
+    VerdictCount:
+      type: object
+      required: [verdict, investigations]
+      properties:
+        verdict:
+          type: string
+          description: A verdict, or `none` for investigations that have not ended with one.
+        investigations:
+          type: integer
+          format: int64
+    DowntimeRow:
+      type: object
+      required: [route, service, recoveries, downtimeMsSum, watchTimeouts]
+      properties:
+        route:
+          type: string
+        service:
+          type: string
+          description: Empty when the investigation had no service.
+        recoveries:
+          type: integer
+          format: int64
+        downtimeMsSum:
+          type: integer
+          format: int64
+        watchTimeouts:
+          type: integer
+          format: int64
+        medianDowntimeMs:
+          type: number
+          format: double
+          description: About the median downtime; left out when nothing recovered.

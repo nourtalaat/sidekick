@@ -620,6 +620,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stats/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Volume, speed, tool calls, false positives, fixes, actions and downtime
+         * @description What the investigations created in the range did, from the hourly
+         *     rollup, by UTC day or hour. A median is worked out from counts in
+         *     buckets of growing width, so it is about right (within a third),
+         *     not exact. The downtime is the time from the first event of a group
+         *     to the last recovery of its watchers, for groups whose watchers all
+         *     recovered. Actions are 0 until actions exist.
+         */
+        get: operations["GetOperationsStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1575,6 +1600,122 @@ export interface components {
              */
             capMicros?: number;
         };
+        OperationsStats: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            /** @enum {string} */
+            interval: "day" | "hour";
+            /** @description One entry for each bucket that has investigations, oldest first. */
+            series: components["schemas"]["OperationsBucket"][];
+            totals: components["schemas"]["OperationsTotals"];
+            /** @description The same totals for the range of equal length that ends the day before `from`. */
+            previous: components["schemas"]["OperationsTotals"];
+            /** @description The investigations of the range by verdict. */
+            verdicts: components["schemas"]["VerdictCount"][];
+            /** @description Recoveries and downtime by route and service. */
+            downtime: components["schemas"]["DowntimeRow"][];
+        };
+        OperationsFigures: {
+            /**
+             * Format: int64
+             * @description Investigations created.
+             */
+            investigations: number;
+            /**
+             * Format: int64
+             * @description Those that ended, as final, failed or cancelled.
+             */
+            finished: number;
+            /**
+             * Format: int64
+             * @description Those with a duration, which started and ended.
+             */
+            durationN: number;
+            /** Format: int64 */
+            durationMsSum: number;
+            /**
+             * Format: int64
+             * @description Those with a first finding.
+             */
+            firstFindingN: number;
+            /**
+             * Format: int64
+             * @description The time from creation to the first finding, added up. Divide by firstFindingN for the mean.
+             */
+            firstFindingMsSum: number;
+            /** Format: int64 */
+            toolCalls: number;
+            /**
+             * Format: int64
+             * @description False positives whose fix a responder marked as applied.
+             */
+            noisyFixed: number;
+            /** Format: int64 */
+            actionsProposed: number;
+            /** Format: int64 */
+            actionsApproved: number;
+            /** Format: int64 */
+            actionsExecuted: number;
+            /**
+             * Format: int64
+             * @description Groups whose watchers all recovered.
+             */
+            recoveries: number;
+            /**
+             * Format: int64
+             * @description Their downtime added up.
+             */
+            downtimeMsSum: number;
+            /**
+             * Format: int64
+             * @description Watchers that timed out.
+             */
+            watchTimeouts: number;
+        };
+        OperationsBucket: components["schemas"]["OperationsFigures"] & {
+            /**
+             * Format: date-time
+             * @description The start of the UTC day or hour.
+             */
+            bucket: string;
+            verdicts: components["schemas"]["VerdictCount"][];
+        };
+        OperationsTotals: components["schemas"]["OperationsFigures"] & {
+            /**
+             * Format: double
+             * @description About the median time from creation to the first finding; left out when there is none.
+             */
+            medianFirstFindingMs?: number;
+            /**
+             * Format: double
+             * @description About the median downtime of a recovery; left out when there is none.
+             */
+            medianDowntimeMs?: number;
+        };
+        VerdictCount: {
+            /** @description A verdict, or `none` for investigations that have not ended with one. */
+            verdict: string;
+            /** Format: int64 */
+            investigations: number;
+        };
+        DowntimeRow: {
+            route: string;
+            /** @description Empty when the investigation had no service. */
+            service: string;
+            /** Format: int64 */
+            recoveries: number;
+            /** Format: int64 */
+            downtimeMsSum: number;
+            /** Format: int64 */
+            watchTimeouts: number;
+            /**
+             * Format: double
+             * @description About the median downtime; left out when nothing recovered.
+             */
+            medianDowntimeMs?: number;
+        };
     };
     responses: {
         /** @description An error, as problem details. */
@@ -2395,6 +2536,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CostStats"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetOperationsStats: {
+        parameters: {
+            query?: {
+                /** @description The first day of the range, a UTC date. The default is 29 days before `to`. */
+                from?: components["parameters"]["StatsFrom"];
+                /** @description The last day of the range, a UTC date, included. The default is today. The range is at most 400 days. */
+                to?: components["parameters"]["StatsTo"];
+                /** @description Only investigations of this route. */
+                route?: components["parameters"]["StatsRoute"];
+                /** @description Only investigations of this service. */
+                service?: components["parameters"]["StatsService"];
+                /** @description Only investigations whose first model turn used this model. */
+                model?: components["parameters"]["StatsModel"];
+                /** @description Only investigations with this verdict. */
+                verdict?: components["parameters"]["StatsVerdict"];
+                /** @description The width of a bucket of the series. An hour needs a range of at most 7 days. */
+                interval?: "day" | "hour";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The numbers of the range and of the range before it. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsStats"];
                 };
             };
             default: components["responses"]["Problem"];

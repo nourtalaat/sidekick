@@ -112,6 +112,360 @@ func (q *Queries) CostPerInvestigationTotals(ctx context.Context, arg CostPerInv
 	return i, err
 }
 
+const downtimeByRouteService = `-- name: DowntimeByRouteService :many
+SELECT route, service,
+       sum(recoveries)::bigint AS recoveries,
+       sum(downtime_ms_sum)::bigint AS downtime_ms_sum,
+       sum(watch_timeouts)::bigint AS watch_timeouts
+FROM stats_hourly
+WHERE hour >= $1 AND hour < $2
+  AND (recoveries > 0 OR watch_timeouts > 0)
+  AND ($3::text IS NULL OR route = $3)
+  AND ($4::text IS NULL OR service = $4)
+  AND ($5::text IS NULL OR model = $5)
+  AND ($6::text IS NULL OR verdict = $6)
+GROUP BY route, service
+ORDER BY route, service
+`
+
+type DowntimeByRouteServiceParams struct {
+	FromHour time.Time
+	ToHour   time.Time
+	Route    *string
+	Service  *string
+	Model    *string
+	Verdict  *string
+}
+
+type DowntimeByRouteServiceRow struct {
+	Route         string
+	Service       string
+	Recoveries    int64
+	DowntimeMsSum int64
+	WatchTimeouts int64
+}
+
+// DowntimeByRouteService sums the recoveries, the downtime and the timed
+// out watchers of the range by route and service. Every filter applies.
+func (q *Queries) DowntimeByRouteService(ctx context.Context, arg DowntimeByRouteServiceParams) ([]DowntimeByRouteServiceRow, error) {
+	rows, err := q.db.Query(ctx, downtimeByRouteService,
+		arg.FromHour,
+		arg.ToHour,
+		arg.Route,
+		arg.Service,
+		arg.Model,
+		arg.Verdict,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DowntimeByRouteServiceRow
+	for rows.Next() {
+		var i DowntimeByRouteServiceRow
+		if err := rows.Scan(
+			&i.Route,
+			&i.Service,
+			&i.Recoveries,
+			&i.DowntimeMsSum,
+			&i.WatchTimeouts,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const downtimeHistogram = `-- name: DowntimeHistogram :many
+SELECT h.i::int AS bucket, sum(h.n)::bigint AS n
+FROM stats_hourly s,
+     unnest(s.downtime_hist) WITH ORDINALITY AS h(n, i)
+WHERE s.hour >= $1 AND s.hour < $2
+  AND s.recoveries > 0
+  AND ($3::text IS NULL OR s.route = $3)
+  AND ($4::text IS NULL OR s.service = $4)
+  AND ($5::text IS NULL OR s.model = $5)
+  AND ($6::text IS NULL OR s.verdict = $6)
+GROUP BY h.i
+HAVING sum(h.n) > 0
+ORDER BY h.i
+`
+
+type DowntimeHistogramParams struct {
+	FromHour time.Time
+	ToHour   time.Time
+	Route    *string
+	Service  *string
+	Model    *string
+	Verdict  *string
+}
+
+type DowntimeHistogramRow struct {
+	Bucket int32
+	N      int64
+}
+
+// DowntimeHistogram is FirstFindingHistogram for the downtime.
+func (q *Queries) DowntimeHistogram(ctx context.Context, arg DowntimeHistogramParams) ([]DowntimeHistogramRow, error) {
+	rows, err := q.db.Query(ctx, downtimeHistogram,
+		arg.FromHour,
+		arg.ToHour,
+		arg.Route,
+		arg.Service,
+		arg.Model,
+		arg.Verdict,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DowntimeHistogramRow
+	for rows.Next() {
+		var i DowntimeHistogramRow
+		if err := rows.Scan(&i.Bucket, &i.N); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const downtimeHistograms = `-- name: DowntimeHistograms :many
+SELECT s.route, s.service, h.i::int AS bucket, sum(h.n)::bigint AS n
+FROM stats_hourly s,
+     unnest(s.downtime_hist) WITH ORDINALITY AS h(n, i)
+WHERE s.hour >= $1 AND s.hour < $2
+  AND s.recoveries > 0
+  AND ($3::text IS NULL OR s.route = $3)
+  AND ($4::text IS NULL OR s.service = $4)
+  AND ($5::text IS NULL OR s.model = $5)
+  AND ($6::text IS NULL OR s.verdict = $6)
+GROUP BY s.route, s.service, h.i
+HAVING sum(h.n) > 0
+ORDER BY s.route, s.service, h.i
+`
+
+type DowntimeHistogramsParams struct {
+	FromHour time.Time
+	ToHour   time.Time
+	Route    *string
+	Service  *string
+	Model    *string
+	Verdict  *string
+}
+
+type DowntimeHistogramsRow struct {
+	Route   string
+	Service string
+	Bucket  int32
+	N       int64
+}
+
+// DowntimeHistograms adds up the downtime histogram of the range by route
+// and service, one row for each of its buckets that has a count. Every
+// filter applies.
+func (q *Queries) DowntimeHistograms(ctx context.Context, arg DowntimeHistogramsParams) ([]DowntimeHistogramsRow, error) {
+	rows, err := q.db.Query(ctx, downtimeHistograms,
+		arg.FromHour,
+		arg.ToHour,
+		arg.Route,
+		arg.Service,
+		arg.Model,
+		arg.Verdict,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DowntimeHistogramsRow
+	for rows.Next() {
+		var i DowntimeHistogramsRow
+		if err := rows.Scan(
+			&i.Route,
+			&i.Service,
+			&i.Bucket,
+			&i.N,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const firstFindingHistogram = `-- name: FirstFindingHistogram :many
+SELECT h.i::int AS bucket, sum(h.n)::bigint AS n
+FROM stats_hourly s,
+     unnest(s.first_finding_hist) WITH ORDINALITY AS h(n, i)
+WHERE s.hour >= $1 AND s.hour < $2
+  AND s.first_finding_n > 0
+  AND ($3::text IS NULL OR s.route = $3)
+  AND ($4::text IS NULL OR s.service = $4)
+  AND ($5::text IS NULL OR s.model = $5)
+  AND ($6::text IS NULL OR s.verdict = $6)
+GROUP BY h.i
+HAVING sum(h.n) > 0
+ORDER BY h.i
+`
+
+type FirstFindingHistogramParams struct {
+	FromHour time.Time
+	ToHour   time.Time
+	Route    *string
+	Service  *string
+	Model    *string
+	Verdict  *string
+}
+
+type FirstFindingHistogramRow struct {
+	Bucket int32
+	N      int64
+}
+
+// FirstFindingHistogram adds up the histograms of the time to the first
+// finding over the hours from from_hour up to to_hour, one row for each of
+// their 24 buckets that has a count. Every filter applies.
+func (q *Queries) FirstFindingHistogram(ctx context.Context, arg FirstFindingHistogramParams) ([]FirstFindingHistogramRow, error) {
+	rows, err := q.db.Query(ctx, firstFindingHistogram,
+		arg.FromHour,
+		arg.ToHour,
+		arg.Route,
+		arg.Service,
+		arg.Model,
+		arg.Verdict,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FirstFindingHistogramRow
+	for rows.Next() {
+		var i FirstFindingHistogramRow
+		if err := rows.Scan(&i.Bucket, &i.N); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const operationsByBucket = `-- name: OperationsByBucket :many
+SELECT date_trunc($1::text, hour AT TIME ZONE 'UTC')::timestamp AS bucket,
+       verdict,
+       sum(investigations)::bigint AS investigations,
+       sum(finished)::bigint AS finished,
+       sum(duration_n)::bigint AS duration_n,
+       sum(duration_ms_sum)::bigint AS duration_ms_sum,
+       sum(first_finding_n)::bigint AS first_finding_n,
+       sum(first_finding_ms_sum)::bigint AS first_finding_ms_sum,
+       sum(tool_calls)::bigint AS tool_calls,
+       sum(noisy_fixed)::bigint AS noisy_fixed,
+       sum(actions_proposed)::bigint AS actions_proposed,
+       sum(actions_approved)::bigint AS actions_approved,
+       sum(actions_executed)::bigint AS actions_executed,
+       sum(recoveries)::bigint AS recoveries,
+       sum(downtime_ms_sum)::bigint AS downtime_ms_sum,
+       sum(watch_timeouts)::bigint AS watch_timeouts
+FROM stats_hourly
+WHERE hour >= $2 AND hour < $3
+  AND ($4::text IS NULL OR route = $4)
+  AND ($5::text IS NULL OR service = $5)
+  AND ($6::text IS NULL OR model = $6)
+  AND ($7::text IS NULL OR verdict = $7)
+GROUP BY 1, 2
+ORDER BY 1, 2
+`
+
+type OperationsByBucketParams struct {
+	Bucket   string
+	FromHour time.Time
+	ToHour   time.Time
+	Route    *string
+	Service  *string
+	Model    *string
+	Verdict  *string
+}
+
+type OperationsByBucketRow struct {
+	Bucket            pgtype.Timestamp
+	Verdict           string
+	Investigations    int64
+	Finished          int64
+	DurationN         int64
+	DurationMsSum     int64
+	FirstFindingN     int64
+	FirstFindingMsSum int64
+	ToolCalls         int64
+	NoisyFixed        int64
+	ActionsProposed   int64
+	ActionsApproved   int64
+	ActionsExecuted   int64
+	Recoveries        int64
+	DowntimeMsSum     int64
+	WatchTimeouts     int64
+}
+
+// OperationsByBucket sums the hourly rows of the hours from from_hour up to
+// to_hour by UTC bucket, which is a day or an hour as bucket says, and by
+// verdict. Every filter applies.
+func (q *Queries) OperationsByBucket(ctx context.Context, arg OperationsByBucketParams) ([]OperationsByBucketRow, error) {
+	rows, err := q.db.Query(ctx, operationsByBucket,
+		arg.Bucket,
+		arg.FromHour,
+		arg.ToHour,
+		arg.Route,
+		arg.Service,
+		arg.Model,
+		arg.Verdict,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OperationsByBucketRow
+	for rows.Next() {
+		var i OperationsByBucketRow
+		if err := rows.Scan(
+			&i.Bucket,
+			&i.Verdict,
+			&i.Investigations,
+			&i.Finished,
+			&i.DurationN,
+			&i.DurationMsSum,
+			&i.FirstFindingN,
+			&i.FirstFindingMsSum,
+			&i.ToolCalls,
+			&i.NoisyFixed,
+			&i.ActionsProposed,
+			&i.ActionsApproved,
+			&i.ActionsExecuted,
+			&i.Recoveries,
+			&i.DowntimeMsSum,
+			&i.WatchTimeouts,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const qualityByDay = `-- name: QualityByDay :many
 SELECT day, sum(n)::bigint AS rated, coalesce(sum(n) FILTER (WHERE predicted = confirmed), 0)::bigint AS correct
 FROM quality_daily

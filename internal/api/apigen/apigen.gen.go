@@ -262,6 +262,24 @@ func (e MeKind) Valid() bool {
 	}
 }
 
+// Defines values for OperationsStatsInterval.
+const (
+	OperationsStatsIntervalDay  OperationsStatsInterval = "day"
+	OperationsStatsIntervalHour OperationsStatsInterval = "hour"
+)
+
+// Valid indicates whether the value is a known member of the OperationsStatsInterval enum.
+func (e OperationsStatsInterval) Valid() bool {
+	switch e {
+	case OperationsStatsIntervalDay:
+		return true
+	case OperationsStatsIntervalHour:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ReportStopReason.
 const (
 	ReportStopReasonBudget    ReportStopReason = "budget"
@@ -625,6 +643,24 @@ func (e ListJobsParamsStatus) Valid() bool {
 	}
 }
 
+// Defines values for GetOperationsStatsParamsInterval.
+const (
+	GetOperationsStatsParamsIntervalDay  GetOperationsStatsParamsInterval = "day"
+	GetOperationsStatsParamsIntervalHour GetOperationsStatsParamsInterval = "hour"
+)
+
+// Valid indicates whether the value is a known member of the GetOperationsStatsParamsInterval enum.
+func (e GetOperationsStatsParamsInterval) Valid() bool {
+	switch e {
+	case GetOperationsStatsParamsIntervalDay:
+		return true
+	case GetOperationsStatsParamsIntervalHour:
+		return true
+	default:
+		return false
+	}
+}
+
 // AuditEntry defines model for AuditEntry.
 type AuditEntry struct {
 	// Action What happened, such as route.updated.
@@ -713,6 +749,20 @@ type CreatedToken struct {
 	// Secret The token, sent as "Authorization: Bearer <secret>". It is shown only here.
 	Secret string `json:"secret"`
 	Token  Token  `json:"token"`
+}
+
+// DowntimeRow defines model for DowntimeRow.
+type DowntimeRow struct {
+	DowntimeMsSum int64 `json:"downtimeMsSum"`
+
+	// MedianDowntimeMs About the median downtime; left out when nothing recovered.
+	MedianDowntimeMs *float64 `json:"medianDowntimeMs,omitempty"`
+	Recoveries       int64    `json:"recoveries"`
+	Route            string   `json:"route"`
+
+	// Service Empty when the investigation had no service.
+	Service       string `json:"service"`
+	WatchTimeouts int64  `json:"watchTimeouts"`
 }
 
 // EffectiveConfig defines model for EffectiveConfig.
@@ -1218,6 +1268,146 @@ type NewToken struct {
 	Role Role   `json:"role"`
 }
 
+// OperationsBucket defines model for OperationsBucket.
+type OperationsBucket struct {
+	ActionsApproved int64 `json:"actionsApproved"`
+	ActionsExecuted int64 `json:"actionsExecuted"`
+	ActionsProposed int64 `json:"actionsProposed"`
+
+	// Bucket The start of the UTC day or hour.
+	Bucket time.Time `json:"bucket"`
+
+	// DowntimeMsSum Their downtime added up.
+	DowntimeMsSum int64 `json:"downtimeMsSum"`
+	DurationMsSum int64 `json:"durationMsSum"`
+
+	// DurationN Those with a duration, which started and ended.
+	DurationN int64 `json:"durationN"`
+
+	// Finished Those that ended, as final, failed or cancelled.
+	Finished int64 `json:"finished"`
+
+	// FirstFindingMsSum The time from creation to the first finding, added up. Divide by firstFindingN for the mean.
+	FirstFindingMsSum int64 `json:"firstFindingMsSum"`
+
+	// FirstFindingN Those with a first finding.
+	FirstFindingN int64 `json:"firstFindingN"`
+
+	// Investigations Investigations created.
+	Investigations int64 `json:"investigations"`
+
+	// NoisyFixed False positives whose fix a responder marked as applied.
+	NoisyFixed int64 `json:"noisyFixed"`
+
+	// Recoveries Groups whose watchers all recovered.
+	Recoveries int64          `json:"recoveries"`
+	ToolCalls  int64          `json:"toolCalls"`
+	Verdicts   []VerdictCount `json:"verdicts"`
+
+	// WatchTimeouts Watchers that timed out.
+	WatchTimeouts int64 `json:"watchTimeouts"`
+}
+
+// OperationsFigures defines model for OperationsFigures.
+type OperationsFigures struct {
+	ActionsApproved int64 `json:"actionsApproved"`
+	ActionsExecuted int64 `json:"actionsExecuted"`
+	ActionsProposed int64 `json:"actionsProposed"`
+
+	// DowntimeMsSum Their downtime added up.
+	DowntimeMsSum int64 `json:"downtimeMsSum"`
+	DurationMsSum int64 `json:"durationMsSum"`
+
+	// DurationN Those with a duration, which started and ended.
+	DurationN int64 `json:"durationN"`
+
+	// Finished Those that ended, as final, failed or cancelled.
+	Finished int64 `json:"finished"`
+
+	// FirstFindingMsSum The time from creation to the first finding, added up. Divide by firstFindingN for the mean.
+	FirstFindingMsSum int64 `json:"firstFindingMsSum"`
+
+	// FirstFindingN Those with a first finding.
+	FirstFindingN int64 `json:"firstFindingN"`
+
+	// Investigations Investigations created.
+	Investigations int64 `json:"investigations"`
+
+	// NoisyFixed False positives whose fix a responder marked as applied.
+	NoisyFixed int64 `json:"noisyFixed"`
+
+	// Recoveries Groups whose watchers all recovered.
+	Recoveries int64 `json:"recoveries"`
+	ToolCalls  int64 `json:"toolCalls"`
+
+	// WatchTimeouts Watchers that timed out.
+	WatchTimeouts int64 `json:"watchTimeouts"`
+}
+
+// OperationsStats defines model for OperationsStats.
+type OperationsStats struct {
+	// Downtime Recoveries and downtime by route and service.
+	Downtime []DowntimeRow           `json:"downtime"`
+	From     openapi_types.Date      `json:"from"`
+	Interval OperationsStatsInterval `json:"interval"`
+
+	// Previous The same totals for the range of equal length that ends the day before `from`.
+	Previous OperationsTotals `json:"previous"`
+
+	// Series One entry for each bucket that has investigations, oldest first.
+	Series []OperationsBucket `json:"series"`
+	To     openapi_types.Date `json:"to"`
+	Totals OperationsTotals   `json:"totals"`
+
+	// Verdicts The investigations of the range by verdict.
+	Verdicts []VerdictCount `json:"verdicts"`
+}
+
+// OperationsStatsInterval defines model for OperationsStats.Interval.
+type OperationsStatsInterval string
+
+// OperationsTotals defines model for OperationsTotals.
+type OperationsTotals struct {
+	ActionsApproved int64 `json:"actionsApproved"`
+	ActionsExecuted int64 `json:"actionsExecuted"`
+	ActionsProposed int64 `json:"actionsProposed"`
+
+	// DowntimeMsSum Their downtime added up.
+	DowntimeMsSum int64 `json:"downtimeMsSum"`
+	DurationMsSum int64 `json:"durationMsSum"`
+
+	// DurationN Those with a duration, which started and ended.
+	DurationN int64 `json:"durationN"`
+
+	// Finished Those that ended, as final, failed or cancelled.
+	Finished int64 `json:"finished"`
+
+	// FirstFindingMsSum The time from creation to the first finding, added up. Divide by firstFindingN for the mean.
+	FirstFindingMsSum int64 `json:"firstFindingMsSum"`
+
+	// FirstFindingN Those with a first finding.
+	FirstFindingN int64 `json:"firstFindingN"`
+
+	// Investigations Investigations created.
+	Investigations int64 `json:"investigations"`
+
+	// MedianDowntimeMs About the median downtime of a recovery; left out when there is none.
+	MedianDowntimeMs *float64 `json:"medianDowntimeMs,omitempty"`
+
+	// MedianFirstFindingMs About the median time from creation to the first finding; left out when there is none.
+	MedianFirstFindingMs *float64 `json:"medianFirstFindingMs,omitempty"`
+
+	// NoisyFixed False positives whose fix a responder marked as applied.
+	NoisyFixed int64 `json:"noisyFixed"`
+
+	// Recoveries Groups whose watchers all recovered.
+	Recoveries int64 `json:"recoveries"`
+	ToolCalls  int64 `json:"toolCalls"`
+
+	// WatchTimeouts Watchers that timed out.
+	WatchTimeouts int64 `json:"watchTimeouts"`
+}
+
 // PendingFollowUp defines model for PendingFollowUp.
 type PendingFollowUp struct {
 	Author    *string   `json:"author,omitempty"`
@@ -1704,6 +1894,14 @@ type TokenList struct {
 // Verdict defines model for Verdict.
 type Verdict string
 
+// VerdictCount defines model for VerdictCount.
+type VerdictCount struct {
+	Investigations int64 `json:"investigations"`
+
+	// Verdict A verdict, or `none` for investigations that have not ended with one.
+	Verdict string `json:"verdict"`
+}
+
 // VerdictScore defines model for VerdictScore.
 type VerdictScore struct {
 	// Actual Rated investigations people confirmed with this verdict.
@@ -1904,6 +2102,33 @@ type GetCostStatsParams struct {
 	Verdict *StatsVerdict `form:"verdict,omitempty" json:"verdict,omitempty"`
 }
 
+// GetOperationsStatsParams defines parameters for GetOperationsStats.
+type GetOperationsStatsParams struct {
+	// From The first day of the range, a UTC date. The default is 29 days before `to`.
+	From *StatsFrom `form:"from,omitempty" json:"from,omitempty"`
+
+	// To The last day of the range, a UTC date, included. The default is today. The range is at most 400 days.
+	To *StatsTo `form:"to,omitempty" json:"to,omitempty"`
+
+	// Route Only investigations of this route.
+	Route *StatsRoute `form:"route,omitempty" json:"route,omitempty"`
+
+	// Service Only investigations of this service.
+	Service *StatsService `form:"service,omitempty" json:"service,omitempty"`
+
+	// Model Only investigations whose first model turn used this model.
+	Model *StatsModel `form:"model,omitempty" json:"model,omitempty"`
+
+	// Verdict Only investigations with this verdict.
+	Verdict *StatsVerdict `form:"verdict,omitempty" json:"verdict,omitempty"`
+
+	// Interval The width of a bucket of the series. An hour needs a range of at most 7 days.
+	Interval *GetOperationsStatsParamsInterval `form:"interval,omitempty" json:"interval,omitempty"`
+}
+
+// GetOperationsStatsParamsInterval defines parameters for GetOperationsStats.
+type GetOperationsStatsParamsInterval string
+
 // GetQualityStatsParams defines parameters for GetQualityStats.
 type GetQualityStatsParams struct {
 	// From The first day of the range, a UTC date. The default is 29 days before `to`.
@@ -2026,6 +2251,9 @@ type ServerInterface interface {
 	// GetStatsFilters The values the dashboard filters offer
 	// (GET /stats/filters)
 	GetStatsFilters(w http.ResponseWriter, r *http.Request)
+	// GetOperationsStats Volume, speed, tool calls, false positives, fixes, actions and downtime
+	// (GET /stats/operations)
+	GetOperationsStats(w http.ResponseWriter, r *http.Request, params GetOperationsStatsParams)
 	// GetQualityStats Verdict accuracy, precision and recall from feedback
 	// (GET /stats/quality)
 	GetQualityStats(w http.ResponseWriter, r *http.Request, params GetQualityStatsParams)
@@ -3037,6 +3265,117 @@ func (siw *ServerInterfaceWrapper) GetStatsFilters(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// GetOperationsStats operation middleware
+func (siw *ServerInterfaceWrapper) GetOperationsStats(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetOperationsStatsParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "route" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "route", r.URL.Query(), &params.Route, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "route"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "route", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "service" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "service", r.URL.Query(), &params.Service, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "service"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "service", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "model" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "model", r.URL.Query(), &params.Model, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "model"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "model", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "verdict" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "verdict", r.URL.Query(), &params.Verdict, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "verdict"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "verdict", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "interval" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "interval", r.URL.Query(), &params.Interval, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "interval"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "interval", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOperationsStats(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetQualityStats operation middleware
 func (siw *ServerInterfaceWrapper) GetQualityStats(w http.ResponseWriter, r *http.Request) {
 
@@ -3366,6 +3705,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stats/quality", wrapper.GetQualityStats)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stats/filters", wrapper.GetStatsFilters)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stats/cost", wrapper.GetCostStats)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stats/operations", wrapper.GetOperationsStats)
 
 	return m
 }
@@ -4398,6 +4738,45 @@ func (response GetStatsFiltersdefaultApplicationProblemPlusJSONResponse) VisitGe
 	return err
 }
 
+type GetOperationsStatsRequestObject struct {
+	Params GetOperationsStatsParams
+}
+
+type GetOperationsStatsResponseObject interface {
+	VisitGetOperationsStatsResponse(w http.ResponseWriter) error
+}
+
+type GetOperationsStats200JSONResponse OperationsStats
+
+func (response GetOperationsStats200JSONResponse) VisitGetOperationsStatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOperationsStatsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetOperationsStatsdefaultApplicationProblemPlusJSONResponse) VisitGetOperationsStatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetQualityStatsRequestObject struct {
 	Params GetQualityStatsParams
 }
@@ -4666,6 +5045,9 @@ type StrictServerInterface interface {
 	// GetStatsFilters The values the dashboard filters offer
 	// (GET /stats/filters)
 	GetStatsFilters(ctx context.Context, request GetStatsFiltersRequestObject) (GetStatsFiltersResponseObject, error)
+	// GetOperationsStats Volume, speed, tool calls, false positives, fixes, actions and downtime
+	// (GET /stats/operations)
+	GetOperationsStats(ctx context.Context, request GetOperationsStatsRequestObject) (GetOperationsStatsResponseObject, error)
 	// GetQualityStats Verdict accuracy, precision and recall from feedback
 	// (GET /stats/quality)
 	GetQualityStats(ctx context.Context, request GetQualityStatsRequestObject) (GetQualityStatsResponseObject, error)
@@ -5421,6 +5803,32 @@ func (sh *strictHandler) GetStatsFilters(w http.ResponseWriter, r *http.Request)
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetStatsFiltersResponseObject); ok {
 		if err := validResponse.VisitGetStatsFiltersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetOperationsStats operation middleware
+func (sh *strictHandler) GetOperationsStats(w http.ResponseWriter, r *http.Request, params GetOperationsStatsParams) {
+	var request GetOperationsStatsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetOperationsStats(ctx, request.(GetOperationsStatsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetOperationsStats")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetOperationsStatsResponseObject); ok {
+		if err := validResponse.VisitGetOperationsStatsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -65,6 +65,8 @@ func TestStatsQueryPlans(t *testing.T) {
 
 		tests = append(tests, costPlans(r.name, from, to, fromTime, toTime, index, filterSet{})...)
 		tests = append(tests, costPlans(r.name+"Filtered", from, to, fromTime, toTime, index, filters)...)
+		tests = append(tests, operationsPlans(r.name, fromTime, toTime, index, filterSet{})...)
+		tests = append(tests, operationsPlans(r.name+"Filtered", fromTime, toTime, index, filters)...)
 	}
 
 	tests = append(tests,
@@ -211,6 +213,78 @@ func costPlans(prefix string, from, to pgtype.Date, fromHour, toHour time.Time, 
 				return fmt.Errorf("run query: %w", err)
 			},
 			wantIndex: statsIndex, scansTable: !index,
+		},
+	}
+}
+
+// operationsPlans are the plan cases of the operations queries for a range
+// of hours.
+func operationsPlans(prefix string, fromHour, toHour time.Time, index bool, f filterSet) []planCase {
+	wantIndex := []string(nil)
+	if index {
+		wantIndex = []string{"stats_hourly_pkey"}
+	}
+
+	byBucket := func(name, bucket string) planCase {
+		return planCase{
+			name: prefix + name,
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.OperationsByBucket(ctx, db.OperationsByBucketParams{
+					Bucket: bucket, FromHour: fromHour, ToHour: toHour, Route: f.route, Service: f.service, Model: f.model, Verdict: f.verdict,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: wantIndex, scansTable: !index,
+		}
+	}
+
+	return []planCase{
+		byBucket("OperationsByDay", "day"),
+		byBucket("OperationsByHour", "hour"),
+		{
+			name: prefix + "FirstFindingHistogram",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.FirstFindingHistogram(ctx, db.FirstFindingHistogramParams{
+					FromHour: fromHour, ToHour: toHour, Route: f.route, Service: f.service, Model: f.model, Verdict: f.verdict,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: wantIndex, scansTable: !index,
+		},
+		{
+			name: prefix + "DowntimeHistogram",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.DowntimeHistogram(ctx, db.DowntimeHistogramParams{
+					FromHour: fromHour, ToHour: toHour, Route: f.route, Service: f.service, Model: f.model, Verdict: f.verdict,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: wantIndex, scansTable: !index,
+		},
+		{
+			name: prefix + "DowntimeByRouteService",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.DowntimeByRouteService(ctx, db.DowntimeByRouteServiceParams{
+					FromHour: fromHour, ToHour: toHour, Route: f.route, Service: f.service, Model: f.model, Verdict: f.verdict,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: wantIndex, scansTable: !index,
+		},
+		{
+			name: prefix + "DowntimeHistograms",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.DowntimeHistograms(ctx, db.DowntimeHistogramsParams{
+					FromHour: fromHour, ToHour: toHour, Route: f.route, Service: f.service, Model: f.model, Verdict: f.verdict,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: wantIndex, scansTable: !index,
 		},
 	}
 }

@@ -129,3 +129,98 @@ WHERE hour >= @from_hour AND hour < @to_hour
   AND (sqlc.narg(service)::text IS NULL OR service = sqlc.narg(service))
   AND (sqlc.narg(model)::text IS NULL OR model = sqlc.narg(model))
   AND (sqlc.narg(verdict)::text IS NULL OR verdict = sqlc.narg(verdict));
+
+-- name: OperationsByBucket :many
+-- OperationsByBucket sums the hourly rows of the hours from from_hour up to
+-- to_hour by UTC bucket, which is a day or an hour as bucket says, and by
+-- verdict. Every filter applies.
+SELECT date_trunc(@bucket::text, hour AT TIME ZONE 'UTC')::timestamp AS bucket,
+       verdict,
+       sum(investigations)::bigint AS investigations,
+       sum(finished)::bigint AS finished,
+       sum(duration_n)::bigint AS duration_n,
+       sum(duration_ms_sum)::bigint AS duration_ms_sum,
+       sum(first_finding_n)::bigint AS first_finding_n,
+       sum(first_finding_ms_sum)::bigint AS first_finding_ms_sum,
+       sum(tool_calls)::bigint AS tool_calls,
+       sum(noisy_fixed)::bigint AS noisy_fixed,
+       sum(actions_proposed)::bigint AS actions_proposed,
+       sum(actions_approved)::bigint AS actions_approved,
+       sum(actions_executed)::bigint AS actions_executed,
+       sum(recoveries)::bigint AS recoveries,
+       sum(downtime_ms_sum)::bigint AS downtime_ms_sum,
+       sum(watch_timeouts)::bigint AS watch_timeouts
+FROM stats_hourly
+WHERE hour >= @from_hour AND hour < @to_hour
+  AND (sqlc.narg(route)::text IS NULL OR route = sqlc.narg(route))
+  AND (sqlc.narg(service)::text IS NULL OR service = sqlc.narg(service))
+  AND (sqlc.narg(model)::text IS NULL OR model = sqlc.narg(model))
+  AND (sqlc.narg(verdict)::text IS NULL OR verdict = sqlc.narg(verdict))
+GROUP BY 1, 2
+ORDER BY 1, 2;
+
+-- name: FirstFindingHistogram :many
+-- FirstFindingHistogram adds up the histograms of the time to the first
+-- finding over the hours from from_hour up to to_hour, one row for each of
+-- their 24 buckets that has a count. Every filter applies.
+SELECT h.i::int AS bucket, sum(h.n)::bigint AS n
+FROM stats_hourly s,
+     unnest(s.first_finding_hist) WITH ORDINALITY AS h(n, i)
+WHERE s.hour >= @from_hour AND s.hour < @to_hour
+  AND s.first_finding_n > 0
+  AND (sqlc.narg(route)::text IS NULL OR s.route = sqlc.narg(route))
+  AND (sqlc.narg(service)::text IS NULL OR s.service = sqlc.narg(service))
+  AND (sqlc.narg(model)::text IS NULL OR s.model = sqlc.narg(model))
+  AND (sqlc.narg(verdict)::text IS NULL OR s.verdict = sqlc.narg(verdict))
+GROUP BY h.i
+HAVING sum(h.n) > 0
+ORDER BY h.i;
+
+-- name: DowntimeHistogram :many
+-- DowntimeHistogram is FirstFindingHistogram for the downtime.
+SELECT h.i::int AS bucket, sum(h.n)::bigint AS n
+FROM stats_hourly s,
+     unnest(s.downtime_hist) WITH ORDINALITY AS h(n, i)
+WHERE s.hour >= @from_hour AND s.hour < @to_hour
+  AND s.recoveries > 0
+  AND (sqlc.narg(route)::text IS NULL OR s.route = sqlc.narg(route))
+  AND (sqlc.narg(service)::text IS NULL OR s.service = sqlc.narg(service))
+  AND (sqlc.narg(model)::text IS NULL OR s.model = sqlc.narg(model))
+  AND (sqlc.narg(verdict)::text IS NULL OR s.verdict = sqlc.narg(verdict))
+GROUP BY h.i
+HAVING sum(h.n) > 0
+ORDER BY h.i;
+
+-- name: DowntimeByRouteService :many
+-- DowntimeByRouteService sums the recoveries, the downtime and the timed
+-- out watchers of the range by route and service. Every filter applies.
+SELECT route, service,
+       sum(recoveries)::bigint AS recoveries,
+       sum(downtime_ms_sum)::bigint AS downtime_ms_sum,
+       sum(watch_timeouts)::bigint AS watch_timeouts
+FROM stats_hourly
+WHERE hour >= @from_hour AND hour < @to_hour
+  AND (recoveries > 0 OR watch_timeouts > 0)
+  AND (sqlc.narg(route)::text IS NULL OR route = sqlc.narg(route))
+  AND (sqlc.narg(service)::text IS NULL OR service = sqlc.narg(service))
+  AND (sqlc.narg(model)::text IS NULL OR model = sqlc.narg(model))
+  AND (sqlc.narg(verdict)::text IS NULL OR verdict = sqlc.narg(verdict))
+GROUP BY route, service
+ORDER BY route, service;
+
+-- name: DowntimeHistograms :many
+-- DowntimeHistograms adds up the downtime histogram of the range by route
+-- and service, one row for each of its buckets that has a count. Every
+-- filter applies.
+SELECT s.route, s.service, h.i::int AS bucket, sum(h.n)::bigint AS n
+FROM stats_hourly s,
+     unnest(s.downtime_hist) WITH ORDINALITY AS h(n, i)
+WHERE s.hour >= @from_hour AND s.hour < @to_hour
+  AND s.recoveries > 0
+  AND (sqlc.narg(route)::text IS NULL OR s.route = sqlc.narg(route))
+  AND (sqlc.narg(service)::text IS NULL OR s.service = sqlc.narg(service))
+  AND (sqlc.narg(model)::text IS NULL OR s.model = sqlc.narg(model))
+  AND (sqlc.narg(verdict)::text IS NULL OR s.verdict = sqlc.narg(verdict))
+GROUP BY s.route, s.service, h.i
+HAVING sum(h.n) > 0
+ORDER BY s.route, s.service, h.i;
