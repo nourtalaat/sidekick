@@ -393,6 +393,40 @@ The navigation has a page for each:
   filters are in the address, so a view can be shared with a link. An
   entry with an old or new value has a **Show change** button.
 
+## The dashboard
+
+`/dashboard` is open to every role from `viewer` up. One row of filters at
+the top applies to the whole page: the time range (the last 7, 30, 90 or 365
+days, or two dates), the route, the service, the model and the verdict. They
+are kept in the address (`range`, `from` and `to` for custom dates, `route`,
+`service`, `model` and `verdict`), so a view can be shared; a value the API
+would refuse is ignored, so every link opens. Days are UTC days.
+
+- **Key numbers.** Verdict accuracy from feedback, false alarms found,
+  the median time to the first finding, and today's spend against the
+  daily cap. Each shows its change against the range before it in words,
+  such as "Up 4 points".
+- **Quality.** Verdict accuracy over time, the verdict Sidekick gave
+  against the verdict people confirmed, precision and recall of each
+  verdict, accuracy by model and strategy, and the newest benchmark runs.
+  Choose two runs to compare them; the two runs are in the address too
+  (`a` and `b`).
+- **Cost.** Spend per day by model with the daily cap as a dashed line and
+  a status when today's spend is near the cap or over it, spend today by
+  route, spend by route, the cost per investigation, and the tokens in and
+  out. The service and verdict filters do not apply to the spend, and the
+  page says so.
+- **Operations.** Investigations per day by verdict, the time to the
+  first finding, the duration, tool calls per investigation, false alarms
+  found, noisy alerts fixed, actions proposed, approved and taken, and
+  the downtime that watchers measured by route and service.
+
+Every chart has a text summary, a legend, a tooltip and a **Show as table**
+button for the same numbers. A chart with nothing to draw says "No data
+for this range" and links to the filters. A responder marks the fix of a
+false positive as applied on the investigation page; that is what "noisy
+alerts fixed" counts.
+
 ## Dashboard numbers and benchmark runs
 
 The dashboard never reads investigations. It reads two rollup tables, which
