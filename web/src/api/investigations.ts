@@ -48,6 +48,7 @@ export const keys = {
   investigation: (id: string) => ["investigation", id] as const,
   steps: (id: string) => ["steps", id] as const,
   watchers: (id: string) => ["watchers", id] as const,
+  feedback: (id: string) => ["feedback", id] as const,
 };
 
 interface Result<T> {

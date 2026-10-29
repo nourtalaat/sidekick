@@ -32,6 +32,7 @@ function pageServer(data: Data = {}, extra: Parameters<typeof routes>[0] = {}) {
     [`GET ${PATH}`]: () => json(200, data.inv ?? detail()),
     [`GET ${PATH}/steps`]: () => json(200, { steps: data.steps ?? [] }),
     [`GET ${PATH}/watchers`]: () => json(200, { watchers: data.watchers ?? [] }),
+    [`GET ${PATH}/feedback`]: () => json(200, { parts: [] }),
     [`POST ${PATH}/follow-ups`]: post({ added: true }, 202),
     [`POST ${PATH}/cancel`]: post({ requested: true }),
     [`POST ${PATH}/resolve`]: post({ resolved: true }),

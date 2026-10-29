@@ -2,6 +2,8 @@ import investigatingEyes from "../../../../assets/states/investigating.svg";
 import type { Investigation } from "../../api/investigations";
 import { StatusBadge, VerdictBadge } from "../../components/Badge";
 import { ConfidenceMeter } from "../../components/ConfidenceMeter";
+import { verdictTarget } from "../../api/feedback";
+import { PartFeedback } from "./PartFeedback";
 import "./VerdictPanel.css";
 
 const VERDICT_LABELS: Record<string, string> = {
@@ -63,6 +65,7 @@ export function VerdictPanel({ inv, steps }: { inv: Investigation; steps: number
       {inv.confirmation && (
         <p className="sk-verdict__muted">People confirmed this verdict: {VERDICT_LABELS[inv.confirmation.verdict]}.</p>
       )}
+      <PartFeedback target={verdictTarget(inv.run)} label="the verdict" />
     </section>
   );
 }

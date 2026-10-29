@@ -34,6 +34,13 @@ const handler = routes({
         step(2, { kind: "tool_result", tool: "search_logs", source: "signoz", parts: [{ type: "tool_result", callId: "c1", content: "3 errors" }] }),
       ],
     }),
+  [`GET ${PATH}/feedback`]: () =>
+    json(200, {
+      parts: [
+        { targetKind: "verdict", targetRef: "run:1/verdict", correct: 2, wrong: 1, mine: { rating: "wrong", reason: "A load test." } },
+        { targetKind: "finding", targetRef: "run:1/finding:f1", correct: 1, wrong: 0 },
+      ],
+    }),
   [`GET ${PATH}/watchers`]: () =>
     json(200, {
       watchers: [
@@ -82,6 +89,18 @@ describe.each(THEMES)("accessibility of the investigation pages, theme $name", (
       await user.click(await screen.findByRole("button", { name: /Model turn: called search_logs/ }));
       await screen.findByText(/Checking: health/);
       expect(screen.getByRole("form", { name: "Ask a follow-up" })).toBeInTheDocument();
+
+      expect(await wcagViolations(container)).toEqual([]);
+    });
+
+    it("has no WCAG 2.2 AA violations with the feedback form of the verdict open, and with the real verdict chosen", async () => {
+      const user = userEvent.setup();
+      const { container } = renderApp({ me: RESPONDER, route: `/investigations/${INVESTIGATION_ID}`, handler });
+      await user.click(await screen.findByRole("button", { name: "Mark the verdict wrong" }));
+      await user.selectOptions(screen.getByLabelText("The real verdict, if you know it"), "false_positive");
+      await user.click(screen.getByRole("button", { name: "Mark finding f2 wrong" }));
+      await screen.findByText(/Checking: health/);
+      expect(screen.getAllByRole("form", { name: /^Feedback on/ })).toHaveLength(2);
 
       expect(await wcagViolations(container)).toEqual([]);
     });

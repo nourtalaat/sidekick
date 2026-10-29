@@ -259,6 +259,18 @@ The web UI shows the investigations in two pages, which every role from
   for each step. A step opens to show the tool call or result in a box
   with a copy button.
 
+Under the verdict, each finding, each fix and each tool result, the page
+says how many people rated that part correct and how many wrong, from
+Slack and the web UI together. A `responder` or higher also sees
+**Correct**, **Wrong** and **Add a reason** there, and their own rating is
+shown as pressed. **Correct** is sent at once. **Wrong** opens a form for
+the reason; on the verdict it also asks for the real verdict and cause,
+and giving the real verdict confirms the investigation. Sending again
+replaces your earlier opinion of the part. If the report changed since the
+page was read, for example because a follow-up run replaced it, the form
+shows the reason the server gave and keeps what you typed. The counts are
+read again every 30 seconds and when a run changes the investigation.
+
 A `responder` or higher also sees **Stop**, **Resolve**, **Stop watching**
 and the follow-up box at the bottom of the page. A `viewer` does not see
 these buttons. The server checks the role of every request again, and
