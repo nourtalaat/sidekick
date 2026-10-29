@@ -66,6 +66,58 @@ func (q *Queries) GetUserFeedbackRating(ctx context.Context, arg GetUserFeedback
 	return rating, err
 }
 
+const listFeedbackCounts = `-- name: ListFeedbackCounts :many
+SELECT target_kind, target_ref,
+       count(*) FILTER (WHERE rating = 'correct') AS correct,
+       count(*) FILTER (WHERE rating = 'wrong') AS wrong
+FROM feedback
+WHERE investigation_id = $1
+  AND (target_kind = 'tool_call' OR starts_with(target_ref, $2::text))
+GROUP BY target_kind, target_ref
+ORDER BY target_kind, target_ref
+`
+
+type ListFeedbackCountsParams struct {
+	InvestigationID uuid.UUID
+	RunPrefix       string
+}
+
+type ListFeedbackCountsRow struct {
+	TargetKind string
+	TargetRef  string
+	Correct    int64
+	Wrong      int64
+}
+
+// ListFeedbackCounts returns, for each part of an investigation that has
+// feedback, how many people rated it correct and how many wrong. It takes
+// the parts of the report of one run, whose refs start with run_prefix
+// such as "run:2/", and every tool call.
+func (q *Queries) ListFeedbackCounts(ctx context.Context, arg ListFeedbackCountsParams) ([]ListFeedbackCountsRow, error) {
+	rows, err := q.db.Query(ctx, listFeedbackCounts, arg.InvestigationID, arg.RunPrefix)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFeedbackCountsRow
+	for rows.Next() {
+		var i ListFeedbackCountsRow
+		if err := rows.Scan(
+			&i.TargetKind,
+			&i.TargetRef,
+			&i.Correct,
+			&i.Wrong,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTargetFeedback = `-- name: ListTargetFeedback :many
 SELECT rating, user_id, slack_user_id, updated_at
 FROM feedback
@@ -102,6 +154,58 @@ func (q *Queries) ListTargetFeedback(ctx context.Context, arg ListTargetFeedback
 			&i.UserID,
 			&i.SlackUserID,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserFeedback = `-- name: ListUserFeedback :many
+SELECT target_kind, target_ref, rating, reason, correct_verdict, correct_cause
+FROM feedback
+WHERE investigation_id = $1 AND user_id = $2
+  AND (target_kind = 'tool_call' OR starts_with(target_ref, $3::text))
+ORDER BY target_kind, target_ref
+`
+
+type ListUserFeedbackParams struct {
+	InvestigationID uuid.UUID
+	UserID          *uuid.UUID
+	RunPrefix       string
+}
+
+type ListUserFeedbackRow struct {
+	TargetKind     string
+	TargetRef      string
+	Rating         string
+	Reason         *string
+	CorrectVerdict *string
+	CorrectCause   *string
+}
+
+// ListUserFeedback returns what one signed-in user said about the parts
+// ListFeedbackCounts counts.
+func (q *Queries) ListUserFeedback(ctx context.Context, arg ListUserFeedbackParams) ([]ListUserFeedbackRow, error) {
+	rows, err := q.db.Query(ctx, listUserFeedback, arg.InvestigationID, arg.UserID, arg.RunPrefix)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserFeedbackRow
+	for rows.Next() {
+		var i ListUserFeedbackRow
+		if err := rows.Scan(
+			&i.TargetKind,
+			&i.TargetRef,
+			&i.Rating,
+			&i.Reason,
+			&i.CorrectVerdict,
+			&i.CorrectCause,
 		); err != nil {
 			return nil, err
 		}

@@ -275,6 +275,14 @@ Text from alerts, sources and the model is always shown as plain text,
 never as HTML. A link opens only when its address is `http` or `https`;
 any other address, such as `javascript:`, is shown as text.
 
+`GET /api/v1/investigations/{id}/feedback` needs only the `viewer` role. It
+lists the parts of the current run that people rated: the verdict, each
+finding and fix, and each tool call, with how many people rated each one
+`correct` and `wrong`, from Slack and the web UI together. For a signed-in
+caller it also has `mine`, the caller's own opinion of the part, with the
+reason and the real verdict and cause they gave. Parts nobody rated, and
+the parts of an earlier run, are left out.
+
 ## Listeners and routes
 
 The listeners and routes that people add at runtime, and those of the

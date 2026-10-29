@@ -13,6 +13,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/feedback"
 	"github.com/nourtalaat/sidekick/internal/output"
 	"github.com/nourtalaat/sidekick/internal/report"
+	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
 // confirmationUnchanged is the confirmation field of feedback that did not
@@ -62,6 +63,70 @@ func (s *server) CreateInvestigationFeedback(ctx context.Context, req apigen.Cre
 	}
 
 	return apigen.CreateInvestigationFeedback201JSONResponse(feedbackOf(got)), nil
+}
+
+// ListInvestigationFeedback returns how many people rated each part of the
+// current run's report, and each tool call, correct and wrong, and for a
+// signed-in caller their own opinion of each.
+func (s *server) ListInvestigationFeedback(ctx context.Context, req apigen.ListInvestigationFeedbackRequestObject) (apigen.ListInvestigationFeedbackResponseObject, error) {
+	p, _ := auth.PrincipalFrom(ctx)
+	queries := db.New(s.pool)
+
+	status, err := queries.GetInvestigationStatus(ctx, req.Id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, errNoInvestigation
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("read investigation %s: %w", req.Id, err)
+	}
+
+	prefix := fmt.Sprintf("run:%d/", status.Run)
+
+	counts, err := queries.ListFeedbackCounts(ctx, db.ListFeedbackCountsParams{InvestigationID: req.Id, RunPrefix: prefix})
+	if err != nil {
+		return nil, fmt.Errorf("count the feedback on investigation %s: %w", req.Id, err)
+	}
+
+	mine := map[string]apigen.FeedbackOpinion{}
+
+	if p.Kind == auth.KindUser {
+		rows, err := queries.ListUserFeedback(ctx, db.ListUserFeedbackParams{InvestigationID: req.Id, UserID: &p.ID, RunPrefix: prefix})
+		if err != nil {
+			return nil, fmt.Errorf("read the feedback of the caller on investigation %s: %w", req.Id, err)
+		}
+
+		for _, row := range rows {
+			mine[row.TargetKind+" "+row.TargetRef] = opinionOf(row)
+		}
+	}
+
+	list := apigen.FeedbackPartList{Parts: make([]apigen.FeedbackPart, 0, len(counts))}
+
+	for _, row := range counts {
+		part := apigen.FeedbackPart{
+			TargetKind: apigen.FeedbackTargetKind(row.TargetKind), TargetRef: row.TargetRef, Correct: int(row.Correct), Wrong: int(row.Wrong),
+		}
+
+		if opinion, ok := mine[row.TargetKind+" "+row.TargetRef]; ok {
+			part.Mine = &opinion
+		}
+
+		list.Parts = append(list.Parts, part)
+	}
+
+	return apigen.ListInvestigationFeedback200JSONResponse(list), nil
+}
+
+// opinionOf is the API's view of one person's feedback on a part.
+func opinionOf(row db.ListUserFeedbackRow) apigen.FeedbackOpinion {
+	opinion := apigen.FeedbackOpinion{Rating: apigen.FeedbackRating(row.Rating), Reason: row.Reason, CorrectCause: row.CorrectCause}
+
+	if row.CorrectVerdict != nil {
+		opinion.CorrectVerdict = new(apigen.Verdict(*row.CorrectVerdict))
+	}
+
+	return opinion
 }
 
 // feedbackProblem turns an error of feedback.Submit into the problem the

@@ -90,3 +90,26 @@ RETURNING *;
 SELECT EXISTS (
   SELECT 1 FROM steps WHERE investigation_id = @investigation_id AND tool_call_id = @tool_call_id
 );
+
+-- name: ListFeedbackCounts :many
+-- ListFeedbackCounts returns, for each part of an investigation that has
+-- feedback, how many people rated it correct and how many wrong. It takes
+-- the parts of the report of one run, whose refs start with run_prefix
+-- such as "run:2/", and every tool call.
+SELECT target_kind, target_ref,
+       count(*) FILTER (WHERE rating = 'correct') AS correct,
+       count(*) FILTER (WHERE rating = 'wrong') AS wrong
+FROM feedback
+WHERE investigation_id = @investigation_id
+  AND (target_kind = 'tool_call' OR starts_with(target_ref, @run_prefix::text))
+GROUP BY target_kind, target_ref
+ORDER BY target_kind, target_ref;
+
+-- name: ListUserFeedback :many
+-- ListUserFeedback returns what one signed-in user said about the parts
+-- ListFeedbackCounts counts.
+SELECT target_kind, target_ref, rating, reason, correct_verdict, correct_cause
+FROM feedback
+WHERE investigation_id = @investigation_id AND user_id = @user_id
+  AND (target_kind = 'tool_call' OR starts_with(target_ref, @run_prefix::text))
+ORDER BY target_kind, target_ref;
