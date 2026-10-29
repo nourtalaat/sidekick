@@ -112,6 +112,194 @@ func (q *Queries) CostPerInvestigationTotals(ctx context.Context, arg CostPerInv
 	return i, err
 }
 
+const dashboardFirstFindingHistograms = `-- name: DashboardFirstFindingHistograms :many
+SELECT s.route, h.i::int AS bucket, sum(h.n)::bigint AS n
+FROM stats_hourly s,
+     unnest(s.first_finding_hist) WITH ORDINALITY AS h(n, i)
+WHERE s.hour >= $1 AND s.hour < $2
+  AND s.first_finding_n > 0
+GROUP BY s.route, h.i
+HAVING sum(h.n) > 0
+ORDER BY s.route, h.i
+`
+
+type DashboardFirstFindingHistogramsParams struct {
+	FromHour time.Time
+	ToHour   time.Time
+}
+
+type DashboardFirstFindingHistogramsRow struct {
+	Route  string
+	Bucket int32
+	N      int64
+}
+
+// DashboardFirstFindingHistograms adds up the histograms of the time to the
+// first finding over the hours from from_hour up to to_hour by route, one
+// row for each of their 24 buckets that has a count.
+func (q *Queries) DashboardFirstFindingHistograms(ctx context.Context, arg DashboardFirstFindingHistogramsParams) ([]DashboardFirstFindingHistogramsRow, error) {
+	rows, err := q.db.Query(ctx, dashboardFirstFindingHistograms, arg.FromHour, arg.ToHour)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DashboardFirstFindingHistogramsRow
+	for rows.Next() {
+		var i DashboardFirstFindingHistogramsRow
+		if err := rows.Scan(&i.Route, &i.Bucket, &i.N); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const dashboardQuality = `-- name: DashboardQuality :many
+SELECT route, model, predicted,
+       sum(n)::bigint AS rated,
+       coalesce(sum(n) FILTER (WHERE predicted = confirmed), 0)::bigint AS correct
+FROM quality_daily
+WHERE day >= $1::date AND day <= $2::date
+GROUP BY route, model, predicted
+ORDER BY route, model, predicted
+`
+
+type DashboardQualityParams struct {
+	FromDay pgtype.Date
+	ToDay   pgtype.Date
+}
+
+type DashboardQualityRow struct {
+	Route     string
+	Model     string
+	Predicted string
+	Rated     int64
+	Correct   int64
+}
+
+// DashboardQuality counts the investigations created on the days from_day
+// to_day, both included, that people rated, and those whose verdict was
+// confirmed as given, by route, model and the verdict given. It feeds the
+// dashboard metrics, which carry no service. The range on day uses the
+// primary key of quality_daily.
+func (q *Queries) DashboardQuality(ctx context.Context, arg DashboardQualityParams) ([]DashboardQualityRow, error) {
+	rows, err := q.db.Query(ctx, dashboardQuality, arg.FromDay, arg.ToDay)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DashboardQualityRow
+	for rows.Next() {
+		var i DashboardQualityRow
+		if err := rows.Scan(
+			&i.Route,
+			&i.Model,
+			&i.Predicted,
+			&i.Rated,
+			&i.Correct,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const dashboardSpendByDay = `-- name: DashboardSpendByDay :many
+SELECT route, model, sum(cost_micros)::bigint AS cost_micros
+FROM spend_daily
+WHERE day = $1
+GROUP BY route, model
+ORDER BY route, model
+`
+
+type DashboardSpendByDayRow struct {
+	Route      string
+	Model      string
+	CostMicros int64
+}
+
+// DashboardSpendByDay sums what model calls cost on a day by route and
+// model, in micro-dollars. The day uses the primary key of spend_daily.
+func (q *Queries) DashboardSpendByDay(ctx context.Context, day pgtype.Date) ([]DashboardSpendByDayRow, error) {
+	rows, err := q.db.Query(ctx, dashboardSpendByDay, day)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DashboardSpendByDayRow
+	for rows.Next() {
+		var i DashboardSpendByDayRow
+		if err := rows.Scan(&i.Route, &i.Model, &i.CostMicros); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const dashboardStatsByRoute = `-- name: DashboardStatsByRoute :many
+SELECT route, verdict,
+       sum(investigations)::bigint AS investigations,
+       sum(recoveries)::bigint AS recoveries,
+       sum(watch_timeouts)::bigint AS watch_timeouts
+FROM stats_hourly
+WHERE hour >= $1 AND hour < $2
+GROUP BY route, verdict
+ORDER BY route, verdict
+`
+
+type DashboardStatsByRouteParams struct {
+	FromHour time.Time
+	ToHour   time.Time
+}
+
+type DashboardStatsByRouteRow struct {
+	Route          string
+	Verdict        string
+	Investigations int64
+	Recoveries     int64
+	WatchTimeouts  int64
+}
+
+// DashboardStatsByRoute sums the investigations, recoveries and timed out
+// watchers of the hours from from_hour up to to_hour by route and verdict.
+// The range on hour uses the primary key of stats_hourly.
+func (q *Queries) DashboardStatsByRoute(ctx context.Context, arg DashboardStatsByRouteParams) ([]DashboardStatsByRouteRow, error) {
+	rows, err := q.db.Query(ctx, dashboardStatsByRoute, arg.FromHour, arg.ToHour)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DashboardStatsByRouteRow
+	for rows.Next() {
+		var i DashboardStatsByRouteRow
+		if err := rows.Scan(
+			&i.Route,
+			&i.Verdict,
+			&i.Investigations,
+			&i.Recoveries,
+			&i.WatchTimeouts,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const downtimeByRouteService = `-- name: DowntimeByRouteService :many
 SELECT route, service,
        sum(recoveries)::bigint AS recoveries,
