@@ -676,6 +676,14 @@ type Confirmation struct {
 	Verdict Verdict   `json:"verdict"`
 }
 
+// ConfusionCell defines model for ConfusionCell.
+type ConfusionCell struct {
+	// Confirmed The verdict people confirmed, or `unknown` when they rated the verdict wrong without giving the real one.
+	Confirmed string  `json:"confirmed"`
+	N         int64   `json:"n"`
+	Predicted Verdict `json:"predicted"`
+}
+
 // CreatedToken defines model for CreatedToken.
 type CreatedToken struct {
 	// Secret The token, sent as "Authorization: Bearer <secret>". It is shown only here.
@@ -1222,6 +1230,56 @@ type Problem struct {
 	Type string `json:"type"`
 }
 
+// QualityComparison defines model for QualityComparison.
+type QualityComparison struct {
+	Correct int64 `json:"correct"`
+
+	// Model Empty when the investigation had no model turn.
+	Model string `json:"model"`
+	Rated int64  `json:"rated"`
+
+	// Strategy Empty when no strategy was chosen.
+	Strategy string `json:"strategy"`
+}
+
+// QualityDay defines model for QualityDay.
+type QualityDay struct {
+	Correct int64              `json:"correct"`
+	Day     openapi_types.Date `json:"day"`
+	Rated   int64              `json:"rated"`
+}
+
+// QualityStats defines model for QualityStats.
+type QualityStats struct {
+	// Comparison Accuracy by model and strategy, for comparing them.
+	Comparison []QualityComparison `json:"comparison"`
+	Days       []QualityDay        `json:"days"`
+	From       openapi_types.Date  `json:"from"`
+
+	// Matrix Each pair of the verdict given and the verdict confirmed that occurs, with its count.
+	Matrix []ConfusionCell `json:"matrix"`
+
+	// PerVerdict Precision and recall of each verdict that was given or confirmed in the range.
+	PerVerdict []VerdictScore `json:"perVerdict"`
+
+	// Previous The same totals for the range of equal length that ends the day before `from`.
+	Previous QualityTotals      `json:"previous"`
+	To       openapi_types.Date `json:"to"`
+	Totals   QualityTotals      `json:"totals"`
+}
+
+// QualityTotals defines model for QualityTotals.
+type QualityTotals struct {
+	// Accuracy correct over rated, from 0 to 1; left out when nothing was rated.
+	Accuracy *float64 `json:"accuracy,omitempty"`
+
+	// Correct Those whose verdict was confirmed as given.
+	Correct int64 `json:"correct"`
+
+	// Rated The investigations people rated.
+	Rated int64 `json:"rated"`
+}
+
 // Report The result of the investigation. The model wrote its text from what
 // the sources returned, so show it as plain text.
 type Report struct {
@@ -1428,6 +1486,13 @@ type SourceCheck struct {
 // SourceCheckStatus defines model for SourceCheck.Status.
 type SourceCheckStatus string
 
+// StatsFilters defines model for StatsFilters.
+type StatsFilters struct {
+	Models   []string `json:"models"`
+	Routes   []string `json:"routes"`
+	Services []string `json:"services"`
+}
+
 // Step One step of the record. A prompt step has only the first message the
 // model got. Reasoning is shown when the provider returned it. Parts
 // hold text from alerts, sources and the model: show it as plain text.
@@ -1532,6 +1597,25 @@ type TokenList struct {
 // Verdict defines model for Verdict.
 type Verdict string
 
+// VerdictScore defines model for VerdictScore.
+type VerdictScore struct {
+	// Actual Rated investigations people confirmed with this verdict.
+	Actual int64 `json:"actual"`
+
+	// Hits Those in both groups.
+	Hits int64 `json:"hits"`
+
+	// Precision hits over predicted; left out when predicted is 0.
+	Precision *float64 `json:"precision,omitempty"`
+
+	// Predicted Rated investigations Sidekick gave this verdict, with a known confirmed verdict.
+	Predicted int64 `json:"predicted"`
+
+	// Recall hits over actual; left out when actual is 0.
+	Recall  *float64 `json:"recall,omitempty"`
+	Verdict Verdict  `json:"verdict"`
+}
+
 // Watcher A check that runs on a schedule until the service is back up or its
 // time is over. The last result comes from the checked service, so
 // show it as plain text.
@@ -1593,6 +1677,24 @@ type InvestigationID = openapi_types.UUID
 
 // RuleName defines model for RuleName.
 type RuleName = string
+
+// StatsFrom defines model for StatsFrom.
+type StatsFrom = openapi_types.Date
+
+// StatsModel defines model for StatsModel.
+type StatsModel = string
+
+// StatsRoute defines model for StatsRoute.
+type StatsRoute = string
+
+// StatsService defines model for StatsService.
+type StatsService = string
+
+// StatsTo defines model for StatsTo.
+type StatsTo = openapi_types.Date
+
+// StatsVerdict defines model for StatsVerdict.
+type StatsVerdict = Verdict
 
 // ListAuditParams defines parameters for ListAudit.
 type ListAuditParams struct {
@@ -1673,6 +1775,27 @@ type ListJobsParams struct {
 
 // ListJobsParamsStatus defines parameters for ListJobs.
 type ListJobsParamsStatus string
+
+// GetQualityStatsParams defines parameters for GetQualityStats.
+type GetQualityStatsParams struct {
+	// From The first day of the range, a UTC date. The default is 29 days before `to`.
+	From *StatsFrom `form:"from,omitempty" json:"from,omitempty"`
+
+	// To The last day of the range, a UTC date, included. The default is today. The range is at most 400 days.
+	To *StatsTo `form:"to,omitempty" json:"to,omitempty"`
+
+	// Route Only investigations of this route.
+	Route *StatsRoute `form:"route,omitempty" json:"route,omitempty"`
+
+	// Service Only investigations of this service.
+	Service *StatsService `form:"service,omitempty" json:"service,omitempty"`
+
+	// Model Only investigations whose first model turn used this model.
+	Model *StatsModel `form:"model,omitempty" json:"model,omitempty"`
+
+	// Verdict Only investigations with this verdict.
+	Verdict *StatsVerdict `form:"verdict,omitempty" json:"verdict,omitempty"`
+}
 
 // CreateInvestigationFeedbackJSONRequestBody defines body for CreateInvestigationFeedback for application/json ContentType.
 type CreateInvestigationFeedbackJSONRequestBody = NewFeedback
@@ -1769,6 +1892,12 @@ type ServerInterface interface {
 	// UpdateRoute Replace a runtime route
 	// (PUT /routes/{name})
 	UpdateRoute(w http.ResponseWriter, r *http.Request, name RuleName)
+	// GetStatsFilters The values the dashboard filters offer
+	// (GET /stats/filters)
+	GetStatsFilters(w http.ResponseWriter, r *http.Request)
+	// GetQualityStats Verdict accuracy, precision and recall from feedback
+	// (GET /stats/quality)
+	GetQualityStats(w http.ResponseWriter, r *http.Request, params GetQualityStatsParams)
 	// ListTokens Every API token, revoked and expired ones included, newest first
 	// (GET /tokens)
 	ListTokens(w http.ResponseWriter, r *http.Request)
@@ -2665,6 +2794,118 @@ func (siw *ServerInterfaceWrapper) UpdateRoute(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// GetStatsFilters operation middleware
+func (siw *ServerInterfaceWrapper) GetStatsFilters(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetStatsFilters(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetQualityStats operation middleware
+func (siw *ServerInterfaceWrapper) GetQualityStats(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetQualityStatsParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "route" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "route", r.URL.Query(), &params.Route, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "route"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "route", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "service" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "service", r.URL.Query(), &params.Service, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "service"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "service", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "model" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "model", r.URL.Query(), &params.Model, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "model"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "model", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "verdict" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "verdict", r.URL.Query(), &params.Verdict, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "verdict"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "verdict", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetQualityStats(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListTokens operation middleware
 func (siw *ServerInterfaceWrapper) ListTokens(w http.ResponseWriter, r *http.Request) {
 
@@ -2893,6 +3134,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/watchers/{id}/stop", wrapper.StopWatcher)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/investigations/{id}/fix-applied", wrapper.UnmarkFixApplied)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/investigations/{id}/fix-applied", wrapper.MarkFixApplied)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stats/quality", wrapper.GetQualityStats)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stats/filters", wrapper.GetStatsFilters)
 
 	return m
 }
@@ -3848,6 +4091,83 @@ func (response UpdateRoutedefaultApplicationProblemPlusJSONResponse) VisitUpdate
 	return err
 }
 
+type GetStatsFiltersRequestObject struct {
+}
+
+type GetStatsFiltersResponseObject interface {
+	VisitGetStatsFiltersResponse(w http.ResponseWriter) error
+}
+
+type GetStatsFilters200JSONResponse StatsFilters
+
+func (response GetStatsFilters200JSONResponse) VisitGetStatsFiltersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStatsFiltersdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetStatsFiltersdefaultApplicationProblemPlusJSONResponse) VisitGetStatsFiltersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetQualityStatsRequestObject struct {
+	Params GetQualityStatsParams
+}
+
+type GetQualityStatsResponseObject interface {
+	VisitGetQualityStatsResponse(w http.ResponseWriter) error
+}
+
+type GetQualityStats200JSONResponse QualityStats
+
+func (response GetQualityStats200JSONResponse) VisitGetQualityStatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetQualityStatsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetQualityStatsdefaultApplicationProblemPlusJSONResponse) VisitGetQualityStatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListTokensRequestObject struct {
 }
 
@@ -4071,6 +4391,12 @@ type StrictServerInterface interface {
 	// UpdateRoute Replace a runtime route
 	// (PUT /routes/{name})
 	UpdateRoute(ctx context.Context, request UpdateRouteRequestObject) (UpdateRouteResponseObject, error)
+	// GetStatsFilters The values the dashboard filters offer
+	// (GET /stats/filters)
+	GetStatsFilters(ctx context.Context, request GetStatsFiltersRequestObject) (GetStatsFiltersResponseObject, error)
+	// GetQualityStats Verdict accuracy, precision and recall from feedback
+	// (GET /stats/quality)
+	GetQualityStats(ctx context.Context, request GetQualityStatsRequestObject) (GetQualityStatsResponseObject, error)
 	// ListTokens Every API token, revoked and expired ones included, newest first
 	// (GET /tokens)
 	ListTokens(ctx context.Context, request ListTokensRequestObject) (ListTokensResponseObject, error)
@@ -4773,6 +5099,56 @@ func (sh *strictHandler) UpdateRoute(w http.ResponseWriter, r *http.Request, nam
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateRouteResponseObject); ok {
 		if err := validResponse.VisitUpdateRouteResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetStatsFilters operation middleware
+func (sh *strictHandler) GetStatsFilters(w http.ResponseWriter, r *http.Request) {
+	var request GetStatsFiltersRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetStatsFilters(ctx, request.(GetStatsFiltersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetStatsFilters")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetStatsFiltersResponseObject); ok {
+		if err := validResponse.VisitGetStatsFiltersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetQualityStats operation middleware
+func (sh *strictHandler) GetQualityStats(w http.ResponseWriter, r *http.Request, params GetQualityStatsParams) {
+	var request GetQualityStatsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetQualityStats(ctx, request.(GetQualityStatsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetQualityStats")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetQualityStatsResponseObject); ok {
+		if err := validResponse.VisitGetQualityStatsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

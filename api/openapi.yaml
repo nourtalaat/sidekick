@@ -766,6 +766,54 @@ paths:
                 $ref: "#/components/schemas/FixApplied"
         default:
           $ref: "#/components/responses/Problem"
+  /stats/quality:
+    get:
+      operationId: GetQualityStats
+      summary: Verdict accuracy, precision and recall from feedback
+      description: |
+        The verdict Sidekick gave against the verdict people confirmed, for
+        the investigations created in the range, read from the daily
+        rollup. Days are UTC dates. Only investigations that people rated
+        count: those with a confirmed verdict, and those whose verdict was
+        rated wrong without a real verdict, which count as confirmed
+        `unknown`; they are wrong in the accuracy and left out of precision
+        and recall. The `verdict` filter selects the verdict Sidekick gave.
+        The rollup is recounted once a minute, so the newest changes can
+        take that long to show.
+      x-sidekick-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/StatsFrom"
+        - $ref: "#/components/parameters/StatsTo"
+        - $ref: "#/components/parameters/StatsRoute"
+        - $ref: "#/components/parameters/StatsService"
+        - $ref: "#/components/parameters/StatsModel"
+        - $ref: "#/components/parameters/StatsVerdict"
+      responses:
+        "200":
+          description: The quality numbers of the range and of the range before it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QualityStats"
+        default:
+          $ref: "#/components/responses/Problem"
+  /stats/filters:
+    get:
+      operationId: GetStatsFilters
+      summary: The values the dashboard filters offer
+      description: |
+        The routes, services and models of the investigations of the last
+        400 days, for the filter menus of the dashboard.
+      x-sidekick-role: viewer
+      responses:
+        "200":
+          description: The values, sorted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatsFilters"
+        default:
+          $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
     session:
@@ -795,6 +843,44 @@ components:
       schema:
         type: string
         format: uuid
+    StatsFrom:
+      name: from
+      in: query
+      description: The first day of the range, a UTC date. The default is 29 days before `to`.
+      schema:
+        type: string
+        format: date
+    StatsTo:
+      name: to
+      in: query
+      description: The last day of the range, a UTC date, included. The default is today. The range is at most 400 days.
+      schema:
+        type: string
+        format: date
+    StatsRoute:
+      name: route
+      in: query
+      description: Only investigations of this route.
+      schema:
+        type: string
+    StatsService:
+      name: service
+      in: query
+      description: Only investigations of this service.
+      schema:
+        type: string
+    StatsModel:
+      name: model
+      in: query
+      description: Only investigations whose first model turn used this model.
+      schema:
+        type: string
+    StatsVerdict:
+      name: verdict
+      in: query
+      description: Only investigations with this verdict.
+      schema:
+        $ref: "#/components/schemas/Verdict"
   responses:
     Problem:
       description: An error, as problem details.
@@ -2104,3 +2190,137 @@ components:
           type: string
           format: date-time
           description: When the fix was marked, while it is marked.
+    QualityStats:
+      type: object
+      required: [from, to, totals, previous, days, matrix, perVerdict, comparison]
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        totals:
+          $ref: "#/components/schemas/QualityTotals"
+        previous:
+          allOf:
+            - $ref: "#/components/schemas/QualityTotals"
+          description: The same totals for the range of equal length that ends the day before `from`.
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/QualityDay"
+        matrix:
+          type: array
+          description: Each pair of the verdict given and the verdict confirmed that occurs, with its count.
+          items:
+            $ref: "#/components/schemas/ConfusionCell"
+        perVerdict:
+          type: array
+          description: Precision and recall of each verdict that was given or confirmed in the range.
+          items:
+            $ref: "#/components/schemas/VerdictScore"
+        comparison:
+          type: array
+          description: Accuracy by model and strategy, for comparing them.
+          items:
+            $ref: "#/components/schemas/QualityComparison"
+    QualityTotals:
+      type: object
+      required: [rated, correct]
+      properties:
+        rated:
+          type: integer
+          format: int64
+          description: The investigations people rated.
+        correct:
+          type: integer
+          format: int64
+          description: Those whose verdict was confirmed as given.
+        accuracy:
+          type: number
+          format: double
+          description: correct over rated, from 0 to 1; left out when nothing was rated.
+    QualityDay:
+      type: object
+      required: [day, rated, correct]
+      properties:
+        day:
+          type: string
+          format: date
+        rated:
+          type: integer
+          format: int64
+        correct:
+          type: integer
+          format: int64
+    ConfusionCell:
+      type: object
+      required: [predicted, confirmed, n]
+      properties:
+        predicted:
+          $ref: "#/components/schemas/Verdict"
+        confirmed:
+          type: string
+          description: The verdict people confirmed, or `unknown` when they rated the verdict wrong without giving the real one.
+        n:
+          type: integer
+          format: int64
+    VerdictScore:
+      type: object
+      required: [verdict, predicted, actual, hits]
+      properties:
+        verdict:
+          $ref: "#/components/schemas/Verdict"
+        predicted:
+          type: integer
+          format: int64
+          description: Rated investigations Sidekick gave this verdict, with a known confirmed verdict.
+        actual:
+          type: integer
+          format: int64
+          description: Rated investigations people confirmed with this verdict.
+        hits:
+          type: integer
+          format: int64
+          description: Those in both groups.
+        precision:
+          type: number
+          format: double
+          description: hits over predicted; left out when predicted is 0.
+        recall:
+          type: number
+          format: double
+          description: hits over actual; left out when actual is 0.
+    QualityComparison:
+      type: object
+      required: [model, strategy, rated, correct]
+      properties:
+        model:
+          type: string
+          description: Empty when the investigation had no model turn.
+        strategy:
+          type: string
+          description: Empty when no strategy was chosen.
+        rated:
+          type: integer
+          format: int64
+        correct:
+          type: integer
+          format: int64
+    StatsFilters:
+      type: object
+      required: [routes, services, models]
+      properties:
+        routes:
+          type: array
+          items:
+            type: string
+        services:
+          type: array
+          items:
+            type: string
+        models:
+          type: array
+          items:
+            type: string
