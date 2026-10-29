@@ -28,7 +28,7 @@ DELETE FROM stats_hourly WHERE hour = ANY(@buckets::timestamptz[]);
 -- DeleteQualityDaily deletes the rows of the days that start at buckets,
 -- which the recount adds again.
 DELETE FROM quality_daily
-WHERE day IN (SELECT (b AT TIME ZONE 'UTC')::date FROM unnest(@buckets::timestamptz[]) AS b);
+WHERE day = ANY (ARRAY(SELECT (b AT TIME ZONE 'UTC')::date FROM unnest(@buckets::timestamptz[]) AS b));
 
 -- name: RecountStatsHourly :exec
 -- RecountStatsHourly counts the investigations created in each hour that

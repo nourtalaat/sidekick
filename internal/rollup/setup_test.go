@@ -158,6 +158,10 @@ func readStats(t *testing.T, pool *pgxpool.Pool) []statsRow {
 	got, err := pgx.CollectRows(rows, pgx.RowToStructByName[statsRow])
 	require.NoError(t, err)
 
+	for i := range got {
+		got[i].Hour = got[i].Hour.UTC()
+	}
+
 	return got
 }
 
@@ -170,6 +174,10 @@ func readQuality(t *testing.T, pool *pgxpool.Pool) []qualityRow {
 
 	got, err := pgx.CollectRows(rows, pgx.RowToStructByName[qualityRow])
 	require.NoError(t, err)
+
+	for i := range got {
+		got[i].Day = got[i].Day.UTC()
+	}
 
 	return got
 }

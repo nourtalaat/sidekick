@@ -40,7 +40,10 @@ func TestQueryPlans(t *testing.T) {
 		name string
 		// run calls the query through q, which explains it instead of
 		// running it.
-		run       func(ctx context.Context, q *db.Queries) error
+		run func(ctx context.Context, q *db.Queries) error
+		// before runs first, on the transaction itself, to clear the rows
+		// the query adds.
+		before    func(ctx context.Context, t *testing.T, q *db.Queries)
 		wantIndex []string
 	}{
 		{
@@ -57,12 +60,18 @@ func TestQueryPlans(t *testing.T) {
 			run: func(ctx context.Context, q *db.Queries) error {
 				return fmt.Errorf("run query: %w", q.RecountStatsHourly(ctx, hours))
 			},
+			before: func(ctx context.Context, t *testing.T, q *db.Queries) {
+				require.NoError(t, q.DeleteStatsHourly(ctx, hours))
+			},
 			wantIndex: []string{"investigations_list", "events_group", "watchers_group_name"},
 		},
 		{
 			name: "RecountQualityDaily",
 			run: func(ctx context.Context, q *db.Queries) error {
 				return fmt.Errorf("run query: %w", q.RecountQualityDaily(ctx, days))
+			},
+			before: func(ctx context.Context, t *testing.T, q *db.Queries) {
+				require.NoError(t, q.DeleteQualityDaily(ctx, days))
 			},
 			wantIndex: []string{"investigations_list", "feedback_investigation"},
 		},
@@ -90,6 +99,10 @@ func TestQueryPlans(t *testing.T) {
 			require.NoError(t, err)
 
 			defer func() { _ = tx.Rollback(t.Context()) }()
+
+			if tt.before != nil {
+				tt.before(t.Context(), t, db.New(tx))
+			}
 
 			explain := storetest.NewExplainer(t, tx)
 

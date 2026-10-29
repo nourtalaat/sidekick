@@ -24,7 +24,7 @@ func (q *Queries) CountDirtyBuckets(ctx context.Context) (int64, error) {
 
 const deleteQualityDaily = `-- name: DeleteQualityDaily :exec
 DELETE FROM quality_daily
-WHERE day IN (SELECT (b AT TIME ZONE 'UTC')::date FROM unnest($1::timestamptz[]) AS b)
+WHERE day = ANY (ARRAY(SELECT (b AT TIME ZONE 'UTC')::date FROM unnest($1::timestamptz[]) AS b))
 `
 
 // DeleteQualityDaily deletes the rows of the days that start at buckets,

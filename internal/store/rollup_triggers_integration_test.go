@@ -202,6 +202,12 @@ func TestRollupTriggersMarkBuckets(t *testing.T) {
 			got, err := pgx.CollectRows(rows, pgx.RowTo[string])
 			require.NoError(t, err)
 
+			if len(tt.want) == 0 {
+				require.Empty(t, got)
+
+				return
+			}
+
 			require.Equal(t, tt.want, got)
 		})
 	}

@@ -301,6 +301,12 @@ func TestEveryPathThatChangesACountedValueMarksItsBuckets(t *testing.T) {
 				return
 			}
 
+			if len(tt.want) == 0 {
+				require.Empty(t, got)
+
+				return
+			}
+
 			require.Equal(t, tt.want, got)
 		})
 	}
