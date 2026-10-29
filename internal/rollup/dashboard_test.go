@@ -23,7 +23,7 @@ func scrapeDashboard(t *testing.T, reg *prometheus.Registry) map[string]float64 
 	t.Helper()
 
 	rec := httptest.NewRecorder()
-	promhttp.HandlerFor(reg, promhttp.HandlerOpts{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	promhttp.HandlerFor(reg, promhttp.HandlerOpts{}).ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", nil))
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	got := map[string]float64{}
