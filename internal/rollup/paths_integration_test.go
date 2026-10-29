@@ -54,100 +54,93 @@ func TestEveryPathThatChangesACountedValueMarksItsBuckets(t *testing.T) {
 	tests := []struct {
 		name    string
 		prepare []string
-		run     func(ctx context.Context, q *db.Queries) error
+		run     func(ctx context.Context, t *testing.T, q *db.Queries)
 		want    []string
 	}{
 		{
 			name: "the router creates an investigation",
-			run: func(ctx context.Context, q *db.Queries) error {
-				return q.InsertInvestigation(ctx, db.InsertInvestigationParams{
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
+				err := q.InsertInvestigation(ctx, db.InsertInvestigationParams{
 					ID: uuid.New(), GroupID: group, Route: "default", Mode: "read-only", Status: "queued",
 					Connectors: json.RawMessage(`{}`), Budget: json.RawMessage(`{}`),
 				})
+				require.NoError(t, err)
 			},
 			want: []string{"stats_hourly NOW"},
 		},
 		{
 			name: "a worker starts the run",
-			run: func(ctx context.Context, q *db.Queries) error {
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				_, err := q.StartInvestigationRun(ctx, db.StartInvestigationRunParams{ID: id, Fence: pathFence, Now: time.Now()})
-
-				return err
+				require.NoError(t, err)
 			},
 			want: []string{markStats},
 		},
 		{
 			name:    "a step of the run, as every step advances the counters",
 			prepare: []string{runningWithFence},
-			run: func(ctx context.Context, q *db.Queries) error {
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				_, err := q.AdvanceInvestigation(ctx, db.AdvanceInvestigationParams{
 					ID: id, Fence: pathFence, InputTokens: 10, OutputTokens: 5, CostMicros: 100, ToolCalls: 1,
 				})
-
-				return err
+				require.NoError(t, err)
 			},
 		},
 		{
 			name:    "the first model turn",
 			prepare: []string{runningWithFence},
-			run: func(ctx context.Context, q *db.Queries) error {
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				_, err := q.AdvanceInvestigation(ctx, db.AdvanceInvestigationParams{ID: id, Fence: pathFence, Model: &model})
-
-				return err
+				require.NoError(t, err)
 			},
 			want: []string{markQuality, markStats},
 		},
 		{
 			name:    "the first finding",
 			prepare: []string{runningWithFence},
-			run: func(ctx context.Context, q *db.Queries) error {
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				_, err := q.AdvanceInvestigation(ctx, db.AdvanceInvestigationParams{ID: id, Fence: pathFence, Finding: true})
-
-				return err
+				require.NoError(t, err)
 			},
 			want: []string{markStats},
 		},
 		{
 			name:    "triage chooses the strategy",
 			prepare: []string{runningWithFence},
-			run: func(ctx context.Context, q *db.Queries) error {
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				_, err := q.SetInvestigationStrategy(ctx, db.SetInvestigationStrategyParams{
 					ID: id, Fence: pathFence, Strategy: &strategy, Budget: json.RawMessage(`{}`),
 				})
-
-				return err
+				require.NoError(t, err)
 			},
 			want: []string{markQuality},
 		},
 		{
 			name:    "the run ends with a verdict",
 			prepare: []string{runningWithFence},
-			run: func(ctx context.Context, q *db.Queries) error {
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				_, err := q.FinishInvestigation(ctx, db.FinishInvestigationParams{
 					ID: id, Fence: pathFence, Status: "final", Verdict: &verdict, Report: report,
 				})
-
-				return err
+				require.NoError(t, err)
 			},
 			want: []string{markQuality, markStats},
 		},
 		{
 			name:    "a dead job ends the run",
 			prepare: []string{runningWithFence},
-			run: func(ctx context.Context, q *db.Queries) error {
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				_, err := q.FailInvestigation(ctx, db.FailInvestigationParams{ID: id, Verdict: &verdict, Report: report})
-
-				return err
+				require.NoError(t, err)
 			},
 			want: []string{markQuality, markStats},
 		},
 		{
 			name:    "a follow-up run starts",
 			prepare: []string{finalWithVerdict},
-			run: func(ctx context.Context, q *db.Queries) error {
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				_, err := q.StartFollowUpRun(ctx, db.StartFollowUpRunParams{ID: id, Fence: pathFence})
-
-				return err
+				require.NoError(t, err)
 			},
 			want: []string{markQuality, markStats},
 		},
@@ -157,127 +150,117 @@ func TestEveryPathThatChangesACountedValueMarksItsBuckets(t *testing.T) {
 				finalWithVerdict,
 				"UPDATE investigations SET status = 'running', run_kind = 'follow_up', run = 2 WHERE id = '" + pathInvestigation + "'",
 			},
-			run: func(ctx context.Context, q *db.Queries) error {
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				_, err := q.EndFollowUpRun(ctx, db.EndFollowUpRunParams{ID: id, Status: "final", Report: report})
-
-				return err
+				require.NoError(t, err)
 			},
 			want: []string{markStats},
 		},
 		{
 			name:    "an investigation runs in full after triage",
 			prepare: []string{"UPDATE investigations SET status = 'final', stop_reason = 'triage', verdict = 'inconclusive', finished_at = now() WHERE id = '" + pathInvestigation + "'"},
-			run: func(ctx context.Context, q *db.Queries) error {
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				_, err := q.RestartTriagedInvestigation(ctx, id)
-
-				return err
+				require.NoError(t, err)
 			},
 			want: []string{markQuality, markStats},
 		},
 		{
 			name:    "a responder confirms the verdict",
 			prepare: []string{finalWithVerdict},
-			run: func(ctx context.Context, q *db.Queries) error {
-				return q.SetInvestigationConfirmation(ctx, db.SetInvestigationConfirmationParams{
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
+				err := q.SetInvestigationConfirmation(ctx, db.SetInvestigationConfirmationParams{
 					ID: id, ConfirmedVerdict: &verdict, ConfirmedBySlackUser: &slackUser,
 				})
+				require.NoError(t, err)
 			},
 			want: []string{markQuality},
 		},
 		{
 			name:    "a responder asks the run to stop",
 			prepare: []string{runningWithFence},
-			run: func(ctx context.Context, q *db.Queries) error {
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				_, err := q.RequestInvestigationCancel(ctx, db.RequestInvestigationCancelParams{ID: id, SlackUserID: &slackUser})
-
-				return err
+				require.NoError(t, err)
 			},
 		},
 		{
 			name:    "a Slack user rates the verdict",
 			prepare: []string{finalWithVerdict},
-			run: func(ctx context.Context, q *db.Queries) error {
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				_, err := q.UpsertSlackFeedback(ctx, db.UpsertSlackFeedbackParams{
 					ID: uuid.New(), InvestigationID: id, TargetKind: "verdict", TargetRef: "run:1/verdict", Rating: "wrong", SlackUserID: slackUser,
 				})
-
-				return err
+				require.NoError(t, err)
 			},
 			want: []string{markQuality},
 		},
 		{
 			name:    "a Slack user changes the rating of the verdict",
 			prepare: []string{finalWithVerdict, slackRating("correct")},
-			run: func(ctx context.Context, q *db.Queries) error {
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				_, err := q.UpsertSlackFeedback(ctx, db.UpsertSlackFeedbackParams{
 					ID: uuid.New(), InvestigationID: id, TargetKind: "verdict", TargetRef: "run:1/verdict", Rating: "wrong", SlackUserID: slackUser,
 				})
-
-				return err
+				require.NoError(t, err)
 			},
 			want: []string{markQuality},
 		},
 		{
 			name:    "a web user rates the verdict",
 			prepare: []string{finalWithVerdict},
-			run: func(ctx context.Context, q *db.Queries) error {
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				_, err := q.UpsertUserFeedback(ctx, db.UpsertUserFeedbackParams{
 					ID: uuid.New(), InvestigationID: id, TargetKind: "verdict", TargetRef: "run:1/verdict", Rating: "wrong", UserID: &user, Channel: "ui",
 				})
-
-				return err
+				require.NoError(t, err)
 			},
 			want: []string{markQuality},
 		},
 		{
 			name:    "a user rates a finding",
 			prepare: []string{finalWithVerdict},
-			run: func(ctx context.Context, q *db.Queries) error {
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				_, err := q.UpsertSlackFeedback(ctx, db.UpsertSlackFeedbackParams{
 					ID: uuid.New(), InvestigationID: id, TargetKind: "finding", TargetRef: "run:1/finding:f1", Rating: "wrong", SlackUserID: slackUser,
 				})
-
-				return err
+				require.NoError(t, err)
 			},
 		},
 		{
 			name: "a watcher starts",
-			run: func(ctx context.Context, q *db.Queries) error {
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				_, err := q.InsertWatcher(ctx, db.InsertWatcherParams{
 					ID: watcher, GroupID: group, InvestigationID: &id, Name: "health", Origin: "model", CheckType: "alert",
 					Spec: json.RawMessage(`{}`), IntervalS: 30, PassesToRecover: 2, CheckTimeoutS: 10, StartedAt: time.Now(), Deadline: time.Now().Add(time.Hour),
 				})
-
-				return err
+				require.NoError(t, err)
 			},
 			want: []string{markStats},
 		},
 		{
 			name:    "a watcher runs a check",
 			prepare: []string{startedWatcher},
-			run: func(ctx context.Context, q *db.Queries) error {
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				_, err := q.RecordWatcherCheck(ctx, db.RecordWatcherCheckParams{ID: watcher, At: time.Now(), Passed: true})
-
-				return err
+				require.NoError(t, err)
 			},
 		},
 		{
 			name:    "a watcher recovers",
 			prepare: []string{startedWatcher},
-			run: func(ctx context.Context, q *db.Queries) error {
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				_, err := q.EndWatcher(ctx, db.EndWatcherParams{ID: watcher, Status: "recovered", At: time.Now()})
-
-				return err
+				require.NoError(t, err)
 			},
 			want: []string{markStats},
 		},
 		{
 			name:    "the group resolves and ends its watchers",
 			prepare: []string{startedWatcher},
-			run: func(ctx context.Context, q *db.Queries) error {
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				_, err := q.EndGroupWatchersResolved(ctx, db.EndGroupWatchersResolvedParams{GroupID: group, At: time.Now()})
-
-				return err
+				require.NoError(t, err)
 			},
 			want: []string{markStats},
 		},
@@ -305,7 +288,7 @@ func TestEveryPathThatChangesACountedValueMarksItsBuckets(t *testing.T) {
 
 			defer func() { _ = tx.Rollback(t.Context()) }()
 
-			require.NoError(t, tt.run(t.Context(), db.New(tx)))
+			tt.run(t.Context(), t, db.New(tx))
 			require.NoError(t, tx.Commit(t.Context()))
 
 			after := time.Now().UTC().Truncate(time.Hour)

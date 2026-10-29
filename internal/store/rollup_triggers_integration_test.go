@@ -17,14 +17,14 @@ const (
 	// The fixture's investigation was created on 2026-10-26 at 14:00:01 UTC.
 	rollupStatsBucket   = "stats_hourly 2026-10-26 14:00"
 	rollupQualityBucket = "quality_daily 2026-10-26 00:00"
-	rollupWatcher       = "0192d3a4-0000-7000-8000-0000000000d1"
+	watcherID           = "0192d3a4-0000-7000-8000-0000000000d1"
 )
 
 const (
 	updateInvestigation = "UPDATE investigations SET %s WHERE id = '" + notifyInvestigation + "'"
 	insertWatcher       = `INSERT INTO watchers (id, group_id, investigation_id, name, origin, check_type, spec, interval_s,
 		passes_to_recover, check_timeout_s, status, started_at, deadline)
-		VALUES ('` + rollupWatcher + `', '` + rollupGroup + `', '` + notifyInvestigation + `',
+		VALUES ('` + watcherID + `', '` + rollupGroup + `', '` + notifyInvestigation + `',
 		'health', 'model', 'alert', '{}', 30, 2, 10, 'running', now(), now() + interval '1 hour')`
 	insertFeedbackTemplate = `INSERT INTO feedback (id, investigation_id, target_kind, target_ref, rating, slack_user_id, channel, created_at, updated_at)
 		VALUES ('0192d3a4-0000-7000-8000-0000000000e1', '` + notifyInvestigation + `', '%s', '%s', 'correct', 'U1', 'slack', now(), now())`
