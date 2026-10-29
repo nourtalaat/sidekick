@@ -33,10 +33,14 @@ const EnvDatabaseURL = "SIDEKICK_TEST_DATABASE_URL"
 const EnvVectorDatabaseURL = "SIDEKICK_TEST_VECTOR_DATABASE_URL"
 
 const (
-	testMaxConns       int32 = 4
-	adminMaxConns      int32 = 4
-	cleanupTimeout           = 30 * time.Second
-	testDatabasePrefix       = "sidekick_test_"
+	testMaxConns  int32 = 4
+	adminMaxConns int32 = 4
+	// testIdleTime is how long a test pool keeps a connection that nothing
+	// uses. A parallel test that waits for its subtests keeps its pool open,
+	// so without this a package holds one idle pool per waiting test.
+	testIdleTime       = time.Second
+	cleanupTimeout     = 30 * time.Second
+	testDatabasePrefix = "sidekick_test_"
 )
 
 // sharedServer is the Postgres server shared by every test in the test
@@ -86,7 +90,7 @@ func Main(m *testing.M) int {
 func New(t testing.TB) *pgxpool.Pool {
 	t.Helper()
 
-	pool, err := store.Open(t.Context(), NewURL(t), testMaxConns)
+	pool, err := openTestPool(t.Context(), NewURL(t))
 	require.NoError(t, err, "open the test database")
 	t.Cleanup(pool.Close)
 
@@ -112,7 +116,7 @@ func NewVector(t testing.TB, dimensions int) *pgxpool.Pool {
 
 	vectorServer.setup(t, vectorKind)
 
-	pool, err := store.Open(t.Context(), vectorServer.createDatabase(t, vectorServer.template), testMaxConns)
+	pool, err := openTestPool(t.Context(), vectorServer.createDatabase(t, vectorServer.template))
 	require.NoError(t, err, "open the test database")
 	t.Cleanup(pool.Close)
 
@@ -188,6 +192,26 @@ func (s *sharedServer) createDatabase(t testing.TB, template string) string {
 	require.NoError(t, err)
 
 	return dbURL
+}
+
+// openTestPool opens a pool of testMaxConns connections that closes the ones
+// it does not use after testIdleTime.
+func openTestPool(ctx context.Context, url string) (*pgxpool.Pool, error) {
+	cfg, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		return nil, fmt.Errorf("parse the database URL: %w", err)
+	}
+
+	cfg.MaxConns = testMaxConns
+	cfg.MaxConnIdleTime = testIdleTime
+	cfg.HealthCheckPeriod = testIdleTime
+
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("open the pool: %w", err)
+	}
+
+	return pool, nil
 }
 
 func quote(name string) string {
