@@ -1,10 +1,10 @@
-import type { AnchorHTMLAttributes, ButtonHTMLAttributes } from "react";
+import type { AnchorHTMLAttributes, ComponentPropsWithRef } from "react";
 import { Link, type LinkProps } from "react-router";
 import "./Button.css";
 
 export type ButtonVariant = "primary" | "secondary" | "destructive" | "brand";
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant };
+type ButtonProps = ComponentPropsWithRef<"button"> & { variant?: ButtonVariant };
 type ButtonLinkProps = AnchorHTMLAttributes<HTMLAnchorElement> & { variant?: ButtonVariant };
 type LinkButtonProps = LinkProps & { variant?: ButtonVariant };
 
