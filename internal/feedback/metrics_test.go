@@ -47,6 +47,23 @@ func TestMetrics(t *testing.T) {
 	}
 }
 
+func TestMetricsOnOneRegistryShareACounter(t *testing.T) {
+	t.Parallel()
+
+	reg := prometheus.NewRegistry()
+
+	first, err := NewMetrics(reg)
+	require.NoError(t, err)
+
+	second, err := NewMetrics(reg)
+	require.NoError(t, err)
+
+	first.Stored(TargetFinding, output.RatingWrong)
+	second.Stored(TargetFinding, output.RatingWrong)
+
+	require.InDelta(t, 2, testutil.ToFloat64(first.feedback.WithLabelValues(TargetFinding, "wrong")), 0)
+}
+
 func TestNilMetricsRecordNothing(t *testing.T) {
 	t.Parallel()
 

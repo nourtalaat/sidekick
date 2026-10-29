@@ -12,6 +12,60 @@ import (
 	"github.com/google/uuid"
 )
 
+const getSlackFeedbackRating = `-- name: GetSlackFeedbackRating :one
+SELECT rating FROM feedback
+WHERE investigation_id = $1 AND target_kind = $2 AND target_ref = $3
+  AND slack_user_id = $4::text
+`
+
+type GetSlackFeedbackRatingParams struct {
+	InvestigationID uuid.UUID
+	TargetKind      string
+	TargetRef       string
+	SlackUserID     string
+}
+
+// GetSlackFeedbackRating returns the rating a Slack user gave a target, and
+// no row when they gave none.
+func (q *Queries) GetSlackFeedbackRating(ctx context.Context, arg GetSlackFeedbackRatingParams) (string, error) {
+	row := q.db.QueryRow(ctx, getSlackFeedbackRating,
+		arg.InvestigationID,
+		arg.TargetKind,
+		arg.TargetRef,
+		arg.SlackUserID,
+	)
+	var rating string
+	err := row.Scan(&rating)
+	return rating, err
+}
+
+const getUserFeedbackRating = `-- name: GetUserFeedbackRating :one
+SELECT rating FROM feedback
+WHERE investigation_id = $1 AND target_kind = $2 AND target_ref = $3
+  AND user_id = $4
+`
+
+type GetUserFeedbackRatingParams struct {
+	InvestigationID uuid.UUID
+	TargetKind      string
+	TargetRef       string
+	UserID          *uuid.UUID
+}
+
+// GetUserFeedbackRating returns the rating a signed-in user gave a target,
+// and no row when they gave none.
+func (q *Queries) GetUserFeedbackRating(ctx context.Context, arg GetUserFeedbackRatingParams) (string, error) {
+	row := q.db.QueryRow(ctx, getUserFeedbackRating,
+		arg.InvestigationID,
+		arg.TargetKind,
+		arg.TargetRef,
+		arg.UserID,
+	)
+	var rating string
+	err := row.Scan(&rating)
+	return rating, err
+}
+
 const listTargetFeedback = `-- name: ListTargetFeedback :many
 SELECT rating, user_id, slack_user_id, updated_at
 FROM feedback
@@ -142,6 +196,26 @@ func (q *Queries) SetInvestigationConfirmation(ctx context.Context, arg SetInves
 	return err
 }
 
+const toolCallExists = `-- name: ToolCallExists :one
+SELECT EXISTS (
+  SELECT 1 FROM steps WHERE investigation_id = $1 AND tool_call_id = $2
+)
+`
+
+type ToolCallExistsParams struct {
+	InvestigationID uuid.UUID
+	ToolCallID      *string
+}
+
+// ToolCallExists reports whether a step of an investigation holds the tool
+// call with this ID.
+func (q *Queries) ToolCallExists(ctx context.Context, arg ToolCallExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, toolCallExists, arg.InvestigationID, arg.ToolCallID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const upsertSlackFeedback = `-- name: UpsertSlackFeedback :one
 INSERT INTO feedback (
   id, investigation_id, target_kind, target_ref, rating, slack_user_id, channel, created_at, updated_at
@@ -179,4 +253,129 @@ func (q *Queries) UpsertSlackFeedback(ctx context.Context, arg UpsertSlackFeedba
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const upsertSlackFeedbackDetails = `-- name: UpsertSlackFeedbackDetails :one
+INSERT INTO feedback (
+  id, investigation_id, target_kind, target_ref, rating, reason, correct_verdict, correct_cause,
+  slack_user_id, channel, created_at, updated_at
+)
+VALUES (
+  $1, $2, $3, $4, $5, $6, $7,
+  $8, $9::text, $10, now(), now()
+)
+ON CONFLICT (investigation_id, target_kind, target_ref, slack_user_id) WHERE slack_user_id IS NOT NULL
+DO UPDATE SET rating = excluded.rating, reason = excluded.reason, correct_verdict = excluded.correct_verdict,
+              correct_cause = excluded.correct_cause, channel = excluded.channel, updated_at = excluded.updated_at
+RETURNING id, investigation_id, target_kind, target_ref, rating, reason, correct_verdict, correct_cause, user_id, slack_user_id, channel, created_at, updated_at
+`
+
+type UpsertSlackFeedbackDetailsParams struct {
+	ID              uuid.UUID
+	InvestigationID uuid.UUID
+	TargetKind      string
+	TargetRef       string
+	Rating          string
+	Reason          *string
+	CorrectVerdict  *string
+	CorrectCause    *string
+	SlackUserID     string
+	Channel         string
+}
+
+// UpsertSlackFeedbackDetails stores a Slack user's feedback on a target
+// from the Details form. A user has one opinion per target: it replaces the
+// user's earlier rating of the target, whatever they said in it.
+func (q *Queries) UpsertSlackFeedbackDetails(ctx context.Context, arg UpsertSlackFeedbackDetailsParams) (Feedback, error) {
+	row := q.db.QueryRow(ctx, upsertSlackFeedbackDetails,
+		arg.ID,
+		arg.InvestigationID,
+		arg.TargetKind,
+		arg.TargetRef,
+		arg.Rating,
+		arg.Reason,
+		arg.CorrectVerdict,
+		arg.CorrectCause,
+		arg.SlackUserID,
+		arg.Channel,
+	)
+	var i Feedback
+	err := row.Scan(
+		&i.ID,
+		&i.InvestigationID,
+		&i.TargetKind,
+		&i.TargetRef,
+		&i.Rating,
+		&i.Reason,
+		&i.CorrectVerdict,
+		&i.CorrectCause,
+		&i.UserID,
+		&i.SlackUserID,
+		&i.Channel,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertUserFeedback = `-- name: UpsertUserFeedback :one
+INSERT INTO feedback (
+  id, investigation_id, target_kind, target_ref, rating, reason, correct_verdict, correct_cause,
+  user_id, channel, created_at, updated_at
+)
+VALUES (
+  $1, $2, $3, $4, $5, $6, $7,
+  $8, $9, $10, now(), now()
+)
+ON CONFLICT (investigation_id, target_kind, target_ref, user_id) WHERE user_id IS NOT NULL
+DO UPDATE SET rating = excluded.rating, reason = excluded.reason, correct_verdict = excluded.correct_verdict,
+              correct_cause = excluded.correct_cause, channel = excluded.channel, updated_at = excluded.updated_at
+RETURNING id, investigation_id, target_kind, target_ref, rating, reason, correct_verdict, correct_cause, user_id, slack_user_id, channel, created_at, updated_at
+`
+
+type UpsertUserFeedbackParams struct {
+	ID              uuid.UUID
+	InvestigationID uuid.UUID
+	TargetKind      string
+	TargetRef       string
+	Rating          string
+	Reason          *string
+	CorrectVerdict  *string
+	CorrectCause    *string
+	UserID          *uuid.UUID
+	Channel         string
+}
+
+// UpsertUserFeedback stores a signed-in user's feedback on a target. A user
+// has one opinion per target: a new submission replaces the earlier one.
+func (q *Queries) UpsertUserFeedback(ctx context.Context, arg UpsertUserFeedbackParams) (Feedback, error) {
+	row := q.db.QueryRow(ctx, upsertUserFeedback,
+		arg.ID,
+		arg.InvestigationID,
+		arg.TargetKind,
+		arg.TargetRef,
+		arg.Rating,
+		arg.Reason,
+		arg.CorrectVerdict,
+		arg.CorrectCause,
+		arg.UserID,
+		arg.Channel,
+	)
+	var i Feedback
+	err := row.Scan(
+		&i.ID,
+		&i.InvestigationID,
+		&i.TargetKind,
+		&i.TargetRef,
+		&i.Rating,
+		&i.Reason,
+		&i.CorrectVerdict,
+		&i.CorrectCause,
+		&i.UserID,
+		&i.SlackUserID,
+		&i.Channel,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

@@ -43,6 +43,12 @@ type confirmationView struct {
 	At          string `json:"at,omitempty"`
 }
 
+// actor is who gave feedback: a signed-in user or a Slack user.
+type actor struct {
+	userID    *uuid.UUID
+	slackUser *string
+}
+
 // view returns c for the audit log, or nil when nothing is confirmed, so
 // the audit row leaves that side out.
 func (c confirmation) view() any {
@@ -77,11 +83,11 @@ func current(inv db.Investigation) confirmation {
 	}
 }
 
-// nextConfirmation returns the confirmed verdict after slackUser rated
-// verdict, whose cause is cause, at now, and how it changed. A Correct
-// confirms verdict unless it is the confirmed one already. A Wrong takes
-// back a confirmation of verdict, and changes nothing otherwise.
-func nextConfirmation(cur confirmation, rating output.Rating, verdict string, cause *string, slackUser string, now time.Time) (confirmation, Change) {
+// nextConfirmation returns the confirmed verdict after who rated verdict,
+// whose cause is cause, at now, and how it changed. A Correct confirms
+// verdict unless it is the confirmed one already. A Wrong takes back a
+// confirmation of verdict, and changes nothing otherwise.
+func nextConfirmation(cur confirmation, rating output.Rating, verdict string, cause *string, who actor, now time.Time) (confirmation, Change) {
 	same := cur.verdict != nil && *cur.verdict == verdict
 
 	switch {
@@ -93,10 +99,46 @@ func nextConfirmation(cur confirmation, rating output.Rating, verdict string, ca
 			change = Revised
 		}
 
-		return confirmation{verdict: &verdict, cause: cause, bySlackUser: &slackUser, at: &now}, change
+		return who.confirmedBy(verdict, cause, now), change
 	case rating == output.RatingWrong && same:
 		return confirmation{}, Withdrawn
 	default:
 		return cur, Unchanged
 	}
+}
+
+// nextRealVerdict returns the confirmed verdict after who said the real
+// verdict is verdict, with cause when they gave one, at now, and how it
+// changed. The real verdict is confirmed whatever the verdict of the
+// report is. The same verdict with no new cause changes nothing.
+func nextRealVerdict(cur confirmation, verdict string, cause *string, who actor, now time.Time) (confirmation, Change) {
+	same := cur.verdict != nil && *cur.verdict == verdict
+	sameCause := cause == nil || (cur.cause != nil && *cur.cause == *cause)
+
+	switch {
+	case same && sameCause:
+		return cur, Unchanged
+	case cur.verdict != nil:
+		return who.confirmedBy(verdict, cause, now), Revised
+	default:
+		return who.confirmedBy(verdict, cause, now), Confirmed
+	}
+}
+
+// confirmedBy returns a confirmation of verdict and cause by a at now.
+func (a actor) confirmedBy(verdict string, cause *string, now time.Time) confirmation {
+	return confirmation{verdict: &verdict, cause: cause, by: a.userID, bySlackUser: a.slackUser, at: &now}
+}
+
+// id names a for the audit log.
+func (a actor) id() string {
+	if a.slackUser != nil {
+		return *a.slackUser
+	}
+
+	if a.userID != nil {
+		return a.userID.String()
+	}
+
+	return ""
 }

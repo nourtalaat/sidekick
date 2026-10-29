@@ -344,6 +344,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations/{id}/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Say that one part of an investigation is correct or wrong
+         * @description Feedback on the verdict, a finding, a fix or a tool call, with an
+         *     optional reason and, when the caller knows it, the real verdict and
+         *     cause. A signed-in user has one opinion per part: a new submission
+         *     replaces the user's earlier one. A real verdict confirms the
+         *     investigation, whichever part the feedback is about, and a
+         *     confirmation that changes is written to the audit log. Rating the
+         *     verdict Correct confirms it too; rating it Wrong takes back a
+         *     confirmation of that verdict.
+         *
+         *     The target is checked against the current report and steps. The
+         *     ref of the verdict is `run:N/verdict`, of a finding
+         *     `run:N/finding:ID`, of a fix `run:N/fix:ID`, where N is the
+         *     investigation's current run; the ref of a tool call is its call ID.
+         *     A ref that is not there answers 422, so a page that shows an older
+         *     run learns that its report is gone. A verdict, finding or fix needs
+         *     an investigation that has a verdict (409 otherwise); a tool call can
+         *     be rated while the investigation runs. API tokens are refused with
+         *     403, since feedback is given by a person.
+         */
+        post: operations["CreateInvestigationFeedback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/investigations/{id}/stream": {
         parameters: {
             query?: never;
@@ -783,6 +820,45 @@ export interface components {
              * @enum {string}
              */
             summary: "correct" | "wrong" | "mixed" | "none";
+        };
+        /** @enum {string} */
+        FeedbackTargetKind: "verdict" | "finding" | "fix" | "tool_call";
+        /** @enum {string} */
+        FeedbackRating: "correct" | "wrong";
+        NewFeedback: {
+            targetKind: components["schemas"]["FeedbackTargetKind"];
+            /**
+             * @description `run:N/verdict`, `run:N/finding:ID` or `run:N/fix:ID` for the
+             *     current run N, or the ID of a tool call.
+             */
+            targetRef: string;
+            rating: components["schemas"]["FeedbackRating"];
+            reason?: string;
+            correctVerdict?: components["schemas"]["Verdict"];
+            correctCause?: string;
+        };
+        Feedback: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            investigationId: string;
+            targetKind: components["schemas"]["FeedbackTargetKind"];
+            targetRef: string;
+            rating: components["schemas"]["FeedbackRating"];
+            reason?: string;
+            correctVerdict?: components["schemas"]["Verdict"];
+            correctCause?: string;
+            /** @enum {string} */
+            channel: "ui" | "slack";
+            /**
+             * @description How this submission changed the confirmed verdict of the investigation.
+             * @enum {string}
+             */
+            confirmation: "unchanged" | "confirmed" | "revised" | "withdrawn";
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
         };
         /** @enum {string} */
         WatcherStatus: "running" | "recovered" | "timed_out" | "stopped";
@@ -1722,6 +1798,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WatcherList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateInvestigationFeedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["InvestigationID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewFeedback"];
+            };
+        };
+        responses: {
+            /** @description The stored feedback. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Feedback"];
                 };
             };
             default: components["responses"]["Problem"];

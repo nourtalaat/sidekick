@@ -538,6 +538,47 @@ paths:
                 $ref: "#/components/schemas/WatcherList"
         default:
           $ref: "#/components/responses/Problem"
+  /investigations/{id}/feedback:
+    post:
+      operationId: CreateInvestigationFeedback
+      summary: Say that one part of an investigation is correct or wrong
+      description: |
+        Feedback on the verdict, a finding, a fix or a tool call, with an
+        optional reason and, when the caller knows it, the real verdict and
+        cause. A signed-in user has one opinion per part: a new submission
+        replaces the user's earlier one. A real verdict confirms the
+        investigation, whichever part the feedback is about, and a
+        confirmation that changes is written to the audit log. Rating the
+        verdict Correct confirms it too; rating it Wrong takes back a
+        confirmation of that verdict.
+
+        The target is checked against the current report and steps. The
+        ref of the verdict is `run:N/verdict`, of a finding
+        `run:N/finding:ID`, of a fix `run:N/fix:ID`, where N is the
+        investigation's current run; the ref of a tool call is its call ID.
+        A ref that is not there answers 422, so a page that shows an older
+        run learns that its report is gone. A verdict, finding or fix needs
+        an investigation that has a verdict (409 otherwise); a tool call can
+        be rated while the investigation runs. API tokens are refused with
+        403, since feedback is given by a person.
+      x-sidekick-role: responder
+      parameters:
+        - $ref: "#/components/parameters/InvestigationID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewFeedback"
+      responses:
+        "201":
+          description: The stored feedback.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Feedback"
+        default:
+          $ref: "#/components/responses/Problem"
   /investigations/{id}/stream:
     get:
       operationId: StreamInvestigation
@@ -1221,6 +1262,70 @@ components:
           description: |
             correct or wrong when every rating says so, mixed when both
             kinds exist, and none when nobody rated.
+    FeedbackTargetKind:
+      type: string
+      enum: [verdict, finding, fix, tool_call]
+    FeedbackRating:
+      type: string
+      enum: [correct, wrong]
+      x-enum-varnames: [RatingCorrect, RatingWrong]
+    NewFeedback:
+      type: object
+      required: [targetKind, targetRef, rating]
+      properties:
+        targetKind:
+          $ref: "#/components/schemas/FeedbackTargetKind"
+        targetRef:
+          type: string
+          maxLength: 200
+          description: |
+            `run:N/verdict`, `run:N/finding:ID` or `run:N/fix:ID` for the
+            current run N, or the ID of a tool call.
+        rating:
+          $ref: "#/components/schemas/FeedbackRating"
+        reason:
+          type: string
+          maxLength: 2000
+        correctVerdict:
+          $ref: "#/components/schemas/Verdict"
+        correctCause:
+          type: string
+          maxLength: 2000
+    Feedback:
+      type: object
+      required: [id, investigationId, targetKind, targetRef, rating, channel, confirmation, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        investigationId:
+          type: string
+          format: uuid
+        targetKind:
+          $ref: "#/components/schemas/FeedbackTargetKind"
+        targetRef:
+          type: string
+        rating:
+          $ref: "#/components/schemas/FeedbackRating"
+        reason:
+          type: string
+        correctVerdict:
+          $ref: "#/components/schemas/Verdict"
+        correctCause:
+          type: string
+        channel:
+          type: string
+          enum: [ui, slack]
+        confirmation:
+          type: string
+          enum: [unchanged, confirmed, revised, withdrawn]
+          description: How this submission changed the confirmed verdict of the investigation.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
     WatcherStatus:
       type: string
       enum: [running, recovered, timed_out, stopped]

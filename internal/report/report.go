@@ -24,6 +24,14 @@ const (
 	Flapping      Verdict = "flapping"
 )
 
+// Verdicts lists every verdict, in the order people see them.
+var Verdicts = []Verdict{TruePositive, FalsePositive, Inconclusive, Duplicate, KnownIssue, Flapping}
+
+// Known reports whether v is one of Verdicts.
+func (v Verdict) Known() bool {
+	return slices.Contains(Verdicts, v)
+}
+
 // Confidence is low, medium or high (VR-2).
 type Confidence string
 

@@ -68,6 +68,9 @@ const stopWithin = 5 * time.Second
 // responsePath is the path of the response URL of the test clicks.
 const responsePath = "/actions/T01TEAM/1/xyz"
 
+// testTriggerID is the trigger ID of the test clicks.
+const testTriggerID = "T01TRIGGER.1.abc"
+
 // testWorker is the locked_by value of the jobs the tests claim.
 const testWorker = "test-worker"
 
@@ -477,6 +480,11 @@ type buttonsHarness struct {
 	mu sync.Mutex
 	// posted are the notes posted to the user who clicked, in order.
 	posted []string
+	// views are the bodies of the views.open calls, in order, and
+	// openError is the Slack error code they are answered with, empty for
+	// none.
+	views     [][]byte
+	openError string
 }
 
 // fixedRole gives every user one role.
@@ -510,6 +518,7 @@ func setupButtonsWith(t *testing.T, lookup roles.Lookup) *buttonsHarness {
 
 	b := &buttonsHarness{harness: h, responses: fakehttp.New(t)}
 	b.responses.HandleFunc(http.MethodPost, responsePath, b.record)
+	h.slack.HandleFunc(http.MethodPost, "/"+methodViewsOpen, b.openView)
 
 	b.buttons = NewButtons(ButtonsOptions{
 		Handler:  h.handler,
@@ -519,6 +528,9 @@ func setupButtonsWith(t *testing.T, lookup roles.Lookup) *buttonsHarness {
 		Watchers: stopper,
 		HTTP:     b.responses.Client(),
 		Logger:   slog.New(slog.DiscardHandler),
+
+		Redactor:  testRedactor,
+		PublicURL: testPublicURL,
 	})
 
 	mux := http.NewServeMux()
@@ -538,18 +550,30 @@ func setupButtonsWith(t *testing.T, lookup roles.Lookup) *buttonsHarness {
 func (b *buttonsHarness) click(t *testing.T, c clickBy, forged bool) int {
 	t.Helper()
 
-	payload, err := json.Marshal(map[string]any{
+	status, _ := b.post(t, map[string]any{
 		"type":         "block_actions",
 		"team":         map[string]string{"id": "T01TEAM"},
 		"user":         map[string]string{"id": c.user},
 		"api_app_id":   "A01SIDEKICK",
+		"trigger_id":   testTriggerID,
 		"response_url": b.responses.URL() + responsePath,
 		"channel":      map[string]string{"id": "C01ALERTS"},
 		"actions": []map[string]any{{
 			"type": "button", "action_id": c.action, "block_id": "feedback", "value": c.id.String(),
 			"action_ts": "1793023330.000300",
 		}},
-	})
+	}, forged)
+
+	return status
+}
+
+// post sends the interaction payload to POST /slack/interactivity as Slack
+// does, signed with the test signing secret, or a wrong one when forged is
+// set, and returns the status and the body of the answer.
+func (b *buttonsHarness) post(t *testing.T, interaction map[string]any, forged bool) (int, string) {
+	t.Helper()
+
+	payload, err := json.Marshal(interaction)
 	require.NoError(t, err)
 
 	body := []byte(url.Values{payloadField: {string(payload)}}.Encode())
@@ -570,7 +594,34 @@ func (b *buttonsHarness) click(t *testing.T, c clickBy, forged bool) int {
 
 	defer func() { require.NoError(t, resp.Body.Close()) }()
 
-	return resp.StatusCode
+	answer, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	return resp.StatusCode, string(answer)
+}
+
+// openView keeps the body of one views.open call, and answers it with
+// openError when that is set.
+func (b *buttonsHarness) openView(w http.ResponseWriter, r *http.Request) {
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+
+		return
+	}
+
+	b.mu.Lock()
+	b.views = append(b.views, raw)
+	openError := b.openError
+	b.mu.Unlock()
+
+	if openError != "" {
+		_, _ = w.Write([]byte(`{"ok": false, "error": "` + openError + `"}`))
+
+		return
+	}
+
+	_, _ = w.Write([]byte(`{"ok": true}`))
 }
 
 // record keeps the text of one note posted to the response URL.

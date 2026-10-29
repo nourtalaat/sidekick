@@ -49,6 +49,7 @@ const noTitle = "the alert"
 const (
 	ActionVerdictCorrect    = "verdict_correct"
 	ActionVerdictWrong      = "verdict_wrong"
+	ActionFeedbackDetails   = "feedback_details"
 	ActionStop              = "stop_investigation"
 	ActionInvestigateAnyway = "investigate_anyway"
 )
@@ -90,6 +91,16 @@ var verdictStyles = map[report.Verdict]verdictStyle{
 	report.Duplicate:     {emoji: ":link:", label: "Duplicate", color: "#2C57CD"},
 	report.KnownIssue:    {emoji: ":pushpin:", label: "Known issue", color: "#2C57CD"},
 	report.Flapping:      {emoji: ":repeat:", label: "Flapping", color: "#17998D"},
+}
+
+// VerdictLabel is the name the messages give v, such as "False alarm" for a
+// false positive; it is v itself for a verdict it does not know.
+func VerdictLabel(v report.Verdict) string {
+	if style, ok := verdictStyles[v]; ok {
+		return style.label
+	}
+
+	return string(v)
 }
 
 // failedStyle is how a run that could not finish looks.
@@ -527,12 +538,13 @@ func stopButtons(u output.Update) block {
 	}}}
 }
 
-// feedbackButtons is the row with the Correct and Wrong buttons, and the
-// Investigate anyway button on a triage-only result.
+// feedbackButtons is the row with the Correct, Wrong and Details buttons,
+// and the Investigate anyway button on a triage-only result.
 func feedbackButtons(u output.Update) block {
 	buttons := []button{
 		{Type: elemButton, ActionID: ActionVerdictCorrect, Text: plain(":thumbsup: Correct"), Value: u.InvestigationID},
 		{Type: elemButton, ActionID: ActionVerdictWrong, Text: plain(":thumbsdown: Wrong"), Value: u.InvestigationID},
+		{Type: elemButton, ActionID: ActionFeedbackDetails, Text: plain("Details"), Value: u.InvestigationID},
 	}
 
 	if u.Report != nil && u.Report.StopReason == report.StopTriage {

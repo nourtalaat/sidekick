@@ -9,13 +9,16 @@ import (
 	"github.com/nourtalaat/sidekick/internal/app"
 	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/auth"
+	"github.com/nourtalaat/sidekick/internal/feedback"
+	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/rules"
 )
 
 // registerAPI serves the login endpoints under /auth and the JSON API
 // under /api/v1 on the main listener, when the config has an oidc
-// section. Without it, neither is served.
-func registerAPI(ctx context.Context, a *app.App) error {
+// section. Without it, neither is served. memorySync says how feedback that
+// changes a confirmed verdict syncs the investigation's memory entry.
+func registerAPI(ctx context.Context, a *app.App, memorySync memory.SyncOptions) error {
 	cfg := a.Config()
 	log := a.Logger().With("component", "api")
 
@@ -35,6 +38,11 @@ func registerAPI(ctx context.Context, a *app.App) error {
 	})
 	if err != nil {
 		return fmt.Errorf("set up login: %w", err)
+	}
+
+	feedbackMetrics, err := feedback.NewMetrics(a.Telemetry().Registry())
+	if err != nil {
+		return fmt.Errorf("set up feedback metrics: %w", err)
 	}
 
 	hub := api.NewHub(api.HubOptions{Pool: a.Pool(), Logger: log})
@@ -57,6 +65,8 @@ func registerAPI(ctx context.Context, a *app.App) error {
 		Pool:     a.Pool(),
 		Audit:    audit.NewWriter(),
 		Hub:      hub,
+		Feedback: feedbackMetrics,
+		Memory:   memorySync,
 		Stopper:  stopper,
 		Watchers: recorder,
 		Logger:   log,

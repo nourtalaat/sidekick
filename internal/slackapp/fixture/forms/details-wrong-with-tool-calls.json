@@ -1,0 +1,272 @@
+{
+  "type": "modal",
+  "title": {
+    "type": "plain_text",
+    "text": "Feedback",
+    "emoji": false
+  },
+  "blocks": [
+    {
+      "type": "input",
+      "block_id": "fb_part",
+      "label": {
+        "type": "plain_text",
+        "text": "Which part is this about?",
+        "emoji": false
+      },
+      "element": {
+        "type": "static_select",
+        "placeholder": {
+          "type": "plain_text",
+          "text": "Choose a part",
+          "emoji": false
+        },
+        "action_id": "part",
+        "options": [
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "The verdict: Real issue",
+              "emoji": false
+            },
+            "value": "run:2/verdict"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Finding f1: Errors rose at 14:02.",
+              "emoji": false
+            },
+            "value": "run:2/finding:f1"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Finding f2: The deploy 4f2c1a changed the connection pool size from 20 t...",
+              "emoji": false
+            },
+            "value": "run:2/finding:f2"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Fix x1: Roll back 4f2c1a",
+              "emoji": false
+            },
+            "value": "run:2/fix:x1"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "A tool call",
+              "emoji": false
+            },
+            "value": "tool_call"
+          }
+        ],
+        "initial_option": {
+          "text": {
+            "type": "plain_text",
+            "text": "The verdict: Real issue",
+            "emoji": false
+          },
+          "value": "run:2/verdict"
+        }
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "To rate a tool call, copy its ID from the steps on <https://sidekick.example.com/investigations/0192d3a4-0000-7000-8000-0000000000c1|the investigation page>.",
+        "verbatim": true
+      }
+    },
+    {
+      "type": "input",
+      "block_id": "fb_tool_call",
+      "label": {
+        "type": "plain_text",
+        "text": "Tool call ID (only for a tool call)",
+        "emoji": false
+      },
+      "element": {
+        "type": "plain_text_input",
+        "action_id": "tool_call_id",
+        "placeholder": {
+          "type": "plain_text",
+          "text": "For example toolu_01A...",
+          "emoji": false
+        }
+      },
+      "optional": true
+    },
+    {
+      "type": "input",
+      "block_id": "fb_rating",
+      "label": {
+        "type": "plain_text",
+        "text": "Is it correct or wrong?",
+        "emoji": false
+      },
+      "element": {
+        "type": "radio_buttons",
+        "action_id": "rating",
+        "options": [
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Correct",
+              "emoji": false
+            },
+            "value": "correct"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Wrong",
+              "emoji": false
+            },
+            "value": "wrong"
+          }
+        ],
+        "initial_option": {
+          "text": {
+            "type": "plain_text",
+            "text": "Wrong",
+            "emoji": false
+          },
+          "value": "wrong"
+        }
+      }
+    },
+    {
+      "type": "input",
+      "block_id": "fb_reason",
+      "label": {
+        "type": "plain_text",
+        "text": "Why?",
+        "emoji": false
+      },
+      "element": {
+        "type": "plain_text_input",
+        "action_id": "reason",
+        "placeholder": {
+          "type": "plain_text",
+          "text": "What was right or wrong about it?",
+          "emoji": false
+        },
+        "multiline": true,
+        "max_length": 2000
+      },
+      "optional": true
+    },
+    {
+      "type": "input",
+      "block_id": "fb_verdict",
+      "label": {
+        "type": "plain_text",
+        "text": "The real verdict, if you know it",
+        "emoji": false
+      },
+      "element": {
+        "type": "static_select",
+        "placeholder": {
+          "type": "plain_text",
+          "text": "Choose a verdict",
+          "emoji": false
+        },
+        "action_id": "correct_verdict",
+        "options": [
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Real issue",
+              "emoji": false
+            },
+            "value": "true_positive"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "False alarm",
+              "emoji": false
+            },
+            "value": "false_positive"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Not sure yet",
+              "emoji": false
+            },
+            "value": "inconclusive"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Duplicate",
+              "emoji": false
+            },
+            "value": "duplicate"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Known issue",
+              "emoji": false
+            },
+            "value": "known_issue"
+          },
+          {
+            "text": {
+              "type": "plain_text",
+              "text": "Flapping",
+              "emoji": false
+            },
+            "value": "flapping"
+          }
+        ]
+      },
+      "hint": {
+        "type": "plain_text",
+        "text": "Giving it confirms the investigation with this verdict.",
+        "emoji": false
+      },
+      "optional": true
+    },
+    {
+      "type": "input",
+      "block_id": "fb_cause",
+      "label": {
+        "type": "plain_text",
+        "text": "The real cause, if you know it",
+        "emoji": false
+      },
+      "element": {
+        "type": "plain_text_input",
+        "action_id": "correct_cause",
+        "placeholder": {
+          "type": "plain_text",
+          "text": "What caused it?",
+          "emoji": false
+        },
+        "multiline": true,
+        "max_length": 2000
+      },
+      "optional": true
+    }
+  ],
+  "close": {
+    "type": "plain_text",
+    "text": "Cancel",
+    "emoji": false
+  },
+  "submit": {
+    "type": "plain_text",
+    "text": "Send",
+    "emoji": false
+  },
+  "private_metadata": "0192d3a4-0000-7000-8000-0000000000c1",
+  "callback_id": "feedback_details"
+}

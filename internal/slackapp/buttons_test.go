@@ -88,7 +88,7 @@ func TestHandleInteractionIgnores(t *testing.T) {
 		name string
 		cb   slack.InteractionCallback
 	}{
-		{name: "a form submission", cb: slack.InteractionCallback{Type: slack.InteractionTypeViewSubmission}},
+		{name: "the submission of another form", cb: slack.InteractionCallback{Type: slack.InteractionTypeViewSubmission}},
 		{name: "another app's button", cb: clickOn("open_investigation", "0192d3a4-0000-7000-8000-0000000000c1")},
 		{name: "a value that is not an investigation ID", cb: clickOn(slackout.ActionStop, "inv_8f2k")},
 		{name: "a Stop watching value that is not a watcher ID", cb: clickOn(slackout.ActionStopWatcher+":1", "checkout-health")},

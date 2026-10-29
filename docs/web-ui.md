@@ -196,6 +196,49 @@ than this version) are filled in the background in batches of 5,000 when
 Sidekick starts; until that job has finished, they do not match the
 `service`, `model` and `q` filters.
 
+### Feedback
+
+`POST /api/v1/investigations/{id}/feedback` needs the `responder` role and a
+signed-in user: an API token gets 403, since feedback comes from a person.
+It says that one part of an investigation is correct or wrong:
+
+```json
+{
+  "targetKind": "finding",
+  "targetRef": "run:2/finding:f2",
+  "rating": "wrong",
+  "reason": "No deploy happened at that time.",
+  "correctVerdict": "false_positive",
+  "correctCause": "A load test."
+}
+```
+
+- `targetKind` is `verdict`, `finding`, `fix` or `tool_call`, and
+  `targetRef` names the part: `run:N/verdict`, `run:N/finding:ID` or
+  `run:N/fix:ID`, where N is the investigation's current run, or the ID
+  of a tool call. A part that is not in the current report or steps
+  answers 422, so a page that still shows an older run learns that its
+  report is gone. A verdict, finding or fix needs an investigation that
+  has a verdict (409 otherwise); a tool call can be rated while the
+  investigation runs.
+- `rating` is `correct` or `wrong`. `reason` and `correctCause` take up
+  to 2,000 characters. `correctVerdict` is the real verdict, one of the
+  verdicts of a report; it may be given on any part. On the verdict, a
+  `correct` rating cannot name another verdict than the reported one, and
+  a `wrong` rating cannot name the reported one (422).
+- Each person has one opinion per part: a new submission replaces the
+  earlier one. The answer is the stored feedback, with `confirmation`,
+  which says how it changed the confirmed verdict of the investigation:
+  `confirmed`, `revised`, `withdrawn` or `unchanged`.
+- A real verdict (`correctVerdict`) confirms the investigation, whichever
+  part the feedback is about, and puts it in memory. The cause is
+  `correctCause`, or the report's cause when the real verdict is the
+  reported one. A `correct` rating of the verdict confirms it too, and a
+  `wrong` rating takes back a confirmation of that verdict, as the buttons
+  in Slack do. Feedback that disagrees with the confirmed verdict
+  replaces it. Every change made with a real verdict, and every revision
+  or withdrawal, is written to the audit log with the user who made it.
+
 ## Investigation pages
 
 The web UI shows the investigations in two pages, which every role from
@@ -338,5 +381,5 @@ role that may call it in `x-sidekick-role`. Errors are problem details
 | 401 | No session or API token, or one that expired or was revoked. |
 | 403 | A change without the CSRF token, or a role below the one the operation needs. |
 | 409 | The change conflicts with the current state, such as retrying a job that is not dead, or changing a rule of the config file. |
-| 422 | A listener or route that fails the config checks; the answer lists the fields. |
+| 422 | A body that is valid but names something that is not there, such as a finding the report does not have, or a listener or route that fails the config checks (the answer lists the fields). |
 | 404, 405 | No operation has this path, or this method on it. |

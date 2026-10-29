@@ -19,6 +19,8 @@ import (
 	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/auth"
 	"github.com/nourtalaat/sidekick/internal/config"
+	"github.com/nourtalaat/sidekick/internal/feedback"
+	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/problem"
 	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/watch"
@@ -63,6 +65,11 @@ type Options struct {
 	// StreamLifetime is how long an event stream stays open. Zero means
 	// DefaultStreamLifetime.
 	StreamLifetime time.Duration
+	// Feedback counts the feedback people give. Nil counts nothing.
+	Feedback *feedback.Metrics
+	// Memory says how feedback that changes the confirmed verdict syncs
+	// the investigation's memory entry; set Embed when vector memory is on.
+	Memory memory.SyncOptions
 	// Stopper stops watchers, for POST /watchers/{id}/stop. Without it,
 	// that operation answers 503.
 	Stopper *watch.Stopper
@@ -112,6 +119,7 @@ func New(opts Options) (http.Handler, error) {
 	srv := &server{
 		tokens: opts.Tokens, cfg: opts.Config, rules: opts.Rules, redactor: opts.Redactor, pool: opts.Pool, audit: opts.Audit,
 		hub: opts.Hub, log: log, stopper: opts.Stopper, watchers: opts.Watchers, now: now,
+		feedbackMetrics: opts.Feedback, memory: opts.Memory,
 		streamHeartbeat: cmp.Or(opts.StreamHeartbeat, DefaultStreamHeartbeat),
 		streamLifetime:  cmp.Or(opts.StreamLifetime, DefaultStreamLifetime),
 	}
