@@ -20,12 +20,25 @@ import (
 	"github.com/nourtalaat/sidekick/internal/feedback"
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/queue"
+	"github.com/nourtalaat/sidekick/internal/store/storetest"
 )
 
-// The users of fixture/sessions.sql that give feedback.
+// The sessions of fixture/feedback_users.sql, as cookie values, and their
+// CSRF tokens.
+var (
+	faSession = sessionValue(0x06)
+	fbSession = sessionValue(0x07)
+)
+
 const (
-	userRe = "01920000-0000-7000-8000-000000000050"
-	userRo = "01920000-0000-7000-8000-000000000051"
+	faCSRF = "csrf-fa"
+	fbCSRF = "csrf-fb"
+)
+
+// The users of fixture/feedback_users.sql that give feedback.
+const (
+	userFa = "01920000-0000-7000-8000-000000000060"
+	userFb = "01920000-0000-7000-8000-000000000061"
 )
 
 // feedbackBody is the response of POST /investigations/{id}/feedback.
@@ -59,7 +72,7 @@ func TestCreateInvestigationFeedback(t *testing.T) {
 		want feedbackBody
 	}{
 		{
-			name: "a responder rates a finding", id: inv1, session: reSession, csrf: reCSRF,
+			name: "a responder rates a finding", id: inv1, session: faSession, csrf: faCSRF,
 			body:       `{"targetKind":"finding","targetRef":"run:2/finding:f2","rating":"wrong","reason":"No deploy at that time."}`,
 			wantStatus: http.StatusCreated,
 			want: feedbackBody{
@@ -68,7 +81,7 @@ func TestCreateInvestigationFeedback(t *testing.T) {
 			},
 		},
 		{
-			name: "a responder rates a fix", id: inv1, session: roSession, csrf: roCSRF,
+			name: "a responder rates a fix", id: inv1, session: fbSession, csrf: fbCSRF,
 			body:       `{"targetKind":"fix","targetRef":"run:2/fix:x1","rating":"correct"}`,
 			wantStatus: http.StatusCreated,
 			want:       feedbackBody{InvestigationID: inv1, TargetKind: "fix", TargetRef: "run:2/fix:x1", Rating: "correct", Channel: "ui", Confirmation: "unchanged"},
@@ -80,13 +93,13 @@ func TestCreateInvestigationFeedback(t *testing.T) {
 			want:       feedbackBody{InvestigationID: inv1, TargetKind: "verdict", TargetRef: "run:2/verdict", Rating: "correct", Channel: "ui", Confirmation: "unchanged"},
 		},
 		{
-			name: "a tool call of a running investigation", id: inv3, session: reSession, csrf: reCSRF,
+			name: "a tool call of a running investigation", id: inv3, session: faSession, csrf: faCSRF,
 			body:       `{"targetKind":"tool_call","targetRef":"c1","rating":"wrong"}`,
 			wantStatus: http.StatusCreated,
 			want:       feedbackBody{InvestigationID: inv3, TargetKind: "tool_call", TargetRef: "c1", Rating: "wrong", Channel: "ui", Confirmation: "unchanged"},
 		},
 		{
-			name: "a Correct on the verdict confirms it", id: inv2, session: reSession, csrf: reCSRF,
+			name: "a Correct on the verdict confirms it", id: inv2, session: faSession, csrf: faCSRF,
 			body:       `{"targetKind":"verdict","targetRef":"run:1/verdict","rating":"correct"}`,
 			wantStatus: http.StatusCreated,
 			want:       feedbackBody{InvestigationID: inv2, TargetKind: "verdict", TargetRef: "run:1/verdict", Rating: "correct", Channel: "ui", Confirmation: "confirmed"},
@@ -102,72 +115,72 @@ func TestCreateInvestigationFeedback(t *testing.T) {
 			wantStatus: http.StatusUnauthorized, wantDetail: "Sign in, or send an API token.",
 		},
 		{
-			name: "no CSRF token", id: inv1, session: reSession,
+			name: "no CSRF token", id: inv1, session: faSession,
 			body:       `{"targetKind":"verdict","targetRef":"run:2/verdict","rating":"correct"}`,
 			wantStatus: http.StatusForbidden, wantDetail: "Send the session's CSRF token in the X-CSRF-Token header.",
 		},
 		{
-			name: "an investigation that does not exist", id: "0192d3a4-0000-7000-8000-0000000000ff", session: reSession, csrf: reCSRF,
+			name: "an investigation that does not exist", id: "0192d3a4-0000-7000-8000-0000000000ff", session: faSession, csrf: faCSRF,
 			body:       `{"targetKind":"tool_call","targetRef":"c1","rating":"wrong"}`,
 			wantStatus: http.StatusNotFound, wantDetail: "No investigation has this ID.",
 		},
 		{
-			name: "the verdict of a running investigation", id: inv3, session: reSession, csrf: reCSRF,
+			name: "the verdict of a running investigation", id: inv3, session: faSession, csrf: faCSRF,
 			body:       `{"targetKind":"verdict","targetRef":"run:2/verdict","rating":"wrong"}`,
 			wantStatus: http.StatusConflict, wantDetail: "The investigation has no verdict yet; only its tool calls can be rated.",
 		},
 		{
-			name: "a verdict of an older run", id: inv1, session: reSession, csrf: reCSRF,
+			name: "a verdict of an older run", id: inv1, session: faSession, csrf: faCSRF,
 			body:       `{"targetKind":"verdict","targetRef":"run:1/verdict","rating":"wrong"}`,
 			wantStatus: http.StatusUnprocessableEntity, wantDetail: "This part is not in the investigation's current report or steps.",
 		},
 		{
-			name: "a finding that is not in the report", id: inv1, session: reSession, csrf: reCSRF,
+			name: "a finding that is not in the report", id: inv1, session: faSession, csrf: faCSRF,
 			body:       `{"targetKind":"finding","targetRef":"run:2/finding:f9","rating":"wrong"}`,
 			wantStatus: http.StatusUnprocessableEntity, wantDetail: "This part is not in the investigation's current report or steps.",
 		},
 		{
-			name: "a fix named like a finding", id: inv1, session: reSession, csrf: reCSRF,
+			name: "a fix named like a finding", id: inv1, session: faSession, csrf: faCSRF,
 			body:       `{"targetKind":"fix","targetRef":"run:2/fix:f1","rating":"wrong"}`,
 			wantStatus: http.StatusUnprocessableEntity, wantDetail: "This part is not in the investigation's current report or steps.",
 		},
 		{
-			name: "a tool call that is not in the steps", id: inv3, session: reSession, csrf: reCSRF,
+			name: "a tool call that is not in the steps", id: inv3, session: faSession, csrf: faCSRF,
 			body:       `{"targetKind":"tool_call","targetRef":"c9","rating":"wrong"}`,
 			wantStatus: http.StatusUnprocessableEntity, wantDetail: "This part is not in the investigation's current report or steps.",
 		},
 		{
-			name: "an investigation with no report", id: inv2, session: reSession, csrf: reCSRF,
+			name: "an investigation with no report", id: inv2, session: faSession, csrf: faCSRF,
 			body:       `{"targetKind":"finding","targetRef":"run:1/finding:f1","rating":"wrong"}`,
 			wantStatus: http.StatusUnprocessableEntity, wantDetail: "This part is not in the investigation's current report or steps.",
 		},
 		{
-			name: "a real verdict that is not a verdict", id: inv1, session: reSession, csrf: reCSRF,
+			name: "a real verdict that is not a verdict", id: inv1, session: faSession, csrf: faCSRF,
 			body:       `{"targetKind":"verdict","targetRef":"run:2/verdict","rating":"wrong","correctVerdict":"maybe"}`,
 			wantStatus: http.StatusUnprocessableEntity, wantDetail: "The real verdict is not a verdict, or it contradicts the rating of the verdict.",
 		},
 		{
-			name: "Correct with another real verdict", id: inv1, session: reSession, csrf: reCSRF,
+			name: "Correct with another real verdict", id: inv1, session: faSession, csrf: faCSRF,
 			body:       `{"targetKind":"verdict","targetRef":"run:2/verdict","rating":"correct","correctVerdict":"false_positive"}`,
 			wantStatus: http.StatusUnprocessableEntity, wantDetail: "The real verdict is not a verdict, or it contradicts the rating of the verdict.",
 		},
 		{
-			name: "an unknown rating", id: inv1, session: reSession, csrf: reCSRF,
+			name: "an unknown rating", id: inv1, session: faSession, csrf: faCSRF,
 			body:       `{"targetKind":"verdict","targetRef":"run:2/verdict","rating":"maybe"}`,
 			wantStatus: http.StatusBadRequest, wantDetail: "The rating must be correct or wrong.",
 		},
 		{
-			name: "an unknown target kind", id: inv1, session: reSession, csrf: reCSRF,
+			name: "an unknown target kind", id: inv1, session: faSession, csrf: faCSRF,
 			body:       `{"targetKind":"investigation","targetRef":"run:2/verdict","rating":"correct"}`,
 			wantStatus: http.StatusBadRequest, wantDetail: "The target kind must be verdict, finding, fix or tool_call.",
 		},
 		{
-			name: "a reason that is too long", id: inv1, session: reSession, csrf: reCSRF,
+			name: "a reason that is too long", id: inv1, session: faSession, csrf: faCSRF,
 			body:       fmt.Sprintf(`{"targetKind":"verdict","targetRef":"run:2/verdict","rating":"wrong","reason":%q}`, strings.Repeat("x", feedback.MaxReasonChars+1)),
 			wantStatus: http.StatusBadRequest, wantDetail: "The reason is longer than 2000 characters.",
 		},
 		{
-			name: "a body that is not JSON", id: inv1, session: reSession, csrf: reCSRF,
+			name: "a body that is not JSON", id: inv1, session: faSession, csrf: faCSRF,
 			body: `{`, wantStatus: http.StatusBadRequest,
 		},
 	}
@@ -176,7 +189,7 @@ func TestCreateInvestigationFeedback(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			s := setupInvestigations(t)
+			s := setupFeedback(t)
 
 			rec := postFeedback(t, s, tt.id, tt.session, tt.csrf, tt.body)
 			require.Equal(t, tt.wantStatus, rec.Code, rec.Body.String())
@@ -208,7 +221,7 @@ func TestCreateInvestigationFeedback(t *testing.T) {
 func TestCreateInvestigationFeedbackRefusesAPITokens(t *testing.T) {
 	t.Parallel()
 
-	s := setupInvestigations(t)
+	s := setupFeedback(t)
 
 	_, err := s.pool.Exec(t.Context(),
 		`INSERT INTO api_tokens (id, name, token_hash, role, created_by, created_at, expires_at)
@@ -228,10 +241,10 @@ func TestCreateInvestigationFeedbackRefusesAPITokens(t *testing.T) {
 func TestCreateInvestigationFeedbackWithARealVerdict(t *testing.T) {
 	t.Parallel()
 
-	s := setupInvestigationsWith(t, func(o *api.Options) { o.Memory = memory.SyncOptions{Embed: true} })
+	s := setupFeedbackWith(t, func(o *api.Options) { o.Memory = memory.SyncOptions{Embed: true} })
 
 	// inv1 is confirmed as a true positive with the cause Deploy.
-	first := postFeedback(t, s, inv1, reSession, reCSRF,
+	first := postFeedback(t, s, inv1, faSession, faCSRF,
 		`{"targetKind":"verdict","targetRef":"run:2/verdict","rating":"wrong","reason":"It was a load test.","correctVerdict":"false_positive","correctCause":"A load test."}`)
 	require.Equal(t, http.StatusCreated, first.Code, first.Body.String())
 
@@ -243,38 +256,38 @@ func TestCreateInvestigationFeedbackWithARealVerdict(t *testing.T) {
 	require.Equal(t, new("A load test."), got.CorrectCause)
 
 	confirmed := confirmation(t, s.pool, inv1)
-	require.Equal(t, confirmedRow{Verdict: "false_positive", Cause: "A load test.", By: userRe}, confirmed)
+	require.Equal(t, confirmedRow{Verdict: "false_positive", Cause: "A load test.", By: userFa}, confirmed)
 	require.Equal(t, []string{"false_positive"}, memoryVerdicts(t, s.pool, inv1))
 	require.Equal(t, 1, embedJobs(t, s.pool), "the memory entry is embedded when vector memory is on")
 
 	// A later submission that disagrees revises it again, and is audited.
-	second := postFeedback(t, s, inv1, roSession, roCSRF, `{"targetKind":"verdict","targetRef":"run:2/verdict","rating":"correct"}`)
+	second := postFeedback(t, s, inv1, fbSession, fbCSRF, `{"targetKind":"verdict","targetRef":"run:2/verdict","rating":"correct"}`)
 	require.Equal(t, http.StatusCreated, second.Code, second.Body.String())
 
 	require.NoError(t, json.Unmarshal(second.Body.Bytes(), &got))
 	require.Equal(t, "revised", got.Confirmation)
-	require.Equal(t, confirmedRow{Verdict: "true_positive", Cause: "Deploy 4f2c1a", By: userRo}, confirmation(t, s.pool, inv1))
+	require.Equal(t, confirmedRow{Verdict: "true_positive", Cause: "Deploy 4f2c1a", By: userFb}, confirmation(t, s.pool, inv1))
 
 	require.Equal(t, []auditRow{
-		{Actor: "user " + userRe, Action: "verdict.revised", Old: "true_positive", New: "false_positive"},
-		{Actor: "user " + userRo, Action: "verdict.revised", Old: "false_positive", New: "true_positive"},
+		{Actor: "user " + userFa, Action: "verdict.revised", Old: "true_positive", New: "false_positive"},
+		{Actor: "user " + userFb, Action: "verdict.revised", Old: "false_positive", New: "true_positive"},
 	}, auditRows(t, s.pool, inv1))
 }
 
 func TestCreateInvestigationFeedbackConfirmsFirstWithARealVerdict(t *testing.T) {
 	t.Parallel()
 
-	s := setupInvestigations(t)
+	s := setupFeedback(t)
 
 	// inv2 is not confirmed. A Wrong with the real verdict confirms it and
 	// is audited; a plain Correct on a verdict would not be audited.
-	rec := postFeedback(t, s, inv2, reSession, reCSRF,
+	rec := postFeedback(t, s, inv2, faSession, faCSRF,
 		`{"targetKind":"verdict","targetRef":"run:1/verdict","rating":"wrong","correctVerdict":"true_positive","correctCause":"Disk filled up."}`)
 	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
 
-	require.Equal(t, confirmedRow{Verdict: "true_positive", Cause: "Disk filled up.", By: userRe}, confirmation(t, s.pool, inv2))
+	require.Equal(t, confirmedRow{Verdict: "true_positive", Cause: "Disk filled up.", By: userFa}, confirmation(t, s.pool, inv2))
 	require.Equal(t, []string{"true_positive"}, memoryVerdicts(t, s.pool, inv2))
-	require.Equal(t, []auditRow{{Actor: "user " + userRe, Action: "verdict.confirmed", New: "true_positive"}}, auditRows(t, s.pool, inv2))
+	require.Equal(t, []auditRow{{Actor: "user " + userFa, Action: "verdict.confirmed", New: "true_positive"}}, auditRows(t, s.pool, inv2))
 	require.Zero(t, embedJobs(t, s.pool), "no embedding without vector memory")
 }
 
@@ -296,28 +309,47 @@ func TestCreateInvestigationFeedbackKeepsOneOpinionPerUser(t *testing.T) {
 	metrics, err := feedback.NewMetrics(reg)
 	require.NoError(t, err)
 
-	s := setupInvestigationsWith(t, func(o *api.Options) { o.Feedback = metrics })
+	s := setupFeedbackWith(t, func(o *api.Options) { o.Feedback = metrics })
 
 	const target = `"targetKind":"finding","targetRef":"run:2/finding:f1"`
 
 	for _, send := range []struct {
 		session, csrf, body string
 	}{
-		{reSession, reCSRF, `{` + target + `,"rating":"wrong"}`},
-		{reSession, reCSRF, `{` + target + `,"rating":"wrong","reason":"Added later."}`},
-		{reSession, reCSRF, `{` + target + `,"rating":"correct"}`},
-		{roSession, roCSRF, `{` + target + `,"rating":"wrong"}`},
+		{faSession, faCSRF, `{` + target + `,"rating":"wrong"}`},
+		{faSession, faCSRF, `{` + target + `,"rating":"wrong","reason":"Added later."}`},
+		{faSession, faCSRF, `{` + target + `,"rating":"correct"}`},
+		{fbSession, fbCSRF, `{` + target + `,"rating":"wrong"}`},
 	} {
 		rec := postFeedback(t, s, inv1, send.session, send.csrf, send.body)
 		require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
 	}
 
 	require.Equal(t, 2, countFeedback(t, s.pool, "channel = 'ui'"), "one row per user")
-	require.Equal(t, "correct", ratingOf(t, s.pool, userRe))
-	require.Equal(t, "wrong", ratingOf(t, s.pool, userRo))
+	require.Equal(t, "correct", ratingOf(t, s.pool, userFa))
+	require.Equal(t, "wrong", ratingOf(t, s.pool, userFb))
 
 	// A new reason on the same rating is not counted again.
 	require.NoError(t, testutil.GatherAndCompare(reg, strings.NewReader(wantFeedbackMetrics), feedback.MetricFeedback))
+}
+
+// setupFeedback returns a server with the investigations and the responders
+// that give feedback.
+func setupFeedback(t *testing.T) server {
+	t.Helper()
+
+	return setupFeedbackWith(t, nil)
+}
+
+// setupFeedbackWith is setupFeedback with tune, when not nil, changing the
+// API's options.
+func setupFeedbackWith(t *testing.T, tune func(*api.Options)) server {
+	t.Helper()
+
+	s := setupInvestigationsWith(t, tune)
+	storetest.LoadFixture(t, s.pool, "fixture/feedback_users.sql")
+
+	return s
 }
 
 // postFeedback sends a body to POST /investigations/{id}/feedback.

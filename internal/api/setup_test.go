@@ -39,15 +39,11 @@ var (
 	viSession        = sessionValue(0x01)
 	viExpiredSession = sessionValue(0x02)
 	adSession        = sessionValue(0x03)
-	reSession        = sessionValue(0x04)
-	roSession        = sessionValue(0x05)
 )
 
 const (
 	viCSRF = "csrf-vi"
 	adCSRF = "csrf-ad"
-	reCSRF = "csrf-re"
-	roCSRF = "csrf-ro"
 )
 
 const (
