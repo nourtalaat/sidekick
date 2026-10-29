@@ -25,7 +25,7 @@ const (
 // TestQueryPlans runs EXPLAIN ANALYZE on each query of the rollup job over
 // a year of investigations, and checks that none reads a table whole except
 // the small ones. The recounts find the investigations of a bucket through
-// the index of the investigation list, and their events, watchers and
+// the index on created_at, and their events, watchers and
 // ratings through the foreign key indexes. Run with -v to see the plans.
 func TestQueryPlans(t *testing.T) {
 	t.Parallel()
@@ -63,7 +63,7 @@ func TestQueryPlans(t *testing.T) {
 			before: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				require.NoError(t, q.DeleteStatsHourly(ctx, hours))
 			},
-			wantIndex: []string{"investigations_list", "events_group", "watchers_group_name"},
+			wantIndex: []string{"investigations_created", "events_group", "watchers_group_name"},
 		},
 		{
 			name: "RecountQualityDaily",
@@ -73,7 +73,7 @@ func TestQueryPlans(t *testing.T) {
 			before: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				require.NoError(t, q.DeleteQualityDaily(ctx, days))
 			},
-			wantIndex: []string{"investigations_list", "feedback_investigation"},
+			wantIndex: []string{"investigations_created", "feedback_investigation"},
 		},
 		{
 			name: "DeleteStatsHourly",

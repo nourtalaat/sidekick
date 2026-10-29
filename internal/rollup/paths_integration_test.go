@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/store/db"
@@ -266,11 +267,17 @@ func TestEveryPathThatChangesACountedValueMarksItsBuckets(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	// The cases share one database, and each starts from the fixture, so
+	// that the test does not hold a database and its connections for every
+	// case.
+	pool := storetest.New(t)
 
-			pool := storetest.New(t)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) { //nolint:paralleltest // The cases share one database.
+			_, err := pool.Exec(t.Context(), "DELETE FROM watchers; DELETE FROM feedback; DELETE FROM investigations; DELETE FROM event_groups",
+				pgx.QueryExecModeSimpleProtocol)
+			require.NoError(t, err)
+
 			storetest.LoadFixture(t, pool, "fixture/paths.sql")
 
 			for _, statement := range tt.prepare {
@@ -278,7 +285,7 @@ func TestEveryPathThatChangesACountedValueMarksItsBuckets(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			_, err := pool.Exec(t.Context(), "DELETE FROM rollup_dirty")
+			_, err = pool.Exec(t.Context(), "DELETE FROM rollup_dirty")
 			require.NoError(t, err)
 
 			before := time.Now().UTC().Truncate(time.Hour)

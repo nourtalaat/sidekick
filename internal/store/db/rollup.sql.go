@@ -57,17 +57,17 @@ SELECT (b.day AT TIME ZONE 'UTC')::date,
        count(*)::int
 FROM unnest($1::timestamptz[]) AS b(day)
 JOIN investigations i ON i.created_at >= b.day AND i.created_at < b.day + interval '24 hours'
+LEFT JOIN LATERAL (
+  SELECT true AS wrong
+  FROM feedback f
+  WHERE f.investigation_id = i.id
+    AND f.target_kind = 'verdict'
+    AND f.target_ref = 'run:' || i.run::text || '/verdict'
+    AND f.rating = 'wrong'
+  LIMIT 1
+) rated ON true
 WHERE i.verdict IS NOT NULL
-  AND (
-    i.confirmed_verdict IS NOT NULL
-    OR EXISTS (
-      SELECT 1 FROM feedback f
-      WHERE f.investigation_id = i.id
-        AND f.target_kind = 'verdict'
-        AND f.target_ref = 'run:' || i.run::text || '/verdict'
-        AND f.rating = 'wrong'
-    )
-  )
+  AND (i.confirmed_verdict IS NOT NULL OR rated.wrong)
 GROUP BY 1, 2, 3, 4, 5, 6, 7
 `
 
@@ -77,8 +77,8 @@ GROUP BY 1, 2, 3, 4, 5, 6, 7
 // The rows of the days must be deleted first. An investigation counts when
 // it has a confirmed verdict, or when someone rated its current verdict
 // wrong without giving the real one, which counts as confirmed 'unknown'.
-// The range on created_at uses the index of the investigation list, and
-// feedback_investigation finds the ratings.
+// The range on created_at uses the index on it, and feedback_investigation
+// finds the ratings.
 func (q *Queries) RecountQualityDaily(ctx context.Context, buckets []time.Time) error {
 	_, err := q.db.Exec(ctx, recountQualityDaily, buckets)
 	return err
@@ -158,7 +158,7 @@ GROUP BY hour, route, service, model, verdict
 // it later. Its watchers count once the group's last one has ended: it
 // recovered when some watcher recovered and none is running or timed out,
 // and the downtime runs from the group's first event to the last recovery.
-// The range on created_at uses the index of the investigation list.
+// The range on created_at uses the index on it.
 func (q *Queries) RecountStatsHourly(ctx context.Context, buckets []time.Time) error {
 	_, err := q.db.Exec(ctx, recountStatsHourly, buckets)
 	return err
