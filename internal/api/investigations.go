@@ -259,6 +259,7 @@ func investigationOf(row db.GetInvestigationDetailRow) (apigen.Investigation, er
 		FinishedAt:        inv.FinishedAt,
 		DurationMs:        durationMs(inv.StartedAt, inv.FinishedAt),
 		CancelRequestedAt: inv.CancelRequestedAt,
+		FixAppliedAt:      inv.FixAppliedAt,
 		EventCount:        int(row.EventCount),
 		Events:            []apigen.Event{},
 		PendingFollowUps:  []apigen.PendingFollowUp{},

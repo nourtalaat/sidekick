@@ -513,6 +513,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations/{id}/fix-applied": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Mark the fix of a false positive as applied
+         * @description Records that a responder applied the change that stops a false
+         *     positive from firing again, such as a new monitor threshold. The
+         *     dashboard counts it under noisy alerts fixed. Only an investigation
+         *     that ended with the verdict false_positive has a fix to mark; any
+         *     other answers 409. Marking one that is marked already changes
+         *     nothing, writes no audit row and answers with `changed` false.
+         */
+        put: operations["MarkFixApplied"];
+        post?: never;
+        /**
+         * Take back the mark that the fix was applied
+         * @description Takes the mark away, for a fix that was marked by mistake. Taking
+         *     back a mark that is not there changes nothing, writes no audit row
+         *     and answers with `changed` false.
+         */
+        delete: operations["UnmarkFixApplied"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -959,6 +990,11 @@ export interface components {
              */
             cancelRequestedAt?: string;
             confirmation?: components["schemas"]["Confirmation"];
+            /**
+             * Format: date-time
+             * @description When a responder marked the fix of a false positive as applied, if one did.
+             */
+            fixAppliedAt?: string;
             report?: components["schemas"]["Report"];
             /** @description How many events the group has, which can be more than events lists. */
             eventCount: number;
@@ -1276,6 +1312,17 @@ export interface components {
             errors?: components["schemas"]["FieldError"][];
             /** @description The path of the request. */
             instance?: string;
+        };
+        FixApplied: {
+            /** @description Whether the fix is marked as applied now. */
+            applied: boolean;
+            /** @description Whether this request changed the mark. */
+            changed: boolean;
+            /**
+             * Format: date-time
+             * @description When the fix was marked, while it is marked.
+             */
+            appliedAt?: string;
         };
     };
     responses: {
@@ -1950,6 +1997,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StopWatcherResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    MarkFixApplied: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["InvestigationID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The mark after the request. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixApplied"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UnmarkFixApplied: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["InvestigationID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The mark after the request. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixApplied"];
                 };
             };
             default: components["responses"]["Problem"];

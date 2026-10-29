@@ -12,6 +12,18 @@ import (
 	"github.com/google/uuid"
 )
 
+const clearFixApplied = `-- name: ClearFixApplied :exec
+UPDATE investigations
+SET fix_applied_at = NULL, fix_applied_by = NULL, fix_applied_by_slack_user = NULL
+WHERE id = $1
+`
+
+// ClearFixApplied takes the mark that the fix was applied away.
+func (q *Queries) ClearFixApplied(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearFixApplied, id)
+	return err
+}
+
 const getSlackFeedbackRating = `-- name: GetSlackFeedbackRating :one
 SELECT rating FROM feedback
 WHERE investigation_id = $1 AND target_kind = $2 AND target_ref = $3
@@ -164,6 +176,27 @@ func (q *Queries) LockInvestigation(ctx context.Context, id uuid.UUID) (Investig
 		&i.FixAppliedBySlackUser,
 	)
 	return i, err
+}
+
+const setFixApplied = `-- name: SetFixApplied :one
+UPDATE investigations
+SET fix_applied_at = now(), fix_applied_by = $1
+WHERE id = $2
+RETURNING fix_applied_at::timestamptz AS fix_applied_at
+`
+
+type SetFixAppliedParams struct {
+	By *uuid.UUID
+	ID uuid.UUID
+}
+
+// SetFixApplied marks the fix of an investigation as applied, now, by the
+// user or API token with ID by. Lock the investigation first.
+func (q *Queries) SetFixApplied(ctx context.Context, arg SetFixAppliedParams) (time.Time, error) {
+	row := q.db.QueryRow(ctx, setFixApplied, arg.By, arg.ID)
+	var fix_applied_at time.Time
+	err := row.Scan(&fix_applied_at)
+	return fix_applied_at, err
 }
 
 const setInvestigationConfirmation = `-- name: SetInvestigationConfirmation :exec

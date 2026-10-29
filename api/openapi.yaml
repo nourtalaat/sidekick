@@ -724,6 +724,48 @@ paths:
                 $ref: "#/components/schemas/StopWatcherResult"
         default:
           $ref: "#/components/responses/Problem"
+  /investigations/{id}/fix-applied:
+    put:
+      operationId: MarkFixApplied
+      summary: Mark the fix of a false positive as applied
+      description: |
+        Records that a responder applied the change that stops a false
+        positive from firing again, such as a new monitor threshold. The
+        dashboard counts it under noisy alerts fixed. Only an investigation
+        that ended with the verdict false_positive has a fix to mark; any
+        other answers 409. Marking one that is marked already changes
+        nothing, writes no audit row and answers with `changed` false.
+      x-sidekick-role: responder
+      parameters:
+        - $ref: "#/components/parameters/InvestigationID"
+      responses:
+        "200":
+          description: The mark after the request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FixApplied"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: UnmarkFixApplied
+      summary: Take back the mark that the fix was applied
+      description: |
+        Takes the mark away, for a fix that was marked by mistake. Taking
+        back a mark that is not there changes nothing, writes no audit row
+        and answers with `changed` false.
+      x-sidekick-role: responder
+      parameters:
+        - $ref: "#/components/parameters/InvestigationID"
+      responses:
+        "200":
+          description: The mark after the request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FixApplied"
+        default:
+          $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
     session:
@@ -1491,6 +1533,10 @@ components:
           description: When a responder asked to stop the run, while it has not stopped yet.
         confirmation:
           $ref: "#/components/schemas/Confirmation"
+        fixAppliedAt:
+          type: string
+          format: date-time
+          description: When a responder marked the fix of a false positive as applied, if one did.
         report:
           $ref: "#/components/schemas/Report"
         eventCount:
@@ -2044,3 +2090,17 @@ components:
         instance:
           type: string
           description: The path of the request.
+    FixApplied:
+      type: object
+      required: [applied, changed]
+      properties:
+        applied:
+          type: boolean
+          description: Whether the fix is marked as applied now.
+        changed:
+          type: boolean
+          description: Whether this request changed the mark.
+        appliedAt:
+          type: string
+          format: date-time
+          description: When the fix was marked, while it is marked.

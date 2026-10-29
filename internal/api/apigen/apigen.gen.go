@@ -814,6 +814,18 @@ type Fix struct {
 	Title            string  `json:"title"`
 }
 
+// FixApplied defines model for FixApplied.
+type FixApplied struct {
+	// Applied Whether the fix is marked as applied now.
+	Applied bool `json:"applied"`
+
+	// AppliedAt When the fix was marked, while it is marked.
+	AppliedAt *time.Time `json:"appliedAt,omitempty"`
+
+	// Changed Whether this request changed the mark.
+	Changed bool `json:"changed"`
+}
+
 // FollowUp defines model for FollowUp.
 type FollowUp struct {
 	// Answer The answer, or why there is none when answered is false.
@@ -865,6 +877,9 @@ type Investigation struct {
 	Events         []Event    `json:"events"`
 	FinishedAt     *time.Time `json:"finishedAt,omitempty"`
 	FirstFindingAt *time.Time `json:"firstFindingAt,omitempty"`
+
+	// FixAppliedAt When a responder marked the fix of a false positive as applied, if one did.
+	FixAppliedAt *time.Time `json:"fixAppliedAt,omitempty"`
 
 	// GroupClosedReason For a closed group, resolved or window_ended.
 	GroupClosedReason *string            `json:"groupClosedReason,omitempty"`
@@ -1700,6 +1715,12 @@ type ServerInterface interface {
 	// CreateInvestigationFeedback Say that one part of an investigation is correct or wrong
 	// (POST /investigations/{id}/feedback)
 	CreateInvestigationFeedback(w http.ResponseWriter, r *http.Request, id InvestigationID)
+	// UnmarkFixApplied Take back the mark that the fix was applied
+	// (DELETE /investigations/{id}/fix-applied)
+	UnmarkFixApplied(w http.ResponseWriter, r *http.Request, id InvestigationID)
+	// MarkFixApplied Mark the fix of a false positive as applied
+	// (PUT /investigations/{id}/fix-applied)
+	MarkFixApplied(w http.ResponseWriter, r *http.Request, id InvestigationID)
 	// AskFollowUp Ask a follow-up question about an investigation
 	// (POST /investigations/{id}/follow-ups)
 	AskFollowUp(w http.ResponseWriter, r *http.Request, id InvestigationID)
@@ -2115,6 +2136,58 @@ func (siw *ServerInterfaceWrapper) CreateInvestigationFeedback(w http.ResponseWr
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateInvestigationFeedback(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UnmarkFixApplied operation middleware
+func (siw *ServerInterfaceWrapper) UnmarkFixApplied(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id InvestigationID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UnmarkFixApplied(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// MarkFixApplied operation middleware
+func (siw *ServerInterfaceWrapper) MarkFixApplied(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id InvestigationID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MarkFixApplied(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2818,6 +2891,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{id}/cancel", wrapper.CancelInvestigation)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{id}/resolve", wrapper.ResolveInvestigation)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/watchers/{id}/stop", wrapper.StopWatcher)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/investigations/{id}/fix-applied", wrapper.UnmarkFixApplied)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/investigations/{id}/fix-applied", wrapper.MarkFixApplied)
 
 	return m
 }
@@ -3047,6 +3122,84 @@ type CreateInvestigationFeedbackdefaultApplicationProblemPlusJSONResponse struct
 }
 
 func (response CreateInvestigationFeedbackdefaultApplicationProblemPlusJSONResponse) VisitCreateInvestigationFeedbackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnmarkFixAppliedRequestObject struct {
+	Id InvestigationID `json:"id"`
+}
+
+type UnmarkFixAppliedResponseObject interface {
+	VisitUnmarkFixAppliedResponse(w http.ResponseWriter) error
+}
+
+type UnmarkFixApplied200JSONResponse FixApplied
+
+func (response UnmarkFixApplied200JSONResponse) VisitUnmarkFixAppliedResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnmarkFixApplieddefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UnmarkFixApplieddefaultApplicationProblemPlusJSONResponse) VisitUnmarkFixAppliedResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkFixAppliedRequestObject struct {
+	Id InvestigationID `json:"id"`
+}
+
+type MarkFixAppliedResponseObject interface {
+	VisitMarkFixAppliedResponse(w http.ResponseWriter) error
+}
+
+type MarkFixApplied200JSONResponse FixApplied
+
+func (response MarkFixApplied200JSONResponse) VisitMarkFixAppliedResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkFixApplieddefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response MarkFixApplieddefaultApplicationProblemPlusJSONResponse) VisitMarkFixAppliedResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -3864,6 +4017,12 @@ type StrictServerInterface interface {
 	// CreateInvestigationFeedback Say that one part of an investigation is correct or wrong
 	// (POST /investigations/{id}/feedback)
 	CreateInvestigationFeedback(ctx context.Context, request CreateInvestigationFeedbackRequestObject) (CreateInvestigationFeedbackResponseObject, error)
+	// UnmarkFixApplied Take back the mark that the fix was applied
+	// (DELETE /investigations/{id}/fix-applied)
+	UnmarkFixApplied(ctx context.Context, request UnmarkFixAppliedRequestObject) (UnmarkFixAppliedResponseObject, error)
+	// MarkFixApplied Mark the fix of a false positive as applied
+	// (PUT /investigations/{id}/fix-applied)
+	MarkFixApplied(ctx context.Context, request MarkFixAppliedRequestObject) (MarkFixAppliedResponseObject, error)
 	// AskFollowUp Ask a follow-up question about an investigation
 	// (POST /investigations/{id}/follow-ups)
 	AskFollowUp(ctx context.Context, request AskFollowUpRequestObject) (AskFollowUpResponseObject, error)
@@ -4119,6 +4278,58 @@ func (sh *strictHandler) CreateInvestigationFeedback(w http.ResponseWriter, r *h
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreateInvestigationFeedbackResponseObject); ok {
 		if err := validResponse.VisitCreateInvestigationFeedbackResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UnmarkFixApplied operation middleware
+func (sh *strictHandler) UnmarkFixApplied(w http.ResponseWriter, r *http.Request, id InvestigationID) {
+	var request UnmarkFixAppliedRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UnmarkFixApplied(ctx, request.(UnmarkFixAppliedRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UnmarkFixApplied")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UnmarkFixAppliedResponseObject); ok {
+		if err := validResponse.VisitUnmarkFixAppliedResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// MarkFixApplied operation middleware
+func (sh *strictHandler) MarkFixApplied(w http.ResponseWriter, r *http.Request, id InvestigationID) {
+	var request MarkFixAppliedRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.MarkFixApplied(ctx, request.(MarkFixAppliedRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "MarkFixApplied")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(MarkFixAppliedResponseObject); ok {
+		if err := validResponse.VisitMarkFixAppliedResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

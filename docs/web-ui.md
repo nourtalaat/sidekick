@@ -184,6 +184,15 @@ as the change.
   already. A group that closed because its window ended answers 409.
   `groupStatus` and `groupClosedReason` in the investigation say which
   groups are still open.
+- `PUT /api/v1/investigations/{id}/fix-applied` records that a responder
+  applied the fix of a false positive, such as a new monitor threshold.
+  The dashboard counts it under noisy alerts fixed, and the investigation
+  shows `fixAppliedAt`. Only an investigation that ended with the verdict
+  `false_positive` has a fix to mark; any other answers 409. `DELETE` on
+  the same path takes the mark back. Both answer `applied`, `changed` and
+  `appliedAt`; a call that finds the mark as it asks for answers 200 with
+  `changed` false and writes no audit row. The audit actions are
+  `fix.applied` and `fix.unapplied`.
 - `POST /api/v1/watchers/{id}/stop` stops a running watcher, as **Stop
   watching** does in Slack. `stopped` in the answer is `false` when the
   watcher had ended already. The watchers of an investigation name who
