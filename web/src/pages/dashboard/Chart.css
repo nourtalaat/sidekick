@@ -57,3 +57,13 @@
 .sk-chart__table th:first-child {
   text-align: left;
 }
+
+.sk-chart__note {
+  margin: 0 0 var(--sk-space-3);
+  color: var(--sk-text-secondary);
+}
+
+.sk-chart__empty {
+  margin: 0;
+  color: var(--sk-text-secondary);
+}

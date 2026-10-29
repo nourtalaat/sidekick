@@ -1,0 +1,137 @@
+.sk-dashboard__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sk-space-3) var(--sk-space-4);
+}
+
+.sk-dashboard__filters:focus-visible {
+  outline-offset: 4px;
+}
+
+.sk-dashboard__filters .sk-field {
+  min-width: 9rem;
+}
+
+.sk-dashboard__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-4);
+}
+
+.sk-dashboard__heading {
+  font: var(--sk-type-h2);
+}
+
+.sk-dashboard__note {
+  margin: 0;
+  color: var(--sk-text-secondary);
+}
+
+/* Charts sit in cards, two to a row on wide screens and one on phones. */
+.sk-dashboard__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sk-space-4);
+}
+
+.sk-dashboard__grid > * {
+  min-width: 0;
+}
+
+@media (min-width: 960px) {
+  .sk-dashboard__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.sk-dashboard__cap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sk-space-2) var(--sk-space-3);
+  margin: 0 0 var(--sk-space-3);
+}
+
+.sk-dashboard__compare {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sk-space-3) var(--sk-space-4);
+  margin: var(--sk-space-4) 0;
+}
+
+/* The four key numbers. */
+.sk-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--sk-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sk-tile {
+  padding: var(--sk-space-4) var(--sk-space-5);
+  background: var(--sk-bg-surface);
+  border: 1px solid var(--sk-border-subtle);
+  border-radius: var(--sk-radius-lg);
+  box-shadow: var(--sk-shadow-raised);
+}
+
+.sk-tile p {
+  margin: 0;
+}
+
+.sk-tile__label {
+  color: var(--sk-text-secondary);
+  font: var(--sk-type-label);
+}
+
+.sk-tile__value {
+  margin-top: var(--sk-space-1);
+  font: var(--sk-type-h2);
+}
+
+.sk-tile__change {
+  margin-top: var(--sk-space-1);
+  color: var(--sk-text-secondary);
+}
+
+/* Tables of numbers: the numbers line up on the right. */
+.sk-numbers td {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.sk-table__caption {
+  padding: var(--sk-space-3) var(--sk-space-4);
+  color: var(--sk-text-secondary);
+  font: var(--sk-type-caption);
+  text-align: left;
+}
+
+/* The confusion matrix: an agreement and a disagreement have a color and a word each. */
+.sk-matrix__cell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.sk-matrix__cell--agrees {
+  background: var(--sk-status-success-bg);
+  color: var(--sk-status-success-fg);
+}
+
+.sk-matrix__cell--differs {
+  background: var(--sk-status-danger-bg);
+  color: var(--sk-status-danger-fg);
+}
+
+.sk-matrix__cell--unknown {
+  background: var(--sk-status-neutral-bg);
+  color: var(--sk-status-neutral-fg);
+}
+
+.sk-matrix__kind {
+  display: block;
+  font: var(--sk-type-caption);
+}

@@ -224,3 +224,52 @@ WHERE s.hour >= @from_hour AND s.hour < @to_hour
 GROUP BY s.route, s.service, h.i
 HAVING sum(h.n) > 0
 ORDER BY s.route, s.service, h.i;
+
+-- name: DashboardQuality :many
+-- DashboardQuality counts the investigations created on the days from_day
+-- to_day, both included, that people rated, and those whose verdict was
+-- confirmed as given, by route, model and the verdict given. It feeds the
+-- dashboard metrics, which carry no service. The range on day uses the
+-- primary key of quality_daily.
+SELECT route, model, predicted,
+       sum(n)::bigint AS rated,
+       coalesce(sum(n) FILTER (WHERE predicted = confirmed), 0)::bigint AS correct
+FROM quality_daily
+WHERE day >= @from_day::date AND day <= @to_day::date
+GROUP BY route, model, predicted
+ORDER BY route, model, predicted;
+
+-- name: DashboardStatsByRoute :many
+-- DashboardStatsByRoute sums the investigations, recoveries and timed out
+-- watchers of the hours from from_hour up to to_hour by route and verdict.
+-- The range on hour uses the primary key of stats_hourly.
+SELECT route, verdict,
+       sum(investigations)::bigint AS investigations,
+       sum(recoveries)::bigint AS recoveries,
+       sum(watch_timeouts)::bigint AS watch_timeouts
+FROM stats_hourly
+WHERE hour >= @from_hour AND hour < @to_hour
+GROUP BY route, verdict
+ORDER BY route, verdict;
+
+-- name: DashboardFirstFindingHistograms :many
+-- DashboardFirstFindingHistograms adds up the histograms of the time to the
+-- first finding over the hours from from_hour up to to_hour by route, one
+-- row for each of their 24 buckets that has a count.
+SELECT s.route, h.i::int AS bucket, sum(h.n)::bigint AS n
+FROM stats_hourly s,
+     unnest(s.first_finding_hist) WITH ORDINALITY AS h(n, i)
+WHERE s.hour >= @from_hour AND s.hour < @to_hour
+  AND s.first_finding_n > 0
+GROUP BY s.route, h.i
+HAVING sum(h.n) > 0
+ORDER BY s.route, h.i;
+
+-- name: DashboardSpendByDay :many
+-- DashboardSpendByDay sums what model calls cost on a day by route and
+-- model, in micro-dollars. The day uses the primary key of spend_daily.
+SELECT route, model, sum(cost_micros)::bigint AS cost_micros
+FROM spend_daily
+WHERE day = @day
+GROUP BY route, model
+ORDER BY route, model;

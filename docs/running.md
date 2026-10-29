@@ -158,12 +158,36 @@ process (`process_*`) metrics, this release has:
 | `sidekick_rollup_buckets_total` | counter | `table` | Hours and days of the dashboard's tables (`stats_hourly` and `quality_daily`) that the once-a-minute rollup job on this replica counted again. |
 | `sidekick_rollup_run_duration_seconds` | histogram | none | How long a rollup run took on this replica. |
 | `sidekick_rollup_dirty_buckets` | gauge | none | Hours and days that waited for a recount when the last rollup run on this replica ended. It stays above 0 for a minute after a burst of changes and should return to 0. |
+| `sidekick_dashboard_rated_verdicts_30d` | gauge | `route`, `model`, `verdict` | Investigations that people rated in the last 30 days, by the verdict Sidekick gave. |
+| `sidekick_dashboard_correct_verdicts_30d` | gauge | `route`, `model`, `verdict` | Of those, the investigations whose verdict people confirmed. |
+| `sidekick_dashboard_verdict_accuracy_ratio_30d` | gauge | `route`, `model` | The share of the rated investigations whose verdict people confirmed, from 0 to 1. A route and model with none rated have no series. |
+| `sidekick_dashboard_investigations_30d` | gauge | `route`, `verdict` | Investigations created in the last 30 days. `verdict="false_positive"` is the false positives found; `none` is an investigation with no verdict yet. |
+| `sidekick_dashboard_recoveries_30d` | gauge | `route` | Investigations created in the last 30 days whose watchers all recovered. |
+| `sidekick_dashboard_watch_timeouts_30d` | gauge | `route` | Watchers that timed out, for investigations created in the last 30 days. |
+| `sidekick_dashboard_time_to_first_finding_median_seconds_30d` | gauge | `route` | The median time from the start of an investigation to its first finding, over the last 30 days. It is approximate, exact only to the width of a histogram bucket. A route with no first finding has no series. |
+| `sidekick_dashboard_spend_today_usd` | gauge | `route`, `model` | What model calls have cost today, in US dollars. The day starts at midnight in `budgets.daily.timeZone`. |
+| `sidekick_dashboard_route_spend_cap_usd` | gauge | `route` | The route's [daily cap](configuration.md#daily-caps) in US dollars. Only routes with a cap have a series. |
+| `sidekick_dashboard_spend_cap_usd` | gauge | none | The global daily cap in US dollars. No series when there is none. |
+| `sidekick_dashboard_refreshed_timestamp_seconds` | gauge | none | When this replica last read the dashboard numbers, in seconds since the Unix epoch. Absent until the first read succeeds. |
 | `sidekick_watchers_running` | gauge | none | Watchers running in the deployment. Read from the database at each scrape, so every replica reports the same number; combine replicas with `max`. |
 | `sidekick_watcher_state_changes_total` | counter | `status` | Watcher state changes on this replica, by the new state: `started`, `recovered`, `timed_out` or `stopped`. |
 | `sidekick_watch_http_blocked_total` | counter | `reason` | Watcher HTTP checks the safety rules refused, by reason: `host`, `private_ip` or `redirect`. |
 | `sidekick_teams_api_errors_total` | counter | `operation`, `status` | Failed Bot Framework Connector calls of the Teams output by operation (`create_conversation`, `send_to_conversation` or `update_activity`) and status: the HTTP status, such as `429` or `404`, or `request_failed` or `bad_response`. See [Investigations in Microsoft Teams](teams.md#limits-and-errors). |
 | `sidekick_slack_api_errors_total` | counter | `method`, `error` | Failed Slack Web API calls by method, such as `chat.update`, and error: Slack's error code, such as `channel_not_found`, or `ratelimited`, `request_failed`, `http_status`, `bad_response` or `other`. See [Investigations in Slack](slack.md). |
 | `sidekick_output_api_errors_total` | counter | `type`, `operation`, `error` | Failed calls of the ticket and webhook outputs to the service they post to, by output type, such as `linear.comment` or `webhook`, operation, such as `comment_create`, and error: `rate_limited`, `request_failed`, `bad_response`, `api_error`, or `http_` and the status, such as `http_503`. See [Results on tickets](tickets.md) and [Webhook callbacks](webhook-callbacks.md). |
+
+The `sidekick_dashboard_*` metrics are the numbers of the dashboard and of the
+`/stats` endpoints, read from the same rollup tables and never from the
+investigations themselves. Every replica reads them once a minute (and once at
+start) and serves the last result, so a scrape runs no query and the numbers
+lag the rollup job by up to a minute or two. Replicas read the same tables, so
+they report the same numbers to within a minute: combine replicas with `max`,
+or use one replica. If a read fails, the replica keeps the last numbers and
+logs a warning; watch `sidekick_dashboard_refreshed_timestamp_seconds` to see
+that. The `model` label is `none` for investigations that have no model, and
+labels never include service or alert names, which can be many. Compare spend
+with the caps in a query such as
+`sum by (route) (sidekick_dashboard_spend_today_usd) / sidekick_dashboard_route_spend_cap_usd`.
 
 ## Logs
 

@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes } from "react-router";
 import { LoginPage } from "./pages/LoginPage";
 import { AuditPage } from "./pages/AuditPage";
-import { DashboardPage } from "./pages/DashboardPage";
+import { DashboardPage } from "./pages/dashboard/DashboardPage";
 import InvestigationPage from "./pages/investigation/InvestigationPage";
 import InvestigationsPage from "./pages/investigations/InvestigationsPage";
 import { ListenerFormPage } from "./pages/ListenerFormPage";
