@@ -19,7 +19,7 @@ import (
 const EnvConnsLog = "SIDEKICK_CONNS_LOG"
 
 const (
-	connsSampleEvery  = 100 * time.Millisecond
+	connsSampleEvery  = 20 * time.Millisecond
 	connsLogMode      = 0o600
 	connsCountClients = `SELECT count(*), count(*) FILTER (WHERE datname = ANY($1))
 		FROM pg_stat_activity WHERE backend_type = 'client backend'`
@@ -59,7 +59,7 @@ func ownDatabaseNames() []string {
 }
 
 // startConnsSampler samples the connections of the test servers every
-// 100 ms until the returned function is called, which then appends the
+// 20 ms until the returned function is called, which then appends the
 // peaks to the file named by EnvConnsLog.
 func startConnsSampler() func() {
 	path := os.Getenv(EnvConnsLog)
