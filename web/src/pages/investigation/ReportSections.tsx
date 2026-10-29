@@ -1,6 +1,8 @@
+import { reportTarget } from "../../api/feedback";
 import type { Evidence, Report } from "../../api/investigations";
 import { StatusBadge } from "../../components/Badge";
 import { safeHttpUrl } from "../../safeUrl";
+import { PartFeedback } from "./PartFeedback";
 import "./ReportSections.css";
 
 /**
@@ -9,7 +11,7 @@ import "./ReportSections.css";
  * the model or from a source, so it is plain text; a link opens only when it
  * is an http or https address.
  */
-export function ReportSections({ report }: { report: Report }) {
+export function ReportSections({ report, run }: { report: Report; run: number }) {
   const falsePositive = report.falsePositive;
 
   return (
@@ -37,6 +39,7 @@ export function ReportSections({ report }: { report: Report }) {
               <li key={finding.id}>
                 <p className="sk-plain">{finding.claim}</p>
                 {finding.evidence.length === 0 ? <StatusBadge status="neutral">Hypothesis</StatusBadge> : <EvidenceList evidence={finding.evidence} />}
+                <PartFeedback target={reportTarget("finding", run, finding.id)} label={`finding ${finding.id}`} />
               </li>
             ))}
           </ol>
@@ -50,6 +53,7 @@ export function ReportSections({ report }: { report: Report }) {
               <li key={fix.id}>
                 <strong className="sk-plain">{fix.title}</strong>
                 <p className="sk-plain">{fix.detail}</p>
+                <PartFeedback target={reportTarget("fix", run, fix.id)} label={`fix ${fix.id}`} />
               </li>
             ))}
           </ol>

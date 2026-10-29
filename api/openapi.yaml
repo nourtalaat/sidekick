@@ -539,6 +539,28 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
   /investigations/{id}/feedback:
+    get:
+      operationId: ListInvestigationFeedback
+      summary: How people rated the parts of an investigation
+      description: |
+        For each part of the current run's report that has feedback (the
+        verdict, a finding or a fix), and for each tool call that has
+        some, how many people rated it correct and how many wrong, from
+        Slack and the web UI together. When a signed-in user is calling,
+        `mine` is their own opinion of the part. Parts nobody rated are
+        left out, and so is feedback on the parts of an earlier run.
+      x-sidekick-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/InvestigationID"
+      responses:
+        "200":
+          description: The parts with feedback.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedbackPartList"
+        default:
+          $ref: "#/components/responses/Problem"
     post:
       operationId: CreateInvestigationFeedback
       summary: Say that one part of an investigation is correct or wrong
@@ -1458,6 +1480,41 @@ components:
     FeedbackTargetKind:
       type: string
       enum: [verdict, finding, fix, tool_call]
+    FeedbackPartList:
+      type: object
+      required: [parts]
+      properties:
+        parts:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackPart"
+    FeedbackPart:
+      type: object
+      required: [targetKind, targetRef, correct, wrong]
+      properties:
+        targetKind:
+          $ref: "#/components/schemas/FeedbackTargetKind"
+        targetRef:
+          type: string
+        correct:
+          type: integer
+        wrong:
+          type: integer
+        mine:
+          $ref: "#/components/schemas/FeedbackOpinion"
+    FeedbackOpinion:
+      type: object
+      required: [rating]
+      description: One person's feedback on a part.
+      properties:
+        rating:
+          $ref: "#/components/schemas/FeedbackRating"
+        reason:
+          type: string
+        correctVerdict:
+          $ref: "#/components/schemas/Verdict"
+        correctCause:
+          type: string
     FeedbackRating:
       type: string
       enum: [correct, wrong]

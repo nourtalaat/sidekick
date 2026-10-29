@@ -351,7 +351,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * How people rated the parts of an investigation
+         * @description For each part of the current run's report that has feedback (the
+         *     verdict, a finding or a fix), and for each tool call that has
+         *     some, how many people rated it correct and how many wrong, from
+         *     Slack and the web UI together. When a signed-in user is calling,
+         *     `mine` is their own opinion of the part. Parts nobody rated are
+         *     left out, and so is feedback on the parts of an earlier run.
+         */
+        get: operations["ListInvestigationFeedback"];
         put?: never;
         /**
          * Say that one part of an investigation is correct or wrong
@@ -955,6 +964,23 @@ export interface components {
         };
         /** @enum {string} */
         FeedbackTargetKind: "verdict" | "finding" | "fix" | "tool_call";
+        FeedbackPartList: {
+            parts: components["schemas"]["FeedbackPart"][];
+        };
+        FeedbackPart: {
+            targetKind: components["schemas"]["FeedbackTargetKind"];
+            targetRef: string;
+            correct: number;
+            wrong: number;
+            mine?: components["schemas"]["FeedbackOpinion"];
+        };
+        /** @description One person's feedback on a part. */
+        FeedbackOpinion: {
+            rating: components["schemas"]["FeedbackRating"];
+            reason?: string;
+            correctVerdict?: components["schemas"]["Verdict"];
+            correctCause?: string;
+        };
         /** @enum {string} */
         FeedbackRating: "correct" | "wrong";
         NewFeedback: {
@@ -2249,6 +2275,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WatcherList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListInvestigationFeedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["InvestigationID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The parts with feedback. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackPartList"];
                 };
             };
             default: components["responses"]["Problem"];

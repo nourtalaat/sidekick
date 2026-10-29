@@ -119,6 +119,24 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"steps_pkey"},
 		},
 		{
+			name: "ListFeedbackCounts",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListFeedbackCounts(ctx, db.ListFeedbackCountsParams{InvestigationID: busy, RunPrefix: "run:1/"})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"feedback_"},
+		},
+		{
+			name: "ListUserFeedback",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListUserFeedback(ctx, db.ListUserFeedbackParams{InvestigationID: busy, UserID: &ana, RunPrefix: "run:1/"})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"feedback_"},
+		},
+		{
 			name: "SetInvestigationConfirmation",
 			run: func(ctx context.Context, q *db.Queries) error {
 				err := q.SetInvestigationConfirmation(ctx, db.SetInvestigationConfirmationParams{

@@ -268,6 +268,18 @@ The web UI shows the investigations in two pages, which every role from
   for each step. A step opens to show the tool call or result in a box
   with a copy button.
 
+Under the verdict, each finding, each fix and each tool result, the page
+says how many people rated that part correct and how many wrong, from
+Slack and the web UI together. A `responder` or higher also sees
+**Correct**, **Wrong** and **Add a reason** there, and their own rating is
+shown as pressed. **Correct** is sent at once. **Wrong** opens a form for
+the reason; on the verdict it also asks for the real verdict and cause,
+and giving the real verdict confirms the investigation. Sending again
+replaces your earlier opinion of the part. If the report changed since the
+page was read, for example because a follow-up run replaced it, the form
+shows the reason the server gave and keeps what you typed. The counts are
+read again every 30 seconds and when a run changes the investigation.
+
 A `responder` or higher also sees **Stop**, **Resolve**, **Stop watching**
 and the follow-up box at the bottom of the page. A `viewer` does not see
 these buttons. The server checks the role of every request again, and
@@ -283,6 +295,14 @@ a question asked in Slack.
 Text from alerts, sources and the model is always shown as plain text,
 never as HTML. A link opens only when its address is `http` or `https`;
 any other address, such as `javascript:`, is shown as text.
+
+`GET /api/v1/investigations/{id}/feedback` needs only the `viewer` role. It
+lists the parts of the current run that people rated: the verdict, each
+finding and fix, and each tool call, with how many people rated each one
+`correct` and `wrong`, from Slack and the web UI together. For a signed-in
+caller it also has `mine`, the caller's own opinion of the part, with the
+reason and the real verdict and cause they gave. Parts nobody rated, and
+the parts of an earlier run, are left out.
 
 ## Listeners and routes
 

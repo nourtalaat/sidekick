@@ -850,6 +850,30 @@ type FeedbackChannel string
 // FeedbackConfirmation How this submission changed the confirmed verdict of the investigation.
 type FeedbackConfirmation string
 
+// FeedbackOpinion One person's feedback on a part.
+type FeedbackOpinion struct {
+	CorrectCause   *string        `json:"correctCause,omitempty"`
+	CorrectVerdict *Verdict       `json:"correctVerdict,omitempty"`
+	Rating         FeedbackRating `json:"rating"`
+	Reason         *string        `json:"reason,omitempty"`
+}
+
+// FeedbackPart defines model for FeedbackPart.
+type FeedbackPart struct {
+	Correct int `json:"correct"`
+
+	// Mine One person's feedback on a part.
+	Mine       *FeedbackOpinion   `json:"mine,omitempty"`
+	TargetKind FeedbackTargetKind `json:"targetKind"`
+	TargetRef  string             `json:"targetRef"`
+	Wrong      int                `json:"wrong"`
+}
+
+// FeedbackPartList defines model for FeedbackPartList.
+type FeedbackPartList struct {
+	Parts []FeedbackPart `json:"parts"`
+}
+
 // FeedbackRating defines model for FeedbackRating.
 type FeedbackRating string
 
@@ -2188,6 +2212,9 @@ type ServerInterface interface {
 	// CancelInvestigation Stop the run of an investigation
 	// (POST /investigations/{id}/cancel)
 	CancelInvestigation(w http.ResponseWriter, r *http.Request, id InvestigationID)
+	// ListInvestigationFeedback How people rated the parts of an investigation
+	// (GET /investigations/{id}/feedback)
+	ListInvestigationFeedback(w http.ResponseWriter, r *http.Request, id InvestigationID)
 	// CreateInvestigationFeedback Say that one part of an investigation is correct or wrong
 	// (POST /investigations/{id}/feedback)
 	CreateInvestigationFeedback(w http.ResponseWriter, r *http.Request, id InvestigationID)
@@ -2598,6 +2625,32 @@ func (siw *ServerInterfaceWrapper) CancelInvestigation(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CancelInvestigation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListInvestigationFeedback operation middleware
+func (siw *ServerInterfaceWrapper) ListInvestigationFeedback(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id InvestigationID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListInvestigationFeedback(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3694,6 +3747,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}", wrapper.GetInvestigation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}/steps", wrapper.ListInvestigationSteps)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}/watchers", wrapper.ListInvestigationWatchers)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}/feedback", wrapper.ListInvestigationFeedback)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{id}/feedback", wrapper.CreateInvestigationFeedback)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}/stream", wrapper.StreamInvestigation)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{id}/follow-ups", wrapper.AskFollowUp)
@@ -3895,6 +3949,45 @@ type CancelInvestigationdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response CancelInvestigationdefaultApplicationProblemPlusJSONResponse) VisitCancelInvestigationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListInvestigationFeedbackRequestObject struct {
+	Id InvestigationID `json:"id"`
+}
+
+type ListInvestigationFeedbackResponseObject interface {
+	VisitListInvestigationFeedbackResponse(w http.ResponseWriter) error
+}
+
+type ListInvestigationFeedback200JSONResponse FeedbackPartList
+
+func (response ListInvestigationFeedback200JSONResponse) VisitListInvestigationFeedbackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListInvestigationFeedbackdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListInvestigationFeedbackdefaultApplicationProblemPlusJSONResponse) VisitListInvestigationFeedbackResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -4982,6 +5075,9 @@ type StrictServerInterface interface {
 	// CancelInvestigation Stop the run of an investigation
 	// (POST /investigations/{id}/cancel)
 	CancelInvestigation(ctx context.Context, request CancelInvestigationRequestObject) (CancelInvestigationResponseObject, error)
+	// ListInvestigationFeedback How people rated the parts of an investigation
+	// (GET /investigations/{id}/feedback)
+	ListInvestigationFeedback(ctx context.Context, request ListInvestigationFeedbackRequestObject) (ListInvestigationFeedbackResponseObject, error)
 	// CreateInvestigationFeedback Say that one part of an investigation is correct or wrong
 	// (POST /investigations/{id}/feedback)
 	CreateInvestigationFeedback(ctx context.Context, request CreateInvestigationFeedbackRequestObject) (CreateInvestigationFeedbackResponseObject, error)
@@ -5225,6 +5321,32 @@ func (sh *strictHandler) CancelInvestigation(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CancelInvestigationResponseObject); ok {
 		if err := validResponse.VisitCancelInvestigationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListInvestigationFeedback operation middleware
+func (sh *strictHandler) ListInvestigationFeedback(w http.ResponseWriter, r *http.Request, id InvestigationID) {
+	var request ListInvestigationFeedbackRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListInvestigationFeedback(ctx, request.(ListInvestigationFeedbackRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListInvestigationFeedback")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListInvestigationFeedbackResponseObject); ok {
+		if err := validResponse.VisitListInvestigationFeedbackResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

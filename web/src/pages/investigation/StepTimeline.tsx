@@ -1,9 +1,11 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useId, useState } from "react";
+import { toolCallTarget } from "../../api/feedback";
 import type { Step, StepPart } from "../../api/investigations";
 import { Button } from "../../components/Button";
 import { CopyButton } from "../../components/CopyButton";
 import { formatDuration, formatTokens } from "../../format";
+import { PartFeedback } from "./PartFeedback";
 import "./StepTimeline.css";
 
 const KIND_LABELS: Record<Step["kind"], string> = {
@@ -78,6 +80,9 @@ function StepRow({ step }: { step: Step }) {
             <PartBox key={i} part={part} />
           ))}
         </div>
+      )}
+      {step.kind === "tool_result" && step.callId && (
+        <PartFeedback target={toolCallTarget(step.callId)} label={`the tool call ${step.tool ?? step.callId}`} />
       )}
     </li>
   );

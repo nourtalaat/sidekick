@@ -92,6 +92,7 @@ export function useInvestigationStream({ id, enabled, after }: StreamOptions): S
       opened.addEventListener("status", () => {
         flush();
         void queryClient.invalidateQueries({ queryKey: keys.investigation(id) });
+        void queryClient.invalidateQueries({ queryKey: keys.feedback(id) });
       });
 
       opened.addEventListener("watchers", () => {
