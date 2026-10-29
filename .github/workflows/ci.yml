@@ -99,6 +99,22 @@ jobs:
       - name: Install the validator tools
         run: make validator-tools
 
+      # A service container takes no command line, so max_connections is
+      # raised with ALTER SYSTEM and a restart of the container. The tests of
+      # the packages that run at the same time came close to the default of
+      # 100 connections, and sometimes went over it.
+      - name: Raise max_connections of the Postgres service
+        if: matrix.group == 'integration'
+        shell: bash
+        env:
+          MAX_CONNECTIONS: "200"
+        run: |
+          container=$(docker ps --quiet --filter ancestor=postgres:16)
+          docker exec "$container" psql -U sidekick -d sidekick_test -c "ALTER SYSTEM SET max_connections = $MAX_CONNECTIONS"
+          docker restart "$container"
+          until docker exec "$container" pg_isready -U sidekick -d sidekick_test; do sleep 1; done
+          docker exec "$container" psql -U sidekick -d sidekick_test -tAc "SHOW max_connections"
+
       - run: make ci-${{ matrix.group }}
         env:
           SIDEKICK_PLANS_DIR: ${{ runner.temp }}/query-plans
