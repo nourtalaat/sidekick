@@ -56,12 +56,12 @@ describe.each(THEMES)("accessibility of the dashboard, theme $name", (theme) => 
     });
 
     it(
-      "has no WCAG 2.2 AA violations with data, a chart drawn and a comparison open",
+      "has no WCAG 2.2 AA violations with data, the charts loaded and a comparison open",
       async () => {
         const { container } = renderApp({ route: `/dashboard?a=${RUN_A_ID}&b=${RUN_B_ID}&service=checkout-api`, handler: server("data") });
 
         await screen.findByRole("region", { name: /^Metrics of / }, { timeout: LOAD_TIMEOUT });
-        await waitFor(() => expect(container.querySelector(".recharts-surface")).not.toBeNull(), { timeout: LOAD_TIMEOUT });
+        await waitFor(() => expect(container.querySelector(".recharts-responsive-container")).not.toBeNull(), { timeout: LOAD_TIMEOUT });
 
         expect(await wcagViolations(container)).toEqual([]);
       },
