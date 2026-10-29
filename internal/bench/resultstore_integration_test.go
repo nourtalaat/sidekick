@@ -63,7 +63,7 @@ func TestResultStoreSave(t *testing.T) {
 			require.Equal(t, 3, repeats)
 			require.Contains(t, string(connectors), "claude-opus-5-5")
 
-			var stored storedSummary
+			var stored StoredSummary
 			require.NoError(t, json.Unmarshal(summary, &stored))
 			require.Equal(t, rep.Metrics.Runs, stored.Metrics.Runs)
 			require.Equal(t, JudgePromptVersion, stored.JudgePromptVersion)

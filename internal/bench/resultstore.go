@@ -39,9 +39,9 @@ type ResultStore struct {
 	pool *pgxpool.Pool
 }
 
-// storedSummary is bench_runs.summary: what report.json holds besides the
+// StoredSummary is bench_runs.summary: what report.json holds besides the
 // run's settings and its scenarios.
-type storedSummary struct {
+type StoredSummary struct {
 	SchemaVersion      int                 `json:"schemaVersion"`
 	PromptVersion      string              `json:"promptVersion"`
 	JudgePromptVersion string              `json:"judgePromptVersion"`
@@ -131,7 +131,7 @@ func runRow(rep *JSONReport) (db.InsertBenchRunParams, error) {
 		return db.InsertBenchRunParams{}, fmt.Errorf("encode the strategies: %w", err)
 	}
 
-	summary, err := json.Marshal(storedSummary{
+	summary, err := json.Marshal(StoredSummary{
 		SchemaVersion:      rep.SchemaVersion,
 		PromptVersion:      rep.PromptVersion,
 		JudgePromptVersion: rep.JudgePromptVersion,
