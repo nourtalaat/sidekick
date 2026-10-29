@@ -272,8 +272,8 @@ func TestEveryPathThatChangesACountedValueMarksItsBuckets(t *testing.T) {
 	// case.
 	pool := storetest.New(t)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) { //nolint:paralleltest // The cases share one database.
+	for _, tt := range tests { //nolint:paralleltest // The cases share one database.
+		t.Run(tt.name, func(t *testing.T) {
 			_, err := pool.Exec(t.Context(), "DELETE FROM watchers; DELETE FROM feedback; DELETE FROM investigations; DELETE FROM event_groups",
 				pgx.QueryExecModeSimpleProtocol)
 			require.NoError(t, err)
