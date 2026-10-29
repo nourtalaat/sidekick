@@ -167,6 +167,30 @@ func TestFeedbackFormSubmission(t *testing.T) {
 			},
 		},
 		{
+			name: "the reason and the real cause are stored redacted",
+			send: formBy{user: "U01ANA", values: detailsValues{
+				Part: finalRef, Rating: "wrong", Reason: "Ask ana@example.com about it.", Verdict: "false_positive", Cause: "Run by bob@example.com.",
+			}},
+			check: func(t *testing.T, b *buttonsHarness) {
+				t.Helper()
+
+				rows := b.feedbackRowsOf(t)
+				require.Len(t, rows, 1)
+
+				var cause string
+
+				require.NoError(t, b.pool.QueryRow(t.Context(),
+					"SELECT correct_cause FROM feedback WHERE investigation_id = $1", finalInvestigation).Scan(&cause))
+
+				for name, text := range map[string]string{
+					"reason": rows[0].Reason, "real cause": cause, "confirmed cause": deref(b.investigation(t, finalInvestigation).ConfirmedCause),
+				} {
+					require.NotContains(t, text, "@example.com", name)
+					require.Contains(t, text, "[REDACTED:emails:", name)
+				}
+			},
+		},
+		{
 			name: "a tool call",
 			send: formBy{user: "U01ANA", values: detailsValues{Part: partToolCall, ToolCall: " call-1 ", Rating: "wrong", Reason: "Wrong service."}},
 			check: func(t *testing.T, b *buttonsHarness) {

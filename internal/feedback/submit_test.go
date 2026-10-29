@@ -99,6 +99,15 @@ func TestSubmissionNormalizedTrimsText(t *testing.T) {
 	require.Equal(t, "Deploy", got.CorrectCause)
 }
 
+func TestSubmitNeedsARedactor(t *testing.T) {
+	t.Parallel()
+
+	_, err := Submit(t.Context(), nil, Submission{
+		Target: Target{Kind: TargetVerdict, Ref: "run:1/verdict"}, Rating: output.RatingWrong, Author: Author{SlackUserID: "U01ANA"},
+	})
+	require.ErrorIs(t, err, ErrNoRedactor)
+}
+
 func TestTargetRefs(t *testing.T) {
 	t.Parallel()
 

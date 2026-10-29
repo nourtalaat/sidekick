@@ -37,6 +37,7 @@ func (s *server) CreateInvestigationFeedback(ctx context.Context, req apigen.Cre
 		CorrectVerdict:  report.Verdict(textOf((*string)(body.CorrectVerdict))),
 		CorrectCause:    textOf(body.CorrectCause),
 		Author:          feedback.Author{UserID: p.ID},
+		Redactor:        s.redactor,
 		Memory:          s.memory,
 	}
 

@@ -529,6 +529,7 @@ func setupButtonsWith(t *testing.T, lookup roles.Lookup) *buttonsHarness {
 		HTTP:     b.responses.Client(),
 		Logger:   slog.New(slog.DiscardHandler),
 
+		Redactor:  testRedactor,
 		PublicURL: testPublicURL,
 	})
 

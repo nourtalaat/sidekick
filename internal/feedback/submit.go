@@ -15,6 +15,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/ids"
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/output"
+	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
@@ -46,6 +47,9 @@ var (
 	// ErrBadVerdict is returned for a real verdict that is not a verdict,
 	// or that contradicts the rating of the verdict.
 	ErrBadVerdict = errors.New("the real verdict does not fit the rating")
+	// ErrNoRedactor is returned for a submission without a Redactor, which
+	// would store the free text as the person typed it.
+	ErrNoRedactor = errors.New("the submission has no redactor")
 )
 
 // InvalidError is returned for feedback whose fields cannot be right,
@@ -83,6 +87,10 @@ type Submission struct {
 	CorrectVerdict report.Verdict
 	CorrectCause   string
 	Author         Author
+	// Redactor redacts the reason and the real cause before they are
+	// stored, since people paste log lines and tokens into them. It is
+	// required: Submit returns ErrNoRedactor without it.
+	Redactor *redact.Redactor
 	// Memory says how the investigation's memory entry is synced when the
 	// submission changes the confirmation; set Embed with vector memory on.
 	Memory memory.SyncOptions
@@ -111,13 +119,19 @@ func (e *InvalidError) Error() string {
 // applied in turn.
 //
 // It returns an *InvalidError for fields that cannot be right, and errors
-// that wrap ErrNotFound, ErrNotRatable (a verdict, finding or fix of an
+// that wrap ErrNoRedactor, ErrNotFound, ErrNotRatable (a verdict, finding or fix of an
 // investigation with no verdict yet), ErrBadTarget and ErrBadVerdict.
 func Submit(ctx context.Context, q db.DBTX, s Submission) (Submitted, error) {
+	if s.Redactor == nil {
+		return Submitted{}, ErrNoRedactor
+	}
+
 	s, err := s.normalized()
 	if err != nil {
 		return Submitted{}, fmt.Errorf("check the feedback: %w", err)
 	}
+
+	s.Reason, s.CorrectCause = s.Redactor.Text(s.Reason).Text, s.Redactor.Text(s.CorrectCause).Text
 
 	queries := db.New(q)
 

@@ -27,6 +27,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/output"
 	slackout "github.com/nourtalaat/sidekick/internal/output/slack"
 	"github.com/nourtalaat/sidekick/internal/publish"
+	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/roles"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 	"github.com/nourtalaat/sidekick/internal/watch"
@@ -101,6 +102,9 @@ type ButtonsOptions struct {
 	// Memory says how a rating syncs the investigation's memory entry; set
 	// Embed when vector memory is on.
 	Memory memory.SyncOptions
+	// Redactor redacts the free text of the feedback form before it is
+	// stored. It is required to send the form.
+	Redactor *redact.Redactor
 	// PublicURL is server.publicURL. With it, the feedback form offers
 	// rating a tool call and links to the investigation page, where the
 	// tool calls are.
@@ -124,6 +128,7 @@ type Buttons struct {
 	http     *http.Client
 	log      *slog.Logger
 	memory   memory.SyncOptions
+	redactor *redact.Redactor
 	// publicURL is ButtonsOptions.PublicURL.
 	publicURL string
 }
@@ -147,6 +152,7 @@ func NewButtons(opts ButtonsOptions) *Buttons {
 		log:      opts.Logger,
 		memory:   opts.Memory,
 
+		redactor:  opts.Redactor,
 		publicURL: opts.PublicURL,
 	}
 }
@@ -431,7 +437,7 @@ func (b *Buttons) submitDetails(ctx context.Context, cb slack.InteractionCallbac
 		return errorsResponse(map[string]string{blockRating: errorDenied})
 	}
 
-	sub, errs := readDetails(cb.View.State).submission(id, cb.User.ID, b.memory)
+	sub, errs := readDetails(cb.View.State).submission(id, cb.User.ID, b.redactor, b.memory)
 	if errs != nil {
 		return errorsResponse(errs)
 	}

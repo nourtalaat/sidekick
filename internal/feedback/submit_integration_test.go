@@ -12,7 +12,18 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/output"
+	"github.com/nourtalaat/sidekick/internal/redact"
 )
+
+// testRedactor redacts email addresses.
+var testRedactor = func() *redact.Redactor {
+	r, err := redact.New(redact.Options{BuiltIn: []string{redact.Emails}, HashKey: []byte("test key")})
+	if err != nil {
+		panic(err)
+	}
+
+	return r
+}()
 
 // The authors of the submissions.
 var (
@@ -363,6 +374,35 @@ func TestSubmitRefuses(t *testing.T) {
 	}
 }
 
+func TestSubmitRedactsTheFreeText(t *testing.T) {
+	t.Parallel()
+
+	pool := setup(t)
+
+	_, err := submit(t, pool, Submission{
+		InvestigationID: finalInvestigation, Target: Target{Kind: TargetVerdict, Ref: VerdictRef(1)}, Rating: output.RatingWrong,
+		Reason: "Ask ana@example.com, it was a load test.", CorrectVerdict: "false_positive",
+		CorrectCause: "A load test that bob@example.com started.", Author: webAna,
+	})
+	require.NoError(t, err)
+
+	rows := feedbackRows(t, pool, finalInvestigation)
+	require.Len(t, rows, 1)
+
+	for name, text := range map[string]string{"reason": rows[0].Reason, "real cause": rows[0].RealCause} {
+		require.NotContains(t, text, "@example.com", name)
+		require.Contains(t, text, "[REDACTED:emails:", name)
+	}
+
+	cause := deref(investigation(t, pool, finalInvestigation).ConfirmedCause)
+	require.NotContains(t, cause, "@example.com", "the confirmed cause")
+	require.Contains(t, cause, "[REDACTED:emails:")
+
+	entry := memoryEntry(t, pool, finalInvestigation)
+	require.NotNil(t, entry)
+	require.NotContains(t, entry.cause, "@example.com", "the memory entry")
+}
+
 func TestSubmitRatesAToolCallWhileTheInvestigationRuns(t *testing.T) {
 	t.Parallel()
 
@@ -382,6 +422,10 @@ func TestSubmitRatesAToolCallWhileTheInvestigationRuns(t *testing.T) {
 // submit submits s in a transaction of its own.
 func submit(t *testing.T, pool *pgxpool.Pool, s Submission) (Submitted, error) {
 	t.Helper()
+
+	if s.Redactor == nil {
+		s.Redactor = testRedactor
+	}
 
 	var got Submitted
 

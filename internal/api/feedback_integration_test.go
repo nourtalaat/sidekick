@@ -301,6 +301,33 @@ sidekick_feedback_total{rating="wrong",target="finding"} 2
 sidekick_feedback_total{rating="wrong",target="verdict"} 0
 `
 
+func TestCreateInvestigationFeedbackRedactsTheFreeText(t *testing.T) {
+	t.Parallel()
+
+	s := setupFeedback(t)
+
+	rec := postFeedback(t, s, inv2, faSession, faCSRF,
+		`{"targetKind":"verdict","targetRef":"run:1/verdict","rating":"wrong","reason":"Ask ana@example.com about it.","correctVerdict":"true_positive","correctCause":"Run by bob@example.com."}`)
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+
+	var got feedbackBody
+
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+
+	var reason, cause, confirmed string
+
+	require.NoError(t, s.pool.QueryRow(t.Context(),
+		"SELECT reason, correct_cause, (SELECT confirmed_cause FROM investigations WHERE id = $1) FROM feedback WHERE id = $2", inv2, got.ID).
+		Scan(&reason, &cause, &confirmed))
+
+	for name, text := range map[string]string{"reason": reason, "real cause": cause, "confirmed cause": confirmed} {
+		require.NotContains(t, text, "@example.com", name)
+		require.Contains(t, text, "[REDACTED:emails:", name)
+	}
+
+	require.NotContains(t, rec.Body.String(), "@example.com", "the answer shows the redacted text")
+}
+
 func TestCreateInvestigationFeedbackKeepsOneOpinionPerUser(t *testing.T) {
 	t.Parallel()
 

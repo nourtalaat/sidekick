@@ -15,11 +15,22 @@ import (
 	"github.com/nourtalaat/sidekick/internal/feedback"
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/output"
+	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
 const testPublicURL = "https://sidekick.example.com"
+
+// testRedactor redacts email addresses.
+var testRedactor = func() *redact.Redactor {
+	r, err := redact.New(redact.Options{BuiltIn: []string{redact.Emails}, HashKey: []byte("test key")})
+	if err != nil {
+		panic(err)
+	}
+
+	return r
+}()
 
 // formInvestigation is the investigation the forms are for: a true
 // positive in its second run, with two findings and a fix.
@@ -231,7 +242,7 @@ func TestDetailsSubmission(t *testing.T) {
 			want: feedback.Submission{
 				InvestigationID: id, Target: feedback.Target{Kind: "finding", Ref: "run:2/finding:f1"}, Rating: output.RatingWrong,
 				Reason: "Not at 14:02.", CorrectVerdict: "false_positive", CorrectCause: "A load test.",
-				Author: feedback.Author{SlackUserID: "U01ANA"}, Memory: mem,
+				Author: feedback.Author{SlackUserID: "U01ANA"}, Redactor: testRedactor, Memory: mem,
 			},
 		},
 		{
@@ -239,7 +250,7 @@ func TestDetailsSubmission(t *testing.T) {
 			values: detailsValues{Part: "run:2/verdict", Rating: "correct"},
 			want: feedback.Submission{
 				InvestigationID: id, Target: feedback.Target{Kind: "verdict", Ref: "run:2/verdict"}, Rating: output.RatingCorrect,
-				Author: feedback.Author{SlackUserID: "U01ANA"}, Memory: mem,
+				Author: feedback.Author{SlackUserID: "U01ANA"}, Redactor: testRedactor, Memory: mem,
 			},
 		},
 		{
@@ -247,7 +258,7 @@ func TestDetailsSubmission(t *testing.T) {
 			values: detailsValues{Part: partToolCall, ToolCall: "toolu_01", Rating: "wrong"},
 			want: feedback.Submission{
 				InvestigationID: id, Target: feedback.Target{Kind: "tool_call", Ref: "toolu_01"}, Rating: output.RatingWrong,
-				Author: feedback.Author{SlackUserID: "U01ANA"}, Memory: mem,
+				Author: feedback.Author{SlackUserID: "U01ANA"}, Redactor: testRedactor, Memory: mem,
 			},
 		},
 		{
@@ -271,7 +282,7 @@ func TestDetailsSubmission(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, errs := tt.values.submission(id, "U01ANA", mem)
+			got, errs := tt.values.submission(id, "U01ANA", testRedactor, mem)
 			require.Equal(t, tt.wantErrors, errs)
 			require.Equal(t, tt.want, got)
 		})

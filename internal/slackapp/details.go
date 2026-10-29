@@ -15,6 +15,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/output"
 	slackout "github.com/nourtalaat/sidekick/internal/output/slack"
+	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
@@ -143,7 +144,7 @@ func detailsView(inv db.Investigation, opts detailsOptions) slack.ModalViewReque
 // submission returns the feedback the form asks for from the Slack user
 // slackUser on investigation id, or the errors to show in the form, by
 // block ID.
-func (d detailsValues) submission(id uuid.UUID, slackUser string, mem memory.SyncOptions) (feedback.Submission, map[string]string) {
+func (d detailsValues) submission(id uuid.UUID, slackUser string, redactor *redact.Redactor, mem memory.SyncOptions) (feedback.Submission, map[string]string) {
 	target, ok := targetOf(d.Part, d.ToolCall)
 
 	switch {
@@ -163,6 +164,7 @@ func (d detailsValues) submission(id uuid.UUID, slackUser string, mem memory.Syn
 		CorrectVerdict:  report.Verdict(d.Verdict),
 		CorrectCause:    d.Cause,
 		Author:          feedback.Author{SlackUserID: slackUser},
+		Redactor:        redactor,
 		Memory:          mem,
 	}, nil
 }

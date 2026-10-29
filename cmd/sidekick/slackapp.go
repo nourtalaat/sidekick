@@ -135,6 +135,7 @@ func newButtons(a *app.App, h *slackapp.Handler, lookup roles.Lookup, memorySync
 		Logger:   a.Logger().With("component", "slackapp"),
 		Memory:   memorySync,
 
+		Redactor:  a.Redactor(),
 		PublicURL: a.Config().Server.PublicURL,
 	}), nil
 }
