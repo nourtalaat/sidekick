@@ -22,9 +22,11 @@ import (
 // The audit actions of rule changes.
 const (
 	ActionListenerCreated = "listener.created"
+	ActionListenerUpdated = "listener.updated"
 	ActionListenerDeleted = "listener.deleted"
 	ActionRouteCreated    = "route.created"
 	ActionRouteUpdated    = "route.updated"
+	ActionRouteDeleted    = "route.deleted"
 )
 
 // uniqueViolation is the Postgres error code of a duplicate key.
@@ -41,7 +43,24 @@ var (
 	// ErrConflict means another change to the same rule was saved at the
 	// same moment. Trying again works.
 	ErrConflict = errors.New("the rule was changed at the same moment by someone else")
+	// ErrStale means the rule was changed since the version the caller
+	// read, so the caller's copy is out of date.
+	ErrStale = errors.New("the rule was changed since it was read")
 )
+
+// Actor is who makes a change. The audit log records it, and the rule's
+// updated_by holds its ID.
+type Actor struct {
+	// Kind is audit.ActorUser or audit.ActorToken.
+	Kind string
+	// ID is a Slack user ID, or the ID of the web UI user or API token.
+	ID string
+}
+
+// SlackUser returns the Actor for the Slack user with id.
+func SlackUser(id string) Actor {
+	return Actor{Kind: audit.ActorUser, ID: id}
+}
 
 // RouteChange is the result of SetRoute.
 type RouteChange struct {
@@ -79,11 +98,11 @@ func (s *Store) Load(ctx context.Context) (Runtime, error) {
 	return rt, nil
 }
 
-// AddListener saves a new runtime listener for the Slack user actor. The
-// error wraps config.Errors when the listener fails the checks, ErrFileRule
-// when the file has a listener of that name, and ErrExists when a runtime
-// one has it.
-func (s *Store) AddListener(ctx context.Context, actor, name string, l config.Listener) error {
+// AddListener saves a new runtime listener for actor. The error wraps
+// config.Errors when the listener fails the checks, ErrFileRule when the
+// file has a listener of that name, and ErrExists when a runtime one has
+// it.
+func (s *Store) AddListener(ctx context.Context, actor Actor, name string, l config.Listener) error {
 	if _, ok := s.file.Listeners[name]; ok {
 		return fmt.Errorf("add listener %s: %w", name, ErrFileRule)
 	}
@@ -110,7 +129,7 @@ func (s *Store) AddListener(ctx context.Context, actor, name string, l config.Li
 		}
 
 		err := q.InsertListener(ctx, db.InsertListenerParams{
-			Name: name, SlackChannel: l.Channel, Match: match, UpdatedBy: optional(actor), UpdatedAt: s.now(),
+			Name: name, SlackChannel: l.Channel, Match: match, UpdatedBy: optional(actor.ID), UpdatedAt: s.now(),
 		})
 		if err != nil {
 			return fmt.Errorf("insert listener: %w", err)
@@ -125,13 +144,24 @@ func (s *Store) AddListener(ctx context.Context, actor, name string, l config.Li
 	return nil
 }
 
-// RemoveListener deletes a runtime listener for the Slack user actor. The
-// error wraps ErrFileRule for a file listener, and ErrNotFound when no
-// runtime listener has the name.
-func (s *Store) RemoveListener(ctx context.Context, actor, name string) error {
+// UpdateListener replaces the channel, match, extract and recovery of the
+// runtime listener named name, and turns it on or off, for actor. version
+// is the version the caller read; a different stored one means someone
+// changed the listener since, and the error wraps ErrStale. The error
+// wraps config.Errors when the listener fails the checks, ErrFileRule when
+// the file has a listener of that name, and ErrNotFound when no runtime
+// listener has it. A change that leaves the listener as it was writes
+// nothing. The result is the listener as stored after the call.
+func (s *Store) UpdateListener(ctx context.Context, actor Actor, name string, version int, l config.Listener, enabled bool) (Listener, error) {
 	if _, ok := s.file.Listeners[name]; ok {
-		return fmt.Errorf("remove listener %s: %w", name, ErrFileRule)
+		return Listener{}, fmt.Errorf("update listener %s: %w", name, ErrFileRule)
 	}
+
+	if err := s.file.CheckRuntimeListener(ctx, name, l); err != nil {
+		return Listener{}, fmt.Errorf("update listener %s: %w", name, err)
+	}
+
+	var res Listener
 
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
 		q := db.New(tx)
@@ -150,6 +180,78 @@ func (s *Store) RemoveListener(ctx context.Context, actor, name string) error {
 			return fmt.Errorf("read listener: %w", err)
 		}
 
+		if old.Version != version {
+			return ErrStale
+		}
+
+		updated := old
+		updated.Config = l
+		updated.Config.Trusted = old.Config.Trusted
+		updated.Enabled = enabled
+		res = old
+
+		changed, err := differ(old.view(), updated.view())
+		if err != nil {
+			return fmt.Errorf("compare listener: %w", err)
+		}
+
+		if !changed {
+			return nil
+		}
+
+		match, err := json.Marshal(matchOfListener(updated.Config))
+		if err != nil {
+			return fmt.Errorf("encode listener: %w", err)
+		}
+
+		now := s.now()
+
+		err = q.UpdateListener(ctx, db.UpdateListenerParams{
+			Name: name, SlackChannel: updated.Config.Channel, Match: match, Enabled: enabled, UpdatedBy: optional(actor.ID), UpdatedAt: now,
+		})
+		if err != nil {
+			return fmt.Errorf("update listener: %w", err)
+		}
+
+		updated.Version, updated.UpdatedBy, updated.UpdatedAt = old.Version+1, actor.ID, now
+		res = updated
+
+		return s.record(ctx, tx, actor, ActionListenerUpdated, KindListener, name, old.view(), updated.view())
+	})
+	if err != nil {
+		return Listener{}, fmt.Errorf("update listener %s: %w", name, err)
+	}
+
+	return res, nil
+}
+
+// RemoveListener deletes a runtime listener for actor. It also deletes a
+// runtime listener that a file listener of the same name shadows, which
+// nothing else can remove; shadowed says that was the case. The error
+// wraps ErrFileRule for a file listener that no runtime listener
+// shadows, and ErrNotFound when neither has the name.
+func (s *Store) RemoveListener(ctx context.Context, actor Actor, name string) (shadowed bool, err error) {
+	_, shadowed = s.file.Listeners[name]
+
+	err = s.inTx(ctx, func(tx pgx.Tx) error {
+		q := db.New(tx)
+
+		row, err := q.LockListener(ctx, name)
+
+		switch {
+		case errors.Is(err, pgx.ErrNoRows) && shadowed:
+			return ErrFileRule
+		case errors.Is(err, pgx.ErrNoRows):
+			return ErrNotFound
+		case err != nil:
+			return fmt.Errorf("read listener: %w", err)
+		}
+
+		old, err := listenerOfRow(row)
+		if err != nil {
+			return fmt.Errorf("read listener: %w", err)
+		}
+
 		if _, err := q.DeleteListener(ctx, name); err != nil {
 			return fmt.Errorf("delete listener: %w", err)
 		}
@@ -157,18 +259,107 @@ func (s *Store) RemoveListener(ctx context.Context, actor, name string) error {
 		return s.record(ctx, tx, actor, ActionListenerDeleted, KindListener, name, old.view(), nil)
 	})
 	if err != nil {
-		return fmt.Errorf("remove listener %s: %w", name, err)
+		return false, fmt.Errorf("remove listener %s: %w", name, err)
 	}
 
-	return nil
+	return shadowed, nil
 }
 
-// SetRoute changes the runtime route named name for the Slack user actor,
-// or creates it from config.NewRoute when it does not exist. change edits
-// the route; an error from it is returned as it is, wrapped. The result
-// must pass the runtime route checks, or the error wraps config.Errors. A
-// change that leaves the route as it was writes nothing.
-func (s *Store) SetRoute(ctx context.Context, actor, name string, change func(r *Route) error) (RouteChange, error) {
+// SetRoute changes the runtime route named name for actor, or creates it
+// from config.NewRoute when it does not exist. change edits the route; an
+// error from it is returned as it is, wrapped. The result must pass the
+// runtime route checks, or the error wraps config.Errors. A change that
+// leaves the route as it was writes nothing.
+func (s *Store) SetRoute(ctx context.Context, actor Actor, name string, change func(r *Route) error) (RouteChange, error) {
+	return s.editRoute(ctx, actor, name, routeEdit{rule: routeUpsert}, change)
+}
+
+// CreateRoute saves a new runtime route for actor. The error wraps
+// config.Errors when the route fails the checks, ErrFileRule when the file
+// has a route of that name, and ErrExists when a runtime one has it.
+func (s *Store) CreateRoute(ctx context.Context, actor Actor, r config.Route) (RouteChange, error) {
+	return s.editRoute(ctx, actor, r.Name, routeEdit{rule: routeCreateOnly}, func(rt *Route) error {
+		rt.Config = cloneRoute(r)
+
+		return nil
+	})
+}
+
+// ReplaceRoute replaces the runtime route named r.Name with r, and turns
+// it on or off, for actor. version is the version the caller read; a
+// different stored one means someone changed the route since, and the
+// error wraps ErrStale. The error wraps config.Errors when the route
+// fails the checks, ErrFileRule when the file has a route of that name,
+// and ErrNotFound when no runtime route has it.
+func (s *Store) ReplaceRoute(ctx context.Context, actor Actor, version int, r config.Route, enabled bool) (RouteChange, error) {
+	return s.editRoute(ctx, actor, r.Name, routeEdit{rule: routeUpdateOnly, version: version}, func(rt *Route) error {
+		rt.Config = cloneRoute(r)
+		rt.Enabled = enabled
+
+		return nil
+	})
+}
+
+// DeleteRoute deletes a runtime route for actor. It also deletes a
+// runtime route that a file route of the same name shadows, which nothing
+// else can remove; shadowed says that was the case. The error wraps
+// ErrFileRule for a file route that no runtime route shadows, and
+// ErrNotFound when neither has the name.
+func (s *Store) DeleteRoute(ctx context.Context, actor Actor, name string) (shadowed bool, err error) {
+	shadowed = name == config.DefaultRouteName || s.fileRoute(name)
+
+	err = s.inTx(ctx, func(tx pgx.Tx) error {
+		q := db.New(tx)
+
+		row, err := q.LockRoute(ctx, name)
+
+		switch {
+		case errors.Is(err, pgx.ErrNoRows) && shadowed:
+			return ErrFileRule
+		case errors.Is(err, pgx.ErrNoRows):
+			return ErrNotFound
+		case err != nil:
+			return fmt.Errorf("read route: %w", err)
+		}
+
+		old, err := routeOfRow(row)
+		if err != nil {
+			return fmt.Errorf("read route: %w", err)
+		}
+
+		if _, err := q.DeleteRoute(ctx, name); err != nil {
+			return fmt.Errorf("delete route: %w", err)
+		}
+
+		return s.record(ctx, tx, actor, ActionRouteDeleted, KindRoute, name, old.view(), nil)
+	})
+	if err != nil {
+		return false, fmt.Errorf("delete route %s: %w", name, err)
+	}
+
+	return shadowed, nil
+}
+
+// routeRule says whether editRoute may create the route, change it, or
+// either.
+type routeRule int
+
+const (
+	routeUpsert routeRule = iota
+	routeCreateOnly
+	routeUpdateOnly
+)
+
+// routeEdit says what editRoute may do.
+type routeEdit struct {
+	rule routeRule
+	// version is the version the caller read, for routeUpdateOnly.
+	version int
+}
+
+// editRoute reads the route, applies change, checks the result and saves
+// it with its audit entry and notification in one transaction.
+func (s *Store) editRoute(ctx context.Context, actor Actor, name string, edit routeEdit, change func(r *Route) error) (RouteChange, error) {
 	if name == config.DefaultRouteName || s.fileRoute(name) {
 		return RouteChange{}, fmt.Errorf("set route %s: %w", name, ErrFileRule)
 	}
@@ -181,15 +372,23 @@ func (s *Store) SetRoute(ctx context.Context, actor, name string, change func(r 
 		row, err := q.LockRoute(ctx, name)
 
 		switch {
+		case errors.Is(err, pgx.ErrNoRows) && edit.rule == routeUpdateOnly:
+			return ErrNotFound
 		case errors.Is(err, pgx.ErrNoRows):
 			res.Created = true
 			res.Old = Route{Config: config.NewRoute(name), Enabled: true}
 		case err != nil:
 			return fmt.Errorf("read route: %w", err)
+		case edit.rule == routeCreateOnly:
+			return ErrExists
 		default:
 			if res.Old, err = routeOfRow(row); err != nil {
 				return fmt.Errorf("read route: %w", err)
 			}
+		}
+
+		if edit.rule == routeUpdateOnly && res.Old.Version != edit.version {
+			return ErrStale
 		}
 
 		res.New = res.Old
@@ -213,7 +412,7 @@ func (s *Store) SetRoute(ctx context.Context, actor, name string, change func(r 
 			return fmt.Errorf("check route: %w", err)
 		}
 
-		if err := s.writeRoute(ctx, q, actor, res); err != nil {
+		if err := s.writeRoute(ctx, q, actor, &res); err != nil {
 			return fmt.Errorf("save route: %w", err)
 		}
 
@@ -251,8 +450,9 @@ func (s *Store) checkRoute(ctx context.Context, q *db.Queries, r config.Route) e
 	return nil
 }
 
-func (s *Store) writeRoute(ctx context.Context, q *db.Queries, actor string, res RouteChange) error {
+func (s *Store) writeRoute(ctx context.Context, q *db.Queries, actor Actor, res *RouteChange) error {
 	r := res.New
+	now := s.now()
 
 	spec, err := json.Marshal(specOfRoute(r.Config))
 	if err != nil {
@@ -262,12 +462,12 @@ func (s *Store) writeRoute(ctx context.Context, q *db.Queries, actor string, res
 	if res.Created {
 		err = q.InsertRoute(ctx, db.InsertRouteParams{
 			Name: r.Config.Name, Priority: int32(r.Config.Priority), Spec: spec, Enabled: r.Enabled, //nolint:gosec // Priorities are small; config checks bound them.
-			UpdatedBy: optional(actor), UpdatedAt: s.now(),
+			UpdatedBy: optional(actor.ID), UpdatedAt: now,
 		})
 	} else {
 		err = q.UpdateRoute(ctx, db.UpdateRouteParams{
 			Name: r.Config.Name, Priority: int32(r.Config.Priority), Spec: spec, Enabled: r.Enabled, //nolint:gosec // Priorities are small; config checks bound them.
-			UpdatedBy: optional(actor), UpdatedAt: s.now(),
+			UpdatedBy: optional(actor.ID), UpdatedAt: now,
 		})
 	}
 
@@ -275,14 +475,16 @@ func (s *Store) writeRoute(ctx context.Context, q *db.Queries, actor string, res
 		return fmt.Errorf("write route: %w", err)
 	}
 
+	res.New.Version, res.New.UpdatedBy, res.New.UpdatedAt = res.Old.Version+1, actor.ID, now
+
 	return nil
 }
 
 // record writes the audit entry of a change and the notification that
 // makes every replica reload.
-func (s *Store) record(ctx context.Context, tx pgx.Tx, actor, action, kind, name string, before, after any) error {
+func (s *Store) record(ctx context.Context, tx pgx.Tx, actor Actor, action, kind, name string, before, after any) error {
 	err := s.audit.Write(ctx, tx, audit.Entry{
-		ActorKind: audit.ActorUser, ActorID: actor, Action: action, TargetKind: kind, TargetID: name, Old: before, New: after,
+		ActorKind: actor.Kind, ActorID: actor.ID, Action: action, TargetKind: kind, TargetID: name, Old: before, New: after,
 	})
 	if err != nil {
 		return fmt.Errorf("audit the change: %w", err)

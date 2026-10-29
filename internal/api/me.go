@@ -21,7 +21,7 @@ import (
 type server struct {
 	tokens   TokenManager
 	cfg      *config.Config
-	rules    RuntimeRules
+	rules    RuleStore
 	redactor *redact.Redactor
 	pool     *pgxpool.Pool
 	audit    *audit.Writer

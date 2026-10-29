@@ -44,3 +44,101 @@ func (q *Queries) InsertAuditEntry(ctx context.Context, arg InsertAuditEntryPara
 	)
 	return err
 }
+
+const listAuditEntries = `-- name: ListAuditEntries :many
+SELECT a.id, a.at, a.actor_kind, a.actor_id, a.action, a.target_kind, a.target_id, a.investigation_id, a.details,
+       coalesce(u.name, t.name, '')::text AS actor_name
+FROM (
+  SELECT p.id, p.at, p.actor_kind, p.actor_id, p.action, p.target_kind, p.target_id, p.investigation_id, p.details
+  FROM audit_log p
+  WHERE ($1::timestamptz IS NULL OR p.at >= $1::timestamptz)
+    AND ($2::timestamptz IS NULL OR p.at < $2::timestamptz)
+    AND ($3::text IS NULL OR p.actor_id = $3::text)
+    AND ($4::text IS NULL OR p.actor_kind = $4::text)
+    AND ($5::text IS NULL OR p.action = $5::text)
+    AND ($6::uuid IS NULL OR p.investigation_id = $6::uuid)
+    AND ($7::timestamptz IS NULL
+         OR (p.at, p.id) < ($7::timestamptz, $8::bigint))
+  ORDER BY p.at DESC, p.id DESC
+  LIMIT $9
+) AS a
+CROSS JOIN LATERAL (
+  SELECT CASE WHEN a.actor_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN a.actor_id::uuid END AS id
+) AS who
+LEFT JOIN users u ON a.actor_kind = 'user' AND u.id = who.id
+LEFT JOIN api_tokens t ON a.actor_kind = 'token' AND t.id = who.id
+ORDER BY a.at DESC, a.id DESC
+`
+
+type ListAuditEntriesParams struct {
+	AtFrom          *time.Time
+	AtTo            *time.Time
+	ActorID         *string
+	ActorKind       *string
+	Action          *string
+	InvestigationID *uuid.UUID
+	CursorAt        *time.Time
+	CursorID        *int64
+	PageSize        int32
+}
+
+type ListAuditEntriesRow struct {
+	ID              int64
+	At              time.Time
+	ActorKind       string
+	ActorID         *string
+	Action          string
+	TargetKind      *string
+	TargetID        *string
+	InvestigationID *uuid.UUID
+	Details         json.RawMessage
+	ActorName       string
+}
+
+// ListAuditEntries returns a page of audit entries, newest first, that
+// match every filter given, with the name of the user or API token that
+// made the change when it is still known. A page starts after the entry
+// with cursor_id made at cursor_at. The page is found first, through the
+// index of the filter, and only its rows are joined. Run it with a plan
+// made for the values it gets, so a filter that is not given costs nothing.
+// An actor_id that is not a UUID, such as a Slack user ID, has no name.
+func (q *Queries) ListAuditEntries(ctx context.Context, arg ListAuditEntriesParams) ([]ListAuditEntriesRow, error) {
+	rows, err := q.db.Query(ctx, listAuditEntries,
+		arg.AtFrom,
+		arg.AtTo,
+		arg.ActorID,
+		arg.ActorKind,
+		arg.Action,
+		arg.InvestigationID,
+		arg.CursorAt,
+		arg.CursorID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuditEntriesRow
+	for rows.Next() {
+		var i ListAuditEntriesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.At,
+			&i.ActorKind,
+			&i.ActorID,
+			&i.Action,
+			&i.TargetKind,
+			&i.TargetID,
+			&i.InvestigationID,
+			&i.Details,
+			&i.ActorName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

@@ -34,7 +34,7 @@ func (h *Handler) listen(ctx context.Context, cmd slack.SlashCommand, args []str
 		return "", err
 	}
 
-	if err := h.store.AddListener(ctx, cmd.UserID, name, l); err != nil {
+	if err := h.store.AddListener(ctx, rules.SlackUser(cmd.UserID), name, l); err != nil {
 		switch {
 		case errors.Is(err, rules.ErrFileRule), errors.Is(err, rules.ErrExists):
 			return "", &userError{msg: fmt.Sprintf("A listener named %s exists already. Choose another name with `name:<name>`.", code(name))}
@@ -61,7 +61,7 @@ func (h *Handler) unlisten(ctx context.Context, cmd slack.SlashCommand, args []s
 
 	name := args[0]
 
-	err := h.store.RemoveListener(ctx, cmd.UserID, name)
+	shadowed, err := h.store.RemoveListener(ctx, rules.SlackUser(cmd.UserID), name)
 
 	switch {
 	case errors.Is(err, rules.ErrFileRule):
@@ -72,7 +72,11 @@ func (h *Handler) unlisten(ctx context.Context, cmd slack.SlashCommand, args []s
 		return "", fmt.Errorf("remove listener %s: %w", name, err)
 	}
 
-	h.log.InfoContext(ctx, "runtime listener removed", "listener", name, "user", cmd.UserID)
+	h.log.InfoContext(ctx, "runtime listener removed", "listener", name, "user", cmd.UserID, "shadowed", shadowed)
+
+	if shadowed {
+		return fmt.Sprintf("Removed the copy of listener %s that was added from Slack and was not in use. The listener %s in the Sidekick config file is unchanged.", code(name), code(name)), nil
+	}
 
 	return fmt.Sprintf("Listener %s removed.", code(name)), nil
 }

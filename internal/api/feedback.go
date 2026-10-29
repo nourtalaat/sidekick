@@ -91,7 +91,7 @@ func feedbackOf(got feedback.Submitted) apigen.Feedback {
 	out := apigen.Feedback{
 		Id: row.ID, InvestigationId: row.InvestigationID,
 		TargetKind: apigen.FeedbackTargetKind(row.TargetKind), TargetRef: row.TargetRef,
-		Rating: row.Rating, Reason: row.Reason, CorrectCause: row.CorrectCause,
+		Rating: apigen.FeedbackRating(row.Rating), Reason: row.Reason, CorrectCause: row.CorrectCause,
 		Channel:      apigen.FeedbackChannel(row.Channel),
 		Confirmation: apigen.FeedbackConfirmation(confirmationUnchanged),
 		CreatedAt:    row.CreatedAt, UpdatedAt: row.UpdatedAt,

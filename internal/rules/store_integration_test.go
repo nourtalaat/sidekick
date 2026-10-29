@@ -41,7 +41,7 @@ func TestAddListener(t *testing.T) {
 			listener: "billing",
 			config:   billing,
 			wantAudit: []auditRow{{
-				Actor: actor, Action: rules.ActionListenerCreated, Target: "listener:billing",
+				Actor: actorID, Action: rules.ActionListenerCreated, Target: "listener:billing",
 				Details: map[string]any{"new": map[string]any{
 					"channel": "#billing", "trusted": false, "enabled": true,
 					"match": map[string]any{"sender": map[string]any{"kind": "bot", "names": []any{"Grafana"}}, "text": "(?i)firing"},
@@ -68,7 +68,7 @@ func TestAddListener(t *testing.T) {
 				require.NoError(t, err)
 				require.Len(t, rt.Listeners, 2)
 				require.Equal(t, tt.config, rt.Listeners[0].Config)
-				require.Equal(t, actor, rt.Listeners[0].UpdatedBy)
+				require.Equal(t, actorID, rt.Listeners[0].UpdatedBy)
 			}
 		})
 	}
@@ -78,22 +78,36 @@ func TestRemoveListener(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name      string
-		listener  string
-		wantErr   error
-		wantAudit []auditRow
+		name string
+		// seed is SQL that runs before the removal.
+		seed     string
+		listener string
+		wantErr  error
+		// wantShadowed is whether the file has a listener of the name.
+		wantShadowed bool
+		wantAudit    []auditRow
 	}{
 		{
 			name:     "a runtime listener",
 			listener: "ops",
 			wantAudit: []auditRow{{
-				Actor: actor, Action: rules.ActionListenerDeleted, Target: "listener:ops",
+				Actor: actorID, Action: rules.ActionListenerDeleted, Target: "listener:ops",
 				Details: map[string]any{"old": map[string]any{
 					"channel": "#ops", "trusted": false, "enabled": true, "match": map[string]any{"sender": map[string]any{"kind": "bot"}},
 				}},
 			}},
 		},
 		{name: "a file listener", listener: "alerts", wantErr: rules.ErrFileRule},
+		{
+			name:         "a runtime listener that a file listener shadows",
+			seed:         `INSERT INTO listeners (name, slack_channel, match, version, updated_at) VALUES ('alerts', '#old', '{}', 1, now())`,
+			listener:     "alerts",
+			wantShadowed: true,
+			wantAudit: []auditRow{{
+				Actor: actorID, Action: rules.ActionListenerDeleted, Target: "listener:alerts",
+				Details: map[string]any{"old": map[string]any{"channel": "#old", "trusted": false, "enabled": true, "match": map[string]any{}}},
+			}},
+		},
 		{name: "a listener that does not exist", listener: "nope", wantErr: rules.ErrNotFound},
 	}
 
@@ -103,8 +117,14 @@ func TestRemoveListener(t *testing.T) {
 
 			pool, store := setup(t)
 
-			err := store.RemoveListener(t.Context(), actor, tt.listener)
+			if tt.seed != "" {
+				_, err := pool.Exec(t.Context(), tt.seed)
+				require.NoError(t, err)
+			}
+
+			shadowed, err := store.RemoveListener(t.Context(), actor, tt.listener)
 			requireErr(t, err, tt.wantErr)
+			require.Equal(t, tt.wantShadowed, shadowed)
 			require.Equal(t, tt.wantAudit, auditRows(t, pool))
 		})
 	}
@@ -274,6 +294,24 @@ func TestQueryPlans(t *testing.T) {
 				return fmt.Errorf("run query: %w", err)
 			},
 			wantIndex: "listeners_pkey",
+		},
+		{
+			name: "UpdateListener",
+			run: func(ctx context.Context, q *db.Queries) error {
+				err := q.UpdateListener(ctx, db.UpdateListenerParams{Name: "listener-500", SlackChannel: "#a", Match: []byte(`{}`), Enabled: true, UpdatedAt: time.Now()})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "listeners_pkey",
+		},
+		{
+			name: "DeleteRoute",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.DeleteRoute(ctx, "route-500")
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "routes_pkey",
 		},
 		{
 			name: "UpdateRoute",

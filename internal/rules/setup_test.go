@@ -14,8 +14,10 @@ import (
 	"github.com/nourtalaat/sidekick/internal/store/storetest"
 )
 
-// actor is the Slack user who makes the changes in the tests.
-const actor = "U01ADMIN"
+// actorID is the Slack user who makes the changes in the tests.
+const actorID = "U01ADMIN"
+
+var actor = rules.SlackUser(actorID)
 
 // TestMain runs the tests, then lets storetest stop the Postgres container
 // it may have started.
