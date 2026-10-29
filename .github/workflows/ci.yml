@@ -102,6 +102,7 @@ jobs:
       - run: make ci-${{ matrix.group }}
         env:
           SIDEKICK_PLANS_DIR: ${{ runner.temp }}/query-plans
+          SIDEKICK_CONNS_LOG: ${{ runner.temp }}/conns.log
           SIDEKICK_VALIDATE_TOOLS: ${{ github.workspace }}/bin/validator-tools
 
       # The plan tests write each query and its EXPLAIN ANALYZE plan here, for
@@ -113,6 +114,14 @@ jobs:
           name: query-plans
           path: ${{ runner.temp }}/query-plans
           if-no-files-found: warn
+
+      - name: List the connections each package held
+        if: always() && matrix.group == 'integration'
+        shell: bash
+        run: |
+          echo 'plain_own plain_total vector_own vector_total package'
+          sort -rn "$RUNNER_TEMP/conns.log" || true
+          echo "PEAK plain total: $(sort -k2 -rn "$RUNNER_TEMP/conns.log" | head -1 | awk '{print $2}')"
 
       - name: List the query plans in the job summary
         if: always() && matrix.group == 'integration'

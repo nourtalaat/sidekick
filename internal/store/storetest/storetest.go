@@ -63,7 +63,10 @@ var (
 //		os.Exit(storetest.Main(m))
 //	}
 func Main(m *testing.M) int {
+	stopSampler := startConnsSampler()
 	code := m.Run()
+
+	stopSampler()
 
 	for _, s := range []*sharedServer{&server, &vectorServer} {
 		if err := s.shutdown(); err != nil {
@@ -167,6 +170,7 @@ func (s *sharedServer) createDatabase(t testing.TB, template string) string {
 	t.Helper()
 
 	name := testDatabasePrefix + strings.ReplaceAll(ids.New().String(), "-", "")
+	trackDatabase(name)
 
 	_, err := s.admin.Exec(t.Context(), "CREATE DATABASE "+quote(name)+" TEMPLATE "+quote(template))
 	require.NoError(t, err, "create test database %s", name)
