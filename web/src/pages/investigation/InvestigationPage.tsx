@@ -7,6 +7,7 @@ import { QueryError } from "../../components/QueryError";
 import { hasRole } from "../../roles";
 import { useCurrentUser } from "../../session";
 import { EventsCard } from "./EventsCard";
+import { FixApplied } from "./FixApplied";
 import { FollowUpBox } from "./FollowUpBox";
 import { PageHeader } from "./PageHeader";
 import { FeedbackProvider } from "./PartFeedback";
@@ -83,6 +84,7 @@ export default function InvestigationPage() {
             </p>
           )}
           {investigation.data.report && <ReportSections report={investigation.data.report} run={investigation.data.run} />}
+          <FixApplied inv={investigation.data} canAct={canAct} />
           {investigation.data.pendingFollowUps.length > 0 && (
             <section aria-labelledby="pending-heading">
               <h2 id="pending-heading" className="sk-inv__heading">
