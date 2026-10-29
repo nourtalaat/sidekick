@@ -68,7 +68,7 @@ func (q *Queries) BackfillInvestigationList(ctx context.Context, batch int32) (i
 }
 
 const getInvestigationDetail = `-- name: GetInvestigationDetail :one
-SELECT investigations.id, investigations.group_id, investigations.route, investigations.strategy, investigations.strategy_version, investigations.mode, investigations.status, investigations.run, investigations.next_seq, investigations.fence, investigations.verdict, investigations.confidence, investigations.report, investigations.stop_reason, investigations.connectors, investigations.budget, investigations.input_tokens, investigations.output_tokens, investigations.cost_micros, investigations.tool_calls, investigations.created_at, investigations.started_at, investigations.first_finding_at, investigations.finished_at, investigations.cancel_requested_at, investigations.cancel_requested_by, investigations.cancel_requested_by_slack_user, investigations.confirmed_verdict, investigations.confirmed_cause, investigations.confirmed_by, investigations.confirmed_by_slack_user, investigations.confirmed_at, investigations.run_kind, investigations.alert_title, investigations.service, investigations.model, event_groups.event_count,
+SELECT investigations.id, investigations.group_id, investigations.route, investigations.strategy, investigations.strategy_version, investigations.mode, investigations.status, investigations.run, investigations.next_seq, investigations.fence, investigations.verdict, investigations.confidence, investigations.report, investigations.stop_reason, investigations.connectors, investigations.budget, investigations.input_tokens, investigations.output_tokens, investigations.cost_micros, investigations.tool_calls, investigations.created_at, investigations.started_at, investigations.first_finding_at, investigations.finished_at, investigations.cancel_requested_at, investigations.cancel_requested_by, investigations.cancel_requested_by_slack_user, investigations.confirmed_verdict, investigations.confirmed_cause, investigations.confirmed_by, investigations.confirmed_by_slack_user, investigations.confirmed_at, investigations.run_kind, investigations.alert_title, investigations.service, investigations.model, investigations.fix_applied_at, investigations.fix_applied_by, investigations.fix_applied_by_slack_user, event_groups.event_count,
        event_groups.status AS group_status, event_groups.closed_reason AS group_closed_reason
 FROM investigations
 JOIN event_groups ON event_groups.id = investigations.group_id
@@ -124,6 +124,9 @@ func (q *Queries) GetInvestigationDetail(ctx context.Context, id uuid.UUID) (Get
 		&i.Investigation.AlertTitle,
 		&i.Investigation.Service,
 		&i.Investigation.Model,
+		&i.Investigation.FixAppliedAt,
+		&i.Investigation.FixAppliedBy,
+		&i.Investigation.FixAppliedBySlackUser,
 		&i.EventCount,
 		&i.GroupStatus,
 		&i.GroupClosedReason,
