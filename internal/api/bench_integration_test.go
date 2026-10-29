@@ -5,7 +5,6 @@ package api_test
 import (
 	"net/http"
 	"net/url"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -407,7 +406,7 @@ func TestCompareBenchRuns(t *testing.T) {
 			require.Equal(t, tt.wantStatus, rec.Code, rec.Body.String())
 
 			if tt.wantDetail != "" {
-				require.True(t, strings.Contains(rec.Body.String(), tt.wantDetail), rec.Body.String())
+				require.Contains(t, rec.Body.String(), tt.wantDetail)
 			}
 		})
 	}

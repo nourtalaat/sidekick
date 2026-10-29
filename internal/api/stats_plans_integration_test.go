@@ -4,7 +4,6 @@ package api_test
 
 import (
 	"context"
-	"crypto/md5"
 	"fmt"
 	"testing"
 	"time"
@@ -101,7 +100,12 @@ func TestStatsQueryPlans(t *testing.T) {
 		},
 	)
 
-	tests = append(tests, benchPlans()...)
+	// The ID of one of the generated runs.
+	var run uuid.UUID
+
+	require.NoError(t, pool.QueryRow(t.Context(), "SELECT md5('run500')::uuid").Scan(&run))
+
+	tests = append(tests, benchPlans(run)...)
 
 	runPlanCases(t, pool, tests)
 }
@@ -295,16 +299,7 @@ func operationsPlans(prefix string, fromHour, toHour time.Time, index bool, f fi
 
 // benchPlans are the plan cases of the benchmark queries over 1,000 runs.
 // None may read a table whole.
-func benchPlans() []planCase {
-	// The ID of one of the generated runs: the fixture makes it as
-	// md5('run500')::uuid.
-	sum := md5.Sum([]byte("run500")) //nolint:gosec // Not a security use: it matches the fixture's md5().
-
-	run, err := uuid.FromBytes(sum[:])
-	if err != nil {
-		panic(err)
-	}
-
+func benchPlans(run uuid.UUID) []planCase {
 	return []planCase{
 		{
 			name: "ListBenchRunsFirstPage",
