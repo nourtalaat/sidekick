@@ -23,6 +23,9 @@ const (
 	connsLogMode      = 0o600
 	connsCountClients = `SELECT count(*), count(*) FILTER (WHERE datname = ANY($1))
 		FROM pg_stat_activity WHERE backend_type = 'client backend'`
+	connsDetail = `SELECT count(*), coalesce(max(c), 0), coalesce(sum(i), 0) FROM (
+		SELECT count(*) c, count(*) FILTER (WHERE state = 'idle') i FROM pg_stat_activity
+		WHERE backend_type = 'client backend' AND datname = ANY($1) GROUP BY datname) t`
 )
 
 var (
@@ -34,6 +37,9 @@ var (
 // the server, and those on databases that this test binary created.
 type peak struct {
 	total, own int
+	// At the moment of the own peak: how many databases held the
+	// connections, the most that one database held, and how many were idle.
+	dbs, perDB, idle int
 }
 
 // trackDatabase remembers a database that this test binary created, so the
@@ -92,7 +98,8 @@ func startConnsSampler() func() {
 			pkg = err.Error()
 		}
 
-		line := fmt.Sprintf("%4d %4d %4d %4d %s\n", plain.own, plain.total, vector.own, vector.total, pkg)
+		line := fmt.Sprintf("%4d %4d %4d %4d %s dbs=%d perdb=%d idle=%d\n",
+			plain.own, plain.total, vector.own, vector.total, pkg, plain.dbs, plain.perDB, plain.idle)
 
 		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, connsLogMode)
 		if err != nil {
@@ -129,6 +136,11 @@ func sampleConns(ctx context.Context, url string, result *peak) {
 		}
 
 		result.total = max(result.total, total)
-		result.own = max(result.own, own)
+
+		if own > result.own {
+			result.own = own
+
+			_ = conn.QueryRow(ctx, connsDetail, ownDatabaseNames()).Scan(&result.dbs, &result.perDB, &result.idle)
+		}
 	}
 }
