@@ -393,6 +393,54 @@ The navigation has a page for each:
   filters are in the address, so a view can be shared with a link. An
   entry with an old or new value has a **Show change** button.
 
+## Dashboard numbers and benchmark runs
+
+The dashboard never reads investigations. It reads two rollup tables, which
+a job recounts once a minute from the records of the investigations that
+changed: `stats_hourly` (investigations by the hour they were created, with
+their route, service, model and verdict) and `quality_daily` (the verdict
+Sidekick gave against the verdict people confirmed, by the day). A change
+shows in the numbers within about a minute. The rollups keep their history
+after the retention job deletes the investigations.
+`sidekick_rollup_dirty_buckets` shows how many hours and days wait for a
+recount (see [Running Sidekick](running.md#metrics)).
+
+These endpoints need the `viewer` role. The stats endpoints take the same
+parameters: `from` and `to`, UTC dates with `to` included (the default is
+the last 30 days, and at most 400 days), and the filters `route`,
+`service`, `model` and `verdict`. Each answer also has the same numbers
+for the range of equal length before it, for showing the change.
+
+- `GET /api/v1/stats/quality` returns the accuracy of the verdicts people
+  rated, a count for each day, the confusion matrix, precision and recall
+  of each verdict, and the accuracy by model and strategy. A rating of
+  wrong without a real verdict counts as wrong in the accuracy and is left
+  out of precision and recall. The `verdict` filter selects the verdict
+  Sidekick gave.
+- `GET /api/v1/stats/cost` returns what model calls cost, by day, model
+  and route, with the tokens, from the same table the daily caps read, and
+  today's spend against the global cap and each route's. That table has no
+  service or verdict, so those two filters do not apply to it and
+  `ignoredFilters` names them. The cost per investigation comes from the
+  hourly rollup and takes every filter.
+- `GET /api/v1/stats/operations` returns, by day or by hour (`interval`,
+  hours for a range of at most 7 days), the investigations by verdict, the
+  time to the first finding, the duration, tool calls, false positives,
+  noisy alerts fixed (false positives whose fix a responder
+  [marked as applied](#actions-on-investigations)), and the recoveries,
+  downtime and timed out watchers. A median is worked out from counts in
+  buckets of growing width, so it is about right, within a third, and not
+  exact. Actions are 0 until actions exist.
+- `GET /api/v1/stats/filters` lists the routes, services and models of the
+  last 400 days, for the filter menus.
+- `GET /api/v1/bench/runs` lists the benchmark runs that
+  `sidekick bench run --db` stored, newest first, a page at a time, with
+  their settings and metrics. `GET /api/v1/bench/runs/{id}` adds the
+  confidence intervals, the thresholds and the result of each run of each
+  scenario; the judge's reasons are left out. `GET /api/v1/bench/compare?a=<id>&b=<id>`
+  lines up two runs: each metric with the change and whether the intervals
+  overlap (`clear` or `none`), and the correct runs of each scenario.
+
 ## The JSON API
 
 The API is under `/api/v1`, described in OpenAPI 3.1 in
