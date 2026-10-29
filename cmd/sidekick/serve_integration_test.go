@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -332,11 +333,22 @@ oidc:
 `
 }
 
+// serveMaxConns is the pool size of the Sidekick processes the tests start.
+// The default is 20, and several of these processes run at the same time,
+// next to the tests of the other packages, on one Postgres that allows 100
+// connections. A process holds about six connections for good, for its
+// listeners and leases, so 10 leaves it some to work with.
+const serveMaxConns = 10
+
 // serveConfig is validConfig listening on ports the system picks, with the
-// claude connector sending its requests to anthropicURL.
+// claude connector sending its requests to anthropicURL, and a smaller
+// database pool.
 func serveConfig(anthropicURL string) string {
-	return strings.Replace(validConfig, "apiKeySecret: { name: anthropic, key: apiKey } }",
-		`apiKeySecret: { name: anthropic, key: apiKey }, baseURL: "`+anthropicURL+`" }`, 1) + `
+	config := strings.Replace(validConfig, "apiKeySecret: { name: anthropic, key: apiKey } }",
+		`apiKeySecret: { name: anthropic, key: apiKey }, baseURL: "`+anthropicURL+`" }`, 1)
+
+	return strings.Replace(config, "  urlSecret: { name: sidekick-db, key: url }\n",
+		"  urlSecret: { name: sidekick-db, key: url }\n  maxConns: "+strconv.Itoa(serveMaxConns)+"\n", 1) + `
 server: { listen: "127.0.0.1:0", metricsListen: "127.0.0.1:0" }
 `
 }
