@@ -696,6 +696,191 @@ type AuditList struct {
 	NextCursor *string `json:"nextCursor,omitempty"`
 }
 
+// BenchComparison defines model for BenchComparison.
+type BenchComparison struct {
+	A       BenchRunSummary  `json:"a"`
+	B       BenchRunSummary  `json:"b"`
+	Metrics []BenchMetricRow `json:"metrics"`
+
+	// Scenarios The scenarios of both runs, by ID.
+	Scenarios []BenchScenarioRow `json:"scenarios"`
+}
+
+// BenchConnector defines model for BenchConnector.
+type BenchConnector struct {
+	Connector string  `json:"connector"`
+	Model     *string `json:"model,omitempty"`
+	Provider  *string `json:"provider,omitempty"`
+}
+
+// BenchInterval defines model for BenchInterval.
+type BenchInterval struct {
+	Lower float64 `json:"lower"`
+	Upper float64 `json:"upper"`
+}
+
+// BenchMetricRow defines model for BenchMetricRow.
+type BenchMetricRow struct {
+	A *float64 `json:"a,omitempty"`
+	B *float64 `json:"b,omitempty"`
+
+	// Change b minus a; left out when either run had nothing to count.
+	Change *float64 `json:"change,omitempty"`
+
+	// Difference Whether the confidence intervals of the two runs are apart
+	// (`clear`) or overlap (`none`). It is `unknown` when a run has no
+	// interval for the metric, as for the mean cost and time.
+	Difference string `json:"difference"`
+
+	// Key The metric's key as the metrics and intervals of a run name it.
+	Key   string `json:"key"`
+	Label string `json:"label"`
+}
+
+// BenchMetrics The scores of a run. A share, from 0 to 1, is left out when the run
+// had nothing to count.
+type BenchMetrics struct {
+	CostMicros             int64    `json:"costMicros"`
+	Evidence               *float64 `json:"evidence,omitempty"`
+	FpPrecision            *float64 `json:"fpPrecision,omitempty"`
+	FpRecall               *float64 `json:"fpRecall,omitempty"`
+	InputTokens            int64    `json:"inputTokens"`
+	JudgeCostMicros        int64    `json:"judgeCostMicros"`
+	JudgeErrors            int      `json:"judgeErrors"`
+	MeanCostPerRunUsd      *float64 `json:"meanCostPerRunUsd,omitempty"`
+	MeanDurationMs         *float64 `json:"meanDurationMs,omitempty"`
+	OutputTokens           int64    `json:"outputTokens"`
+	Overall                *float64 `json:"overall,omitempty"`
+	RootCauseMatch         *float64 `json:"rootCauseMatch,omitempty"`
+	RootCauseScore         *float64 `json:"rootCauseScore,omitempty"`
+	Runs                   int      `json:"runs"`
+	SourceFailuresReported *float64 `json:"sourceFailuresReported,omitempty"`
+	ToolCalls              int      `json:"toolCalls"`
+	TpPrecision            *float64 `json:"tpPrecision,omitempty"`
+	TpRecall               *float64 `json:"tpRecall,omitempty"`
+	VerdictAccuracy        *float64 `json:"verdictAccuracy,omitempty"`
+}
+
+// BenchResult defines model for BenchResult.
+type BenchResult struct {
+	CostMicros      int64    `json:"costMicros"`
+	DurationMs      int64    `json:"durationMs"`
+	EvidenceScore   *float64 `json:"evidenceScore,omitempty"`
+	ExpectedVerdict string   `json:"expectedVerdict"`
+	InputTokens     int64    `json:"inputTokens"`
+	OutputTokens    int64    `json:"outputTokens"`
+
+	// Repeat 1 for the first run of the scenario, counting up.
+	Repeat         int      `json:"repeat"`
+	RequiredMet    *bool    `json:"requiredMet,omitempty"`
+	RootCauseScore *float64 `json:"rootCauseScore,omitempty"`
+	ScenarioId     string   `json:"scenarioId"`
+	ToolCalls      int      `json:"toolCalls"`
+
+	// Verdict The verdict the investigation gave; left out when it gave none.
+	Verdict        *string `json:"verdict,omitempty"`
+	VerdictCorrect bool    `json:"verdictCorrect"`
+}
+
+// BenchRun defines model for BenchRun.
+type BenchRun struct {
+	ConfigHash string `json:"configHash"`
+
+	// Connectors The connector and model of each role.
+	Connectors map[string]BenchConnector `json:"connectors"`
+	FinishedAt time.Time                 `json:"finishedAt"`
+	GitSha     string                    `json:"gitSha"`
+	Id         openapi_types.UUID        `json:"id"`
+
+	// Intervals The confidence interval of each share metric, by the metric's key, such as overall or fpPrecision.
+	Intervals          map[string]BenchInterval `json:"intervals"`
+	JudgePromptVersion string                   `json:"judgePromptVersion"`
+	Label              *string                  `json:"label,omitempty"`
+
+	// Metrics The scores of a run. A share, from 0 to 1, is left out when the run
+	// had nothing to count.
+	Metrics         BenchMetrics  `json:"metrics"`
+	PromptVersion   string        `json:"promptVersion"`
+	Repeats         int           `json:"repeats"`
+	Results         []BenchResult `json:"results"`
+	ScenarioSet     string        `json:"scenarioSet"`
+	SidekickVersion string        `json:"sidekickVersion"`
+	StartedAt       time.Time     `json:"startedAt"`
+
+	// Status passed, or failed when a threshold failed.
+	Status string `json:"status"`
+
+	// Strategies The version of each strategy the scenarios used, by name.
+	Strategies map[string]string `json:"strategies"`
+	Thresholds []BenchThreshold  `json:"thresholds"`
+
+	// TriggeredBy cli, ci or gate.
+	TriggeredBy string `json:"triggeredBy"`
+}
+
+// BenchRunList defines model for BenchRunList.
+type BenchRunList struct {
+	// NextCursor Pass as cursor for the next page. Absent on the last page.
+	NextCursor *string           `json:"nextCursor,omitempty"`
+	Runs       []BenchRunSummary `json:"runs"`
+}
+
+// BenchRunSummary defines model for BenchRunSummary.
+type BenchRunSummary struct {
+	// Connectors The connector and model of each role.
+	Connectors map[string]BenchConnector `json:"connectors"`
+	FinishedAt time.Time                 `json:"finishedAt"`
+	GitSha     string                    `json:"gitSha"`
+	Id         openapi_types.UUID        `json:"id"`
+	Label      *string                   `json:"label,omitempty"`
+
+	// Metrics The scores of a run. A share, from 0 to 1, is left out when the run
+	// had nothing to count.
+	Metrics         BenchMetrics `json:"metrics"`
+	Repeats         int          `json:"repeats"`
+	ScenarioSet     string       `json:"scenarioSet"`
+	SidekickVersion string       `json:"sidekickVersion"`
+	StartedAt       time.Time    `json:"startedAt"`
+
+	// Status passed, or failed when a threshold failed.
+	Status string `json:"status"`
+
+	// Strategies The version of each strategy the scenarios used, by name.
+	Strategies map[string]string `json:"strategies"`
+
+	// TriggeredBy cli, ci or gate.
+	TriggeredBy string `json:"triggeredBy"`
+}
+
+// BenchScenarioCounts defines model for BenchScenarioCounts.
+type BenchScenarioCounts struct {
+	// Correct Runs whose verdict counts as correct.
+	Correct int `json:"correct"`
+
+	// RootCauseMean The mean root-cause score of the graded runs; left out when none was graded.
+	RootCauseMean *float64 `json:"rootCauseMean,omitempty"`
+	Runs          int      `json:"runs"`
+}
+
+// BenchScenarioRow defines model for BenchScenarioRow.
+type BenchScenarioRow struct {
+	A               *BenchScenarioCounts `json:"a,omitempty"`
+	B               *BenchScenarioCounts `json:"b,omitempty"`
+	ExpectedVerdict string               `json:"expectedVerdict"`
+	ScenarioId      string               `json:"scenarioId"`
+}
+
+// BenchThreshold defines model for BenchThreshold.
+type BenchThreshold struct {
+	Detail *string `json:"detail,omitempty"`
+	Limit  float64 `json:"limit"`
+	Name   string  `json:"name"`
+	Passed bool    `json:"passed"`
+
+	// Value The run's metric; left out when it had nothing to count.
+	Value *float64 `json:"value,omitempty"`
+}
+
 // CancelResult defines model for CancelResult.
 type CancelResult struct {
 	// Requested False when the investigation had ended or a stop was asked for already.
@@ -2001,6 +2186,9 @@ type WatcherSummary struct {
 	Status WatcherStatus `json:"status"`
 }
 
+// BenchRunID defines model for BenchRunID.
+type BenchRunID = openapi_types.UUID
+
 // InvestigationID defines model for InvestigationID.
 type InvestigationID = openapi_types.UUID
 
@@ -2044,6 +2232,22 @@ type ListAuditParams struct {
 	// Investigation Only entries of this investigation.
 	Investigation *openapi_types.UUID `form:"investigation,omitempty" json:"investigation,omitempty"`
 
+	// Cursor The nextCursor of the page before.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// CompareBenchRunsParams defines parameters for CompareBenchRuns.
+type CompareBenchRunsParams struct {
+	// A The ID of the first run.
+	A openapi_types.UUID `form:"a" json:"a"`
+
+	// B The ID of the second run.
+	B openapi_types.UUID `form:"b" json:"b"`
+}
+
+// ListBenchRunsParams defines parameters for ListBenchRuns.
+type ListBenchRunsParams struct {
 	// Cursor The nextCursor of the page before.
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
@@ -2200,6 +2404,15 @@ type ServerInterface interface {
 	// ListAudit The audit log, newest first, a page at a time
 	// (GET /audit)
 	ListAudit(w http.ResponseWriter, r *http.Request, params ListAuditParams)
+	// CompareBenchRuns Two benchmark runs side by side
+	// (GET /bench/compare)
+	CompareBenchRuns(w http.ResponseWriter, r *http.Request, params CompareBenchRunsParams)
+	// ListBenchRuns Benchmark runs, newest first, a page at a time
+	// (GET /bench/runs)
+	ListBenchRuns(w http.ResponseWriter, r *http.Request, params ListBenchRunsParams)
+	// GetBenchRun One benchmark run with its results
+	// (GET /bench/runs/{id})
+	GetBenchRun(w http.ResponseWriter, r *http.Request, id BenchRunID)
 	// GetConfig The effective config, with secrets shown only as references
 	// (GET /config)
 	GetConfig(w http.ResponseWriter, r *http.Request)
@@ -2409,6 +2622,124 @@ func (siw *ServerInterfaceWrapper) ListAudit(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListAudit(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CompareBenchRuns operation middleware
+func (siw *ServerInterfaceWrapper) CompareBenchRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CompareBenchRunsParams
+
+	// ------------- Required query parameter "a" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "a", r.URL.Query(), &params.A, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "a"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "a", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "b" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "b", r.URL.Query(), &params.B, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "b"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "b", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompareBenchRuns(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListBenchRuns operation middleware
+func (siw *ServerInterfaceWrapper) ListBenchRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListBenchRunsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListBenchRuns(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetBenchRun operation middleware
+func (siw *ServerInterfaceWrapper) GetBenchRun(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id BenchRunID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetBenchRun(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3760,6 +4091,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stats/filters", wrapper.GetStatsFilters)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stats/cost", wrapper.GetCostStats)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stats/operations", wrapper.GetOperationsStats)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/bench/runs", wrapper.ListBenchRuns)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/bench/runs/{id}", wrapper.GetBenchRun)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/bench/compare", wrapper.CompareBenchRuns)
 
 	return m
 }
@@ -3794,6 +4128,123 @@ type ListAuditdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ListAuditdefaultApplicationProblemPlusJSONResponse) VisitListAuditResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompareBenchRunsRequestObject struct {
+	Params CompareBenchRunsParams
+}
+
+type CompareBenchRunsResponseObject interface {
+	VisitCompareBenchRunsResponse(w http.ResponseWriter) error
+}
+
+type CompareBenchRuns200JSONResponse BenchComparison
+
+func (response CompareBenchRuns200JSONResponse) VisitCompareBenchRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompareBenchRunsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CompareBenchRunsdefaultApplicationProblemPlusJSONResponse) VisitCompareBenchRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListBenchRunsRequestObject struct {
+	Params ListBenchRunsParams
+}
+
+type ListBenchRunsResponseObject interface {
+	VisitListBenchRunsResponse(w http.ResponseWriter) error
+}
+
+type ListBenchRuns200JSONResponse BenchRunList
+
+func (response ListBenchRuns200JSONResponse) VisitListBenchRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListBenchRunsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListBenchRunsdefaultApplicationProblemPlusJSONResponse) VisitListBenchRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBenchRunRequestObject struct {
+	Id BenchRunID `json:"id"`
+}
+
+type GetBenchRunResponseObject interface {
+	VisitGetBenchRunResponse(w http.ResponseWriter) error
+}
+
+type GetBenchRun200JSONResponse BenchRun
+
+func (response GetBenchRun200JSONResponse) VisitGetBenchRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBenchRundefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetBenchRundefaultApplicationProblemPlusJSONResponse) VisitGetBenchRunResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -5063,6 +5514,15 @@ type StrictServerInterface interface {
 	// ListAudit The audit log, newest first, a page at a time
 	// (GET /audit)
 	ListAudit(ctx context.Context, request ListAuditRequestObject) (ListAuditResponseObject, error)
+	// CompareBenchRuns Two benchmark runs side by side
+	// (GET /bench/compare)
+	CompareBenchRuns(ctx context.Context, request CompareBenchRunsRequestObject) (CompareBenchRunsResponseObject, error)
+	// ListBenchRuns Benchmark runs, newest first, a page at a time
+	// (GET /bench/runs)
+	ListBenchRuns(ctx context.Context, request ListBenchRunsRequestObject) (ListBenchRunsResponseObject, error)
+	// GetBenchRun One benchmark run with its results
+	// (GET /bench/runs/{id})
+	GetBenchRun(ctx context.Context, request GetBenchRunRequestObject) (GetBenchRunResponseObject, error)
 	// GetConfig The effective config, with secrets shown only as references
 	// (GET /config)
 	GetConfig(ctx context.Context, request GetConfigRequestObject) (GetConfigResponseObject, error)
@@ -5219,6 +5679,84 @@ func (sh *strictHandler) ListAudit(w http.ResponseWriter, r *http.Request, param
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListAuditResponseObject); ok {
 		if err := validResponse.VisitListAuditResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CompareBenchRuns operation middleware
+func (sh *strictHandler) CompareBenchRuns(w http.ResponseWriter, r *http.Request, params CompareBenchRunsParams) {
+	var request CompareBenchRunsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CompareBenchRuns(ctx, request.(CompareBenchRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CompareBenchRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CompareBenchRunsResponseObject); ok {
+		if err := validResponse.VisitCompareBenchRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListBenchRuns operation middleware
+func (sh *strictHandler) ListBenchRuns(w http.ResponseWriter, r *http.Request, params ListBenchRunsParams) {
+	var request ListBenchRunsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListBenchRuns(ctx, request.(ListBenchRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListBenchRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListBenchRunsResponseObject); ok {
+		if err := validResponse.VisitListBenchRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetBenchRun operation middleware
+func (sh *strictHandler) GetBenchRun(w http.ResponseWriter, r *http.Request, id BenchRunID) {
+	var request GetBenchRunRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetBenchRun(ctx, request.(GetBenchRunRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetBenchRun")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetBenchRunResponseObject); ok {
+		if err := validResponse.VisitGetBenchRunResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

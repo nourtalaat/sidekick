@@ -4,10 +4,12 @@ package api_test
 
 import (
 	"context"
+	"crypto/md5"
 	"fmt"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -98,6 +100,8 @@ func TestStatsQueryPlans(t *testing.T) {
 			scansTable: true,
 		},
 	)
+
+	tests = append(tests, benchPlans()...)
 
 	runPlanCases(t, pool, tests)
 }
@@ -285,6 +289,69 @@ func operationsPlans(prefix string, fromHour, toHour time.Time, index bool, f fi
 				return fmt.Errorf("run query: %w", err)
 			},
 			wantIndex: wantIndex, scansTable: !index,
+		},
+	}
+}
+
+// benchPlans are the plan cases of the benchmark queries over 1,000 runs.
+// None may read a table whole.
+func benchPlans() []planCase {
+	// The ID of one of the generated runs: the fixture makes it as
+	// md5('run500')::uuid.
+	sum := md5.Sum([]byte("run500")) //nolint:gosec // Not a security use: it matches the fixture's md5().
+
+	run, err := uuid.FromBytes(sum[:])
+	if err != nil {
+		panic(err)
+	}
+
+	return []planCase{
+		{
+			name: "ListBenchRunsFirstPage",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListBenchRuns(ctx, db.ListBenchRunsParams{PageSize: 51})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"bench_runs_started"},
+		},
+		{
+			name: "ListBenchRunsWithACursor",
+			run: func(ctx context.Context, q *db.Queries) error {
+				at := time.Now().Add(-500 * time.Hour)
+
+				_, err := q.ListBenchRuns(ctx, db.ListBenchRunsParams{PageSize: 51, CursorAt: &at, CursorID: &run})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"bench_runs_started"},
+		},
+		{
+			name: "GetBenchRun",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.GetBenchRun(ctx, run)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"bench_runs_pkey"},
+		},
+		{
+			name: "ListBenchResults",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListBenchResults(ctx, run)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"bench_results_pkey"},
+		},
+		{
+			name: "SummarizeBenchScenarios",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.SummarizeBenchScenarios(ctx, run)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"bench_results_pkey"},
 		},
 	}
 }

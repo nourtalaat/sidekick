@@ -13,6 +13,33 @@ import (
 	"github.com/google/uuid"
 )
 
+const getBenchRun = `-- name: GetBenchRun :one
+SELECT id, label, started_at, finished_at, sidekick_version, git_sha, config_hash, connectors, strategies, scenario_set, repeats, summary, status, triggered_by FROM bench_runs WHERE id = $1
+`
+
+// GetBenchRun returns one benchmark run with its whole summary.
+func (q *Queries) GetBenchRun(ctx context.Context, id uuid.UUID) (BenchRun, error) {
+	row := q.db.QueryRow(ctx, getBenchRun, id)
+	var i BenchRun
+	err := row.Scan(
+		&i.ID,
+		&i.Label,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.SidekickVersion,
+		&i.GitSha,
+		&i.ConfigHash,
+		&i.Connectors,
+		&i.Strategies,
+		&i.ScenarioSet,
+		&i.Repeats,
+		&i.Summary,
+		&i.Status,
+		&i.TriggeredBy,
+	)
+	return i, err
+}
+
 const insertBenchResult = `-- name: InsertBenchResult :exec
 INSERT INTO bench_results (
   run_id, scenario_id, repeat, verdict, expected_verdict, verdict_correct,
@@ -113,4 +140,184 @@ func (q *Queries) InsertBenchRun(ctx context.Context, arg InsertBenchRunParams) 
 		arg.TriggeredBy,
 	)
 	return err
+}
+
+const listBenchResults = `-- name: ListBenchResults :many
+SELECT scenario_id, repeat, verdict, expected_verdict, verdict_correct, root_cause_score, required_met,
+       evidence_score, cost_micros, duration_ms, input_tokens, output_tokens, tool_calls
+FROM bench_results
+WHERE run_id = $1
+ORDER BY scenario_id, repeat
+`
+
+type ListBenchResultsRow struct {
+	ScenarioID      string
+	Repeat          int32
+	Verdict         *string
+	ExpectedVerdict string
+	VerdictCorrect  bool
+	RootCauseScore  *float32
+	RequiredMet     *bool
+	EvidenceScore   *float32
+	CostMicros      int64
+	DurationMs      int32
+	InputTokens     int64
+	OutputTokens    int64
+	ToolCalls       int32
+}
+
+// ListBenchResults returns the result of each run of each scenario of a
+// benchmark run, without the judge's reasons, which are model output.
+func (q *Queries) ListBenchResults(ctx context.Context, runID uuid.UUID) ([]ListBenchResultsRow, error) {
+	rows, err := q.db.Query(ctx, listBenchResults, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBenchResultsRow
+	for rows.Next() {
+		var i ListBenchResultsRow
+		if err := rows.Scan(
+			&i.ScenarioID,
+			&i.Repeat,
+			&i.Verdict,
+			&i.ExpectedVerdict,
+			&i.VerdictCorrect,
+			&i.RootCauseScore,
+			&i.RequiredMet,
+			&i.EvidenceScore,
+			&i.CostMicros,
+			&i.DurationMs,
+			&i.InputTokens,
+			&i.OutputTokens,
+			&i.ToolCalls,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBenchRuns = `-- name: ListBenchRuns :many
+SELECT id, label, started_at, finished_at, sidekick_version, git_sha, connectors, strategies,
+       scenario_set, repeats, status, triggered_by, (summary -> 'metrics')::jsonb AS metrics
+FROM bench_runs
+WHERE $1::timestamptz IS NULL
+   OR (started_at, id) < ($1::timestamptz, $2::uuid)
+ORDER BY started_at DESC, id DESC
+LIMIT $3
+`
+
+type ListBenchRunsParams struct {
+	CursorAt *time.Time
+	CursorID *uuid.UUID
+	PageSize int32
+}
+
+type ListBenchRunsRow struct {
+	ID              uuid.UUID
+	Label           *string
+	StartedAt       time.Time
+	FinishedAt      time.Time
+	SidekickVersion string
+	GitSha          string
+	Connectors      json.RawMessage
+	Strategies      json.RawMessage
+	ScenarioSet     string
+	Repeats         int32
+	Status          string
+	TriggeredBy     string
+	Metrics         json.RawMessage
+}
+
+// ListBenchRuns returns a page of benchmark runs, newest first, without
+// their scenario results: the run's settings and the metrics of its summary.
+// A page starts after the run with cursor_id that started at cursor_at.
+func (q *Queries) ListBenchRuns(ctx context.Context, arg ListBenchRunsParams) ([]ListBenchRunsRow, error) {
+	rows, err := q.db.Query(ctx, listBenchRuns, arg.CursorAt, arg.CursorID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBenchRunsRow
+	for rows.Next() {
+		var i ListBenchRunsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Label,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.SidekickVersion,
+			&i.GitSha,
+			&i.Connectors,
+			&i.Strategies,
+			&i.ScenarioSet,
+			&i.Repeats,
+			&i.Status,
+			&i.TriggeredBy,
+			&i.Metrics,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const summarizeBenchScenarios = `-- name: SummarizeBenchScenarios :many
+SELECT scenario_id, expected_verdict,
+       count(*)::int AS runs,
+       (count(*) FILTER (WHERE verdict_correct))::int AS correct,
+       count(root_cause_score)::int AS graded,
+       coalesce(sum(root_cause_score), 0)::float8 AS root_cause_sum
+FROM bench_results
+WHERE run_id = $1
+GROUP BY scenario_id, expected_verdict
+ORDER BY scenario_id
+`
+
+type SummarizeBenchScenariosRow struct {
+	ScenarioID      string
+	ExpectedVerdict string
+	Runs            int32
+	Correct         int32
+	Graded          int32
+	RootCauseSum    float64
+}
+
+// SummarizeBenchScenarios counts, for each scenario of a benchmark run, its
+// runs, those with a correct verdict, and the root-cause scores of the runs
+// that were graded, as their number and their sum.
+func (q *Queries) SummarizeBenchScenarios(ctx context.Context, runID uuid.UUID) ([]SummarizeBenchScenariosRow, error) {
+	rows, err := q.db.Query(ctx, summarizeBenchScenarios, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SummarizeBenchScenariosRow
+	for rows.Next() {
+		var i SummarizeBenchScenariosRow
+		if err := rows.Scan(
+			&i.ScenarioID,
+			&i.ExpectedVerdict,
+			&i.Runs,
+			&i.Correct,
+			&i.Graded,
+			&i.RootCauseSum,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

@@ -901,6 +901,89 @@ paths:
                 $ref: "#/components/schemas/OperationsStats"
         default:
           $ref: "#/components/responses/Problem"
+  /bench/runs:
+    get:
+      operationId: ListBenchRuns
+      summary: Benchmark runs, newest first, a page at a time
+      description: |
+        The runs that `sidekick bench run --db` stored, with their settings
+        and headline metrics.
+      x-sidekick-role: viewer
+      parameters:
+        - name: cursor
+          in: query
+          description: The nextCursor of the page before.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: A page of runs.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BenchRunList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /bench/runs/{id}:
+    get:
+      operationId: GetBenchRun
+      summary: One benchmark run with its results
+      description: |
+        The run's settings, its metrics with their confidence intervals and
+        thresholds, and the result of each run of each scenario. The judge's
+        reasons are left out, since they are model output.
+      x-sidekick-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/BenchRunID"
+      responses:
+        "200":
+          description: The run.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BenchRun"
+        default:
+          $ref: "#/components/responses/Problem"
+  /bench/compare:
+    get:
+      operationId: CompareBenchRuns
+      summary: Two benchmark runs side by side
+      description: |
+        Each metric of the two runs with the change from a to b and whether
+        their confidence intervals overlap, and each scenario's correct
+        runs. A scenario that only one run has shows the other as absent.
+      x-sidekick-role: viewer
+      parameters:
+        - name: a
+          in: query
+          required: true
+          description: The ID of the first run.
+          schema:
+            type: string
+            format: uuid
+        - name: b
+          in: query
+          required: true
+          description: The ID of the second run.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The comparison.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BenchComparison"
+        default:
+          $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
     session:
@@ -968,6 +1051,14 @@ components:
       description: Only investigations with this verdict.
       schema:
         $ref: "#/components/schemas/Verdict"
+    BenchRunID:
+      name: id
+      in: path
+      required: true
+      description: The ID of a benchmark run.
+      schema:
+        type: string
+        format: uuid
   responses:
     Problem:
       description: An error, as problem details.
@@ -2758,3 +2849,295 @@ components:
           type: number
           format: double
           description: About the median downtime; left out when nothing recovered.
+    BenchRunList:
+      type: object
+      required: [runs]
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: "#/components/schemas/BenchRunSummary"
+        nextCursor:
+          type: string
+          description: Pass as cursor for the next page. Absent on the last page.
+    BenchRunSummary:
+      type: object
+      required:
+        - id
+        - startedAt
+        - finishedAt
+        - sidekickVersion
+        - gitSha
+        - connectors
+        - strategies
+        - scenarioSet
+        - repeats
+        - status
+        - triggeredBy
+        - metrics
+      properties:
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+        sidekickVersion:
+          type: string
+        gitSha:
+          type: string
+        connectors:
+          type: object
+          description: The connector and model of each role.
+          additionalProperties:
+            $ref: "#/components/schemas/BenchConnector"
+        strategies:
+          type: object
+          description: The version of each strategy the scenarios used, by name.
+          additionalProperties:
+            type: string
+        scenarioSet:
+          type: string
+        repeats:
+          type: integer
+        status:
+          type: string
+          description: passed, or failed when a threshold failed.
+        triggeredBy:
+          type: string
+          description: cli, ci or gate.
+        metrics:
+          $ref: "#/components/schemas/BenchMetrics"
+    BenchConnector:
+      type: object
+      required: [connector]
+      properties:
+        connector:
+          type: string
+        provider:
+          type: string
+        model:
+          type: string
+    BenchMetrics:
+      type: object
+      description: |
+        The scores of a run. A share, from 0 to 1, is left out when the run
+        had nothing to count.
+      required: [runs, toolCalls, inputTokens, outputTokens, costMicros, judgeCostMicros, judgeErrors]
+      properties:
+        runs:
+          type: integer
+        overall:
+          type: number
+          format: double
+        verdictAccuracy:
+          type: number
+          format: double
+        fpPrecision:
+          type: number
+          format: double
+        fpRecall:
+          type: number
+          format: double
+        tpPrecision:
+          type: number
+          format: double
+        tpRecall:
+          type: number
+          format: double
+        rootCauseMatch:
+          type: number
+          format: double
+        rootCauseScore:
+          type: number
+          format: double
+        evidence:
+          type: number
+          format: double
+        sourceFailuresReported:
+          type: number
+          format: double
+        meanCostPerRunUsd:
+          type: number
+          format: double
+        meanDurationMs:
+          type: number
+          format: double
+        toolCalls:
+          type: integer
+        inputTokens:
+          type: integer
+          format: int64
+        outputTokens:
+          type: integer
+          format: int64
+        costMicros:
+          type: integer
+          format: int64
+        judgeCostMicros:
+          type: integer
+          format: int64
+        judgeErrors:
+          type: integer
+    BenchRun:
+      allOf:
+        - $ref: "#/components/schemas/BenchRunSummary"
+        - type: object
+          required: [configHash, promptVersion, judgePromptVersion, intervals, thresholds, results]
+          properties:
+            configHash:
+              type: string
+            promptVersion:
+              type: string
+            judgePromptVersion:
+              type: string
+            intervals:
+              type: object
+              description: The confidence interval of each share metric, by the metric's key, such as overall or fpPrecision.
+              additionalProperties:
+                $ref: "#/components/schemas/BenchInterval"
+            thresholds:
+              type: array
+              items:
+                $ref: "#/components/schemas/BenchThreshold"
+            results:
+              type: array
+              items:
+                $ref: "#/components/schemas/BenchResult"
+    BenchInterval:
+      type: object
+      required: [lower, upper]
+      properties:
+        lower:
+          type: number
+          format: double
+        upper:
+          type: number
+          format: double
+    BenchThreshold:
+      type: object
+      required: [name, limit, passed]
+      properties:
+        name:
+          type: string
+        limit:
+          type: number
+          format: double
+        value:
+          type: number
+          format: double
+          description: The run's metric; left out when it had nothing to count.
+        passed:
+          type: boolean
+        detail:
+          type: string
+    BenchResult:
+      type: object
+      required: [scenarioId, repeat, expectedVerdict, verdictCorrect, costMicros, durationMs, inputTokens, outputTokens, toolCalls]
+      properties:
+        scenarioId:
+          type: string
+        repeat:
+          type: integer
+          description: 1 for the first run of the scenario, counting up.
+        verdict:
+          type: string
+          description: The verdict the investigation gave; left out when it gave none.
+        expectedVerdict:
+          type: string
+        verdictCorrect:
+          type: boolean
+        rootCauseScore:
+          type: number
+          format: double
+        requiredMet:
+          type: boolean
+        evidenceScore:
+          type: number
+          format: double
+        costMicros:
+          type: integer
+          format: int64
+        durationMs:
+          type: integer
+          format: int64
+        inputTokens:
+          type: integer
+          format: int64
+        outputTokens:
+          type: integer
+          format: int64
+        toolCalls:
+          type: integer
+    BenchComparison:
+      type: object
+      required: [a, b, metrics, scenarios]
+      properties:
+        a:
+          $ref: "#/components/schemas/BenchRunSummary"
+        b:
+          $ref: "#/components/schemas/BenchRunSummary"
+        metrics:
+          type: array
+          items:
+            $ref: "#/components/schemas/BenchMetricRow"
+        scenarios:
+          type: array
+          description: The scenarios of both runs, by ID.
+          items:
+            $ref: "#/components/schemas/BenchScenarioRow"
+    BenchMetricRow:
+      type: object
+      required: [key, label, difference]
+      properties:
+        key:
+          type: string
+          description: The metric's key as the metrics and intervals of a run name it.
+        label:
+          type: string
+        a:
+          type: number
+          format: double
+        b:
+          type: number
+          format: double
+        change:
+          type: number
+          format: double
+          description: b minus a; left out when either run had nothing to count.
+        difference:
+          type: string
+          description: |
+            Whether the confidence intervals of the two runs are apart
+            (`clear`) or overlap (`none`). It is `unknown` when a run has no
+            interval for the metric, as for the mean cost and time.
+    BenchScenarioRow:
+      type: object
+      required: [scenarioId, expectedVerdict]
+      properties:
+        scenarioId:
+          type: string
+        expectedVerdict:
+          type: string
+        a:
+          $ref: "#/components/schemas/BenchScenarioCounts"
+        b:
+          $ref: "#/components/schemas/BenchScenarioCounts"
+    BenchScenarioCounts:
+      type: object
+      required: [runs, correct]
+      properties:
+        runs:
+          type: integer
+        correct:
+          type: integer
+          description: Runs whose verdict counts as correct.
+        rootCauseMean:
+          type: number
+          format: double
+          description: The mean root-cause score of the graded runs; left out when none was graded.

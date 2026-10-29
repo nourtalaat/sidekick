@@ -654,6 +654,71 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/bench/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Benchmark runs, newest first, a page at a time
+         * @description The runs that `sidekick bench run --db` stored, with their settings
+         *     and headline metrics.
+         */
+        get: operations["ListBenchRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bench/runs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One benchmark run with its results
+         * @description The run's settings, its metrics with their confidence intervals and
+         *     thresholds, and the result of each run of each scenario. The judge's
+         *     reasons are left out, since they are model output.
+         */
+        get: operations["GetBenchRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bench/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Two benchmark runs side by side
+         * @description Each metric of the two runs with the change from a to b and whether
+         *     their confidence intervals overlap, and each scenario's correct
+         *     runs. A scenario that only one run has shows the other as absent.
+         */
+        get: operations["CompareBenchRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1742,6 +1807,178 @@ export interface components {
              */
             medianDowntimeMs?: number;
         };
+        BenchRunList: {
+            runs: components["schemas"]["BenchRunSummary"][];
+            /** @description Pass as cursor for the next page. Absent on the last page. */
+            nextCursor?: string;
+        };
+        BenchRunSummary: {
+            /** Format: uuid */
+            id: string;
+            label?: string;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            finishedAt: string;
+            sidekickVersion: string;
+            gitSha: string;
+            /** @description The connector and model of each role. */
+            connectors: {
+                [key: string]: components["schemas"]["BenchConnector"];
+            };
+            /** @description The version of each strategy the scenarios used, by name. */
+            strategies: {
+                [key: string]: string;
+            };
+            scenarioSet: string;
+            repeats: number;
+            /** @description passed, or failed when a threshold failed. */
+            status: string;
+            /** @description cli, ci or gate. */
+            triggeredBy: string;
+            metrics: components["schemas"]["BenchMetrics"];
+        };
+        BenchConnector: {
+            connector: string;
+            provider?: string;
+            model?: string;
+        };
+        /**
+         * @description The scores of a run. A share, from 0 to 1, is left out when the run
+         *     had nothing to count.
+         */
+        BenchMetrics: {
+            runs: number;
+            /** Format: double */
+            overall?: number;
+            /** Format: double */
+            verdictAccuracy?: number;
+            /** Format: double */
+            fpPrecision?: number;
+            /** Format: double */
+            fpRecall?: number;
+            /** Format: double */
+            tpPrecision?: number;
+            /** Format: double */
+            tpRecall?: number;
+            /** Format: double */
+            rootCauseMatch?: number;
+            /** Format: double */
+            rootCauseScore?: number;
+            /** Format: double */
+            evidence?: number;
+            /** Format: double */
+            sourceFailuresReported?: number;
+            /** Format: double */
+            meanCostPerRunUsd?: number;
+            /** Format: double */
+            meanDurationMs?: number;
+            toolCalls: number;
+            /** Format: int64 */
+            inputTokens: number;
+            /** Format: int64 */
+            outputTokens: number;
+            /** Format: int64 */
+            costMicros: number;
+            /** Format: int64 */
+            judgeCostMicros: number;
+            judgeErrors: number;
+        };
+        BenchRun: components["schemas"]["BenchRunSummary"] & {
+            configHash: string;
+            promptVersion: string;
+            judgePromptVersion: string;
+            /** @description The confidence interval of each share metric, by the metric's key, such as overall or fpPrecision. */
+            intervals: {
+                [key: string]: components["schemas"]["BenchInterval"];
+            };
+            thresholds: components["schemas"]["BenchThreshold"][];
+            results: components["schemas"]["BenchResult"][];
+        };
+        BenchInterval: {
+            /** Format: double */
+            lower: number;
+            /** Format: double */
+            upper: number;
+        };
+        BenchThreshold: {
+            name: string;
+            /** Format: double */
+            limit: number;
+            /**
+             * Format: double
+             * @description The run's metric; left out when it had nothing to count.
+             */
+            value?: number;
+            passed: boolean;
+            detail?: string;
+        };
+        BenchResult: {
+            scenarioId: string;
+            /** @description 1 for the first run of the scenario, counting up. */
+            repeat: number;
+            /** @description The verdict the investigation gave; left out when it gave none. */
+            verdict?: string;
+            expectedVerdict: string;
+            verdictCorrect: boolean;
+            /** Format: double */
+            rootCauseScore?: number;
+            requiredMet?: boolean;
+            /** Format: double */
+            evidenceScore?: number;
+            /** Format: int64 */
+            costMicros: number;
+            /** Format: int64 */
+            durationMs: number;
+            /** Format: int64 */
+            inputTokens: number;
+            /** Format: int64 */
+            outputTokens: number;
+            toolCalls: number;
+        };
+        BenchComparison: {
+            a: components["schemas"]["BenchRunSummary"];
+            b: components["schemas"]["BenchRunSummary"];
+            metrics: components["schemas"]["BenchMetricRow"][];
+            /** @description The scenarios of both runs, by ID. */
+            scenarios: components["schemas"]["BenchScenarioRow"][];
+        };
+        BenchMetricRow: {
+            /** @description The metric's key as the metrics and intervals of a run name it. */
+            key: string;
+            label: string;
+            /** Format: double */
+            a?: number;
+            /** Format: double */
+            b?: number;
+            /**
+             * Format: double
+             * @description b minus a; left out when either run had nothing to count.
+             */
+            change?: number;
+            /**
+             * @description Whether the confidence intervals of the two runs are apart
+             *     (`clear`) or overlap (`none`). It is `unknown` when a run has no
+             *     interval for the metric, as for the mean cost and time.
+             */
+            difference: string;
+        };
+        BenchScenarioRow: {
+            scenarioId: string;
+            expectedVerdict: string;
+            a?: components["schemas"]["BenchScenarioCounts"];
+            b?: components["schemas"]["BenchScenarioCounts"];
+        };
+        BenchScenarioCounts: {
+            runs: number;
+            /** @description Runs whose verdict counts as correct. */
+            correct: number;
+            /**
+             * Format: double
+             * @description The mean root-cause score of the graded runs; left out when none was graded.
+             */
+            rootCauseMean?: number;
+        };
     };
     responses: {
         /** @description An error, as problem details. */
@@ -1770,6 +2007,8 @@ export interface components {
         StatsModel: string;
         /** @description Only investigations with this verdict. */
         StatsVerdict: components["schemas"]["Verdict"];
+        /** @description The ID of a benchmark run. */
+        BenchRunID: string;
     };
     requestBodies: never;
     headers: never;
@@ -2621,6 +2860,81 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OperationsStats"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListBenchRuns: {
+        parameters: {
+            query?: {
+                /** @description The nextCursor of the page before. */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of runs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchRunList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetBenchRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The ID of a benchmark run. */
+                id: components["parameters"]["BenchRunID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchRun"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CompareBenchRuns: {
+        parameters: {
+            query: {
+                /** @description The ID of the first run. */
+                a: string;
+                /** @description The ID of the second run. */
+                b: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The comparison. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchComparison"];
                 };
             };
             default: components["responses"]["Problem"];
