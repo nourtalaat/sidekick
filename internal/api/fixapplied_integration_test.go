@@ -122,11 +122,12 @@ func TestMarkFixAppliedRefusals(t *testing.T) {
 		},
 	}
 
+	// Refused requests change nothing, so the cases share one server.
+	s := setupFeedback(t)
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-
-			s := setupFeedback(t)
 
 			rec := putFix(t, s, tt.method, tt.id, tt.session, tt.csrf)
 			require.Equal(t, tt.wantStatus, rec.Code, rec.Body.String())
