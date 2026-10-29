@@ -160,6 +160,36 @@ Every role from `viewer` up can read investigations:
   and answers 429 above that. The session or token is checked when the
   stream opens, so a revoked one can keep a stream for up to 30 minutes.
 
+## Actions on investigations
+
+These need the `responder` role or higher, and a session's CSRF token
+(an API token needs none). A token can call them too; the audit log then
+names the token. Each action writes its audit row in the same transaction
+as the change.
+
+- `POST /api/v1/investigations/{id}/follow-ups` with `{"text": "..."}`
+  asks a follow-up question, as a thread reply does in Slack. The text
+  is trimmed, redacted and at most 4000 bytes. The answer is 202. A
+  triage-only result and an investigation that failed take no questions
+  and answer 409; for a triage-only result, start a full investigation
+  with **Investigate anyway** in Slack first. The audit row keeps the
+  question's length, never its text.
+- `POST /api/v1/investigations/{id}/cancel` asks the run to stop, as the
+  Stop button does in Slack. `requested` in the answer is `false` when
+  the investigation has ended or a stop was asked for already.
+- `POST /api/v1/investigations/{id}/resolve` marks the investigation's
+  group as resolved and ends its watchers, as a recovery does: watchers
+  that wait for the alert to clear count as recovered, the others stop.
+  `resolved` in the answer is `false` when the group was resolved
+  already. A group that closed because its window ended answers 409.
+  `groupStatus` and `groupClosedReason` in the investigation say which
+  groups are still open.
+- `POST /api/v1/watchers/{id}/stop` stops a running watcher, as **Stop
+  watching** does in Slack. `stopped` in the answer is `false` when the
+  watcher had ended already. The watchers of an investigation name who
+  stopped one in `stoppedBy`: the user's or token's ID and name, or the
+  Slack user's ID.
+
 The list's service, model and title columns are filled when an
 investigation is created. Investigations from before they existed (older
 than this version) are filled in the background in batches of 5,000 when
@@ -208,6 +238,42 @@ It says that one part of an investigation is correct or wrong:
   in Slack do. Feedback that disagrees with the confirmed verdict
   replaces it. Every change made with a real verdict, and every revision
   or withdrawal, is written to the audit log with the user who made it.
+
+## Investigation pages
+
+The web UI shows the investigations in two pages, which every role from
+`viewer` up can open.
+
+- **The list** (`/investigations`) has a row for each investigation,
+  newest first, with the verdict first so the list can be scanned: the
+  alert title, service, route, start time, duration, cost, how people
+  rated the verdict, and the state of the newest watcher. The filters
+  above the table are kept in the address (`q`, `verdict`, `status`,
+  `range`, `route`, `service` and `model`), so a view can be shared.
+  **Load more** adds the next page. **Compact rows** (`compact=1`) makes
+  the rows shorter.
+- **The investigation page** (`/investigations/<id>`, the address the
+  Slack link opens) shows the verdict, how sure Sidekick is, the reason,
+  the state of the watchers, the report, what was checked, the cost and
+  the model, the alerts of the group, and the record of the run, one line
+  for each step. A step opens to show the tool call or result in a box
+  with a copy button.
+
+A `responder` or higher also sees **Stop**, **Resolve**, **Stop watching**
+and the follow-up box at the bottom of the page. A `viewer` does not see
+these buttons. The server checks the role of every request again, and
+the page shows its reason when it refuses one.
+
+While a run goes, the page follows the investigation's stream and adds
+the new steps in batches every few seconds, so a screen reader announces
+them one batch at a time. The stream also opens when a follow-up question
+waits for its run, and when the page reads the investigation again (every
+30 seconds while nothing runs) and finds a new run, such as an answer to
+a question asked in Slack.
+
+Text from alerts, sources and the model is always shown as plain text,
+never as HTML. A link opens only when its address is `http` or `https`;
+any other address, such as `javascript:`, is shown as text.
 
 ## Listeners and routes
 
@@ -273,6 +339,30 @@ used by every replica within seconds.
   attempts reset. The retry is written to the audit log. A job that is
   not dead, or whose unique key a pending or running job holds, answers
   409.
+
+## Listeners, routes and the audit log in the UI
+
+The navigation has a page for each:
+
+- **Listeners** (`/listeners`) and **Routes** (`/routes`) list the rules of
+  the config file and those added at runtime. Each row says where the rule
+  is defined and its status: active, shadowed (a rule of the config file
+  has the same name and is used instead), invalid (it no longer passes the
+  checks, with the reason) or turned off. Routes show the order they are
+  tried in. Rules of the config file have no buttons; only a config change
+  alters them. A shadowed runtime copy can be deleted.
+- **Add**, **Change** and **Delete** are shown to a responder for
+  listeners and to an admin for routes; a viewer sees the lists only.
+  Delete asks first. A save runs the same checks as the config file and
+  the `/sidekick` commands, and the form shows each problem under its
+  field, with problems that belong to no field in a message at the top.
+  The mode of a route can only be read-only for now. If someone else
+  changed the rule while the form was open, the form says so and offers
+  to load the new version.
+- **Audit log** (`/audit`, admins) shows the entries newest first, with
+  filters for the time, who, the action and the investigation. The
+  filters are in the address, so a view can be shared with a link. An
+  entry with an old or new value has a **Show change** button.
 
 ## The JSON API
 

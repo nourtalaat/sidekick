@@ -1,0 +1,27 @@
+/* Rows of a fixed height, 40px, or 32px in compact mode, on top of the shared table. */
+.sk-table--rows td {
+  height: 40px;
+  padding-block: 0;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.sk-table--rows.sk-table--compact td {
+  height: 32px;
+}
+
+.sk-table--rows tbody tr:hover {
+  background: var(--sk-bg-hover);
+}
+
+.sk-table__title {
+  max-width: 28rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sk-table__feedback {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sk-space-1);
+}

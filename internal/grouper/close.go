@@ -132,15 +132,7 @@ func (c *Closer) decide(ctx context.Context, tx pgx.Tx, job db.Job, id uuid.UUID
 	}
 
 	if recovered {
-		if _, err := watch.EndGroupResolved(ctx, tx, grp.ID, c.now(), c.watchers); err != nil {
-			return fmt.Errorf("end the watchers: %w", err)
-		}
-
-		if err := closeGroup(ctx, c.log, queries, grp.ID, ClosedResolved); err != nil {
-			return fmt.Errorf("resolve: %w", err)
-		}
-
-		return nil
+		return endResolved(ctx, c.log, tx, grp.ID, c.now(), c.watchers)
 	}
 
 	if grp.WindowUntil != nil && grp.WindowUntil.After(c.now()) {

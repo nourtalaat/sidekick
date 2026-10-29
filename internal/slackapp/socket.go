@@ -275,8 +275,13 @@ func (s *Socket) connect(ctx context.Context, conn *pgx.Conn, slot int32) error 
 			stopped := ctx.Err() != nil
 			cancel()
 
+			// watchSlot uses the slot's session, which the caller closes
+			// once connect returns, so wait for it to stop first, also
+			// when the connection failed by itself.
+			slotErr := <-lost
+
 			if stopped {
-				return fmt.Errorf("connection stopped: %w", <-lost)
+				return fmt.Errorf("connection stopped: %w", slotErr)
 			}
 
 			return fmt.Errorf("run the connection: %w", err)

@@ -44,7 +44,9 @@ How it behaves:
 - **No data.** A search that matches nothing, and a service without notes,
   are reported as no data.
 - **Evidence.** Each investigation found is listed as a past incident in
-  the evidence of the call.
+  the evidence of the call. With `server.publicURL` set, each one links
+  to the investigation's page in the web UI, and so do the examples in
+  the prompt.
 - **Size.** Summaries and causes are cut to 1,000 bytes and notes to 8,000
   bytes; a result that was cut is marked as cut.
 

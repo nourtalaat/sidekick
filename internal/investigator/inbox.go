@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/prompt"
@@ -62,9 +63,16 @@ type Question struct {
 	// such as a Slack user ID.
 	Author   string
 	AuthorID string
+	// AuthorToken says AuthorID is the ID of an API token, for the audit
+	// entry.
+	AuthorToken bool
 	// Text is the question, redacted already.
 	Text string
 }
+
+// ActionFollowUpAsked is the action of the audit entry of a follow-up
+// question that was added.
+const ActionFollowUpAsked = "investigation.follow_up_asked"
 
 // followUpBody is the body of an inbox item with a follow-up question.
 type followUpBody struct {
@@ -131,6 +139,29 @@ func FindInvestigation(ctx context.Context, q db.DBTX, sinks []string, external 
 // The investigation's row stays locked until the question and the job are
 // committed, so a run that ends meanwhile sees the question.
 func AddFollowUp(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, q Question) (bool, error) {
+	var added bool
+
+	err := pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+		var err error
+
+		added, err = AddFollowUpTx(ctx, tx, id, q)
+		if err != nil {
+			return fmt.Errorf("in a transaction: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return false, fmt.Errorf("add a follow-up question to investigation %s: %w", id, err)
+	}
+
+	return added, nil
+}
+
+// AddFollowUpTx is AddFollowUp in the caller's transaction tx, so the
+// caller can write more in it, such as an audit row. The investigation's
+// row stays locked until tx ends.
+func AddFollowUpTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, q Question) (bool, error) {
 	if q.Key == "" {
 		return false, errNoQuestionKey
 	}
@@ -140,51 +171,75 @@ func AddFollowUp(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, q Questi
 		return false, fmt.Errorf("encode the question: %w", err)
 	}
 
-	var added bool
+	queries := db.New(tx)
 
-	err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
-		queries := db.New(tx)
-
-		inv, err := queries.LockInvestigation(ctx, id)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
-		}
-
-		if err != nil {
-			return fmt.Errorf("lock the investigation: %w", err)
-		}
-
-		if inv.Status == StatusFailed {
-			return nil
-		}
-
-		if triageOnlyResult(inv) {
-			return ErrTriageOnly
-		}
-
-		rows, err := queries.InsertKeyedInboxItem(ctx, db.InsertKeyedInboxItemParams{
-			InvestigationID: id,
-			Kind:            InboxFollowUp,
-			Body:            store.JSON(body),
-			Key:             q.Key,
-		})
-		if err != nil {
-			return fmt.Errorf("add the question: %w", err)
-		}
-
-		added = rows > 0
-
-		if !added || !answers(inv) {
-			return nil
-		}
-
-		return enqueueFollowUp(ctx, tx, inv)
-	})
-	if err != nil {
-		return false, fmt.Errorf("add a follow-up question to investigation %s: %w", id, err)
+	inv, err := queries.LockInvestigation(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
 	}
 
-	return added, nil
+	if err != nil {
+		return false, fmt.Errorf("lock the investigation: %w", err)
+	}
+
+	if inv.Status == StatusFailed {
+		return false, nil
+	}
+
+	if triageOnlyResult(inv) {
+		return false, ErrTriageOnly
+	}
+
+	rows, err := queries.InsertKeyedInboxItem(ctx, db.InsertKeyedInboxItemParams{
+		InvestigationID: id,
+		Kind:            InboxFollowUp,
+		Body:            store.JSON(body),
+		Key:             q.Key,
+	})
+	if err != nil {
+		return false, fmt.Errorf("add the question: %w", err)
+	}
+
+	if rows == 0 {
+		return false, nil
+	}
+
+	if answers(inv) {
+		if err := enqueueFollowUp(ctx, tx, inv); err != nil {
+			return false, fmt.Errorf("enqueue the follow-up job: %w", err)
+		}
+	}
+
+	if err := auditQuestion(ctx, tx, id, q); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+// auditQuestion writes the audit entry of the question q added to the
+// investigation with id. It records the question's key and size, never
+// its text.
+func auditQuestion(ctx context.Context, q db.DBTX, id uuid.UUID, question Question) error {
+	kind := audit.ActorUser
+	if question.AuthorToken {
+		kind = audit.ActorToken
+	}
+
+	err := auditor.Write(ctx, q, audit.Entry{
+		ActorKind:       kind,
+		ActorID:         question.AuthorID,
+		Action:          ActionFollowUpAsked,
+		TargetKind:      auditTargetKind,
+		TargetID:        id.String(),
+		InvestigationID: &id,
+		New:             map[string]any{"key": question.Key, "bytes": len(question.Text)},
+	})
+	if err != nil {
+		return fmt.Errorf("audit the question to investigation %s: %w", id, err)
+	}
+
+	return nil
 }
 
 // deliverInbox saves every item that waits in the investigation's inbox

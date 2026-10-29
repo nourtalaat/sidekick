@@ -1,0 +1,15 @@
+.sk-audit-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--sk-space-4);
+  align-items: start;
+}
+
+.sk-audit-filters__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sk-space-3);
+  align-items: center;
+  min-height: var(--sk-size-control-md);
+  align-self: end;
+}

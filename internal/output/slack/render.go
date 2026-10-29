@@ -150,6 +150,10 @@ func verdictReplyView(u output.Update, permalink string) view {
 		line += " · " + link(permalink, "See the full report")
 	}
 
+	if open := openLink(u); open != "" {
+		line += " · " + open
+	}
+
 	return view{
 		text: escape(notificationText(u.Report, title)),
 		attachment: attachment{Color: style.color, Blocks: []block{
@@ -312,6 +316,8 @@ func finalView(u output.Update, title string) view {
 		checked = joinParts(checked, triageOnlyLine)
 	}
 
+	checked = joinParts(checked, openLink(u))
+
 	if checked != "" {
 		blocks = append(blocks, contextBlock(checked))
 	}
@@ -343,7 +349,7 @@ func failedView(u output.Update, title string) view {
 
 	blocks := []block{section(failedStyle.emoji + " *" + failedStyle.label + "*\n" + detail)}
 
-	if checked := checkedLine(u.Report); checked != "" {
+	if checked := joinParts(checkedLine(u.Report), openLink(u)); checked != "" {
 		blocks = append(blocks, contextBlock(checked))
 	}
 
@@ -593,14 +599,15 @@ func stoppedLine(by *output.Person) string {
 	return "Stopped by a responder"
 }
 
-// mention is the Slack mention of p, or "" when p has no valid Slack user
-// ID.
+// mention is the Slack mention of p; for someone who acted in the web UI
+// and has no valid Slack user ID, their escaped name; or "" when p has
+// neither.
 func mention(p output.Person) string {
-	if !slackUserID.MatchString(p.SlackUserID) {
-		return ""
+	if slackUserID.MatchString(p.SlackUserID) {
+		return "<@" + p.SlackUserID + ">"
 	}
 
-	return "<@" + p.SlackUserID + ">"
+	return escape(cut(p.Name, maxLineChars))
 }
 
 // joinParts joins the parts of a context line that are not empty.
@@ -628,7 +635,13 @@ func runningContext(u output.Update) string {
 		parts = append(parts, fmt.Sprintf("%d events", u.Events))
 	}
 
-	return strings.Join(append(parts, "Updates as the investigation runs"), " · ")
+	return joinParts(append(parts, "Updates as the investigation runs", openLink(u))...)
+}
+
+// openLink is the link to the investigation page in the web UI, or "" when
+// the update has no address for it.
+func openLink(u output.Update) string {
+	return link(u.URL, "Open in Sidekick")
 }
 
 // eventTitle is the event's title, its alert name, or noTitle, cut to

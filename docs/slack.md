@@ -39,6 +39,10 @@ thread. Slash commands and a link to the web UI come in later releases.
   link to the full report, because Slack does not notify anyone when a
   message is edited. This happens for every investigation, including "Not
   sure yet".
+- **An Open in Sidekick link** goes to the investigation's page in the
+  [web UI](web-ui.md), at `<server.publicURL>/investigations/<id>`. The
+  main message and the verdict reply have it when `server.publicURL` is
+  set, and leave it out when it is empty.
 - **A triage-only result**, when [triage](investigations.md#triage)
   found that no full investigation is needed, shows the triage's verdict
   (Duplicate, Known issue or Flapping) with "Triage only · No full

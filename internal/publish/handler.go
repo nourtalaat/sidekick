@@ -21,6 +21,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/weblink"
 )
 
 // SpanName is the name of the span of one publish job.
@@ -56,16 +57,20 @@ type Options struct {
 	// Watchers returns the state of every watcher of a group, for the live
 	// display in every update. Nil shows no watchers.
 	Watchers func(ctx context.Context, q db.DBTX, groupID uuid.UUID) ([]output.WatcherState, error)
+	// PublicURL is server.publicURL. With it, each update has the address of
+	// the investigation page in Update.URL. Empty leaves the URL out.
+	PublicURL string
 }
 
 // Handler runs publish jobs. Make it with New and register it for
 // queue.KindPublish.
 type Handler struct {
-	pool     *pgxpool.Pool
-	sinks    map[string]output.Sink
-	log      *slog.Logger
-	tracer   trace.Tracer
-	watchers func(ctx context.Context, q db.DBTX, groupID uuid.UUID) ([]output.WatcherState, error)
+	pool      *pgxpool.Pool
+	sinks     map[string]output.Sink
+	log       *slog.Logger
+	tracer    trace.Tracer
+	watchers  func(ctx context.Context, q db.DBTX, groupID uuid.UUID) ([]output.WatcherState, error)
+	publicURL string
 }
 
 var _ queue.Handler = (*Handler)(nil)
@@ -82,7 +87,7 @@ func New(opts Options) *Handler {
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	return &Handler{pool: opts.Pool, sinks: opts.Sinks, log: log, tracer: tp.Tracer(tracerName), watchers: opts.Watchers}
+	return &Handler{pool: opts.Pool, sinks: opts.Sinks, log: log, tracer: tp.Tracer(tracerName), watchers: opts.Watchers, publicURL: opts.PublicURL}
 }
 
 // Handle shows the newest state of one investigation in one sink, inside
@@ -284,6 +289,7 @@ func (h *Handler) update(ctx context.Context, investigationID uuid.UUID, state d
 
 	u := output.Update{
 		InvestigationID: investigationID.String(),
+		URL:             weblink.Investigation(h.publicURL, investigationID.String()),
 		Event:           ev,
 		Events:          int(state.EventCount),
 		Phase:           output.Phase(state.Phase),
@@ -362,11 +368,42 @@ func (h *Handler) addResponders(ctx context.Context, u *output.Update, inv db.In
 
 	u.Feedback = ratings
 
-	if inv.CancelRequestedBySlackUser != nil {
-		u.StoppedBy = &output.Person{SlackUserID: *inv.CancelRequestedBySlackUser}
+	stoppedBy, err := stoppedByOf(ctx, h.pool, inv)
+	if err != nil {
+		return fmt.Errorf("load who stopped the run: %w", err)
 	}
 
+	u.StoppedBy = stoppedBy
+
 	return nil
+}
+
+// stoppedByOf returns who asked to stop the run of inv, or nil when
+// nobody did. A web user or API token is named by the users or api_tokens
+// row; one that was deleted since is shown without a name.
+func stoppedByOf(ctx context.Context, q db.DBTX, inv db.Investigation) (*output.Person, error) {
+	if inv.CancelRequestedBy == nil && inv.CancelRequestedBySlackUser == nil {
+		return nil, nil
+	}
+
+	p := &output.Person{}
+
+	if inv.CancelRequestedBySlackUser != nil {
+		p.SlackUserID = *inv.CancelRequestedBySlackUser
+	}
+
+	if inv.CancelRequestedBy != nil {
+		p.UserID = *inv.CancelRequestedBy
+
+		actor, err := db.New(q).GetActorName(ctx, *inv.CancelRequestedBy)
+		if err != nil {
+			return nil, fmt.Errorf("read the name of %s: %w", p.UserID, err)
+		}
+
+		p.Name = actor.Name
+	}
+
+	return p, nil
 }
 
 // finish ends the run in one transaction: it locks the state row, stores

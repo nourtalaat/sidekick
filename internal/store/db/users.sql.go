@@ -12,6 +12,27 @@ import (
 	"github.com/google/uuid"
 )
 
+const getActorName = `-- name: GetActorName :one
+SELECT
+  coalesce((SELECT u.name FROM users u WHERE u.id = $1::uuid), (SELECT t.name FROM api_tokens t WHERE t.id = $1::uuid), '')::text AS name,
+  EXISTS (SELECT 1 FROM api_tokens t WHERE t.id = $1::uuid) AS is_token
+`
+
+type GetActorNameRow struct {
+	Name    string
+	IsToken bool
+}
+
+// GetActorName returns the name of the user, or else of the API token,
+// with id, and whether it is a token. The name is empty for an ID that is
+// neither.
+func (q *Queries) GetActorName(ctx context.Context, id uuid.UUID) (GetActorNameRow, error) {
+	row := q.db.QueryRow(ctx, getActorName, id)
+	var i GetActorNameRow
+	err := row.Scan(&i.Name, &i.IsToken)
+	return i, err
+}
+
 const insertUser = `-- name: InsertUser :one
 INSERT INTO users (id, oidc_issuer, oidc_subject, email, name, groups, role, created_at, last_login_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)

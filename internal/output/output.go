@@ -7,6 +7,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/report"
@@ -125,10 +127,17 @@ type Feedback struct {
 	By     Person
 }
 
-// Person is someone who acted on an investigation.
+// Person is someone who acted on an investigation. Someone who acted in
+// Slack has a SlackUserID; someone who acted in the web UI has a UserID and
+// a Name. A Person may have only one of them.
 type Person struct {
 	// SlackUserID is set for someone who acted in Slack, such as U01ABCDEF.
 	SlackUserID string `json:"slackUserId,omitempty"`
+	// UserID is the ID of the web UI user, or of the API token, that acted.
+	UserID uuid.UUID `json:"userId,omitzero"`
+	// Name is the web UI user's name, or the API token's name. It is text
+	// from outside, so a sink escapes it.
+	Name string `json:"name,omitempty"`
 }
 
 // WatcherStatus is the state of one watcher (WT-4).

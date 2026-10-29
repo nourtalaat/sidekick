@@ -639,7 +639,7 @@ func InvestigateAnyway(ctx context.Context, q db.DBTX, id uuid.UUID, by Requeste
 	}
 
 	err = auditor.Write(ctx, q, audit.Entry{
-		ActorKind:       audit.ActorUser,
+		ActorKind:       by.actorKind(),
 		ActorID:         by.actorID(),
 		Action:          auditInvestigateAnyway,
 		TargetKind:      auditTargetKind,

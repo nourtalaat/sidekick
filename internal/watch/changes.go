@@ -88,7 +88,7 @@ func States(ctx context.Context, q db.DBTX, groupID uuid.UUID) ([]output.Watcher
 
 	states := make([]output.WatcherState, len(rows))
 	for i, row := range rows {
-		states[i] = stateOf(row.Watcher, deref(row.LastDetail))
+		states[i] = stateOf(row.Watcher, deref(row.LastDetail), row.StoppedByName)
 	}
 
 	return states, nil
@@ -114,7 +114,7 @@ func writeChange(ctx context.Context, q db.DBTX, investigationID uuid.UUID, w db
 		return fmt.Errorf("load the last check: %w", err)
 	}
 
-	state := stateOf(w, deref(row.LastDetail))
+	state := stateOf(w, deref(row.LastDetail), row.StoppedByName)
 
 	if err := addToInbox(ctx, q, investigationID, InboxItem{State: state}); err != nil {
 		return fmt.Errorf("write it to the inbox: %w", err)
@@ -143,8 +143,9 @@ func addToInbox(ctx context.Context, q db.DBTX, investigationID uuid.UUID, item 
 }
 
 // stateOf returns w as the outputs show it, with lastResult, the detail of
-// its last check.
-func stateOf(w db.Watcher, lastResult string) output.WatcherState {
+// its last check, and stoppedByName, the name of the web user or API token
+// that stopped it, if one did.
+func stateOf(w db.Watcher, lastResult, stoppedByName string) output.WatcherState {
 	s := output.WatcherState{
 		ID:              w.ID.String(),
 		Name:            w.Name,
@@ -161,8 +162,8 @@ func stateOf(w db.Watcher, lastResult string) output.WatcherState {
 		StopReason:      deref(w.StopReason),
 	}
 
-	if w.StoppedBySlackUser != nil {
-		s.StoppedBy = &output.Person{SlackUserID: *w.StoppedBySlackUser}
+	if w.StoppedBySlackUser != nil || w.StoppedBy != nil {
+		s.StoppedBy = &output.Person{SlackUserID: deref(w.StoppedBySlackUser), UserID: deref(w.StoppedBy), Name: stoppedByName}
 	}
 
 	return s

@@ -27,6 +27,8 @@ export interface Api {
   setCsrfToken(token: string | undefined): void;
   /** Ends the session. */
   signOut(): Promise<void>;
+  /** The address of an API path such as "/investigations/{id}/stream", for an EventSource. */
+  url(path: string): string;
   /** Calls listener whenever the API answers 401. Returns the function that stops it. */
   onUnauthorized(listener: () => void): () => void;
 }
@@ -74,6 +76,9 @@ export function createApi(options: ApiOptions = {}): Api {
     client,
     setCsrfToken(token) {
       csrfToken = token;
+    },
+    url(path) {
+      return `${origin}${API_BASE}${path}`;
     },
     async signOut() {
       const headers = new Headers();

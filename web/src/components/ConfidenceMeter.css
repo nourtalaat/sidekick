@@ -1,0 +1,29 @@
+.sk-confidence {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sk-space-2);
+  color: var(--sk-text-secondary);
+  font: var(--sk-type-label);
+}
+
+.sk-confidence__steps {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.sk-confidence__step {
+  width: 8px;
+  height: 14px;
+  border: 1px solid var(--sk-text-secondary);
+  border-radius: 2px;
+}
+
+.sk-confidence__step--on {
+  background: var(--sk-text-secondary);
+}
+
+@media (forced-colors: active) {
+  .sk-confidence__step--on {
+    background: CanvasText;
+  }
+}

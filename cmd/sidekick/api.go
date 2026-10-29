@@ -51,6 +51,11 @@ func registerAPI(ctx context.Context, a *app.App, memorySync memory.SyncOptions)
 		return fmt.Errorf("register the listener for investigation updates: %w", err)
 	}
 
+	stopper, recorder, err := newWatchStopper(a)
+	if err != nil {
+		return fmt.Errorf("set up the watcher actions of the API: %w", err)
+	}
+
 	handler, err := api.New(api.Options{
 		Auth:     sessions,
 		Tokens:   sessions,
@@ -62,6 +67,8 @@ func registerAPI(ctx context.Context, a *app.App, memorySync memory.SyncOptions)
 		Hub:      hub,
 		Feedback: feedbackMetrics,
 		Memory:   memorySync,
+		Stopper:  stopper,
+		Watchers: recorder,
 		Logger:   log,
 	})
 	if err != nil {

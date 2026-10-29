@@ -99,6 +99,8 @@ func renderedViews(t *testing.T) []rendered {
 		)
 	}
 
+	cases = append(cases, linkedViews()...)
+
 	long := testUpdate(output.PhaseFinal, longReport())
 	more, ok := continuationView(long)
 	require.True(t, ok)
@@ -503,5 +505,91 @@ func watcherReplies() map[string]output.WatcherState {
 		"recovered": w[1],
 		"timed-out": w[2],
 		"stopped":   w[3],
+	}
+}
+
+func TestMention(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		person output.Person
+		want   string
+	}{
+		{name: "a Slack user", person: output.Person{SlackUserID: "U01ABCDEF"}, want: "<@U01ABCDEF>"},
+		{name: "a Slack user wins over the name", person: output.Person{SlackUserID: "U01ABCDEF", Name: "Ada"}, want: "<@U01ABCDEF>"},
+		{name: "a web user is shown by name", person: output.Person{Name: "Ada Lovelace"}, want: "Ada Lovelace"},
+		{name: "the name is escaped", person: output.Person{Name: "<!channel> & co"}, want: "&lt;!channel&gt; &amp; co"},
+		{name: "an invalid Slack ID falls back to the name", person: output.Person{SlackUserID: "not an id", Name: "Ada"}, want: "Ada"},
+		{name: "nobody", person: output.Person{}, want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tt.want, mention(tt.person))
+		})
+	}
+}
+
+// openURL is the address of the investigation page that linkedViews give
+// the updates.
+const openURL = "https://sidekick.example.com/investigations/0192d3a4-0000-7000-8000-0000000000aa"
+
+// withOpenURL returns u with the address of its investigation page.
+func withOpenURL(u output.Update) output.Update {
+	u.URL = openURL
+
+	return u
+}
+
+// linkedViews renders the views that show the Open in Sidekick link, which
+// the sink shows only when the update has an address.
+func linkedViews() []rendered {
+	failedRun := &report.Report{
+		StopReason: report.StopError,
+		StopDetail: "The model returned an error after 3 tries.",
+		Checked:    []report.Check{{Source: "signoz", Status: report.CheckOK}},
+	}
+	final := withOpenURL(testUpdate(output.PhaseFinal, verdictReport(report.TruePositive)))
+
+	return []rendered{
+		{name: "queued-with-link", view: mainView(withOpenURL(testUpdate(output.PhaseQueued, nil)))},
+		{name: "running-with-link", view: mainView(withOpenURL(runningUpdate(3)))},
+		{name: "final-true_positive-with-link", view: mainView(final)},
+		{name: "failed-with-link", view: mainView(withOpenURL(testUpdate(output.PhaseFinal, failedRun)))},
+		{name: "reply-true_positive-with-link", view: verdictReplyView(final, "https://example.slack.com/archives/C123/p1793023321000200")},
+	}
+}
+
+func TestOpenInSidekickLinkNeedsAnHTTPAddress(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{name: "an https address", url: openURL, want: true},
+		{name: "no address", url: "", want: false},
+		{name: "a script", url: "javascript:alert(1)", want: false},
+		{name: "a relative address", url: "/investigations/1", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			u := testUpdate(output.PhaseFinal, verdictReport(report.TruePositive))
+			u.URL = tt.url
+
+			for name, v := range map[string]view{
+				"main":  mainView(u),
+				"reply": verdictReplyView(u, "https://example.slack.com/archives/C123/p1793023321000200"),
+			} {
+				require.Equal(t, tt.want, strings.Contains(goldenJSON(t, v), "Open in Sidekick"), name)
+			}
+		})
 	}
 }

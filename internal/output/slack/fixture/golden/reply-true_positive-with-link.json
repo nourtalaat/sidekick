@@ -1,0 +1,28 @@
+{
+  "text": "Real issue (high confidence): checkout-api p99 latency above 2s",
+  "attachments": [
+    {
+      "color": "#C4261C",
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": ":rotating_light: *Real issue* · High confidence · <https://example.slack.com/archives/C123/p1793023321000200|See the full report> · <https://sidekick.example.com/investigations/0192d3a4-0000-7000-8000-0000000000aa|Open in Sidekick>",
+            "verbatim": true
+          }
+        },
+        {
+          "type": "context",
+          "elements": [
+            {
+              "type": "mrkdwn",
+              "text": "checkout-api p99 latency above 2s",
+              "verbatim": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

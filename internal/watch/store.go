@@ -324,11 +324,37 @@ func stateChanged(ctx context.Context, q db.DBTX, log *slog.Logger, old *db.Watc
 		"watcher_id", w.ID.String(), "group_id", w.GroupID.String(), "watcher", w.Name,
 		"from", from, "status", w.Status, "stop_reason", deref(w.StopReason))
 
-	if err := auditor.Write(ctx, q, auditEntry(old, w)); err != nil {
+	entry := auditEntry(old, w)
+
+	if w.StoppedBy != nil {
+		kind, err := actorKind(ctx, q, *w.StoppedBy)
+		if err != nil {
+			return fmt.Errorf("find who stopped the watcher: %w", err)
+		}
+
+		entry.ActorKind = kind
+	}
+
+	if err := auditor.Write(ctx, q, entry); err != nil {
 		return fmt.Errorf("audit the state change: %w", err)
 	}
 
 	return nil
+}
+
+// actorKind is audit.ActorToken when id is an API token's ID, and
+// audit.ActorUser otherwise.
+func actorKind(ctx context.Context, q db.DBTX, id uuid.UUID) (string, error) {
+	actor, err := db.New(q).GetActorName(ctx, id)
+	if err != nil {
+		return "", fmt.Errorf("look up %s: %w", id, err)
+	}
+
+	if actor.IsToken {
+		return audit.ActorToken, nil
+	}
+
+	return audit.ActorUser, nil
 }
 
 // auditEntry is the audit row of a watcher's change from old, nil for a
