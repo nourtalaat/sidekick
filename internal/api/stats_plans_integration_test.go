@@ -57,9 +57,14 @@ func TestStatsQueryPlans(t *testing.T) {
 		index := r.days == planMonth
 
 		tests = append(tests, qualityPlans(r.name, from, to, index, filterSet{})...)
-		tests = append(tests, qualityPlans(r.name+"Filtered", from, to, index, filterSet{
-			route: new("route-1"), service: new("service-3"), model: new("model-2"), verdict: new("false_positive"),
-		})...)
+		filters := filterSet{route: new("route-1"), service: new("service-3"), model: new("model-2"), verdict: new("false_positive")}
+
+		tests = append(tests, qualityPlans(r.name+"Filtered", from, to, index, filters)...)
+
+		fromTime, toTime := from.Time, to.Time.AddDate(0, 0, 1)
+
+		tests = append(tests, costPlans(r.name, from, to, fromTime, toTime, index, filterSet{})...)
+		tests = append(tests, costPlans(r.name+"Filtered", from, to, fromTime, toTime, index, filters)...)
 	}
 
 	tests = append(tests,
@@ -144,6 +149,68 @@ func qualityPlans(prefix string, from, to pgtype.Date, index bool, f filterSet) 
 				return fmt.Errorf("run query: %w", err)
 			},
 			wantIndex: wantIndex, scansTable: !index,
+		},
+	}
+}
+
+// costPlans are the plan cases of the cost queries for a range. The spend
+// queries take the route and model filters; the cost per investigation
+// takes the hours of the range as well, and every filter.
+func costPlans(prefix string, from, to pgtype.Date, fromHour, toHour time.Time, index bool, f filterSet) []planCase {
+	spendIndex, statsIndex := []string(nil), []string(nil)
+	if index {
+		spendIndex, statsIndex = []string{"spend_daily_pkey"}, []string{"stats_hourly_pkey"}
+	}
+
+	return []planCase{
+		{
+			name: prefix + "SpendTotals",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.SpendTotals(ctx, db.SpendTotalsParams{FromDay: from, ToDay: to, Route: f.route, Model: f.model})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: spendIndex, scansTable: !index,
+		},
+		{
+			name: prefix + "SpendByDayModel",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.SpendByDayModel(ctx, db.SpendByDayModelParams{FromDay: from, ToDay: to, Route: f.route, Model: f.model})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: spendIndex, scansTable: !index,
+		},
+		{
+			name: prefix + "SpendByRoute",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.SpendByRoute(ctx, db.SpendByRouteParams{FromDay: from, ToDay: to, Route: f.route, Model: f.model})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: spendIndex, scansTable: !index,
+		},
+		{
+			name: prefix + "CostPerInvestigationByDay",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.CostPerInvestigationByDay(ctx, db.CostPerInvestigationByDayParams{
+					FromHour: fromHour, ToHour: toHour, Route: f.route, Service: f.service, Model: f.model, Verdict: f.verdict,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: statsIndex, scansTable: !index,
+		},
+		{
+			name: prefix + "CostPerInvestigationTotals",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.CostPerInvestigationTotals(ctx, db.CostPerInvestigationTotalsParams{
+					FromHour: fromHour, ToHour: toHour, Route: f.route, Service: f.service, Model: f.model, Verdict: f.verdict,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: statsIndex, scansTable: !index,
 		},
 	}
 }

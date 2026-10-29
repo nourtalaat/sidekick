@@ -12,6 +12,106 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const costPerInvestigationByDay = `-- name: CostPerInvestigationByDay :many
+SELECT (hour AT TIME ZONE 'UTC')::date AS day,
+       sum(investigations)::bigint AS investigations,
+       sum(cost_micros)::bigint AS cost_micros
+FROM stats_hourly
+WHERE hour >= $1 AND hour < $2
+  AND ($3::text IS NULL OR route = $3)
+  AND ($4::text IS NULL OR service = $4)
+  AND ($5::text IS NULL OR model = $5)
+  AND ($6::text IS NULL OR verdict = $6)
+GROUP BY 1
+ORDER BY 1
+`
+
+type CostPerInvestigationByDayParams struct {
+	FromHour time.Time
+	ToHour   time.Time
+	Route    *string
+	Service  *string
+	Model    *string
+	Verdict  *string
+}
+
+type CostPerInvestigationByDayRow struct {
+	Day            pgtype.Date
+	Investigations int64
+	CostMicros     int64
+}
+
+// CostPerInvestigationByDay sums the investigations created in the hours
+// from from_hour up to to_hour, and what they cost, by UTC day. Every
+// filter applies.
+func (q *Queries) CostPerInvestigationByDay(ctx context.Context, arg CostPerInvestigationByDayParams) ([]CostPerInvestigationByDayRow, error) {
+	rows, err := q.db.Query(ctx, costPerInvestigationByDay,
+		arg.FromHour,
+		arg.ToHour,
+		arg.Route,
+		arg.Service,
+		arg.Model,
+		arg.Verdict,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CostPerInvestigationByDayRow
+	for rows.Next() {
+		var i CostPerInvestigationByDayRow
+		if err := rows.Scan(&i.Day, &i.Investigations, &i.CostMicros); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const costPerInvestigationTotals = `-- name: CostPerInvestigationTotals :one
+SELECT coalesce(sum(investigations), 0)::bigint AS investigations,
+       coalesce(sum(cost_micros), 0)::bigint AS cost_micros
+FROM stats_hourly
+WHERE hour >= $1 AND hour < $2
+  AND ($3::text IS NULL OR route = $3)
+  AND ($4::text IS NULL OR service = $4)
+  AND ($5::text IS NULL OR model = $5)
+  AND ($6::text IS NULL OR verdict = $6)
+`
+
+type CostPerInvestigationTotalsParams struct {
+	FromHour time.Time
+	ToHour   time.Time
+	Route    *string
+	Service  *string
+	Model    *string
+	Verdict  *string
+}
+
+type CostPerInvestigationTotalsRow struct {
+	Investigations int64
+	CostMicros     int64
+}
+
+// CostPerInvestigationTotals is CostPerInvestigationByDay for the whole
+// range.
+func (q *Queries) CostPerInvestigationTotals(ctx context.Context, arg CostPerInvestigationTotalsParams) (CostPerInvestigationTotalsRow, error) {
+	row := q.db.QueryRow(ctx, costPerInvestigationTotals,
+		arg.FromHour,
+		arg.ToHour,
+		arg.Route,
+		arg.Service,
+		arg.Model,
+		arg.Verdict,
+	)
+	var i CostPerInvestigationTotalsRow
+	err := row.Scan(&i.Investigations, &i.CostMicros)
+	return i, err
+}
+
 const qualityByDay = `-- name: QualityByDay :many
 SELECT day, sum(n)::bigint AS rated, coalesce(sum(n) FILTER (WHERE predicted = confirmed), 0)::bigint AS correct
 FROM quality_daily
@@ -225,6 +325,164 @@ func (q *Queries) QualityTotals(ctx context.Context, arg QualityTotalsParams) (Q
 	)
 	var i QualityTotalsRow
 	err := row.Scan(&i.Rated, &i.Correct)
+	return i, err
+}
+
+const spendByDayModel = `-- name: SpendByDayModel :many
+SELECT day, connector, model,
+       sum(cost_micros)::bigint AS cost_micros,
+       sum(input_tokens)::bigint AS input_tokens,
+       sum(output_tokens)::bigint AS output_tokens
+FROM spend_daily
+WHERE day >= $1::date AND day <= $2::date
+  AND ($3::text IS NULL OR route = $3)
+  AND ($4::text IS NULL OR model = $4)
+GROUP BY day, connector, model
+ORDER BY day, connector, model
+`
+
+type SpendByDayModelParams struct {
+	FromDay pgtype.Date
+	ToDay   pgtype.Date
+	Route   *string
+	Model   *string
+}
+
+type SpendByDayModelRow struct {
+	Day          pgtype.Date
+	Connector    string
+	Model        string
+	CostMicros   int64
+	InputTokens  int64
+	OutputTokens int64
+}
+
+// SpendByDayModel sums the spend of each day by connector and model.
+func (q *Queries) SpendByDayModel(ctx context.Context, arg SpendByDayModelParams) ([]SpendByDayModelRow, error) {
+	rows, err := q.db.Query(ctx, spendByDayModel,
+		arg.FromDay,
+		arg.ToDay,
+		arg.Route,
+		arg.Model,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SpendByDayModelRow
+	for rows.Next() {
+		var i SpendByDayModelRow
+		if err := rows.Scan(
+			&i.Day,
+			&i.Connector,
+			&i.Model,
+			&i.CostMicros,
+			&i.InputTokens,
+			&i.OutputTokens,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const spendByRoute = `-- name: SpendByRoute :many
+SELECT route,
+       sum(cost_micros)::bigint AS cost_micros,
+       sum(input_tokens)::bigint AS input_tokens,
+       sum(output_tokens)::bigint AS output_tokens
+FROM spend_daily
+WHERE day >= $1::date AND day <= $2::date
+  AND ($3::text IS NULL OR route = $3)
+  AND ($4::text IS NULL OR model = $4)
+GROUP BY route
+ORDER BY route
+`
+
+type SpendByRouteParams struct {
+	FromDay pgtype.Date
+	ToDay   pgtype.Date
+	Route   *string
+	Model   *string
+}
+
+type SpendByRouteRow struct {
+	Route        string
+	CostMicros   int64
+	InputTokens  int64
+	OutputTokens int64
+}
+
+// SpendByRoute sums the spend of the range by route.
+func (q *Queries) SpendByRoute(ctx context.Context, arg SpendByRouteParams) ([]SpendByRouteRow, error) {
+	rows, err := q.db.Query(ctx, spendByRoute,
+		arg.FromDay,
+		arg.ToDay,
+		arg.Route,
+		arg.Model,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SpendByRouteRow
+	for rows.Next() {
+		var i SpendByRouteRow
+		if err := rows.Scan(
+			&i.Route,
+			&i.CostMicros,
+			&i.InputTokens,
+			&i.OutputTokens,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const spendTotals = `-- name: SpendTotals :one
+SELECT coalesce(sum(cost_micros), 0)::bigint AS cost_micros,
+       coalesce(sum(input_tokens), 0)::bigint AS input_tokens,
+       coalesce(sum(output_tokens), 0)::bigint AS output_tokens
+FROM spend_daily
+WHERE day >= $1::date AND day <= $2::date
+  AND ($3::text IS NULL OR route = $3)
+  AND ($4::text IS NULL OR model = $4)
+`
+
+type SpendTotalsParams struct {
+	FromDay pgtype.Date
+	ToDay   pgtype.Date
+	Route   *string
+	Model   *string
+}
+
+type SpendTotalsRow struct {
+	CostMicros   int64
+	InputTokens  int64
+	OutputTokens int64
+}
+
+// SpendTotals sums what model calls cost on the days from_day to to_day,
+// both included. spend_daily has no service or verdict, so only the route
+// and model filters apply.
+func (q *Queries) SpendTotals(ctx context.Context, arg SpendTotalsParams) (SpendTotalsRow, error) {
+	row := q.db.QueryRow(ctx, spendTotals,
+		arg.FromDay,
+		arg.ToDay,
+		arg.Route,
+		arg.Model,
+	)
+	var i SpendTotalsRow
+	err := row.Scan(&i.CostMicros, &i.InputTokens, &i.OutputTokens)
 	return i, err
 }
 

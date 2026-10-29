@@ -684,6 +684,30 @@ type ConfusionCell struct {
 	Predicted Verdict `json:"predicted"`
 }
 
+// CostStats defines model for CostStats.
+type CostStats struct {
+	ByModel []SpendModel `json:"byModel"`
+	ByRoute []SpendRoute `json:"byRoute"`
+
+	// DayModels The spend of each day by connector and model, for a chart stacked by model.
+	DayModels []SpendDayModel    `json:"dayModels"`
+	Days      []SpendDay         `json:"days"`
+	From      openapi_types.Date `json:"from"`
+
+	// IgnoredFilters The filters of the request that the spend cannot be filtered by, service and verdict.
+	IgnoredFilters []string `json:"ignoredFilters"`
+
+	// PerInvestigation Investigations and what they cost, by the day they were created.
+	PerInvestigation []InvestigationCostDay `json:"perInvestigation"`
+
+	// Previous The same totals for the range of equal length that ends the day before `from`.
+	Previous                 Spend              `json:"previous"`
+	PreviousPerInvestigation InvestigationCost  `json:"previousPerInvestigation"`
+	To                       openapi_types.Date `json:"to"`
+	Today                    SpendToday         `json:"today"`
+	Totals                   Spend              `json:"totals"`
+}
+
 // CreatedToken defines model for CreatedToken.
 type CreatedToken struct {
 	// Secret The token, sent as "Authorization: Bearer <secret>". It is shown only here.
@@ -933,6 +957,19 @@ type Investigation struct {
 
 // InvestigationGroupStatus Whether the group of events is still open. Only an open group, or one closed as resolved, can be resolved.
 type InvestigationGroupStatus string
+
+// InvestigationCost defines model for InvestigationCost.
+type InvestigationCost struct {
+	CostMicros     int64 `json:"costMicros"`
+	Investigations int64 `json:"investigations"`
+}
+
+// InvestigationCostDay defines model for InvestigationCostDay.
+type InvestigationCostDay struct {
+	CostMicros     int64              `json:"costMicros"`
+	Day            openapi_types.Date `json:"day"`
+	Investigations int64              `json:"investigations"`
+}
 
 // InvestigationList defines model for InvestigationList.
 type InvestigationList struct {
@@ -1486,6 +1523,76 @@ type SourceCheck struct {
 // SourceCheckStatus defines model for SourceCheck.Status.
 type SourceCheckStatus string
 
+// Spend defines model for Spend.
+type Spend struct {
+	// CostMicros Millionths of a US dollar.
+	CostMicros   int64 `json:"costMicros"`
+	InputTokens  int64 `json:"inputTokens"`
+	OutputTokens int64 `json:"outputTokens"`
+}
+
+// SpendDay defines model for SpendDay.
+type SpendDay struct {
+	// CostMicros Millionths of a US dollar.
+	CostMicros   int64              `json:"costMicros"`
+	Day          openapi_types.Date `json:"day"`
+	InputTokens  int64              `json:"inputTokens"`
+	OutputTokens int64              `json:"outputTokens"`
+}
+
+// SpendDayModel defines model for SpendDayModel.
+type SpendDayModel struct {
+	Connector string `json:"connector"`
+
+	// CostMicros Millionths of a US dollar.
+	CostMicros   int64              `json:"costMicros"`
+	Day          openapi_types.Date `json:"day"`
+	InputTokens  int64              `json:"inputTokens"`
+	Model        string             `json:"model"`
+	OutputTokens int64              `json:"outputTokens"`
+}
+
+// SpendModel defines model for SpendModel.
+type SpendModel struct {
+	Connector string `json:"connector"`
+
+	// CostMicros Millionths of a US dollar.
+	CostMicros   int64  `json:"costMicros"`
+	InputTokens  int64  `json:"inputTokens"`
+	Model        string `json:"model"`
+	OutputTokens int64  `json:"outputTokens"`
+}
+
+// SpendRoute defines model for SpendRoute.
+type SpendRoute struct {
+	// CostMicros Millionths of a US dollar.
+	CostMicros   int64  `json:"costMicros"`
+	InputTokens  int64  `json:"inputTokens"`
+	OutputTokens int64  `json:"outputTokens"`
+	Route        string `json:"route"`
+}
+
+// SpendToday defines model for SpendToday.
+type SpendToday struct {
+	// CapMicros The global daily cap; left out when there is none.
+	CapMicros *int64 `json:"capMicros,omitempty"`
+
+	// Day Today in the time zone of the daily caps.
+	Day    openapi_types.Date `json:"day"`
+	Routes []SpendTodayRoute  `json:"routes"`
+
+	// SpentMicros Spent today by every route together.
+	SpentMicros int64 `json:"spentMicros"`
+}
+
+// SpendTodayRoute defines model for SpendTodayRoute.
+type SpendTodayRoute struct {
+	// CapMicros The route's daily cap; left out when it has none.
+	CapMicros   *int64 `json:"capMicros,omitempty"`
+	Route       string `json:"route"`
+	SpentMicros int64  `json:"spentMicros"`
+}
+
 // StatsFilters defines model for StatsFilters.
 type StatsFilters struct {
 	Models   []string `json:"models"`
@@ -1776,6 +1883,27 @@ type ListJobsParams struct {
 // ListJobsParamsStatus defines parameters for ListJobs.
 type ListJobsParamsStatus string
 
+// GetCostStatsParams defines parameters for GetCostStats.
+type GetCostStatsParams struct {
+	// From The first day of the range, a UTC date. The default is 29 days before `to`.
+	From *StatsFrom `form:"from,omitempty" json:"from,omitempty"`
+
+	// To The last day of the range, a UTC date, included. The default is today. The range is at most 400 days.
+	To *StatsTo `form:"to,omitempty" json:"to,omitempty"`
+
+	// Route Only investigations of this route.
+	Route *StatsRoute `form:"route,omitempty" json:"route,omitempty"`
+
+	// Service Only investigations of this service.
+	Service *StatsService `form:"service,omitempty" json:"service,omitempty"`
+
+	// Model Only investigations whose first model turn used this model.
+	Model *StatsModel `form:"model,omitempty" json:"model,omitempty"`
+
+	// Verdict Only investigations with this verdict.
+	Verdict *StatsVerdict `form:"verdict,omitempty" json:"verdict,omitempty"`
+}
+
 // GetQualityStatsParams defines parameters for GetQualityStats.
 type GetQualityStatsParams struct {
 	// From The first day of the range, a UTC date. The default is 29 days before `to`.
@@ -1892,6 +2020,9 @@ type ServerInterface interface {
 	// UpdateRoute Replace a runtime route
 	// (PUT /routes/{name})
 	UpdateRoute(w http.ResponseWriter, r *http.Request, name RuleName)
+	// GetCostStats Spend, tokens and cost per investigation
+	// (GET /stats/cost)
+	GetCostStats(w http.ResponseWriter, r *http.Request, params GetCostStatsParams)
 	// GetStatsFilters The values the dashboard filters offer
 	// (GET /stats/filters)
 	GetStatsFilters(w http.ResponseWriter, r *http.Request)
@@ -2794,6 +2925,104 @@ func (siw *ServerInterfaceWrapper) UpdateRoute(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// GetCostStats operation middleware
+func (siw *ServerInterfaceWrapper) GetCostStats(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetCostStatsParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "route" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "route", r.URL.Query(), &params.Route, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "route"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "route", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "service" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "service", r.URL.Query(), &params.Service, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "service"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "service", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "model" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "model", r.URL.Query(), &params.Model, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "model"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "model", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "verdict" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "verdict", r.URL.Query(), &params.Verdict, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "verdict"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "verdict", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCostStats(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetStatsFilters operation middleware
 func (siw *ServerInterfaceWrapper) GetStatsFilters(w http.ResponseWriter, r *http.Request) {
 
@@ -3136,6 +3365,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/investigations/{id}/fix-applied", wrapper.MarkFixApplied)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stats/quality", wrapper.GetQualityStats)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stats/filters", wrapper.GetStatsFilters)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stats/cost", wrapper.GetCostStats)
 
 	return m
 }
@@ -4091,6 +4321,45 @@ func (response UpdateRoutedefaultApplicationProblemPlusJSONResponse) VisitUpdate
 	return err
 }
 
+type GetCostStatsRequestObject struct {
+	Params GetCostStatsParams
+}
+
+type GetCostStatsResponseObject interface {
+	VisitGetCostStatsResponse(w http.ResponseWriter) error
+}
+
+type GetCostStats200JSONResponse CostStats
+
+func (response GetCostStats200JSONResponse) VisitGetCostStatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCostStatsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetCostStatsdefaultApplicationProblemPlusJSONResponse) VisitGetCostStatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetStatsFiltersRequestObject struct {
 }
 
@@ -4391,6 +4660,9 @@ type StrictServerInterface interface {
 	// UpdateRoute Replace a runtime route
 	// (PUT /routes/{name})
 	UpdateRoute(ctx context.Context, request UpdateRouteRequestObject) (UpdateRouteResponseObject, error)
+	// GetCostStats Spend, tokens and cost per investigation
+	// (GET /stats/cost)
+	GetCostStats(ctx context.Context, request GetCostStatsRequestObject) (GetCostStatsResponseObject, error)
 	// GetStatsFilters The values the dashboard filters offer
 	// (GET /stats/filters)
 	GetStatsFilters(ctx context.Context, request GetStatsFiltersRequestObject) (GetStatsFiltersResponseObject, error)
@@ -5099,6 +5371,32 @@ func (sh *strictHandler) UpdateRoute(w http.ResponseWriter, r *http.Request, nam
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateRouteResponseObject); ok {
 		if err := validResponse.VisitUpdateRouteResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCostStats operation middleware
+func (sh *strictHandler) GetCostStats(w http.ResponseWriter, r *http.Request, params GetCostStatsParams) {
+	var request GetCostStatsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCostStats(ctx, request.(GetCostStatsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCostStats")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCostStatsResponseObject); ok {
+		if err := validResponse.VisitGetCostStatsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

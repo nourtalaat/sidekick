@@ -593,6 +593,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stats/cost": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Spend, tokens and cost per investigation
+         * @description What model calls cost in the range, by day, model and route, with
+         *     the tokens in and out, and what the day's cap leaves; from the
+         *     daily spend table the caps read. Days are UTC dates for the range
+         *     and follow `budgets.daily.timeZone` for the spend and the caps. The
+         *     spend table has no service or verdict, so those filters do not
+         *     apply to it and `ignoredFilters` names the ones that were given.
+         *     The cost per investigation comes from the hourly rollup and takes
+         *     every filter.
+         */
+        get: operations["GetCostStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1464,6 +1491,90 @@ export interface components {
             services: string[];
             models: string[];
         };
+        CostStats: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            /** @description The filters of the request that the spend cannot be filtered by, service and verdict. */
+            ignoredFilters: string[];
+            totals: components["schemas"]["Spend"];
+            /** @description The same totals for the range of equal length that ends the day before `from`. */
+            previous: components["schemas"]["Spend"];
+            days: components["schemas"]["SpendDay"][];
+            /** @description The spend of each day by connector and model, for a chart stacked by model. */
+            dayModels: components["schemas"]["SpendDayModel"][];
+            byModel: components["schemas"]["SpendModel"][];
+            byRoute: components["schemas"]["SpendRoute"][];
+            /** @description Investigations and what they cost, by the day they were created. */
+            perInvestigation: components["schemas"]["InvestigationCostDay"][];
+            previousPerInvestigation: components["schemas"]["InvestigationCost"];
+            today: components["schemas"]["SpendToday"];
+        };
+        Spend: {
+            /**
+             * Format: int64
+             * @description Millionths of a US dollar.
+             */
+            costMicros: number;
+            /** Format: int64 */
+            inputTokens: number;
+            /** Format: int64 */
+            outputTokens: number;
+        };
+        SpendDay: components["schemas"]["Spend"] & {
+            /** Format: date */
+            day: string;
+        };
+        SpendDayModel: components["schemas"]["SpendDay"] & {
+            connector: string;
+            model: string;
+        };
+        SpendModel: components["schemas"]["Spend"] & {
+            connector: string;
+            model: string;
+        };
+        SpendRoute: components["schemas"]["Spend"] & {
+            route: string;
+        };
+        InvestigationCost: {
+            /** Format: int64 */
+            investigations: number;
+            /** Format: int64 */
+            costMicros: number;
+        };
+        InvestigationCostDay: components["schemas"]["InvestigationCost"] & {
+            /** Format: date */
+            day: string;
+        };
+        SpendToday: {
+            /**
+             * Format: date
+             * @description Today in the time zone of the daily caps.
+             */
+            day: string;
+            /**
+             * Format: int64
+             * @description Spent today by every route together.
+             */
+            spentMicros: number;
+            /**
+             * Format: int64
+             * @description The global daily cap; left out when there is none.
+             */
+            capMicros?: number;
+            routes: components["schemas"]["SpendTodayRoute"][];
+        };
+        SpendTodayRoute: {
+            route: string;
+            /** Format: int64 */
+            spentMicros: number;
+            /**
+             * Format: int64
+             * @description The route's daily cap; left out when it has none.
+             */
+            capMicros?: number;
+        };
     };
     responses: {
         /** @description An error, as problem details. */
@@ -2250,6 +2361,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StatsFilters"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetCostStats: {
+        parameters: {
+            query?: {
+                /** @description The first day of the range, a UTC date. The default is 29 days before `to`. */
+                from?: components["parameters"]["StatsFrom"];
+                /** @description The last day of the range, a UTC date, included. The default is today. The range is at most 400 days. */
+                to?: components["parameters"]["StatsTo"];
+                /** @description Only investigations of this route. */
+                route?: components["parameters"]["StatsRoute"];
+                /** @description Only investigations of this service. */
+                service?: components["parameters"]["StatsService"];
+                /** @description Only investigations whose first model turn used this model. */
+                model?: components["parameters"]["StatsModel"];
+                /** @description Only investigations with this verdict. */
+                verdict?: components["parameters"]["StatsVerdict"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The spend of the range and of the range before it. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CostStats"];
                 };
             };
             default: components["responses"]["Problem"];
