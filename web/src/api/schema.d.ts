@@ -1705,6 +1705,8 @@ export interface components {
             previous: components["schemas"]["OperationsTotals"];
             /** @description The investigations of the range by verdict. */
             verdicts: components["schemas"]["VerdictCount"][];
+            /** @description The same for the range of equal length that ends the day before `from`. */
+            previousVerdicts: components["schemas"]["VerdictCount"][];
             /** @description Recoveries and downtime by route and service. */
             downtime: components["schemas"]["DowntimeRow"][];
         };

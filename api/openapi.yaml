@@ -2689,7 +2689,7 @@ components:
           description: The route's daily cap; left out when it has none.
     OperationsStats:
       type: object
-      required: [from, to, interval, series, totals, previous, verdicts, downtime]
+      required: [from, to, interval, series, totals, previous, verdicts, previousVerdicts, downtime]
       properties:
         from:
           type: string
@@ -2714,6 +2714,11 @@ components:
         verdicts:
           type: array
           description: The investigations of the range by verdict.
+          items:
+            $ref: "#/components/schemas/VerdictCount"
+        previousVerdicts:
+          type: array
+          description: The same for the range of equal length that ends the day before `from`.
           items:
             $ref: "#/components/schemas/VerdictCount"
         downtime:

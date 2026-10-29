@@ -1563,6 +1563,9 @@ type OperationsStats struct {
 	// Previous The same totals for the range of equal length that ends the day before `from`.
 	Previous OperationsTotals `json:"previous"`
 
+	// PreviousVerdicts The same for the range of equal length that ends the day before `from`.
+	PreviousVerdicts []VerdictCount `json:"previousVerdicts"`
+
 	// Series One entry for each bucket that has investigations, oldest first.
 	Series []OperationsBucket `json:"series"`
 	To     openapi_types.Date `json:"to"`

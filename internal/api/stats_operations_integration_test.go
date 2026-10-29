@@ -29,6 +29,10 @@ type operationsBody struct {
 		Verdict        string `json:"verdict"`
 		Investigations int64  `json:"investigations"`
 	} `json:"verdicts"`
+	PreviousVerdicts []struct {
+		Verdict        string `json:"verdict"`
+		Investigations int64  `json:"investigations"`
+	} `json:"previousVerdicts"`
 	Downtime []struct {
 		Route            string   `json:"route"`
 		Service          string   `json:"service"`
@@ -144,6 +148,10 @@ func TestGetOperationsStats(t *testing.T) {
 
 		require.Equal(t, []count{{"true_positive", 4}, {"false_positive", 16}, {"inconclusive", 2}, {"none", 1}}, verdicts)
 
+		require.Len(t, got.PreviousVerdicts, 1)
+		require.Equal(t, "false_positive", got.PreviousVerdicts[0].Verdict)
+		require.Equal(t, int64(5), got.PreviousVerdicts[0].Investigations)
+
 		require.Len(t, got.Downtime, 2)
 		require.Equal(t, "r1", got.Downtime[0].Route)
 		require.Equal(t, "checkout", got.Downtime[0].Service)
@@ -219,7 +227,7 @@ func TestGetOperationsStats(t *testing.T) {
 		rec := getStats(t, s, "/stats/operations?route=nowhere")
 		require.Equal(t, http.StatusOK, rec.Code)
 
-		for _, empty := range []string{"series", "verdicts", "downtime"} {
+		for _, empty := range []string{"series", "verdicts", "previousVerdicts", "downtime"} {
 			require.Contains(t, rec.Body.String(), `"`+empty+`":[]`)
 		}
 	})

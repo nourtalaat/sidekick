@@ -91,7 +91,7 @@ func (s *server) GetOperationsStats(ctx context.Context, req apigen.GetOperation
 	return apigen.GetOperationsStats200JSONResponse{
 		From: dateOf(w.from), To: dateOf(w.to), Interval: interval,
 		Series: series.buckets, Totals: totals, Previous: previousTotals,
-		Verdicts: series.verdicts, Downtime: downtime,
+		Verdicts: series.verdicts, PreviousVerdicts: previous.verdicts, Downtime: downtime,
 	}, nil
 }
 
