@@ -262,6 +262,24 @@ func (e MeKind) Valid() bool {
 	}
 }
 
+// Defines values for OperationsStatsInterval.
+const (
+	OperationsStatsIntervalDay  OperationsStatsInterval = "day"
+	OperationsStatsIntervalHour OperationsStatsInterval = "hour"
+)
+
+// Valid indicates whether the value is a known member of the OperationsStatsInterval enum.
+func (e OperationsStatsInterval) Valid() bool {
+	switch e {
+	case OperationsStatsIntervalDay:
+		return true
+	case OperationsStatsIntervalHour:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ReportStopReason.
 const (
 	ReportStopReasonBudget    ReportStopReason = "budget"
@@ -625,6 +643,24 @@ func (e ListJobsParamsStatus) Valid() bool {
 	}
 }
 
+// Defines values for GetOperationsStatsParamsInterval.
+const (
+	GetOperationsStatsParamsIntervalDay  GetOperationsStatsParamsInterval = "day"
+	GetOperationsStatsParamsIntervalHour GetOperationsStatsParamsInterval = "hour"
+)
+
+// Valid indicates whether the value is a known member of the GetOperationsStatsParamsInterval enum.
+func (e GetOperationsStatsParamsInterval) Valid() bool {
+	switch e {
+	case GetOperationsStatsParamsIntervalDay:
+		return true
+	case GetOperationsStatsParamsIntervalHour:
+		return true
+	default:
+		return false
+	}
+}
+
 // AuditEntry defines model for AuditEntry.
 type AuditEntry struct {
 	// Action What happened, such as route.updated.
@@ -660,6 +696,191 @@ type AuditList struct {
 	NextCursor *string `json:"nextCursor,omitempty"`
 }
 
+// BenchComparison defines model for BenchComparison.
+type BenchComparison struct {
+	A       BenchRunSummary  `json:"a"`
+	B       BenchRunSummary  `json:"b"`
+	Metrics []BenchMetricRow `json:"metrics"`
+
+	// Scenarios The scenarios of both runs, by ID.
+	Scenarios []BenchScenarioRow `json:"scenarios"`
+}
+
+// BenchConnector defines model for BenchConnector.
+type BenchConnector struct {
+	Connector string  `json:"connector"`
+	Model     *string `json:"model,omitempty"`
+	Provider  *string `json:"provider,omitempty"`
+}
+
+// BenchInterval defines model for BenchInterval.
+type BenchInterval struct {
+	Lower float64 `json:"lower"`
+	Upper float64 `json:"upper"`
+}
+
+// BenchMetricRow defines model for BenchMetricRow.
+type BenchMetricRow struct {
+	A *float64 `json:"a,omitempty"`
+	B *float64 `json:"b,omitempty"`
+
+	// Change b minus a; left out when either run had nothing to count.
+	Change *float64 `json:"change,omitempty"`
+
+	// Difference Whether the confidence intervals of the two runs are apart
+	// (`clear`) or overlap (`none`). It is `unknown` when a run has no
+	// interval for the metric, as for the mean cost and time.
+	Difference string `json:"difference"`
+
+	// Key The metric's key as the metrics and intervals of a run name it.
+	Key   string `json:"key"`
+	Label string `json:"label"`
+}
+
+// BenchMetrics The scores of a run. A share, from 0 to 1, is left out when the run
+// had nothing to count.
+type BenchMetrics struct {
+	CostMicros             int64    `json:"costMicros"`
+	Evidence               *float64 `json:"evidence,omitempty"`
+	FpPrecision            *float64 `json:"fpPrecision,omitempty"`
+	FpRecall               *float64 `json:"fpRecall,omitempty"`
+	InputTokens            int64    `json:"inputTokens"`
+	JudgeCostMicros        int64    `json:"judgeCostMicros"`
+	JudgeErrors            int      `json:"judgeErrors"`
+	MeanCostPerRunUsd      *float64 `json:"meanCostPerRunUsd,omitempty"`
+	MeanDurationMs         *float64 `json:"meanDurationMs,omitempty"`
+	OutputTokens           int64    `json:"outputTokens"`
+	Overall                *float64 `json:"overall,omitempty"`
+	RootCauseMatch         *float64 `json:"rootCauseMatch,omitempty"`
+	RootCauseScore         *float64 `json:"rootCauseScore,omitempty"`
+	Runs                   int      `json:"runs"`
+	SourceFailuresReported *float64 `json:"sourceFailuresReported,omitempty"`
+	ToolCalls              int      `json:"toolCalls"`
+	TpPrecision            *float64 `json:"tpPrecision,omitempty"`
+	TpRecall               *float64 `json:"tpRecall,omitempty"`
+	VerdictAccuracy        *float64 `json:"verdictAccuracy,omitempty"`
+}
+
+// BenchResult defines model for BenchResult.
+type BenchResult struct {
+	CostMicros      int64    `json:"costMicros"`
+	DurationMs      int64    `json:"durationMs"`
+	EvidenceScore   *float64 `json:"evidenceScore,omitempty"`
+	ExpectedVerdict string   `json:"expectedVerdict"`
+	InputTokens     int64    `json:"inputTokens"`
+	OutputTokens    int64    `json:"outputTokens"`
+
+	// Repeat 1 for the first run of the scenario, counting up.
+	Repeat         int      `json:"repeat"`
+	RequiredMet    *bool    `json:"requiredMet,omitempty"`
+	RootCauseScore *float64 `json:"rootCauseScore,omitempty"`
+	ScenarioId     string   `json:"scenarioId"`
+	ToolCalls      int      `json:"toolCalls"`
+
+	// Verdict The verdict the investigation gave; left out when it gave none.
+	Verdict        *string `json:"verdict,omitempty"`
+	VerdictCorrect bool    `json:"verdictCorrect"`
+}
+
+// BenchRun defines model for BenchRun.
+type BenchRun struct {
+	ConfigHash string `json:"configHash"`
+
+	// Connectors The connector and model of each role.
+	Connectors map[string]BenchConnector `json:"connectors"`
+	FinishedAt time.Time                 `json:"finishedAt"`
+	GitSha     string                    `json:"gitSha"`
+	Id         openapi_types.UUID        `json:"id"`
+
+	// Intervals The confidence interval of each share metric, by the metric's key, such as overall or fpPrecision.
+	Intervals          map[string]BenchInterval `json:"intervals"`
+	JudgePromptVersion string                   `json:"judgePromptVersion"`
+	Label              *string                  `json:"label,omitempty"`
+
+	// Metrics The scores of a run. A share, from 0 to 1, is left out when the run
+	// had nothing to count.
+	Metrics         BenchMetrics  `json:"metrics"`
+	PromptVersion   string        `json:"promptVersion"`
+	Repeats         int           `json:"repeats"`
+	Results         []BenchResult `json:"results"`
+	ScenarioSet     string        `json:"scenarioSet"`
+	SidekickVersion string        `json:"sidekickVersion"`
+	StartedAt       time.Time     `json:"startedAt"`
+
+	// Status passed, or failed when a threshold failed.
+	Status string `json:"status"`
+
+	// Strategies The version of each strategy the scenarios used, by name.
+	Strategies map[string]string `json:"strategies"`
+	Thresholds []BenchThreshold  `json:"thresholds"`
+
+	// TriggeredBy cli, ci or gate.
+	TriggeredBy string `json:"triggeredBy"`
+}
+
+// BenchRunList defines model for BenchRunList.
+type BenchRunList struct {
+	// NextCursor Pass as cursor for the next page. Absent on the last page.
+	NextCursor *string           `json:"nextCursor,omitempty"`
+	Runs       []BenchRunSummary `json:"runs"`
+}
+
+// BenchRunSummary defines model for BenchRunSummary.
+type BenchRunSummary struct {
+	// Connectors The connector and model of each role.
+	Connectors map[string]BenchConnector `json:"connectors"`
+	FinishedAt time.Time                 `json:"finishedAt"`
+	GitSha     string                    `json:"gitSha"`
+	Id         openapi_types.UUID        `json:"id"`
+	Label      *string                   `json:"label,omitempty"`
+
+	// Metrics The scores of a run. A share, from 0 to 1, is left out when the run
+	// had nothing to count.
+	Metrics         BenchMetrics `json:"metrics"`
+	Repeats         int          `json:"repeats"`
+	ScenarioSet     string       `json:"scenarioSet"`
+	SidekickVersion string       `json:"sidekickVersion"`
+	StartedAt       time.Time    `json:"startedAt"`
+
+	// Status passed, or failed when a threshold failed.
+	Status string `json:"status"`
+
+	// Strategies The version of each strategy the scenarios used, by name.
+	Strategies map[string]string `json:"strategies"`
+
+	// TriggeredBy cli, ci or gate.
+	TriggeredBy string `json:"triggeredBy"`
+}
+
+// BenchScenarioCounts defines model for BenchScenarioCounts.
+type BenchScenarioCounts struct {
+	// Correct Runs whose verdict counts as correct.
+	Correct int `json:"correct"`
+
+	// RootCauseMean The mean root-cause score of the graded runs; left out when none was graded.
+	RootCauseMean *float64 `json:"rootCauseMean,omitempty"`
+	Runs          int      `json:"runs"`
+}
+
+// BenchScenarioRow defines model for BenchScenarioRow.
+type BenchScenarioRow struct {
+	A               *BenchScenarioCounts `json:"a,omitempty"`
+	B               *BenchScenarioCounts `json:"b,omitempty"`
+	ExpectedVerdict string               `json:"expectedVerdict"`
+	ScenarioId      string               `json:"scenarioId"`
+}
+
+// BenchThreshold defines model for BenchThreshold.
+type BenchThreshold struct {
+	Detail *string `json:"detail,omitempty"`
+	Limit  float64 `json:"limit"`
+	Name   string  `json:"name"`
+	Passed bool    `json:"passed"`
+
+	// Value The run's metric; left out when it had nothing to count.
+	Value *float64 `json:"value,omitempty"`
+}
+
 // CancelResult defines model for CancelResult.
 type CancelResult struct {
 	// Requested False when the investigation had ended or a stop was asked for already.
@@ -676,11 +897,57 @@ type Confirmation struct {
 	Verdict Verdict   `json:"verdict"`
 }
 
+// ConfusionCell defines model for ConfusionCell.
+type ConfusionCell struct {
+	// Confirmed The verdict people confirmed, or `unknown` when they rated the verdict wrong without giving the real one.
+	Confirmed string  `json:"confirmed"`
+	N         int64   `json:"n"`
+	Predicted Verdict `json:"predicted"`
+}
+
+// CostStats defines model for CostStats.
+type CostStats struct {
+	ByModel []SpendModel `json:"byModel"`
+	ByRoute []SpendRoute `json:"byRoute"`
+
+	// DayModels The spend of each day by connector and model, for a chart stacked by model.
+	DayModels []SpendDayModel    `json:"dayModels"`
+	Days      []SpendDay         `json:"days"`
+	From      openapi_types.Date `json:"from"`
+
+	// IgnoredFilters The filters of the request that the spend cannot be filtered by, service and verdict.
+	IgnoredFilters []string `json:"ignoredFilters"`
+
+	// PerInvestigation Investigations and what they cost, by the day they were created.
+	PerInvestigation []InvestigationCostDay `json:"perInvestigation"`
+
+	// Previous The same totals for the range of equal length that ends the day before `from`.
+	Previous                 Spend              `json:"previous"`
+	PreviousPerInvestigation InvestigationCost  `json:"previousPerInvestigation"`
+	To                       openapi_types.Date `json:"to"`
+	Today                    SpendToday         `json:"today"`
+	Totals                   Spend              `json:"totals"`
+}
+
 // CreatedToken defines model for CreatedToken.
 type CreatedToken struct {
 	// Secret The token, sent as "Authorization: Bearer <secret>". It is shown only here.
 	Secret string `json:"secret"`
 	Token  Token  `json:"token"`
+}
+
+// DowntimeRow defines model for DowntimeRow.
+type DowntimeRow struct {
+	DowntimeMsSum int64 `json:"downtimeMsSum"`
+
+	// MedianDowntimeMs About the median downtime; left out when nothing recovered.
+	MedianDowntimeMs *float64 `json:"medianDowntimeMs,omitempty"`
+	Recoveries       int64    `json:"recoveries"`
+	Route            string   `json:"route"`
+
+	// Service Empty when the investigation had no service.
+	Service       string `json:"service"`
+	WatchTimeouts int64  `json:"watchTimeouts"`
 }
 
 // EffectiveConfig defines model for EffectiveConfig.
@@ -838,6 +1105,18 @@ type Fix struct {
 	Title            string  `json:"title"`
 }
 
+// FixApplied defines model for FixApplied.
+type FixApplied struct {
+	// Applied Whether the fix is marked as applied now.
+	Applied bool `json:"applied"`
+
+	// AppliedAt When the fix was marked, while it is marked.
+	AppliedAt *time.Time `json:"appliedAt,omitempty"`
+
+	// Changed Whether this request changed the mark.
+	Changed bool `json:"changed"`
+}
+
 // FollowUp defines model for FollowUp.
 type FollowUp struct {
 	// Answer The answer, or why there is none when answered is false.
@@ -890,6 +1169,9 @@ type Investigation struct {
 	FinishedAt     *time.Time `json:"finishedAt,omitempty"`
 	FirstFindingAt *time.Time `json:"firstFindingAt,omitempty"`
 
+	// FixAppliedAt When a responder marked the fix of a false positive as applied, if one did.
+	FixAppliedAt *time.Time `json:"fixAppliedAt,omitempty"`
+
 	// GroupClosedReason For a closed group, resolved or window_ended.
 	GroupClosedReason *string            `json:"groupClosedReason,omitempty"`
 	GroupId           openapi_types.UUID `json:"groupId"`
@@ -934,6 +1216,19 @@ type Investigation struct {
 
 // InvestigationGroupStatus Whether the group of events is still open. Only an open group, or one closed as resolved, can be resolved.
 type InvestigationGroupStatus string
+
+// InvestigationCost defines model for InvestigationCost.
+type InvestigationCost struct {
+	CostMicros     int64 `json:"costMicros"`
+	Investigations int64 `json:"investigations"`
+}
+
+// InvestigationCostDay defines model for InvestigationCostDay.
+type InvestigationCostDay struct {
+	CostMicros     int64              `json:"costMicros"`
+	Day            openapi_types.Date `json:"day"`
+	Investigations int64              `json:"investigations"`
+}
 
 // InvestigationList defines model for InvestigationList.
 type InvestigationList struct {
@@ -1182,6 +1477,149 @@ type NewToken struct {
 	Role Role   `json:"role"`
 }
 
+// OperationsBucket defines model for OperationsBucket.
+type OperationsBucket struct {
+	ActionsApproved int64 `json:"actionsApproved"`
+	ActionsExecuted int64 `json:"actionsExecuted"`
+	ActionsProposed int64 `json:"actionsProposed"`
+
+	// Bucket The start of the UTC day or hour.
+	Bucket time.Time `json:"bucket"`
+
+	// DowntimeMsSum Their downtime added up.
+	DowntimeMsSum int64 `json:"downtimeMsSum"`
+	DurationMsSum int64 `json:"durationMsSum"`
+
+	// DurationN Those with a duration, which started and ended.
+	DurationN int64 `json:"durationN"`
+
+	// Finished Those that ended, as final, failed or cancelled.
+	Finished int64 `json:"finished"`
+
+	// FirstFindingMsSum The time from creation to the first finding, added up. Divide by firstFindingN for the mean.
+	FirstFindingMsSum int64 `json:"firstFindingMsSum"`
+
+	// FirstFindingN Those with a first finding.
+	FirstFindingN int64 `json:"firstFindingN"`
+
+	// Investigations Investigations created.
+	Investigations int64 `json:"investigations"`
+
+	// NoisyFixed False positives whose fix a responder marked as applied.
+	NoisyFixed int64 `json:"noisyFixed"`
+
+	// Recoveries Groups whose watchers all recovered.
+	Recoveries int64          `json:"recoveries"`
+	ToolCalls  int64          `json:"toolCalls"`
+	Verdicts   []VerdictCount `json:"verdicts"`
+
+	// WatchTimeouts Watchers that timed out.
+	WatchTimeouts int64 `json:"watchTimeouts"`
+}
+
+// OperationsFigures defines model for OperationsFigures.
+type OperationsFigures struct {
+	ActionsApproved int64 `json:"actionsApproved"`
+	ActionsExecuted int64 `json:"actionsExecuted"`
+	ActionsProposed int64 `json:"actionsProposed"`
+
+	// DowntimeMsSum Their downtime added up.
+	DowntimeMsSum int64 `json:"downtimeMsSum"`
+	DurationMsSum int64 `json:"durationMsSum"`
+
+	// DurationN Those with a duration, which started and ended.
+	DurationN int64 `json:"durationN"`
+
+	// Finished Those that ended, as final, failed or cancelled.
+	Finished int64 `json:"finished"`
+
+	// FirstFindingMsSum The time from creation to the first finding, added up. Divide by firstFindingN for the mean.
+	FirstFindingMsSum int64 `json:"firstFindingMsSum"`
+
+	// FirstFindingN Those with a first finding.
+	FirstFindingN int64 `json:"firstFindingN"`
+
+	// Investigations Investigations created.
+	Investigations int64 `json:"investigations"`
+
+	// NoisyFixed False positives whose fix a responder marked as applied.
+	NoisyFixed int64 `json:"noisyFixed"`
+
+	// Recoveries Groups whose watchers all recovered.
+	Recoveries int64 `json:"recoveries"`
+	ToolCalls  int64 `json:"toolCalls"`
+
+	// WatchTimeouts Watchers that timed out.
+	WatchTimeouts int64 `json:"watchTimeouts"`
+}
+
+// OperationsStats defines model for OperationsStats.
+type OperationsStats struct {
+	// Downtime Recoveries and downtime by route and service.
+	Downtime []DowntimeRow           `json:"downtime"`
+	From     openapi_types.Date      `json:"from"`
+	Interval OperationsStatsInterval `json:"interval"`
+
+	// Previous The same totals for the range of equal length that ends the day before `from`.
+	Previous OperationsTotals `json:"previous"`
+
+	// PreviousVerdicts The same for the range of equal length that ends the day before `from`.
+	PreviousVerdicts []VerdictCount `json:"previousVerdicts"`
+
+	// Series One entry for each bucket that has investigations, oldest first.
+	Series []OperationsBucket `json:"series"`
+	To     openapi_types.Date `json:"to"`
+	Totals OperationsTotals   `json:"totals"`
+
+	// Verdicts The investigations of the range by verdict.
+	Verdicts []VerdictCount `json:"verdicts"`
+}
+
+// OperationsStatsInterval defines model for OperationsStats.Interval.
+type OperationsStatsInterval string
+
+// OperationsTotals defines model for OperationsTotals.
+type OperationsTotals struct {
+	ActionsApproved int64 `json:"actionsApproved"`
+	ActionsExecuted int64 `json:"actionsExecuted"`
+	ActionsProposed int64 `json:"actionsProposed"`
+
+	// DowntimeMsSum Their downtime added up.
+	DowntimeMsSum int64 `json:"downtimeMsSum"`
+	DurationMsSum int64 `json:"durationMsSum"`
+
+	// DurationN Those with a duration, which started and ended.
+	DurationN int64 `json:"durationN"`
+
+	// Finished Those that ended, as final, failed or cancelled.
+	Finished int64 `json:"finished"`
+
+	// FirstFindingMsSum The time from creation to the first finding, added up. Divide by firstFindingN for the mean.
+	FirstFindingMsSum int64 `json:"firstFindingMsSum"`
+
+	// FirstFindingN Those with a first finding.
+	FirstFindingN int64 `json:"firstFindingN"`
+
+	// Investigations Investigations created.
+	Investigations int64 `json:"investigations"`
+
+	// MedianDowntimeMs About the median downtime of a recovery; left out when there is none.
+	MedianDowntimeMs *float64 `json:"medianDowntimeMs,omitempty"`
+
+	// MedianFirstFindingMs About the median time from creation to the first finding; left out when there is none.
+	MedianFirstFindingMs *float64 `json:"medianFirstFindingMs,omitempty"`
+
+	// NoisyFixed False positives whose fix a responder marked as applied.
+	NoisyFixed int64 `json:"noisyFixed"`
+
+	// Recoveries Groups whose watchers all recovered.
+	Recoveries int64 `json:"recoveries"`
+	ToolCalls  int64 `json:"toolCalls"`
+
+	// WatchTimeouts Watchers that timed out.
+	WatchTimeouts int64 `json:"watchTimeouts"`
+}
+
 // PendingFollowUp defines model for PendingFollowUp.
 type PendingFollowUp struct {
 	Author    *string   `json:"author,omitempty"`
@@ -1229,6 +1667,56 @@ type Problem struct {
 
 	// Type A URI that names the kind of problem; about:blank when the status says it all.
 	Type string `json:"type"`
+}
+
+// QualityComparison defines model for QualityComparison.
+type QualityComparison struct {
+	Correct int64 `json:"correct"`
+
+	// Model Empty when the investigation had no model turn.
+	Model string `json:"model"`
+	Rated int64  `json:"rated"`
+
+	// Strategy Empty when no strategy was chosen.
+	Strategy string `json:"strategy"`
+}
+
+// QualityDay defines model for QualityDay.
+type QualityDay struct {
+	Correct int64              `json:"correct"`
+	Day     openapi_types.Date `json:"day"`
+	Rated   int64              `json:"rated"`
+}
+
+// QualityStats defines model for QualityStats.
+type QualityStats struct {
+	// Comparison Accuracy by model and strategy, for comparing them.
+	Comparison []QualityComparison `json:"comparison"`
+	Days       []QualityDay        `json:"days"`
+	From       openapi_types.Date  `json:"from"`
+
+	// Matrix Each pair of the verdict given and the verdict confirmed that occurs, with its count.
+	Matrix []ConfusionCell `json:"matrix"`
+
+	// PerVerdict Precision and recall of each verdict that was given or confirmed in the range.
+	PerVerdict []VerdictScore `json:"perVerdict"`
+
+	// Previous The same totals for the range of equal length that ends the day before `from`.
+	Previous QualityTotals      `json:"previous"`
+	To       openapi_types.Date `json:"to"`
+	Totals   QualityTotals      `json:"totals"`
+}
+
+// QualityTotals defines model for QualityTotals.
+type QualityTotals struct {
+	// Accuracy correct over rated, from 0 to 1; left out when nothing was rated.
+	Accuracy *float64 `json:"accuracy,omitempty"`
+
+	// Correct Those whose verdict was confirmed as given.
+	Correct int64 `json:"correct"`
+
+	// Rated The investigations people rated.
+	Rated int64 `json:"rated"`
 }
 
 // Report The result of the investigation. The model wrote its text from what
@@ -1437,6 +1925,83 @@ type SourceCheck struct {
 // SourceCheckStatus defines model for SourceCheck.Status.
 type SourceCheckStatus string
 
+// Spend defines model for Spend.
+type Spend struct {
+	// CostMicros Millionths of a US dollar.
+	CostMicros   int64 `json:"costMicros"`
+	InputTokens  int64 `json:"inputTokens"`
+	OutputTokens int64 `json:"outputTokens"`
+}
+
+// SpendDay defines model for SpendDay.
+type SpendDay struct {
+	// CostMicros Millionths of a US dollar.
+	CostMicros   int64              `json:"costMicros"`
+	Day          openapi_types.Date `json:"day"`
+	InputTokens  int64              `json:"inputTokens"`
+	OutputTokens int64              `json:"outputTokens"`
+}
+
+// SpendDayModel defines model for SpendDayModel.
+type SpendDayModel struct {
+	Connector string `json:"connector"`
+
+	// CostMicros Millionths of a US dollar.
+	CostMicros   int64              `json:"costMicros"`
+	Day          openapi_types.Date `json:"day"`
+	InputTokens  int64              `json:"inputTokens"`
+	Model        string             `json:"model"`
+	OutputTokens int64              `json:"outputTokens"`
+}
+
+// SpendModel defines model for SpendModel.
+type SpendModel struct {
+	Connector string `json:"connector"`
+
+	// CostMicros Millionths of a US dollar.
+	CostMicros   int64  `json:"costMicros"`
+	InputTokens  int64  `json:"inputTokens"`
+	Model        string `json:"model"`
+	OutputTokens int64  `json:"outputTokens"`
+}
+
+// SpendRoute defines model for SpendRoute.
+type SpendRoute struct {
+	// CostMicros Millionths of a US dollar.
+	CostMicros   int64  `json:"costMicros"`
+	InputTokens  int64  `json:"inputTokens"`
+	OutputTokens int64  `json:"outputTokens"`
+	Route        string `json:"route"`
+}
+
+// SpendToday defines model for SpendToday.
+type SpendToday struct {
+	// CapMicros The global daily cap; left out when there is none.
+	CapMicros *int64 `json:"capMicros,omitempty"`
+
+	// Day Today in the time zone of the daily caps.
+	Day    openapi_types.Date `json:"day"`
+	Routes []SpendTodayRoute  `json:"routes"`
+
+	// SpentMicros Spent today by every route together.
+	SpentMicros int64 `json:"spentMicros"`
+}
+
+// SpendTodayRoute defines model for SpendTodayRoute.
+type SpendTodayRoute struct {
+	// CapMicros The route's daily cap; left out when it has none.
+	CapMicros   *int64 `json:"capMicros,omitempty"`
+	Route       string `json:"route"`
+	SpentMicros int64  `json:"spentMicros"`
+}
+
+// StatsFilters defines model for StatsFilters.
+type StatsFilters struct {
+	Models   []string `json:"models"`
+	Routes   []string `json:"routes"`
+	Services []string `json:"services"`
+}
+
 // Step One step of the record. A prompt step has only the first message the
 // model got. Reasoning is shown when the provider returned it. Parts
 // hold text from alerts, sources and the model: show it as plain text.
@@ -1541,6 +2106,33 @@ type TokenList struct {
 // Verdict defines model for Verdict.
 type Verdict string
 
+// VerdictCount defines model for VerdictCount.
+type VerdictCount struct {
+	Investigations int64 `json:"investigations"`
+
+	// Verdict A verdict, or `none` for investigations that have not ended with one.
+	Verdict string `json:"verdict"`
+}
+
+// VerdictScore defines model for VerdictScore.
+type VerdictScore struct {
+	// Actual Rated investigations people confirmed with this verdict.
+	Actual int64 `json:"actual"`
+
+	// Hits Those in both groups.
+	Hits int64 `json:"hits"`
+
+	// Precision hits over predicted; left out when predicted is 0.
+	Precision *float64 `json:"precision,omitempty"`
+
+	// Predicted Rated investigations Sidekick gave this verdict, with a known confirmed verdict.
+	Predicted int64 `json:"predicted"`
+
+	// Recall hits over actual; left out when actual is 0.
+	Recall  *float64 `json:"recall,omitempty"`
+	Verdict Verdict  `json:"verdict"`
+}
+
 // Watcher A check that runs on a schedule until the service is back up or its
 // time is over. The last result comes from the checked service, so
 // show it as plain text.
@@ -1597,11 +2189,32 @@ type WatcherSummary struct {
 	Status WatcherStatus `json:"status"`
 }
 
+// BenchRunID defines model for BenchRunID.
+type BenchRunID = openapi_types.UUID
+
 // InvestigationID defines model for InvestigationID.
 type InvestigationID = openapi_types.UUID
 
 // RuleName defines model for RuleName.
 type RuleName = string
+
+// StatsFrom defines model for StatsFrom.
+type StatsFrom = openapi_types.Date
+
+// StatsModel defines model for StatsModel.
+type StatsModel = string
+
+// StatsRoute defines model for StatsRoute.
+type StatsRoute = string
+
+// StatsService defines model for StatsService.
+type StatsService = string
+
+// StatsTo defines model for StatsTo.
+type StatsTo = openapi_types.Date
+
+// StatsVerdict defines model for StatsVerdict.
+type StatsVerdict = Verdict
 
 // ListAuditParams defines parameters for ListAudit.
 type ListAuditParams struct {
@@ -1622,6 +2235,22 @@ type ListAuditParams struct {
 	// Investigation Only entries of this investigation.
 	Investigation *openapi_types.UUID `form:"investigation,omitempty" json:"investigation,omitempty"`
 
+	// Cursor The nextCursor of the page before.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// CompareBenchRunsParams defines parameters for CompareBenchRuns.
+type CompareBenchRunsParams struct {
+	// A The ID of the first run.
+	A openapi_types.UUID `form:"a" json:"a"`
+
+	// B The ID of the second run.
+	B openapi_types.UUID `form:"b" json:"b"`
+}
+
+// ListBenchRunsParams defines parameters for ListBenchRuns.
+type ListBenchRunsParams struct {
 	// Cursor The nextCursor of the page before.
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
@@ -1683,6 +2312,75 @@ type ListJobsParams struct {
 // ListJobsParamsStatus defines parameters for ListJobs.
 type ListJobsParamsStatus string
 
+// GetCostStatsParams defines parameters for GetCostStats.
+type GetCostStatsParams struct {
+	// From The first day of the range, a UTC date. The default is 29 days before `to`.
+	From *StatsFrom `form:"from,omitempty" json:"from,omitempty"`
+
+	// To The last day of the range, a UTC date, included. The default is today. The range is at most 400 days.
+	To *StatsTo `form:"to,omitempty" json:"to,omitempty"`
+
+	// Route Only investigations of this route.
+	Route *StatsRoute `form:"route,omitempty" json:"route,omitempty"`
+
+	// Service Only investigations of this service.
+	Service *StatsService `form:"service,omitempty" json:"service,omitempty"`
+
+	// Model Only investigations whose first model turn used this model.
+	Model *StatsModel `form:"model,omitempty" json:"model,omitempty"`
+
+	// Verdict Only investigations with this verdict.
+	Verdict *StatsVerdict `form:"verdict,omitempty" json:"verdict,omitempty"`
+}
+
+// GetOperationsStatsParams defines parameters for GetOperationsStats.
+type GetOperationsStatsParams struct {
+	// From The first day of the range, a UTC date. The default is 29 days before `to`.
+	From *StatsFrom `form:"from,omitempty" json:"from,omitempty"`
+
+	// To The last day of the range, a UTC date, included. The default is today. The range is at most 400 days.
+	To *StatsTo `form:"to,omitempty" json:"to,omitempty"`
+
+	// Route Only investigations of this route.
+	Route *StatsRoute `form:"route,omitempty" json:"route,omitempty"`
+
+	// Service Only investigations of this service.
+	Service *StatsService `form:"service,omitempty" json:"service,omitempty"`
+
+	// Model Only investigations whose first model turn used this model.
+	Model *StatsModel `form:"model,omitempty" json:"model,omitempty"`
+
+	// Verdict Only investigations with this verdict.
+	Verdict *StatsVerdict `form:"verdict,omitempty" json:"verdict,omitempty"`
+
+	// Interval The width of a bucket of the series. An hour needs a range of at most 7 days.
+	Interval *GetOperationsStatsParamsInterval `form:"interval,omitempty" json:"interval,omitempty"`
+}
+
+// GetOperationsStatsParamsInterval defines parameters for GetOperationsStats.
+type GetOperationsStatsParamsInterval string
+
+// GetQualityStatsParams defines parameters for GetQualityStats.
+type GetQualityStatsParams struct {
+	// From The first day of the range, a UTC date. The default is 29 days before `to`.
+	From *StatsFrom `form:"from,omitempty" json:"from,omitempty"`
+
+	// To The last day of the range, a UTC date, included. The default is today. The range is at most 400 days.
+	To *StatsTo `form:"to,omitempty" json:"to,omitempty"`
+
+	// Route Only investigations of this route.
+	Route *StatsRoute `form:"route,omitempty" json:"route,omitempty"`
+
+	// Service Only investigations of this service.
+	Service *StatsService `form:"service,omitempty" json:"service,omitempty"`
+
+	// Model Only investigations whose first model turn used this model.
+	Model *StatsModel `form:"model,omitempty" json:"model,omitempty"`
+
+	// Verdict Only investigations with this verdict.
+	Verdict *StatsVerdict `form:"verdict,omitempty" json:"verdict,omitempty"`
+}
+
 // CreateInvestigationFeedbackJSONRequestBody defines body for CreateInvestigationFeedback for application/json ContentType.
 type CreateInvestigationFeedbackJSONRequestBody = NewFeedback
 
@@ -1709,6 +2407,15 @@ type ServerInterface interface {
 	// ListAudit The audit log, newest first, a page at a time
 	// (GET /audit)
 	ListAudit(w http.ResponseWriter, r *http.Request, params ListAuditParams)
+	// CompareBenchRuns Two benchmark runs side by side
+	// (GET /bench/compare)
+	CompareBenchRuns(w http.ResponseWriter, r *http.Request, params CompareBenchRunsParams)
+	// ListBenchRuns Benchmark runs, newest first, a page at a time
+	// (GET /bench/runs)
+	ListBenchRuns(w http.ResponseWriter, r *http.Request, params ListBenchRunsParams)
+	// GetBenchRun One benchmark run with its results
+	// (GET /bench/runs/{id})
+	GetBenchRun(w http.ResponseWriter, r *http.Request, id BenchRunID)
 	// GetConfig The effective config, with secrets shown only as references
 	// (GET /config)
 	GetConfig(w http.ResponseWriter, r *http.Request)
@@ -1727,6 +2434,12 @@ type ServerInterface interface {
 	// CreateInvestigationFeedback Say that one part of an investigation is correct or wrong
 	// (POST /investigations/{id}/feedback)
 	CreateInvestigationFeedback(w http.ResponseWriter, r *http.Request, id InvestigationID)
+	// UnmarkFixApplied Take back the mark that the fix was applied
+	// (DELETE /investigations/{id}/fix-applied)
+	UnmarkFixApplied(w http.ResponseWriter, r *http.Request, id InvestigationID)
+	// MarkFixApplied Mark the fix of a false positive as applied
+	// (PUT /investigations/{id}/fix-applied)
+	MarkFixApplied(w http.ResponseWriter, r *http.Request, id InvestigationID)
 	// AskFollowUp Ask a follow-up question about an investigation
 	// (POST /investigations/{id}/follow-ups)
 	AskFollowUp(w http.ResponseWriter, r *http.Request, id InvestigationID)
@@ -1775,6 +2488,18 @@ type ServerInterface interface {
 	// UpdateRoute Replace a runtime route
 	// (PUT /routes/{name})
 	UpdateRoute(w http.ResponseWriter, r *http.Request, name RuleName)
+	// GetCostStats Spend, tokens and cost per investigation
+	// (GET /stats/cost)
+	GetCostStats(w http.ResponseWriter, r *http.Request, params GetCostStatsParams)
+	// GetStatsFilters The values the dashboard filters offer
+	// (GET /stats/filters)
+	GetStatsFilters(w http.ResponseWriter, r *http.Request)
+	// GetOperationsStats Volume, speed, tool calls, false positives, fixes, actions and downtime
+	// (GET /stats/operations)
+	GetOperationsStats(w http.ResponseWriter, r *http.Request, params GetOperationsStatsParams)
+	// GetQualityStats Verdict accuracy, precision and recall from feedback
+	// (GET /stats/quality)
+	GetQualityStats(w http.ResponseWriter, r *http.Request, params GetQualityStatsParams)
 	// ListTokens Every API token, revoked and expired ones included, newest first
 	// (GET /tokens)
 	ListTokens(w http.ResponseWriter, r *http.Request)
@@ -1900,6 +2625,124 @@ func (siw *ServerInterfaceWrapper) ListAudit(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListAudit(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CompareBenchRuns operation middleware
+func (siw *ServerInterfaceWrapper) CompareBenchRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CompareBenchRunsParams
+
+	// ------------- Required query parameter "a" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "a", r.URL.Query(), &params.A, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "a"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "a", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "b" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "b", r.URL.Query(), &params.B, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "b"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "b", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompareBenchRuns(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListBenchRuns operation middleware
+func (siw *ServerInterfaceWrapper) ListBenchRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListBenchRunsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListBenchRuns(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetBenchRun operation middleware
+func (siw *ServerInterfaceWrapper) GetBenchRun(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id BenchRunID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetBenchRun(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2168,6 +3011,58 @@ func (siw *ServerInterfaceWrapper) CreateInvestigationFeedback(w http.ResponseWr
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateInvestigationFeedback(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UnmarkFixApplied operation middleware
+func (siw *ServerInterfaceWrapper) UnmarkFixApplied(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id InvestigationID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UnmarkFixApplied(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// MarkFixApplied operation middleware
+func (siw *ServerInterfaceWrapper) MarkFixApplied(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id InvestigationID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MarkFixApplied(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2645,6 +3540,327 @@ func (siw *ServerInterfaceWrapper) UpdateRoute(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// GetCostStats operation middleware
+func (siw *ServerInterfaceWrapper) GetCostStats(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetCostStatsParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "route" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "route", r.URL.Query(), &params.Route, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "route"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "route", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "service" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "service", r.URL.Query(), &params.Service, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "service"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "service", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "model" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "model", r.URL.Query(), &params.Model, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "model"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "model", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "verdict" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "verdict", r.URL.Query(), &params.Verdict, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "verdict"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "verdict", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCostStats(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetStatsFilters operation middleware
+func (siw *ServerInterfaceWrapper) GetStatsFilters(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetStatsFilters(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOperationsStats operation middleware
+func (siw *ServerInterfaceWrapper) GetOperationsStats(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetOperationsStatsParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "route" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "route", r.URL.Query(), &params.Route, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "route"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "route", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "service" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "service", r.URL.Query(), &params.Service, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "service"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "service", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "model" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "model", r.URL.Query(), &params.Model, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "model"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "model", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "verdict" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "verdict", r.URL.Query(), &params.Verdict, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "verdict"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "verdict", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "interval" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "interval", r.URL.Query(), &params.Interval, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "interval"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "interval", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOperationsStats(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetQualityStats operation middleware
+func (siw *ServerInterfaceWrapper) GetQualityStats(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetQualityStatsParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "route" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "route", r.URL.Query(), &params.Route, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "route"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "route", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "service" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "service", r.URL.Query(), &params.Service, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "service"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "service", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "model" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "model", r.URL.Query(), &params.Model, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "model"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "model", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "verdict" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "verdict", r.URL.Query(), &params.Verdict, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "verdict"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "verdict", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetQualityStats(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListTokens operation middleware
 func (siw *ServerInterfaceWrapper) ListTokens(w http.ResponseWriter, r *http.Request) {
 
@@ -2872,6 +4088,15 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{id}/cancel", wrapper.CancelInvestigation)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{id}/resolve", wrapper.ResolveInvestigation)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/watchers/{id}/stop", wrapper.StopWatcher)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/investigations/{id}/fix-applied", wrapper.UnmarkFixApplied)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/investigations/{id}/fix-applied", wrapper.MarkFixApplied)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stats/quality", wrapper.GetQualityStats)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stats/filters", wrapper.GetStatsFilters)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stats/cost", wrapper.GetCostStats)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stats/operations", wrapper.GetOperationsStats)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/bench/runs", wrapper.ListBenchRuns)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/bench/runs/{id}", wrapper.GetBenchRun)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/bench/compare", wrapper.CompareBenchRuns)
 
 	return m
 }
@@ -2906,6 +4131,123 @@ type ListAuditdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ListAuditdefaultApplicationProblemPlusJSONResponse) VisitListAuditResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompareBenchRunsRequestObject struct {
+	Params CompareBenchRunsParams
+}
+
+type CompareBenchRunsResponseObject interface {
+	VisitCompareBenchRunsResponse(w http.ResponseWriter) error
+}
+
+type CompareBenchRuns200JSONResponse BenchComparison
+
+func (response CompareBenchRuns200JSONResponse) VisitCompareBenchRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompareBenchRunsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CompareBenchRunsdefaultApplicationProblemPlusJSONResponse) VisitCompareBenchRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListBenchRunsRequestObject struct {
+	Params ListBenchRunsParams
+}
+
+type ListBenchRunsResponseObject interface {
+	VisitListBenchRunsResponse(w http.ResponseWriter) error
+}
+
+type ListBenchRuns200JSONResponse BenchRunList
+
+func (response ListBenchRuns200JSONResponse) VisitListBenchRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListBenchRunsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListBenchRunsdefaultApplicationProblemPlusJSONResponse) VisitListBenchRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBenchRunRequestObject struct {
+	Id BenchRunID `json:"id"`
+}
+
+type GetBenchRunResponseObject interface {
+	VisitGetBenchRunResponse(w http.ResponseWriter) error
+}
+
+type GetBenchRun200JSONResponse BenchRun
+
+func (response GetBenchRun200JSONResponse) VisitGetBenchRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBenchRundefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetBenchRundefaultApplicationProblemPlusJSONResponse) VisitGetBenchRunResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -3140,6 +4482,84 @@ type CreateInvestigationFeedbackdefaultApplicationProblemPlusJSONResponse struct
 }
 
 func (response CreateInvestigationFeedbackdefaultApplicationProblemPlusJSONResponse) VisitCreateInvestigationFeedbackResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnmarkFixAppliedRequestObject struct {
+	Id InvestigationID `json:"id"`
+}
+
+type UnmarkFixAppliedResponseObject interface {
+	VisitUnmarkFixAppliedResponse(w http.ResponseWriter) error
+}
+
+type UnmarkFixApplied200JSONResponse FixApplied
+
+func (response UnmarkFixApplied200JSONResponse) VisitUnmarkFixAppliedResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnmarkFixApplieddefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UnmarkFixApplieddefaultApplicationProblemPlusJSONResponse) VisitUnmarkFixAppliedResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkFixAppliedRequestObject struct {
+	Id InvestigationID `json:"id"`
+}
+
+type MarkFixAppliedResponseObject interface {
+	VisitMarkFixAppliedResponse(w http.ResponseWriter) error
+}
+
+type MarkFixApplied200JSONResponse FixApplied
+
+func (response MarkFixApplied200JSONResponse) VisitMarkFixAppliedResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkFixApplieddefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response MarkFixApplieddefaultApplicationProblemPlusJSONResponse) VisitMarkFixAppliedResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -3788,6 +5208,161 @@ func (response UpdateRoutedefaultApplicationProblemPlusJSONResponse) VisitUpdate
 	return err
 }
 
+type GetCostStatsRequestObject struct {
+	Params GetCostStatsParams
+}
+
+type GetCostStatsResponseObject interface {
+	VisitGetCostStatsResponse(w http.ResponseWriter) error
+}
+
+type GetCostStats200JSONResponse CostStats
+
+func (response GetCostStats200JSONResponse) VisitGetCostStatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCostStatsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetCostStatsdefaultApplicationProblemPlusJSONResponse) VisitGetCostStatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStatsFiltersRequestObject struct {
+}
+
+type GetStatsFiltersResponseObject interface {
+	VisitGetStatsFiltersResponse(w http.ResponseWriter) error
+}
+
+type GetStatsFilters200JSONResponse StatsFilters
+
+func (response GetStatsFilters200JSONResponse) VisitGetStatsFiltersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStatsFiltersdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetStatsFiltersdefaultApplicationProblemPlusJSONResponse) VisitGetStatsFiltersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOperationsStatsRequestObject struct {
+	Params GetOperationsStatsParams
+}
+
+type GetOperationsStatsResponseObject interface {
+	VisitGetOperationsStatsResponse(w http.ResponseWriter) error
+}
+
+type GetOperationsStats200JSONResponse OperationsStats
+
+func (response GetOperationsStats200JSONResponse) VisitGetOperationsStatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOperationsStatsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetOperationsStatsdefaultApplicationProblemPlusJSONResponse) VisitGetOperationsStatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetQualityStatsRequestObject struct {
+	Params GetQualityStatsParams
+}
+
+type GetQualityStatsResponseObject interface {
+	VisitGetQualityStatsResponse(w http.ResponseWriter) error
+}
+
+type GetQualityStats200JSONResponse QualityStats
+
+func (response GetQualityStats200JSONResponse) VisitGetQualityStatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetQualityStatsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetQualityStatsdefaultApplicationProblemPlusJSONResponse) VisitGetQualityStatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListTokensRequestObject struct {
 }
 
@@ -3942,6 +5517,15 @@ type StrictServerInterface interface {
 	// ListAudit The audit log, newest first, a page at a time
 	// (GET /audit)
 	ListAudit(ctx context.Context, request ListAuditRequestObject) (ListAuditResponseObject, error)
+	// CompareBenchRuns Two benchmark runs side by side
+	// (GET /bench/compare)
+	CompareBenchRuns(ctx context.Context, request CompareBenchRunsRequestObject) (CompareBenchRunsResponseObject, error)
+	// ListBenchRuns Benchmark runs, newest first, a page at a time
+	// (GET /bench/runs)
+	ListBenchRuns(ctx context.Context, request ListBenchRunsRequestObject) (ListBenchRunsResponseObject, error)
+	// GetBenchRun One benchmark run with its results
+	// (GET /bench/runs/{id})
+	GetBenchRun(ctx context.Context, request GetBenchRunRequestObject) (GetBenchRunResponseObject, error)
 	// GetConfig The effective config, with secrets shown only as references
 	// (GET /config)
 	GetConfig(ctx context.Context, request GetConfigRequestObject) (GetConfigResponseObject, error)
@@ -3960,6 +5544,12 @@ type StrictServerInterface interface {
 	// CreateInvestigationFeedback Say that one part of an investigation is correct or wrong
 	// (POST /investigations/{id}/feedback)
 	CreateInvestigationFeedback(ctx context.Context, request CreateInvestigationFeedbackRequestObject) (CreateInvestigationFeedbackResponseObject, error)
+	// UnmarkFixApplied Take back the mark that the fix was applied
+	// (DELETE /investigations/{id}/fix-applied)
+	UnmarkFixApplied(ctx context.Context, request UnmarkFixAppliedRequestObject) (UnmarkFixAppliedResponseObject, error)
+	// MarkFixApplied Mark the fix of a false positive as applied
+	// (PUT /investigations/{id}/fix-applied)
+	MarkFixApplied(ctx context.Context, request MarkFixAppliedRequestObject) (MarkFixAppliedResponseObject, error)
 	// AskFollowUp Ask a follow-up question about an investigation
 	// (POST /investigations/{id}/follow-ups)
 	AskFollowUp(ctx context.Context, request AskFollowUpRequestObject) (AskFollowUpResponseObject, error)
@@ -4008,6 +5598,18 @@ type StrictServerInterface interface {
 	// UpdateRoute Replace a runtime route
 	// (PUT /routes/{name})
 	UpdateRoute(ctx context.Context, request UpdateRouteRequestObject) (UpdateRouteResponseObject, error)
+	// GetCostStats Spend, tokens and cost per investigation
+	// (GET /stats/cost)
+	GetCostStats(ctx context.Context, request GetCostStatsRequestObject) (GetCostStatsResponseObject, error)
+	// GetStatsFilters The values the dashboard filters offer
+	// (GET /stats/filters)
+	GetStatsFilters(ctx context.Context, request GetStatsFiltersRequestObject) (GetStatsFiltersResponseObject, error)
+	// GetOperationsStats Volume, speed, tool calls, false positives, fixes, actions and downtime
+	// (GET /stats/operations)
+	GetOperationsStats(ctx context.Context, request GetOperationsStatsRequestObject) (GetOperationsStatsResponseObject, error)
+	// GetQualityStats Verdict accuracy, precision and recall from feedback
+	// (GET /stats/quality)
+	GetQualityStats(ctx context.Context, request GetQualityStatsRequestObject) (GetQualityStatsResponseObject, error)
 	// ListTokens Every API token, revoked and expired ones included, newest first
 	// (GET /tokens)
 	ListTokens(ctx context.Context, request ListTokensRequestObject) (ListTokensResponseObject, error)
@@ -4080,6 +5682,84 @@ func (sh *strictHandler) ListAudit(w http.ResponseWriter, r *http.Request, param
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListAuditResponseObject); ok {
 		if err := validResponse.VisitListAuditResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CompareBenchRuns operation middleware
+func (sh *strictHandler) CompareBenchRuns(w http.ResponseWriter, r *http.Request, params CompareBenchRunsParams) {
+	var request CompareBenchRunsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CompareBenchRuns(ctx, request.(CompareBenchRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CompareBenchRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CompareBenchRunsResponseObject); ok {
+		if err := validResponse.VisitCompareBenchRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListBenchRuns operation middleware
+func (sh *strictHandler) ListBenchRuns(w http.ResponseWriter, r *http.Request, params ListBenchRunsParams) {
+	var request ListBenchRunsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListBenchRuns(ctx, request.(ListBenchRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListBenchRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListBenchRunsResponseObject); ok {
+		if err := validResponse.VisitListBenchRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetBenchRun operation middleware
+func (sh *strictHandler) GetBenchRun(w http.ResponseWriter, r *http.Request, id BenchRunID) {
+	var request GetBenchRunRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetBenchRun(ctx, request.(GetBenchRunRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetBenchRun")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetBenchRunResponseObject); ok {
+		if err := validResponse.VisitGetBenchRunResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -4241,6 +5921,58 @@ func (sh *strictHandler) CreateInvestigationFeedback(w http.ResponseWriter, r *h
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreateInvestigationFeedbackResponseObject); ok {
 		if err := validResponse.VisitCreateInvestigationFeedbackResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UnmarkFixApplied operation middleware
+func (sh *strictHandler) UnmarkFixApplied(w http.ResponseWriter, r *http.Request, id InvestigationID) {
+	var request UnmarkFixAppliedRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UnmarkFixApplied(ctx, request.(UnmarkFixAppliedRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UnmarkFixApplied")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UnmarkFixAppliedResponseObject); ok {
+		if err := validResponse.VisitUnmarkFixAppliedResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// MarkFixApplied operation middleware
+func (sh *strictHandler) MarkFixApplied(w http.ResponseWriter, r *http.Request, id InvestigationID) {
+	var request MarkFixAppliedRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.MarkFixApplied(ctx, request.(MarkFixAppliedRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "MarkFixApplied")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(MarkFixAppliedResponseObject); ok {
+		if err := validResponse.VisitMarkFixAppliedResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -4684,6 +6416,108 @@ func (sh *strictHandler) UpdateRoute(w http.ResponseWriter, r *http.Request, nam
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateRouteResponseObject); ok {
 		if err := validResponse.VisitUpdateRouteResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCostStats operation middleware
+func (sh *strictHandler) GetCostStats(w http.ResponseWriter, r *http.Request, params GetCostStatsParams) {
+	var request GetCostStatsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCostStats(ctx, request.(GetCostStatsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCostStats")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCostStatsResponseObject); ok {
+		if err := validResponse.VisitGetCostStatsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetStatsFilters operation middleware
+func (sh *strictHandler) GetStatsFilters(w http.ResponseWriter, r *http.Request) {
+	var request GetStatsFiltersRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetStatsFilters(ctx, request.(GetStatsFiltersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetStatsFilters")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetStatsFiltersResponseObject); ok {
+		if err := validResponse.VisitGetStatsFiltersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetOperationsStats operation middleware
+func (sh *strictHandler) GetOperationsStats(w http.ResponseWriter, r *http.Request, params GetOperationsStatsParams) {
+	var request GetOperationsStatsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetOperationsStats(ctx, request.(GetOperationsStatsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetOperationsStats")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetOperationsStatsResponseObject); ok {
+		if err := validResponse.VisitGetOperationsStatsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetQualityStats operation middleware
+func (sh *strictHandler) GetQualityStats(w http.ResponseWriter, r *http.Request, params GetQualityStatsParams) {
+	var request GetQualityStatsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetQualityStats(ctx, request.(GetQualityStatsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetQualityStats")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetQualityStatsResponseObject); ok {
+		if err := validResponse.VisitGetQualityStatsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

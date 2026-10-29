@@ -1,0 +1,50 @@
+-- Two years of rollups for the query plan tests of the stats endpoints,
+-- ending on the day the test runs: 17,520 hours of stats in 3 routes, 20
+-- services, 3 models and 6 verdicts (2 rows an hour), quality rows for
+-- every day (up to 40 a day), and spend for every day, route, connector
+-- and model, and 1,000 benchmark runs with 30 results each.
+INSERT INTO stats_hourly (
+  hour, route, service, model, verdict,
+  investigations, finished, duration_n, duration_ms_sum, first_finding_n, first_finding_ms_sum, first_finding_hist,
+  tool_calls, cost_micros, input_tokens, output_tokens, noisy_fixed,
+  recoveries, downtime_ms_sum, downtime_hist, watch_timeouts
+)
+SELECT date_trunc('hour', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' - make_interval(hours => h),
+       'route-' || ((h + r) % 3), 'service-' || ((h * 7 + r) % 20), 'model-' || ((h + r) % 3),
+       (ARRAY['true_positive', 'false_positive', 'inconclusive', 'duplicate', 'known_issue', 'flapping'])[1 + (h + r) % 6],
+       3, 3, 3, 300000, 3, 90000, array_fill(0, ARRAY[24]),
+       12, 3000, 1500, 600, (h % 5 = 0)::int,
+       (h % 7 = 0)::int, CASE WHEN h % 7 = 0 THEN 600000 ELSE 0 END, array_fill(0, ARRAY[24]), (h % 11 = 0)::int
+FROM generate_series(0, 17519) AS h, generate_series(0, 1) AS r
+ON CONFLICT DO NOTHING;
+
+INSERT INTO quality_daily (day, route, service, model, strategy, predicted, confirmed, n)
+SELECT (now() AT TIME ZONE 'UTC')::date - d,
+       'route-' || (i % 3), 'service-' || (i % 20), 'model-' || (i % 3), 'strategy-' || (i % 2),
+       (ARRAY['true_positive', 'false_positive', 'inconclusive', 'duplicate', 'known_issue', 'flapping'])[1 + i % 6],
+       (ARRAY['true_positive', 'false_positive', 'inconclusive', 'duplicate', 'known_issue', 'flapping', 'unknown'])[1 + (i / 2) % 7],
+       1 + i % 4
+FROM generate_series(0, 729) AS d, generate_series(1, 40) AS i
+ON CONFLICT DO NOTHING;
+
+INSERT INTO spend_daily (day, route, connector, model, cost_micros, input_tokens, output_tokens)
+SELECT (now() AT TIME ZONE 'UTC')::date - d, 'route-' || r, 'connector-' || c, 'model-' || m, 1000 + d, 500, 250
+FROM generate_series(0, 729) AS d, generate_series(0, 2) AS r, generate_series(0, 1) AS c, generate_series(0, 2) AS m
+ON CONFLICT DO NOTHING;
+
+INSERT INTO bench_runs (
+  id, label, started_at, finished_at, sidekick_version, git_sha, config_hash, connectors, strategies,
+  scenario_set, repeats, summary, status, triggered_by
+)
+SELECT md5('run' || i)::uuid, 'run ' || i, now() - make_interval(hours => i), now() - make_interval(hours => i) + interval '10 minutes',
+       'v0.9.0', 'abc1234', 'cfg', '{"investigate": {"connector": "claude", "model": "m"}}', '{}', 'starter', 3,
+       '{"metrics": {"runs": 30, "overall": 0.5}, "intervals": {}, "thresholds": []}', 'passed', 'cli'
+FROM generate_series(1, 1000) AS i;
+
+INSERT INTO bench_results (
+  run_id, scenario_id, repeat, verdict, expected_verdict, verdict_correct, cost_micros, duration_ms, input_tokens, output_tokens, tool_calls
+)
+SELECT md5('run' || i)::uuid, 's' || sc, r, 'false_positive', 'false_positive', (r % 2 = 0), 1000, 1000, 100, 50, 3
+FROM generate_series(1, 1000) AS i, generate_series(1, 10) AS sc, generate_series(1, 3) AS r;
+
+ANALYZE stats_hourly, quality_daily, spend_daily, bench_runs, bench_results;

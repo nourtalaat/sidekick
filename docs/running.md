@@ -155,6 +155,9 @@ process (`process_*`) metrics, this release has:
 | `sidekick_watcher_checks_total` | counter | `type`, `result` | [Watcher](configuration.md#watch) checks by type (`http`, `tool` or `alert`) and result (`pass`, `fail` or `error`). |
 | `sidekick_watcher_check_duration_seconds` | histogram | `type` | Duration of watcher checks. |
 | `sidekick_retention_deleted_rows_total` | counter | `table` | Rows the daily [retention](configuration.md#retention) job deleted on this replica, by table, such as `events` or `audit_log`. The steps, inbox rows and other records deleted together with an investigation are not counted on their own. |
+| `sidekick_rollup_buckets_total` | counter | `table` | Hours and days of the dashboard's tables (`stats_hourly` and `quality_daily`) that the once-a-minute rollup job on this replica counted again. |
+| `sidekick_rollup_run_duration_seconds` | histogram | none | How long a rollup run took on this replica. |
+| `sidekick_rollup_dirty_buckets` | gauge | none | Hours and days that waited for a recount when the last rollup run on this replica ended. It stays above 0 for a minute after a burst of changes and should return to 0. |
 | `sidekick_watchers_running` | gauge | none | Watchers running in the deployment. Read from the database at each scrape, so every replica reports the same number; combine replicas with `max`. |
 | `sidekick_watcher_state_changes_total` | counter | `status` | Watcher state changes on this replica, by the new state: `started`, `recovered`, `timed_out` or `stopped`. |
 | `sidekick_watch_http_blocked_total` | counter | `reason` | Watcher HTTP checks the safety rules refused, by reason: `host`, `private_ip` or `redirect`. |

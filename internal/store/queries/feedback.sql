@@ -113,3 +113,17 @@ FROM feedback
 WHERE investigation_id = @investigation_id AND user_id = @user_id
   AND (target_kind = 'tool_call' OR starts_with(target_ref, @run_prefix::text))
 ORDER BY target_kind, target_ref;
+
+-- name: SetFixApplied :one
+-- SetFixApplied marks the fix of an investigation as applied, now, by the
+-- user or API token with ID by. Lock the investigation first.
+UPDATE investigations
+SET fix_applied_at = now(), fix_applied_by = sqlc.narg(by)
+WHERE id = @id
+RETURNING fix_applied_at::timestamptz AS fix_applied_at;
+
+-- name: ClearFixApplied :exec
+-- ClearFixApplied takes the mark that the fix was applied away.
+UPDATE investigations
+SET fix_applied_at = NULL, fix_applied_by = NULL, fix_applied_by_slack_user = NULL
+WHERE id = @id;

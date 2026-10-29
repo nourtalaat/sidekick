@@ -746,6 +746,244 @@ paths:
                 $ref: "#/components/schemas/StopWatcherResult"
         default:
           $ref: "#/components/responses/Problem"
+  /investigations/{id}/fix-applied:
+    put:
+      operationId: MarkFixApplied
+      summary: Mark the fix of a false positive as applied
+      description: |
+        Records that a responder applied the change that stops a false
+        positive from firing again, such as a new monitor threshold. The
+        dashboard counts it under noisy alerts fixed. Only an investigation
+        that ended with the verdict false_positive has a fix to mark; any
+        other answers 409. Marking one that is marked already changes
+        nothing, writes no audit row and answers with `changed` false.
+      x-sidekick-role: responder
+      parameters:
+        - $ref: "#/components/parameters/InvestigationID"
+      responses:
+        "200":
+          description: The mark after the request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FixApplied"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: UnmarkFixApplied
+      summary: Take back the mark that the fix was applied
+      description: |
+        Takes the mark away, for a fix that was marked by mistake. Taking
+        back a mark that is not there changes nothing, writes no audit row
+        and answers with `changed` false.
+      x-sidekick-role: responder
+      parameters:
+        - $ref: "#/components/parameters/InvestigationID"
+      responses:
+        "200":
+          description: The mark after the request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FixApplied"
+        default:
+          $ref: "#/components/responses/Problem"
+  /stats/quality:
+    get:
+      operationId: GetQualityStats
+      summary: Verdict accuracy, precision and recall from feedback
+      description: |
+        The verdict Sidekick gave against the verdict people confirmed, for
+        the investigations created in the range, read from the daily
+        rollup. Days are UTC dates. Only investigations that people rated
+        count: those with a confirmed verdict, and those whose verdict was
+        rated wrong without a real verdict, which count as confirmed
+        `unknown`; they are wrong in the accuracy and left out of precision
+        and recall. The `verdict` filter selects the verdict Sidekick gave.
+        The rollup is recounted once a minute, so the newest changes can
+        take that long to show.
+      x-sidekick-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/StatsFrom"
+        - $ref: "#/components/parameters/StatsTo"
+        - $ref: "#/components/parameters/StatsRoute"
+        - $ref: "#/components/parameters/StatsService"
+        - $ref: "#/components/parameters/StatsModel"
+        - $ref: "#/components/parameters/StatsVerdict"
+      responses:
+        "200":
+          description: The quality numbers of the range and of the range before it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QualityStats"
+        default:
+          $ref: "#/components/responses/Problem"
+  /stats/filters:
+    get:
+      operationId: GetStatsFilters
+      summary: The values the dashboard filters offer
+      description: |
+        The routes, services and models of the investigations of the last
+        400 days, for the filter menus of the dashboard.
+      x-sidekick-role: viewer
+      responses:
+        "200":
+          description: The values, sorted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatsFilters"
+        default:
+          $ref: "#/components/responses/Problem"
+  /stats/cost:
+    get:
+      operationId: GetCostStats
+      summary: Spend, tokens and cost per investigation
+      description: |
+        What model calls cost in the range, by day, model and route, with
+        the tokens in and out, and what the day's cap leaves; from the
+        daily spend table the caps read. Days are UTC dates for the range
+        and follow `budgets.daily.timeZone` for the spend and the caps. The
+        spend table has no service or verdict, so those filters do not
+        apply to it and `ignoredFilters` names the ones that were given.
+        The cost per investigation comes from the hourly rollup and takes
+        every filter.
+      x-sidekick-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/StatsFrom"
+        - $ref: "#/components/parameters/StatsTo"
+        - $ref: "#/components/parameters/StatsRoute"
+        - $ref: "#/components/parameters/StatsService"
+        - $ref: "#/components/parameters/StatsModel"
+        - $ref: "#/components/parameters/StatsVerdict"
+      responses:
+        "200":
+          description: The spend of the range and of the range before it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CostStats"
+        default:
+          $ref: "#/components/responses/Problem"
+  /stats/operations:
+    get:
+      operationId: GetOperationsStats
+      summary: Volume, speed, tool calls, false positives, fixes, actions and downtime
+      description: |
+        What the investigations created in the range did, from the hourly
+        rollup, by UTC day or hour. A median is worked out from counts in
+        buckets of growing width, so it is about right (within a third),
+        not exact. The downtime is the time from the first event of a group
+        to the last recovery of its watchers, for groups whose watchers all
+        recovered. Actions are 0 until actions exist.
+      x-sidekick-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/StatsFrom"
+        - $ref: "#/components/parameters/StatsTo"
+        - $ref: "#/components/parameters/StatsRoute"
+        - $ref: "#/components/parameters/StatsService"
+        - $ref: "#/components/parameters/StatsModel"
+        - $ref: "#/components/parameters/StatsVerdict"
+        - name: interval
+          in: query
+          description: The width of a bucket of the series. An hour needs a range of at most 7 days.
+          schema:
+            type: string
+            enum: [day, hour]
+            default: day
+      responses:
+        "200":
+          description: The numbers of the range and of the range before it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsStats"
+        default:
+          $ref: "#/components/responses/Problem"
+  /bench/runs:
+    get:
+      operationId: ListBenchRuns
+      summary: Benchmark runs, newest first, a page at a time
+      description: |
+        The runs that `sidekick bench run --db` stored, with their settings
+        and headline metrics.
+      x-sidekick-role: viewer
+      parameters:
+        - name: cursor
+          in: query
+          description: The nextCursor of the page before.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: A page of runs.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BenchRunList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /bench/runs/{id}:
+    get:
+      operationId: GetBenchRun
+      summary: One benchmark run with its results
+      description: |
+        The run's settings, its metrics with their confidence intervals and
+        thresholds, and the result of each run of each scenario. The judge's
+        reasons are left out, since they are model output.
+      x-sidekick-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/BenchRunID"
+      responses:
+        "200":
+          description: The run.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BenchRun"
+        default:
+          $ref: "#/components/responses/Problem"
+  /bench/compare:
+    get:
+      operationId: CompareBenchRuns
+      summary: Two benchmark runs side by side
+      description: |
+        Each metric of the two runs with the change from a to b and whether
+        their confidence intervals overlap, and each scenario's correct
+        runs. A scenario that only one run has shows the other as absent.
+      x-sidekick-role: viewer
+      parameters:
+        - name: a
+          in: query
+          required: true
+          description: The ID of the first run.
+          schema:
+            type: string
+            format: uuid
+        - name: b
+          in: query
+          required: true
+          description: The ID of the second run.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The comparison.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BenchComparison"
+        default:
+          $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
     session:
@@ -772,6 +1010,52 @@ components:
       name: id
       in: path
       required: true
+      schema:
+        type: string
+        format: uuid
+    StatsFrom:
+      name: from
+      in: query
+      description: The first day of the range, a UTC date. The default is 29 days before `to`.
+      schema:
+        type: string
+        format: date
+    StatsTo:
+      name: to
+      in: query
+      description: The last day of the range, a UTC date, included. The default is today. The range is at most 400 days.
+      schema:
+        type: string
+        format: date
+    StatsRoute:
+      name: route
+      in: query
+      description: Only investigations of this route.
+      schema:
+        type: string
+    StatsService:
+      name: service
+      in: query
+      description: Only investigations of this service.
+      schema:
+        type: string
+    StatsModel:
+      name: model
+      in: query
+      description: Only investigations whose first model turn used this model.
+      schema:
+        type: string
+    StatsVerdict:
+      name: verdict
+      in: query
+      description: Only investigations with this verdict.
+      schema:
+        $ref: "#/components/schemas/Verdict"
+    BenchRunID:
+      name: id
+      in: path
+      required: true
+      description: The ID of a benchmark run.
       schema:
         type: string
         format: uuid
@@ -1548,6 +1832,10 @@ components:
           description: When a responder asked to stop the run, while it has not stopped yet.
         confirmation:
           $ref: "#/components/schemas/Confirmation"
+        fixAppliedAt:
+          type: string
+          format: date-time
+          description: When a responder marked the fix of a false positive as applied, if one did.
         report:
           $ref: "#/components/schemas/Report"
         eventCount:
@@ -2101,3 +2389,760 @@ components:
         instance:
           type: string
           description: The path of the request.
+    FixApplied:
+      type: object
+      required: [applied, changed]
+      properties:
+        applied:
+          type: boolean
+          description: Whether the fix is marked as applied now.
+        changed:
+          type: boolean
+          description: Whether this request changed the mark.
+        appliedAt:
+          type: string
+          format: date-time
+          description: When the fix was marked, while it is marked.
+    QualityStats:
+      type: object
+      required: [from, to, totals, previous, days, matrix, perVerdict, comparison]
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        totals:
+          $ref: "#/components/schemas/QualityTotals"
+        previous:
+          allOf:
+            - $ref: "#/components/schemas/QualityTotals"
+          description: The same totals for the range of equal length that ends the day before `from`.
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/QualityDay"
+        matrix:
+          type: array
+          description: Each pair of the verdict given and the verdict confirmed that occurs, with its count.
+          items:
+            $ref: "#/components/schemas/ConfusionCell"
+        perVerdict:
+          type: array
+          description: Precision and recall of each verdict that was given or confirmed in the range.
+          items:
+            $ref: "#/components/schemas/VerdictScore"
+        comparison:
+          type: array
+          description: Accuracy by model and strategy, for comparing them.
+          items:
+            $ref: "#/components/schemas/QualityComparison"
+    QualityTotals:
+      type: object
+      required: [rated, correct]
+      properties:
+        rated:
+          type: integer
+          format: int64
+          description: The investigations people rated.
+        correct:
+          type: integer
+          format: int64
+          description: Those whose verdict was confirmed as given.
+        accuracy:
+          type: number
+          format: double
+          description: correct over rated, from 0 to 1; left out when nothing was rated.
+    QualityDay:
+      type: object
+      required: [day, rated, correct]
+      properties:
+        day:
+          type: string
+          format: date
+        rated:
+          type: integer
+          format: int64
+        correct:
+          type: integer
+          format: int64
+    ConfusionCell:
+      type: object
+      required: [predicted, confirmed, n]
+      properties:
+        predicted:
+          $ref: "#/components/schemas/Verdict"
+        confirmed:
+          type: string
+          description: The verdict people confirmed, or `unknown` when they rated the verdict wrong without giving the real one.
+        n:
+          type: integer
+          format: int64
+    VerdictScore:
+      type: object
+      required: [verdict, predicted, actual, hits]
+      properties:
+        verdict:
+          $ref: "#/components/schemas/Verdict"
+        predicted:
+          type: integer
+          format: int64
+          description: Rated investigations Sidekick gave this verdict, with a known confirmed verdict.
+        actual:
+          type: integer
+          format: int64
+          description: Rated investigations people confirmed with this verdict.
+        hits:
+          type: integer
+          format: int64
+          description: Those in both groups.
+        precision:
+          type: number
+          format: double
+          description: hits over predicted; left out when predicted is 0.
+        recall:
+          type: number
+          format: double
+          description: hits over actual; left out when actual is 0.
+    QualityComparison:
+      type: object
+      required: [model, strategy, rated, correct]
+      properties:
+        model:
+          type: string
+          description: Empty when the investigation had no model turn.
+        strategy:
+          type: string
+          description: Empty when no strategy was chosen.
+        rated:
+          type: integer
+          format: int64
+        correct:
+          type: integer
+          format: int64
+    StatsFilters:
+      type: object
+      required: [routes, services, models]
+      properties:
+        routes:
+          type: array
+          items:
+            type: string
+        services:
+          type: array
+          items:
+            type: string
+        models:
+          type: array
+          items:
+            type: string
+    CostStats:
+      type: object
+      required: [from, to, ignoredFilters, totals, previous, days, dayModels, byModel, byRoute, perInvestigation, previousPerInvestigation, today]
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        ignoredFilters:
+          type: array
+          description: The filters of the request that the spend cannot be filtered by, service and verdict.
+          items:
+            type: string
+        totals:
+          $ref: "#/components/schemas/Spend"
+        previous:
+          allOf:
+            - $ref: "#/components/schemas/Spend"
+          description: The same totals for the range of equal length that ends the day before `from`.
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpendDay"
+        dayModels:
+          type: array
+          description: The spend of each day by connector and model, for a chart stacked by model.
+          items:
+            $ref: "#/components/schemas/SpendDayModel"
+        byModel:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpendModel"
+        byRoute:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpendRoute"
+        perInvestigation:
+          type: array
+          description: Investigations and what they cost, by the day they were created.
+          items:
+            $ref: "#/components/schemas/InvestigationCostDay"
+        previousPerInvestigation:
+          $ref: "#/components/schemas/InvestigationCost"
+        today:
+          $ref: "#/components/schemas/SpendToday"
+    Spend:
+      type: object
+      required: [costMicros, inputTokens, outputTokens]
+      properties:
+        costMicros:
+          type: integer
+          format: int64
+          description: Millionths of a US dollar.
+        inputTokens:
+          type: integer
+          format: int64
+        outputTokens:
+          type: integer
+          format: int64
+    SpendDay:
+      allOf:
+        - $ref: "#/components/schemas/Spend"
+        - type: object
+          required: [day]
+          properties:
+            day:
+              type: string
+              format: date
+    SpendDayModel:
+      allOf:
+        - $ref: "#/components/schemas/SpendDay"
+        - type: object
+          required: [connector, model]
+          properties:
+            connector:
+              type: string
+            model:
+              type: string
+    SpendModel:
+      allOf:
+        - $ref: "#/components/schemas/Spend"
+        - type: object
+          required: [connector, model]
+          properties:
+            connector:
+              type: string
+            model:
+              type: string
+    SpendRoute:
+      allOf:
+        - $ref: "#/components/schemas/Spend"
+        - type: object
+          required: [route]
+          properties:
+            route:
+              type: string
+    InvestigationCost:
+      type: object
+      required: [investigations, costMicros]
+      properties:
+        investigations:
+          type: integer
+          format: int64
+        costMicros:
+          type: integer
+          format: int64
+    InvestigationCostDay:
+      allOf:
+        - $ref: "#/components/schemas/InvestigationCost"
+        - type: object
+          required: [day]
+          properties:
+            day:
+              type: string
+              format: date
+    SpendToday:
+      type: object
+      required: [day, spentMicros, routes]
+      properties:
+        day:
+          type: string
+          format: date
+          description: Today in the time zone of the daily caps.
+        spentMicros:
+          type: integer
+          format: int64
+          description: Spent today by every route together.
+        capMicros:
+          type: integer
+          format: int64
+          description: The global daily cap; left out when there is none.
+        routes:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpendTodayRoute"
+    SpendTodayRoute:
+      type: object
+      required: [route, spentMicros]
+      properties:
+        route:
+          type: string
+        spentMicros:
+          type: integer
+          format: int64
+        capMicros:
+          type: integer
+          format: int64
+          description: The route's daily cap; left out when it has none.
+    OperationsStats:
+      type: object
+      required: [from, to, interval, series, totals, previous, verdicts, previousVerdicts, downtime]
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        interval:
+          type: string
+          enum: [day, hour]
+        series:
+          type: array
+          description: One entry for each bucket that has investigations, oldest first.
+          items:
+            $ref: "#/components/schemas/OperationsBucket"
+        totals:
+          $ref: "#/components/schemas/OperationsTotals"
+        previous:
+          allOf:
+            - $ref: "#/components/schemas/OperationsTotals"
+          description: The same totals for the range of equal length that ends the day before `from`.
+        verdicts:
+          type: array
+          description: The investigations of the range by verdict.
+          items:
+            $ref: "#/components/schemas/VerdictCount"
+        previousVerdicts:
+          type: array
+          description: The same for the range of equal length that ends the day before `from`.
+          items:
+            $ref: "#/components/schemas/VerdictCount"
+        downtime:
+          type: array
+          description: Recoveries and downtime by route and service.
+          items:
+            $ref: "#/components/schemas/DowntimeRow"
+    OperationsFigures:
+      type: object
+      required:
+        - investigations
+        - finished
+        - durationN
+        - durationMsSum
+        - firstFindingN
+        - firstFindingMsSum
+        - toolCalls
+        - noisyFixed
+        - actionsProposed
+        - actionsApproved
+        - actionsExecuted
+        - recoveries
+        - downtimeMsSum
+        - watchTimeouts
+      properties:
+        investigations:
+          type: integer
+          format: int64
+          description: Investigations created.
+        finished:
+          type: integer
+          format: int64
+          description: Those that ended, as final, failed or cancelled.
+        durationN:
+          type: integer
+          format: int64
+          description: Those with a duration, which started and ended.
+        durationMsSum:
+          type: integer
+          format: int64
+        firstFindingN:
+          type: integer
+          format: int64
+          description: Those with a first finding.
+        firstFindingMsSum:
+          type: integer
+          format: int64
+          description: The time from creation to the first finding, added up. Divide by firstFindingN for the mean.
+        toolCalls:
+          type: integer
+          format: int64
+        noisyFixed:
+          type: integer
+          format: int64
+          description: False positives whose fix a responder marked as applied.
+        actionsProposed:
+          type: integer
+          format: int64
+        actionsApproved:
+          type: integer
+          format: int64
+        actionsExecuted:
+          type: integer
+          format: int64
+        recoveries:
+          type: integer
+          format: int64
+          description: Groups whose watchers all recovered.
+        downtimeMsSum:
+          type: integer
+          format: int64
+          description: Their downtime added up.
+        watchTimeouts:
+          type: integer
+          format: int64
+          description: Watchers that timed out.
+    OperationsBucket:
+      allOf:
+        - $ref: "#/components/schemas/OperationsFigures"
+        - type: object
+          required: [bucket, verdicts]
+          properties:
+            bucket:
+              type: string
+              format: date-time
+              description: The start of the UTC day or hour.
+            verdicts:
+              type: array
+              items:
+                $ref: "#/components/schemas/VerdictCount"
+    OperationsTotals:
+      allOf:
+        - $ref: "#/components/schemas/OperationsFigures"
+        - type: object
+          properties:
+            medianFirstFindingMs:
+              type: number
+              format: double
+              description: About the median time from creation to the first finding; left out when there is none.
+            medianDowntimeMs:
+              type: number
+              format: double
+              description: About the median downtime of a recovery; left out when there is none.
+    VerdictCount:
+      type: object
+      required: [verdict, investigations]
+      properties:
+        verdict:
+          type: string
+          description: A verdict, or `none` for investigations that have not ended with one.
+        investigations:
+          type: integer
+          format: int64
+    DowntimeRow:
+      type: object
+      required: [route, service, recoveries, downtimeMsSum, watchTimeouts]
+      properties:
+        route:
+          type: string
+        service:
+          type: string
+          description: Empty when the investigation had no service.
+        recoveries:
+          type: integer
+          format: int64
+        downtimeMsSum:
+          type: integer
+          format: int64
+        watchTimeouts:
+          type: integer
+          format: int64
+        medianDowntimeMs:
+          type: number
+          format: double
+          description: About the median downtime; left out when nothing recovered.
+    BenchRunList:
+      type: object
+      required: [runs]
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: "#/components/schemas/BenchRunSummary"
+        nextCursor:
+          type: string
+          description: Pass as cursor for the next page. Absent on the last page.
+    BenchRunSummary:
+      type: object
+      required:
+        - id
+        - startedAt
+        - finishedAt
+        - sidekickVersion
+        - gitSha
+        - connectors
+        - strategies
+        - scenarioSet
+        - repeats
+        - status
+        - triggeredBy
+        - metrics
+      properties:
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+        sidekickVersion:
+          type: string
+        gitSha:
+          type: string
+        connectors:
+          type: object
+          description: The connector and model of each role.
+          additionalProperties:
+            $ref: "#/components/schemas/BenchConnector"
+        strategies:
+          type: object
+          description: The version of each strategy the scenarios used, by name.
+          additionalProperties:
+            type: string
+        scenarioSet:
+          type: string
+        repeats:
+          type: integer
+        status:
+          type: string
+          description: passed, or failed when a threshold failed.
+        triggeredBy:
+          type: string
+          description: cli, ci or gate.
+        metrics:
+          $ref: "#/components/schemas/BenchMetrics"
+    BenchConnector:
+      type: object
+      required: [connector]
+      properties:
+        connector:
+          type: string
+        provider:
+          type: string
+        model:
+          type: string
+    BenchMetrics:
+      type: object
+      description: |
+        The scores of a run. A share, from 0 to 1, is left out when the run
+        had nothing to count.
+      required: [runs, toolCalls, inputTokens, outputTokens, costMicros, judgeCostMicros, judgeErrors]
+      properties:
+        runs:
+          type: integer
+        overall:
+          type: number
+          format: double
+        verdictAccuracy:
+          type: number
+          format: double
+        fpPrecision:
+          type: number
+          format: double
+        fpRecall:
+          type: number
+          format: double
+        tpPrecision:
+          type: number
+          format: double
+        tpRecall:
+          type: number
+          format: double
+        rootCauseMatch:
+          type: number
+          format: double
+        rootCauseScore:
+          type: number
+          format: double
+        evidence:
+          type: number
+          format: double
+        sourceFailuresReported:
+          type: number
+          format: double
+        meanCostPerRunUsd:
+          type: number
+          format: double
+        meanDurationMs:
+          type: number
+          format: double
+        toolCalls:
+          type: integer
+        inputTokens:
+          type: integer
+          format: int64
+        outputTokens:
+          type: integer
+          format: int64
+        costMicros:
+          type: integer
+          format: int64
+        judgeCostMicros:
+          type: integer
+          format: int64
+        judgeErrors:
+          type: integer
+    BenchRun:
+      allOf:
+        - $ref: "#/components/schemas/BenchRunSummary"
+        - type: object
+          required: [configHash, promptVersion, judgePromptVersion, intervals, thresholds, results]
+          properties:
+            configHash:
+              type: string
+            promptVersion:
+              type: string
+            judgePromptVersion:
+              type: string
+            intervals:
+              type: object
+              description: The confidence interval of each share metric, by the metric's key, such as overall or fpPrecision.
+              additionalProperties:
+                $ref: "#/components/schemas/BenchInterval"
+            thresholds:
+              type: array
+              items:
+                $ref: "#/components/schemas/BenchThreshold"
+            results:
+              type: array
+              items:
+                $ref: "#/components/schemas/BenchResult"
+    BenchInterval:
+      type: object
+      required: [lower, upper]
+      properties:
+        lower:
+          type: number
+          format: double
+        upper:
+          type: number
+          format: double
+    BenchThreshold:
+      type: object
+      required: [name, limit, passed]
+      properties:
+        name:
+          type: string
+        limit:
+          type: number
+          format: double
+        value:
+          type: number
+          format: double
+          description: The run's metric; left out when it had nothing to count.
+        passed:
+          type: boolean
+        detail:
+          type: string
+    BenchResult:
+      type: object
+      required: [scenarioId, repeat, expectedVerdict, verdictCorrect, costMicros, durationMs, inputTokens, outputTokens, toolCalls]
+      properties:
+        scenarioId:
+          type: string
+        repeat:
+          type: integer
+          description: 1 for the first run of the scenario, counting up.
+        verdict:
+          type: string
+          description: The verdict the investigation gave; left out when it gave none.
+        expectedVerdict:
+          type: string
+        verdictCorrect:
+          type: boolean
+        rootCauseScore:
+          type: number
+          format: double
+        requiredMet:
+          type: boolean
+        evidenceScore:
+          type: number
+          format: double
+        costMicros:
+          type: integer
+          format: int64
+        durationMs:
+          type: integer
+          format: int64
+        inputTokens:
+          type: integer
+          format: int64
+        outputTokens:
+          type: integer
+          format: int64
+        toolCalls:
+          type: integer
+    BenchComparison:
+      type: object
+      required: [a, b, metrics, scenarios]
+      properties:
+        a:
+          $ref: "#/components/schemas/BenchRunSummary"
+        b:
+          $ref: "#/components/schemas/BenchRunSummary"
+        metrics:
+          type: array
+          items:
+            $ref: "#/components/schemas/BenchMetricRow"
+        scenarios:
+          type: array
+          description: The scenarios of both runs, by ID.
+          items:
+            $ref: "#/components/schemas/BenchScenarioRow"
+    BenchMetricRow:
+      type: object
+      required: [key, label, difference]
+      properties:
+        key:
+          type: string
+          description: The metric's key as the metrics and intervals of a run name it.
+        label:
+          type: string
+        a:
+          type: number
+          format: double
+        b:
+          type: number
+          format: double
+        change:
+          type: number
+          format: double
+          description: b minus a; left out when either run had nothing to count.
+        difference:
+          type: string
+          description: |
+            Whether the confidence intervals of the two runs are apart
+            (`clear`) or overlap (`none`). It is `unknown` when a run has no
+            interval for the metric, as for the mean cost and time.
+    BenchScenarioRow:
+      type: object
+      required: [scenarioId, expectedVerdict]
+      properties:
+        scenarioId:
+          type: string
+        expectedVerdict:
+          type: string
+        a:
+          $ref: "#/components/schemas/BenchScenarioCounts"
+        b:
+          $ref: "#/components/schemas/BenchScenarioCounts"
+    BenchScenarioCounts:
+      type: object
+      required: [runs, correct]
+      properties:
+        runs:
+          type: integer
+        correct:
+          type: integer
+          description: Runs whose verdict counts as correct.
+        rootCauseMean:
+          type: number
+          format: double
+          description: The mean root-cause score of the graded runs; left out when none was graded.

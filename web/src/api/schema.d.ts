@@ -522,6 +522,203 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations/{id}/fix-applied": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Mark the fix of a false positive as applied
+         * @description Records that a responder applied the change that stops a false
+         *     positive from firing again, such as a new monitor threshold. The
+         *     dashboard counts it under noisy alerts fixed. Only an investigation
+         *     that ended with the verdict false_positive has a fix to mark; any
+         *     other answers 409. Marking one that is marked already changes
+         *     nothing, writes no audit row and answers with `changed` false.
+         */
+        put: operations["MarkFixApplied"];
+        post?: never;
+        /**
+         * Take back the mark that the fix was applied
+         * @description Takes the mark away, for a fix that was marked by mistake. Taking
+         *     back a mark that is not there changes nothing, writes no audit row
+         *     and answers with `changed` false.
+         */
+        delete: operations["UnmarkFixApplied"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stats/quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Verdict accuracy, precision and recall from feedback
+         * @description The verdict Sidekick gave against the verdict people confirmed, for
+         *     the investigations created in the range, read from the daily
+         *     rollup. Days are UTC dates. Only investigations that people rated
+         *     count: those with a confirmed verdict, and those whose verdict was
+         *     rated wrong without a real verdict, which count as confirmed
+         *     `unknown`; they are wrong in the accuracy and left out of precision
+         *     and recall. The `verdict` filter selects the verdict Sidekick gave.
+         *     The rollup is recounted once a minute, so the newest changes can
+         *     take that long to show.
+         */
+        get: operations["GetQualityStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stats/filters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The values the dashboard filters offer
+         * @description The routes, services and models of the investigations of the last
+         *     400 days, for the filter menus of the dashboard.
+         */
+        get: operations["GetStatsFilters"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stats/cost": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Spend, tokens and cost per investigation
+         * @description What model calls cost in the range, by day, model and route, with
+         *     the tokens in and out, and what the day's cap leaves; from the
+         *     daily spend table the caps read. Days are UTC dates for the range
+         *     and follow `budgets.daily.timeZone` for the spend and the caps. The
+         *     spend table has no service or verdict, so those filters do not
+         *     apply to it and `ignoredFilters` names the ones that were given.
+         *     The cost per investigation comes from the hourly rollup and takes
+         *     every filter.
+         */
+        get: operations["GetCostStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stats/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Volume, speed, tool calls, false positives, fixes, actions and downtime
+         * @description What the investigations created in the range did, from the hourly
+         *     rollup, by UTC day or hour. A median is worked out from counts in
+         *     buckets of growing width, so it is about right (within a third),
+         *     not exact. The downtime is the time from the first event of a group
+         *     to the last recovery of its watchers, for groups whose watchers all
+         *     recovered. Actions are 0 until actions exist.
+         */
+        get: operations["GetOperationsStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bench/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Benchmark runs, newest first, a page at a time
+         * @description The runs that `sidekick bench run --db` stored, with their settings
+         *     and headline metrics.
+         */
+        get: operations["ListBenchRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bench/runs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One benchmark run with its results
+         * @description The run's settings, its metrics with their confidence intervals and
+         *     thresholds, and the result of each run of each scenario. The judge's
+         *     reasons are left out, since they are model output.
+         */
+        get: operations["GetBenchRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bench/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Two benchmark runs side by side
+         * @description Each metric of the two runs with the change from a to b and whether
+         *     their confidence intervals overlap, and each scenario's correct
+         *     runs. A scenario that only one run has shows the other as absent.
+         */
+        get: operations["CompareBenchRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -985,6 +1182,11 @@ export interface components {
              */
             cancelRequestedAt?: string;
             confirmation?: components["schemas"]["Confirmation"];
+            /**
+             * Format: date-time
+             * @description When a responder marked the fix of a false positive as applied, if one did.
+             */
+            fixAppliedAt?: string;
             report?: components["schemas"]["Report"];
             /** @description How many events the group has, which can be more than events lists. */
             eventCount: number;
@@ -1303,6 +1505,482 @@ export interface components {
             /** @description The path of the request. */
             instance?: string;
         };
+        FixApplied: {
+            /** @description Whether the fix is marked as applied now. */
+            applied: boolean;
+            /** @description Whether this request changed the mark. */
+            changed: boolean;
+            /**
+             * Format: date-time
+             * @description When the fix was marked, while it is marked.
+             */
+            appliedAt?: string;
+        };
+        QualityStats: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            totals: components["schemas"]["QualityTotals"];
+            /** @description The same totals for the range of equal length that ends the day before `from`. */
+            previous: components["schemas"]["QualityTotals"];
+            days: components["schemas"]["QualityDay"][];
+            /** @description Each pair of the verdict given and the verdict confirmed that occurs, with its count. */
+            matrix: components["schemas"]["ConfusionCell"][];
+            /** @description Precision and recall of each verdict that was given or confirmed in the range. */
+            perVerdict: components["schemas"]["VerdictScore"][];
+            /** @description Accuracy by model and strategy, for comparing them. */
+            comparison: components["schemas"]["QualityComparison"][];
+        };
+        QualityTotals: {
+            /**
+             * Format: int64
+             * @description The investigations people rated.
+             */
+            rated: number;
+            /**
+             * Format: int64
+             * @description Those whose verdict was confirmed as given.
+             */
+            correct: number;
+            /**
+             * Format: double
+             * @description correct over rated, from 0 to 1; left out when nothing was rated.
+             */
+            accuracy?: number;
+        };
+        QualityDay: {
+            /** Format: date */
+            day: string;
+            /** Format: int64 */
+            rated: number;
+            /** Format: int64 */
+            correct: number;
+        };
+        ConfusionCell: {
+            predicted: components["schemas"]["Verdict"];
+            /** @description The verdict people confirmed, or `unknown` when they rated the verdict wrong without giving the real one. */
+            confirmed: string;
+            /** Format: int64 */
+            n: number;
+        };
+        VerdictScore: {
+            verdict: components["schemas"]["Verdict"];
+            /**
+             * Format: int64
+             * @description Rated investigations Sidekick gave this verdict, with a known confirmed verdict.
+             */
+            predicted: number;
+            /**
+             * Format: int64
+             * @description Rated investigations people confirmed with this verdict.
+             */
+            actual: number;
+            /**
+             * Format: int64
+             * @description Those in both groups.
+             */
+            hits: number;
+            /**
+             * Format: double
+             * @description hits over predicted; left out when predicted is 0.
+             */
+            precision?: number;
+            /**
+             * Format: double
+             * @description hits over actual; left out when actual is 0.
+             */
+            recall?: number;
+        };
+        QualityComparison: {
+            /** @description Empty when the investigation had no model turn. */
+            model: string;
+            /** @description Empty when no strategy was chosen. */
+            strategy: string;
+            /** Format: int64 */
+            rated: number;
+            /** Format: int64 */
+            correct: number;
+        };
+        StatsFilters: {
+            routes: string[];
+            services: string[];
+            models: string[];
+        };
+        CostStats: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            /** @description The filters of the request that the spend cannot be filtered by, service and verdict. */
+            ignoredFilters: string[];
+            totals: components["schemas"]["Spend"];
+            /** @description The same totals for the range of equal length that ends the day before `from`. */
+            previous: components["schemas"]["Spend"];
+            days: components["schemas"]["SpendDay"][];
+            /** @description The spend of each day by connector and model, for a chart stacked by model. */
+            dayModels: components["schemas"]["SpendDayModel"][];
+            byModel: components["schemas"]["SpendModel"][];
+            byRoute: components["schemas"]["SpendRoute"][];
+            /** @description Investigations and what they cost, by the day they were created. */
+            perInvestigation: components["schemas"]["InvestigationCostDay"][];
+            previousPerInvestigation: components["schemas"]["InvestigationCost"];
+            today: components["schemas"]["SpendToday"];
+        };
+        Spend: {
+            /**
+             * Format: int64
+             * @description Millionths of a US dollar.
+             */
+            costMicros: number;
+            /** Format: int64 */
+            inputTokens: number;
+            /** Format: int64 */
+            outputTokens: number;
+        };
+        SpendDay: components["schemas"]["Spend"] & {
+            /** Format: date */
+            day: string;
+        };
+        SpendDayModel: components["schemas"]["SpendDay"] & {
+            connector: string;
+            model: string;
+        };
+        SpendModel: components["schemas"]["Spend"] & {
+            connector: string;
+            model: string;
+        };
+        SpendRoute: components["schemas"]["Spend"] & {
+            route: string;
+        };
+        InvestigationCost: {
+            /** Format: int64 */
+            investigations: number;
+            /** Format: int64 */
+            costMicros: number;
+        };
+        InvestigationCostDay: components["schemas"]["InvestigationCost"] & {
+            /** Format: date */
+            day: string;
+        };
+        SpendToday: {
+            /**
+             * Format: date
+             * @description Today in the time zone of the daily caps.
+             */
+            day: string;
+            /**
+             * Format: int64
+             * @description Spent today by every route together.
+             */
+            spentMicros: number;
+            /**
+             * Format: int64
+             * @description The global daily cap; left out when there is none.
+             */
+            capMicros?: number;
+            routes: components["schemas"]["SpendTodayRoute"][];
+        };
+        SpendTodayRoute: {
+            route: string;
+            /** Format: int64 */
+            spentMicros: number;
+            /**
+             * Format: int64
+             * @description The route's daily cap; left out when it has none.
+             */
+            capMicros?: number;
+        };
+        OperationsStats: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            /** @enum {string} */
+            interval: "day" | "hour";
+            /** @description One entry for each bucket that has investigations, oldest first. */
+            series: components["schemas"]["OperationsBucket"][];
+            totals: components["schemas"]["OperationsTotals"];
+            /** @description The same totals for the range of equal length that ends the day before `from`. */
+            previous: components["schemas"]["OperationsTotals"];
+            /** @description The investigations of the range by verdict. */
+            verdicts: components["schemas"]["VerdictCount"][];
+            /** @description The same for the range of equal length that ends the day before `from`. */
+            previousVerdicts: components["schemas"]["VerdictCount"][];
+            /** @description Recoveries and downtime by route and service. */
+            downtime: components["schemas"]["DowntimeRow"][];
+        };
+        OperationsFigures: {
+            /**
+             * Format: int64
+             * @description Investigations created.
+             */
+            investigations: number;
+            /**
+             * Format: int64
+             * @description Those that ended, as final, failed or cancelled.
+             */
+            finished: number;
+            /**
+             * Format: int64
+             * @description Those with a duration, which started and ended.
+             */
+            durationN: number;
+            /** Format: int64 */
+            durationMsSum: number;
+            /**
+             * Format: int64
+             * @description Those with a first finding.
+             */
+            firstFindingN: number;
+            /**
+             * Format: int64
+             * @description The time from creation to the first finding, added up. Divide by firstFindingN for the mean.
+             */
+            firstFindingMsSum: number;
+            /** Format: int64 */
+            toolCalls: number;
+            /**
+             * Format: int64
+             * @description False positives whose fix a responder marked as applied.
+             */
+            noisyFixed: number;
+            /** Format: int64 */
+            actionsProposed: number;
+            /** Format: int64 */
+            actionsApproved: number;
+            /** Format: int64 */
+            actionsExecuted: number;
+            /**
+             * Format: int64
+             * @description Groups whose watchers all recovered.
+             */
+            recoveries: number;
+            /**
+             * Format: int64
+             * @description Their downtime added up.
+             */
+            downtimeMsSum: number;
+            /**
+             * Format: int64
+             * @description Watchers that timed out.
+             */
+            watchTimeouts: number;
+        };
+        OperationsBucket: components["schemas"]["OperationsFigures"] & {
+            /**
+             * Format: date-time
+             * @description The start of the UTC day or hour.
+             */
+            bucket: string;
+            verdicts: components["schemas"]["VerdictCount"][];
+        };
+        OperationsTotals: components["schemas"]["OperationsFigures"] & {
+            /**
+             * Format: double
+             * @description About the median time from creation to the first finding; left out when there is none.
+             */
+            medianFirstFindingMs?: number;
+            /**
+             * Format: double
+             * @description About the median downtime of a recovery; left out when there is none.
+             */
+            medianDowntimeMs?: number;
+        };
+        VerdictCount: {
+            /** @description A verdict, or `none` for investigations that have not ended with one. */
+            verdict: string;
+            /** Format: int64 */
+            investigations: number;
+        };
+        DowntimeRow: {
+            route: string;
+            /** @description Empty when the investigation had no service. */
+            service: string;
+            /** Format: int64 */
+            recoveries: number;
+            /** Format: int64 */
+            downtimeMsSum: number;
+            /** Format: int64 */
+            watchTimeouts: number;
+            /**
+             * Format: double
+             * @description About the median downtime; left out when nothing recovered.
+             */
+            medianDowntimeMs?: number;
+        };
+        BenchRunList: {
+            runs: components["schemas"]["BenchRunSummary"][];
+            /** @description Pass as cursor for the next page. Absent on the last page. */
+            nextCursor?: string;
+        };
+        BenchRunSummary: {
+            /** Format: uuid */
+            id: string;
+            label?: string;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            finishedAt: string;
+            sidekickVersion: string;
+            gitSha: string;
+            /** @description The connector and model of each role. */
+            connectors: {
+                [key: string]: components["schemas"]["BenchConnector"];
+            };
+            /** @description The version of each strategy the scenarios used, by name. */
+            strategies: {
+                [key: string]: string;
+            };
+            scenarioSet: string;
+            repeats: number;
+            /** @description passed, or failed when a threshold failed. */
+            status: string;
+            /** @description cli, ci or gate. */
+            triggeredBy: string;
+            metrics: components["schemas"]["BenchMetrics"];
+        };
+        BenchConnector: {
+            connector: string;
+            provider?: string;
+            model?: string;
+        };
+        /**
+         * @description The scores of a run. A share, from 0 to 1, is left out when the run
+         *     had nothing to count.
+         */
+        BenchMetrics: {
+            runs: number;
+            /** Format: double */
+            overall?: number;
+            /** Format: double */
+            verdictAccuracy?: number;
+            /** Format: double */
+            fpPrecision?: number;
+            /** Format: double */
+            fpRecall?: number;
+            /** Format: double */
+            tpPrecision?: number;
+            /** Format: double */
+            tpRecall?: number;
+            /** Format: double */
+            rootCauseMatch?: number;
+            /** Format: double */
+            rootCauseScore?: number;
+            /** Format: double */
+            evidence?: number;
+            /** Format: double */
+            sourceFailuresReported?: number;
+            /** Format: double */
+            meanCostPerRunUsd?: number;
+            /** Format: double */
+            meanDurationMs?: number;
+            toolCalls: number;
+            /** Format: int64 */
+            inputTokens: number;
+            /** Format: int64 */
+            outputTokens: number;
+            /** Format: int64 */
+            costMicros: number;
+            /** Format: int64 */
+            judgeCostMicros: number;
+            judgeErrors: number;
+        };
+        BenchRun: components["schemas"]["BenchRunSummary"] & {
+            configHash: string;
+            promptVersion: string;
+            judgePromptVersion: string;
+            /** @description The confidence interval of each share metric, by the metric's key, such as overall or fpPrecision. */
+            intervals: {
+                [key: string]: components["schemas"]["BenchInterval"];
+            };
+            thresholds: components["schemas"]["BenchThreshold"][];
+            results: components["schemas"]["BenchResult"][];
+        };
+        BenchInterval: {
+            /** Format: double */
+            lower: number;
+            /** Format: double */
+            upper: number;
+        };
+        BenchThreshold: {
+            name: string;
+            /** Format: double */
+            limit: number;
+            /**
+             * Format: double
+             * @description The run's metric; left out when it had nothing to count.
+             */
+            value?: number;
+            passed: boolean;
+            detail?: string;
+        };
+        BenchResult: {
+            scenarioId: string;
+            /** @description 1 for the first run of the scenario, counting up. */
+            repeat: number;
+            /** @description The verdict the investigation gave; left out when it gave none. */
+            verdict?: string;
+            expectedVerdict: string;
+            verdictCorrect: boolean;
+            /** Format: double */
+            rootCauseScore?: number;
+            requiredMet?: boolean;
+            /** Format: double */
+            evidenceScore?: number;
+            /** Format: int64 */
+            costMicros: number;
+            /** Format: int64 */
+            durationMs: number;
+            /** Format: int64 */
+            inputTokens: number;
+            /** Format: int64 */
+            outputTokens: number;
+            toolCalls: number;
+        };
+        BenchComparison: {
+            a: components["schemas"]["BenchRunSummary"];
+            b: components["schemas"]["BenchRunSummary"];
+            metrics: components["schemas"]["BenchMetricRow"][];
+            /** @description The scenarios of both runs, by ID. */
+            scenarios: components["schemas"]["BenchScenarioRow"][];
+        };
+        BenchMetricRow: {
+            /** @description The metric's key as the metrics and intervals of a run name it. */
+            key: string;
+            label: string;
+            /** Format: double */
+            a?: number;
+            /** Format: double */
+            b?: number;
+            /**
+             * Format: double
+             * @description b minus a; left out when either run had nothing to count.
+             */
+            change?: number;
+            /**
+             * @description Whether the confidence intervals of the two runs are apart
+             *     (`clear`) or overlap (`none`). It is `unknown` when a run has no
+             *     interval for the metric, as for the mean cost and time.
+             */
+            difference: string;
+        };
+        BenchScenarioRow: {
+            scenarioId: string;
+            expectedVerdict: string;
+            a?: components["schemas"]["BenchScenarioCounts"];
+            b?: components["schemas"]["BenchScenarioCounts"];
+        };
+        BenchScenarioCounts: {
+            runs: number;
+            /** @description Runs whose verdict counts as correct. */
+            correct: number;
+            /**
+             * Format: double
+             * @description The mean root-cause score of the graded runs; left out when none was graded.
+             */
+            rootCauseMean?: number;
+        };
     };
     responses: {
         /** @description An error, as problem details. */
@@ -1319,6 +1997,20 @@ export interface components {
         /** @description The name of a listener or route. */
         RuleName: string;
         InvestigationID: string;
+        /** @description The first day of the range, a UTC date. The default is 29 days before `to`. */
+        StatsFrom: string;
+        /** @description The last day of the range, a UTC date, included. The default is today. The range is at most 400 days. */
+        StatsTo: string;
+        /** @description Only investigations of this route. */
+        StatsRoute: string;
+        /** @description Only investigations of this service. */
+        StatsService: string;
+        /** @description Only investigations whose first model turn used this model. */
+        StatsModel: string;
+        /** @description Only investigations with this verdict. */
+        StatsVerdict: components["schemas"]["Verdict"];
+        /** @description The ID of a benchmark run. */
+        BenchRunID: string;
     };
     requestBodies: never;
     headers: never;
@@ -1999,6 +2691,252 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StopWatcherResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    MarkFixApplied: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["InvestigationID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The mark after the request. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixApplied"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UnmarkFixApplied: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["InvestigationID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The mark after the request. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixApplied"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetQualityStats: {
+        parameters: {
+            query?: {
+                /** @description The first day of the range, a UTC date. The default is 29 days before `to`. */
+                from?: components["parameters"]["StatsFrom"];
+                /** @description The last day of the range, a UTC date, included. The default is today. The range is at most 400 days. */
+                to?: components["parameters"]["StatsTo"];
+                /** @description Only investigations of this route. */
+                route?: components["parameters"]["StatsRoute"];
+                /** @description Only investigations of this service. */
+                service?: components["parameters"]["StatsService"];
+                /** @description Only investigations whose first model turn used this model. */
+                model?: components["parameters"]["StatsModel"];
+                /** @description Only investigations with this verdict. */
+                verdict?: components["parameters"]["StatsVerdict"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The quality numbers of the range and of the range before it. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualityStats"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetStatsFilters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The values, sorted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatsFilters"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetCostStats: {
+        parameters: {
+            query?: {
+                /** @description The first day of the range, a UTC date. The default is 29 days before `to`. */
+                from?: components["parameters"]["StatsFrom"];
+                /** @description The last day of the range, a UTC date, included. The default is today. The range is at most 400 days. */
+                to?: components["parameters"]["StatsTo"];
+                /** @description Only investigations of this route. */
+                route?: components["parameters"]["StatsRoute"];
+                /** @description Only investigations of this service. */
+                service?: components["parameters"]["StatsService"];
+                /** @description Only investigations whose first model turn used this model. */
+                model?: components["parameters"]["StatsModel"];
+                /** @description Only investigations with this verdict. */
+                verdict?: components["parameters"]["StatsVerdict"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The spend of the range and of the range before it. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CostStats"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetOperationsStats: {
+        parameters: {
+            query?: {
+                /** @description The first day of the range, a UTC date. The default is 29 days before `to`. */
+                from?: components["parameters"]["StatsFrom"];
+                /** @description The last day of the range, a UTC date, included. The default is today. The range is at most 400 days. */
+                to?: components["parameters"]["StatsTo"];
+                /** @description Only investigations of this route. */
+                route?: components["parameters"]["StatsRoute"];
+                /** @description Only investigations of this service. */
+                service?: components["parameters"]["StatsService"];
+                /** @description Only investigations whose first model turn used this model. */
+                model?: components["parameters"]["StatsModel"];
+                /** @description Only investigations with this verdict. */
+                verdict?: components["parameters"]["StatsVerdict"];
+                /** @description The width of a bucket of the series. An hour needs a range of at most 7 days. */
+                interval?: "day" | "hour";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The numbers of the range and of the range before it. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsStats"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListBenchRuns: {
+        parameters: {
+            query?: {
+                /** @description The nextCursor of the page before. */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of runs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchRunList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetBenchRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The ID of a benchmark run. */
+                id: components["parameters"]["BenchRunID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchRun"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CompareBenchRuns: {
+        parameters: {
+            query: {
+                /** @description The ID of the first run. */
+                a: string;
+                /** @description The ID of the second run. */
+                b: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The comparison. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchComparison"];
                 };
             };
             default: components["responses"]["Problem"];

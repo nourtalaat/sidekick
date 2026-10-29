@@ -167,6 +167,9 @@ type Investigation struct {
 	AlertTitle                 *string
 	Service                    *string
 	Model                      *string
+	FixAppliedAt               *time.Time
+	FixAppliedBy               *uuid.UUID
+	FixAppliedBySlackUser      *string
 }
 
 type InvestigationInbox struct {
@@ -257,10 +260,27 @@ type PublishState struct {
 	UpdateSeq       *int64
 }
 
+type QualityDaily struct {
+	Day       pgtype.Date
+	Route     string
+	Service   string
+	Model     string
+	Strategy  string
+	Predicted string
+	Confirmed string
+	N         int32
+}
+
 type RateAdmission struct {
 	Scope      string
 	EventID    uuid.UUID
 	AdmittedAt time.Time
+}
+
+type RollupDirty struct {
+	TableName string
+	Bucket    time.Time
+	MarkedAt  time.Time
 }
 
 type Route struct {
@@ -306,6 +326,33 @@ type SpendDaily struct {
 	CostMicros   int64
 	InputTokens  int64
 	OutputTokens int64
+}
+
+type StatsHourly struct {
+	Hour              time.Time
+	Route             string
+	Service           string
+	Model             string
+	Verdict           string
+	Investigations    int32
+	Finished          int32
+	DurationN         int32
+	DurationMsSum     int64
+	FirstFindingN     int32
+	FirstFindingMsSum int64
+	FirstFindingHist  []int32
+	ToolCalls         int32
+	CostMicros        int64
+	InputTokens       int64
+	OutputTokens      int64
+	NoisyFixed        int32
+	ActionsProposed   int32
+	ActionsApproved   int32
+	ActionsExecuted   int32
+	Recoveries        int32
+	DowntimeMsSum     int64
+	DowntimeHist      []int32
+	WatchTimeouts     int32
 }
 
 type Step struct {
