@@ -109,6 +109,7 @@ func (v *validator) run() {
 	v.checkBudgets()
 	v.checkReport()
 	v.checkMemory()
+	v.checkProposals()
 	v.checkRedaction()
 	v.checkTelemetry()
 	v.checkWatch()
@@ -584,6 +585,33 @@ func (v *validator) checkReport() {
 	c := v.cfg.Report.MinFalsePositiveConfidence
 	if c != "" && !slices.Contains(knownConfidence, c) {
 		v.errs.add("report.minFalsePositiveConfidence", "unknown confidence %q%s", c, didYouMean(string(c), asStrings(knownConfidence)))
+	}
+}
+
+// checkProposals checks the settings of strategy proposals and of the
+// benchmark gate, whether or not proposals are enabled, so a mistake shows
+// before they are turned on.
+func (v *validator) checkProposals() {
+	p := v.cfg.Strategies.Proposals
+
+	if p.WrongThreshold < 1 {
+		v.errs.add("strategies.proposals.wrongThreshold", "must be at least 1, got %d", p.WrongThreshold)
+	}
+
+	v.positiveDuration("strategies.proposals.window", p.Window.Duration())
+
+	g := v.cfg.Bench.Gate
+
+	if g.MinRepeats < MinGateRepeats {
+		v.errs.add("bench.gate.minRepeats", "must be at least %d, got %d; a gate with fewer runs cannot tell a change from chance", MinGateRepeats, g.MinRepeats)
+	}
+
+	if g.MaxDrop < 0 || g.MaxDrop >= 1 {
+		v.errs.add("bench.gate.maxDrop", "must be from 0 up to but not including 1, got %g", g.MaxDrop)
+	}
+
+	if g.MaxCostUSD <= 0 {
+		v.errs.add("bench.gate.maxCostUSD", "must be positive, got %g", g.MaxCostUSD)
 	}
 }
 

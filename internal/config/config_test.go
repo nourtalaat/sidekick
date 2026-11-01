@@ -82,6 +82,8 @@ func TestParseDefaults(t *testing.T) {
 					Memory:         Period(730 * Day),
 				}, cfg.Retention)
 				require.Nil(t, cfg.Slack)
+				require.Equal(t, StrategyProposals{Enabled: false, WrongThreshold: 3, Window: Period(14 * Day)}, cfg.Strategies.Proposals, "proposals are off unless enabled")
+				require.Equal(t, BenchGate{MinRepeats: 5, MaxDrop: 0.02, MaxCostUSD: 5}, cfg.Bench.Gate)
 				require.Equal(t, Memory{Enabled: true, Examples: 3}, cfg.Memory)
 				require.Equal(t, 3, cfg.Memory.PromptExamples())
 				require.Equal(t, []Route{{
@@ -101,6 +103,8 @@ server: {listen: ":1"}
 budgets: {perInvestigation: {maxToolCalls: 10}, concurrency: 4}
 memory: {enabled: false}
 retention: {events: 7d, watcherChecks: 36h}
+strategies: {proposals: {enabled: true, window: 7d}}
+bench: {gate: {minRepeats: 8, maxCostUSD: 2.5}}
 routes:
   - {name: a, priority: 0, budgets: {maxWallTime: 1m}, concurrency: 2, grouping: {window: 5m, relatedWindow: 2m, fingerprintLabels: [service, env]}}
   - {name: default}
@@ -120,6 +124,8 @@ routes:
 				require.Equal(t, Grouping{Window: DefaultGroupingWindow}, cfg.Routes[1].Grouping)
 				require.Equal(t, Memory{Examples: 3}, cfg.Memory)
 				require.Zero(t, cfg.Memory.PromptExamples(), "no examples when memory is off")
+				require.Equal(t, StrategyProposals{Enabled: true, WrongThreshold: 3, Window: Period(7 * Day)}, cfg.Strategies.Proposals)
+				require.Equal(t, BenchGate{MinRepeats: 8, MaxDrop: 0.02, MaxCostUSD: 2.5}, cfg.Bench.Gate)
 			},
 		},
 		{

@@ -263,6 +263,14 @@ func TestValidateFixtures(t *testing.T) {
 			"the built-in default interval 30s is below routes[0].watcherLimits.minInterval 45s; set routes[0].watcherDefaults.interval or watch.defaults.interval",
 			"the built-in default timeout 1h0m0s is above watch.maxTimeout 30m0s; set watch.defaults.timeout",
 		}},
+		// Strategy proposals and the benchmark gate
+		{file: "proposals-invalid", want: []string{
+			"bench.gate.maxCostUSD: must be positive, got 0",
+			"bench.gate.maxDrop: must be from 0 up to but not including 1, got 1",
+			"bench.gate.minRepeats: must be at least 5, got 3; a gate with fewer runs cannot tell a change from chance",
+			"strategies.proposals.window: must be positive",
+			"strategies.proposals.wrongThreshold: must be at least 1, got 0",
+		}},
 		// Retention
 		{file: "retention-invalid", want: []string{
 			`retention.auditLog: expected a period such as 90d or 36h, got "90 days"`,

@@ -55,6 +55,8 @@ func TestExampleConfig(t *testing.T) {
 				require.Equal(t, &RateLimit{Events: 600, Per: time.Hour, OverLimit: OverLimitDelay}, cfg.Budgets.RateLimit)
 				require.Equal(t, report.Rules{MinFalsePositiveConfidence: report.High}, cfg.Report.Rules())
 				require.Equal(t, exampleStrategiesDir, cfg.Strategies.Dir)
+				require.Equal(t, StrategyProposals{Enabled: true, WrongThreshold: 3, Window: Period(14 * Day)}, cfg.Strategies.Proposals)
+				require.Equal(t, BenchGate{MinRepeats: 5, MaxDrop: 0.02, MaxCostUSD: 5, PublicDir: "/opt/sidekick/bench/scenarios/public", BaseDir: "/opt/sidekick"}, cfg.Bench.Gate)
 				require.Equal(t, LogLevelInfo, cfg.Telemetry.LogLevel)
 				require.Equal(t, []RedactionRule{{Name: "customer_id", Pattern: "cus_[A-Za-z0-9]{14}"}}, cfg.Redaction.Custom)
 				require.Equal(t, WatchHTTP{AllowHosts: []string{"*.internal.example.com", "status.example.com"}, AllowPrivate: []string{"10.20.0.0/16"}}, cfg.Watch.HTTP)

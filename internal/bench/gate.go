@@ -4,6 +4,8 @@ import (
 	"math/rand/v2"
 	"slices"
 	"strings"
+
+	"github.com/nourtalaat/sidekick/internal/config"
 )
 
 const (
@@ -16,13 +18,13 @@ const (
 	MinGateScenarios = 3
 	// MinGateRepeats is the fewest times a gate runs each scenario. The
 	// config cannot set it lower.
-	MinGateRepeats = 5
+	MinGateRepeats = config.MinGateRepeats
 	// DefaultGateMaxDrop is how far below the baseline the lower end of the
 	// interval may be when bench.gate.maxDrop is not set.
-	DefaultGateMaxDrop = 0.02
+	DefaultGateMaxDrop = config.DefaultGateMaxDrop
 	// DefaultGateMaxCostUSD is the most one gate run may cost when
 	// bench.gate.maxCostUSD is not set.
-	DefaultGateMaxCostUSD = 5.0
+	DefaultGateMaxCostUSD = config.DefaultGateMaxCostUSD
 )
 
 // GateResult is how a strategy gate ended.
