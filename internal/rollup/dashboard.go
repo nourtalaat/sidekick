@@ -62,9 +62,10 @@ type DashboardOptions struct {
 	// Location is the time zone whose midnight starts a new day for the
 	// daily caps and spend_daily. Nil means UTC.
 	Location *time.Location
-	// RouteCapsMicros are the daily spending caps of the routes that have
-	// one, in micro-dollars.
-	RouteCapsMicros map[string]int64
+	// RouteCaps returns the daily spending caps of the routes in effect
+	// that have one, in micro-dollars. It is called at every scrape, so a
+	// route saved at runtime shows its cap. Nil means no route has one.
+	RouteCaps func() map[string]int64
 	// GlobalCapMicros is the global daily cap in micro-dollars. Zero means
 	// none.
 	GlobalCapMicros int64
@@ -80,13 +81,13 @@ type DashboardOptions struct {
 // query and every replica reports the same numbers to within one interval.
 // A series whose data leaves the window is gone from the next snapshot.
 type Dashboard struct {
-	pool     *pgxpool.Pool
-	interval time.Duration
-	loc      *time.Location
-	routeCap map[string]int64
-	global   int64
-	now      func() time.Time
-	log      *slog.Logger
+	pool      *pgxpool.Pool
+	interval  time.Duration
+	loc       *time.Location
+	routeCaps func() map[string]int64
+	global    int64
+	now       func() time.Time
+	log       *slog.Logger
 
 	descs    dashboardDescs
 	snapshot atomic.Pointer[[]prometheus.Metric]
@@ -98,14 +99,14 @@ var _ prometheus.Collector = (*Dashboard)(nil)
 // nothing until its first refresh succeeds, except the caps.
 func NewDashboard(reg prometheus.Registerer, opts DashboardOptions) (*Dashboard, error) {
 	d := &Dashboard{
-		pool:     opts.Pool,
-		interval: opts.Interval,
-		loc:      opts.Location,
-		routeCap: opts.RouteCapsMicros,
-		global:   opts.GlobalCapMicros,
-		now:      opts.Now,
-		log:      opts.Logger,
-		descs:    newDashboardDescs(),
+		pool:      opts.Pool,
+		interval:  opts.Interval,
+		loc:       opts.Location,
+		routeCaps: opts.RouteCaps,
+		global:    opts.GlobalCapMicros,
+		now:       opts.Now,
+		log:       opts.Logger,
+		descs:     newDashboardDescs(),
 	}
 
 	if d.interval <= 0 {
@@ -186,8 +187,10 @@ func (d *Dashboard) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect sends the caps and the last snapshot.
 func (d *Dashboard) Collect(ch chan<- prometheus.Metric) {
-	for route, micros := range d.routeCap {
-		ch <- gauge(d.descs.routeCap, float64(micros)/microDollarsPerUSD, route)
+	if d.routeCaps != nil {
+		for route, micros := range d.routeCaps() {
+			ch <- gauge(d.descs.routeCap, float64(micros)/microDollarsPerUSD, route)
+		}
 	}
 
 	if d.global > 0 {

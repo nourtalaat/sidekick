@@ -50,7 +50,7 @@ func TestDashboardMetricsOfTheRows(t *testing.T) {
 
 	reg := prometheus.NewRegistry()
 	d, err := NewDashboard(reg, DashboardOptions{
-		RouteCapsMicros: map[string]int64{"r1": 5_000_000},
+		RouteCaps:       func() map[string]int64 { return map[string]int64{"r1": 5_000_000} },
 		GlobalCapMicros: 12_500_000,
 	})
 	require.NoError(t, err)
@@ -120,7 +120,7 @@ func TestDashboardReportsOnlyTheCapsBeforeTheFirstRefresh(t *testing.T) {
 	t.Parallel()
 
 	reg := prometheus.NewRegistry()
-	_, err := NewDashboard(reg, DashboardOptions{RouteCapsMicros: map[string]int64{"r1": 1_000_000}})
+	_, err := NewDashboard(reg, DashboardOptions{RouteCaps: func() map[string]int64 { return map[string]int64{"r1": 1_000_000} }})
 	require.NoError(t, err)
 
 	require.Equal(t, map[string]float64{`sidekick_dashboard_route_spend_cap_usd{route="r1"}`: 1}, scrapeDashboard(t, reg))
@@ -148,4 +148,23 @@ func TestSpendDayIsTheDayInTheCapsTimeZone(t *testing.T) {
 
 	require.Equal(t, time.Date(2026, 10, 29, 0, 0, 0, 0, time.UTC), spendDay(at, time.UTC).Time)
 	require.Equal(t, time.Date(2026, 10, 28, 0, 0, 0, 0, time.UTC), spendDay(at, newYork).Time)
+}
+
+func TestDashboardRouteCapsFollowTheRoutesInEffect(t *testing.T) {
+	t.Parallel()
+
+	caps := map[string]int64{"r1": 1_000_000}
+
+	reg := prometheus.NewRegistry()
+	_, err := NewDashboard(reg, DashboardOptions{RouteCaps: func() map[string]int64 { return caps }})
+	require.NoError(t, err)
+
+	require.Equal(t, map[string]float64{`sidekick_dashboard_route_spend_cap_usd{route="r1"}`: 1}, scrapeDashboard(t, reg))
+
+	caps = map[string]int64{"r1": 1_000_000, "runtime": 2_500_000}
+
+	require.Equal(t, map[string]float64{
+		`sidekick_dashboard_route_spend_cap_usd{route="r1"}`:      1,
+		`sidekick_dashboard_route_spend_cap_usd{route="runtime"}`: 2.5,
+	}, scrapeDashboard(t, reg))
 }

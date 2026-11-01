@@ -25,7 +25,7 @@ func (h *harness) newDashboard(t *testing.T, now *time.Time) (*Dashboard, *prome
 
 	d, err := NewDashboard(reg, DashboardOptions{
 		Pool:            h.pool,
-		RouteCapsMicros: map[string]int64{"r1": 5_000_000},
+		RouteCaps:       func() map[string]int64 { return map[string]int64{"r1": 5_000_000} },
 		GlobalCapMicros: 20_000_000,
 		Now:             func() time.Time { return *now },
 	})
