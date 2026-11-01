@@ -1,0 +1,48 @@
+name: SK-92 proof
+
+# Temporary: runs the long result test of the AWS source many times. Removed
+# before review.
+on:
+  push:
+    branches:
+      - fix/SK-92/aws-long-result-flake
+
+permissions:
+  contents: read
+
+jobs:
+  repeat:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: plain
+            load: "0"
+            count: "50"
+          - name: loaded
+            load: "1"
+            count: "100"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26"
+          check-latest: true
+
+      - name: Start a CPU load
+        if: matrix.load == '1'
+        run: |
+          for _ in $(seq "$(nproc)"); do
+            (while :; do :; done) &
+          done
+
+      - name: Run the long result test
+        env:
+          COUNT: ${{ matrix.count }}
+        run: go test -race -count="$COUNT" -run 'TestSourceCallCutsLongResults|TestQueryLogsStopsTheQueryInTime' ./internal/source/aws
