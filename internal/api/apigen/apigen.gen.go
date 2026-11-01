@@ -1083,7 +1083,8 @@ type FeedbackTargetKind string
 type FieldError struct {
 	// Field The path of the field in the request body, such as
 	// budgets.maxTokens or match.sender.bots[0]. Empty for a problem
-	// with the whole body.
+	// with the whole body. For a strategy, body.match.textPattern
+	// names a path in its YAML.
 	Field   string `json:"field"`
 	Message string `json:"message"`
 }
@@ -1467,6 +1468,18 @@ type NewRoute struct {
 	Strategy *string   `json:"strategy,omitempty"`
 }
 
+// NewStrategyVersion defines model for NewStrategyVersion.
+type NewStrategyVersion struct {
+	// BaseVersion The version that was read, or 0 for a strategy that is not stored yet. Leave it out to skip the check.
+	BaseVersion *int `json:"baseVersion,omitempty"`
+
+	// Body The strategy as YAML, in the format of a strategy file.
+	Body string `json:"body"`
+
+	// Reason Why the version is saved. Required, at most 500 characters.
+	Reason string `json:"reason"`
+}
+
 // NewToken defines model for NewToken.
 type NewToken struct {
 	// ExpiresAt When the token stops working, at most a year away.
@@ -1647,7 +1660,9 @@ type Prevention struct {
 type Problem struct {
 	// Code Names the kind of problem for a program. Only some answers have
 	// it: validation (422), file_rule, exists, stale, conflict
-	// (409) and not_found (404) on listeners and routes.
+	// (409) and not_found (404) on listeners and routes; validation
+	// and unchanged (422), stale and conflict (409) and not_found
+	// (404) on strategies.
 	Code *string `json:"code,omitempty"`
 
 	// Detail What went wrong with this request.
@@ -2082,6 +2097,154 @@ type StopWatcherResult struct {
 	Stopped bool `json:"stopped"`
 }
 
+// Strategy defines model for Strategy.
+type Strategy struct {
+	Description *string `json:"description,omitempty"`
+
+	// Layer Where the strategy is defined: built-in, runtime or file. A
+	// built-in strategy and a strategy of the file layer are read-only.
+	// This is not an enum, because the names of its values would clash
+	// with those of RuleLayer in the generated Go code.
+	Layer StrategyLayer `json:"layer"`
+	Name  string        `json:"name"`
+
+	// Overrides The layers whose strategy of this name this one replaces.
+	Overrides *[]StrategyLayer `json:"overrides,omitempty"`
+
+	// ReadOnly True for a built-in strategy and a strategy file.
+	ReadOnly bool `json:"readOnly"`
+
+	// RuntimeVersion The current version of the runtime strategy of this name, when one is stored.
+	RuntimeVersion *int `json:"runtimeVersion,omitempty"`
+
+	// Status active: in effect. shadowed: a strategy file has the same name and
+	// is used instead. invalid: the stored version no longer passes the
+	// strategy checks. Not an enum, for the reason StrategyLayer gives.
+	Status StrategyStatus `json:"status"`
+
+	// StatusReason Why the strategy is not active.
+	StatusReason *string    `json:"statusReason,omitempty"`
+	UpdatedAt    *time.Time `json:"updatedAt,omitempty"`
+
+	// UpdatedBy The name of who saved the current version of a runtime strategy.
+	UpdatedBy *string `json:"updatedBy,omitempty"`
+
+	// Version The version investigations record: a content hash for a built-in
+	// strategy and a strategy file, and runtime:N for version N of a
+	// runtime strategy.
+	Version *string `json:"version,omitempty"`
+}
+
+// StrategyDetail defines model for StrategyDetail.
+type StrategyDetail struct {
+	// Body The strategy as YAML.
+	Body        string  `json:"body"`
+	Description *string `json:"description,omitempty"`
+
+	// Layer Where the strategy is defined: built-in, runtime or file. A
+	// built-in strategy and a strategy of the file layer are read-only.
+	// This is not an enum, because the names of its values would clash
+	// with those of RuleLayer in the generated Go code.
+	Layer StrategyLayer `json:"layer"`
+	Name  string        `json:"name"`
+
+	// Overrides The layers whose strategy of this name this one replaces.
+	Overrides *[]StrategyLayer `json:"overrides,omitempty"`
+
+	// ReadOnly True for a built-in strategy and a strategy file.
+	ReadOnly bool `json:"readOnly"`
+
+	// RuntimeVersion The current version of the runtime strategy of this name, when one is stored.
+	RuntimeVersion *int `json:"runtimeVersion,omitempty"`
+
+	// Status active: in effect. shadowed: a strategy file has the same name and
+	// is used instead. invalid: the stored version no longer passes the
+	// strategy checks. Not an enum, for the reason StrategyLayer gives.
+	Status StrategyStatus `json:"status"`
+
+	// StatusReason Why the strategy is not active.
+	StatusReason *string    `json:"statusReason,omitempty"`
+	UpdatedAt    *time.Time `json:"updatedAt,omitempty"`
+
+	// UpdatedBy The name of who saved the current version of a runtime strategy.
+	UpdatedBy *string `json:"updatedBy,omitempty"`
+
+	// Version The version investigations record: a content hash for a built-in
+	// strategy and a strategy file, and runtime:N for version N of a
+	// runtime strategy.
+	Version *string `json:"version,omitempty"`
+}
+
+// StrategyLayer Where the strategy is defined: built-in, runtime or file. A
+// built-in strategy and a strategy of the file layer are read-only.
+// This is not an enum, because the names of its values would clash
+// with those of RuleLayer in the generated Go code.
+type StrategyLayer = string
+
+// StrategyList defines model for StrategyList.
+type StrategyList struct {
+	Strategies []Strategy `json:"strategies"`
+}
+
+// StrategyStatus active: in effect. shadowed: a strategy file has the same name and
+// is used instead. invalid: the stored version no longer passes the
+// strategy checks. Not an enum, for the reason StrategyLayer gives.
+type StrategyStatus = string
+
+// StrategyVersion defines model for StrategyVersion.
+type StrategyVersion struct {
+	// Author The ID of the user or API token that saved it, when known.
+	Author *openapi_types.UUID `json:"author,omitempty"`
+
+	// AuthorName The name of the author, while the user or token exists.
+	AuthorName *string `json:"authorName,omitempty"`
+
+	// BenchRunId The benchmark run that checked the proposal, if any.
+	BenchRunId *openapi_types.UUID `json:"benchRunId,omitempty"`
+	CreatedAt  time.Time           `json:"createdAt"`
+
+	// Current True for the version that new investigations use.
+	Current bool   `json:"current"`
+	Name    string `json:"name"`
+
+	// ProposalId The strategy proposal the version comes from, if any.
+	ProposalId *openapi_types.UUID `json:"proposalId,omitempty"`
+	Reason     string              `json:"reason"`
+	Version    int                 `json:"version"`
+}
+
+// StrategyVersionDetail defines model for StrategyVersionDetail.
+type StrategyVersionDetail struct {
+	// Author The ID of the user or API token that saved it, when known.
+	Author *openapi_types.UUID `json:"author,omitempty"`
+
+	// AuthorName The name of the author, while the user or token exists.
+	AuthorName *string `json:"authorName,omitempty"`
+
+	// BenchRunId The benchmark run that checked the proposal, if any.
+	BenchRunId *openapi_types.UUID `json:"benchRunId,omitempty"`
+
+	// Body The strategy as YAML.
+	Body      string    `json:"body"`
+	CreatedAt time.Time `json:"createdAt"`
+
+	// Current True for the version that new investigations use.
+	Current bool   `json:"current"`
+	Name    string `json:"name"`
+
+	// ProposalId The strategy proposal the version comes from, if any.
+	ProposalId *openapi_types.UUID `json:"proposalId,omitempty"`
+	Reason     string              `json:"reason"`
+	Version    int                 `json:"version"`
+}
+
+// StrategyVersionList defines model for StrategyVersionList.
+type StrategyVersionList struct {
+	// Next Pass as before to get the older versions. Absent on the last page.
+	Next     *int              `json:"next,omitempty"`
+	Versions []StrategyVersion `json:"versions"`
+}
+
 // Token defines model for Token.
 type Token struct {
 	CreatedAt time.Time `json:"createdAt"`
@@ -2215,6 +2378,9 @@ type StatsTo = openapi_types.Date
 
 // StatsVerdict defines model for StatsVerdict.
 type StatsVerdict = Verdict
+
+// StrategyName defines model for StrategyName.
+type StrategyName = string
 
 // ListAuditParams defines parameters for ListAudit.
 type ListAuditParams struct {
@@ -2381,6 +2547,13 @@ type GetQualityStatsParams struct {
 	Verdict *StatsVerdict `form:"verdict,omitempty" json:"verdict,omitempty"`
 }
 
+// ListStrategyVersionsParams defines parameters for ListStrategyVersions.
+type ListStrategyVersionsParams struct {
+	// Before Only versions below this number; the next of the page before.
+	Before *int `form:"before,omitempty" json:"before,omitempty"`
+	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // CreateInvestigationFeedbackJSONRequestBody defines body for CreateInvestigationFeedback for application/json ContentType.
 type CreateInvestigationFeedbackJSONRequestBody = NewFeedback
 
@@ -2398,6 +2571,9 @@ type CreateRouteJSONRequestBody = NewRoute
 
 // UpdateRouteJSONRequestBody defines body for UpdateRoute for application/json ContentType.
 type UpdateRouteJSONRequestBody = RouteUpdate
+
+// SaveStrategyVersionJSONRequestBody defines body for SaveStrategyVersion for application/json ContentType.
+type SaveStrategyVersionJSONRequestBody = NewStrategyVersion
 
 // CreateTokenJSONRequestBody defines body for CreateToken for application/json ContentType.
 type CreateTokenJSONRequestBody = NewToken
@@ -2500,6 +2676,21 @@ type ServerInterface interface {
 	// GetQualityStats Verdict accuracy, precision and recall from feedback
 	// (GET /stats/quality)
 	GetQualityStats(w http.ResponseWriter, r *http.Request, params GetQualityStatsParams)
+	// ListStrategies The strategies, built-in, from the config file and from runtime, with their status
+	// (GET /strategies)
+	ListStrategies(w http.ResponseWriter, r *http.Request)
+	// GetStrategy The strategy in effect with this name, with its YAML
+	// (GET /strategies/{name})
+	GetStrategy(w http.ResponseWriter, r *http.Request, name StrategyName)
+	// ListStrategyVersions The saved versions of a runtime strategy, newest first
+	// (GET /strategies/{name}/versions)
+	ListStrategyVersions(w http.ResponseWriter, r *http.Request, name StrategyName, params ListStrategyVersionsParams)
+	// SaveStrategyVersion Save a new version of a runtime strategy
+	// (POST /strategies/{name}/versions)
+	SaveStrategyVersion(w http.ResponseWriter, r *http.Request, name StrategyName)
+	// GetStrategyVersion One saved version of a runtime strategy, with its YAML
+	// (GET /strategies/{name}/versions/{version})
+	GetStrategyVersion(w http.ResponseWriter, r *http.Request, name StrategyName, version int)
 	// ListTokens Every API token, revoked and expired ones included, newest first
 	// (GET /tokens)
 	ListTokens(w http.ResponseWriter, r *http.Request)
@@ -3861,6 +4052,162 @@ func (siw *ServerInterfaceWrapper) GetQualityStats(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// ListStrategies operation middleware
+func (siw *ServerInterfaceWrapper) ListStrategies(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListStrategies(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetStrategy operation middleware
+func (siw *ServerInterfaceWrapper) GetStrategy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "name" -------------
+	var name StrategyName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetStrategy(w, r, name)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListStrategyVersions operation middleware
+func (siw *ServerInterfaceWrapper) ListStrategyVersions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "name" -------------
+	var name StrategyName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListStrategyVersionsParams
+
+	// ------------- Optional query parameter "before" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "before", r.URL.Query(), &params.Before, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "before"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "before", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListStrategyVersions(w, r, name, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SaveStrategyVersion operation middleware
+func (siw *ServerInterfaceWrapper) SaveStrategyVersion(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "name" -------------
+	var name StrategyName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SaveStrategyVersion(w, r, name)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetStrategyVersion operation middleware
+func (siw *ServerInterfaceWrapper) GetStrategyVersion(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "name" -------------
+	var name StrategyName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "version" -------------
+	var version int
+
+	err = runtime.BindStyledParameterWithOptions("simple", "version", r.PathValue("version"), &version, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "version", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetStrategyVersion(w, r, name, version)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListTokens operation middleware
 func (siw *ServerInterfaceWrapper) ListTokens(w http.ResponseWriter, r *http.Request) {
 
@@ -4076,6 +4423,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/routes", wrapper.CreateRoute)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/routes/{name}", wrapper.DeleteRoute)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/routes/{name}", wrapper.UpdateRoute)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/strategies", wrapper.ListStrategies)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/strategies/{name}", wrapper.GetStrategy)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/strategies/{name}/versions", wrapper.ListStrategyVersions)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/strategies/{name}/versions", wrapper.SaveStrategyVersion)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/strategies/{name}/versions/{version}", wrapper.GetStrategyVersion)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/audit", wrapper.ListAudit)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations", wrapper.ListInvestigations)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}", wrapper.GetInvestigation)
@@ -5363,6 +5715,203 @@ func (response GetQualityStatsdefaultApplicationProblemPlusJSONResponse) VisitGe
 	return err
 }
 
+type ListStrategiesRequestObject struct {
+}
+
+type ListStrategiesResponseObject interface {
+	VisitListStrategiesResponse(w http.ResponseWriter) error
+}
+
+type ListStrategies200JSONResponse StrategyList
+
+func (response ListStrategies200JSONResponse) VisitListStrategiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListStrategiesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListStrategiesdefaultApplicationProblemPlusJSONResponse) VisitListStrategiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStrategyRequestObject struct {
+	Name StrategyName `json:"name"`
+}
+
+type GetStrategyResponseObject interface {
+	VisitGetStrategyResponse(w http.ResponseWriter) error
+}
+
+type GetStrategy200JSONResponse StrategyDetail
+
+func (response GetStrategy200JSONResponse) VisitGetStrategyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStrategydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetStrategydefaultApplicationProblemPlusJSONResponse) VisitGetStrategyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListStrategyVersionsRequestObject struct {
+	Name   StrategyName `json:"name"`
+	Params ListStrategyVersionsParams
+}
+
+type ListStrategyVersionsResponseObject interface {
+	VisitListStrategyVersionsResponse(w http.ResponseWriter) error
+}
+
+type ListStrategyVersions200JSONResponse StrategyVersionList
+
+func (response ListStrategyVersions200JSONResponse) VisitListStrategyVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListStrategyVersionsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListStrategyVersionsdefaultApplicationProblemPlusJSONResponse) VisitListStrategyVersionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SaveStrategyVersionRequestObject struct {
+	Name StrategyName `json:"name"`
+	Body *SaveStrategyVersionJSONRequestBody
+}
+
+type SaveStrategyVersionResponseObject interface {
+	VisitSaveStrategyVersionResponse(w http.ResponseWriter) error
+}
+
+type SaveStrategyVersion201JSONResponse StrategyVersionDetail
+
+func (response SaveStrategyVersion201JSONResponse) VisitSaveStrategyVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SaveStrategyVersiondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response SaveStrategyVersiondefaultApplicationProblemPlusJSONResponse) VisitSaveStrategyVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStrategyVersionRequestObject struct {
+	Name    StrategyName `json:"name"`
+	Version int          `json:"version"`
+}
+
+type GetStrategyVersionResponseObject interface {
+	VisitGetStrategyVersionResponse(w http.ResponseWriter) error
+}
+
+type GetStrategyVersion200JSONResponse StrategyVersionDetail
+
+func (response GetStrategyVersion200JSONResponse) VisitGetStrategyVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStrategyVersiondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetStrategyVersiondefaultApplicationProblemPlusJSONResponse) VisitGetStrategyVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListTokensRequestObject struct {
 }
 
@@ -5610,6 +6159,21 @@ type StrictServerInterface interface {
 	// GetQualityStats Verdict accuracy, precision and recall from feedback
 	// (GET /stats/quality)
 	GetQualityStats(ctx context.Context, request GetQualityStatsRequestObject) (GetQualityStatsResponseObject, error)
+	// ListStrategies The strategies, built-in, from the config file and from runtime, with their status
+	// (GET /strategies)
+	ListStrategies(ctx context.Context, request ListStrategiesRequestObject) (ListStrategiesResponseObject, error)
+	// GetStrategy The strategy in effect with this name, with its YAML
+	// (GET /strategies/{name})
+	GetStrategy(ctx context.Context, request GetStrategyRequestObject) (GetStrategyResponseObject, error)
+	// ListStrategyVersions The saved versions of a runtime strategy, newest first
+	// (GET /strategies/{name}/versions)
+	ListStrategyVersions(ctx context.Context, request ListStrategyVersionsRequestObject) (ListStrategyVersionsResponseObject, error)
+	// SaveStrategyVersion Save a new version of a runtime strategy
+	// (POST /strategies/{name}/versions)
+	SaveStrategyVersion(ctx context.Context, request SaveStrategyVersionRequestObject) (SaveStrategyVersionResponseObject, error)
+	// GetStrategyVersion One saved version of a runtime strategy, with its YAML
+	// (GET /strategies/{name}/versions/{version})
+	GetStrategyVersion(ctx context.Context, request GetStrategyVersionRequestObject) (GetStrategyVersionResponseObject, error)
 	// ListTokens Every API token, revoked and expired ones included, newest first
 	// (GET /tokens)
 	ListTokens(ctx context.Context, request ListTokensRequestObject) (ListTokensResponseObject, error)
@@ -6518,6 +7082,143 @@ func (sh *strictHandler) GetQualityStats(w http.ResponseWriter, r *http.Request,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetQualityStatsResponseObject); ok {
 		if err := validResponse.VisitGetQualityStatsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListStrategies operation middleware
+func (sh *strictHandler) ListStrategies(w http.ResponseWriter, r *http.Request) {
+	var request ListStrategiesRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListStrategies(ctx, request.(ListStrategiesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListStrategies")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListStrategiesResponseObject); ok {
+		if err := validResponse.VisitListStrategiesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetStrategy operation middleware
+func (sh *strictHandler) GetStrategy(w http.ResponseWriter, r *http.Request, name StrategyName) {
+	var request GetStrategyRequestObject
+
+	request.Name = name
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetStrategy(ctx, request.(GetStrategyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetStrategy")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetStrategyResponseObject); ok {
+		if err := validResponse.VisitGetStrategyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListStrategyVersions operation middleware
+func (sh *strictHandler) ListStrategyVersions(w http.ResponseWriter, r *http.Request, name StrategyName, params ListStrategyVersionsParams) {
+	var request ListStrategyVersionsRequestObject
+
+	request.Name = name
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListStrategyVersions(ctx, request.(ListStrategyVersionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListStrategyVersions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListStrategyVersionsResponseObject); ok {
+		if err := validResponse.VisitListStrategyVersionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SaveStrategyVersion operation middleware
+func (sh *strictHandler) SaveStrategyVersion(w http.ResponseWriter, r *http.Request, name StrategyName) {
+	var request SaveStrategyVersionRequestObject
+
+	request.Name = name
+
+	var body SaveStrategyVersionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SaveStrategyVersion(ctx, request.(SaveStrategyVersionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SaveStrategyVersion")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SaveStrategyVersionResponseObject); ok {
+		if err := validResponse.VisitSaveStrategyVersionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetStrategyVersion operation middleware
+func (sh *strictHandler) GetStrategyVersion(w http.ResponseWriter, r *http.Request, name StrategyName, version int) {
+	var request GetStrategyVersionRequestObject
+
+	request.Name = name
+	request.Version = version
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetStrategyVersion(ctx, request.(GetStrategyVersionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetStrategyVersion")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetStrategyVersionResponseObject); ok {
+		if err := validResponse.VisitGetStrategyVersionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

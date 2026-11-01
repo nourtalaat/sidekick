@@ -15,19 +15,23 @@ import (
 	"github.com/nourtalaat/sidekick/internal/feedback"
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/redact"
+	"github.com/nourtalaat/sidekick/internal/strategy"
 	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
 // server implements the API operations.
 type server struct {
-	tokens   TokenManager
-	cfg      *config.Config
-	rules    RuleStore
-	redactor *redact.Redactor
-	pool     *pgxpool.Pool
-	audit    *audit.Writer
-	hub      *Hub
-	log      *slog.Logger
+	tokens     TokenManager
+	cfg        *config.Config
+	rules      RuleStore
+	strategies StrategyStore
+	// strategyBase holds the built-in and file strategies.
+	strategyBase *strategy.Set
+	redactor     *redact.Redactor
+	pool         *pgxpool.Pool
+	audit        *audit.Writer
+	hub          *Hub
+	log          *slog.Logger
 
 	feedbackMetrics *feedback.Metrics
 	memory          memory.SyncOptions

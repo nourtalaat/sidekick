@@ -1,0 +1,24 @@
+.sk-strategy-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-4);
+  max-width: 960px;
+}
+
+.sk-strategy-editor__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sk-space-3);
+}
+
+.sk-strategy-editor__problems {
+  margin: 0;
+  padding-left: var(--sk-space-5);
+}
+
+.sk-strategy-compare {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sk-space-4);
+}

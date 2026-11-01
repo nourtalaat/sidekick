@@ -1,0 +1,71 @@
+.sk-diff__summary {
+  margin: 0;
+}
+
+.sk-diff {
+  overflow-x: auto;
+  background: var(--sk-bg-surface);
+  border: 1px solid var(--sk-border-subtle);
+  border-radius: var(--sk-radius-lg);
+}
+
+.sk-diff__table {
+  width: 100%;
+  border-collapse: collapse;
+  font: var(--sk-type-mono);
+  font-variant-ligatures: none;
+}
+
+.sk-diff__number {
+  width: 1%;
+  padding: 0 var(--sk-space-3);
+  text-align: right;
+  color: var(--sk-text-secondary);
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sk-diff__text {
+  padding: 0 var(--sk-space-3);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.sk-diff__mark {
+  display: inline-block;
+  width: 2ch;
+  font-weight: 700;
+}
+
+.sk-diff__line--added {
+  background: var(--sk-status-success-bg);
+  box-shadow: inset 3px 0 0 var(--sk-status-success-border);
+}
+
+.sk-diff__line--removed {
+  background: var(--sk-status-danger-bg);
+  box-shadow: inset 3px 0 0 var(--sk-status-danger-border);
+}
+
+.sk-diff__line--added .sk-diff__text {
+  color: var(--sk-status-success-fg);
+}
+
+.sk-diff__line--removed .sk-diff__text {
+  color: var(--sk-status-danger-fg);
+}
+
+.sk-yaml {
+  overflow-x: auto;
+  background: var(--sk-bg-surface);
+  border: 1px solid var(--sk-border-subtle);
+  border-radius: var(--sk-radius-lg);
+}
+
+.sk-yaml__text {
+  margin: 0;
+  padding: var(--sk-space-4);
+  font: var(--sk-type-mono);
+  font-variant-ligatures: none;
+  white-space: pre;
+}
