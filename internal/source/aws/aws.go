@@ -134,6 +134,8 @@ func build(ctx context.Context, name string, cfg Config, deps registry.Deps, loa
 		base = httpclient.New()
 	}
 
+	base = httpclient.WithPlainBody(base)
+
 	next := base.Transport
 	if next == nil {
 		next = http.DefaultTransport
