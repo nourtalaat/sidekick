@@ -73,7 +73,7 @@ type notesView struct {
 func (s *Store) Notes(ctx context.Context, service string) (Notes, error) {
 	service, err := checkService(service)
 	if err != nil {
-		return Notes{}, err
+		return Notes{}, fmt.Errorf("check the service: %w", err)
 	}
 
 	return readNotes(ctx, s.pool, service)
@@ -118,12 +118,12 @@ func (s *Store) ListNotes(ctx context.Context, after string, pageSize int) (Note
 func (s *Store) SetNotes(ctx context.Context, actor Actor, service, text string) (Notes, error) {
 	service, err := checkService(service)
 	if err != nil {
-		return Notes{}, err
+		return Notes{}, fmt.Errorf("check the service: %w", err)
 	}
 
 	text, err = s.checkNotes(text)
 	if err != nil {
-		return Notes{}, err
+		return Notes{}, fmt.Errorf("check the notes: %w", err)
 	}
 
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
@@ -135,7 +135,7 @@ func (s *Store) SetNotes(ctx context.Context, actor Actor, service, text string)
 
 		cur, err := readNotes(ctx, tx, service)
 		if err != nil {
-			return err
+			return fmt.Errorf("read the notes it replaces: %w", err)
 		}
 
 		switch text {
@@ -219,5 +219,9 @@ func readNotes(ctx context.Context, q db.DBTX, service string) (Notes, error) {
 // writeNotesAudit writes the audit entry of a change to the notes of
 // service.
 func writeNotesAudit(ctx context.Context, tx pgx.Tx, actor Actor, action, service string, before, after any) error {
-	return writeAuditFor(ctx, tx, actor, action, auditTargetNotes, service, nil, before, after)
+	if err := writeAuditFor(ctx, tx, actor, action, auditTargetNotes, service, nil, before, after); err != nil {
+		return fmt.Errorf("audit the change to the notes of service %s: %w", service, err)
+	}
+
+	return nil
 }

@@ -229,7 +229,7 @@ func (s *Store) Get(ctx context.Context, id uuid.UUID) (Stored, error) {
 func (s *Store) Create(ctx context.Context, actor Actor, n New) (Stored, error) {
 	text, scope, err := s.check(n.Text, n.Scope)
 	if err != nil {
-		return Stored{}, err
+		return Stored{}, fmt.Errorf("check the lesson: %w", err)
 	}
 
 	id := ids.New()
@@ -264,18 +264,18 @@ func (s *Store) Create(ctx context.Context, actor Actor, n New) (Stored, error) 
 func (s *Store) Update(ctx context.Context, actor Actor, id uuid.UUID, version int, e Edit) (Stored, error) {
 	text, scope, err := s.check(e.Text, e.Scope)
 	if err != nil {
-		return Stored{}, err
+		return Stored{}, fmt.Errorf("check the lesson: %w", err)
 	}
 
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		cur, err := lock(ctx, tx, id)
 		if err != nil {
-			return err
+			return fmt.Errorf("lock the lesson: %w", err)
 		}
 
 		status, err := nextStatus(cur.Status, e.Status)
 		if err != nil {
-			return err
+			return fmt.Errorf("check the status: %w", err)
 		}
 
 		if cur.Origin == OriginFeedback && scope.Global() {
@@ -311,7 +311,7 @@ func (s *Store) Approve(ctx context.Context, actor Actor, id uuid.UUID, version 
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		cur, err := lock(ctx, tx, id)
 		if err != nil {
-			return err
+			return fmt.Errorf("lock the lesson: %w", err)
 		}
 
 		if cur.Status != StatusProposed {
@@ -342,7 +342,7 @@ func (s *Store) Delete(ctx context.Context, actor Actor, id uuid.UUID) error {
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		cur, err := lock(ctx, tx, id)
 		if err != nil {
-			return err
+			return fmt.Errorf("lock the lesson: %w", err)
 		}
 
 		if _, err := db.New(tx).DeleteLesson(ctx, id); err != nil {
