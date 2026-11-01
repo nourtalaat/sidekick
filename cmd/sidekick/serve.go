@@ -162,6 +162,10 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
+	if err := registerProposals(ctx, a, opts.Registries, strategies, modelMetrics); err != nil {
+		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
+	}
+
 	if err := registerLessons(a, modelMetrics); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}

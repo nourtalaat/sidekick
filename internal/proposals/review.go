@@ -29,6 +29,11 @@ const MaxBodyBytes = strategy.MaxBodyBytes
 // rejecting.
 const MaxReasonChars = 500
 
+// GateMaxAttempts is how many times the queue tries a gate job. A gate can be
+// interrupted by a restart, a provider that is down or a day's spending cap,
+// and each try carries on from the runs the last one finished.
+const GateMaxAttempts = 10
+
 // gateResultPassed is the gate_result of a proposal that passed.
 const gateResultPassed = "passed"
 
@@ -333,7 +338,7 @@ func enqueueGate(ctx context.Context, q db.DBTX, id uuid.UUID) error {
 		return fmt.Errorf("encode the payload of the gate job: %w", err)
 	}
 
-	_, err = queue.Enqueue(ctx, q, queue.NewJob{Kind: queue.KindBenchGate, Payload: payload, UniqueKey: BenchGateKey(id)})
+	_, err = queue.Enqueue(ctx, q, queue.NewJob{Kind: queue.KindBenchGate, Payload: payload, UniqueKey: BenchGateKey(id), MaxAttempts: GateMaxAttempts})
 	if err != nil && !errors.Is(err, queue.ErrDuplicate) {
 		return fmt.Errorf("queue the gate of proposal %s: %w", id, err)
 	}

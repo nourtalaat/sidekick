@@ -203,6 +203,13 @@ type env struct {
 	url  string
 	conn *dispatcher
 	gate *gate.Gate
+	// set holds the strategies in effect, and cfg and regs are what the gate
+	// runs with.
+	set  *strategy.Set
+	cfg  *config.Config
+	regs config.Registries
+	// scenarios are the scenarios the gate chooses from.
+	scenarios []bench.Scenario
 }
 
 // newEnv returns an environment with a gate.
@@ -245,18 +252,20 @@ func newEnv(t *testing.T, opts envOptions) *env {
 		scenarios = coveringScenarios(t, testScenarios)
 	}
 
+	set := base.WithRuntime([]strategy.Strategy{saved})
+
 	g, err := gate.New(gate.Options{
 		Pool:        pool,
 		Config:      cfg,
 		Registries:  regs,
 		DatabaseURL: func(context.Context) (string, error) { return url, nil },
-		Strategies:  base.WithRuntime([]strategy.Strategy{saved}),
+		Strategies:  set,
 		Scenarios:   gate.ScenarioFunc(func(context.Context) ([]bench.Scenario, error) { return scenarios, nil }),
 		Daily:       opts.daily,
 	})
 	require.NoError(t, err)
 
-	return &env{pool: pool, url: url, conn: conn, gate: g}
+	return &env{pool: pool, url: url, conn: conn, gate: g, set: set, cfg: cfg, regs: regs, scenarios: scenarios}
 }
 
 // coveringScenarios returns n copies of the sample scenario that name the
