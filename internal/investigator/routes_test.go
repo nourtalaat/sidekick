@@ -67,6 +67,13 @@ func TestConfigRoutes(t *testing.T) {
 	}
 
 	require.Equal(t, []string{"checkout", "payments"}, routes.Names())
+}
+
+func TestConfigRoutesFollowTheRoutesInEffect(t *testing.T) {
+	t.Parallel()
+
+	current := []config.Route{{Name: "payments"}}
+	routes := ConfigRoutes(func() []config.Route { return current })
 
 	current = []config.Route{{Name: "search", Sources: []string{"loki"}}}
 
