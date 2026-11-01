@@ -153,7 +153,7 @@ func TestDecideAProposalThatCannotBeDecided(t *testing.T) {
 				require.NoError(t, err)
 			},
 			decide: func(h *harness, id uuid.UUID) error {
-				_, err := h.svc.Approve(context.Background(), id, Decider{UserID: ciToken, Token: true})
+				_, err := h.svc.Approve(context.Background(), id, Decider{SlackUserID: "U01APPR"})
 				return err
 			},
 			wantAs: action.StatusRejected,
