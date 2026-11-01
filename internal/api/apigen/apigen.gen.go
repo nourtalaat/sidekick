@@ -1615,6 +1615,38 @@ type Me struct {
 // MeKind Whether the caller is a signed-in user or an API token.
 type MeKind string
 
+// MemoryEntry defines model for MemoryEntry.
+type MemoryEntry struct {
+	AlertName *string `json:"alertName,omitempty"`
+
+	// Cause Plain text, the confirmed cause, or edited by an admin.
+	Cause       *string   `json:"cause,omitempty"`
+	ConfirmedAt time.Time `json:"confirmedAt"`
+	Disabled    bool      `json:"disabled"`
+
+	// InvestigationId The investigation the entry is about; it may be gone, as memory outlives investigations.
+	InvestigationId openapi_types.UUID `json:"investigationId"`
+	Service         *string            `json:"service,omitempty"`
+
+	// Summary Plain text, from the investigation's report or edited by an admin.
+	Summary string  `json:"summary"`
+	Verdict Verdict `json:"verdict"`
+}
+
+// MemoryEntryList defines model for MemoryEntryList.
+type MemoryEntryList struct {
+	Entries    []MemoryEntry `json:"entries"`
+	NextCursor *string       `json:"nextCursor,omitempty"`
+}
+
+// MemoryEntryUpdate defines model for MemoryEntryUpdate.
+type MemoryEntryUpdate struct {
+	// Cause Leave it out or empty for an entry without a cause.
+	Cause    *string `json:"cause,omitempty"`
+	Disabled bool    `json:"disabled"`
+	Summary  string  `json:"summary"`
+}
+
 // NewFeedback defines model for NewFeedback.
 type NewFeedback struct {
 	CorrectCause   *string            `json:"correctCause,omitempty"`
@@ -2599,6 +2631,9 @@ type InvestigationID = openapi_types.UUID
 // LessonID defines model for LessonID.
 type LessonID = openapi_types.UUID
 
+// MemoryEntryID defines model for MemoryEntryID.
+type MemoryEntryID = openapi_types.UUID
+
 // RuleName defines model for RuleName.
 type RuleName = string
 
@@ -2735,6 +2770,25 @@ type ListLessonsParams struct {
 	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// ListMemoryEntriesParams defines parameters for ListMemoryEntries.
+type ListMemoryEntriesParams struct {
+	// Service Only entries of this service.
+	Service *string `form:"service,omitempty" json:"service,omitempty"`
+
+	// Verdict Only entries with this confirmed verdict.
+	Verdict *Verdict `form:"verdict,omitempty" json:"verdict,omitempty"`
+
+	// Q Only entries whose service, alert name, summary or cause match these words, as in a web search.
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Disabled With true, only disabled entries; with false, only enabled ones. Leave it out for both.
+	Disabled *bool `form:"disabled,omitempty" json:"disabled,omitempty"`
+
+	// Cursor The nextCursor of the page before.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // GetCostStatsParams defines parameters for GetCostStats.
 type GetCostStatsParams struct {
 	// From The first day of the range, a UTC date. The default is 29 days before `to`.
@@ -2831,6 +2885,9 @@ type CreateListenerJSONRequestBody = NewListener
 
 // UpdateListenerJSONRequestBody defines body for UpdateListener for application/json ContentType.
 type UpdateListenerJSONRequestBody = ListenerUpdate
+
+// UpdateMemoryEntryJSONRequestBody defines body for UpdateMemoryEntry for application/json ContentType.
+type UpdateMemoryEntryJSONRequestBody = MemoryEntryUpdate
 
 // CreateRouteJSONRequestBody defines body for CreateRoute for application/json ContentType.
 type CreateRouteJSONRequestBody = NewRoute
@@ -2933,6 +2990,18 @@ type ServerInterface interface {
 	// GetMe The signed-in user or API token, and its role
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
+	// ListMemoryEntries Memory entries, newest confirmation first, a page at a time
+	// (GET /memory/entries)
+	ListMemoryEntries(w http.ResponseWriter, r *http.Request, params ListMemoryEntriesParams)
+	// DeleteMemoryEntry Delete a memory entry
+	// (DELETE /memory/entries/{id})
+	DeleteMemoryEntry(w http.ResponseWriter, r *http.Request, id MemoryEntryID)
+	// GetMemoryEntry One memory entry
+	// (GET /memory/entries/{id})
+	GetMemoryEntry(w http.ResponseWriter, r *http.Request, id MemoryEntryID)
+	// UpdateMemoryEntry Edit a memory entry, disable it or enable it
+	// (PUT /memory/entries/{id})
+	UpdateMemoryEntry(w http.ResponseWriter, r *http.Request, id MemoryEntryID)
 	// ListRoutes The routes, from the config file and from runtime, with their status
 	// (GET /routes)
 	ListRoutes(w http.ResponseWriter, r *http.Request)
@@ -4109,6 +4178,182 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 	handler.ServeHTTP(w, r)
 }
 
+// ListMemoryEntries operation middleware
+func (siw *ServerInterfaceWrapper) ListMemoryEntries(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListMemoryEntriesParams
+
+	// ------------- Optional query parameter "service" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "service", r.URL.Query(), &params.Service, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "service"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "service", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "verdict" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "verdict", r.URL.Query(), &params.Verdict, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "verdict"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "verdict", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "disabled" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "disabled", r.URL.Query(), &params.Disabled, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "disabled"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "disabled", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListMemoryEntries(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteMemoryEntry operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMemoryEntry(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id MemoryEntryID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMemoryEntry(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMemoryEntry operation middleware
+func (siw *ServerInterfaceWrapper) GetMemoryEntry(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id MemoryEntryID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMemoryEntry(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateMemoryEntry operation middleware
+func (siw *ServerInterfaceWrapper) UpdateMemoryEntry(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id MemoryEntryID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateMemoryEntry(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListRoutes operation middleware
 func (siw *ServerInterfaceWrapper) ListRoutes(w http.ResponseWriter, r *http.Request) {
 
@@ -4891,6 +5136,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/lessons/{id}", wrapper.DeleteLesson)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/lessons/{id}", wrapper.UpdateLesson)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/lessons/{id}/approve", wrapper.ApproveLesson)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/memory/entries", wrapper.ListMemoryEntries)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/memory/entries/{id}", wrapper.DeleteMemoryEntry)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/memory/entries/{id}", wrapper.GetMemoryEntry)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/memory/entries/{id}", wrapper.UpdateMemoryEntry)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/audit", wrapper.ListAudit)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations", wrapper.ListInvestigations)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}", wrapper.GetInvestigation)
@@ -6064,6 +6313,157 @@ func (response GetMedefaultApplicationProblemPlusJSONResponse) VisitGetMeRespons
 	return err
 }
 
+type ListMemoryEntriesRequestObject struct {
+	Params ListMemoryEntriesParams
+}
+
+type ListMemoryEntriesResponseObject interface {
+	VisitListMemoryEntriesResponse(w http.ResponseWriter) error
+}
+
+type ListMemoryEntries200JSONResponse MemoryEntryList
+
+func (response ListMemoryEntries200JSONResponse) VisitListMemoryEntriesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMemoryEntriesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListMemoryEntriesdefaultApplicationProblemPlusJSONResponse) VisitListMemoryEntriesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMemoryEntryRequestObject struct {
+	Id MemoryEntryID `json:"id"`
+}
+
+type DeleteMemoryEntryResponseObject interface {
+	VisitDeleteMemoryEntryResponse(w http.ResponseWriter) error
+}
+
+type DeleteMemoryEntry204Response struct {
+}
+
+func (response DeleteMemoryEntry204Response) VisitDeleteMemoryEntryResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteMemoryEntrydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteMemoryEntrydefaultApplicationProblemPlusJSONResponse) VisitDeleteMemoryEntryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMemoryEntryRequestObject struct {
+	Id MemoryEntryID `json:"id"`
+}
+
+type GetMemoryEntryResponseObject interface {
+	VisitGetMemoryEntryResponse(w http.ResponseWriter) error
+}
+
+type GetMemoryEntry200JSONResponse MemoryEntry
+
+func (response GetMemoryEntry200JSONResponse) VisitGetMemoryEntryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMemoryEntrydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetMemoryEntrydefaultApplicationProblemPlusJSONResponse) VisitGetMemoryEntryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMemoryEntryRequestObject struct {
+	Id   MemoryEntryID `json:"id"`
+	Body *UpdateMemoryEntryJSONRequestBody
+}
+
+type UpdateMemoryEntryResponseObject interface {
+	VisitUpdateMemoryEntryResponse(w http.ResponseWriter) error
+}
+
+type UpdateMemoryEntry200JSONResponse MemoryEntry
+
+func (response UpdateMemoryEntry200JSONResponse) VisitUpdateMemoryEntryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMemoryEntrydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UpdateMemoryEntrydefaultApplicationProblemPlusJSONResponse) VisitUpdateMemoryEntryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListRoutesRequestObject struct {
 }
 
@@ -6804,6 +7204,18 @@ type StrictServerInterface interface {
 	// GetMe The signed-in user or API token, and its role
 	// (GET /me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
+	// ListMemoryEntries Memory entries, newest confirmation first, a page at a time
+	// (GET /memory/entries)
+	ListMemoryEntries(ctx context.Context, request ListMemoryEntriesRequestObject) (ListMemoryEntriesResponseObject, error)
+	// DeleteMemoryEntry Delete a memory entry
+	// (DELETE /memory/entries/{id})
+	DeleteMemoryEntry(ctx context.Context, request DeleteMemoryEntryRequestObject) (DeleteMemoryEntryResponseObject, error)
+	// GetMemoryEntry One memory entry
+	// (GET /memory/entries/{id})
+	GetMemoryEntry(ctx context.Context, request GetMemoryEntryRequestObject) (GetMemoryEntryResponseObject, error)
+	// UpdateMemoryEntry Edit a memory entry, disable it or enable it
+	// (PUT /memory/entries/{id})
+	UpdateMemoryEntry(ctx context.Context, request UpdateMemoryEntryRequestObject) (UpdateMemoryEntryResponseObject, error)
 	// ListRoutes The routes, from the config file and from runtime, with their status
 	// (GET /routes)
 	ListRoutes(ctx context.Context, request ListRoutesRequestObject) (ListRoutesResponseObject, error)
@@ -7684,6 +8096,117 @@ func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetMeResponseObject); ok {
 		if err := validResponse.VisitGetMeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListMemoryEntries operation middleware
+func (sh *strictHandler) ListMemoryEntries(w http.ResponseWriter, r *http.Request, params ListMemoryEntriesParams) {
+	var request ListMemoryEntriesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListMemoryEntries(ctx, request.(ListMemoryEntriesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListMemoryEntries")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListMemoryEntriesResponseObject); ok {
+		if err := validResponse.VisitListMemoryEntriesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteMemoryEntry operation middleware
+func (sh *strictHandler) DeleteMemoryEntry(w http.ResponseWriter, r *http.Request, id MemoryEntryID) {
+	var request DeleteMemoryEntryRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMemoryEntry(ctx, request.(DeleteMemoryEntryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMemoryEntry")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteMemoryEntryResponseObject); ok {
+		if err := validResponse.VisitDeleteMemoryEntryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMemoryEntry operation middleware
+func (sh *strictHandler) GetMemoryEntry(w http.ResponseWriter, r *http.Request, id MemoryEntryID) {
+	var request GetMemoryEntryRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMemoryEntry(ctx, request.(GetMemoryEntryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMemoryEntry")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMemoryEntryResponseObject); ok {
+		if err := validResponse.VisitGetMemoryEntryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateMemoryEntry operation middleware
+func (sh *strictHandler) UpdateMemoryEntry(w http.ResponseWriter, r *http.Request, id MemoryEntryID) {
+	var request UpdateMemoryEntryRequestObject
+
+	request.Id = id
+
+	var body UpdateMemoryEntryJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateMemoryEntry(ctx, request.(UpdateMemoryEntryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateMemoryEntry")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateMemoryEntryResponseObject); ok {
+		if err := validResponse.VisitUpdateMemoryEntryResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -425,6 +425,65 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/memory/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Memory entries, newest confirmation first, a page at a time
+         * @description Memory holds one entry for each investigation whose verdict a
+         *     responder confirmed; prompts show the entries like a new alert. The
+         *     list has disabled entries too. The text of an entry came from the
+         *     model and from people: show it as plain text. The answer has no total,
+         *     since counting every entry would read the whole table.
+         */
+        get: operations["ListMemoryEntries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memory/entries/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One memory entry */
+        get: operations["GetMemoryEntry"];
+        /**
+         * Edit a memory entry, disable it or enable it
+         * @description Replaces the summary, the cause and the disabled flag. A disabled
+         *     entry is never shown to a prompt or found by a search. The last write
+         *     wins; there is no version. The next change of the investigation's
+         *     confirmation replaces the summary and the cause with the
+         *     investigation's own and keeps the flag. A summary or cause that is
+         *     empty (the summary), too long or has control characters answers 422
+         *     with the field. Text that differs from the stored text is redacted
+         *     before it is stored. A request that changes nothing writes nothing.
+         *     The change is written to the audit log.
+         */
+        put: operations["UpdateMemoryEntry"];
+        post?: never;
+        /**
+         * Delete a memory entry
+         * @description Deletes the entry and its embedding. If the confirmation of the
+         *     investigation changes later, a new entry is written; disable an entry
+         *     to keep it out for good. The audit log keeps what the entry said.
+         */
+        delete: operations["DeleteMemoryEntry"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/audit": {
         parameters: {
             query?: never;
@@ -1261,6 +1320,33 @@ export interface components {
         };
         LessonApproval: {
             version: number;
+        };
+        MemoryEntry: {
+            /**
+             * Format: uuid
+             * @description The investigation the entry is about; it may be gone, as memory outlives investigations.
+             */
+            investigationId: string;
+            service?: string;
+            alertName?: string;
+            verdict: components["schemas"]["Verdict"];
+            /** @description Plain text, from the investigation's report or edited by an admin. */
+            summary: string;
+            /** @description Plain text, the confirmed cause, or edited by an admin. */
+            cause?: string;
+            /** Format: date-time */
+            confirmedAt: string;
+            disabled: boolean;
+        };
+        MemoryEntryList: {
+            entries: components["schemas"]["MemoryEntry"][];
+            nextCursor?: string;
+        };
+        MemoryEntryUpdate: {
+            summary: string;
+            /** @description Leave it out or empty for an entry without a cause. */
+            cause?: string;
+            disabled: boolean;
         };
         /** @description A lesson that the prompt of an investigation used, as it is now. */
         UsedLesson: {
@@ -2388,6 +2474,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description The ID of the investigation the entry is about. */
+        MemoryEntryID: string;
         LessonID: string;
         /** @description The name of a listener or route. */
         RuleName: string;
@@ -3017,6 +3105,113 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Lesson"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListMemoryEntries: {
+        parameters: {
+            query?: {
+                /** @description Only entries of this service. */
+                service?: string;
+                /** @description Only entries with this confirmed verdict. */
+                verdict?: components["schemas"]["Verdict"];
+                /** @description Only entries whose service, alert name, summary or cause match these words, as in a web search. */
+                q?: string;
+                /** @description With true, only disabled entries; with false, only enabled ones. Leave it out for both. */
+                disabled?: boolean;
+                /** @description The nextCursor of the page before. */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of memory entries. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryEntryList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetMemoryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The ID of the investigation the entry is about. */
+                id: components["parameters"]["MemoryEntryID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The memory entry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryEntry"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateMemoryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The ID of the investigation the entry is about. */
+                id: components["parameters"]["MemoryEntryID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryEntryUpdate"];
+            };
+        };
+        responses: {
+            /** @description The memory entry as stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryEntry"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteMemoryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The ID of the investigation the entry is about. */
+                id: components["parameters"]["MemoryEntryID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The memory entry is deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };

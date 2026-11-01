@@ -600,6 +600,122 @@ paths:
                 $ref: "#/components/schemas/Lesson"
         default:
           $ref: "#/components/responses/Problem"
+  /memory/entries:
+    get:
+      operationId: ListMemoryEntries
+      summary: Memory entries, newest confirmation first, a page at a time
+      description: |
+        Memory holds one entry for each investigation whose verdict a
+        responder confirmed; prompts show the entries like a new alert. The
+        list has disabled entries too. The text of an entry came from the
+        model and from people: show it as plain text. The answer has no total,
+        since counting every entry would read the whole table.
+      x-sidekick-role: viewer
+      parameters:
+        - name: service
+          in: query
+          description: Only entries of this service.
+          schema:
+            type: string
+        - name: verdict
+          in: query
+          description: Only entries with this confirmed verdict.
+          schema:
+            $ref: "#/components/schemas/Verdict"
+        - name: q
+          in: query
+          description: Only entries whose service, alert name, summary or cause match these words, as in a web search.
+          schema:
+            type: string
+            maxLength: 200
+        - name: disabled
+          in: query
+          description: With true, only disabled entries; with false, only enabled ones. Leave it out for both.
+          schema:
+            type: boolean
+        - name: cursor
+          in: query
+          description: The nextCursor of the page before.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: A page of memory entries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryEntryList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /memory/entries/{id}:
+    get:
+      operationId: GetMemoryEntry
+      summary: One memory entry
+      x-sidekick-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/MemoryEntryID"
+      responses:
+        "200":
+          description: The memory entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryEntry"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      operationId: UpdateMemoryEntry
+      summary: Edit a memory entry, disable it or enable it
+      description: |
+        Replaces the summary, the cause and the disabled flag. A disabled
+        entry is never shown to a prompt or found by a search. The last write
+        wins; there is no version. The next change of the investigation's
+        confirmation replaces the summary and the cause with the
+        investigation's own and keeps the flag. A summary or cause that is
+        empty (the summary), too long or has control characters answers 422
+        with the field. Text that differs from the stored text is redacted
+        before it is stored. A request that changes nothing writes nothing.
+        The change is written to the audit log.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/MemoryEntryID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemoryEntryUpdate"
+      responses:
+        "200":
+          description: The memory entry as stored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryEntry"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: DeleteMemoryEntry
+      summary: Delete a memory entry
+      description: |
+        Deletes the entry and its embedding. If the confirmation of the
+        investigation changes later, a new entry is written; disable an entry
+        to keep it out for good. The audit log keeps what the entry said.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/MemoryEntryID"
+      responses:
+        "204":
+          description: The memory entry is deleted.
+        default:
+          $ref: "#/components/responses/Problem"
   /audit:
     get:
       operationId: ListAudit
@@ -1273,6 +1389,14 @@ components:
       scheme: bearer
       description: An API token an admin created.
   parameters:
+    MemoryEntryID:
+      name: id
+      in: path
+      required: true
+      description: The ID of the investigation the entry is about.
+      schema:
+        type: string
+        format: uuid
     LessonID:
       name: id
       in: path
@@ -1951,6 +2075,54 @@ components:
       properties:
         version:
           type: integer
+    MemoryEntry:
+      type: object
+      required: [investigationId, verdict, summary, confirmedAt, disabled]
+      properties:
+        investigationId:
+          type: string
+          format: uuid
+          description: The investigation the entry is about; it may be gone, as memory outlives investigations.
+        service:
+          type: string
+        alertName:
+          type: string
+        verdict:
+          $ref: "#/components/schemas/Verdict"
+        summary:
+          type: string
+          description: Plain text, from the investigation's report or edited by an admin.
+        cause:
+          type: string
+          description: Plain text, the confirmed cause, or edited by an admin.
+        confirmedAt:
+          type: string
+          format: date-time
+        disabled:
+          type: boolean
+    MemoryEntryList:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemoryEntry"
+        nextCursor:
+          type: string
+    MemoryEntryUpdate:
+      type: object
+      required: [summary, disabled]
+      properties:
+        summary:
+          type: string
+          maxLength: 2000
+        cause:
+          type: string
+          maxLength: 2000
+          description: Leave it out or empty for an entry without a cause.
+        disabled:
+          type: boolean
     UsedLesson:
       type: object
       required: [id, text, scope, status]
