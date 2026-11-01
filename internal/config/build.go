@@ -45,7 +45,8 @@ type Instances struct {
 // checks the roles against the capabilities the built connectors report,
 // for connectors whose config did not declare them. When deps.Secrets is nil
 // it reads the files under the config's secrets.dir. deps.SlackBotToken is
-// set from slack.botTokenSecret and deps.TeamsBot from the teams section.
+// set from slack.botTokenSecret, deps.TeamsBot from the teams section and
+// deps.DailyLocation from budgets.daily.timeZone.
 // On problems it closes what it built and
 // returns Errors.
 func Build(ctx context.Context, cfg *Config, regs Registries, deps registry.Deps) (*Instances, error) {
@@ -63,6 +64,15 @@ func Build(ctx context.Context, cfg *Config, regs Registries, deps registry.Deps
 	}
 
 	var errs errorList
+
+	if deps.DailyLocation == nil {
+		loc, err := cfg.Budgets.Daily.Location()
+		if err != nil {
+			errs.add("budgets.daily.timeZone", "unknown time zone %q", cfg.Budgets.Daily.TimeZone)
+		}
+
+		deps.DailyLocation = loc
+	}
 
 	connectors := make(map[string]Section, len(cfg.Model.Connectors))
 	for name, c := range cfg.Model.Connectors {
