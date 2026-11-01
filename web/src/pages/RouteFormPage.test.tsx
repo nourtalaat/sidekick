@@ -53,13 +53,33 @@ describe("the route form", () => {
     });
   });
 
-  it("offers read-only as the only mode", async () => {
+  it("offers read-only and approved as the modes", async () => {
     renderApp({ me: ADMIN, route: "/routes/new" });
 
     const mode = await screen.findByLabelText("Mode");
 
-    expect(within(mode).getAllByRole("option")).toHaveLength(1);
+    expect(within(mode).getAllByRole("option")).toHaveLength(2);
     expect(within(mode).getByRole("option", { name: "Read-only" })).toBeInTheDocument();
+    expect(within(mode).getByRole("option", { name: /^Approved/ })).toBeInTheDocument();
+  });
+
+  it("sends the mode and the actions of an approved route", async () => {
+    const user = userEvent.setup();
+
+    const { handler, seen } = recording((request) =>
+      request.method === "POST" ? json(201, route({ name: "search", version: 1 })) : json(200, { routes: sampleRoutes() }),
+    );
+
+    renderApp({ me: ADMIN, route: "/routes/new", handler });
+
+    await user.type(await screen.findByLabelText("Name"), "search");
+    await user.type(screen.getByLabelText("Service"), "search-*");
+    await user.selectOptions(screen.getByLabelText("Mode"), "approved");
+    await user.type(screen.getByLabelText("Actions"), "monitor-pr, ticket-comment");
+    await user.click(screen.getByRole("button", { name: "Add route" }));
+
+    expect(await screen.findByText("Route search saved. Every replica uses it within seconds.")).toBeInTheDocument();
+    expect(seen.find((r) => r.method === "POST")?.body).toMatchObject({ mode: "approved", actions: ["monitor-pr", "ticket-comment"] });
   });
 
   it("asks for numbers and labels the way the form needs them, without sending anything", async () => {

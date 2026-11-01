@@ -10,6 +10,7 @@ import { EventsCard } from "./EventsCard";
 import { FixApplied } from "./FixApplied";
 import { FollowUpBox } from "./FollowUpBox";
 import { PageHeader } from "./PageHeader";
+import { ProposalsSection } from "./ProposalsSection";
 import { FeedbackProvider } from "./PartFeedback";
 import { ReportSections } from "./ReportSections";
 import { SideColumn } from "./SideColumn";
@@ -29,6 +30,7 @@ export default function InvestigationPage() {
   const { id = "" } = useParams();
   const me = useCurrentUser();
   const canAct = hasRole(me.role, "responder");
+  const canDecide = hasRole(me.role, "approver");
   const followUpField = useRef<HTMLTextAreaElement>(null);
 
   const investigation = useInvestigation(id);
@@ -85,6 +87,7 @@ export default function InvestigationPage() {
           )}
           {investigation.data.report && <ReportSections report={investigation.data.report} run={investigation.data.run} />}
           <FixApplied inv={investigation.data} canAct={canAct} />
+          <ProposalsSection proposals={investigation.data.proposals} canDecide={canDecide} />
           {investigation.data.pendingFollowUps.length > 0 && (
             <section aria-labelledby="pending-heading">
               <h2 id="pending-heading" className="sk-inv__heading">

@@ -117,7 +117,7 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 
 	trigger := proposalTrigger(ctx, a)
 
-	if err := registerSlackApp(ctx, a, cache, memory.SyncOptions{Embed: vectors != nil}, trigger); err != nil {
+	if err := registerSlackApp(ctx, a, cache, actions, memory.SyncOptions{Embed: vectors != nil}, trigger); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 

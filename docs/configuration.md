@@ -1473,7 +1473,8 @@ action names. Which keys an action takes, and what its `limits` mean,
 depend on its `type`. Credentials are `{ name, key }` references to
 mounted secrets like everywhere else, and an action should have a
 credential of its own, with no more rights than its limits allow. No
-action type ships in this release.
+action type ships in this release; [Writing an action](plugins/actions.md)
+describes how to add one.
 
 How a proposal is handled:
 

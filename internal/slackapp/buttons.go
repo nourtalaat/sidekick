@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/slack-go/slack"
 
+	actionproposals "github.com/nourtalaat/sidekick/internal/action/proposals"
 	"github.com/nourtalaat/sidekick/internal/feedback"
 	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/intake"
@@ -58,6 +59,15 @@ const (
 	noteBusy           = "The last run of this investigation is still finishing. Try again in a moment."
 	noteFailed         = "Sidekick could not record that click. Try again in a moment."
 	noteFormFailed     = "Sidekick could not open the feedback form. Press Details to try again."
+
+	noteNotApprover  = "Only approvers can approve or reject an action. Ask an admin for the approver role."
+	noteApproved     = "Approved. The action runs now, and the message shows the result."
+	noteRejected     = "Rejected. Nothing runs."
+	noteNoProposal   = "This action proposal does not exist any more."
+	noteExpired      = "This proposal expired before anyone decided it."
+	noteNotAllowed   = "The config does not allow this any more: %s. Reject it instead."
+	noteAlreadyDone  = "This proposal is %s already%s."
+	noteNoActionsSvc = "Action proposals are not set up on this server."
 )
 
 // viewOpenTimeout bounds opening a form, which Slack only allows within 3
@@ -77,6 +87,9 @@ var (
 	// errNoStopper is returned for a Stop watching click when Buttons has
 	// no Watchers.
 	errNoStopper = errors.New("watchers cannot be stopped here")
+	// errNoActions is returned for an Approve or Reject click when Buttons
+	// has no Actions.
+	errNoActions = errors.New("action proposals cannot be decided here")
 )
 
 // ButtonsOptions set up Buttons. Handler, Pool, Roles and Logger are
@@ -95,6 +108,10 @@ type ButtonsOptions struct {
 	// Watchers stops the watchers responders stop with the Stop watching
 	// button. Nil makes those clicks fail.
 	Watchers *watch.Stopper
+	// Actions decides the action proposals approvers approve and reject
+	// with the buttons of a proposal. Nil makes those clicks answer that
+	// proposals are not set up.
+	Actions *actionproposals.Service
 	// HTTP posts notes to the user who clicked. Nil means
 	// httpclient.New().
 	HTTP *http.Client
@@ -133,6 +150,7 @@ type Buttons struct {
 	roles     roles.Lookup
 	metrics   *feedback.Metrics
 	watchers  *watch.Stopper
+	actions   *actionproposals.Service
 	http      *http.Client
 	log       *slog.Logger
 	memory    memory.SyncOptions
@@ -159,6 +177,7 @@ func NewButtons(opts ButtonsOptions) *Buttons {
 		roles:    opts.Roles,
 		metrics:  opts.Metrics,
 		watchers: opts.Watchers,
+		actions:  opts.Actions,
 		http:     hc,
 		log:      opts.Logger,
 		memory:   opts.Memory,
@@ -259,6 +278,10 @@ func (b *Buttons) handleClick(ctx context.Context, cb slack.InteractionCallback)
 
 	log := b.log.With("action", action.ActionID, "user_id", cb.User.ID)
 
+	if slackout.IsProposalAction(action.ActionID) {
+		return b.handleProposalClick(ctx, log, cb, action)
+	}
+
 	id, ok := buttonID(action.Value)
 	if !ok {
 		log.WarnContext(ctx, "ignoring a click whose value is not an ID")
@@ -318,11 +341,109 @@ func (b *Buttons) handleClick(ctx context.Context, cb slack.InteractionCallback)
 	return nil, nil
 }
 
+// handleProposalClick handles a click on Approve or Reject on an action
+// proposal. The role is read at the time of the click, and only approvers
+// and admins may decide. The decision itself, and what happens when two
+// people decide at once or the proposal expired, is the proposal
+// service's. What the user needs to know is posted to them alone.
+func (b *Buttons) handleProposalClick(ctx context.Context, log *slog.Logger, cb slack.InteractionCallback, click *slack.BlockAction) ([]byte, error) {
+	id, ok := buttonID(click.Value)
+	if !ok {
+		log.WarnContext(ctx, "ignoring a click whose value is not a proposal ID")
+
+		return nil, nil
+	}
+
+	log = log.With("proposal_id", id.String())
+
+	role, err := b.roleAtLeast(ctx, cb.Team.ID, cb.User.ID, roles.Approver)
+	if err != nil {
+		b.note(ctx, log, cb, noteFailed)
+
+		return nil, fmt.Errorf("look up the role of the user who clicked: %w", err)
+	}
+
+	if !role.Has(roles.Approver) {
+		log.InfoContext(ctx, "click denied: the user is not an approver")
+		b.note(ctx, log, cb, noteNotApprover)
+
+		return nil, nil
+	}
+
+	if b.actions == nil {
+		b.note(ctx, log, cb, noteNoActionsSvc)
+
+		return nil, errNoActions
+	}
+
+	by := actionproposals.Decider{SlackUserID: cb.User.ID}
+
+	var decided error
+
+	switch click.ActionID {
+	case slackout.ActionApproveProposal:
+		_, decided = b.actions.Approve(ctx, id, by)
+	default:
+		_, decided = b.actions.Reject(ctx, id, by, "")
+	}
+
+	note, err := proposalNote(click.ActionID, decided)
+	if err != nil {
+		b.note(ctx, log, cb, noteFailed)
+
+		return nil, fmt.Errorf("click on %s for proposal %s: %w", click.ActionID, id, err)
+	}
+
+	log.InfoContext(ctx, "proposal click handled", "decided", decided == nil)
+	b.note(ctx, log, cb, note)
+
+	return nil, nil
+}
+
+// proposalNote returns the note for the user who clicked, from the result
+// of the decision, or the error when the decision failed for another reason
+// than the proposal's state.
+func proposalNote(actionID string, err error) (string, error) {
+	var (
+		decided    *actionproposals.DecidedError
+		notAllowed *actionproposals.NotAllowedError
+	)
+
+	switch {
+	case err == nil && actionID == slackout.ActionApproveProposal:
+		return noteApproved, nil
+	case err == nil:
+		return noteRejected, nil
+	case errors.Is(err, actionproposals.ErrNotFound):
+		return noteNoProposal, nil
+	case errors.Is(err, actionproposals.ErrExpired):
+		return noteExpired, nil
+	case errors.As(err, &notAllowed):
+		return fmt.Sprintf(noteNotAllowed, notAllowed.Reason), nil
+	case errors.As(err, &decided):
+		by := ""
+
+		if who := slackout.Decider(decided.Proposal); who != "" {
+			by = "; " + who + " decided it"
+		}
+
+		return fmt.Sprintf(noteAlreadyDone, decided.Proposal.Status, by), nil
+	default:
+		return "", err
+	}
+}
+
 // role returns the role of the user who clicked. A user below responder
 // has their role read again when the lookup can do that, so a user just
 // given a higher role is not refused.
 func (b *Buttons) role(ctx context.Context, teamID, userID string) (roles.Role, error) {
 	return responderRole(ctx, b.roles, teamID, userID)
+}
+
+// roleAtLeast returns the role of the user who clicked. A user below need
+// has their role read again when the lookup can do that.
+func (b *Buttons) roleAtLeast(ctx context.Context, teamID, userID string, need roles.Role) (roles.Role, error) {
+	return roleAtLeast(ctx, b.roles, teamID, userID, need)
 }
 
 // rate stores a rating of the verdict and shows it in the outputs, in one
@@ -649,7 +770,7 @@ func ourAction(actions []*slack.BlockAction) (*slack.BlockAction, bool) {
 		switch {
 		case a.ActionID == slackout.ActionVerdictCorrect, a.ActionID == slackout.ActionVerdictWrong,
 			a.ActionID == slackout.ActionFeedbackDetails, a.ActionID == slackout.ActionStop, a.ActionID == slackout.ActionInvestigateAnyway,
-			slackout.IsStopWatcher(a.ActionID):
+			slackout.IsStopWatcher(a.ActionID), slackout.IsProposalAction(a.ActionID):
 			return a, true
 		}
 	}
@@ -719,13 +840,20 @@ func slackURL(raw string) bool {
 // user just given a higher role, such as one just added to a Slack user
 // group, is not refused.
 func responderRole(ctx context.Context, lookup roles.Lookup, teamID, userID string) (roles.Role, error) {
+	return roleAtLeast(ctx, lookup, teamID, userID, roles.Responder)
+}
+
+// roleAtLeast returns the role lookup gives userID in teamID. A user below
+// need has their role read again when lookup can do that, so a user just
+// given a higher role is not refused.
+func roleAtLeast(ctx context.Context, lookup roles.Lookup, teamID, userID string, need roles.Role) (roles.Role, error) {
 	role, err := lookup.Role(ctx, teamID, userID)
 	if err != nil {
 		return 0, fmt.Errorf("look up the role: %w", err)
 	}
 
 	r, ok := lookup.(refresher)
-	if role.Has(roles.Responder) || !ok {
+	if role.Has(need) || !ok {
 		return role, nil
 	}
 

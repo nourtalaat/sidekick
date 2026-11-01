@@ -32,6 +32,7 @@ const FIELDS = [
   "sources",
   "outputs",
   "mode",
+  "actions",
   "budgets.maxTokens",
   "budgets.maxToolCalls",
   "budgets.maxWallTime",
@@ -41,8 +42,11 @@ const FIELDS = [
   "grouping.relatedWindow",
 ] as const;
 
-// TODO: [SK-48] Offer approved and read-write here once the actions arrive.
-const MODES = [{ value: "read-only", label: "Read-only" }];
+// TODO: [SK-48] Offer read-write here once Sidekick can run actions without approval.
+const MODES = [
+  { value: "read-only", label: "Read-only" },
+  { value: "approved", label: "Approved: the model proposes, a person approves" },
+];
 
 const LIST_PATH = "/routes";
 
@@ -62,6 +66,7 @@ interface RouteValues {
   sources: string;
   outputs: string;
   mode: string;
+  actions: string;
   maxTokens: string;
   maxToolCalls: string;
   maxWallTime: string;
@@ -84,6 +89,7 @@ const EMPTY: RouteValues = {
   sources: "",
   outputs: "",
   mode: "read-only",
+  actions: "",
   maxTokens: "",
   maxToolCalls: "",
   maxWallTime: "",
@@ -327,7 +333,14 @@ function RouteForm({ mode, initial, version }: RouteFormProps) {
           onChange={(e) => set({ mode: e.target.value })}
           options={MODES}
           error={byField.mode}
-          help="Read-only is the only mode until actions can be approved."
+          help="In approved mode the model may propose the actions below, and a person approves each one."
+        />
+        <TextField
+          label="Actions"
+          value={values.actions}
+          onChange={(e) => set({ actions: e.target.value })}
+          error={byField.actions}
+          help="Names of actions from the config file that the model may propose, separated by commas. Needed in approved mode, empty in read-only mode."
         />
       </fieldset>
 
@@ -450,7 +463,8 @@ function specOf(values: RouteValues, mode: "new" | "edit"): Built {
       strategy: textOrUndefined(values.strategy),
       sources: orUndefined(splitList(values.sources)),
       outputs: orUndefined(splitList(values.outputs)),
-      mode: "read-only",
+      mode: values.mode === "approved" ? "approved" : "read-only",
+      actions: orUndefined(splitList(values.actions)),
       budgets: {
         maxTokens,
         maxToolCalls,
@@ -481,6 +495,7 @@ function valuesOf(r: Route): RouteValues {
     sources: joinList(r.sources),
     outputs: joinList(r.outputs),
     mode: r.mode ?? "read-only",
+    actions: joinList(r.actions),
     maxTokens: r.budgets?.maxTokens === undefined ? "" : String(r.budgets.maxTokens),
     maxToolCalls: r.budgets?.maxToolCalls === undefined ? "" : String(r.budgets.maxToolCalls),
     maxWallTime: r.budgets?.maxWallTime ?? "",

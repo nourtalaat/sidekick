@@ -1,4 +1,5 @@
 import type { ComponentType } from "react";
+import { ActionsTab } from "./ActionsTab";
 import { LessonsTab } from "./LessonsTab";
 import { ScenariosTab } from "./ScenariosTab";
 import { StrategiesTab } from "./StrategiesTab";
@@ -16,4 +17,5 @@ export const REVIEW_TABS: readonly ReviewTab[] = [
   { id: "lessons", label: "Lessons", Panel: LessonsTab },
   { id: "strategies", label: "Strategies", Panel: StrategiesTab },
   { id: "scenarios", label: "Scenarios", Panel: ScenariosTab },
+  { id: "actions", label: "Actions", Panel: ActionsTab },
 ];
