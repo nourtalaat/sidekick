@@ -164,6 +164,26 @@ func proposalOf(row db.ActionProposal, route, decidedByName string) (action.Prop
 		p.DecidedBy = row.DecidedBy.String()
 	}
 
+	if row.UndoOf != nil {
+		p.UndoOf = row.UndoOf.String()
+	}
+
+	snap, err := snapshotOf(row)
+	if err != nil {
+		return action.Proposal{}, err
+	}
+
+	if snap != nil {
+		changes, err := action.Changes(*snap)
+		if err != nil {
+			return action.Proposal{}, fmt.Errorf("write the changes: %w", err)
+		}
+
+		p.Snapshot, p.Changes = snap, changes
+	}
+
+	p.Undoable = row.Undoable && p.Status == action.StatusSucceeded && p.UndoOf == "" && (p.Snapshot == nil || !p.Snapshot.Deletes())
+
 	if len(row.Result) > 0 {
 		var res action.Result
 		if err := json.Unmarshal(row.Result, &res); err != nil {
@@ -174,6 +194,21 @@ func proposalOf(row db.ActionProposal, route, decidedByName string) (action.Prop
 	}
 
 	return p, nil
+}
+
+// snapshotOf returns the snapshot stored with the proposal, or nil when it
+// has none.
+func snapshotOf(row db.ActionProposal) (*action.Snapshot, error) {
+	if len(row.Snapshot) == 0 {
+		return nil, nil
+	}
+
+	var snap action.Snapshot
+	if err := json.Unmarshal(row.Snapshot, &snap); err != nil {
+		return nil, fmt.Errorf("decode the snapshot: %w", err)
+	}
+
+	return &snap, nil
 }
 
 // deref returns *p, or the zero value for nil.

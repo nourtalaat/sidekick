@@ -195,6 +195,11 @@ func (s *Service) run(ctx context.Context, row db.ActionProposal, route string) 
 		return s.fail(ctx, row, "The parameters are not valid any more: "+s.errorText(err)+". Propose it again if it is still needed.")
 	}
 
+	snap, err := snapshotOf(row)
+	if err != nil {
+		return s.fail(ctx, row, "The snapshot stored with the proposal cannot be read: "+s.errorText(err))
+	}
+
 	execCtx, cancel := context.WithTimeout(ctx, ExecuteTimeout)
 	defer cancel()
 
@@ -204,6 +209,7 @@ func (s *Service) run(ctx context.Context, row db.ActionProposal, route string) 
 		Params:          row.Params,
 		IdempotencyKey:  row.IdempotencyKey,
 		ApprovedBy:      approvedBy(row),
+		Snapshot:        snap,
 	})
 
 	switch {
