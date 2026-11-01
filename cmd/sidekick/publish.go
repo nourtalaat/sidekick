@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/nourtalaat/sidekick/internal/action/proposals"
 	"github.com/nourtalaat/sidekick/internal/app"
 	"github.com/nourtalaat/sidekick/internal/publish"
 	"github.com/nourtalaat/sidekick/internal/queue"
@@ -10,7 +11,8 @@ import (
 )
 
 // registerPublisher runs the publish jobs that show each investigation in
-// its route's outputs, with the live state of its group's watchers.
+// its route's outputs, with the live state of its group's watchers and
+// the action proposals of the investigation.
 func registerPublisher(a *app.App) error {
 	h := publish.New(publish.Options{
 		Pool:           a.Pool(),
@@ -18,6 +20,7 @@ func registerPublisher(a *app.App) error {
 		Logger:         a.Logger().With("component", "publish"),
 		TracerProvider: a.Telemetry().TracerProvider(),
 		Watchers:       watch.States,
+		Proposals:      proposals.OfInvestigation,
 		PublicURL:      a.Config().Server.PublicURL,
 	})
 
