@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -44,6 +45,9 @@ func TestQueryPlans(t *testing.T) {
 		name      string
 		run       func(ctx context.Context, q *db.Queries) error
 		wantIndex []string
+		// allowSeqScan is set for a query that counts every row of a table,
+		// which cannot avoid reading it.
+		allowSeqScan bool
 	}{
 		{
 			name: "ListLessonCandidates",
@@ -106,6 +110,97 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"lessons_search"},
 		},
 		{
+			name: "ListLessons",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListLessons(ctx, db.ListLessonsParams{Status: new("proposed"), PageSize: 51})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"lessons_status_created", "feedback_pkey"},
+		},
+		{
+			name: "ListLessonsAfterACursor",
+			run: func(ctx context.Context, q *db.Queries) error {
+				at, id := time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC), md5UUID(t, pool, "lesson5100")
+				_, err := q.ListLessons(ctx, db.ListLessonsParams{Status: new("proposed"), AfterAt: &at, AfterID: &id, PageSize: 51})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"lessons_status_created"},
+		},
+		{
+			name: "GetLesson",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.GetLesson(ctx, md5UUID(t, pool, "lesson5100"))
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"lessons_pkey", "feedback_pkey"},
+		},
+		{
+			name: "CountLessonsByStatus",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.CountLessonsByStatus(ctx)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			allowSeqScan: true,
+		},
+		{
+			name: "LockLesson",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.LockLesson(ctx, md5UUID(t, pool, "lesson100"))
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"lessons_pkey"},
+		},
+		{
+			name: "InsertLesson",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.InsertLesson(ctx, db.InsertLessonParams{ID: uuid.New(), Text: "Check the deploys.", Status: "active", Origin: "ui"})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"Insert on lessons"},
+		},
+		{
+			name: "UpdateLesson",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.UpdateLesson(ctx, db.UpdateLessonParams{ID: md5UUID(t, pool, "lesson100"), Version: 1, Text: "Check the deploys.", Status: "active"})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"lessons_pkey"},
+		},
+		{
+			name: "ApproveLesson",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ApproveLesson(ctx, db.ApproveLessonParams{ID: md5UUID(t, pool, "lesson5043"), Version: 1})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"lessons_pkey"},
+		},
+		{
+			name: "DeleteLesson",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.DeleteLesson(ctx, md5UUID(t, pool, "lesson100"))
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"lessons_pkey"},
+		},
+		{
+			name: "ListLessonsUsedBy",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListLessonsUsedBy(ctx, db.ListLessonsUsedByParams{InvestigationID: md5UUID(t, pool, "inv100"), MaxRows: 50})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"lesson_uses_investigation", "lessons_pkey"},
+		},
+		{
 			name: "InsertLessonUses",
 			run: func(ctx context.Context, q *db.Queries) error {
 				return fmt.Errorf("run query: %w", q.InsertLessonUses(ctx, db.InsertLessonUsesParams{LessonIds: ids, InvestigationID: finalInvestigation}))
@@ -138,7 +233,9 @@ func TestQueryPlans(t *testing.T) {
 				require.Contains(t, explain.Plan, index)
 			}
 
-			require.NotContains(t, explain.Plan, "Seq Scan")
+			if !tt.allowSeqScan {
+				require.NotContains(t, explain.Plan, "Seq Scan")
+			}
 		})
 	}
 }
