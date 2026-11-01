@@ -9,6 +9,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/feedback"
 	"github.com/nourtalaat/sidekick/internal/memory"
+	"github.com/nourtalaat/sidekick/internal/proposals"
 	"github.com/nourtalaat/sidekick/internal/roles"
 	"github.com/nourtalaat/sidekick/internal/rules"
 	"github.com/nourtalaat/sidekick/internal/slackapp"
@@ -21,7 +22,7 @@ import (
 // POST /slack/events in events mode, and answers /sidekick commands the
 // same way, at POST /slack/commands in events mode. Without either,
 // Sidekick only posts to Slack.
-func registerSlackApp(ctx context.Context, a *app.App, cache *rules.Cache, memorySync memory.SyncOptions) error {
+func registerSlackApp(ctx context.Context, a *app.App, cache *rules.Cache, memorySync memory.SyncOptions, trigger proposals.Trigger) error {
 	cfg := a.Config()
 	log := a.Logger().With("component", "slackapp")
 
@@ -76,7 +77,7 @@ func registerSlackApp(ctx context.Context, a *app.App, cache *rules.Cache, memor
 
 	commands := newSlackCommands(a, h, cache, lookup)
 
-	buttons, err := newButtons(a, h, lookup, memorySync)
+	buttons, err := newButtons(a, h, lookup, memorySync, trigger)
 	if err != nil {
 		return fmt.Errorf("set up the Slack buttons: %w", err)
 	}
@@ -115,7 +116,7 @@ func registerSlackApp(ctx context.Context, a *app.App, cache *rules.Cache, memor
 // newButtons handles clicks on the buttons of Sidekick's messages, with
 // sidekick_feedback_total, and stops watchers for Stop watching. Each
 // click checks the clicker's role with lookup.
-func newButtons(a *app.App, h *slackapp.Handler, lookup roles.Lookup, memorySync memory.SyncOptions) (*slackapp.Buttons, error) {
+func newButtons(a *app.App, h *slackapp.Handler, lookup roles.Lookup, memorySync memory.SyncOptions, trigger proposals.Trigger) (*slackapp.Buttons, error) {
 	metrics, err := feedback.NewMetrics(a.Telemetry().Registry())
 	if err != nil {
 		return nil, fmt.Errorf("set up feedback metrics: %w", err)
@@ -135,7 +136,9 @@ func newButtons(a *app.App, h *slackapp.Handler, lookup roles.Lookup, memorySync
 		Logger:   a.Logger().With("component", "slackapp"),
 		Memory:   memorySync,
 
-		Redactor:  a.Redactor(),
-		PublicURL: a.Config().Server.PublicURL,
+		Proposals:    trigger,
+		Redactor:     a.Redactor(),
+		DraftLessons: summarizeConfigured(a.Config()),
+		PublicURL:    a.Config().Server.PublicURL,
 	}), nil
 }

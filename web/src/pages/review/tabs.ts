@@ -1,20 +1,19 @@
 import type { ComponentType } from "react";
-import type { Role } from "../../roles";
+import { LessonsTab } from "./LessonsTab";
 import { ScenariosTab } from "./ScenariosTab";
+import { StrategiesTab } from "./StrategiesTab";
 
-/** One tab of the review queue. */
+/** One kind of thing that waits for review. Its panel is a component of its own, in this folder. */
 export interface ReviewTab {
-  /** The value of ?tab= in the address. */
+  /** The value of the tab address parameter, such as "lessons" in /review?tab=lessons. */
   id: string;
   label: string;
-  /** The lowest role that sees the tab. */
-  minRole: Role;
-  Component: ComponentType;
+  Panel: ComponentType;
 }
 
-/**
- * The tabs of the review queue, in the order they show. Each tab is a
- * component in its own file under pages/review; a new kind of review adds
- * one entry here.
- */
-export const REVIEW_TABS: readonly ReviewTab[] = [{ id: "scenarios", label: "Scenarios", minRole: "admin", Component: ScenariosTab }];
+/** The tabs of the review queue, in the order they are shown. The first one opens when the address names none. */
+export const REVIEW_TABS: readonly ReviewTab[] = [
+  { id: "lessons", label: "Lessons", Panel: LessonsTab },
+  { id: "strategies", label: "Strategies", Panel: StrategiesTab },
+  { id: "scenarios", label: "Scenarios", Panel: ScenariosTab },
+];

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/nourtalaat/sidekick/internal/problem"
+	"github.com/nourtalaat/sidekick/internal/proposals"
 	"github.com/nourtalaat/sidekick/internal/strategystore"
 )
 
@@ -91,5 +92,45 @@ func invalidStrategyError(invalid *strategystore.InvalidError) *Error {
 	return &Error{
 		Status: http.StatusUnprocessableEntity, Code: codeValidation, Fields: fields,
 		Detail: "The strategy does not pass the checks:\n" + strings.Join(lines, "\n"),
+	}
+}
+
+// proposalError is the answer to a failed review of a strategy proposal. An
+// error it does not know answers 500.
+func proposalError(err error) error {
+	var invalid *strategystore.InvalidError
+
+	switch {
+	case errors.As(err, &invalid):
+		return invalidStrategyError(invalid)
+	case errors.Is(err, proposals.ErrNotFound):
+		return errNoProposal
+	case errors.Is(err, proposals.ErrNotPassed), errors.Is(err, strategystore.ErrProposalNotPassed):
+		return &Error{
+			Status: http.StatusConflict, Code: codeNotPassed,
+			Detail: "This proposal has not passed its benchmark gate, or was decided on already, so it cannot be applied. There is no way around the gate.",
+		}
+	case errors.Is(err, proposals.ErrNotEditable):
+		return &Error{
+			Status: http.StatusConflict, Code: codeConflict,
+			Detail: "A proposal can be edited only after its gate has ended and before anyone decides on it.",
+		}
+	case errors.Is(err, proposals.ErrNotRejectable):
+		return &Error{
+			Status: http.StatusConflict, Code: codeConflict,
+			Detail: "This proposal has no draft yet, or was decided on already, so it cannot be rejected.",
+		}
+	case errors.Is(err, strategystore.ErrStale):
+		return &Error{
+			Status: http.StatusConflict, Code: codeStale,
+			Detail: "The strategy was saved again since this proposal was drafted from it. Reject the proposal, or edit it to run its gate again.",
+		}
+	case errors.Is(err, strategystore.ErrUnchanged):
+		return &Error{
+			Status: http.StatusUnprocessableEntity, Code: codeUnchanged,
+			Detail: "The strategy already holds this YAML, so there is nothing to apply.",
+		}
+	default:
+		return fmt.Errorf("review the strategy proposal: %w", err)
 	}
 }

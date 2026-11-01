@@ -21,6 +21,7 @@ func TestDraftRubric(t *testing.T) {
 		callErr error
 		want    []bench.RubricItem
 		wantErr string
+		wantIs  error
 	}{
 		{
 			name:   "items with weights",
@@ -39,7 +40,7 @@ func TestDraftRubric(t *testing.T) {
 		{name: "too many items", answer: `{"items":[{"text":"a","weight":1},{"text":"b","weight":1},{"text":"c","weight":1},{"text":"d","weight":1},{"text":"e","weight":1},{"text":"f","weight":1}]}`, wantErr: "6 items"},
 		{name: "an item without text", answer: `{"items":[{"text":"  ","weight":1}]}`, wantErr: "item 1 has no text"},
 		{name: "not JSON", answer: `nope`, wantErr: "not usable"},
-		{name: "the call fails", callErr: summarize.ErrOverCap, wantErr: "daily spending cap"},
+		{name: "the call fails", callErr: summarize.ErrOverCap, wantIs: summarize.ErrOverCap},
 	}
 
 	for _, tt := range tests {
@@ -68,6 +69,12 @@ func TestDraftRubric(t *testing.T) {
 			require.True(t, drafter.Enabled())
 
 			got, err := drafter.Draft(t.Context(), nil, "default", "true_positive", "the cause")
+			if tt.wantIs != nil {
+				require.ErrorIs(t, err, tt.wantIs)
+
+				return
+			}
+
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
 

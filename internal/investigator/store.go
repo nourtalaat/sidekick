@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/nourtalaat/sidekick/internal/lessons"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/output"
 	"github.com/nourtalaat/sidekick/internal/publish"
@@ -51,6 +52,11 @@ type newStep struct {
 
 	// inbox are the IDs of the inbox items an inbox step delivers.
 	inbox []int64
+
+	// lessons are the lessons chosen for the prompt a prompt or triage
+	// prompt step carries. The step records them, and the investigation's
+	// use of them, in its transaction.
+	lessons *lessons.Selection
 
 	startedAt time.Time
 	duration  time.Duration
@@ -114,6 +120,12 @@ func (r *run) save(ctx context.Context, s newStep) (db.Step, error) {
 
 		if err := markDelivered(ctx, queries, r.inv.ID, step.Seq, s.inbox); err != nil {
 			return fmt.Errorf("step %d: %w", step.Seq, err)
+		}
+
+		if s.lessons != nil {
+			if err := lessons.Record(ctx, tx, r.inv.ID, *s.lessons); err != nil {
+				return fmt.Errorf("step %d: %w", step.Seq, err)
+			}
 		}
 
 		// A follow-up run leaves the report on show while it runs.
@@ -203,6 +215,15 @@ func (r *run) stepParams(s newStep) (db.InsertStepParams, error) {
 		}
 
 		p.Evidence = store.JSON(raw)
+	}
+
+	if s.lessons != nil {
+		raw, err := s.lessons.StepRecord()
+		if err != nil {
+			return db.InsertStepParams{}, fmt.Errorf("encode the lessons: %w", err)
+		}
+
+		p.Lessons = raw
 	}
 
 	if s.usage != nil {

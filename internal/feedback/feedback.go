@@ -25,6 +25,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/ids"
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/output"
+	"github.com/nourtalaat/sidekick/internal/proposals"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
@@ -67,6 +68,10 @@ type VerdictRating struct {
 	// Memory says how the investigation's memory entry is synced when the
 	// rating changes the confirmation; set Embed with vector memory on.
 	Memory memory.SyncOptions
+	// Proposals decides whether a rating of wrong makes the
+	// investigation's strategy version get a proposed change. The zero
+	// value is off.
+	Proposals proposals.Trigger
 }
 
 // Result is what a rating changed.
@@ -133,6 +138,10 @@ func RateVerdict(ctx context.Context, q db.DBTX, r VerdictRating) (Result, error
 		if err := memory.Sync(ctx, q, inv.ID, r.Memory); err != nil {
 			return Result{}, fmt.Errorf("investigation %s: %w", inv.ID, err)
 		}
+	}
+
+	if err := proposeStrategy(ctx, q, r.Proposals, inv, r.Rating, TargetVerdict, true); err != nil {
+		return Result{}, fmt.Errorf("investigation %s: %w", inv.ID, err)
 	}
 
 	return Result{Stored: true, Confirmation: change}, nil

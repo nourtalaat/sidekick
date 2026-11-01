@@ -235,6 +235,10 @@ It says that one part of an investigation is correct or wrong:
   verdicts of a report; it may be given on any part. On the verdict, a
   `correct` rating cannot name another verdict than the reported one, and
   a `wrong` rating cannot name the reported one (422).
+- A `reason` also starts a lesson when `model.roles.summarize` is set:
+  Sidekick asks that model to draft one from the feedback (see
+  [`lessons`](configuration.md#lessons)). A reason you change later does
+  not draft a second lesson from the same feedback.
 - Each person has one opinion per part: a new submission replaces the
   earlier one. The answer is the stored feedback, with `confirmation`,
   which says how it changed the confirmed verdict of the investigation:
@@ -264,9 +268,12 @@ The web UI shows the investigations in two pages, which every role from
 - **The investigation page** (`/investigations/<id>`, the address the
   Slack link opens) shows the verdict, how sure Sidekick is, the reason,
   the state of the watchers, the report, what was checked, the cost and
-  the model, the alerts of the group, and the record of the run, one line
-  for each step. A step opens to show the tool call or result in a box
-  with a copy button.
+  the model, the lessons the prompt used, the alerts of the group, and the
+  record of the run, one line for each step. A step opens to show the tool
+  call or result in a box with a copy button. The prompt step, and the
+  triage prompt step, also say how many lessons they used and which
+  lessons applied but were left out, with the reason; see
+  [Lessons](#lessons).
 
 Under the verdict, each finding, each fix and each tool result, the page
 says how many people rated that part correct and how many wrong, from
@@ -303,6 +310,252 @@ finding and fix, and each tool call, with how many people rated each one
 caller it also has `mine`, the caller's own opinion of the part, with the
 reason and the real verdict and cause they gave. Parts nobody rated, and
 the parts of an earlier run, are left out.
+
+## Lessons
+
+Lessons are short pieces of guidance, up to 400 characters, that prompts show
+the model; see [`lessons`](configuration.md#lessons). Anyone with the
+`viewer` role can read them, and an `admin` changes them. All of it is
+under `/api/v1`:
+
+- `GET /lessons` lists lessons newest first, a page at a time (`limit`, at
+  most 200, and `cursor`). `status` (`proposed`, `active`, `disabled` or
+  `rejected`), `service` and `q`, words the text matches as in a web
+  search, narrow the list. The answer also has `counts`, how many lessons
+  have each status whatever the filters. A lesson has its text, its scope
+  (`service`, `alert`, `route` and `strategy`; a lesson with none applies to
+  every investigation), its status and origin (`feedback`, `ui`, `slack` or
+  `file`), the feedback a drafted lesson comes from, how many people rated
+  the verdicts of investigations that used it correct (`helpful`) and wrong
+  (`unhelpful`), and a `version`.
+- `POST /lessons` writes a lesson, active at once or with `status:
+  proposed`. A lesson with no scope field is global.
+- `PUT /lessons/{id}` replaces the text and scope, and may set `status`: a
+  lesson that waits for review can be rejected, an active one disabled, a
+  disabled one enabled. A lesson drafted from feedback keeps at least one
+  scope field. `POST /lessons/{id}/approve` makes a lesson that waits for
+  review active and notes who approved it. `DELETE /lessons/{id}` deletes
+  one, with the record of the investigations that used it.
+- An edit or approval sends the `version` it read (400 without one). If the
+  lesson changed since, the answer is 409 with code `stale`; approving a lesson that does
+  not wait for review is 409 with code `not_proposed`. A text or scope that
+  fails the checks is 422 with the field. Every change is written to the
+  audit log.
+- `GET /investigations/{id}` lists the `lessons` the investigation used, with
+  their text and status as they are now. A prompt step in
+  `GET /investigations/{id}/steps` has `lessons`: the ones it used and the
+  first 50 it left out, each with the reason, and how many applied.
+
+Secrets in the text of a lesson are redacted when it is saved, as in feedback. The text of a lesson came from people and the model: show it as plain text.
+
+## Memory entries and service notes
+
+Memory keeps one entry for each investigation whose verdict a responder
+confirmed; see [`memory`](configuration.md#memory). An admin can fix an entry
+that misleads, or switch it off. Anyone with the `viewer` role can read
+entries and notes, and an `admin` changes them. All of it is under `/api/v1`:
+
+- `GET /memory/entries` lists entries, newest confirmation first, a page at
+  a time (`limit`, at most 200, and `cursor`). `service`, `verdict`, `q`
+  (words from the service, alert name, summary and cause, as in a web
+  search) and `disabled` (`true` for only disabled entries, `false` for only
+  enabled ones) narrow the list. An entry has its investigation ID (the
+  investigation may be gone, since memory outlives investigations), service,
+  alert name, confirmed verdict, summary, cause, when it was confirmed and
+  whether it is disabled. The list has no total.
+- `GET /memory/entries/{id}` reads one entry; the ID is the investigation's.
+- `PUT /memory/entries/{id}` replaces the `summary` (required, up to 2,000
+  characters), the `cause` (up to 2,000, empty for none) and the `disabled`
+  flag, and answers with the entry as stored. There is no version: the last
+  write wins. A disabled entry is never shown to a prompt or found by a
+  search. A request that changes nothing writes nothing.
+- `DELETE /memory/entries/{id}` deletes an entry and its embedding.
+- `GET /services/notes` lists the services that have notes, by name, a page
+  at a time (`limit`, at most 500, and `after`, the `nextAfter` of the page
+  before), with the first 120 characters of each and who changed them last.
+  `GET /services/{name}/notes` reads the notes about one service, up to
+  4,000 characters of plain text; a service without notes answers 200 with
+  empty `text`. `PUT /services/{name}/notes` replaces them, and empty text
+  deletes them. A name with a slash in it is sent as `%2F`.
+- A summary, cause or notes text that fails the checks is 422 with the
+  field. An entry that does not exist is 404. Text you send is redacted
+  before it is stored, as for lessons, and the length checks run on the
+  redacted text.
+
+Two things to know about editing memory:
+
+- **An edit lasts until the confirmation changes.** When someone changes the
+  confirmed verdict or cause of the investigation, Sidekick writes the
+  entry again from the investigation: the summary and cause you edited are
+  replaced. The `disabled` flag stays.
+- **A delete lasts until the confirmation changes too.** The next change
+  of the investigation's confirmation writes a new entry. To keep an entry
+  out for good, disable it instead of deleting it.
+
+With vector memory on, an edit of the summary or cause embeds the entry
+again.
+
+Every change is written to the audit log with the old and new values, as
+`memory.updated`, `memory.disabled`, `memory.enabled`, `memory.deleted`,
+`service_notes.updated` or `service_notes.deleted`. The memory entries have
+`target_kind` `memory_entry` and the investigation filter of the audit log
+finds them; notes have `target_kind` `service_notes` and the service as the
+target.
+
+## The Lessons and memory page
+
+The **Lessons** item of the navigation (`/lessons`) is one page with three
+tabs: **Lessons**, **Memory** and **Service notes**. The tab is in the address
+(`/lessons?tab=memory`), so a link opens the page on it, and the arrow keys
+move between the tabs. Everyone who can sign in can read the page; changing
+anything needs the `admin` role. Text on the page is plain text, never HTML.
+
+The **Lessons** tab lists every lesson, newest first, a page at a time. Filters
+for the status, the service and words in the text narrow the list, and stay in
+the address. Each lesson shows its status, where it applies, how many times
+people rated the verdict of an investigation that used it correct (found
+helpful) and wrong (found unhelpful), and when it was last used. An `admin` can:
+
+- **Write a lesson.** With no scope field filled in, the lesson is global and
+  applies to every investigation.
+- **Edit** the text and scope of an active or disabled lesson.
+- **Disable** an active lesson, so prompts stop using it, and **enable** a
+  disabled one.
+- **Delete** a lesson. The page asks first, in the page and not in a browser
+  dialog. The record of the investigations that used it goes with it; the audit
+  log keeps its text.
+
+A lesson that waits for review links to the [review queue](#the-review-queue),
+where it is approved or rejected.
+
+The **Memory** tab lists the memory entries, newest confirmation first, with
+filters for the service, the verdict, words and whether an entry is disabled.
+Each entry shows its verdict, summary, cause, service and alert name, when it
+was confirmed and a link to its investigation. An `admin` can edit the summary
+and cause, disable or enable the entry, and delete it. Two things to know:
+
+- An edit lasts until the confirmation of the investigation changes. Then
+  Sidekick writes the entry again from the investigation, and the text you wrote
+  is replaced; the disabled state stays.
+- A delete lasts until the confirmation changes too: Sidekick then writes a new
+  entry. To keep an entry out of prompts for good, disable it.
+
+The edit form and the delete step say so. See
+[Memory entries and service notes](#memory-entries-and-service-notes) for the
+API.
+
+The **Service notes** tab lists the services that have notes. Pick one, or type
+a service name, to read its notes, see who changed them last and when, and, as
+an `admin`, edit them as plain text up to 4,000 characters. Saving empty text
+deletes the notes, after the page asks. The memory source shows the notes to the
+model; see [the memory source](sources/memory.md).
+
+Every change from this page is written to the audit log.
+
+## The review queue
+
+The **Review queue** (`/review`) is one page with a tab for each kind of
+thing that waits for a person. The tab is in the address
+(`/review?tab=lessons`), so a link opens the queue on it, and the arrow keys
+move between the tabs.
+
+The **Lessons** tab lists the lessons drafted from feedback that wait for
+review, newest first, each with its text, where it applies and links to the
+investigations whose feedback it came from. Everyone who can sign in can read
+it. An `admin` can:
+
+- **Approve** the lesson, so prompts use it from now on.
+- **Edit** its text, up to 400 characters, and its scope (service, alert
+  name, route and strategy). A lesson drafted from feedback keeps at least
+  one scope field. The lesson stays in the queue until it is approved or
+  rejected.
+- **Reject** it. The lesson is kept, with the status `rejected`, and never
+  used.
+
+If someone else changed the lesson while the page was open, the page says
+so and the queue shows the new version. The text of a lesson is shown as
+plain text, never as HTML.
+
+### Proposed strategy changes
+
+The **Strategies** tab lists the changes Sidekick drafted to strategies after
+repeated wrong feedback. See [`strategies.proposals`](configuration.md#proposed-changes)
+for what turns them on and what they cost. Only an `admin` sees them.
+
+Each proposal shows its status: being drafted, draft failed, waiting for the
+gate, gate running, passed the gate, did not pass, applied, approved (for a
+strategy in a file) or rejected. Opening one shows:
+
+- why the model changed the strategy, in its own words, which is model output;
+- the change as a diff of the strategy before and after;
+- the wrong ratings it was drafted from, with their reasons and links to the
+  investigations;
+- the result of the [benchmark gate](benchmark.md#the-strategy-gate): what it
+  means and what to do about it, the mean difference of the scores with its 95%
+  interval against the allowed drop, the score of each scenario with the
+  current version and with the change, and what the gate cost.
+
+An admin can then:
+
+- **Approve** a proposal that passed. For a runtime strategy the change
+  becomes its next version, and for a built-in strategy a runtime strategy of the
+  same name that takes its place; the version records the proposal and the
+  benchmark run that checked it. Sidekick cannot change a strategy file, so for
+  one the page gives the YAML to download or copy and you commit it. The button
+  is off for any proposal that has not passed, and the server refuses it too:
+  there is no way around the gate.
+- **Edit** a proposal whose gate has ended. The new text goes through the same
+  checks as a saved strategy, the old gate result is dropped, and the proposal
+  goes through the gate again. Saving the same text runs the gate again, which
+  is the way to retry a gate that could not finish.
+- **Reject** a proposal, with a reason if you like. A gate that is still
+  running stops before its next run.
+
+Approving is refused with `stale` when the strategy was saved again since the
+draft; reject the proposal or edit it to run the gate on the strategy as it is.
+Everything an admin does is written to the audit log in the same transaction.
+
+The API behind the tab, all for an `admin`:
+
+- `GET /api/v1/strategy-proposals` lists them, newest first, 50 at a time
+  (`limit` up to 200, `cursor` from the answer's `nextCursor`), filtered by
+  `status` or `name`. Without a `status` the proposals that are still being
+  drafted, and failed drafts, are left out.
+- `GET /api/v1/strategy-proposals/{id}` returns one with `baseBody` and `body`,
+  its feedback, its `gate` and whether it is `stale`.
+- `PUT /api/v1/strategy-proposals/{id}` with a `body` edits it.
+- `POST /api/v1/strategy-proposals/{id}/approve` applies it. A proposal that has
+  not passed answers 409 with the code `not_passed`.
+- `POST /api/v1/strategy-proposals/{id}/reject` takes an optional `reason`.
+
+### Scenarios (admin)
+
+The **Scenarios** tab lists the benchmark scenarios exported from confirmed
+investigations, most recently changed first, and filters them by status. To
+make one, an admin opens a confirmed investigation and chooses **Export as
+scenario**; the draft opens on this tab. The same export is
+`sidekick bench export`; see
+[Exporting a real investigation](benchmark.md#exporting-a-real-investigation)
+for what the draft holds and how it is cleaned.
+
+A scenario opens with:
+
+- **What to check first:** a reminder of what the cleaner can and cannot
+  find, the places it kept because it could not tell what they are, and what the
+  exporter skipped or merged.
+- **Original and cleaned:** each part of the scenario (the alert payload, what
+  each fixture matches on, each answer, the expected cause) next to the recorded
+  original it was made from. Values the cleaner replaced, such as `host-1`, and
+  the places it kept, are marked; the marks have text or a tooltip, never colour
+  alone. The original is read from the investigation's events and steps; once the
+  retention job has deleted them, the part says that the original is no longer
+  kept.
+- **Scenario file:** the whole YAML file, to edit. Saving checks the file and
+  refuses one that is not a valid scenario or holds an email, a host name or an
+  IP address. A saved edit puts the scenario back to draft.
+- **Review:** the box "I checked this for sensitive data" and **Mark as
+  reviewed**. The button works only after the tick and with no unsaved edits. A
+  reviewed scenario shows who reviewed it and when, and can be downloaded.
 
 ## Listeners and routes
 
@@ -538,41 +791,6 @@ for the range of equal length before it, for showing the change.
   scenario; the judge's reasons are left out. `GET /api/v1/bench/compare?a=<id>&b=<id>`
   lines up two runs: each metric with the change and whether the intervals
   overlap (`clear` or `none`), and the correct runs of each scenario.
-
-## The review queue
-
-The **Review queue** page (`/review`) has one tab for each kind of thing that
-waits for a person. The tab is in the address (`/review?tab=scenarios`), so a
-link opens the right one, and a tab shows only to the roles that may use it.
-
-### Scenarios (admin)
-
-The **Scenarios** tab lists the benchmark scenarios exported from confirmed
-investigations, most recently changed first, and filters them by status. To
-make one, an admin opens a confirmed investigation and chooses **Export as
-scenario**; the draft opens on this tab. The same export is
-`sidekick bench export`; see
-[Exporting a real investigation](benchmark.md#exporting-a-real-investigation)
-for what the draft holds and how it is cleaned.
-
-A scenario opens with:
-
-- **What to check first:** a reminder of what the cleaner can and cannot
-  find, the places it kept because it could not tell what they are, and what the
-  exporter skipped or merged.
-- **Original and cleaned:** each part of the scenario (the alert payload, what
-  each fixture matches on, each answer, the expected cause) next to the recorded
-  original it was made from. Values the cleaner replaced, such as `host-1`, and
-  the places it kept, are marked; the marks have text or a tooltip, never colour
-  alone. The original is read from the investigation's events and steps; once the
-  retention job has deleted them, the part says that the original is no longer
-  kept.
-- **Scenario file:** the whole YAML file, to edit. Saving checks the file and
-  refuses one that is not a valid scenario or holds an email, a host name or an
-  IP address. A saved edit puts the scenario back to draft.
-- **Review:** the box "I checked this for sensitive data" and **Mark as
-  reviewed**. The button works only after the tick and with no unsaved edits. A
-  reviewed scenario shows who reviewed it and when, and can be downloaded.
 
 ## The JSON API
 

@@ -455,6 +455,487 @@ paths:
                 $ref: "#/components/schemas/StrategyVersionDetail"
         default:
           $ref: "#/components/responses/Problem"
+  /lessons:
+    get:
+      operationId: ListLessons
+      summary: Lessons, newest first, a page at a time
+      description: |
+        Lessons are short pieces of reviewed guidance that prompts show the
+        model. A lesson that waits for review has the status `proposed`.
+        `counts` is the number of lessons with each status, whatever the
+        filters. The text of a lesson came from people and the model: show it
+        as plain text.
+      x-sidekick-role: viewer
+      parameters:
+        - name: status
+          in: query
+          description: Only lessons with this status.
+          schema:
+            $ref: "#/components/schemas/LessonStatus"
+        - name: service
+          in: query
+          description: Only lessons scoped to this service.
+          schema:
+            type: string
+        - name: q
+          in: query
+          description: Only lessons whose text matches these words, as in a web search.
+          schema:
+            type: string
+            maxLength: 200
+        - name: cursor
+          in: query
+          description: The nextCursor of the page before.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: A page of lessons.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LessonList"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: CreateLesson
+      summary: Write a lesson
+      description: |
+        Stores a lesson written by an admin, active at once unless
+        `status` is `proposed`. A lesson with no scope field is global and
+        applies to every investigation. A failed check answers 422 with the
+        field of the problem. The change is written to the audit log.
+      x-sidekick-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewLesson"
+      responses:
+        "201":
+          description: The new lesson.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lesson"
+        default:
+          $ref: "#/components/responses/Problem"
+  /lessons/{id}:
+    put:
+      operationId: UpdateLesson
+      summary: Edit a lesson, disable or enable it, or reject it
+      description: |
+        Replaces the text and scope of the lesson. `status` may be omitted to
+        keep the status; a lesson that waits for review may be rejected, an
+        active one disabled and a disabled one enabled. Approving a lesson
+        that waits for review is its own operation. `version` is the version
+        that was read; if the lesson changed since, the answer is 409 with
+        code `stale`. A lesson drafted from feedback keeps at least one scope
+        field (422). The change is written to the audit log.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/LessonID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LessonUpdate"
+      responses:
+        "200":
+          description: The lesson as saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lesson"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: DeleteLesson
+      summary: Delete a lesson
+      description: |
+        Deletes the lesson and the record of the investigations that used it.
+        The audit log keeps its text.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/LessonID"
+      responses:
+        "204":
+          description: The lesson is deleted.
+        default:
+          $ref: "#/components/responses/Problem"
+  /lessons/{id}/approve:
+    post:
+      operationId: ApproveLesson
+      summary: Approve a lesson that waits for review
+      description: |
+        Makes the lesson active, so prompts use it, and notes who approved it.
+        `version` is the version that was read; if the lesson changed since,
+        the answer is 409 with code `stale`. A lesson that does not wait for
+        review answers 409 with code `not_proposed`. The change is written to
+        the audit log.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/LessonID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LessonApproval"
+      responses:
+        "200":
+          description: The lesson as saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lesson"
+        default:
+          $ref: "#/components/responses/Problem"
+  /strategy-proposals:
+    get:
+      operationId: ListStrategyProposals
+      summary: Proposed changes to strategies, newest first, a page at a time
+      description: |
+        The changes the model drafted after a strategy version collected
+        wrong feedback, with the result of the benchmark gate that checks
+        each. Proposals that are still being drafted, and drafts that
+        failed, are listed only when asked for with `status`.
+      x-sidekick-role: admin
+      parameters:
+        - name: status
+          in: query
+          description: Only proposals with this status. The default is every status but `drafting` and `draft_failed`.
+          schema:
+            $ref: "#/components/schemas/StrategyProposalStatus"
+        - name: name
+          in: query
+          description: Only proposals for the strategy with this name.
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          description: The nextCursor of the page before.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: A page of proposals.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StrategyProposalList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /strategy-proposals/{id}:
+    get:
+      operationId: GetStrategyProposal
+      summary: One proposal, with its YAML, the feedback and the gate result
+      description: |
+        `baseBody` and `body` are the strategy before and after the change,
+        for a diff. `gate` holds the numbers the gate's decision rests on.
+        `stale` is true when the strategy has changed since the draft, so
+        approving a proposal for a runtime strategy would fail.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/StrategyProposalID"
+      responses:
+        "200":
+          description: The proposal.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StrategyProposal"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      operationId: EditStrategyProposal
+      summary: Replace the YAML of a proposal and send it through the gate again
+      description: |
+        Only a proposal whose gate has ended and that nobody has decided on
+        can be edited; any other answers 409 with code `conflict`. The YAML
+        goes through the checks of a strategy file, and its name must be the
+        proposal's; a failed check answers 422 with code `validation` and
+        a field for each problem. The old gate result is dropped. Saving the
+        same YAML runs the gate again.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/StrategyProposalID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EditStrategyProposal"
+      responses:
+        "200":
+          description: The proposal, now pending.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StrategyProposal"
+        default:
+          $ref: "#/components/responses/Problem"
+  /strategy-proposals/{id}/approve:
+    post:
+      operationId: ApproveStrategyProposal
+      summary: Apply a proposal that passed its gate
+      description: |
+        There is no way to apply a proposal that has not passed: any other
+        answers 409 with code `not_passed`, and nothing is changed. For a
+        runtime strategy the YAML is saved as its next version, and for a
+        built-in one as a runtime strategy of the same name. The answer has
+        the `version`. For a strategy in a file, Sidekick cannot change the
+        file: the answer has the `yaml` to commit. A strategy that was saved
+        since the draft answers 409 with code `stale`, and one that already
+        holds the YAML 422 with code `unchanged`.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/StrategyProposalID"
+      responses:
+        "200":
+          description: The proposal as decided.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StrategyProposalApproval"
+        default:
+          $ref: "#/components/responses/Problem"
+  /strategy-proposals/{id}/reject:
+    post:
+      operationId: RejectStrategyProposal
+      summary: Set a proposal aside
+      description: |
+        A proposal that has a draft and that nobody has decided on can be
+        rejected, whatever its gate result; any other answers 409 with code
+        `conflict`. A gate that is still running stops before its next run.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/StrategyProposalID"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RejectStrategyProposal"
+      responses:
+        "200":
+          description: The rejected proposal.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StrategyProposalSummary"
+        default:
+          $ref: "#/components/responses/Problem"
+  /memory/entries:
+    get:
+      operationId: ListMemoryEntries
+      summary: Memory entries, newest confirmation first, a page at a time
+      description: |
+        Memory holds one entry for each investigation whose verdict a
+        responder confirmed; prompts show the entries like a new alert. The
+        list has disabled entries too. The text of an entry came from the
+        model and from people: show it as plain text. The answer has no total,
+        since counting every entry would read the whole table.
+      x-sidekick-role: viewer
+      parameters:
+        - name: service
+          in: query
+          description: Only entries of this service.
+          schema:
+            type: string
+        - name: verdict
+          in: query
+          description: Only entries with this confirmed verdict.
+          schema:
+            $ref: "#/components/schemas/Verdict"
+        - name: q
+          in: query
+          description: Only entries whose service, alert name, summary or cause match these words, as in a web search.
+          schema:
+            type: string
+            maxLength: 200
+        - name: disabled
+          in: query
+          description: With true, only disabled entries; with false, only enabled ones. Leave it out for both.
+          schema:
+            type: boolean
+        - name: cursor
+          in: query
+          description: The nextCursor of the page before.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: A page of memory entries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryEntryList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /memory/entries/{id}:
+    get:
+      operationId: GetMemoryEntry
+      summary: One memory entry
+      x-sidekick-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/MemoryEntryID"
+      responses:
+        "200":
+          description: The memory entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryEntry"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      operationId: UpdateMemoryEntry
+      summary: Edit a memory entry, disable it or enable it
+      description: |
+        Replaces the summary, the cause and the disabled flag. A disabled
+        entry is never shown to a prompt or found by a search. The last write
+        wins; there is no version. The next change of the investigation's
+        confirmation replaces the summary and the cause with the
+        investigation's own and keeps the flag. A summary or cause that is
+        empty (the summary), too long or has control characters answers 422
+        with the field. Text that differs from the stored text is redacted
+        before it is stored. A request that changes nothing writes nothing.
+        The change is written to the audit log.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/MemoryEntryID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemoryEntryUpdate"
+      responses:
+        "200":
+          description: The memory entry as stored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryEntry"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: DeleteMemoryEntry
+      summary: Delete a memory entry
+      description: |
+        Deletes the entry and its embedding. If the confirmation of the
+        investigation changes later, a new entry is written; disable an entry
+        to keep it out for good. The audit log keeps what the entry said.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/MemoryEntryID"
+      responses:
+        "204":
+          description: The memory entry is deleted.
+        default:
+          $ref: "#/components/responses/Problem"
+  /services/notes:
+    get:
+      operationId: ListServiceNotes
+      summary: The services that have notes, by name, a page at a time
+      description: |
+        Service notes are what people wrote about a service; the memory source
+        shows them to the model. Each service comes with the first characters
+        of its notes. Read the notes of one service with
+        `GET /services/{name}/notes`.
+      x-sidekick-role: viewer
+      parameters:
+        - name: after
+          in: query
+          description: The nextAfter of the page before.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: A page of services with notes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceNotesList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /services/{name}/notes:
+    get:
+      operationId: GetServiceNotes
+      summary: The notes about a service
+      description: |
+        A service without notes answers 200 with empty `text` and no
+        `updatedAt`. The text is plain text: show it as such.
+      x-sidekick-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/ServiceName"
+      responses:
+        "200":
+          description: The notes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceNotes"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      operationId: PutServiceNotes
+      summary: Replace the notes about a service
+      description: |
+        Replaces the notes with `text`, which is trimmed and redacted before
+        it is stored. Empty text deletes the notes. The last write wins.
+        Text longer than 4,000 characters, once redacted, or with control
+        characters answers 422 with the field `text`. The change is written
+        to the audit log; a request that changes nothing writes nothing.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/ServiceName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceNotesUpdate"
+      responses:
+        "200":
+          description: The notes as stored, empty after a delete.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceNotes"
+        default:
+          $ref: "#/components/responses/Problem"
   /audit:
     get:
       operationId: ListAudit
@@ -1296,6 +1777,28 @@ components:
       scheme: bearer
       description: An API token an admin created.
   parameters:
+    ServiceName:
+      name: name
+      in: path
+      required: true
+      description: The name of a service, up to 200 characters.
+      schema:
+        type: string
+    MemoryEntryID:
+      name: id
+      in: path
+      required: true
+      description: The ID of the investigation the entry is about.
+      schema:
+        type: string
+        format: uuid
+    LessonID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     RuleName:
       name: name
       in: path
@@ -1310,6 +1813,14 @@ components:
       description: The name of a strategy.
       schema:
         type: string
+    StrategyProposalID:
+      name: id
+      in: path
+      required: true
+      description: The ID of a strategy proposal.
+      schema:
+        type: string
+        format: uuid
     InvestigationID:
       name: id
       in: path
@@ -1834,6 +2345,504 @@ components:
           type: integer
           minimum: 0
           description: The version that was read, or 0 for a strategy that is not stored yet. Leave it out to skip the check.
+    LessonStatus:
+      type: string
+      enum: [proposed, active, disabled, rejected]
+      x-enum-varnames: [LessonProposed, LessonActive, LessonDisabled, LessonRejected]
+    LessonScope:
+      type: object
+      description: |
+        Which investigations a lesson applies to. A field that is set must
+        equal the investigation's value; a lesson with no field set applies to
+        every investigation.
+      properties:
+        service:
+          type: string
+          maxLength: 200
+        alert:
+          type: string
+          maxLength: 200
+        route:
+          type: string
+          maxLength: 200
+        strategy:
+          type: string
+          maxLength: 200
+    LessonFeedback:
+      type: object
+      required: [feedbackId, investigationId]
+      properties:
+        feedbackId:
+          type: string
+          format: uuid
+        investigationId:
+          type: string
+          format: uuid
+    Lesson:
+      type: object
+      required: [id, text, scope, status, origin, feedback, helpful, unhelpful, version, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        text:
+          type: string
+          maxLength: 400
+          description: Plain text, written by a person or drafted by the model.
+        scope:
+          $ref: "#/components/schemas/LessonScope"
+        status:
+          $ref: "#/components/schemas/LessonStatus"
+        origin:
+          type: string
+          enum: [feedback, ui, slack, file]
+          x-enum-varnames: [LessonOriginFeedback, LessonOriginUI, LessonOriginSlack, LessonOriginFile]
+        feedback:
+          type: array
+          description: The feedback a drafted lesson comes from.
+          items:
+            $ref: "#/components/schemas/LessonFeedback"
+        createdBy:
+          type: string
+          format: uuid
+          description: The user who wrote the lesson, when a user did.
+        approvedBy:
+          type: string
+          format: uuid
+          description: The user who approved the lesson, when a user did.
+        helpful:
+          type: integer
+          description: How many people rated the verdict of an investigation that used the lesson correct.
+        unhelpful:
+          type: integer
+          description: How many people rated it wrong.
+        lastUsedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          description: Goes up with every change; send it back with an edit or an approval.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    LessonList:
+      type: object
+      required: [lessons, counts]
+      properties:
+        lessons:
+          type: array
+          items:
+            $ref: "#/components/schemas/Lesson"
+        nextCursor:
+          type: string
+        counts:
+          $ref: "#/components/schemas/LessonCounts"
+    LessonCounts:
+      type: object
+      required: [proposed, active, disabled, rejected]
+      description: How many lessons there are with each status, whatever the filters.
+      properties:
+        proposed:
+          type: integer
+        active:
+          type: integer
+        disabled:
+          type: integer
+        rejected:
+          type: integer
+    NewLesson:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          maxLength: 400
+        scope:
+          $ref: "#/components/schemas/LessonScope"
+        status:
+          type: string
+          enum: [active, proposed]
+          x-enum-varnames: [NewLessonActive, NewLessonProposed]
+          default: active
+    LessonUpdate:
+      type: object
+      required: [version, text]
+      properties:
+        version:
+          type: integer
+        text:
+          type: string
+          maxLength: 400
+        scope:
+          $ref: "#/components/schemas/LessonScope"
+        status:
+          $ref: "#/components/schemas/LessonStatus"
+    LessonApproval:
+      type: object
+      required: [version]
+      properties:
+        version:
+          type: integer
+    MemoryEntry:
+      type: object
+      required: [investigationId, verdict, summary, confirmedAt, disabled]
+      properties:
+        investigationId:
+          type: string
+          format: uuid
+          description: The investigation the entry is about; it may be gone, as memory outlives investigations.
+        service:
+          type: string
+        alertName:
+          type: string
+        verdict:
+          $ref: "#/components/schemas/Verdict"
+        summary:
+          type: string
+          description: Plain text, from the investigation's report or edited by an admin.
+        cause:
+          type: string
+          description: Plain text, the confirmed cause, or edited by an admin.
+        confirmedAt:
+          type: string
+          format: date-time
+        disabled:
+          type: boolean
+    MemoryEntryList:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemoryEntry"
+        nextCursor:
+          type: string
+    MemoryEntryUpdate:
+      type: object
+      required: [summary, disabled]
+      properties:
+        summary:
+          type: string
+          maxLength: 2000
+        cause:
+          type: string
+          maxLength: 2000
+          description: Leave it out or empty for an entry without a cause.
+        disabled:
+          type: boolean
+    ServiceNotes:
+      type: object
+      required: [service, text]
+      properties:
+        service:
+          type: string
+        text:
+          type: string
+          maxLength: 4000
+          description: Plain text. Empty for a service without notes.
+        updatedAt:
+          type: string
+          format: date-time
+        updatedByName:
+          type: string
+          description: The name of the user who last changed the notes. Not set when an API token did.
+    ServiceNotesSummary:
+      type: object
+      required: [service, preview, updatedAt]
+      properties:
+        service:
+          type: string
+        preview:
+          type: string
+          description: The first 120 characters of the notes, as plain text.
+        updatedAt:
+          type: string
+          format: date-time
+        updatedByName:
+          type: string
+    ServiceNotesList:
+      type: object
+      required: [services]
+      properties:
+        services:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceNotesSummary"
+        nextAfter:
+          type: string
+          description: Pass it as `after` to read the next page.
+    ServiceNotesUpdate:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          maxLength: 4000
+    UsedLesson:
+      type: object
+      required: [id, text, scope, status]
+      description: A lesson that the prompt of an investigation used, as it is now.
+      properties:
+        id:
+          type: string
+          format: uuid
+        text:
+          type: string
+        scope:
+          $ref: "#/components/schemas/LessonScope"
+        status:
+          $ref: "#/components/schemas/LessonStatus"
+    LeftOutLesson:
+      type: object
+      required: [id, reason, scope]
+      properties:
+        id:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          enum: [max_per_prompt, max_tokens, global_share]
+          x-enum-varnames: [LeftOutMaxPerPrompt, LeftOutMaxTokens, LeftOutGlobalShare]
+        scope:
+          $ref: "#/components/schemas/LessonScope"
+    StepLessons:
+      type: object
+      required: [used, leftOut, leftOutTotal, candidates]
+      description: |
+        The lessons that the prompt of this step used and the ones that
+        applied but were left out, for a prompt or triage prompt step.
+      properties:
+        used:
+          type: array
+          items:
+            type: string
+            format: uuid
+        leftOut:
+          type: array
+          description: The first lessons left out, at most 50, in rank order.
+          items:
+            $ref: "#/components/schemas/LeftOutLesson"
+        leftOutTotal:
+          type: integer
+          description: How many lessons were left out in all.
+        candidates:
+          type: integer
+          description: How many active lessons applied.
+    StrategyProposalStatus:
+      type: string
+      enum: [drafting, draft_failed, pending, benchmarking, passed, failed, approved, rejected, applied]
+      description: |
+        `drafting`: waiting for the model's draft. `draft_failed`: no draft
+        could be made; the status detail says why. `pending`: drafted, waiting
+        for the gate. `benchmarking`: the gate is running. `passed`: the gate
+        passed, and the proposal can be approved. `failed`: the gate ended
+        without a pass; the gate result says how. `applied`: approved, and a
+        version was saved. `approved`: approved for a strategy in a file.
+        `rejected`: set aside.
+    StrategyGateResult:
+      type: string
+      enum: [passed, failed, not_enough_evidence, no_benchmark_coverage, over_budget, error]
+      description: |
+        How the gate ended. `passed`: the lower end of the 95% interval of the
+        score difference is above minus `maxDrop`. `failed`: the proposal
+        scores lower on average by more than that. `not_enough_evidence`: it
+        looks no worse on average, but the interval is too wide to be sure, or
+        fewer than three scenarios cover the strategy. `no_benchmark_coverage`:
+        no scenario covers the strategy. `over_budget`: the gate stopped before
+        it passed its cost cap. `error`: the gate could not finish.
+    StrategyProposalSummary:
+      type: object
+      required: [id, name, baseVersion, triggerCount, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: The strategy the proposal changes.
+        baseVersion:
+          type: string
+          description: The version the draft started from, as investigations record it.
+        baseOrigin:
+          $ref: "#/components/schemas/StrategyLayer"
+        rationale:
+          type: string
+          description: Why the model changed the strategy. It is model output.
+        triggerCount:
+          type: integer
+          description: How many wrong ratings the version had when the proposal was made.
+        status:
+          $ref: "#/components/schemas/StrategyProposalStatus"
+        statusDetail:
+          type: string
+          description: Why a draft failed.
+        gateResult:
+          $ref: "#/components/schemas/StrategyGateResult"
+        benchRunId:
+          type: string
+          format: uuid
+          description: The benchmark run of the proposal, when the gate ran.
+        baselineRunId:
+          type: string
+          format: uuid
+          description: The benchmark run of the current version, when the gate ran.
+        reviewer:
+          type: string
+          format: uuid
+          description: The user or API token that last decided on or edited the proposal.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        decidedAt:
+          type: string
+          format: date-time
+    StrategyProposalList:
+      type: object
+      required: [proposals]
+      properties:
+        proposals:
+          type: array
+          items:
+            $ref: "#/components/schemas/StrategyProposalSummary"
+        nextCursor:
+          type: string
+          description: Pass as cursor to get the next page. Absent on the last page.
+    StrategyProposal:
+      allOf:
+        - $ref: "#/components/schemas/StrategyProposalSummary"
+        - type: object
+          required: [feedback, stale, approvable]
+          properties:
+            baseBody:
+              type: string
+              description: The strategy before the change, as YAML.
+            body:
+              type: string
+              description: The strategy after the change, as YAML.
+            feedback:
+              type: array
+              description: The wrong ratings the proposal was drafted from.
+              items:
+                $ref: "#/components/schemas/StrategyProposalFeedback"
+            gate:
+              $ref: "#/components/schemas/StrategyGate"
+            stale:
+              type: boolean
+              description: True when the strategy has changed since the draft.
+            approvable:
+              type: boolean
+              description: True when the proposal has passed its gate and can be approved.
+    StrategyProposalFeedback:
+      type: object
+      required: [id, investigationId, targetKind, targetRef, rating, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        investigationId:
+          type: string
+          format: uuid
+        targetKind:
+          type: string
+        targetRef:
+          type: string
+        rating:
+          type: string
+        reason:
+          type: string
+        correctVerdict:
+          type: string
+        correctCause:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    StrategyGate:
+      type: object
+      required: [result, reason, mean, interval, maxDrop, resamples, seed, repeats, costMicros, maxCostMicros, scenarios]
+      properties:
+        result:
+          $ref: "#/components/schemas/StrategyGateResult"
+        reason:
+          type: string
+          description: The result in a sentence.
+        mean:
+          type: number
+          format: double
+          description: The mean over the scenarios of the proposal's overall score minus the current version's.
+        interval:
+          $ref: "#/components/schemas/BenchInterval"
+        maxDrop:
+          type: number
+          format: double
+          description: The proposal passes when the lower end of the interval is above minus this.
+        resamples:
+          type: integer
+        seed:
+          type: string
+          description: The seed of the resampling, as a decimal string, so the interval can be worked out again.
+        repeats:
+          type: integer
+          description: How many times each scenario ran in each arm.
+        costMicros:
+          type: integer
+          format: int64
+        maxCostMicros:
+          type: integer
+          format: int64
+        error:
+          type: string
+        scenarios:
+          type: array
+          items:
+            $ref: "#/components/schemas/StrategyGateScenario"
+    StrategyGateScenario:
+      type: object
+      required: [id, baseline, proposal, difference]
+      properties:
+        id:
+          type: string
+        baseline:
+          type: number
+          format: double
+        proposal:
+          type: number
+          format: double
+        difference:
+          type: number
+          format: double
+    EditStrategyProposal:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          description: The strategy as YAML, in the format of a strategy file.
+    RejectStrategyProposal:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Why the proposal is set aside, at most 500 characters.
+    StrategyProposalApproval:
+      type: object
+      required: [proposal]
+      properties:
+        proposal:
+          $ref: "#/components/schemas/StrategyProposalSummary"
+        version:
+          type: integer
+          description: The runtime version that was saved. Absent for a strategy in a file.
+        yaml:
+          type: string
+          description: The strategy to commit, for a strategy in a file.
     FieldError:
       type: object
       required: [field, message]
@@ -2297,6 +3306,14 @@ components:
           description: Follow-up questions that no run has answered yet, oldest first.
           items:
             $ref: "#/components/schemas/PendingFollowUp"
+        lessons:
+          type: array
+          description: |
+            The lessons that the prompt, or the triage, of the investigation
+            used, with their text and status as they are now. A lesson that
+            was deleted is not listed.
+          items:
+            $ref: "#/components/schemas/UsedLesson"
     Confirmation:
       type: object
       required: [verdict, at]
@@ -2598,6 +3615,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/StepPart"
+        lessons:
+          $ref: "#/components/schemas/StepLessons"
     StepTokens:
       type: object
       required: [input, output]

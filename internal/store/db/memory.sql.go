@@ -12,6 +12,33 @@ import (
 	"github.com/google/uuid"
 )
 
+const deleteMemoryEntry = `-- name: DeleteMemoryEntry :execrows
+DELETE FROM memory_entries WHERE investigation_id = $1
+`
+
+// DeleteMemoryEntry deletes a memory entry, and its embedding with it. A
+// later change of the investigation's confirmation writes a new entry.
+func (q *Queries) DeleteMemoryEntry(ctx context.Context, investigationID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemoryEntry, investigationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteServiceNotes = `-- name: DeleteServiceNotes :execrows
+DELETE FROM service_notes WHERE service = $1
+`
+
+// DeleteServiceNotes deletes the notes about a service.
+func (q *Queries) DeleteServiceNotes(ctx context.Context, service string) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteServiceNotes, service)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteUnconfirmedMemoryEntry = `-- name: DeleteUnconfirmedMemoryEntry :exec
 DELETE FROM memory_entries AS m
 WHERE m.investigation_id = $1
@@ -29,6 +56,41 @@ func (q *Queries) DeleteUnconfirmedMemoryEntry(ctx context.Context, investigatio
 	return err
 }
 
+const getMemoryEntry = `-- name: GetMemoryEntry :one
+SELECT investigation_id, service, alert_name, verdict, summary, cause, confirmed_at, disabled
+FROM memory_entries
+WHERE investigation_id = $1
+`
+
+type GetMemoryEntryRow struct {
+	InvestigationID uuid.UUID
+	Service         *string
+	AlertName       *string
+	Verdict         string
+	Summary         string
+	Cause           *string
+	ConfirmedAt     time.Time
+	Disabled        bool
+}
+
+// GetMemoryEntry returns one memory entry. It returns no row for an entry
+// that does not exist.
+func (q *Queries) GetMemoryEntry(ctx context.Context, investigationID uuid.UUID) (GetMemoryEntryRow, error) {
+	row := q.db.QueryRow(ctx, getMemoryEntry, investigationID)
+	var i GetMemoryEntryRow
+	err := row.Scan(
+		&i.InvestigationID,
+		&i.Service,
+		&i.AlertName,
+		&i.Verdict,
+		&i.Summary,
+		&i.Cause,
+		&i.ConfirmedAt,
+		&i.Disabled,
+	)
+	return i, err
+}
+
 const getServiceNotes = `-- name: GetServiceNotes :one
 SELECT service, text, updated_at FROM service_notes WHERE service = $1
 `
@@ -44,6 +106,35 @@ func (q *Queries) GetServiceNotes(ctx context.Context, service string) (GetServi
 	row := q.db.QueryRow(ctx, getServiceNotes, service)
 	var i GetServiceNotesRow
 	err := row.Scan(&i.Service, &i.Text, &i.UpdatedAt)
+	return i, err
+}
+
+const getServiceNotesDetail = `-- name: GetServiceNotesDetail :one
+SELECT n.service, n.text, n.updated_at,
+       coalesce((SELECT u.name FROM users AS u WHERE u.id = n.updated_by), '')::text AS updated_by_name
+FROM service_notes AS n
+WHERE n.service = $1
+`
+
+type GetServiceNotesDetailRow struct {
+	Service       string
+	Text          string
+	UpdatedAt     time.Time
+	UpdatedByName string
+}
+
+// GetServiceNotesDetail returns the notes about a service with the name of
+// the user who last changed them, which is empty when a token did. It
+// returns no row for a service without notes.
+func (q *Queries) GetServiceNotesDetail(ctx context.Context, service string) (GetServiceNotesDetailRow, error) {
+	row := q.db.QueryRow(ctx, getServiceNotesDetail, service)
+	var i GetServiceNotesDetailRow
+	err := row.Scan(
+		&i.Service,
+		&i.Text,
+		&i.UpdatedAt,
+		&i.UpdatedByName,
+	)
 	return i, err
 }
 
@@ -167,6 +258,132 @@ func (q *Queries) ListMemoryByServiceAlert(ctx context.Context, arg ListMemoryBy
 	return items, nil
 }
 
+const listMemoryEntries = `-- name: ListMemoryEntries :many
+SELECT m.investigation_id, m.service, m.alert_name, m.verdict, m.summary, m.cause, m.confirmed_at, m.disabled
+FROM memory_entries AS m
+WHERE ($1::text IS NULL OR m.service = $1::text)
+  AND ($2::text IS NULL OR m.verdict = $2::text)
+  AND ($3::text IS NULL OR m.search @@ websearch_to_tsquery('english', $3::text))
+  AND ($4::boolean IS NULL OR m.disabled = $4::boolean)
+  AND ($5::timestamptz IS NULL
+       OR (m.confirmed_at, m.investigation_id) < ($5::timestamptz, $6::uuid))
+ORDER BY m.confirmed_at DESC, m.investigation_id DESC
+LIMIT $7::int
+`
+
+type ListMemoryEntriesParams struct {
+	Service  *string
+	Verdict  *string
+	Search   *string
+	Disabled *bool
+	AfterAt  *time.Time
+	AfterID  *uuid.UUID
+	PageSize int32
+}
+
+type ListMemoryEntriesRow struct {
+	InvestigationID uuid.UUID
+	Service         *string
+	AlertName       *string
+	Verdict         string
+	Summary         string
+	Cause           *string
+	ConfirmedAt     time.Time
+	Disabled        bool
+}
+
+// ListMemoryEntries returns memory entries for the web UI, newest
+// confirmation first, a page at a time, disabled ones too. Every filter is
+// optional: the service, the verdict, words (a web-search style query on
+// the service, alert name, summary and cause), whether the entry is
+// disabled, and the place after which the page starts (the confirmation
+// time and investigation ID of the last entry of the page before).
+func (q *Queries) ListMemoryEntries(ctx context.Context, arg ListMemoryEntriesParams) ([]ListMemoryEntriesRow, error) {
+	rows, err := q.db.Query(ctx, listMemoryEntries,
+		arg.Service,
+		arg.Verdict,
+		arg.Search,
+		arg.Disabled,
+		arg.AfterAt,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMemoryEntriesRow
+	for rows.Next() {
+		var i ListMemoryEntriesRow
+		if err := rows.Scan(
+			&i.InvestigationID,
+			&i.Service,
+			&i.AlertName,
+			&i.Verdict,
+			&i.Summary,
+			&i.Cause,
+			&i.ConfirmedAt,
+			&i.Disabled,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listServiceNotes = `-- name: ListServiceNotes :many
+SELECT n.service, left(n.text, 120)::text AS preview, n.updated_at,
+       coalesce((SELECT u.name FROM users AS u WHERE u.id = n.updated_by), '')::text AS updated_by_name
+FROM service_notes AS n
+WHERE n.service > $1::text
+ORDER BY n.service
+LIMIT $2::int
+`
+
+type ListServiceNotesParams struct {
+	After    string
+	PageSize int32
+}
+
+type ListServiceNotesRow struct {
+	Service       string
+	Preview       string
+	UpdatedAt     time.Time
+	UpdatedByName string
+}
+
+// ListServiceNotes returns the services that have notes, by name, a page at
+// a time, starting after the service after, with the first characters of
+// the notes and the name of the user who last changed them.
+func (q *Queries) ListServiceNotes(ctx context.Context, arg ListServiceNotesParams) ([]ListServiceNotesRow, error) {
+	rows, err := q.db.Query(ctx, listServiceNotes, arg.After, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServiceNotesRow
+	for rows.Next() {
+		var i ListServiceNotesRow
+		if err := rows.Scan(
+			&i.Service,
+			&i.Preview,
+			&i.UpdatedAt,
+			&i.UpdatedByName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSimilarMemory = `-- name: ListSimilarMemory :many
 SELECT investigation_id, service, alert_name, verdict, summary, cause, confirmed_at
 FROM memory_entries
@@ -225,6 +442,55 @@ func (q *Queries) ListSimilarMemory(ctx context.Context, arg ListSimilarMemoryPa
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockMemoryEntry = `-- name: LockMemoryEntry :one
+SELECT investigation_id, service, alert_name, verdict, summary, cause, confirmed_at, disabled
+FROM memory_entries
+WHERE investigation_id = $1
+FOR UPDATE
+`
+
+type LockMemoryEntryRow struct {
+	InvestigationID uuid.UUID
+	Service         *string
+	AlertName       *string
+	Verdict         string
+	Summary         string
+	Cause           *string
+	ConfirmedAt     time.Time
+	Disabled        bool
+}
+
+// LockMemoryEntry returns one memory entry and holds a lock on its row
+// until the transaction ends, so two admins who change the same entry at
+// once, or an admin and a change of the confirmation, are applied in turn.
+func (q *Queries) LockMemoryEntry(ctx context.Context, investigationID uuid.UUID) (LockMemoryEntryRow, error) {
+	row := q.db.QueryRow(ctx, lockMemoryEntry, investigationID)
+	var i LockMemoryEntryRow
+	err := row.Scan(
+		&i.InvestigationID,
+		&i.Service,
+		&i.AlertName,
+		&i.Verdict,
+		&i.Summary,
+		&i.Cause,
+		&i.ConfirmedAt,
+		&i.Disabled,
+	)
+	return i, err
+}
+
+const lockServiceNotes = `-- name: LockServiceNotes :exec
+SELECT pg_advisory_xact_lock(hashtextextended('service_notes:' || $1::text, 0))
+`
+
+// LockServiceNotes takes a lock on the notes of a service, that need not
+// exist yet, until the transaction ends, so a change reads the notes it
+// replaces even when another admin writes the first notes at the same time.
+func (q *Queries) LockServiceNotes(ctx context.Context, service string) error {
+	_, err := q.db.Exec(ctx, lockServiceNotes, service)
+	return err
 }
 
 const searchMemory = `-- name: SearchMemory :many
@@ -291,6 +557,35 @@ func (q *Queries) SearchMemory(ctx context.Context, arg SearchMemoryParams) ([]S
 	return items, nil
 }
 
+const updateMemoryEntry = `-- name: UpdateMemoryEntry :execrows
+UPDATE memory_entries
+SET summary = $1, cause = $2, disabled = $3
+WHERE investigation_id = $4
+`
+
+type UpdateMemoryEntryParams struct {
+	Summary         string
+	Cause           *string
+	Disabled        bool
+	InvestigationID uuid.UUID
+}
+
+// UpdateMemoryEntry replaces the summary, cause and disabled flag of a
+// memory entry. The next change of the investigation's confirmation
+// replaces the summary and cause again, and keeps the flag.
+func (q *Queries) UpdateMemoryEntry(ctx context.Context, arg UpdateMemoryEntryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateMemoryEntry,
+		arg.Summary,
+		arg.Cause,
+		arg.Disabled,
+		arg.InvestigationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const upsertMemoryEntry = `-- name: UpsertMemoryEntry :execrows
 INSERT INTO memory_entries (
   investigation_id, service, alert_name, fingerprint, verdict, summary, cause, confirmed_at
@@ -333,4 +628,24 @@ func (q *Queries) UpsertMemoryEntry(ctx context.Context, investigationID uuid.UU
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const upsertServiceNotes = `-- name: UpsertServiceNotes :exec
+INSERT INTO service_notes (service, text, updated_by, updated_at)
+VALUES ($1, $2, $3, now())
+ON CONFLICT (service) DO UPDATE
+SET text = excluded.text, updated_by = excluded.updated_by, updated_at = excluded.updated_at
+`
+
+type UpsertServiceNotesParams struct {
+	Service   string
+	Text      string
+	UpdatedBy *uuid.UUID
+}
+
+// UpsertServiceNotes writes the notes about a service. updated_by is the
+// Sidekick user who wrote them, or no one when a token did.
+func (q *Queries) UpsertServiceNotes(ctx context.Context, arg UpsertServiceNotesParams) error {
+	_, err := q.db.Exec(ctx, upsertServiceNotes, arg.Service, arg.Text, arg.UpdatedBy)
+	return err
 }

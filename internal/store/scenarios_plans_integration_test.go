@@ -138,9 +138,20 @@ FROM generate_series(1, $3) AS i`, planGroups, groupID, planScenarios)
 			wantIndex: []string{"scenarios_updated"},
 		},
 		{
-			name: "ListScenariosByStatus",
+			// Most scenarios are drafts, so the planner reads them in order of
+			// the update time and skips the others.
+			name: "ListScenariosByStatusDraft",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.ListScenariosByStatus(ctx, db.ListScenariosByStatusParams{Status: "draft", PageSize: planPageSize})
+
+				return explained(err)
+			},
+			wantIndex: []string{"Index Scan"},
+		},
+		{
+			name: "ListScenariosByStatusReviewed",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListScenariosByStatus(ctx, db.ListScenariosByStatusParams{Status: "reviewed", PageSize: planPageSize})
 
 				return explained(err)
 			},

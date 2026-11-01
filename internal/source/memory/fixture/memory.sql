@@ -10,5 +10,15 @@ VALUES
   ('0192d3a4-0000-7000-8000-0000000000e4', 'checkout-api', 'CheckoutLatencyP99', 'fp-checkout-us', 'true_positive',
    'Disabled: p99 latency rose in the US region.', NULL, '2026-10-23 10:00:00+00', true);
 
+-- Lessons: an active one for checkout-api, a global one, one for another
+-- service, and ones that are not active.
+INSERT INTO lessons (id, text, scope_service, status, origin, created_at)
+VALUES
+  ('0192d3a4-0000-7000-8000-0000000000f1', 'Latency after a release usually means a new slow query.', 'checkout-api', 'active', 'ui', '2026-10-01 00:00:00+00'),
+  ('0192d3a4-0000-7000-8000-0000000000f2', 'Say which tools could not show recent changes, also when latency is the symptom.', NULL, 'active', 'ui', '2026-10-02 00:00:00+00'),
+  ('0192d3a4-0000-7000-8000-0000000000f3', 'Latency of the export endpoint is expected.', 'orders-api', 'active', 'ui', '2026-10-03 00:00:00+00'),
+  ('0192d3a4-0000-7000-8000-0000000000f4', 'Latency lesson that waits for review.', 'checkout-api', 'proposed', 'feedback', '2026-10-04 00:00:00+00'),
+  ('0192d3a4-0000-7000-8000-0000000000f5', 'Latency lesson that was disabled.', 'checkout-api', 'disabled', 'ui', '2026-10-05 00:00:00+00');
+
 INSERT INTO service_notes (service, text, updated_at)
 VALUES ('checkout-api', 'Latency alerts during the 02:00 batch run are expected.', '2026-10-01 09:00:00+00');

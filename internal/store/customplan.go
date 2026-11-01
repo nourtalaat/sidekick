@@ -1,4 +1,4 @@
-package api
+package store
 
 import (
 	"context"
@@ -10,19 +10,19 @@ import (
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
-// customPlan is a db.DBTX that runs each query with a plan made for the
+// CustomPlan is a db.DBTX that runs each query with a plan made for the
 // values it gets, instead of a prepared statement whose plan the driver
 // may reuse after a few runs. A query with optional filters, written as
 // `$1 IS NULL OR column = $1`, gets a plan that uses the index of the
 // filter only when the plan knows the value; a reused plan has to work for
 // every combination of filters and uses none of their indexes.
-type customPlan struct {
-	db db.DBTX
+type CustomPlan struct {
+	DB db.DBTX
 }
 
 // Exec runs the statement with a plan made for args.
-func (c customPlan) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
-	tag, err := c.db.Exec(ctx, sql, withExecMode(args)...)
+func (c CustomPlan) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	tag, err := c.DB.Exec(ctx, sql, withExecMode(args)...)
 	if err != nil {
 		return tag, fmt.Errorf("exec: %w", err)
 	}
@@ -31,8 +31,8 @@ func (c customPlan) Exec(ctx context.Context, sql string, args ...any) (pgconn.C
 }
 
 // Query runs the query with a plan made for args.
-func (c customPlan) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
-	rows, err := c.db.Query(ctx, sql, withExecMode(args)...)
+func (c CustomPlan) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	rows, err := c.DB.Query(ctx, sql, withExecMode(args)...)
 	if err != nil {
 		return nil, fmt.Errorf("query: %w", err)
 	}
@@ -41,8 +41,8 @@ func (c customPlan) Query(ctx context.Context, sql string, args ...any) (pgx.Row
 }
 
 // QueryRow runs the query with a plan made for args.
-func (c customPlan) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
-	return c.db.QueryRow(ctx, sql, withExecMode(args)...)
+func (c CustomPlan) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	return c.DB.QueryRow(ctx, sql, withExecMode(args)...)
 }
 
 // withExecMode puts pgx.QueryExecModeExec in front of args, which makes

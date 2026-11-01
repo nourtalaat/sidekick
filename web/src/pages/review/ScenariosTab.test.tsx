@@ -2,13 +2,21 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { json, problem, renderApp, wcagViolations } from "../../test/helpers";
-import { ADMIN, codedProblem, recording, rowAt, validationProblem } from "../../test/rules";
+import { ADMIN, RESPONDER, codedProblem, recording, rowAt, validationProblem } from "../../test/rules";
 import { scenario, scenarioDetail } from "../../test/scenarios";
 
 const ID = "latency-alert-checkout-0198f2";
 const DETAIL_PATH = `/api/v1/scenarios/${ID}`;
 
 describe("the scenario list", () => {
+  it("asks for the admin role and loads nothing for anyone below it", async () => {
+    const { handler, seen } = recording(() => json(200, { scenarios: [] }));
+    renderApp({ me: RESPONDER, route: "/review?tab=scenarios", handler });
+
+    expect(await screen.findByRole("heading", { name: "Needs the admin role" })).toBeInTheDocument();
+    expect(seen.some((r) => r.path === "/api/v1/scenarios")).toBe(false);
+  });
+
   it("lists the scenarios with their status, a link to each and to its investigation", async () => {
     const { handler } = recording(() =>
       json(200, {

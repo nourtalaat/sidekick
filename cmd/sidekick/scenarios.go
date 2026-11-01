@@ -6,13 +6,9 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/app"
 	"github.com/nourtalaat/sidekick/internal/audit"
-	"github.com/nourtalaat/sidekick/internal/config"
-	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/model/instrument"
-	"github.com/nourtalaat/sidekick/internal/model/pricing"
 	"github.com/nourtalaat/sidekick/internal/scenario"
 	"github.com/nourtalaat/sidekick/internal/scrub"
-	"github.com/nourtalaat/sidekick/internal/summarize"
 )
 
 // newScenarioService builds the service the API exports, edits and reviews
@@ -46,57 +42,4 @@ func newScenarioService(ctx context.Context, a *app.App, modelMetrics *instrumen
 		Pool: a.Pool(), Cleaner: cleaner, Rubric: scenario.NewRubricDrafter(caller), Audit: audit.NewWriter(),
 		Webhooks: cfg.Intake.Webhooks, Sources: cfg.Sources,
 	}), nil
-}
-
-// newSummarizer builds the caller of the summarize role: its connector,
-// wrapped with the model call span and metrics and priced like the
-// investigator's, with the daily caps of the config. Without the role the
-// caller is off.
-func newSummarizer(a *app.App, modelMetrics *instrument.Metrics) (*summarize.Caller, error) {
-	cfg := a.Config()
-
-	name := cfg.Model.Roles[model.RoleSummarize]
-	conn, ok := a.Instances().Models[name]
-
-	if name == "" || !ok {
-		return summarize.New(summarize.Options{}), nil
-	}
-
-	prices := pricing.New(cfg.Model.PriceTable())
-
-	wrapped := instrument.Wrap(conn, instrument.Options{
-		Connector: name,
-		Provider:  cfg.Model.Connectors[name].Type,
-		Metrics:   modelMetrics,
-		Prices:    prices,
-		Tracer:    a.Telemetry().TracerProvider().Tracer(instrument.TracerName),
-	})
-
-	opts, err := summarizeOptions(cfg, name, wrapped, a.Instances().ModelSettings[name], prices)
-	if err != nil {
-		return nil, err
-	}
-
-	opts.Logger = a.Logger().With("component", "summarize")
-
-	return summarize.New(opts), nil
-}
-
-// summarizeOptions are the options of the caller of the connector name of
-// the summarize role, with the config's daily caps.
-func summarizeOptions(cfg *config.Config, name string, conn model.Connector, settings model.Settings, prices pricing.Table) (summarize.Options, error) {
-	loc, err := cfg.Budgets.Daily.Location()
-	if err != nil {
-		return summarize.Options{}, fmt.Errorf("set up the daily caps: %w", err)
-	}
-
-	routeCaps := make(map[string]int64, len(cfg.Routes))
-	for _, r := range cfg.Routes {
-		routeCaps[r.Name] = r.Budgets.Daily.MaxCostMicros()
-	}
-
-	return summarize.Options{
-		Name: name, Connector: conn, Model: settings.Model, Prices: prices, Retries: settings.Retries,
-		Daily: summarize.Daily{Location: loc, MaxCostMicros: cfg.Budgets.Daily.MaxCostMicros(), RouteMicros: routeCaps},
-	}, nil
 }

@@ -141,6 +141,11 @@ Ratings are counted in `sidekick_feedback_total`, by target (`verdict`,
 repeated click, or a form that only adds a reason to the same rating, is
 not counted.
 
+A reason given in the **Details** form, or in the web UI, is also the start
+of a lesson: when `model.roles.summarize` is set, Sidekick asks that model to
+draft a lesson from the feedback, and an admin approves it before prompts
+use it. See [`lessons`](configuration.md#lessons).
+
 ## Set up the Slack app
 
 Each organization creates its own internal Slack app from the manifest
@@ -352,6 +357,7 @@ shown only to the person who sent the command.
 | `/sidekick listeners` | viewer | Lists the listeners in effect. |
 | `/sidekick routes` | viewer | Lists the routes, in the order they are tried. |
 | `/sidekick route set <name> <field> <value>` | admin | Changes one field of a route added from Slack, or adds the route. `/sidekick route set` lists the fields. |
+| `/sidekick lesson add "<text>" [service:<name>] [alert:<name>] [route:<name>] [strategy:<name>]` | admin | Writes a lesson that prompts use from now on. Put the text, at most 400 characters, in double quotes. At least one scope option is needed; a lesson for every investigation is written in the web UI. Secrets in the text are redacted, as in feedback. See [`lessons`](configuration.md#lessons). |
 | `/sidekick investigate <message link>` | responder | Investigates the message, as a mention of `@Sidekick` in its thread would. Use the message's **Copy link**; for a reply in a thread, the thread's first message is investigated. |
 | `/sidekick status` | anyone | Shows the version, your role and how many rules are in effect. |
 | `/sidekick help` | anyone | Lists the commands. |

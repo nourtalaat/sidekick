@@ -42,12 +42,15 @@ type TriageInput struct {
 	Group Group
 	// Route is the route that matched the group.
 	Route RouteContext
+	// Lessons are the reviewed lessons that apply, best first. Empty leaves
+	// them out.
+	Lessons []Lesson
 }
 
 // BuildTriage assembles the request of a triage: the triage system prompt
 // and the list of strategies as system text, the submit_triage tool, and
-// one user message with the event group and the strategies whose match
-// fits its first event. The list of strategies and the tool are the same
+// one user message with the lessons, when there are any, the event group
+// and the strategies whose match fits its first event. The list of strategies and the tool are the same
 // from one triage to the next, so the cache breakpoints mark them. The
 // caller adds the model settings, such as requiring the tool call.
 func BuildTriage(in TriageInput) model.Request {
@@ -60,10 +63,10 @@ func BuildTriage(in TriageInput) model.Request {
 			{Text: renderStrategyList(in.Strategies), Cache: true},
 		},
 		Tools: []model.ToolSpec{tool},
-		Messages: []model.Message{{Role: model.User, Parts: []model.Part{
-			model.Text{Text: renderEvent(in.Group, in.Route)},
-			model.Text{Text: renderStrategyChoice(in.Strategies, in.RouteStrategy, in.Group.First)},
-		}}},
+		Messages: []model.Message{{Role: model.User, Parts: textParts(slices.Concat(
+			renderLessons(in.Lessons),
+			[]string{renderEvent(in.Group, in.Route), renderStrategyChoice(in.Strategies, in.RouteStrategy, in.Group.First)},
+		))}},
 	}
 }
 
@@ -112,4 +115,14 @@ func renderStrategyChoice(strategies []strategy.Strategy, routeStrategy string, 
 	}
 
 	return b.String()
+}
+
+// textParts returns a text part for each of texts.
+func textParts(texts []string) []model.Part {
+	parts := make([]model.Part, len(texts))
+	for i, text := range texts {
+		parts[i] = model.Text{Text: text}
+	}
+
+	return parts
 }
