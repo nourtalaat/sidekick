@@ -79,7 +79,7 @@ func newSummarizer(a *app.App, modelMetrics *instrument.Metrics) (*summarize.Cal
 
 	opts, err := summarizeOptions(cfg, name, wrapped, a.Instances().ModelSettings[name], prices)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("set up the summarize options: %w", err)
 	}
 
 	opts.Logger = log

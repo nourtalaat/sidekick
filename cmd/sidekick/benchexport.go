@@ -110,7 +110,7 @@ func benchExport(ctx context.Context, cmd *cobra.Command, regs config.Registries
 
 	pool, err := exportPool(ctx, cfg)
 	if err != nil {
-		return err
+		return fmt.Errorf("open the database: %w", err)
 	}
 
 	defer pool.Close()
@@ -123,7 +123,7 @@ func benchExport(ctx context.Context, cmd *cobra.Command, regs config.Registries
 
 	service, err := exportService(ctx, cmd, regs, cfg, pool)
 	if err != nil {
-		return err
+		return fmt.Errorf("set up the export: %w", err)
 	}
 
 	return exportInvestigation(ctx, cmd, service, id, actor)
@@ -285,7 +285,7 @@ func exportService(ctx context.Context, cmd *cobra.Command, regs config.Registri
 
 	caller, err := exportSummarizer(ctx, cmd, regs, cfg, deps)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("set up the summarize role: %w", err)
 	}
 
 	if !caller.Enabled() {

@@ -113,7 +113,7 @@ func RecordedCalls(steps []db.Step) ([]RecordedCall, error) {
 
 			call, err := recordedCall(s, inputs[*s.ToolCallID])
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("read the call of step %d: %w", s.Seq, err)
 			}
 
 			out = append(out, call)
