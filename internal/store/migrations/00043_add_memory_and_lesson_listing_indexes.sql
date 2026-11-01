@@ -6,10 +6,11 @@
 --
 -- The memory list orders by (confirmed_at, investigation_id) descending and
 -- continues after the last row of the page before with a comparison of that
--- pair, which an index on the pair in the same direction answers as a
--- range. The older confirmed_at index has no second column, so it cannot.
--- The verdict filter has no index of its own: it is applied to rows read in
--- order from the listing or service index.
+-- pair. The existing memory_entries_confirmed index serves the unfiltered
+-- list: Postgres turns the comparison into a range on confirmed_at, reads in
+-- order and sorts only the rows that share a time. The verdict filter has no
+-- index of its own: it is applied to rows read in order from that index or
+-- from the service index.
 --
 -- The lessons list does the same with (created_at, id). Its existing
 -- indexes all start with the status or cover only active lessons, so a list
@@ -17,7 +18,6 @@
 -- them.
 
 -- +goose Up
-CREATE INDEX memory_entries_listing ON memory_entries (confirmed_at DESC, investigation_id DESC);
 CREATE INDEX memory_entries_service_listing ON memory_entries (service, confirmed_at DESC, investigation_id DESC);
 -- Only the disabled entries, which are a small part of the table.
 CREATE INDEX memory_entries_disabled_listing ON memory_entries (confirmed_at DESC, investigation_id DESC) WHERE disabled;
@@ -28,7 +28,8 @@ CREATE INDEX memory_entries_search_all ON memory_entries USING gin (search) WITH
 CREATE INDEX lessons_created ON lessons (created_at DESC, id DESC);
 CREATE INDEX lessons_service_created ON lessons (scope_service, created_at DESC, id DESC);
 -- The words filter across every status; lessons_search covers active ones.
-CREATE INDEX lessons_search_all ON lessons USING gin (search);
+-- Lessons are written rarely, so new ones go into the index at once.
+CREATE INDEX lessons_search_all ON lessons USING gin (search) WITH (fastupdate = off);
 
 -- +goose Down
 DROP INDEX lessons_search_all;
@@ -37,4 +38,3 @@ DROP INDEX lessons_created;
 DROP INDEX memory_entries_search_all;
 DROP INDEX memory_entries_disabled_listing;
 DROP INDEX memory_entries_service_listing;
-DROP INDEX memory_entries_listing;

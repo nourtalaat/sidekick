@@ -5,6 +5,8 @@ package lessons
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,6 +47,9 @@ func TestQueryPlans(t *testing.T) {
 		name      string
 		run       func(ctx context.Context, q *db.Queries) error
 		wantIndex []string
+		// wantOneOf are indexes of which the plan uses at least one, for a
+		// query that two indexes serve about equally.
+		wantOneOf []string
 		// allowSeqScan is set for a query that counts every row of a table,
 		// which cannot avoid reading it.
 		allowSeqScan bool
@@ -116,7 +121,8 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"lessons_status_created", "feedback_pkey"},
+			wantIndex: []string{"feedback_pkey"},
+			wantOneOf: []string{"lessons_status_created", "lessons_created"},
 		},
 		{
 			name: "ListLessonsAfterACursor",
@@ -126,7 +132,7 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"lessons_status_created"},
+			wantOneOf: []string{"lessons_status_created", "lessons_created"},
 		},
 		{
 			name: "ListLessonsOfEveryStatus",
@@ -268,6 +274,11 @@ func TestQueryPlans(t *testing.T) {
 
 			for _, index := range tt.wantIndex {
 				require.Contains(t, explain.Plan, index)
+			}
+
+			if len(tt.wantOneOf) > 0 {
+				require.True(t, slices.ContainsFunc(tt.wantOneOf, func(index string) bool { return strings.Contains(explain.Plan, index) }),
+					"want one of %v in the plan", tt.wantOneOf)
 			}
 
 			if !tt.allowSeqScan {
