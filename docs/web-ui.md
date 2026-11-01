@@ -781,7 +781,12 @@ for the range of equal length before it, for showing the change.
   [marked as applied](#actions-on-investigations)), and the recoveries,
   downtime and timed out watchers. A median is worked out from counts in
   buckets of growing width, so it is about right, within a third, and not
-  exact. Actions are 0 until actions exist.
+  exact. The actions of an investigation count in its hour. Proposed is
+  every proposal. Approved is the proposals that a person or the policy
+  approved: those that are approved, executing, succeeded or undone, and
+  those that failed after a decision; not the rejected or expired ones.
+  Executed is the proposals that ran and succeeded, including the undone
+  ones, which ran before they were undone.
 - `GET /api/v1/stats/filters` lists the routes, services and models of the
   last 400 days, for the filter menus.
 - `GET /api/v1/bench/runs` lists the benchmark runs that
