@@ -473,3 +473,28 @@ func TestExportOfTheSameAlertTwiceInOneWindow(t *testing.T) {
 	require.NotEqual(t, first.ID, other.ID)
 	require.Equal(t, first.Title, other.Title)
 }
+
+func TestExportKeepsTheSpendOfARubricThatWasNotSaved(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, true)
+
+	// A scenario of another investigation has the ID the export will take, so
+	// the insert fails after the rubric was drafted and paid for.
+	_, err := f.pool.Exec(t.Context(), `INSERT INTO scenarios (id, title, status, body, provenance, notes, created_at, updated_at)
+		VALUES ('latency-alert-checkout-api-p99-latency-above-2s-for-5m-3f6e8d1c4b70', 'taken', 'draft', 'id: x', '[]', '[]', now(), now())`)
+	require.NoError(t, err)
+
+	_, _, err = f.service.Export(t.Context(), f.seed.InvestigationID, admin)
+	require.Error(t, err)
+
+	spend, err := db.New(f.pool).GetDailySpend(t.Context(), db.GetDailySpendParams{Route: f.seed.Route, Day: dayOf(spendDayTime)})
+	require.NoError(t, err)
+	require.EqualValues(t, rubricCostMicros, spend.RouteMicros)
+
+	var n int
+
+	require.NoError(t, f.pool.QueryRow(t.Context(), `SELECT count(*) FROM scenarios`).Scan(&n))
+	require.Equal(t, 1, n)
+	require.Zero(t, auditCount(t.Context(), t, f.pool, ActionDrafted, "latency-alert-checkout-api-p99-latency-above-2s-for-5m-3f6e8d1c4b70"))
+}
