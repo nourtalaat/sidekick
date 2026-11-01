@@ -1,10 +1,13 @@
 package proposals
 
 import (
+	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -92,25 +95,35 @@ func Get(ctx context.Context, q db.DBTX, id uuid.UUID) (View, error) {
 
 // List returns one page of proposals with one of the statuses, newest
 // first. It reads PageSize proposals; ask for one more than the page holds
-// to know whether another page follows.
+// to know whether another page follows. Each status is read from its own
+// part of the index, in order and up to a page, and the pages are merged,
+// so the cost of a page does not grow with the number of proposals.
 func List(ctx context.Context, q db.DBTX, opts ListOptions) ([]View, error) {
-	statuses := make([]string, len(opts.Statuses))
-	for i, s := range opts.Statuses {
-		statuses[i] = string(s)
-	}
-
 	after := opts.After
 	if after.ProposedAt.IsZero() {
 		after = Cursor{ProposedAt: farFuture, ID: uuid.Max}
 	}
 
-	rows, err := db.New(q).ListActionProposals(ctx, db.ListActionProposalsParams{
-		Statuses: statuses, BeforeAt: after.ProposedAt, BeforeID: after.ID, PageSize: opts.PageSize,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list proposals: %w", err)
+	queries := db.New(q)
+
+	var rows []db.ListActionProposalsRow
+
+	for _, status := range opts.Statuses {
+		page, err := queries.ListActionProposals(ctx, db.ListActionProposalsParams{
+			Status: string(status), BeforeAt: after.ProposedAt, BeforeID: after.ID, PageSize: opts.PageSize,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list %s proposals: %w", status, err)
+		}
+
+		rows = append(rows, page...)
 	}
 
+	slices.SortFunc(rows, func(a, b db.ListActionProposalsRow) int {
+		return cmp.Or(b.ActionProposal.ProposedAt.Compare(a.ActionProposal.ProposedAt), bytes.Compare(b.ActionProposal.ID[:], a.ActionProposal.ID[:]))
+	})
+
+	rows = rows[:min(len(rows), int(opts.PageSize))]
 	out := make([]View, 0, len(rows))
 
 	for _, r := range rows {

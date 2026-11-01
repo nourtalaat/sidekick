@@ -94,8 +94,10 @@ WHERE id IN (
 RETURNING id, investigation_id, action;
 
 -- name: ListActionProposals :many
--- ListActionProposals lists proposals with one of the statuses, newest
--- first, from the page that starts after the cursor (before_at, before_id).
+-- ListActionProposals lists proposals with one status, newest first, from
+-- the page that starts after the cursor (before_at, before_id). The index
+-- on the status and the time gives the order, so a page reads only its own
+-- rows. A list of several statuses is the merge of one such page for each.
 SELECT
   sqlc.embed(p),
   (SELECT i.route FROM investigations i WHERE i.id = p.investigation_id)::text AS route,
@@ -105,7 +107,7 @@ SELECT
     (SELECT t.name FROM api_tokens t WHERE t.id = p.decided_by),
     '')::text AS decided_by_name
 FROM action_proposals p
-WHERE p.status = ANY (@statuses::text[])
+WHERE p.status = @status
   AND (p.proposed_at, p.id) < (@before_at::timestamptz, @before_id::uuid)
 ORDER BY p.proposed_at DESC, p.id DESC
 LIMIT @page_size;

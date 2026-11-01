@@ -192,6 +192,24 @@ func TestListProposalsPages(t *testing.T) {
 	require.Empty(t, second.NextCursor)
 }
 
+// TestListProposalsPagesAcrossStatuses pages through proposals of three
+// statuses, which are read one status at a time and merged by time.
+func TestListProposalsPagesAcrossStatuses(t *testing.T) {
+	t.Parallel()
+
+	s, _ := setupProposals(t)
+
+	const query = "?status=rejected&status=approved&status=succeeded&limit=2"
+
+	first := readProposals(t, s.doWithToken(t, http.MethodGet, proposalsRoute+query, approverToken, nil))
+	require.Equal(t, []string{propApproved, propSucceeded}, ids(first.Proposals))
+	require.NotEmpty(t, first.NextCursor)
+
+	second := readProposals(t, s.doWithToken(t, http.MethodGet, proposalsRoute+query+"&cursor="+first.NextCursor, approverToken, nil))
+	require.Equal(t, []string{propRejected}, ids(second.Proposals))
+	require.Empty(t, second.NextCursor)
+}
+
 func TestListProposalsRefusals(t *testing.T) {
 	t.Parallel()
 

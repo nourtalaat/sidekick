@@ -323,14 +323,14 @@ SELECT
     (SELECT t.name FROM api_tokens t WHERE t.id = p.decided_by),
     '')::text AS decided_by_name
 FROM action_proposals p
-WHERE p.status = ANY ($1::text[])
+WHERE p.status = $1
   AND (p.proposed_at, p.id) < ($2::timestamptz, $3::uuid)
 ORDER BY p.proposed_at DESC, p.id DESC
 LIMIT $4
 `
 
 type ListActionProposalsParams struct {
-	Statuses []string
+	Status   string
 	BeforeAt time.Time
 	BeforeID uuid.UUID
 	PageSize int32
@@ -343,11 +343,13 @@ type ListActionProposalsRow struct {
 	DecidedByName  string
 }
 
-// ListActionProposals lists proposals with one of the statuses, newest
-// first, from the page that starts after the cursor (before_at, before_id).
+// ListActionProposals lists proposals with one status, newest first, from
+// the page that starts after the cursor (before_at, before_id). The index
+// on the status and the time gives the order, so a page reads only its own
+// rows. A list of several statuses is the merge of one such page for each.
 func (q *Queries) ListActionProposals(ctx context.Context, arg ListActionProposalsParams) ([]ListActionProposalsRow, error) {
 	rows, err := q.db.Query(ctx, listActionProposals,
-		arg.Statuses,
+		arg.Status,
 		arg.BeforeAt,
 		arg.BeforeID,
 		arg.PageSize,
