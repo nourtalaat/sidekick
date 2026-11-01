@@ -371,7 +371,7 @@ func TestScenarioUpdateRefusals(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, missing.Code)
 
 	// Nothing changed.
-	require.EqualValues(t, draft.Revision, getScenario(t, s, draft.ID).Scenario.Revision)
+	require.Equal(t, draft.Revision, getScenario(t, s, draft.ID).Scenario.Revision)
 }
 
 func TestScenarioList(t *testing.T) {

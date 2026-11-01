@@ -1,4 +1,5 @@
 import { Check, CircleX, Clock, TriangleAlert, type LucideIcon } from "lucide-react";
+import { Link } from "react-router";
 import type { Investigation } from "../../api/investigations";
 import { Card } from "../../components/Card";
 import { formatCost, formatDuration, formatTokens } from "../../format";
@@ -49,11 +50,31 @@ export function SideColumn({ inv }: { inv: Investigation }) {
           <Fact name="Tool calls" value={String(inv.toolCalls)} />
           <Fact name="Model" value={inv.model} />
           <Fact name="Route" value={inv.route} />
-          <Fact name="Strategy" value={inv.strategy ? `${inv.strategy} ${inv.strategyVersion ?? ""}`.trim() : undefined} />
+          <StrategyFact name={inv.strategy} version={inv.strategyVersion} />
           <Fact name="Run" value={`${inv.run}`} />
         </dl>
       </Card>
     </aside>
+  );
+}
+
+/** The strategy and version the investigation used; a runtime version links to its text. */
+function StrategyFact({ name, version }: { name: string | undefined; version: string | undefined }) {
+  const runtimeVersion = /^runtime:(\d+)$/.exec(version ?? "")?.[1];
+
+  if (!name || runtimeVersion === undefined) {
+    return <Fact name="Strategy" value={name ? `${name} ${version ?? ""}`.trim() : undefined} />;
+  }
+
+  return (
+    <div className="sk-side__fact">
+      <dt>Strategy</dt>
+      <dd>
+        <Link to={`/strategies/${encodeURIComponent(name)}/versions/${runtimeVersion}`}>
+          {name} {version}
+        </Link>
+      </dd>
+    </div>
   );
 }
 

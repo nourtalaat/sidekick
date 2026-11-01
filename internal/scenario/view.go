@@ -83,7 +83,7 @@ func (s *Service) Detail(ctx context.Context, id string) (Detail, error) {
 	sc, err := bench.ParseScenario([]byte(row.Body))
 	if err != nil {
 		// A reviewer cannot have saved this, but show what there is.
-		return out, nil
+		return out, nil //nolint:nilerr // The view is still useful without the pairs.
 	}
 
 	var provenance []Provenance

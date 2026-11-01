@@ -1,0 +1,4 @@
+name: file-latency
+description: A strategy from the strategies directory.
+first:
+  - Check what changed.
