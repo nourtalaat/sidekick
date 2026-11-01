@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
+	"github.com/nourtalaat/sidekick/internal/lessons"
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/prompt"
@@ -224,19 +225,65 @@ func (r *run) savePrompt(ctx context.Context) error {
 		examples[i].URL = weblink.Investigation(r.h.opts.PublicURL, examples[i].InvestigationID)
 	}
 
+	chosen, err := r.chooseLessons(ctx, group, name)
+	if err != nil {
+		return fmt.Errorf("choose the lessons: %w", err)
+	}
+
 	req := prompt.Build(prompt.Input{
 		Strategy: st,
 		Tools:    append(specs, r.tools.Tools()...),
 		Group:    group,
 		Route:    prompt.RouteContext{Name: r.inv.Route},
 		Memory:   examples,
+		Lessons:  promptLessons(chosen),
 	})
 
-	if _, err := r.save(ctx, newStep{kind: kindPrompt, prompt: &req, status: statusOK, startedAt: time.Now()}); err != nil {
+	step := newStep{kind: kindPrompt, prompt: &req, status: statusOK, startedAt: time.Now(), lessons: lessonsOf(chosen, r.h.opts.Lessons)}
+	if _, err := r.save(ctx, step); err != nil {
 		return fmt.Errorf("save the prompt: %w", err)
 	}
 
 	return nil
+}
+
+// chooseLessons returns the lessons for the prompt of the investigation
+// under strategyName, for the event group group.
+func (r *run) chooseLessons(ctx context.Context, group prompt.Group, strategyName string) (lessons.Selection, error) {
+	first := group.First
+
+	sel, err := r.h.opts.Lessons.Select(ctx, r.h.opts.Pool, lessons.Subject{
+		Service:   first.Service,
+		AlertName: first.AlertName,
+		Route:     r.inv.Route,
+		Strategy:  strategyName,
+		Text:      first.Title + "\n" + first.Text,
+	})
+	if err != nil {
+		return lessons.Selection{}, fmt.Errorf("select: %w", err)
+	}
+
+	return sel, nil
+}
+
+// promptLessons returns the lessons of sel as the prompt shows them.
+func promptLessons(sel lessons.Selection) []prompt.Lesson {
+	out := make([]prompt.Lesson, len(sel.Used))
+	for i, l := range sel.Used {
+		out[i] = prompt.Lesson{Scope: l.Scope.Describe(), Text: l.Text}
+	}
+
+	return out
+}
+
+// lessonsOf returns sel for the step that carries the prompt, or nil when
+// lessons are off, so the step records nothing.
+func lessonsOf(sel lessons.Selection, selector *lessons.Selector) *lessons.Selection {
+	if selector == nil {
+		return nil
+	}
+
+	return &sel
 }
 
 // loop runs the investigation until it ends, then stores and publishes
