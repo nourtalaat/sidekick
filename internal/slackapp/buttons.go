@@ -18,7 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/slack-go/slack"
 
-	"github.com/nourtalaat/sidekick/internal/action/proposals"
+	actionproposals "github.com/nourtalaat/sidekick/internal/action/proposals"
 	"github.com/nourtalaat/sidekick/internal/feedback"
 	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/intake"
@@ -27,6 +27,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/output"
 	slackout "github.com/nourtalaat/sidekick/internal/output/slack"
+	"github.com/nourtalaat/sidekick/internal/proposals"
 	"github.com/nourtalaat/sidekick/internal/publish"
 	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/roles"
@@ -110,7 +111,7 @@ type ButtonsOptions struct {
 	// Actions decides the action proposals approvers approve and reject
 	// with the buttons of a proposal. Nil makes those clicks answer that
 	// proposals are not set up.
-	Actions *proposals.Service
+	Actions *actionproposals.Service
 	// HTTP posts notes to the user who clicked. Nil means
 	// httpclient.New().
 	HTTP *http.Client
@@ -119,6 +120,9 @@ type ButtonsOptions struct {
 	// Memory says how a rating syncs the investigation's memory entry; set
 	// Embed when vector memory is on.
 	Memory memory.SyncOptions
+	// Proposals decides whether a rating of wrong makes the investigation's
+	// strategy version get a proposed change. The zero value is off.
+	Proposals proposals.Trigger
 	// DraftLessons makes a reason given in the feedback form enqueue a job
 	// that drafts a lesson from it. Set it when a summarize role is
 	// configured.
@@ -141,16 +145,17 @@ type ButtonsOptions struct {
 // that time. It answers interactions from Socket Mode as an
 // InteractionHandler, and at POST /slack/interactivity in events mode.
 type Buttons struct {
-	handler  *Handler
-	pool     *pgxpool.Pool
-	roles    roles.Lookup
-	metrics  *feedback.Metrics
-	watchers *watch.Stopper
-	actions  *proposals.Service
-	http     *http.Client
-	log      *slog.Logger
-	memory   memory.SyncOptions
-	redactor *redact.Redactor
+	handler   *Handler
+	pool      *pgxpool.Pool
+	roles     roles.Lookup
+	metrics   *feedback.Metrics
+	watchers  *watch.Stopper
+	actions   *actionproposals.Service
+	http      *http.Client
+	log       *slog.Logger
+	memory    memory.SyncOptions
+	proposals proposals.Trigger
+	redactor  *redact.Redactor
 	// draftLessons is ButtonsOptions.DraftLessons.
 	draftLessons bool
 	// publicURL is ButtonsOptions.PublicURL.
@@ -177,6 +182,7 @@ func NewButtons(opts ButtonsOptions) *Buttons {
 		log:      opts.Logger,
 		memory:   opts.Memory,
 
+		proposals:    opts.Proposals,
 		redactor:     opts.Redactor,
 		draftLessons: opts.DraftLessons,
 		publicURL:    opts.PublicURL,
@@ -370,7 +376,7 @@ func (b *Buttons) handleProposalClick(ctx context.Context, log *slog.Logger, cb 
 		return nil, errNoActions
 	}
 
-	by := proposals.Decider{SlackUserID: cb.User.ID}
+	by := actionproposals.Decider{SlackUserID: cb.User.ID}
 
 	var decided error
 
@@ -399,8 +405,8 @@ func (b *Buttons) handleProposalClick(ctx context.Context, log *slog.Logger, cb 
 // than the proposal's state.
 func proposalNote(actionID string, err error) (string, error) {
 	var (
-		decided    *proposals.DecidedError
-		notAllowed *proposals.NotAllowedError
+		decided    *actionproposals.DecidedError
+		notAllowed *actionproposals.NotAllowedError
 	)
 
 	switch {
@@ -408,9 +414,9 @@ func proposalNote(actionID string, err error) (string, error) {
 		return noteApproved, nil
 	case err == nil:
 		return noteRejected, nil
-	case errors.Is(err, proposals.ErrNotFound):
+	case errors.Is(err, actionproposals.ErrNotFound):
 		return noteNoProposal, nil
-	case errors.Is(err, proposals.ErrExpired):
+	case errors.Is(err, actionproposals.ErrExpired):
 		return noteExpired, nil
 	case errors.As(err, &notAllowed):
 		return fmt.Sprintf(noteNotAllowed, notAllowed.Reason), nil
@@ -448,7 +454,7 @@ func (b *Buttons) rate(ctx context.Context, log *slog.Logger, id uuid.UUID, user
 	err := pgx.BeginFunc(ctx, b.pool, func(tx pgx.Tx) error {
 		var err error
 
-		res, err = feedback.RateVerdict(ctx, tx, feedback.VerdictRating{InvestigationID: id, Rating: rating, SlackUserID: userID, Memory: b.memory})
+		res, err = feedback.RateVerdict(ctx, tx, feedback.VerdictRating{InvestigationID: id, Rating: rating, SlackUserID: userID, Memory: b.memory, Proposals: b.proposals})
 		if err != nil {
 			return fmt.Errorf("rate the verdict: %w", err)
 		}
@@ -569,6 +575,8 @@ func (b *Buttons) submitDetails(ctx context.Context, cb slack.InteractionCallbac
 	if errs != nil {
 		return errorsResponse(errs)
 	}
+
+	sub.Proposals = b.proposals
 
 	res, err := b.storeFeedback(ctx, sub)
 	if errs := submissionErrors(sub.Target, err); errs != nil {

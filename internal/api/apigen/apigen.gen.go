@@ -679,6 +679,75 @@ func (e StepPartType) Valid() bool {
 	}
 }
 
+// Defines values for StrategyGateResult.
+const (
+	StrategyGateResultError               StrategyGateResult = "error"
+	StrategyGateResultFailed              StrategyGateResult = "failed"
+	StrategyGateResultNoBenchmarkCoverage StrategyGateResult = "no_benchmark_coverage"
+	StrategyGateResultNotEnoughEvidence   StrategyGateResult = "not_enough_evidence"
+	StrategyGateResultOverBudget          StrategyGateResult = "over_budget"
+	StrategyGateResultPassed              StrategyGateResult = "passed"
+)
+
+// Valid indicates whether the value is a known member of the StrategyGateResult enum.
+func (e StrategyGateResult) Valid() bool {
+	switch e {
+	case StrategyGateResultError:
+		return true
+	case StrategyGateResultFailed:
+		return true
+	case StrategyGateResultNoBenchmarkCoverage:
+		return true
+	case StrategyGateResultNotEnoughEvidence:
+		return true
+	case StrategyGateResultOverBudget:
+		return true
+	case StrategyGateResultPassed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StrategyProposalStatus.
+const (
+	StrategyProposalStatusApplied      StrategyProposalStatus = "applied"
+	StrategyProposalStatusApproved     StrategyProposalStatus = "approved"
+	StrategyProposalStatusBenchmarking StrategyProposalStatus = "benchmarking"
+	StrategyProposalStatusDraftFailed  StrategyProposalStatus = "draft_failed"
+	StrategyProposalStatusDrafting     StrategyProposalStatus = "drafting"
+	StrategyProposalStatusFailed       StrategyProposalStatus = "failed"
+	StrategyProposalStatusPassed       StrategyProposalStatus = "passed"
+	StrategyProposalStatusPending      StrategyProposalStatus = "pending"
+	StrategyProposalStatusRejected     StrategyProposalStatus = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the StrategyProposalStatus enum.
+func (e StrategyProposalStatus) Valid() bool {
+	switch e {
+	case StrategyProposalStatusApplied:
+		return true
+	case StrategyProposalStatusApproved:
+		return true
+	case StrategyProposalStatusBenchmarking:
+		return true
+	case StrategyProposalStatusDraftFailed:
+		return true
+	case StrategyProposalStatusDrafting:
+		return true
+	case StrategyProposalStatusFailed:
+		return true
+	case StrategyProposalStatusPassed:
+		return true
+	case StrategyProposalStatusPending:
+		return true
+	case StrategyProposalStatusRejected:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for Verdict.
 const (
 	Duplicate     Verdict = "duplicate"
@@ -1086,6 +1155,12 @@ type DowntimeRow struct {
 	// Service Empty when the investigation had no service.
 	Service       string `json:"service"`
 	WatchTimeouts int64  `json:"watchTimeouts"`
+}
+
+// EditStrategyProposal defines model for EditStrategyProposal.
+type EditStrategyProposal struct {
+	// Body The strategy as YAML, in the format of a strategy file.
+	Body string `json:"body"`
 }
 
 // EffectiveConfig defines model for EffectiveConfig.
@@ -1669,6 +1744,38 @@ type Me struct {
 // MeKind Whether the caller is a signed-in user or an API token.
 type MeKind string
 
+// MemoryEntry defines model for MemoryEntry.
+type MemoryEntry struct {
+	AlertName *string `json:"alertName,omitempty"`
+
+	// Cause Plain text, the confirmed cause, or edited by an admin.
+	Cause       *string   `json:"cause,omitempty"`
+	ConfirmedAt time.Time `json:"confirmedAt"`
+	Disabled    bool      `json:"disabled"`
+
+	// InvestigationId The investigation the entry is about; it may be gone, as memory outlives investigations.
+	InvestigationId openapi_types.UUID `json:"investigationId"`
+	Service         *string            `json:"service,omitempty"`
+
+	// Summary Plain text, from the investigation's report or edited by an admin.
+	Summary string  `json:"summary"`
+	Verdict Verdict `json:"verdict"`
+}
+
+// MemoryEntryList defines model for MemoryEntryList.
+type MemoryEntryList struct {
+	Entries    []MemoryEntry `json:"entries"`
+	NextCursor *string       `json:"nextCursor,omitempty"`
+}
+
+// MemoryEntryUpdate defines model for MemoryEntryUpdate.
+type MemoryEntryUpdate struct {
+	// Cause Leave it out or empty for an entry without a cause.
+	Cause    *string `json:"cause,omitempty"`
+	Disabled bool    `json:"disabled"`
+	Summary  string  `json:"summary"`
+}
+
 // NewFeedback defines model for NewFeedback.
 type NewFeedback struct {
 	CorrectCause   *string            `json:"correctCause,omitempty"`
@@ -2054,6 +2161,12 @@ type RejectProposalRequest struct {
 	Note *string `json:"note,omitempty"`
 }
 
+// RejectStrategyProposal defines model for RejectStrategyProposal.
+type RejectStrategyProposal struct {
+	// Reason Why the proposal is set aside, at most 500 characters.
+	Reason *string `json:"reason,omitempty"`
+}
+
 // Report The result of the investigation. The model wrote its text from what
 // the sources returned, so show it as plain text.
 type Report struct {
@@ -2269,6 +2382,39 @@ type Sender struct {
 
 // SenderKind defines model for Sender.Kind.
 type SenderKind string
+
+// ServiceNotes defines model for ServiceNotes.
+type ServiceNotes struct {
+	Service string `json:"service"`
+
+	// Text Plain text. Empty for a service without notes.
+	Text      string     `json:"text"`
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
+
+	// UpdatedByName The name of the user who last changed the notes. Not set when an API token did.
+	UpdatedByName *string `json:"updatedByName,omitempty"`
+}
+
+// ServiceNotesList defines model for ServiceNotesList.
+type ServiceNotesList struct {
+	// NextAfter Pass it as `after` to read the next page.
+	NextAfter *string               `json:"nextAfter,omitempty"`
+	Services  []ServiceNotesSummary `json:"services"`
+}
+
+// ServiceNotesSummary defines model for ServiceNotesSummary.
+type ServiceNotesSummary struct {
+	// Preview The first 120 characters of the notes, as plain text.
+	Preview       string    `json:"preview"`
+	Service       string    `json:"service"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+	UpdatedByName *string   `json:"updatedByName,omitempty"`
+}
+
+// ServiceNotesUpdate defines model for ServiceNotesUpdate.
+type ServiceNotesUpdate struct {
+	Text string `json:"text"`
+}
 
 // SourceCheck defines model for SourceCheck.
 type SourceCheck struct {
@@ -2534,6 +2680,57 @@ type StrategyDetail struct {
 	Version *string `json:"version,omitempty"`
 }
 
+// StrategyGate defines model for StrategyGate.
+type StrategyGate struct {
+	CostMicros    int64         `json:"costMicros"`
+	Error         *string       `json:"error,omitempty"`
+	Interval      BenchInterval `json:"interval"`
+	MaxCostMicros int64         `json:"maxCostMicros"`
+
+	// MaxDrop The proposal passes when the lower end of the interval is above minus this.
+	MaxDrop float64 `json:"maxDrop"`
+
+	// Mean The mean over the scenarios of the proposal's overall score minus the current version's.
+	Mean float64 `json:"mean"`
+
+	// Reason The result in a sentence.
+	Reason string `json:"reason"`
+
+	// Repeats How many times each scenario ran in each arm.
+	Repeats   int `json:"repeats"`
+	Resamples int `json:"resamples"`
+
+	// Result How the gate ended. `passed`: the lower end of the 95% interval of the
+	// score difference is above minus `maxDrop`. `failed`: the proposal
+	// scores lower on average by more than that. `not_enough_evidence`: it
+	// looks no worse on average, but the interval is too wide to be sure, or
+	// fewer than three scenarios cover the strategy. `no_benchmark_coverage`:
+	// no scenario covers the strategy. `over_budget`: the gate stopped before
+	// it passed its cost cap. `error`: the gate could not finish.
+	Result    StrategyGateResult     `json:"result"`
+	Scenarios []StrategyGateScenario `json:"scenarios"`
+
+	// Seed The seed of the resampling, as a decimal string, so the interval can be worked out again.
+	Seed string `json:"seed"`
+}
+
+// StrategyGateResult How the gate ended. `passed`: the lower end of the 95% interval of the
+// score difference is above minus `maxDrop`. `failed`: the proposal
+// scores lower on average by more than that. `not_enough_evidence`: it
+// looks no worse on average, but the interval is too wide to be sure, or
+// fewer than three scenarios cover the strategy. `no_benchmark_coverage`:
+// no scenario covers the strategy. `over_budget`: the gate stopped before
+// it passed its cost cap. `error`: the gate could not finish.
+type StrategyGateResult string
+
+// StrategyGateScenario defines model for StrategyGateScenario.
+type StrategyGateScenario struct {
+	Baseline   float64 `json:"baseline"`
+	Difference float64 `json:"difference"`
+	Id         string  `json:"id"`
+	Proposal   float64 `json:"proposal"`
+}
+
 // StrategyLayer Where the strategy is defined: built-in, runtime or file. A
 // built-in strategy and a strategy of the file layer are read-only.
 // This is not an enum, because the names of its values would clash
@@ -2543,6 +2740,172 @@ type StrategyLayer = string
 // StrategyList defines model for StrategyList.
 type StrategyList struct {
 	Strategies []Strategy `json:"strategies"`
+}
+
+// StrategyProposal defines model for StrategyProposal.
+type StrategyProposal struct {
+	// Approvable True when the proposal has passed its gate and can be approved.
+	Approvable bool `json:"approvable"`
+
+	// BaseBody The strategy before the change, as YAML.
+	BaseBody *string `json:"baseBody,omitempty"`
+
+	// BaseOrigin Where the strategy is defined: built-in, runtime or file. A
+	// built-in strategy and a strategy of the file layer are read-only.
+	// This is not an enum, because the names of its values would clash
+	// with those of RuleLayer in the generated Go code.
+	BaseOrigin *StrategyLayer `json:"baseOrigin,omitempty"`
+
+	// BaseVersion The version the draft started from, as investigations record it.
+	BaseVersion string `json:"baseVersion"`
+
+	// BaselineRunId The benchmark run of the current version, when the gate ran.
+	BaselineRunId *openapi_types.UUID `json:"baselineRunId,omitempty"`
+
+	// BenchRunId The benchmark run of the proposal, when the gate ran.
+	BenchRunId *openapi_types.UUID `json:"benchRunId,omitempty"`
+
+	// Body The strategy after the change, as YAML.
+	Body      *string    `json:"body,omitempty"`
+	CreatedAt time.Time  `json:"createdAt"`
+	DecidedAt *time.Time `json:"decidedAt,omitempty"`
+
+	// Feedback The wrong ratings the proposal was drafted from.
+	Feedback []StrategyProposalFeedback `json:"feedback"`
+	Gate     *StrategyGate              `json:"gate,omitempty"`
+
+	// GateResult How the gate ended. `passed`: the lower end of the 95% interval of the
+	// score difference is above minus `maxDrop`. `failed`: the proposal
+	// scores lower on average by more than that. `not_enough_evidence`: it
+	// looks no worse on average, but the interval is too wide to be sure, or
+	// fewer than three scenarios cover the strategy. `no_benchmark_coverage`:
+	// no scenario covers the strategy. `over_budget`: the gate stopped before
+	// it passed its cost cap. `error`: the gate could not finish.
+	GateResult *StrategyGateResult `json:"gateResult,omitempty"`
+	Id         openapi_types.UUID  `json:"id"`
+
+	// Name The strategy the proposal changes.
+	Name string `json:"name"`
+
+	// Rationale Why the model changed the strategy. It is model output.
+	Rationale *string `json:"rationale,omitempty"`
+
+	// Reviewer The user or API token that last decided on or edited the proposal.
+	Reviewer *openapi_types.UUID `json:"reviewer,omitempty"`
+
+	// Stale True when the strategy has changed since the draft.
+	Stale bool `json:"stale"`
+
+	// Status `drafting`: waiting for the model's draft. `draft_failed`: no draft
+	// could be made; the status detail says why. `pending`: drafted, waiting
+	// for the gate. `benchmarking`: the gate is running. `passed`: the gate
+	// passed, and the proposal can be approved. `failed`: the gate ended
+	// without a pass; the gate result says how. `applied`: approved, and a
+	// version was saved. `approved`: approved for a strategy in a file.
+	// `rejected`: set aside.
+	Status StrategyProposalStatus `json:"status"`
+
+	// StatusDetail Why a draft failed.
+	StatusDetail *string `json:"statusDetail,omitempty"`
+
+	// TriggerCount How many wrong ratings the version had when the proposal was made.
+	TriggerCount int       `json:"triggerCount"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
+// StrategyProposalApproval defines model for StrategyProposalApproval.
+type StrategyProposalApproval struct {
+	Proposal StrategyProposalSummary `json:"proposal"`
+
+	// Version The runtime version that was saved. Absent for a strategy in a file.
+	Version *int `json:"version,omitempty"`
+
+	// Yaml The strategy to commit, for a strategy in a file.
+	Yaml *string `json:"yaml,omitempty"`
+}
+
+// StrategyProposalFeedback defines model for StrategyProposalFeedback.
+type StrategyProposalFeedback struct {
+	CorrectCause    *string            `json:"correctCause,omitempty"`
+	CorrectVerdict  *string            `json:"correctVerdict,omitempty"`
+	Id              openapi_types.UUID `json:"id"`
+	InvestigationId openapi_types.UUID `json:"investigationId"`
+	Rating          string             `json:"rating"`
+	Reason          *string            `json:"reason,omitempty"`
+	TargetKind      string             `json:"targetKind"`
+	TargetRef       string             `json:"targetRef"`
+	UpdatedAt       time.Time          `json:"updatedAt"`
+}
+
+// StrategyProposalList defines model for StrategyProposalList.
+type StrategyProposalList struct {
+	// NextCursor Pass as cursor to get the next page. Absent on the last page.
+	NextCursor *string                   `json:"nextCursor,omitempty"`
+	Proposals  []StrategyProposalSummary `json:"proposals"`
+}
+
+// StrategyProposalStatus `drafting`: waiting for the model's draft. `draft_failed`: no draft
+// could be made; the status detail says why. `pending`: drafted, waiting
+// for the gate. `benchmarking`: the gate is running. `passed`: the gate
+// passed, and the proposal can be approved. `failed`: the gate ended
+// without a pass; the gate result says how. `applied`: approved, and a
+// version was saved. `approved`: approved for a strategy in a file.
+// `rejected`: set aside.
+type StrategyProposalStatus string
+
+// StrategyProposalSummary defines model for StrategyProposalSummary.
+type StrategyProposalSummary struct {
+	// BaseOrigin Where the strategy is defined: built-in, runtime or file. A
+	// built-in strategy and a strategy of the file layer are read-only.
+	// This is not an enum, because the names of its values would clash
+	// with those of RuleLayer in the generated Go code.
+	BaseOrigin *StrategyLayer `json:"baseOrigin,omitempty"`
+
+	// BaseVersion The version the draft started from, as investigations record it.
+	BaseVersion string `json:"baseVersion"`
+
+	// BaselineRunId The benchmark run of the current version, when the gate ran.
+	BaselineRunId *openapi_types.UUID `json:"baselineRunId,omitempty"`
+
+	// BenchRunId The benchmark run of the proposal, when the gate ran.
+	BenchRunId *openapi_types.UUID `json:"benchRunId,omitempty"`
+	CreatedAt  time.Time           `json:"createdAt"`
+	DecidedAt  *time.Time          `json:"decidedAt,omitempty"`
+
+	// GateResult How the gate ended. `passed`: the lower end of the 95% interval of the
+	// score difference is above minus `maxDrop`. `failed`: the proposal
+	// scores lower on average by more than that. `not_enough_evidence`: it
+	// looks no worse on average, but the interval is too wide to be sure, or
+	// fewer than three scenarios cover the strategy. `no_benchmark_coverage`:
+	// no scenario covers the strategy. `over_budget`: the gate stopped before
+	// it passed its cost cap. `error`: the gate could not finish.
+	GateResult *StrategyGateResult `json:"gateResult,omitempty"`
+	Id         openapi_types.UUID  `json:"id"`
+
+	// Name The strategy the proposal changes.
+	Name string `json:"name"`
+
+	// Rationale Why the model changed the strategy. It is model output.
+	Rationale *string `json:"rationale,omitempty"`
+
+	// Reviewer The user or API token that last decided on or edited the proposal.
+	Reviewer *openapi_types.UUID `json:"reviewer,omitempty"`
+
+	// Status `drafting`: waiting for the model's draft. `draft_failed`: no draft
+	// could be made; the status detail says why. `pending`: drafted, waiting
+	// for the gate. `benchmarking`: the gate is running. `passed`: the gate
+	// passed, and the proposal can be approved. `failed`: the gate ended
+	// without a pass; the gate result says how. `applied`: approved, and a
+	// version was saved. `approved`: approved for a strategy in a file.
+	// `rejected`: set aside.
+	Status StrategyProposalStatus `json:"status"`
+
+	// StatusDetail Why a draft failed.
+	StatusDetail *string `json:"statusDetail,omitempty"`
+
+	// TriggerCount How many wrong ratings the version had when the proposal was made.
+	TriggerCount int       `json:"triggerCount"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
 // StrategyStatus active: in effect. shadowed: a strategy file has the same name and
@@ -2732,11 +3095,17 @@ type InvestigationID = openapi_types.UUID
 // LessonID defines model for LessonID.
 type LessonID = openapi_types.UUID
 
+// MemoryEntryID defines model for MemoryEntryID.
+type MemoryEntryID = openapi_types.UUID
+
 // ProposalID defines model for ProposalID.
 type ProposalID = openapi_types.UUID
 
 // RuleName defines model for RuleName.
 type RuleName = string
+
+// ServiceName defines model for ServiceName.
+type ServiceName = string
 
 // StatsFrom defines model for StatsFrom.
 type StatsFrom = openapi_types.Date
@@ -2758,6 +3127,9 @@ type StatsVerdict = Verdict
 
 // StrategyName defines model for StrategyName.
 type StrategyName = string
+
+// StrategyProposalID defines model for StrategyProposalID.
+type StrategyProposalID = openapi_types.UUID
 
 // ListAuditParams defines parameters for ListAudit.
 type ListAuditParams struct {
@@ -2871,6 +3243,25 @@ type ListLessonsParams struct {
 	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// ListMemoryEntriesParams defines parameters for ListMemoryEntries.
+type ListMemoryEntriesParams struct {
+	// Service Only entries of this service.
+	Service *string `form:"service,omitempty" json:"service,omitempty"`
+
+	// Verdict Only entries with this confirmed verdict.
+	Verdict *Verdict `form:"verdict,omitempty" json:"verdict,omitempty"`
+
+	// Q Only entries whose service, alert name, summary or cause match these words, as in a web search.
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Disabled With true, only disabled entries; with false, only enabled ones. Leave it out for both.
+	Disabled *bool `form:"disabled,omitempty" json:"disabled,omitempty"`
+
+	// Cursor The nextCursor of the page before.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // ListProposalsParams defines parameters for ListProposals.
 type ListProposalsParams struct {
 	// Status Only proposals with one of these statuses. The default is proposed.
@@ -2879,6 +3270,13 @@ type ListProposalsParams struct {
 	// Cursor The nextCursor of the page before.
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListServiceNotesParams defines parameters for ListServiceNotes.
+type ListServiceNotesParams struct {
+	// After The nextAfter of the page before.
+	After *string `form:"after,omitempty" json:"after,omitempty"`
+	Limit *int    `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // GetCostStatsParams defines parameters for GetCostStats.
@@ -2957,6 +3355,19 @@ type ListStrategyVersionsParams struct {
 	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// ListStrategyProposalsParams defines parameters for ListStrategyProposals.
+type ListStrategyProposalsParams struct {
+	// Status Only proposals with this status. The default is every status but `drafting` and `draft_failed`.
+	Status *StrategyProposalStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// Name Only proposals for the strategy with this name.
+	Name *string `form:"name,omitempty" json:"name,omitempty"`
+
+	// Cursor The nextCursor of the page before.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // CreateInvestigationFeedbackJSONRequestBody defines body for CreateInvestigationFeedback for application/json ContentType.
 type CreateInvestigationFeedbackJSONRequestBody = NewFeedback
 
@@ -2978,6 +3389,9 @@ type CreateListenerJSONRequestBody = NewListener
 // UpdateListenerJSONRequestBody defines body for UpdateListener for application/json ContentType.
 type UpdateListenerJSONRequestBody = ListenerUpdate
 
+// UpdateMemoryEntryJSONRequestBody defines body for UpdateMemoryEntry for application/json ContentType.
+type UpdateMemoryEntryJSONRequestBody = MemoryEntryUpdate
+
 // RejectProposalJSONRequestBody defines body for RejectProposal for application/json ContentType.
 type RejectProposalJSONRequestBody = RejectProposalRequest
 
@@ -2987,8 +3401,17 @@ type CreateRouteJSONRequestBody = NewRoute
 // UpdateRouteJSONRequestBody defines body for UpdateRoute for application/json ContentType.
 type UpdateRouteJSONRequestBody = RouteUpdate
 
+// PutServiceNotesJSONRequestBody defines body for PutServiceNotes for application/json ContentType.
+type PutServiceNotesJSONRequestBody = ServiceNotesUpdate
+
 // SaveStrategyVersionJSONRequestBody defines body for SaveStrategyVersion for application/json ContentType.
 type SaveStrategyVersionJSONRequestBody = NewStrategyVersion
+
+// EditStrategyProposalJSONRequestBody defines body for EditStrategyProposal for application/json ContentType.
+type EditStrategyProposalJSONRequestBody = EditStrategyProposal
+
+// RejectStrategyProposalJSONRequestBody defines body for RejectStrategyProposal for application/json ContentType.
+type RejectStrategyProposalJSONRequestBody = RejectStrategyProposal
 
 // CreateTokenJSONRequestBody defines body for CreateToken for application/json ContentType.
 type CreateTokenJSONRequestBody = NewToken
@@ -3082,6 +3505,18 @@ type ServerInterface interface {
 	// GetMe The signed-in user or API token, and its role
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
+	// ListMemoryEntries Memory entries, newest confirmation first, a page at a time
+	// (GET /memory/entries)
+	ListMemoryEntries(w http.ResponseWriter, r *http.Request, params ListMemoryEntriesParams)
+	// DeleteMemoryEntry Delete a memory entry
+	// (DELETE /memory/entries/{id})
+	DeleteMemoryEntry(w http.ResponseWriter, r *http.Request, id MemoryEntryID)
+	// GetMemoryEntry One memory entry
+	// (GET /memory/entries/{id})
+	GetMemoryEntry(w http.ResponseWriter, r *http.Request, id MemoryEntryID)
+	// UpdateMemoryEntry Edit a memory entry, disable it or enable it
+	// (PUT /memory/entries/{id})
+	UpdateMemoryEntry(w http.ResponseWriter, r *http.Request, id MemoryEntryID)
 	// ListProposals Action proposals, newest first, a page at a time
 	// (GET /proposals)
 	ListProposals(w http.ResponseWriter, r *http.Request, params ListProposalsParams)
@@ -3103,6 +3538,15 @@ type ServerInterface interface {
 	// UpdateRoute Replace a runtime route
 	// (PUT /routes/{name})
 	UpdateRoute(w http.ResponseWriter, r *http.Request, name RuleName)
+	// ListServiceNotes The services that have notes, by name, a page at a time
+	// (GET /services/notes)
+	ListServiceNotes(w http.ResponseWriter, r *http.Request, params ListServiceNotesParams)
+	// GetServiceNotes The notes about a service
+	// (GET /services/{name}/notes)
+	GetServiceNotes(w http.ResponseWriter, r *http.Request, name ServiceName)
+	// PutServiceNotes Replace the notes about a service
+	// (PUT /services/{name}/notes)
+	PutServiceNotes(w http.ResponseWriter, r *http.Request, name ServiceName)
 	// GetCostStats Spend, tokens and cost per investigation
 	// (GET /stats/cost)
 	GetCostStats(w http.ResponseWriter, r *http.Request, params GetCostStatsParams)
@@ -3130,6 +3574,21 @@ type ServerInterface interface {
 	// GetStrategyVersion One saved version of a runtime strategy, with its YAML
 	// (GET /strategies/{name}/versions/{version})
 	GetStrategyVersion(w http.ResponseWriter, r *http.Request, name StrategyName, version int)
+	// ListStrategyProposals Proposed changes to strategies, newest first, a page at a time
+	// (GET /strategy-proposals)
+	ListStrategyProposals(w http.ResponseWriter, r *http.Request, params ListStrategyProposalsParams)
+	// GetStrategyProposal One proposal, with its YAML, the feedback and the gate result
+	// (GET /strategy-proposals/{id})
+	GetStrategyProposal(w http.ResponseWriter, r *http.Request, id StrategyProposalID)
+	// EditStrategyProposal Replace the YAML of a proposal and send it through the gate again
+	// (PUT /strategy-proposals/{id})
+	EditStrategyProposal(w http.ResponseWriter, r *http.Request, id StrategyProposalID)
+	// ApproveStrategyProposal Apply a proposal that passed its gate
+	// (POST /strategy-proposals/{id}/approve)
+	ApproveStrategyProposal(w http.ResponseWriter, r *http.Request, id StrategyProposalID)
+	// RejectStrategyProposal Set a proposal aside
+	// (POST /strategy-proposals/{id}/reject)
+	RejectStrategyProposal(w http.ResponseWriter, r *http.Request, id StrategyProposalID)
 	// ListTokens Every API token, revoked and expired ones included, newest first
 	// (GET /tokens)
 	ListTokens(w http.ResponseWriter, r *http.Request)
@@ -4267,6 +4726,182 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 	handler.ServeHTTP(w, r)
 }
 
+// ListMemoryEntries operation middleware
+func (siw *ServerInterfaceWrapper) ListMemoryEntries(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListMemoryEntriesParams
+
+	// ------------- Optional query parameter "service" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "service", r.URL.Query(), &params.Service, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "service"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "service", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "verdict" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "verdict", r.URL.Query(), &params.Verdict, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "verdict"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "verdict", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "disabled" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "disabled", r.URL.Query(), &params.Disabled, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "disabled"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "disabled", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListMemoryEntries(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteMemoryEntry operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMemoryEntry(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id MemoryEntryID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMemoryEntry(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMemoryEntry operation middleware
+func (siw *ServerInterfaceWrapper) GetMemoryEntry(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id MemoryEntryID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMemoryEntry(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateMemoryEntry operation middleware
+func (siw *ServerInterfaceWrapper) UpdateMemoryEntry(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id MemoryEntryID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateMemoryEntry(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListProposals operation middleware
 func (siw *ServerInterfaceWrapper) ListProposals(w http.ResponseWriter, r *http.Request) {
 
@@ -4449,6 +5084,104 @@ func (siw *ServerInterfaceWrapper) UpdateRoute(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateRoute(w, r, name)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListServiceNotes operation middleware
+func (siw *ServerInterfaceWrapper) ListServiceNotes(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListServiceNotesParams
+
+	// ------------- Optional query parameter "after" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "after", r.URL.Query(), &params.After, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListServiceNotes(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetServiceNotes operation middleware
+func (siw *ServerInterfaceWrapper) GetServiceNotes(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "name" -------------
+	var name ServiceName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetServiceNotes(w, r, name)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutServiceNotes operation middleware
+func (siw *ServerInterfaceWrapper) PutServiceNotes(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "name" -------------
+	var name ServiceName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutServiceNotes(w, r, name)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4935,6 +5668,182 @@ func (siw *ServerInterfaceWrapper) GetStrategyVersion(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// ListStrategyProposals operation middleware
+func (siw *ServerInterfaceWrapper) ListStrategyProposals(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListStrategyProposalsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "name" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "name", r.URL.Query(), &params.Name, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "name"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListStrategyProposals(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetStrategyProposal operation middleware
+func (siw *ServerInterfaceWrapper) GetStrategyProposal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id StrategyProposalID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetStrategyProposal(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// EditStrategyProposal operation middleware
+func (siw *ServerInterfaceWrapper) EditStrategyProposal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id StrategyProposalID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.EditStrategyProposal(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApproveStrategyProposal operation middleware
+func (siw *ServerInterfaceWrapper) ApproveStrategyProposal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id StrategyProposalID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApproveStrategyProposal(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RejectStrategyProposal operation middleware
+func (siw *ServerInterfaceWrapper) RejectStrategyProposal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id StrategyProposalID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RejectStrategyProposal(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListTokens operation middleware
 func (siw *ServerInterfaceWrapper) ListTokens(w http.ResponseWriter, r *http.Request) {
 
@@ -5160,6 +6069,18 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/lessons/{id}", wrapper.DeleteLesson)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/lessons/{id}", wrapper.UpdateLesson)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/lessons/{id}/approve", wrapper.ApproveLesson)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/strategy-proposals", wrapper.ListStrategyProposals)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/strategy-proposals/{id}", wrapper.GetStrategyProposal)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/strategy-proposals/{id}", wrapper.EditStrategyProposal)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/strategy-proposals/{id}/approve", wrapper.ApproveStrategyProposal)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/strategy-proposals/{id}/reject", wrapper.RejectStrategyProposal)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/memory/entries", wrapper.ListMemoryEntries)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/memory/entries/{id}", wrapper.DeleteMemoryEntry)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/memory/entries/{id}", wrapper.GetMemoryEntry)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/memory/entries/{id}", wrapper.UpdateMemoryEntry)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/services/notes", wrapper.ListServiceNotes)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/services/{name}/notes", wrapper.GetServiceNotes)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/services/{name}/notes", wrapper.PutServiceNotes)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/audit", wrapper.ListAudit)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations", wrapper.ListInvestigations)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}", wrapper.GetInvestigation)
@@ -6336,6 +7257,157 @@ func (response GetMedefaultApplicationProblemPlusJSONResponse) VisitGetMeRespons
 	return err
 }
 
+type ListMemoryEntriesRequestObject struct {
+	Params ListMemoryEntriesParams
+}
+
+type ListMemoryEntriesResponseObject interface {
+	VisitListMemoryEntriesResponse(w http.ResponseWriter) error
+}
+
+type ListMemoryEntries200JSONResponse MemoryEntryList
+
+func (response ListMemoryEntries200JSONResponse) VisitListMemoryEntriesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMemoryEntriesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListMemoryEntriesdefaultApplicationProblemPlusJSONResponse) VisitListMemoryEntriesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMemoryEntryRequestObject struct {
+	Id MemoryEntryID `json:"id"`
+}
+
+type DeleteMemoryEntryResponseObject interface {
+	VisitDeleteMemoryEntryResponse(w http.ResponseWriter) error
+}
+
+type DeleteMemoryEntry204Response struct {
+}
+
+func (response DeleteMemoryEntry204Response) VisitDeleteMemoryEntryResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteMemoryEntrydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteMemoryEntrydefaultApplicationProblemPlusJSONResponse) VisitDeleteMemoryEntryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMemoryEntryRequestObject struct {
+	Id MemoryEntryID `json:"id"`
+}
+
+type GetMemoryEntryResponseObject interface {
+	VisitGetMemoryEntryResponse(w http.ResponseWriter) error
+}
+
+type GetMemoryEntry200JSONResponse MemoryEntry
+
+func (response GetMemoryEntry200JSONResponse) VisitGetMemoryEntryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMemoryEntrydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetMemoryEntrydefaultApplicationProblemPlusJSONResponse) VisitGetMemoryEntryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMemoryEntryRequestObject struct {
+	Id   MemoryEntryID `json:"id"`
+	Body *UpdateMemoryEntryJSONRequestBody
+}
+
+type UpdateMemoryEntryResponseObject interface {
+	VisitUpdateMemoryEntryResponse(w http.ResponseWriter) error
+}
+
+type UpdateMemoryEntry200JSONResponse MemoryEntry
+
+func (response UpdateMemoryEntry200JSONResponse) VisitUpdateMemoryEntryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMemoryEntrydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UpdateMemoryEntrydefaultApplicationProblemPlusJSONResponse) VisitUpdateMemoryEntryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListProposalsRequestObject struct {
 	Params ListProposalsParams
 }
@@ -6593,6 +7665,124 @@ type UpdateRoutedefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response UpdateRoutedefaultApplicationProblemPlusJSONResponse) VisitUpdateRouteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListServiceNotesRequestObject struct {
+	Params ListServiceNotesParams
+}
+
+type ListServiceNotesResponseObject interface {
+	VisitListServiceNotesResponse(w http.ResponseWriter) error
+}
+
+type ListServiceNotes200JSONResponse ServiceNotesList
+
+func (response ListServiceNotes200JSONResponse) VisitListServiceNotesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListServiceNotesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListServiceNotesdefaultApplicationProblemPlusJSONResponse) VisitListServiceNotesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetServiceNotesRequestObject struct {
+	Name ServiceName `json:"name"`
+}
+
+type GetServiceNotesResponseObject interface {
+	VisitGetServiceNotesResponse(w http.ResponseWriter) error
+}
+
+type GetServiceNotes200JSONResponse ServiceNotes
+
+func (response GetServiceNotes200JSONResponse) VisitGetServiceNotesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetServiceNotesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetServiceNotesdefaultApplicationProblemPlusJSONResponse) VisitGetServiceNotesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutServiceNotesRequestObject struct {
+	Name ServiceName `json:"name"`
+	Body *PutServiceNotesJSONRequestBody
+}
+
+type PutServiceNotesResponseObject interface {
+	VisitPutServiceNotesResponse(w http.ResponseWriter) error
+}
+
+type PutServiceNotes200JSONResponse ServiceNotes
+
+func (response PutServiceNotes200JSONResponse) VisitPutServiceNotesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutServiceNotesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response PutServiceNotesdefaultApplicationProblemPlusJSONResponse) VisitPutServiceNotesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -6956,6 +8146,203 @@ func (response GetStrategyVersiondefaultApplicationProblemPlusJSONResponse) Visi
 	return err
 }
 
+type ListStrategyProposalsRequestObject struct {
+	Params ListStrategyProposalsParams
+}
+
+type ListStrategyProposalsResponseObject interface {
+	VisitListStrategyProposalsResponse(w http.ResponseWriter) error
+}
+
+type ListStrategyProposals200JSONResponse StrategyProposalList
+
+func (response ListStrategyProposals200JSONResponse) VisitListStrategyProposalsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListStrategyProposalsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListStrategyProposalsdefaultApplicationProblemPlusJSONResponse) VisitListStrategyProposalsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStrategyProposalRequestObject struct {
+	Id StrategyProposalID `json:"id"`
+}
+
+type GetStrategyProposalResponseObject interface {
+	VisitGetStrategyProposalResponse(w http.ResponseWriter) error
+}
+
+type GetStrategyProposal200JSONResponse StrategyProposal
+
+func (response GetStrategyProposal200JSONResponse) VisitGetStrategyProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStrategyProposaldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetStrategyProposaldefaultApplicationProblemPlusJSONResponse) VisitGetStrategyProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EditStrategyProposalRequestObject struct {
+	Id   StrategyProposalID `json:"id"`
+	Body *EditStrategyProposalJSONRequestBody
+}
+
+type EditStrategyProposalResponseObject interface {
+	VisitEditStrategyProposalResponse(w http.ResponseWriter) error
+}
+
+type EditStrategyProposal200JSONResponse StrategyProposal
+
+func (response EditStrategyProposal200JSONResponse) VisitEditStrategyProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EditStrategyProposaldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response EditStrategyProposaldefaultApplicationProblemPlusJSONResponse) VisitEditStrategyProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveStrategyProposalRequestObject struct {
+	Id StrategyProposalID `json:"id"`
+}
+
+type ApproveStrategyProposalResponseObject interface {
+	VisitApproveStrategyProposalResponse(w http.ResponseWriter) error
+}
+
+type ApproveStrategyProposal200JSONResponse StrategyProposalApproval
+
+func (response ApproveStrategyProposal200JSONResponse) VisitApproveStrategyProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveStrategyProposaldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ApproveStrategyProposaldefaultApplicationProblemPlusJSONResponse) VisitApproveStrategyProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RejectStrategyProposalRequestObject struct {
+	Id   StrategyProposalID `json:"id"`
+	Body *RejectStrategyProposalJSONRequestBody
+}
+
+type RejectStrategyProposalResponseObject interface {
+	VisitRejectStrategyProposalResponse(w http.ResponseWriter) error
+}
+
+type RejectStrategyProposal200JSONResponse StrategyProposalSummary
+
+func (response RejectStrategyProposal200JSONResponse) VisitRejectStrategyProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RejectStrategyProposaldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RejectStrategyProposaldefaultApplicationProblemPlusJSONResponse) VisitRejectStrategyProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListTokensRequestObject struct {
 }
 
@@ -7194,6 +8581,18 @@ type StrictServerInterface interface {
 	// GetMe The signed-in user or API token, and its role
 	// (GET /me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
+	// ListMemoryEntries Memory entries, newest confirmation first, a page at a time
+	// (GET /memory/entries)
+	ListMemoryEntries(ctx context.Context, request ListMemoryEntriesRequestObject) (ListMemoryEntriesResponseObject, error)
+	// DeleteMemoryEntry Delete a memory entry
+	// (DELETE /memory/entries/{id})
+	DeleteMemoryEntry(ctx context.Context, request DeleteMemoryEntryRequestObject) (DeleteMemoryEntryResponseObject, error)
+	// GetMemoryEntry One memory entry
+	// (GET /memory/entries/{id})
+	GetMemoryEntry(ctx context.Context, request GetMemoryEntryRequestObject) (GetMemoryEntryResponseObject, error)
+	// UpdateMemoryEntry Edit a memory entry, disable it or enable it
+	// (PUT /memory/entries/{id})
+	UpdateMemoryEntry(ctx context.Context, request UpdateMemoryEntryRequestObject) (UpdateMemoryEntryResponseObject, error)
 	// ListProposals Action proposals, newest first, a page at a time
 	// (GET /proposals)
 	ListProposals(ctx context.Context, request ListProposalsRequestObject) (ListProposalsResponseObject, error)
@@ -7215,6 +8614,15 @@ type StrictServerInterface interface {
 	// UpdateRoute Replace a runtime route
 	// (PUT /routes/{name})
 	UpdateRoute(ctx context.Context, request UpdateRouteRequestObject) (UpdateRouteResponseObject, error)
+	// ListServiceNotes The services that have notes, by name, a page at a time
+	// (GET /services/notes)
+	ListServiceNotes(ctx context.Context, request ListServiceNotesRequestObject) (ListServiceNotesResponseObject, error)
+	// GetServiceNotes The notes about a service
+	// (GET /services/{name}/notes)
+	GetServiceNotes(ctx context.Context, request GetServiceNotesRequestObject) (GetServiceNotesResponseObject, error)
+	// PutServiceNotes Replace the notes about a service
+	// (PUT /services/{name}/notes)
+	PutServiceNotes(ctx context.Context, request PutServiceNotesRequestObject) (PutServiceNotesResponseObject, error)
 	// GetCostStats Spend, tokens and cost per investigation
 	// (GET /stats/cost)
 	GetCostStats(ctx context.Context, request GetCostStatsRequestObject) (GetCostStatsResponseObject, error)
@@ -7242,6 +8650,21 @@ type StrictServerInterface interface {
 	// GetStrategyVersion One saved version of a runtime strategy, with its YAML
 	// (GET /strategies/{name}/versions/{version})
 	GetStrategyVersion(ctx context.Context, request GetStrategyVersionRequestObject) (GetStrategyVersionResponseObject, error)
+	// ListStrategyProposals Proposed changes to strategies, newest first, a page at a time
+	// (GET /strategy-proposals)
+	ListStrategyProposals(ctx context.Context, request ListStrategyProposalsRequestObject) (ListStrategyProposalsResponseObject, error)
+	// GetStrategyProposal One proposal, with its YAML, the feedback and the gate result
+	// (GET /strategy-proposals/{id})
+	GetStrategyProposal(ctx context.Context, request GetStrategyProposalRequestObject) (GetStrategyProposalResponseObject, error)
+	// EditStrategyProposal Replace the YAML of a proposal and send it through the gate again
+	// (PUT /strategy-proposals/{id})
+	EditStrategyProposal(ctx context.Context, request EditStrategyProposalRequestObject) (EditStrategyProposalResponseObject, error)
+	// ApproveStrategyProposal Apply a proposal that passed its gate
+	// (POST /strategy-proposals/{id}/approve)
+	ApproveStrategyProposal(ctx context.Context, request ApproveStrategyProposalRequestObject) (ApproveStrategyProposalResponseObject, error)
+	// RejectStrategyProposal Set a proposal aside
+	// (POST /strategy-proposals/{id}/reject)
+	RejectStrategyProposal(ctx context.Context, request RejectStrategyProposalRequestObject) (RejectStrategyProposalResponseObject, error)
 	// ListTokens Every API token, revoked and expired ones included, newest first
 	// (GET /tokens)
 	ListTokens(ctx context.Context, request ListTokensRequestObject) (ListTokensResponseObject, error)
@@ -8090,6 +9513,117 @@ func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ListMemoryEntries operation middleware
+func (sh *strictHandler) ListMemoryEntries(w http.ResponseWriter, r *http.Request, params ListMemoryEntriesParams) {
+	var request ListMemoryEntriesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListMemoryEntries(ctx, request.(ListMemoryEntriesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListMemoryEntries")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListMemoryEntriesResponseObject); ok {
+		if err := validResponse.VisitListMemoryEntriesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteMemoryEntry operation middleware
+func (sh *strictHandler) DeleteMemoryEntry(w http.ResponseWriter, r *http.Request, id MemoryEntryID) {
+	var request DeleteMemoryEntryRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMemoryEntry(ctx, request.(DeleteMemoryEntryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMemoryEntry")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteMemoryEntryResponseObject); ok {
+		if err := validResponse.VisitDeleteMemoryEntryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMemoryEntry operation middleware
+func (sh *strictHandler) GetMemoryEntry(w http.ResponseWriter, r *http.Request, id MemoryEntryID) {
+	var request GetMemoryEntryRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMemoryEntry(ctx, request.(GetMemoryEntryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMemoryEntry")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMemoryEntryResponseObject); ok {
+		if err := validResponse.VisitGetMemoryEntryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateMemoryEntry operation middleware
+func (sh *strictHandler) UpdateMemoryEntry(w http.ResponseWriter, r *http.Request, id MemoryEntryID) {
+	var request UpdateMemoryEntryRequestObject
+
+	request.Id = id
+
+	var body UpdateMemoryEntryJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateMemoryEntry(ctx, request.(UpdateMemoryEntryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateMemoryEntry")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateMemoryEntryResponseObject); ok {
+		if err := validResponse.VisitUpdateMemoryEntryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListProposals operation middleware
 func (sh *strictHandler) ListProposals(w http.ResponseWriter, r *http.Request, params ListProposalsParams) {
 	var request ListProposalsRequestObject
@@ -8285,6 +9819,91 @@ func (sh *strictHandler) UpdateRoute(w http.ResponseWriter, r *http.Request, nam
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateRouteResponseObject); ok {
 		if err := validResponse.VisitUpdateRouteResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListServiceNotes operation middleware
+func (sh *strictHandler) ListServiceNotes(w http.ResponseWriter, r *http.Request, params ListServiceNotesParams) {
+	var request ListServiceNotesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListServiceNotes(ctx, request.(ListServiceNotesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListServiceNotes")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListServiceNotesResponseObject); ok {
+		if err := validResponse.VisitListServiceNotesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetServiceNotes operation middleware
+func (sh *strictHandler) GetServiceNotes(w http.ResponseWriter, r *http.Request, name ServiceName) {
+	var request GetServiceNotesRequestObject
+
+	request.Name = name
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetServiceNotes(ctx, request.(GetServiceNotesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetServiceNotes")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetServiceNotesResponseObject); ok {
+		if err := validResponse.VisitGetServiceNotesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutServiceNotes operation middleware
+func (sh *strictHandler) PutServiceNotes(w http.ResponseWriter, r *http.Request, name ServiceName) {
+	var request PutServiceNotesRequestObject
+
+	request.Name = name
+
+	var body PutServiceNotesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutServiceNotes(ctx, request.(PutServiceNotesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutServiceNotes")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutServiceNotesResponseObject); ok {
+		if err := validResponse.VisitPutServiceNotesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -8524,6 +10143,153 @@ func (sh *strictHandler) GetStrategyVersion(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetStrategyVersionResponseObject); ok {
 		if err := validResponse.VisitGetStrategyVersionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListStrategyProposals operation middleware
+func (sh *strictHandler) ListStrategyProposals(w http.ResponseWriter, r *http.Request, params ListStrategyProposalsParams) {
+	var request ListStrategyProposalsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListStrategyProposals(ctx, request.(ListStrategyProposalsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListStrategyProposals")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListStrategyProposalsResponseObject); ok {
+		if err := validResponse.VisitListStrategyProposalsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetStrategyProposal operation middleware
+func (sh *strictHandler) GetStrategyProposal(w http.ResponseWriter, r *http.Request, id StrategyProposalID) {
+	var request GetStrategyProposalRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetStrategyProposal(ctx, request.(GetStrategyProposalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetStrategyProposal")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetStrategyProposalResponseObject); ok {
+		if err := validResponse.VisitGetStrategyProposalResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// EditStrategyProposal operation middleware
+func (sh *strictHandler) EditStrategyProposal(w http.ResponseWriter, r *http.Request, id StrategyProposalID) {
+	var request EditStrategyProposalRequestObject
+
+	request.Id = id
+
+	var body EditStrategyProposalJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.EditStrategyProposal(ctx, request.(EditStrategyProposalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "EditStrategyProposal")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(EditStrategyProposalResponseObject); ok {
+		if err := validResponse.VisitEditStrategyProposalResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ApproveStrategyProposal operation middleware
+func (sh *strictHandler) ApproveStrategyProposal(w http.ResponseWriter, r *http.Request, id StrategyProposalID) {
+	var request ApproveStrategyProposalRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ApproveStrategyProposal(ctx, request.(ApproveStrategyProposalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ApproveStrategyProposal")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ApproveStrategyProposalResponseObject); ok {
+		if err := validResponse.VisitApproveStrategyProposalResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RejectStrategyProposal operation middleware
+func (sh *strictHandler) RejectStrategyProposal(w http.ResponseWriter, r *http.Request, id StrategyProposalID) {
+	var request RejectStrategyProposalRequestObject
+
+	request.Id = id
+
+	var body RejectStrategyProposalJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RejectStrategyProposal(ctx, request.(RejectStrategyProposalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RejectStrategyProposal")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RejectStrategyProposalResponseObject); ok {
+		if err := validResponse.VisitRejectStrategyProposalResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

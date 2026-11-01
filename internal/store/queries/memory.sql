@@ -99,3 +99,88 @@ LIMIT sqlc.arg(max_rows)::int;
 -- name: GetServiceNotes :one
 -- GetServiceNotes returns the notes about a service.
 SELECT service, text, updated_at FROM service_notes WHERE service = @service;
+
+-- name: ListMemoryEntries :many
+-- ListMemoryEntries returns memory entries for the web UI, newest
+-- confirmation first, a page at a time, disabled ones too. Every filter is
+-- optional: the service, the verdict, words (a web-search style query on
+-- the service, alert name, summary and cause), whether the entry is
+-- disabled, and the place after which the page starts (the confirmation
+-- time and investigation ID of the last entry of the page before).
+SELECT m.investigation_id, m.service, m.alert_name, m.verdict, m.summary, m.cause, m.confirmed_at, m.disabled
+FROM memory_entries AS m
+WHERE (sqlc.narg(service)::text IS NULL OR m.service = sqlc.narg(service)::text)
+  AND (sqlc.narg(verdict)::text IS NULL OR m.verdict = sqlc.narg(verdict)::text)
+  AND (sqlc.narg(search)::text IS NULL OR m.search @@ websearch_to_tsquery('english', sqlc.narg(search)::text))
+  AND (sqlc.narg(disabled)::boolean IS NULL OR m.disabled = sqlc.narg(disabled)::boolean)
+  AND (sqlc.narg(after_at)::timestamptz IS NULL
+       OR (m.confirmed_at, m.investigation_id) < (sqlc.narg(after_at)::timestamptz, sqlc.narg(after_id)::uuid))
+ORDER BY m.confirmed_at DESC, m.investigation_id DESC
+LIMIT sqlc.arg(page_size)::int;
+
+-- name: GetMemoryEntry :one
+-- GetMemoryEntry returns one memory entry. It returns no row for an entry
+-- that does not exist.
+SELECT investigation_id, service, alert_name, verdict, summary, cause, confirmed_at, disabled
+FROM memory_entries
+WHERE investigation_id = @investigation_id;
+
+-- name: LockMemoryEntry :one
+-- LockMemoryEntry returns one memory entry and holds a lock on its row
+-- until the transaction ends, so two admins who change the same entry at
+-- once, or an admin and a change of the confirmation, are applied in turn.
+SELECT investigation_id, service, alert_name, verdict, summary, cause, confirmed_at, disabled
+FROM memory_entries
+WHERE investigation_id = @investigation_id
+FOR UPDATE;
+
+-- name: UpdateMemoryEntry :execrows
+-- UpdateMemoryEntry replaces the summary, cause and disabled flag of a
+-- memory entry. The next change of the investigation's confirmation
+-- replaces the summary and cause again, and keeps the flag.
+UPDATE memory_entries
+SET summary = @summary, cause = sqlc.narg(cause), disabled = @disabled
+WHERE investigation_id = @investigation_id;
+
+-- name: DeleteMemoryEntry :execrows
+-- DeleteMemoryEntry deletes a memory entry, and its embedding with it. A
+-- later change of the investigation's confirmation writes a new entry.
+DELETE FROM memory_entries WHERE investigation_id = @investigation_id;
+
+-- name: GetServiceNotesDetail :one
+-- GetServiceNotesDetail returns the notes about a service with the name of
+-- the user who last changed them, which is empty when a token did. It
+-- returns no row for a service without notes.
+SELECT n.service, n.text, n.updated_at,
+       coalesce((SELECT u.name FROM users AS u WHERE u.id = n.updated_by), '')::text AS updated_by_name
+FROM service_notes AS n
+WHERE n.service = @service;
+
+-- name: ListServiceNotes :many
+-- ListServiceNotes returns the services that have notes, by name, a page at
+-- a time, starting after the service after, with the first characters of
+-- the notes and the name of the user who last changed them.
+SELECT n.service, left(n.text, 120)::text AS preview, n.updated_at,
+       coalesce((SELECT u.name FROM users AS u WHERE u.id = n.updated_by), '')::text AS updated_by_name
+FROM service_notes AS n
+WHERE n.service > @after::text
+ORDER BY n.service
+LIMIT sqlc.arg(page_size)::int;
+
+-- name: LockServiceNotes :exec
+-- LockServiceNotes takes a lock on the notes of a service, that need not
+-- exist yet, until the transaction ends, so a change reads the notes it
+-- replaces even when another admin writes the first notes at the same time.
+SELECT pg_advisory_xact_lock(hashtextextended('service_notes:' || @service::text, 0));
+
+-- name: UpsertServiceNotes :exec
+-- UpsertServiceNotes writes the notes about a service. updated_by is the
+-- Sidekick user who wrote them, or no one when a token did.
+INSERT INTO service_notes (service, text, updated_by, updated_at)
+VALUES (@service, @text, sqlc.narg(updated_by), now())
+ON CONFLICT (service) DO UPDATE
+SET text = excluded.text, updated_by = excluded.updated_by, updated_at = excluded.updated_at;
+
+-- name: DeleteServiceNotes :execrows
+-- DeleteServiceNotes deletes the notes about a service.
+DELETE FROM service_notes WHERE service = @service;

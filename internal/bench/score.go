@@ -83,8 +83,9 @@ type ScoreOptions struct {
 
 // Score scores each run of results, then the spread of each scenario and
 // the run totals. Root causes are graded by opts.Grader, one run at a
-// time. A grading that fails because of the model provider, or because
-// ctx ended, stops Score with its error; any other grading failure is kept
+// time. A grading that fails because of the model provider, because the
+// budget of a budget grader is spent, or because ctx ended, stops Score
+// with its error; any other grading failure is kept
 // on the run, which then scores 0 for its root cause.
 func Score(ctx context.Context, results *Results, opts ScoreOptions) error {
 	for i := range results.Scenarios {
@@ -127,7 +128,7 @@ func scoreRun(ctx context.Context, expected Expected, run *RunResult, grader Gra
 
 	grade, err := grader.Grade(ctx, expected.RootCause, run.Report)
 	if err != nil {
-		if errors.Is(err, ErrInfrastructure) || ctx.Err() != nil {
+		if errors.Is(err, ErrInfrastructure) || errors.Is(err, ErrOverBudget) || ctx.Err() != nil {
 			return fmt.Errorf("grade the root cause: %w", err)
 		}
 

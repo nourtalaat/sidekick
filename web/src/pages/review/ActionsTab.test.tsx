@@ -2,7 +2,7 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { VIEWER, json, renderApp, wcagViolations } from "../../test/helpers";
-import { APPROVER, proposal } from "../../test/proposals";
+import { APPROVER, proposal } from "../../test/actionProposals";
 import { recording } from "../../test/rules";
 
 /** A handler that serves the proposals for the statuses asked. */

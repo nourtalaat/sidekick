@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action"
-	"github.com/nourtalaat/sidekick/internal/action/proposals"
+	actionproposals "github.com/nourtalaat/sidekick/internal/action/proposals"
 	slackout "github.com/nourtalaat/sidekick/internal/output/slack"
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/roles"
@@ -35,10 +35,10 @@ func (noteAction) Execute(context.Context, action.Invocation) (action.Result, er
 
 // proposalService returns a proposal service for the default route, which
 // proposes monitor-note in approved mode. now, when set, is its clock.
-func proposalService(t *testing.T, b *buttonsHarness, policy action.Policy, now func() time.Time) *proposals.Service {
+func proposalService(t *testing.T, b *buttonsHarness, policy action.Policy, now func() time.Time) *actionproposals.Service {
 	t.Helper()
 
-	svc, err := proposals.New(proposals.Options{
+	svc, err := actionproposals.New(actionproposals.Options{
 		Pool: b.pool, Actions: map[string]action.Action{"monitor-note": noteAction{}}, Policy: policy, Now: now,
 	})
 	require.NoError(t, err)
@@ -52,7 +52,7 @@ var approvedDefault = action.StaticPolicy{"default": {Mode: action.Approved, Act
 func (b *buttonsHarness) propose(t *testing.T) uuid.UUID {
 	t.Helper()
 
-	res, err := b.buttons.actions.Propose(t.Context(), proposals.ProposeRequest{
+	res, err := b.buttons.actions.Propose(t.Context(), actionproposals.ProposeRequest{
 		InvestigationID: finalInvestigation, ToolCallID: "call-1", Route: "default", Mode: action.Approved,
 		Input: json.RawMessage(`{"action": "monitor-note", "params": {"title": "Slow checkout"}, "reason": "p99 doubled."}`),
 	})
@@ -131,7 +131,7 @@ func TestProposalButtons(t *testing.T) {
 			prepare: func(t *testing.T, b *buttonsHarness, id uuid.UUID) {
 				t.Helper()
 
-				_, err := b.buttons.actions.Reject(t.Context(), id, proposals.Decider{SlackUserID: "U01ANA"}, "")
+				_, err := b.buttons.actions.Reject(t.Context(), id, actionproposals.Decider{SlackUserID: "U01ANA"}, "")
 				require.NoError(t, err)
 			},
 			wantNotes: []string{"This proposal is rejected already; <@U01ANA> decided it."}, wantStatus: "rejected",

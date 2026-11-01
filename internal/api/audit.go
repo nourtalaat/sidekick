@@ -9,6 +9,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/audit"
+	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
@@ -30,7 +31,7 @@ func (s *server) ListAudit(ctx context.Context, req apigen.ListAuditRequestObjec
 		return nil, fmt.Errorf("check the filters: %w", err)
 	}
 
-	rows, err := db.New(customPlan{db: s.pool}).ListAuditEntries(ctx, params)
+	rows, err := db.New(store.CustomPlan{DB: s.pool}).ListAuditEntries(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("list audit entries: %w", err)
 	}

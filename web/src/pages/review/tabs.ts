@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import { ActionsTab } from "./ActionsTab";
 import { LessonsTab } from "./LessonsTab";
+import { StrategiesTab } from "./StrategiesTab";
 
 /** One kind of thing that waits for review. Its panel is a component of its own, in this folder. */
 export interface ReviewTab {
@@ -13,5 +14,6 @@ export interface ReviewTab {
 /** The tabs of the review queue, in the order they are shown. The first one opens when the address names none. */
 export const REVIEW_TABS: readonly ReviewTab[] = [
   { id: "lessons", label: "Lessons", Panel: LessonsTab },
+  { id: "strategies", label: "Strategies", Panel: StrategiesTab },
   { id: "actions", label: "Actions", Panel: ActionsTab },
 ];

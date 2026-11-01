@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/nourtalaat/sidekick/internal/action/proposals"
+	actionproposals "github.com/nourtalaat/sidekick/internal/action/proposals"
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/investigator"
@@ -81,7 +81,7 @@ func (s *server) ListInvestigations(ctx context.Context, req apigen.ListInvestig
 		return nil, err
 	}
 
-	rows, err := db.New(customPlan{db: s.pool}).ListInvestigations(ctx, params)
+	rows, err := db.New(store.CustomPlan{DB: s.pool}).ListInvestigations(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("list investigations: %w", err)
 	}
@@ -141,7 +141,7 @@ func (s *server) GetInvestigation(ctx context.Context, req apigen.GetInvestigati
 		return nil, fmt.Errorf("investigation %s: %w", req.Id, err)
 	}
 
-	stored, err := proposals.OfInvestigation(ctx, s.pool, req.Id)
+	stored, err := actionproposals.OfInvestigation(ctx, s.pool, req.Id)
 	if err != nil {
 		return nil, fmt.Errorf("list the action proposals of investigation %s: %w", req.Id, err)
 	}

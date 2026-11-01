@@ -13,6 +13,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/bench"
+	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
@@ -32,7 +33,7 @@ func (s *server) ListBenchRuns(ctx context.Context, req apigen.ListBenchRunsRequ
 		return nil, err
 	}
 
-	rows, err := db.New(customPlan{db: s.pool}).ListBenchRuns(ctx, params)
+	rows, err := db.New(store.CustomPlan{DB: s.pool}).ListBenchRuns(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("list benchmark runs: %w", err)
 	}

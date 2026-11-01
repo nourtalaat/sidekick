@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	apispec "github.com/nourtalaat/sidekick/api"
-	"github.com/nourtalaat/sidekick/internal/action/proposals"
+	actionproposals "github.com/nourtalaat/sidekick/internal/action/proposals"
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/auth"
@@ -23,6 +23,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/feedback"
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/problem"
+	"github.com/nourtalaat/sidekick/internal/proposals"
 	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/strategy"
 	"github.com/nourtalaat/sidekick/internal/watch"
@@ -53,6 +54,9 @@ type Options struct {
 	// Strategies reads and saves the runtime strategies. Without it, the
 	// strategy operations answer 503.
 	Strategies StrategyStore
+	// ProposalReviewer approves, rejects and edits strategy proposals.
+	// Without it, those operations answer 503.
+	ProposalReviewer ProposalReviewer
 	// StrategyBase holds the built-in and file strategies that the runtime
 	// ones are added to. Nil means those of Config.
 	StrategyBase *strategy.Set
@@ -81,6 +85,13 @@ type Options struct {
 	// Lessons reads and changes lessons, for the /lessons operations and
 	// the lessons an investigation shows. Without it, they answer 503.
 	Lessons LessonStore
+	// MemoryStore reads and changes memory entries and service notes, for
+	// the /memory and /services operations. Without it, they answer 503.
+	MemoryStore MemoryStore
+	// Proposals decides whether a rating of wrong makes the
+	// investigation's strategy version get a proposed change. The zero
+	// value is off.
+	Proposals proposals.Trigger
 	// DraftLessons makes feedback with a reason enqueue a job that drafts a
 	// lesson from it. Set it when a summarize role is configured.
 	DraftLessons bool
@@ -93,7 +104,7 @@ type Options struct {
 	Watchers *watch.Recorder
 	// Actions approves and rejects action proposals. Without it, those
 	// operations answer 503.
-	Actions *proposals.Service
+	Actions *actionproposals.Service
 	// Now returns the current time. Nil means time.Now.
 	Now func() time.Time
 	// Logger gets the errors that answer 500. Nil logs nothing.
@@ -139,9 +150,9 @@ func New(opts Options) (http.Handler, error) {
 	h := &handler{auth: opts.Auth, routes: http.NewServeMux(), log: log}
 
 	srv := &server{
-		tokens: opts.Tokens, cfg: opts.Config, rules: opts.Rules, strategies: opts.Strategies, strategyBase: strategyBase, redactor: opts.Redactor, pool: opts.Pool, audit: opts.Audit,
+		tokens: opts.Tokens, cfg: opts.Config, rules: opts.Rules, strategies: opts.Strategies, proposalReviewer: opts.ProposalReviewer, strategyBase: strategyBase, redactor: opts.Redactor, pool: opts.Pool, audit: opts.Audit,
 		hub: opts.Hub, log: log, stopper: opts.Stopper, watchers: opts.Watchers, actions: opts.Actions, now: now,
-		feedbackMetrics: opts.Feedback, memory: opts.Memory, draftLessons: opts.DraftLessons, lessons: opts.Lessons,
+		feedbackMetrics: opts.Feedback, memory: opts.Memory, proposals: opts.Proposals, draftLessons: opts.DraftLessons, lessons: opts.Lessons, memoryEntries: opts.MemoryStore,
 		streamHeartbeat: cmp.Or(opts.StreamHeartbeat, DefaultStreamHeartbeat),
 		streamLifetime:  cmp.Or(opts.StreamLifetime, DefaultStreamLifetime),
 	}

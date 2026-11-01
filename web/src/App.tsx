@@ -10,6 +10,7 @@ import { NotFoundPage } from "./pages/NotFoundPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { RouteFormPage } from "./pages/RouteFormPage";
 import { RoutesPage } from "./pages/RoutesPage";
+import { LessonsPage } from "./pages/lessons/LessonsPage";
 import { ReviewPage } from "./pages/review/ReviewPage";
 import { StrategiesPage } from "./pages/StrategiesPage";
 import { StrategyDiffPage } from "./pages/StrategyDiffPage";
@@ -22,7 +23,7 @@ import { Shell } from "./shell/Shell";
 import { UnauthorizedRedirect } from "./UnauthorizedRedirect";
 
 /** The paths of the navigation that have their own routes below, so no placeholder is made for them. */
-const BUILT_PATHS = ["/investigations", "/routes", "/listeners", "/strategies", "/audit", "/review"];
+const BUILT_PATHS = ["/investigations", "/routes", "/listeners", "/strategies", "/audit", "/review", "/lessons"];
 
 /** The routes of the app. Everything but the login page needs a session. */
 export function App() {
@@ -48,6 +49,7 @@ export function App() {
             <Route path="/strategies/:name/diff" element={<StrategyDiffPage />} />
             <Route path="/audit" element={<AuditPage />} />
             <Route path="/review" element={<ReviewPage />} />
+            <Route path="/lessons" element={<LessonsPage />} />
             {NAV_ITEMS.filter(({ to }) => !BUILT_PATHS.includes(to)).map(({ to, label }) => (
               <Route key={to} path={to} element={to === "/dashboard" ? <DashboardPage /> : <PlaceholderPage title={label} />} />
             ))}

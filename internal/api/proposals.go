@@ -2,296 +2,337 @@ package api
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
-	"github.com/nourtalaat/sidekick/internal/action"
-	"github.com/nourtalaat/sidekick/internal/action/proposals"
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
-	"github.com/nourtalaat/sidekick/internal/auth"
+	"github.com/nourtalaat/sidekick/internal/gate"
+	"github.com/nourtalaat/sidekick/internal/proposals"
+	"github.com/nourtalaat/sidekick/internal/store"
+	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/strategystore"
 )
 
-// The page sizes of GET /proposals, and the longest note of a rejection,
-// in characters.
+// The page sizes of GET /strategy-proposals.
 const (
-	defaultProposalsPage = 50
-	maxProposalsPage     = 100
-	maxRejectNote        = 500
+	defaultProposalPage = 50
+	maxProposalPage     = 200
 )
 
-// The codes of the 409 answers to a decision, for a program to tell them
-// apart.
-const (
-	codeExpired    = "expired"
-	codeDecided    = "decided"
-	codeNotAllowed = "not_allowed"
-)
+// The codes of the problems that proposal reviews answer with, besides those
+// of strategy saves.
+const codeNotPassed = "not_passed"
 
-// What a refused decision says.
-const (
-	detailNoActions = "Action proposals are not set up on this server."
-	detailNoProp    = "No action proposal has this ID."
-	detailExpired   = "This proposal expired before anyone decided it."
-	detailLongNote  = "note must be at most 500 characters."
-)
+// errProposalsUnavailable answers a request when the server was started
+// without a proposal reviewer.
+var errProposalsUnavailable = problemf(http.StatusServiceUnavailable, "Strategy proposals are not available.")
 
-// proposalListed are the statuses GET /proposals lists when none is asked.
-var proposalListed = []action.ProposalStatus{action.StatusProposed}
+// errNoProposal answers a request for a proposal that does not exist.
+var errNoProposal = &Error{Status: http.StatusNotFound, Code: codeNotFound, Detail: "No strategy proposal has this ID."}
 
-// knownProposalStatuses are the statuses a request may ask for.
-var knownProposalStatuses = []action.ProposalStatus{
-	action.StatusProposed, action.StatusApproved, action.StatusRejected, action.StatusExpired,
-	action.StatusExecuting, action.StatusSucceeded, action.StatusFailed, action.StatusUndone,
+// ProposalReviewer approves, rejects and edits strategy proposals.
+// *proposals.Service is one.
+type ProposalReviewer interface {
+	Approve(ctx context.Context, id uuid.UUID, by strategystore.Actor) (proposals.Approved, error)
+	Reject(ctx context.Context, id uuid.UUID, by strategystore.Actor, reason string) (db.StrategyProposal, error)
+	Edit(ctx context.Context, id uuid.UUID, by strategystore.Actor, body string) (db.StrategyProposal, error)
 }
 
-// ListProposals returns a page of the review queue, newest first.
-func (s *server) ListProposals(ctx context.Context, req apigen.ListProposalsRequestObject) (apigen.ListProposalsResponseObject, error) {
-	statuses := proposalListed
-
-	if req.Params.Status != nil && len(*req.Params.Status) > 0 {
-		statuses = statuses[:0:0]
-
-		for _, st := range *req.Params.Status {
-			status := action.ProposalStatus(st)
-			if !slices.Contains(knownProposalStatuses, status) {
-				return nil, problemf(http.StatusBadRequest, "status must be one of %s.", joinStatuses())
-			}
-
-			statuses = append(statuses, status)
-		}
-	}
-
-	limit := defaultProposalsPage
-	if req.Params.Limit != nil {
-		limit = *req.Params.Limit
-	}
-
-	if limit < 1 || limit > maxProposalsPage {
-		return nil, problemf(http.StatusBadRequest, "limit must be 1 to %d.", maxProposalsPage)
-	}
-
-	var after proposals.Cursor
-
-	if req.Params.Cursor != nil {
-		c, err := parseProposalCursor(*req.Params.Cursor)
-		if err != nil {
-			return nil, problemf(http.StatusBadRequest, "cursor is not one this API returned.")
-		}
-
-		after = c
-	}
-
-	views, err := proposals.List(ctx, s.pool, proposals.ListOptions{Statuses: statuses, After: after, PageSize: int32(limit + 1)}) //nolint:gosec // limit is at most maxProposalsPage.
+// ListStrategyProposals returns a page of proposals, newest first.
+func (s *server) ListStrategyProposals(ctx context.Context, req apigen.ListStrategyProposalsRequestObject) (apigen.ListStrategyProposalsResponseObject, error) {
+	params, limit, err := proposalParams(req.Params)
 	if err != nil {
-		return nil, fmt.Errorf("list proposals: %w", err)
+		return nil, err
 	}
 
-	list := apigen.ListProposals200JSONResponse{Proposals: make([]apigen.Proposal, 0, min(len(views), limit))}
+	rows, err := db.New(store.CustomPlan{DB: s.pool}).ListStrategyProposals(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("list strategy proposals: %w", err)
+	}
 
-	for i, v := range views {
+	list := apigen.ListStrategyProposals200JSONResponse{Proposals: make([]apigen.StrategyProposalSummary, 0, min(len(rows), limit))}
+
+	for i, row := range rows {
 		if i == limit {
-			cursor := proposalCursor(proposals.Cursor{ProposedAt: views[i-1].ProposedAt, ID: uuid.MustParse(views[i-1].ID)})
+			cursor := investigationCursor{createdAt: rows[i-1].CreatedAt, id: rows[i-1].ID}.String()
 			list.NextCursor = &cursor
 
 			break
 		}
 
-		list.Proposals = append(list.Proposals, s.proposalOf(v.Proposal, v.AlertTitle))
+		list.Proposals = append(list.Proposals, proposalSummaryOf(proposalFields{
+			id: row.ID, name: row.Name, baseVersion: row.BaseVersion, baseOrigin: row.BaseOrigin, rationale: row.Rationale,
+			triggerCount: row.TriggerCount, status: row.Status, statusDetail: row.StatusDetail, gateResult: row.GateResult,
+			benchRunID: row.BenchRunID, baselineRunID: row.BaselineRunID, reviewer: row.Reviewer,
+			createdAt: row.CreatedAt, updatedAt: row.UpdatedAt, decidedAt: row.DecidedAt,
+		}))
 	}
 
 	return list, nil
 }
 
-// ApproveProposal approves a proposal that waits for a decision.
-func (s *server) ApproveProposal(ctx context.Context, req apigen.ApproveProposalRequestObject) (apigen.ApproveProposalResponseObject, error) {
-	if s.actions == nil {
-		return nil, problemf(http.StatusServiceUnavailable, detailNoActions)
-	}
-
-	p, _ := auth.PrincipalFrom(ctx)
-
-	got, err := s.actions.Approve(ctx, req.Id, deciderOf(p))
+// GetStrategyProposal returns one proposal with its YAML, its feedback and
+// its gate result.
+func (s *server) GetStrategyProposal(ctx context.Context, req apigen.GetStrategyProposalRequestObject) (apigen.GetStrategyProposalResponseObject, error) {
+	p, err := s.proposalDetail(ctx, req.Id)
 	if err != nil {
-		return nil, fmt.Errorf("approve proposal %s: %w", req.Id, decisionProblem(err))
+		return nil, err
 	}
 
-	return apigen.ApproveProposal200JSONResponse(s.proposalOf(got, "")), nil
+	return apigen.GetStrategyProposal200JSONResponse(p), nil
 }
 
-// RejectProposal rejects a proposal that waits for a decision.
-func (s *server) RejectProposal(ctx context.Context, req apigen.RejectProposalRequestObject) (apigen.RejectProposalResponseObject, error) {
-	if s.actions == nil {
-		return nil, problemf(http.StatusServiceUnavailable, detailNoActions)
+// EditStrategyProposal replaces the YAML of a proposal and sends it through
+// the gate again.
+func (s *server) EditStrategyProposal(ctx context.Context, req apigen.EditStrategyProposalRequestObject) (apigen.EditStrategyProposalResponseObject, error) {
+	if s.proposalReviewer == nil {
+		return nil, errProposalsUnavailable
 	}
 
-	var note string
-	if req.Body != nil && req.Body.Note != nil {
-		note = strings.TrimSpace(*req.Body.Note)
+	if req.Body == nil {
+		return nil, problemf(http.StatusBadRequest, "Send the new YAML as body.")
 	}
 
-	if len([]rune(note)) > maxRejectNote {
-		return nil, problemf(http.StatusBadRequest, detailLongNote)
+	if _, err := s.proposalReviewer.Edit(ctx, req.Id, proposalActor(ctx), req.Body.Body); err != nil {
+		return nil, proposalError(err)
 	}
 
-	p, _ := auth.PrincipalFrom(ctx)
-
-	got, err := s.actions.Reject(ctx, req.Id, deciderOf(p), note)
+	p, err := s.proposalDetail(ctx, req.Id)
 	if err != nil {
-		return nil, fmt.Errorf("reject proposal %s: %w", req.Id, decisionProblem(err))
+		return nil, err
 	}
 
-	return apigen.RejectProposal200JSONResponse(s.proposalOf(got, "")), nil
+	return apigen.EditStrategyProposal200JSONResponse(p), nil
 }
 
-// deciderOf is the person or token that made the request.
-func deciderOf(p auth.Principal) proposals.Decider {
-	return proposals.Decider{UserID: p.ID, Token: p.Kind == auth.KindToken}
+// ApproveStrategyProposal applies a proposal that passed its gate.
+func (s *server) ApproveStrategyProposal(ctx context.Context, req apigen.ApproveStrategyProposalRequestObject) (apigen.ApproveStrategyProposalResponseObject, error) {
+	if s.proposalReviewer == nil {
+		return nil, errProposalsUnavailable
+	}
+
+	got, err := s.proposalReviewer.Approve(ctx, req.Id, proposalActor(ctx))
+	if err != nil {
+		return nil, proposalError(err)
+	}
+
+	out := apigen.ApproveStrategyProposal200JSONResponse{Proposal: proposalSummaryOf(fieldsOf(got.Proposal)), Yaml: nonEmptyText(got.YAML)}
+	if got.Version != nil {
+		out.Version = &got.Version.Number
+	}
+
+	return out, nil
 }
 
-// decisionProblem turns the error of a decision into the answer to give:
-// 404 for a proposal that does not exist, 409 with a code for one that
-// cannot be decided, and the error itself otherwise.
-func decisionProblem(err error) error {
-	var (
-		decided    *proposals.DecidedError
-		notAllowed *proposals.NotAllowedError
-	)
+// RejectStrategyProposal sets a proposal aside.
+func (s *server) RejectStrategyProposal(ctx context.Context, req apigen.RejectStrategyProposalRequestObject) (apigen.RejectStrategyProposalResponseObject, error) {
+	if s.proposalReviewer == nil {
+		return nil, errProposalsUnavailable
+	}
 
-	switch {
-	case errors.Is(err, proposals.ErrNotFound):
-		return problemf(http.StatusNotFound, detailNoProp)
-	case errors.Is(err, proposals.ErrExpired):
-		return withCode(problemf(http.StatusConflict, detailExpired), codeExpired)
-	case errors.As(err, &decided):
-		return withCode(problemf(http.StatusConflict, "%s", decidedDetail(decided.Proposal)), codeDecided)
-	case errors.As(err, &notAllowed):
-		return withCode(problemf(http.StatusConflict, "The config does not allow this any more: %s. Reject it instead.", notAllowed.Reason), codeNotAllowed)
-	default:
-		return err
+	var reason string
+	if req.Body != nil {
+		reason = textOf(req.Body.Reason)
+	}
+
+	p, err := s.proposalReviewer.Reject(ctx, req.Id, proposalActor(ctx), reason)
+	if err != nil {
+		return nil, proposalError(err)
+	}
+
+	return apigen.RejectStrategyProposal200JSONResponse(proposalSummaryOf(fieldsOf(p))), nil
+}
+
+// proposalDetail reads a proposal with the feedback it was drafted from and
+// its gate result.
+func (s *server) proposalDetail(ctx context.Context, id uuid.UUID) (apigen.StrategyProposal, error) {
+	q := db.New(s.pool)
+
+	p, err := q.GetStrategyProposal(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return apigen.StrategyProposal{}, errNoProposal
+	}
+
+	if err != nil {
+		return apigen.StrategyProposal{}, fmt.Errorf("read strategy proposal %s: %w", id, err)
+	}
+
+	rows, err := q.ListFeedbackByIDs(ctx, p.FeedbackIds)
+	if err != nil {
+		return apigen.StrategyProposal{}, fmt.Errorf("list the feedback of strategy proposal %s: %w", id, err)
+	}
+
+	stale, err := s.proposalStale(ctx, p)
+	if err != nil {
+		return apigen.StrategyProposal{}, fmt.Errorf("check strategy proposal %s for staleness: %w", id, err)
+	}
+
+	gateView, hasGate, err := gateOf(p)
+	if err != nil {
+		return apigen.StrategyProposal{}, fmt.Errorf("strategy proposal %s: %w", id, err)
+	}
+
+	summary := proposalSummaryOf(fieldsOf(p))
+
+	out := apigen.StrategyProposal{
+		Id: summary.Id, Name: summary.Name, BaseVersion: summary.BaseVersion, BaseOrigin: summary.BaseOrigin, Rationale: summary.Rationale,
+		TriggerCount: summary.TriggerCount, Status: summary.Status, StatusDetail: summary.StatusDetail, GateResult: summary.GateResult,
+		BenchRunId: summary.BenchRunId, BaselineRunId: summary.BaselineRunId, Reviewer: summary.Reviewer,
+		CreatedAt: summary.CreatedAt, UpdatedAt: summary.UpdatedAt, DecidedAt: summary.DecidedAt,
+		BaseBody: p.BaseBody, Body: p.Body, Stale: stale, Approvable: p.Status == proposals.StatusPassed,
+		Feedback: make([]apigen.StrategyProposalFeedback, 0, len(rows)),
+	}
+
+	if hasGate {
+		out.Gate = &gateView
+	}
+
+	for _, r := range rows {
+		out.Feedback = append(out.Feedback, apigen.StrategyProposalFeedback{
+			Id: r.ID, InvestigationId: r.InvestigationID, TargetKind: r.TargetKind, TargetRef: r.TargetRef, Rating: r.Rating,
+			Reason: r.Reason, CorrectVerdict: r.CorrectVerdict, CorrectCause: r.CorrectCause, UpdatedAt: r.UpdatedAt,
+		})
+	}
+
+	return out, nil
+}
+
+// proposalStale reports whether the strategy in effect is no longer at the
+// version the proposal was drafted from. Without a strategy store it is
+// not known, and the answer is false.
+func (s *server) proposalStale(ctx context.Context, p db.StrategyProposal) (bool, error) {
+	if s.strategies == nil {
+		return false, nil
+	}
+
+	o, err := s.strategyOverview(ctx)
+	if err != nil {
+		return false, fmt.Errorf("read the strategies: %w", err)
+	}
+
+	st, ok := o.effective.Set.Get(p.Name)
+
+	return !ok || st.Version != p.BaseVersion, nil
+}
+
+// gateOf returns the stored result of a proposal's gate, and false when the
+// gate has not ended.
+func gateOf(p db.StrategyProposal) (apigen.StrategyGate, bool, error) {
+	if len(p.GateDetail) == 0 {
+		return apigen.StrategyGate{}, false, nil
+	}
+
+	var d gate.Detail
+	if err := json.Unmarshal(p.GateDetail, &d); err != nil {
+		return apigen.StrategyGate{}, false, fmt.Errorf("decode the gate detail: %w", err)
+	}
+
+	out := apigen.StrategyGate{
+		Result: apigen.StrategyGateResult(d.Result), Reason: d.Reason, Mean: d.Mean,
+		Interval: apigen.BenchInterval{Lower: d.Interval.Lower, Upper: d.Interval.Upper},
+		MaxDrop:  d.MaxDrop, Resamples: d.Resamples, Seed: strconv.FormatUint(d.Seed, 10), Repeats: d.Repeats,
+		CostMicros: d.CostMicros, MaxCostMicros: d.MaxCostMicros, Error: nonEmptyText(d.Error),
+		Scenarios: make([]apigen.StrategyGateScenario, 0, len(d.Scenarios)),
+	}
+
+	for _, sc := range d.Scenarios {
+		out.Scenarios = append(out.Scenarios, apigen.StrategyGateScenario{Id: sc.ID, Baseline: sc.Baseline, Proposal: sc.Proposal, Difference: sc.Difference})
+	}
+
+	return out, true, nil
+}
+
+// proposalFields are the fields the summary of a proposal shows, whichever
+// query read them.
+type proposalFields struct {
+	id            uuid.UUID
+	name          string
+	baseVersion   string
+	baseOrigin    *string
+	rationale     *string
+	triggerCount  int32
+	status        string
+	statusDetail  *string
+	gateResult    *string
+	benchRunID    *uuid.UUID
+	baselineRunID *uuid.UUID
+	reviewer      *uuid.UUID
+	createdAt     time.Time
+	updatedAt     time.Time
+	decidedAt     *time.Time
+}
+
+// fieldsOf returns the summary fields of a whole proposal.
+func fieldsOf(p db.StrategyProposal) proposalFields {
+	return proposalFields{
+		id: p.ID, name: p.Name, baseVersion: p.BaseVersion, baseOrigin: p.BaseOrigin, rationale: p.Rationale, triggerCount: p.TriggerCount,
+		status: p.Status, statusDetail: p.StatusDetail, gateResult: p.GateResult, benchRunID: p.BenchRunID, baselineRunID: p.BaselineRunID,
+		reviewer: p.Reviewer, createdAt: p.CreatedAt, updatedAt: p.UpdatedAt, decidedAt: p.DecidedAt,
 	}
 }
 
-// withCode returns e with its code set.
-func withCode(e *Error, code string) *Error {
-	e.Code = code
+// proposalSummaryOf returns the API's view of a proposal's summary fields.
+func proposalSummaryOf(f proposalFields) apigen.StrategyProposalSummary {
+	out := apigen.StrategyProposalSummary{
+		Id: f.id, Name: f.name, BaseVersion: f.baseVersion, BaseOrigin: f.baseOrigin, Rationale: f.rationale,
+		TriggerCount: int(f.triggerCount), Status: apigen.StrategyProposalStatus(f.status), StatusDetail: f.statusDetail,
+		BenchRunId: f.benchRunID, BaselineRunId: f.baselineRunID, Reviewer: f.reviewer,
+		CreatedAt: f.createdAt, UpdatedAt: f.updatedAt, DecidedAt: f.decidedAt,
+	}
 
-	return e
+	if f.gateResult != nil {
+		out.GateResult = new(apigen.StrategyGateResult(*f.gateResult))
+	}
+
+	return out
 }
 
-// decidedDetail says what became of a proposal that cannot be decided
-// because it was decided, or went further, already, and by whom.
-func decidedDetail(p action.Proposal) string {
-	by := p.DecidedByName
-	if by == "" && p.DecidedBySlackUser != "" {
-		by = "the Slack user " + p.DecidedBySlackUser
+// proposalParams returns the query parameters of a list and its page size.
+func proposalParams(p apigen.ListStrategyProposalsParams) (db.ListStrategyProposalsParams, int, error) {
+	limit := defaultProposalPage
+	if p.Limit != nil {
+		limit = *p.Limit
 	}
 
-	if by == "" {
-		return fmt.Sprintf("This proposal is %s already.", p.Status)
+	if limit < 1 || limit > maxProposalPage {
+		return db.ListStrategyProposalsParams{}, 0, problemf(http.StatusBadRequest, "limit must be 1 to %d.", maxProposalPage)
 	}
 
-	return fmt.Sprintf("This proposal is %s already; %s decided it.", p.Status, by)
-}
+	params := db.ListStrategyProposalsParams{PageSize: int32(limit + 1), Name: p.Name} //nolint:gosec // limit is at most maxProposalPage.
 
-// proposalOf is the API's view of a proposal. The reason and the error are
-// masked; the parameters never are, because they are what runs and what the
-// approver reads.
-func (s *server) proposalOf(p action.Proposal, alertTitle string) apigen.Proposal {
-	out := apigen.Proposal{
-		Id:                 uuid.MustParse(p.ID),
-		InvestigationId:    uuid.MustParse(p.InvestigationID),
-		AlertTitle:         nonEmptyText(alertTitle),
-		Route:              p.Route,
-		Action:             p.Action,
-		Params:             map[string]any{},
-		ParamsText:         p.ParamsText,
-		Reason:             s.mask(p.Reason),
-		Mode:               string(p.Mode),
-		Status:             apigen.ProposalStatus(p.Status),
-		ProposedAt:         p.ProposedAt,
-		ExpiresAt:          p.ExpiresAt,
-		DecidedByName:      nonEmptyText(p.DecidedByName),
-		DecidedBySlackUser: nonEmptyText(p.DecidedBySlackUser),
-		Error:              nonEmptyText(s.mask(p.Error)),
-	}
-
-	if err := json.Unmarshal(p.Params, &out.Params); err != nil {
-		out.Params = map[string]any{}
-	}
-
-	if !p.DecidedAt.IsZero() {
-		out.DecidedAt = &p.DecidedAt
-	}
-
-	if p.Result != nil {
-		out.Result = &apigen.ActionResult{Summary: s.mask(p.Result.Summary)}
-
-		for _, l := range p.Result.Links {
-			links := valueOf(out.Result.Links)
-			links = append(links, apigen.ActionLink{Title: s.mask(l.Title), Url: l.URL})
-			out.Result.Links = &links
+	if p.Status != nil {
+		if !p.Status.Valid() {
+			return db.ListStrategyProposalsParams{}, 0, problemf(http.StatusBadRequest, "status is not a proposal status.")
 		}
+
+		status := string(*p.Status)
+		params.Status = &status
+		params.IncludeDrafts = true
 	}
 
-	return out
+	if p.Cursor != nil {
+		c, err := parseInvestigationCursor(*p.Cursor)
+		if err != nil {
+			return db.ListStrategyProposalsParams{}, 0, problemf(http.StatusBadRequest, "cursor is not one this API returned.")
+		}
+
+		params.CursorAt, params.CursorID = &c.createdAt, &c.id
+	}
+
+	return params, limit, nil
 }
 
-// proposalsOf is the API's view of the proposals of an investigation.
-func (s *server) proposalsOf(list []action.Proposal) []apigen.Proposal {
-	out := make([]apigen.Proposal, 0, len(list))
+// proposalActor returns who acts, as the strategy store and the proposal
+// service record them.
+func proposalActor(ctx context.Context) strategystore.Actor {
+	actor := actorOf(ctx)
 
-	for _, p := range list {
-		out = append(out, s.proposalOf(p, ""))
-	}
-
-	return out
-}
-
-// proposalCursor encodes where a page of proposals ends.
-func proposalCursor(c proposals.Cursor) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(strconv.FormatInt(c.ProposedAt.UnixMicro(), 10) + "." + c.ID.String()))
-}
-
-// parseProposalCursor decodes a cursor proposalCursor made.
-func parseProposalCursor(s string) (proposals.Cursor, error) {
-	raw, err := base64.RawURLEncoding.DecodeString(s)
-	if err != nil {
-		return proposals.Cursor{}, fmt.Errorf("decode the cursor: %w", err)
-	}
-
-	micros, id, ok := strings.Cut(string(raw), ".")
-	if !ok {
-		return proposals.Cursor{}, errors.New("the cursor has no ID")
-	}
-
-	n, err := strconv.ParseInt(micros, 10, 64)
-	if err != nil {
-		return proposals.Cursor{}, fmt.Errorf("read the cursor's time: %w", err)
-	}
-
-	u, err := uuid.Parse(id)
-	if err != nil {
-		return proposals.Cursor{}, fmt.Errorf("read the cursor's ID: %w", err)
-	}
-
-	return proposals.Cursor{ProposedAt: time.UnixMicro(n).UTC(), ID: u}, nil
-}
-
-// joinStatuses lists the statuses a request may ask for.
-func joinStatuses() string {
-	names := make([]string, len(knownProposalStatuses))
-	for i, st := range knownProposalStatuses {
-		names[i] = string(st)
-	}
-
-	return strings.Join(names, ", ")
+	return strategystore.Actor{Kind: actor.Kind, ID: actor.ID}
 }

@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { json, problem, renderWithProviders, fakeServer, wcagViolations } from "../test/helpers";
-import { APPROVER, PROPOSAL_ID, proposal } from "../test/proposals";
+import { APPROVER, PROPOSAL_ID, proposal } from "../test/actionProposals";
 import { routes } from "../test/streams";
 import { ProposalCard } from "./ProposalCard";
 

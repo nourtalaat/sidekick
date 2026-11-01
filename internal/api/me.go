@@ -8,13 +8,14 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/nourtalaat/sidekick/internal/action/proposals"
+	actionproposals "github.com/nourtalaat/sidekick/internal/action/proposals"
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/auth"
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/feedback"
 	"github.com/nourtalaat/sidekick/internal/memory"
+	"github.com/nourtalaat/sidekick/internal/proposals"
 	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/strategy"
 	"github.com/nourtalaat/sidekick/internal/watch"
@@ -26,6 +27,8 @@ type server struct {
 	cfg        *config.Config
 	rules      RuleStore
 	strategies StrategyStore
+	// proposalReviewer reviews strategy proposals.
+	proposalReviewer ProposalReviewer
 	// strategyBase holds the built-in and file strategies.
 	strategyBase *strategy.Set
 	redactor     *redact.Redactor
@@ -36,14 +39,16 @@ type server struct {
 
 	feedbackMetrics *feedback.Metrics
 	memory          memory.SyncOptions
+	proposals       proposals.Trigger
 	draftLessons    bool
 	lessons         LessonStore
+	memoryEntries   MemoryStore
 	// stopper stops watchers and watchers records the changes that
 	// resolving a group makes to them; now is the clock.
 	stopper  *watch.Stopper
 	watchers *watch.Recorder
 	// actions decides the action proposals.
-	actions *proposals.Service
+	actions *actionproposals.Service
 	now     func() time.Time
 
 	streamHeartbeat time.Duration

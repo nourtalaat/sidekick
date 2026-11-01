@@ -17,6 +17,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/ids"
 	"github.com/nourtalaat/sidekick/internal/redact"
+	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
@@ -163,7 +164,8 @@ func NewStore(pool *pgxpool.Pool, redactor *redact.Redactor) *Store {
 	return &Store{pool: pool, redactor: redactor}
 }
 
-// List returns a page of lessons, newest first.
+// List returns a page of lessons, newest first. It runs with a plan made
+// for the filters of the call, since the query has optional filters.
 func (s *Store) List(ctx context.Context, p ListParams) (Page, error) {
 	size := min(max(p.PageSize, 1), MaxPageSize)
 
@@ -175,7 +177,7 @@ func (s *Store) List(ctx context.Context, p ListParams) (Page, error) {
 		params.AfterAt, params.AfterID = &p.AfterAt, &p.AfterID
 	}
 
-	rows, err := db.New(s.pool).ListLessons(ctx, params)
+	rows, err := db.New(store.CustomPlan{DB: s.pool}).ListLessons(ctx, params)
 	if err != nil {
 		return Page{}, fmt.Errorf("list lessons: %w", err)
 	}
@@ -227,7 +229,7 @@ func (s *Store) Get(ctx context.Context, id uuid.UUID) (Stored, error) {
 func (s *Store) Create(ctx context.Context, actor Actor, n New) (Stored, error) {
 	text, scope, err := s.check(n.Text, n.Scope)
 	if err != nil {
-		return Stored{}, err
+		return Stored{}, fmt.Errorf("check the lesson: %w", err)
 	}
 
 	id := ids.New()
@@ -262,18 +264,18 @@ func (s *Store) Create(ctx context.Context, actor Actor, n New) (Stored, error) 
 func (s *Store) Update(ctx context.Context, actor Actor, id uuid.UUID, version int, e Edit) (Stored, error) {
 	text, scope, err := s.check(e.Text, e.Scope)
 	if err != nil {
-		return Stored{}, err
+		return Stored{}, fmt.Errorf("check the lesson: %w", err)
 	}
 
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		cur, err := lock(ctx, tx, id)
 		if err != nil {
-			return err
+			return fmt.Errorf("lock the lesson: %w", err)
 		}
 
 		status, err := nextStatus(cur.Status, e.Status)
 		if err != nil {
-			return err
+			return fmt.Errorf("check the status: %w", err)
 		}
 
 		if cur.Origin == OriginFeedback && scope.Global() {
@@ -309,7 +311,7 @@ func (s *Store) Approve(ctx context.Context, actor Actor, id uuid.UUID, version 
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		cur, err := lock(ctx, tx, id)
 		if err != nil {
-			return err
+			return fmt.Errorf("lock the lesson: %w", err)
 		}
 
 		if cur.Status != StatusProposed {
@@ -340,7 +342,7 @@ func (s *Store) Delete(ctx context.Context, actor Actor, id uuid.UUID) error {
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		cur, err := lock(ctx, tx, id)
 		if err != nil {
-			return err
+			return fmt.Errorf("lock the lesson: %w", err)
 		}
 
 		if _, err := db.New(tx).DeleteLesson(ctx, id); err != nil {
