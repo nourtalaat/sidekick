@@ -127,6 +127,9 @@ type statsRow struct {
 	InputTokens       int64     `db:"input_tokens"`
 	OutputTokens      int64     `db:"output_tokens"`
 	NoisyFixed        int32     `db:"noisy_fixed"`
+	ActionsProposed   int32     `db:"actions_proposed"`
+	ActionsApproved   int32     `db:"actions_approved"`
+	ActionsExecuted   int32     `db:"actions_executed"`
 	Recoveries        int32     `db:"recoveries"`
 	DowntimeMsSum     int64     `db:"downtime_ms_sum"`
 	DowntimeHist      []int32   `db:"downtime_hist"`
@@ -151,6 +154,7 @@ func readStats(t *testing.T, pool *pgxpool.Pool) []statsRow {
 	rows, err := pool.Query(t.Context(), `SELECT hour, route, service, model, verdict, investigations, finished,
 		duration_n, duration_ms_sum, first_finding_n, first_finding_ms_sum, first_finding_hist,
 		tool_calls, cost_micros, input_tokens, output_tokens, noisy_fixed,
+		actions_proposed, actions_approved, actions_executed,
 		recoveries, downtime_ms_sum, downtime_hist, watch_timeouts
 		FROM stats_hourly ORDER BY hour, route, service, model, verdict`)
 	require.NoError(t, err)

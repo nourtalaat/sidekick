@@ -1,6 +1,6 @@
 -- A year of investigations for the query plan tests: 20,000 investigations
 -- in 20,000 groups, one event each, a watcher for every 10th, a rating for
--- every 5th, their rollup rows, in 3 routes, 20 services, 3 models and 6 verdicts, and one
+-- every 5th, a proposal for every 4th, their rollup rows, in 3 routes, 20 services, 3 models and 6 verdicts, and one
 -- dirty mark for every hour and day of the year.
 INSERT INTO event_groups (id, fingerprint, route, status, event_count, opened_at, last_event_at, closed_reason, investigation_id)
 SELECT md5('group' || i)::uuid, 'fp-' || i, 'route-' || (i % 3), 'closed', 1,
@@ -40,6 +40,15 @@ INSERT INTO feedback (id, investigation_id, target_kind, target_ref, rating, sla
 SELECT md5('feedback' || i)::uuid, md5('investigation' || i)::uuid, 'verdict', 'run:1/verdict',
        (ARRAY['correct', 'wrong'])[1 + i % 2], 'U1', 'slack', now() - make_interval(secs => i * 1577 - 400), now() - make_interval(secs => i * 1577 - 400)
 FROM generate_series(5, 20000, 5) AS i;
+
+INSERT INTO action_proposals (id, investigation_id, action, params, mode, status, idempotency_key,
+                              proposed_at, expires_at, decided_at, executed_at)
+SELECT md5('proposal' || i)::uuid, md5('investigation' || i)::uuid, 'note', '{}', 'approved',
+       (ARRAY['proposed', 'approved', 'rejected', 'expired', 'executing', 'succeeded', 'failed', 'undone'])[1 + i % 8],
+       'proposal-' || i,
+       now() - make_interval(secs => i * 1577 - 20), now() + interval '1 day',
+       now() - make_interval(secs => i * 1577 - 40), now() - make_interval(secs => i * 1577 - 60)
+FROM generate_series(4, 20000, 4) AS i;
 
 DELETE FROM rollup_dirty;
 
