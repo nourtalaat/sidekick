@@ -124,7 +124,7 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"memory_entries_listing"},
+			wantIndex: []string{"memory_entries_confirmed"},
 		},
 		{
 			name: "ListMemoryEntriesAfterACursor",
@@ -133,7 +133,7 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"memory_entries_listing"},
+			wantIndex: []string{"memory_entries_confirmed"},
 		},
 		{
 			name: "ListMemoryEntriesOfAService",
@@ -160,7 +160,7 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"memory_entries_listing"},
+			wantIndex: []string{"memory_entries_confirmed"},
 		},
 		{
 			name: "ListMemoryEntriesWithWords",

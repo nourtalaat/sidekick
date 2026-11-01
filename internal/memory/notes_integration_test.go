@@ -18,7 +18,10 @@ func notesStoreSetup(t *testing.T) (*Store, func(sql string)) {
 
 	_, err := pool.Exec(t.Context(), `
 		INSERT INTO users (id, oidc_issuer, oidc_subject, name, role, created_at, last_login_at)
-		VALUES ($1, 'https://idp.example.com', 'ada', 'Ada Lovelace', 'admin', now(), now());
+		VALUES ($1, 'https://idp.example.com', 'ada', 'Ada Lovelace', 'admin', now(), now())`, adminID)
+	require.NoError(t, err)
+
+	_, err = pool.Exec(t.Context(), `
 		INSERT INTO service_notes (service, text, updated_by, updated_at) VALUES
 		  ('billing', 'Billing is quiet at night.', $1, '2026-10-20 10:00:00+00'),
 		  ('checkout-api', 'Checkout pages the on-call twice a week for pool exhaustion.', NULL, '2026-10-21 10:00:00+00'),

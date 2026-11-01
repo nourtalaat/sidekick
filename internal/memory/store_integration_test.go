@@ -130,6 +130,8 @@ func TestStoreList(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
+			tt.params.PageSize = 50
+
 			page, err := s.List(t.Context(), tt.params)
 			require.NoError(t, err)
 			require.Equal(t, tt.want, idsOf(page))
