@@ -35,6 +35,7 @@ const (
 	KindFollowUp        = "follow_up"
 	KindPublish         = "publish"
 	KindExecuteAction   = "execute_action"
+	KindExpireProposals = "expire_proposals"
 	KindDraftLesson     = "draft_lesson"
 	KindProposeStrategy = "propose_strategy"
 	KindBenchGate       = "bench_gate"
