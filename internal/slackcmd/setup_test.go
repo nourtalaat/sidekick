@@ -106,7 +106,7 @@ func setup(t *testing.T) *harness {
 	require.NoError(t, err)
 
 	commands := slackcmd.New(slackcmd.Options{
-		File: cfg, Store: rules.NewStore(pool, cfg), Rules: cache, Roles: lookup, Investigator: app, Lessons: lessons.NewStore(pool), Logger: log, Version: "v0.0.0-test",
+		File: cfg, Store: rules.NewStore(pool, cfg), Rules: cache, Roles: lookup, Investigator: app, Lessons: lessons.NewStore(pool, redactor), Logger: log, Version: "v0.0.0-test",
 		// A shared test database can be slower than Slack allows; the
 		// tests check the replies, not how fast they come.
 		Timeout: testTimeout,

@@ -346,7 +346,7 @@ under `/api/v1`:
   `GET /investigations/{id}/steps` has `lessons`: the ones it used and the
   first 50 it left out, each with the reason, and how many applied.
 
-The text of a lesson came from people and the model: show it as plain text.
+Secrets in the text of a lesson are redacted when it is saved, as in feedback. The text of a lesson came from people and the model: show it as plain text.
 
 ## The review queue
 

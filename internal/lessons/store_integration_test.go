@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/audit"
+	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/store/storetest"
 )
 
@@ -37,7 +38,10 @@ func storeSetup(t *testing.T) (*Store, *pgxpool.Pool) {
 	pool := setup(t)
 	storetest.LoadFixture(t, pool, "fixture/lessons.sql")
 
-	return NewStore(pool), pool
+	redactor, err := redact.New(redact.Options{HashKey: []byte("test key"), Custom: []redact.Rule{{Name: "ticket", Pattern: `TICKET-[0-9]+`}}})
+	require.NoError(t, err)
+
+	return NewStore(pool, redactor), pool
 }
 
 // auditActions returns the audit actions written for lesson id, oldest
@@ -151,6 +155,80 @@ func TestStoreCreate(t *testing.T) {
 			require.Equal(t, []string{"lesson.created"}, auditActions(t, pool, got.ID))
 		})
 	}
+}
+
+func TestStoreRedactsTheText(t *testing.T) {
+	t.Parallel()
+
+	const secret = "TICKET-4711"
+
+	t.Run("create", func(t *testing.T) {
+		t.Parallel()
+
+		store, pool := storeSetup(t)
+
+		got, err := store.Create(t.Context(), admin, New{Text: "See " + secret + " first.", Origin: OriginUI, Status: StatusActive})
+		require.NoError(t, err)
+		require.NotContains(t, got.Text, secret)
+		require.Contains(t, got.Text, "[REDACTED:ticket:")
+
+		var stored, audited string
+
+		require.NoError(t, pool.QueryRow(t.Context(), "SELECT text FROM lessons WHERE id = $1", got.ID).Scan(&stored))
+		require.NoError(t, pool.QueryRow(t.Context(), "SELECT details->'new'->>'text' FROM audit_log WHERE action = 'lesson.created' AND target_id = $1", got.ID.String()).Scan(&audited))
+		require.Equal(t, got.Text, stored)
+		require.Equal(t, got.Text, audited, "the audit entry shows the redacted text")
+	})
+
+	t.Run("update", func(t *testing.T) {
+		t.Parallel()
+
+		store, pool := storeSetup(t)
+		id := lessonID(lessonActive)
+
+		got, err := store.Update(t.Context(), admin, id, 1, Edit{Text: "Ask about " + secret + ".", Scope: Scope{Service: "checkout-api"}})
+		require.NoError(t, err)
+		require.NotContains(t, got.Text, secret)
+		require.Contains(t, got.Text, "[REDACTED:ticket:")
+
+		var audited string
+
+		require.NoError(t, pool.QueryRow(t.Context(), "SELECT details->'new'->>'text' FROM audit_log WHERE action = 'lesson.updated' AND target_id = $1", id.String()).Scan(&audited))
+		require.Equal(t, got.Text, audited)
+	})
+
+	t.Run("the scope is left as it is", func(t *testing.T) {
+		t.Parallel()
+
+		store, _ := storeSetup(t)
+
+		got, err := store.Create(t.Context(), admin, New{Text: "Check.", Scope: Scope{Alert: secret}, Origin: OriginUI, Status: StatusActive})
+		require.NoError(t, err)
+		require.Equal(t, secret, got.Scope.Alert)
+	})
+
+	t.Run("the length is checked on the redacted text", func(t *testing.T) {
+		t.Parallel()
+
+		store, _ := storeSetup(t)
+
+		// 395 characters, but 410 once the secret is a placeholder.
+		_, err := store.Create(t.Context(), admin, New{Text: strings.Repeat("a", 385) + " TICKET-12", Origin: OriginUI, Status: StatusActive})
+
+		invalid, ok := errors.AsType[*InvalidError](err)
+		require.True(t, ok, "want an *InvalidError, got %v", err)
+		require.Equal(t, "text", invalid.Field)
+	})
+
+	t.Run("a store with no redactor keeps the text", func(t *testing.T) {
+		t.Parallel()
+
+		_, pool := storeSetup(t)
+
+		got, err := NewStore(pool, nil).Create(t.Context(), admin, New{Text: "See " + secret + ".", Origin: OriginUI, Status: StatusActive})
+		require.NoError(t, err)
+		require.Equal(t, "See "+secret+".", got.Text)
+	})
 }
 
 func TestStoreUpdate(t *testing.T) {

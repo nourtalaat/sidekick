@@ -57,7 +57,7 @@ type lessonListBody struct {
 func setupLessons(t *testing.T) server {
 	t.Helper()
 
-	return setupWith(t, func(o *api.Options) { o.Lessons = lessons.NewStore(o.Pool) }, "fixture/rules_api.sql", "fixture/investigations.sql", "fixture/lessons.sql")
+	return setupWith(t, func(o *api.Options) { o.Lessons = lessons.NewStore(o.Pool, o.Redactor) }, "fixture/rules_api.sql", "fixture/investigations.sql", "fixture/lessons.sql")
 }
 
 func lessonIDsOf(l lessonListBody) []string {
@@ -311,6 +311,38 @@ func TestCreateLesson(t *testing.T) {
 			require.Equal(t, map[bool]string{true: "token", false: "user"}[tt.caller.token != ""], actor)
 		})
 	}
+}
+
+func TestLessonTextIsRedacted(t *testing.T) {
+	t.Parallel()
+
+	s := setupLessons(t)
+
+	// The test server redacts email addresses, as sidekick serve does with
+	// the rules of the config.
+	const address = "ana@example.com"
+
+	created := decodeLesson(t, s.sendRule(t, adminCaller, http.MethodPost, "/api/v1/lessons", map[string]any{
+		"text": "Ask " + address + " about the deploy.",
+	}), http.StatusCreated)
+	require.NotContains(t, created.Text, address)
+	require.Contains(t, created.Text, "[REDACTED:")
+
+	updated := decodeLesson(t, s.sendRule(t, adminCaller, http.MethodPut, "/api/v1/lessons/"+created.ID, map[string]any{
+		"version": created.Version, "text": "Mail " + address + " first.",
+	}), http.StatusOK)
+	require.NotContains(t, updated.Text, address)
+	require.Contains(t, updated.Text, "[REDACTED:")
+
+	var stored string
+
+	require.NoError(t, s.pool.QueryRow(t.Context(), "SELECT text FROM lessons WHERE id = $1", created.ID).Scan(&stored))
+	require.Equal(t, updated.Text, stored)
+
+	var audited int
+
+	require.NoError(t, s.pool.QueryRow(t.Context(), "SELECT count(*) FROM audit_log WHERE target_kind = 'lesson' AND details::text LIKE '%' || $1 || '%'", address).Scan(&audited))
+	require.Zero(t, audited, "the audit log never holds the address")
 }
 
 func TestUpdateLesson(t *testing.T) {

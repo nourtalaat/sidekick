@@ -9,6 +9,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestLessonAddRedactsTheText(t *testing.T) {
+	t.Parallel()
+
+	h := setup(t)
+
+	status, reply := h.command(t, admin, `lesson add "Ask ana@example.com about the deploy." service:checkout-api`)
+	require.Equal(t, 200, status)
+	require.NotContains(t, reply, "ana@example.com")
+	require.Contains(t, reply, "[REDACTED:")
+
+	var text string
+
+	require.NoError(t, h.pool.QueryRow(t.Context(), "SELECT text FROM lessons").Scan(&text))
+	require.NotContains(t, text, "ana@example.com")
+	require.Contains(t, text, "[REDACTED:")
+}
+
 func TestLessonAdd(t *testing.T) {
 	t.Parallel()
 

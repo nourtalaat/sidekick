@@ -16,6 +16,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/ids"
+	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
@@ -151,12 +152,15 @@ type Edit struct {
 // Store reads and changes lessons. Every change is audited in the
 // transaction that makes it.
 type Store struct {
-	pool *pgxpool.Pool
+	pool     *pgxpool.Pool
+	redactor *redact.Redactor
 }
 
-// NewStore returns a Store on pool.
-func NewStore(pool *pgxpool.Pool) *Store {
-	return &Store{pool: pool}
+// NewStore returns a Store on pool. It redacts the text of every lesson it
+// stores with redactor, since the text goes into prompts; a nil redactor
+// leaves the text as it is.
+func NewStore(pool *pgxpool.Pool, redactor *redact.Redactor) *Store {
+	return &Store{pool: pool, redactor: redactor}
 }
 
 // List returns a page of lessons, newest first.
@@ -221,7 +225,7 @@ func (s *Store) Get(ctx context.Context, id uuid.UUID) (Stored, error) {
 // global. It returns an *InvalidError for a text or scope that cannot be
 // right.
 func (s *Store) Create(ctx context.Context, actor Actor, n New) (Stored, error) {
-	text, scope, err := check(n.Text, n.Scope)
+	text, scope, err := s.check(n.Text, n.Scope)
 	if err != nil {
 		return Stored{}, err
 	}
@@ -256,7 +260,7 @@ func (s *Store) Create(ctx context.Context, actor Actor, n New) (Stored, error) 
 // It returns errors that wrap ErrNotFound and ErrStale, and an
 // *InvalidError.
 func (s *Store) Update(ctx context.Context, actor Actor, id uuid.UUID, version int, e Edit) (Stored, error) {
-	text, scope, err := check(e.Text, e.Scope)
+	text, scope, err := s.check(e.Text, e.Scope)
 	if err != nil {
 		return Stored{}, err
 	}
@@ -441,10 +445,16 @@ func recordOf(row db.ListLessonsRow) (Stored, error) {
 }
 
 // check returns the text and scope of a lesson as they are stored, or an
-// *InvalidError. The text is trimmed; a scope value is trimmed and may not
-// span lines.
-func check(text string, scope Scope) (string, Scope, error) {
+// *InvalidError. The text is trimmed and redacted, and the checks of its
+// length and characters are on the redacted text, since that is what is
+// stored; a scope value is trimmed and may not span lines, and is not
+// redacted, since it is a name that must match an event exactly.
+func (s *Store) check(text string, scope Scope) (string, Scope, error) {
 	text = strings.TrimSpace(text)
+
+	if s.redactor != nil {
+		text = s.redactor.Text(text).Text
+	}
 
 	switch {
 	case text == "":

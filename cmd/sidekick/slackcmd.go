@@ -22,7 +22,7 @@ func newSlackCommands(a *app.App, h *slackapp.Handler, cache *rules.Cache, looku
 		Rules:        cache,
 		Roles:        lookup,
 		Investigator: h,
-		Lessons:      lessons.NewStore(a.Pool()),
+		Lessons:      lessons.NewStore(a.Pool(), a.Redactor()),
 		Logger:       a.Logger().With("component", "slackcmd"),
 		Version:      buildinfo.Current().Version,
 	})
