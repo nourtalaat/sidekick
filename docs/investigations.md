@@ -90,6 +90,14 @@ The model sees the built-in tools and the tools of the route's sources:
   hosts the route's `watcherLimits` allow. A request outside them gets an
   error naming the limit, and nothing starts. The watcher keeps running
   after the investigation ends.
+- **`propose_action`** proposes one change, from the actions the route
+  lists, for a person to approve or reject. It is offered only when the
+  investigation's route is in `approved` mode (see
+  [`actions`](configuration.md#actions)). Proposing runs nothing. Sidekick
+  checks the parameters against the action's schema and limits, and a
+  proposal that fails comes back to the model as an error. The proposal
+  waits for an approver for `actions.proposalTTL` (24 hours by default) and
+  then expires.
 - **Source tools** are named `<source>__<tool>`, for example
   `signoz__search_logs`. A route's `sources` list limits them to those
   sources; without one, every source's tools are offered. See

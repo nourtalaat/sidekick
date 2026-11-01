@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/nourtalaat/sidekick/internal/action/proposals"
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/model"
@@ -80,6 +81,9 @@ type Options struct {
 	// Watchers starts the watchers the model asks for with start_watcher.
 	// Nil offers the tool to no investigation.
 	Watchers *watch.ModelStarter
+	// Actions takes the propose_action calls of investigations in approved
+	// mode. Nil offers the tool to no investigation.
+	Actions *proposals.Service
 	// Logger receives a line when a run starts and ends, with IDs, the
 	// route, the verdict and the stop reason only, never event text, tool
 	// results or model output. Nil logs nothing.

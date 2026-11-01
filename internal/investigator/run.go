@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/model"
@@ -212,6 +213,10 @@ func (r *run) savePrompt(ctx context.Context) error {
 
 	specs := r.h.builtins.specs()
 	if spec, ok := r.h.opts.Watchers.Spec(r.inv.Route, specNames(r.tools.Tools())); ok {
+		specs = append(specs, spec)
+	}
+
+	if spec, ok := r.h.opts.Actions.Spec(r.inv.Route, action.Mode(r.inv.Mode)); ok {
 		specs = append(specs, spec)
 	}
 

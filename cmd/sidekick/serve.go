@@ -151,7 +151,12 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
-	if err := registerInvestigator(a, cache, guard, watchers, modelMetrics, vectors); err != nil {
+	actions, err := registerActions(a, cache)
+	if err != nil {
+		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
+	}
+
+	if err := registerInvestigator(a, cache, guard, watchers, actions, modelMetrics, vectors); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 

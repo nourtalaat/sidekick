@@ -169,6 +169,7 @@ process (`process_*`) metrics, this release has:
 | `sidekick_dashboard_route_spend_cap_usd` | gauge | `route` | The route's [daily cap](configuration.md#daily-caps) in US dollars. Only routes with a cap have a series. |
 | `sidekick_dashboard_spend_cap_usd` | gauge | none | The global daily cap in US dollars. No series when there is none. |
 | `sidekick_dashboard_refreshed_timestamp_seconds` | gauge | none | When this replica last read the dashboard numbers, in seconds since the Unix epoch. Absent until the first read succeeds. |
+| `sidekick_actions_total` | counter | `action`, `status` | Action proposals that reached a status on this replica, by the action's name and the status: `proposed`, `approved`, `rejected`, `expired`, `executing`, `succeeded` or `failed`. See [`actions`](configuration.md#actions). |
 | `sidekick_watchers_running` | gauge | none | Watchers running in the deployment. Read from the database at each scrape, so every replica reports the same number; combine replicas with `max`. |
 | `sidekick_watcher_state_changes_total` | counter | `status` | Watcher state changes on this replica, by the new state: `started`, `recovered`, `timed_out` or `stopped`. |
 | `sidekick_watch_http_blocked_total` | counter | `reason` | Watcher HTTP checks the safety rules refused, by reason: `host`, `private_ip` or `redirect`. |
