@@ -122,6 +122,11 @@ func TestValidateFixtures(t *testing.T) {
 		{file: "unknown-confidence", want: []string{`report.minFalsePositiveConfidence: unknown confidence "hgh" (did you mean "high"?)`}},
 		// Memory
 		{file: "memory-examples", want: []string{"memory.examples: must be between 1 and 10, got 11; set memory.enabled to false for none"}},
+		{file: "lessons-limits", want: []string{
+			"lessons.globalShare: must be between 0 and 1, got 1.5",
+			"lessons.maxPerPrompt: must be between 1 and 50, got 0",
+			"lessons.maxTokens: must be between 200 and 20000, got 100",
+		}},
 		{file: "vector-no-embeddings", want: []string{"memory.vector.embeddings.provider: required when memory.vector.enabled is true"}},
 		{file: "vector-cannot-embed", want: []string{"memory.vector.embeddings.provider: the anthropic provider cannot embed text; use openai, bedrock or voyage"}},
 		{file: "vector-too-wide", want: []string{

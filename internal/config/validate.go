@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
+	"math"
 	"net"
 	"net/url"
 	"path"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/event"
+	"github.com/nourtalaat/sidekick/internal/lessons"
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/redact"
@@ -110,6 +112,7 @@ func (v *validator) run() {
 	v.checkReport()
 	v.checkMemory()
 	v.checkProposals()
+	v.checkLessons()
 	v.checkRedaction()
 	v.checkTelemetry()
 	v.checkWatch()
@@ -622,6 +625,23 @@ func (v *validator) checkMemory() {
 
 	if v.cfg.Memory.Vector.Enabled {
 		v.checkVector()
+	}
+}
+
+// checkLessons checks the limits of the lessons section.
+func (v *validator) checkLessons() {
+	l := v.cfg.Lessons
+
+	if l.MaxPerPrompt < 1 || l.MaxPerPrompt > lessons.MaxPerPromptLimit {
+		v.errs.add("lessons.maxPerPrompt", "must be between 1 and %d, got %d", lessons.MaxPerPromptLimit, l.MaxPerPrompt)
+	}
+
+	if l.MaxTokens < lessons.MinTokens || l.MaxTokens > lessons.MaxTokensLimit {
+		v.errs.add("lessons.maxTokens", "must be between %d and %d, got %d", lessons.MinTokens, lessons.MaxTokensLimit, l.MaxTokens)
+	}
+
+	if l.GlobalShare < 0 || l.GlobalShare > 1 || math.IsNaN(l.GlobalShare) {
+		v.errs.add("lessons.globalShare", "must be between 0 and 1, got %v", l.GlobalShare)
 	}
 }
 

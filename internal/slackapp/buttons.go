@@ -106,6 +106,10 @@ type ButtonsOptions struct {
 	// Proposals decides whether a rating of wrong makes the investigation's
 	// strategy version get a proposed change. The zero value is off.
 	Proposals proposals.Trigger
+	// DraftLessons makes a reason given in the feedback form enqueue a job
+	// that drafts a lesson from it. Set it when a summarize role is
+	// configured.
+	DraftLessons bool
 	// Redactor redacts the free text of the feedback form before it is
 	// stored. It is required to send the form.
 	Redactor *redact.Redactor
@@ -134,6 +138,8 @@ type Buttons struct {
 	memory    memory.SyncOptions
 	proposals proposals.Trigger
 	redactor  *redact.Redactor
+	// draftLessons is ButtonsOptions.DraftLessons.
+	draftLessons bool
 	// publicURL is ButtonsOptions.PublicURL.
 	publicURL string
 }
@@ -157,9 +163,10 @@ func NewButtons(opts ButtonsOptions) *Buttons {
 		log:      opts.Logger,
 		memory:   opts.Memory,
 
-		proposals: opts.Proposals,
-		redactor:  opts.Redactor,
-		publicURL: opts.PublicURL,
+		proposals:    opts.Proposals,
+		redactor:     opts.Redactor,
+		draftLessons: opts.DraftLessons,
+		publicURL:    opts.PublicURL,
 	}
 }
 
@@ -476,6 +483,8 @@ func (b *Buttons) submitDetails(ctx context.Context, cb slack.InteractionCallbac
 // verdict is shown in the outputs in the same one.
 func (b *Buttons) storeFeedback(ctx context.Context, sub feedback.Submission) (feedback.Submitted, error) {
 	var res feedback.Submitted
+
+	sub.DraftLessons = b.draftLessons
 
 	err := pgx.BeginFunc(ctx, b.pool, func(tx pgx.Tx) error {
 		var err error

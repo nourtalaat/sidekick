@@ -20,6 +20,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/intake"
+	"github.com/nourtalaat/sidekick/internal/lessons"
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/output"
@@ -92,6 +93,7 @@ type Config struct {
 	Telemetry  Telemetry          `yaml:"telemetry"`
 	Watch      Watch              `yaml:"watch"`
 	Memory     Memory             `yaml:"memory"`
+	Lessons    Lessons            `yaml:"lessons"`
 	Retention  Retention          `yaml:"retention"`
 
 	// Listeners are the file listeners, by name. Their events go through
@@ -370,6 +372,22 @@ type Memory struct {
 	// Vector turns on search by meaning next to full-text search. It is
 	// off unless enabled.
 	Vector Vector `yaml:"vector"`
+}
+
+// Lessons says how lessons are approved and chosen for prompts: the
+// guidance that people reviewed.
+type Lessons struct {
+	// RequireApproval makes a lesson drafted from feedback wait for an
+	// admin to approve it. It is on unless set to false; with it off, a
+	// drafted lesson is used at once.
+	RequireApproval bool `yaml:"requireApproval"`
+	// MaxPerPrompt is the most lessons a prompt shows.
+	MaxPerPrompt int `yaml:"maxPerPrompt"`
+	// MaxTokens is the most tokens the lessons of a prompt may use.
+	MaxTokens int `yaml:"maxTokens"`
+	// GlobalShare is the share, from 0 to 1, of the places and the tokens
+	// that lessons without a scope may use.
+	GlobalShare float64 `yaml:"globalShare"`
 }
 
 // Vector configures vector memory: memory entries are embedded with a
@@ -679,6 +697,7 @@ func (c *Config) setDefaults() {
 	c.Telemetry.setDefaults()
 	c.Watch.setDefaults()
 	c.Memory.setDefaults()
+	c.Lessons.setDefaults()
 	c.Retention.setDefaults()
 	c.Strategies.setDefaults()
 	c.Bench.setDefaults()
@@ -749,6 +768,13 @@ func (b *Bench) setDefaults() {
 func (m *Memory) setDefaults() {
 	m.Enabled = true
 	m.Examples = memory.DefaultExamples
+}
+
+func (l *Lessons) setDefaults() {
+	l.RequireApproval = true
+	l.MaxPerPrompt = lessons.DefaultMaxPerPrompt
+	l.MaxTokens = lessons.DefaultMaxTokens
+	l.GlobalShare = lessons.DefaultGlobalShare
 }
 
 // parseDocument parses data as exactly one YAML document.
