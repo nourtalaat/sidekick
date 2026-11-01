@@ -138,7 +138,8 @@ func newButtons(a *app.App, h *slackapp.Handler, lookup roles.Lookup, actions *p
 		Logger:   a.Logger().With("component", "slackapp"),
 		Memory:   memorySync,
 
-		Redactor:  a.Redactor(),
-		PublicURL: a.Config().Server.PublicURL,
+		Redactor:     a.Redactor(),
+		DraftLessons: summarizeConfigured(a.Config()),
+		PublicURL:    a.Config().Server.PublicURL,
 	}), nil
 }

@@ -74,6 +74,8 @@ func registerAPI(ctx context.Context, a *app.App, actions *proposals.Service, me
 		Watchers:   recorder,
 		Actions:    actions,
 		Logger:     log,
+
+		DraftLessons: summarizeConfigured(cfg),
 	})
 	if err != nil {
 		return fmt.Errorf("set up the API: %w", err)

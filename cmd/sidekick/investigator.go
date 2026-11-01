@@ -10,6 +10,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/investigator"
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
+	"github.com/nourtalaat/sidekick/internal/lessons"
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/model/instrument"
 	"github.com/nourtalaat/sidekick/internal/model/pricing"
@@ -66,6 +67,7 @@ func registerInvestigator(a *app.App, cache *rules.Cache, strategies strategy.So
 		PublicURL:      cfg.Server.PublicURL,
 		MemoryExamples: cfg.Memory.PromptExamples(),
 		MemoryVectors:  vectors,
+		Lessons:        lessons.NewSelector(lessons.LimitsOf(cfg.Lessons.MaxPerPrompt, cfg.Lessons.MaxTokens, cfg.Lessons.GlobalShare)),
 		Watchers:       watchers,
 		Actions:        actions,
 		Logger:         a.Logger().With("component", "investigator"),

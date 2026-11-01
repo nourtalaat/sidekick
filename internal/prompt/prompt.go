@@ -18,7 +18,7 @@ import (
 // and the layout of the other parts. Each investigation records it, so
 // results always refer to an exact prompt. Change it whenever the prompt
 // changes; a test fails until system.tmpl and this version agree.
-const Version = "4"
+const Version = "5"
 
 //go:embed system.tmpl
 var systemTemplate string
@@ -44,6 +44,9 @@ type Input struct {
 	// Memory are similar confirmed investigations, shown in the order
 	// given. Empty leaves the memory part out.
 	Memory []Example
+	// Lessons are the reviewed lessons that apply, best first. Empty leaves
+	// the lessons part out.
+	Lessons []Lesson
 }
 
 // Group is an event group as the prompt shows it.
@@ -74,9 +77,8 @@ type parts struct {
 	tools    []model.ToolSpec
 	strategy string
 	// lessons and memory are reviewed guidance and short summaries of
-	// similar confirmed investigations. Lessons are always empty until
-	// they arrive in M3. Both change from one investigation to the next,
-	// so they sit after the last cache breakpoint.
+	// similar confirmed investigations. Both change from one investigation
+	// to the next, so they sit after the last cache breakpoint.
 	lessons []string
 	memory  []string
 	event   string
@@ -92,6 +94,7 @@ func Build(in Input) model.Request {
 		system:   systemPrompt,
 		tools:    orderTools(in.Tools),
 		strategy: renderStrategy(in.Strategy, in.Tools),
+		lessons:  renderLessons(in.Lessons),
 		memory:   renderMemory(in.Memory),
 		event:    renderEvent(in.Group, in.Route),
 	}

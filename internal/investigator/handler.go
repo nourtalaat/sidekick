@@ -18,6 +18,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/action/proposals"
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
+	"github.com/nourtalaat/sidekick/internal/lessons"
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/model/pricing"
@@ -81,6 +82,9 @@ type Options struct {
 	// MemoryVectors adds the entries nearest in meaning to the examples,
 	// with vector memory on. Nil means full-text matches only.
 	MemoryVectors *memory.Vectors
+	// Lessons chooses the reviewed lessons that prompts and triage show.
+	// Nil shows none.
+	Lessons *lessons.Selector
 	// Watchers starts the watchers the model asks for with start_watcher.
 	// Nil offers the tool to no investigation.
 	Watchers *watch.ModelStarter
