@@ -1844,6 +1844,38 @@ one. Cohere on Bedrock does not report tokens in its answer, so Sidekick
 reads them from a response header when Bedrock sends it, and the cost shows
 zero when it does not.
 
+### `lessons`
+
+```yaml
+lessons:
+  requireApproval: true   # default true
+  maxPerPrompt: 10        # 1 to 50; default 10
+  maxTokens: 1500         # 200 to 20000; default 1500
+  globalShare: 0.3        # 0 to 1; default 0.3
+```
+
+A lesson is a short piece of guidance that people reviewed, up to 400
+characters, with a scope: a service, an alert name, a route or a strategy.
+A lesson applies to an investigation when every scope field it sets equals
+the investigation's value. A lesson with no scope applies to every
+investigation; only an admin can write one, in the web UI.
+
+When a responder gives a reason with feedback, Sidekick asks the model of the
+`summarize` role to draft a lesson from it. With `requireApproval: true` the
+lesson waits in the review queue until an admin approves it; with `false` it
+is used at once. Without a `summarize` role, no lesson is drafted from
+feedback, and Sidekick logs that once at start-up. Admins can still write
+lessons by hand. Each draft is one model call, priced and counted in the daily
+spend and the daily caps like any other model call; at a cap the draft waits
+for the next day.
+
+A prompt shows at most `maxPerPrompt` lessons and at most `maxTokens` tokens
+of them. Lessons with more matching scope fields come first, and global
+lessons come after all scoped ones. Global lessons may use at most
+`globalShare` of the places and of the tokens, so they cannot crowd out
+specific ones. Lessons that did not fit are listed in the investigation's
+record, so you can see when a scope is too broad.
+
 ### `redaction`
 
 Redaction removes secrets and personal data from event text, raw webhook
@@ -2110,6 +2142,10 @@ with access to the database, who can turn the guard off.
 | `memory.enabled` | `true` |
 | `memory.examples` | `3` |
 | `memory.vector.enabled` | `false` |
+| `lessons.requireApproval` | `true` |
+| `lessons.maxPerPrompt` | `10` |
+| `lessons.maxTokens` | `1500` |
+| `lessons.globalShare` | `0.3` |
 | `redaction.builtIn` | every built-in rule except `ip_addresses` |
 | `telemetry.logLevel` | `info` |
 | `routes[].watcherLimits.types` | every check type: `http`, `tool` and `alert` |
@@ -2187,6 +2223,8 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   `dimensions`, and `dimensions` is a length the model returns and at most
   2000. No `model.connectors` entry sets `dimensions` or names an embedding
   model.
+- `lessons.maxPerPrompt` is 1 to 50, `lessons.maxTokens` is 200 to 20000, and
+  `lessons.globalShare` is 0 to 1.
 - Every `redaction.builtIn` entry is a built-in rule. Every custom
   redaction rule has a unique name of the right shape that is not a
   built-in rule's name, and a pattern that parses.
