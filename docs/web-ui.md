@@ -235,6 +235,10 @@ It says that one part of an investigation is correct or wrong:
   verdicts of a report; it may be given on any part. On the verdict, a
   `correct` rating cannot name another verdict than the reported one, and
   a `wrong` rating cannot name the reported one (422).
+- A `reason` also starts a lesson when `model.roles.summarize` is set:
+  Sidekick asks that model to draft one from the feedback (see
+  [`lessons`](configuration.md#lessons)). A reason you change later does
+  not draft a second lesson from the same feedback.
 - Each person has one opinion per part: a new submission replaces the
   earlier one. The answer is the stored feedback, with `confirmation`,
   which says how it changed the confirmed verdict of the investigation:

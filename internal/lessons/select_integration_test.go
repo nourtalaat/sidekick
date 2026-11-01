@@ -12,9 +12,9 @@ import (
 	"github.com/nourtalaat/sidekick/internal/store/storetest"
 )
 
-// eventText is the text of the event the lessons of fixture/lessons.sql are
+// rankingText is the text of the event the lessons of fixture/lessons.sql are
 // ranked against.
-const eventText = "checkout-api p99 latency above 2s. p99 is 2.6 s. The database connection pool is exhausted."
+const rankingText = "checkout-api p99 latency above 2s. p99 is 2.6 s. The database connection pool is exhausted."
 
 // noLimits lets every lesson that applies through.
 var noLimits = Limits{MaxPerPrompt: MaxPerPromptLimit, MaxTokens: MaxTokensLimit, GlobalPercent: 100}
@@ -37,7 +37,7 @@ func lessonIDs(numbers ...int) []uuid.UUID {
 func TestSelectRanking(t *testing.T) {
 	t.Parallel()
 
-	checkout := Subject{Service: "checkout-api", AlertName: "CheckoutLatencyP99", Route: "payments", Strategy: "latency-alert", Text: eventText}
+	checkout := Subject{Service: "checkout-api", AlertName: "CheckoutLatencyP99", Route: "payments", Strategy: "latency-alert", Text: rankingText}
 
 	tests := []struct {
 		name    string
@@ -62,12 +62,12 @@ func TestSelectRanking(t *testing.T) {
 		},
 		{
 			name:    "a lesson applies only when all its fields match",
-			subject: Subject{Service: "checkout-api", AlertName: "CheckoutLatencyP99", Route: "billing", Strategy: "other", Text: eventText},
+			subject: Subject{Service: "checkout-api", AlertName: "CheckoutLatencyP99", Route: "billing", Strategy: "other", Text: rankingText},
 			want:    []int{1, 2, 3, 21, 31, 32, 5, 8, 9},
 		},
 		{
 			name:    "another service gets its own lesson and the global ones",
-			subject: Subject{Service: "search-api", AlertName: "X", Route: "r", Strategy: "s", Text: eventText},
+			subject: Subject{Service: "search-api", AlertName: "X", Route: "r", Strategy: "s", Text: rankingText},
 			want:    []int{10, 8, 9},
 		},
 		{
@@ -96,7 +96,7 @@ func TestSelectRanking(t *testing.T) {
 func TestSelectLimits(t *testing.T) {
 	t.Parallel()
 
-	subject := Subject{Service: "checkout-api", AlertName: "CheckoutLatencyP99", Route: "payments", Strategy: "latency-alert", Text: eventText}
+	subject := Subject{Service: "checkout-api", AlertName: "CheckoutLatencyP99", Route: "payments", Strategy: "latency-alert", Text: rankingText}
 
 	pool := setup(t)
 	storetest.LoadFixture(t, pool, "fixture/lessons.sql")
@@ -120,7 +120,7 @@ func TestRecord(t *testing.T) {
 	pool := setup(t)
 	storetest.LoadFixture(t, pool, "fixture/lessons.sql")
 
-	sel, err := NewSelector(noLimits).Select(t.Context(), pool, Subject{Service: "search-api", Text: eventText})
+	sel, err := NewSelector(noLimits).Select(t.Context(), pool, Subject{Service: "search-api", Text: rankingText})
 	require.NoError(t, err)
 	require.Equal(t, lessonIDs(10, 8, 9), idsOf(sel.Used))
 

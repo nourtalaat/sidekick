@@ -11,6 +11,107 @@ import (
 	"github.com/google/uuid"
 )
 
+const getFeedbackToDraft = `-- name: GetFeedbackToDraft :one
+SELECT id, investigation_id, target_kind, target_ref, rating, reason, correct_verdict, correct_cause
+FROM feedback
+WHERE id = $1
+`
+
+type GetFeedbackToDraftRow struct {
+	ID              uuid.UUID
+	InvestigationID uuid.UUID
+	TargetKind      string
+	TargetRef       string
+	Rating          string
+	Reason          *string
+	CorrectVerdict  *string
+	CorrectCause    *string
+}
+
+// GetFeedbackToDraft returns what the draft_lesson job needs of a feedback
+// row. It returns no row for feedback that is gone.
+func (q *Queries) GetFeedbackToDraft(ctx context.Context, id uuid.UUID) (GetFeedbackToDraftRow, error) {
+	row := q.db.QueryRow(ctx, getFeedbackToDraft, id)
+	var i GetFeedbackToDraftRow
+	err := row.Scan(
+		&i.ID,
+		&i.InvestigationID,
+		&i.TargetKind,
+		&i.TargetRef,
+		&i.Rating,
+		&i.Reason,
+		&i.CorrectVerdict,
+		&i.CorrectCause,
+	)
+	return i, err
+}
+
+const getToolCallStep = `-- name: GetToolCallStep :one
+SELECT source, tool, status
+FROM steps
+WHERE investigation_id = $1 AND tool_call_id = $2 AND kind = 'tool_result'
+LIMIT 1
+`
+
+type GetToolCallStepParams struct {
+	InvestigationID uuid.UUID
+	ToolCallID      *string
+}
+
+type GetToolCallStepRow struct {
+	Source *string
+	Tool   *string
+	Status string
+}
+
+// GetToolCallStep returns what the result of a tool call says of the call.
+// It returns no row when the call has no result yet.
+func (q *Queries) GetToolCallStep(ctx context.Context, arg GetToolCallStepParams) (GetToolCallStepRow, error) {
+	row := q.db.QueryRow(ctx, getToolCallStep, arg.InvestigationID, arg.ToolCallID)
+	var i GetToolCallStepRow
+	err := row.Scan(&i.Source, &i.Tool, &i.Status)
+	return i, err
+}
+
+const insertDraftedLesson = `-- name: InsertDraftedLesson :one
+INSERT INTO lessons (id, text, scope_service, scope_alert, scope_route, scope_strategy, status, origin, feedback_ids)
+SELECT $1::uuid, $2::text, $3::text, $4::text,
+       $5::text, $6::text, $7::text, 'feedback',
+       ARRAY[$8::uuid]
+WHERE NOT EXISTS (SELECT 1 FROM lessons WHERE feedback_ids @> ARRAY[$8::uuid])
+RETURNING id
+`
+
+type InsertDraftedLessonParams struct {
+	ID            uuid.UUID
+	Text          string
+	ScopeService  *string
+	ScopeAlert    *string
+	ScopeRoute    *string
+	ScopeStrategy *string
+	Status        string
+	FeedbackID    uuid.UUID
+}
+
+// InsertDraftedLesson stores a lesson drafted from a feedback row, and
+// returns its ID. It stores nothing, and returns no row, when a lesson was
+// drafted from the feedback already, so a repeated job adds no second one.
+func (q *Queries) InsertDraftedLesson(ctx context.Context, arg InsertDraftedLessonParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertDraftedLesson,
+		arg.ID,
+		arg.Text,
+		arg.ScopeService,
+		arg.ScopeAlert,
+		arg.ScopeRoute,
+		arg.ScopeStrategy,
+		arg.Status,
+		arg.FeedbackID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const insertLessonUses = `-- name: InsertLessonUses :exec
 INSERT INTO lesson_uses (lesson_id, investigation_id)
 SELECT unnest($1::uuid[]), $2::uuid
@@ -28,6 +129,19 @@ type InsertLessonUsesParams struct {
 func (q *Queries) InsertLessonUses(ctx context.Context, arg InsertLessonUsesParams) error {
 	_, err := q.db.Exec(ctx, insertLessonUses, arg.LessonIds, arg.InvestigationID)
 	return err
+}
+
+const lessonExistsForFeedback = `-- name: LessonExistsForFeedback :one
+SELECT EXISTS (SELECT 1 FROM lessons WHERE feedback_ids @> ARRAY[$1::uuid])
+`
+
+// LessonExistsForFeedback reports whether a lesson was drafted from the
+// feedback row, whatever became of the lesson since.
+func (q *Queries) LessonExistsForFeedback(ctx context.Context, feedbackID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, lessonExistsForFeedback, feedbackID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const listLessonCandidates = `-- name: ListLessonCandidates :many

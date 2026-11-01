@@ -141,6 +141,11 @@ Ratings are counted in `sidekick_feedback_total`, by target (`verdict`,
 repeated click, or a form that only adds a reason to the same rating, is
 not counted.
 
+A reason given in the **Details** form, or in the web UI, is also the start
+of a lesson: when `model.roles.summarize` is set, Sidekick asks that model to
+draft a lesson from the feedback, and an admin approves it before prompts
+use it. See [`lessons`](configuration.md#lessons).
+
 ## Set up the Slack app
 
 Each organization creates its own internal Slack app from the manifest
