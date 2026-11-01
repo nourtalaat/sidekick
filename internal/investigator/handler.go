@@ -59,8 +59,11 @@ type Options struct {
 	Connectors map[string]Connector
 	// Prices price each model step.
 	Prices pricing.Table
-	// Strategies are the strategies routes name.
-	Strategies *strategy.Set
+	// Strategies gives the strategies routes name. A *strategy.Set is a
+	// fixed source; the strategystore cache follows the strategies saved at
+	// runtime. An investigation keeps the version of its strategy that it
+	// started with, as long as the source still has it.
+	Strategies strategy.Source
 	// Routes are the settings of each route, by name.
 	Routes map[string]Route
 	// Rules are the checks a submitted report must pass.
@@ -169,6 +172,10 @@ func New(opts Options) (*Handler, error) {
 	log := opts.Logger
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
+	}
+
+	if opts.Strategies == nil {
+		opts.Strategies = (*strategy.Set)(nil)
 	}
 
 	h := &Handler{

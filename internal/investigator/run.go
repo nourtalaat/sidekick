@@ -18,6 +18,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/strategy"
 	"github.com/nourtalaat/sidekick/internal/weblink"
 )
 
@@ -187,15 +188,19 @@ func (r *run) settings() error {
 func (r *run) savePrompt(ctx context.Context) error {
 	name := deref(r.inv.Strategy)
 
-	st, ok := r.h.opts.Strategies.Get(name)
-	if !ok {
+	st, exact, err := r.h.opts.Strategies.Version(ctx, name, deref(r.inv.StrategyVersion))
+	if errors.Is(err, strategy.ErrNotFound) {
 		r.log.ErrorContext(ctx, "the investigation's strategy is not loaded", "strategy", name)
 
 		return fmt.Errorf("%w: strategy %q is not loaded", queue.ErrGiveUp, name)
 	}
 
-	if st.Version != deref(r.inv.StrategyVersion) {
-		r.log.InfoContext(ctx, "the strategy changed after the investigation was created; using the loaded version",
+	if err != nil {
+		return fmt.Errorf("find the investigation's strategy: %w", err)
+	}
+
+	if !exact {
+		r.log.InfoContext(ctx, "the version of the strategy that the investigation started with is not available; using the loaded version",
 			"strategy", name, "stored_version", deref(r.inv.StrategyVersion), "loaded_version", st.Version)
 	}
 

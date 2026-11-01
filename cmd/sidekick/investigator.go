@@ -13,6 +13,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/model/instrument"
 	"github.com/nourtalaat/sidekick/internal/model/pricing"
 	"github.com/nourtalaat/sidekick/internal/queue"
+	"github.com/nourtalaat/sidekick/internal/strategy"
 	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
@@ -21,7 +22,7 @@ import (
 // questions, with every source behind guard, every model connector
 // wrapped with its span and metrics, and start_watcher through watchers,
 // and listens for Stops of the runs on this replica.
-func registerInvestigator(a *app.App, guard *tools.Guard, watchers *watch.ModelStarter, modelMetrics *instrument.Metrics, vectors *memory.Vectors) error {
+func registerInvestigator(a *app.App, strategies strategy.Source, guard *tools.Guard, watchers *watch.ModelStarter, modelMetrics *instrument.Metrics, vectors *memory.Vectors) error {
 	cfg := a.Config()
 	prices := pricing.New(cfg.Model.PriceTable())
 
@@ -57,7 +58,7 @@ func registerInvestigator(a *app.App, guard *tools.Guard, watchers *watch.ModelS
 		Guard:      guard,
 		Connectors: connectors,
 		Prices:     prices,
-		Strategies: cfg.StrategySet(),
+		Strategies: strategies,
 		Routes:     routes,
 		Rules:      cfg.Report.Rules(),
 		Daily: investigator.DailyCaps{
