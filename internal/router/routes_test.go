@@ -216,7 +216,7 @@ func TestNewRoutesWithRuntimeStrategy(t *testing.T) {
 
 	cfg, in := loadConfig(t)
 
-	saved, problems := strategy.ParseRuntime([]byte("name: latency-alert\ndescription: Saved at runtime.\nbudgets:\n  maxToolCalls: 10\n"), 3)
+	saved, problems := strategy.ParseRuntime([]byte("name: generic-alert\ndescription: Saved at runtime.\nbudgets:\n  maxToolCalls: 10\n"), 3)
 	require.Empty(t, problems)
 
 	routes, err := newRoutes(cfg, cfg.StrategySet().WithRuntime([]strategy.Strategy{saved}), in.ModelSettings, cfg.WatchPolicy())
@@ -227,17 +227,17 @@ func TestNewRoutesWithRuntimeStrategy(t *testing.T) {
 		byName[r.name] = r
 	}
 
-	payments := byName["payments-latency"]
-	require.Equal(t, "latency-alert", payments.strategy)
-	require.Equal(t, "runtime:3", payments.strategyVersion, "the route records the runtime version")
+	crashloop := byName["crashloop"]
+	require.Equal(t, strategy.GenericAlert, crashloop.strategy)
+	require.Equal(t, "runtime:3", crashloop.strategyVersion, "the route records the runtime version")
 
 	var budget investigator.Budget
 
-	require.NoError(t, json.Unmarshal(payments.budget, &budget))
+	require.NoError(t, json.Unmarshal(crashloop.budget, &budget))
 	require.Equal(t, 10, budget.MaxToolCalls, "the budget comes from the version in effect")
 
-	generic, _ := cfg.StrategySet().Get(strategy.GenericAlert)
-	require.Equal(t, generic.Version, byName["crashloop"].strategyVersion, "other routes are unchanged")
+	latency, _ := cfg.StrategySet().Get("latency-alert")
+	require.Equal(t, latency.Version, byName["payments-latency"].strategyVersion, "a strategy file wins over a runtime strategy, so other routes are unchanged")
 }
 
 func TestEffectiveBudget(t *testing.T) {
