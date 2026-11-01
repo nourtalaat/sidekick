@@ -50,3 +50,19 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+.sk-manage__heading {
+  margin: 0;
+  font: var(--sk-type-h3);
+}
+
+.sk-manage__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-3);
+}
+
+.sk-manage__preview {
+  max-width: 40ch;
+  overflow-wrap: anywhere;
+}

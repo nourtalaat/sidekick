@@ -34,6 +34,13 @@ describe("DeleteConfirm", () => {
     expect(onConfirm).toHaveBeenCalledOnce();
   });
 
+  it("can ask about plural things", () => {
+    render(<DeleteConfirm subject="notes" determiner="these" onConfirm={() => undefined} onCancel={() => undefined} />);
+
+    expect(screen.getByRole("group", { name: "Delete these notes" })).toBeInTheDocument();
+    expect(screen.getByText("Delete these notes?")).toBeInTheDocument();
+  });
+
   it("disables the destructive button while the delete runs", () => {
     render(<DeleteConfirm subject="lesson" busy onConfirm={() => undefined} onCancel={() => undefined} />);
 
