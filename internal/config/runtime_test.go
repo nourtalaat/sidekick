@@ -13,7 +13,7 @@ import (
 func TestCheckRuntimeRoute(t *testing.T) {
 	t.Parallel()
 
-	cfg, err := Parse(t.Context(), exampleYAML(t), testOptions())
+	cfg, err := Parse(t.Context(), append(exampleYAML(t), trustActions...), testOptions())
 	require.NoError(t, err)
 
 	route := func(change func(r *Route)) Route {
@@ -84,11 +84,39 @@ func TestCheckRuntimeRoute(t *testing.T) {
 			},
 		},
 		{
-			name:  "read-write",
-			route: route(func(r *Route) { r.Mode = action.ReadWrite }),
+			name:  "read-write on a match that can select untrusted intakes",
+			route: route(func(r *Route) { r.Mode, r.Actions = action.ReadWrite, []string{"monitor-note"} }),
 			want: []string{
-				`routes.checkout.mode: mode "read-write" is not available yet: use "approved", where a person approves each action`,
+				`routes.checkout.mode: mode read-write needs senders that are trusted, but this route can select "generic-ci", "slack-mention"; ` +
+					"list only trusted intakes in match.intake, mark them trusted: true, or set allowUntrustedWrite: true",
 			},
+		},
+		{
+			name: "read-write on trusted intakes",
+			route: route(func(r *Route) {
+				r.Mode, r.Actions = action.ReadWrite, []string{"monitor-note"}
+				r.Match = &Match{Intake: []string{"alertmanager", "alerts"}}
+			}),
+		},
+		{
+			name: "read-write on a runtime listener, which is never trusted",
+			route: route(func(r *Route) {
+				r.Mode, r.Actions = action.ReadWrite, []string{"monitor-note"}
+				r.Match = &Match{Intake: []string{"ops"}}
+			}),
+			listeners: []string{"ops"},
+			want: []string{
+				`routes.checkout.mode: mode read-write needs senders that are trusted, but this route can select "ops"; ` +
+					"list only trusted intakes in match.intake, mark them trusted: true, or set allowUntrustedWrite: true",
+			},
+		},
+		{
+			name: "read-write with the override",
+			route: route(func(r *Route) {
+				r.Mode, r.Actions, r.AllowUntrustedWrite = action.ReadWrite, []string{"monitor-note"}, true
+				r.Match = &Match{Intake: []string{"ops"}}
+			}),
+			listeners: []string{"ops"},
 		},
 		{
 			name:  "approved with no action",
