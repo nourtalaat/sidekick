@@ -313,7 +313,7 @@ func TestStoreApprove(t *testing.T) {
 		require.Equal(t, &adminID, got.ApprovedBy)
 		require.Equal(t, 2, got.Version)
 		require.Equal(t, []string{"lesson.approved"}, auditActions(t, pool, id))
-		require.Len(t, got.Feedback, 0, "the fixture's lesson has no feedback row")
+		require.Empty(t, got.Feedback, "the fixture's lesson has no feedback row")
 	})
 
 	t.Run("an approval by someone who is no user has no approver", func(t *testing.T) {
