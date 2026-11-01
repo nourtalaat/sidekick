@@ -54,6 +54,13 @@ type Snapshot struct {
 	Version string `json:"version,omitempty"`
 }
 
+// ErrPermanent is wrapped by an Execute error that repeating the call cannot
+// fix, such as a target that no longer exists. Sidekick then fails the
+// proposal at once instead of trying again. ErrConflict and ErrLimit count
+// as permanent too. Any other Execute error is tried again with the same
+// idempotency key.
+var ErrPermanent = errors.New("permanent failure")
+
 // ErrConflict is returned when a definition changed since its snapshot was taken.
 var ErrConflict = errors.New("definition changed since the snapshot")
 
