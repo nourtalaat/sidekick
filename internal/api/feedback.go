@@ -40,6 +40,7 @@ func (s *server) CreateInvestigationFeedback(ctx context.Context, req apigen.Cre
 		Author:          feedback.Author{UserID: p.ID},
 		Redactor:        s.redactor,
 		Memory:          s.memory,
+		Proposals:       s.proposals,
 	}
 
 	var got feedback.Submitted

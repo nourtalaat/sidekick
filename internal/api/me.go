@@ -14,6 +14,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/feedback"
 	"github.com/nourtalaat/sidekick/internal/memory"
+	"github.com/nourtalaat/sidekick/internal/proposals"
 	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/strategy"
 	"github.com/nourtalaat/sidekick/internal/watch"
@@ -35,6 +36,7 @@ type server struct {
 
 	feedbackMetrics *feedback.Metrics
 	memory          memory.SyncOptions
+	proposals       proposals.Trigger
 	// stopper stops watchers and watchers records the changes that
 	// resolving a group makes to them; now is the clock.
 	stopper  *watch.Stopper

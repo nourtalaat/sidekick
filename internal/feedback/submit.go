@@ -15,6 +15,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/ids"
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/output"
+	"github.com/nourtalaat/sidekick/internal/proposals"
 	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/store/db"
@@ -94,6 +95,10 @@ type Submission struct {
 	// Memory says how the investigation's memory entry is synced when the
 	// submission changes the confirmation; set Embed with vector memory on.
 	Memory memory.SyncOptions
+	// Proposals decides whether a rating of wrong on the verdict or a
+	// finding makes the investigation's strategy version get a proposed
+	// change. The zero value is off.
+	Proposals proposals.Trigger
 }
 
 // Submitted is what a submission stored and changed.
@@ -171,7 +176,26 @@ func Submit(ctx context.Context, q db.DBTX, s Submission) (Submitted, error) {
 
 	// TODO: [SK-41] Enqueue draft_lesson here when s.Reason is not empty.
 
+	if err := proposeStrategy(ctx, q, s.Proposals, inv, s.Rating, s.Target.Kind, changed); err != nil {
+		return Submitted{}, fmt.Errorf("investigation %s: %w", inv.ID, err)
+	}
+
 	return Submitted{Feedback: row, RatingChanged: changed, Confirmation: change}, nil
+}
+
+// proposeStrategy lets the trigger look at a rating of wrong on the verdict
+// or a finding that has just been stored. Other ratings, and a rating the
+// author gave before, change no count.
+func proposeStrategy(ctx context.Context, q db.DBTX, trigger proposals.Trigger, inv db.Investigation, rating output.Rating, kind string, changed bool) error {
+	if !changed || rating != output.RatingWrong || (kind != TargetVerdict && kind != TargetFinding) {
+		return nil
+	}
+
+	if _, err := trigger.Check(ctx, q, inv); err != nil {
+		return fmt.Errorf("check for a strategy proposal: %w", err)
+	}
+
+	return nil
 }
 
 // normalized returns s with its text trimmed, or an *InvalidError.
