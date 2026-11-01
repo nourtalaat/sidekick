@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/source/mock"
@@ -218,3 +219,69 @@ expected:
   unavailableReported: [signoz]
 limits: { maxToolCalls: -1 }
 `
+
+func TestParseScenario(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		in      string
+		wantErr []string
+	}{
+		{name: "minimal", in: minimal},
+		{name: "unknown key", in: minimal + "colour: red\n", wantErr: []string{"colour"}},
+		{name: "no id", in: "now: 2026-05-04T10:20:00Z\n", wantErr: []string{"id: required", "event.adapter: required"}},
+		{name: "empty", in: "", wantErr: []string{"the file is empty"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := ParseScenario([]byte(tt.in))
+			if tt.wantErr == nil {
+				require.NoError(t, err)
+				require.Equal(t, "minimal", got.ID)
+
+				return
+			}
+
+			require.ErrorIs(t, err, ErrInvalidScenario)
+
+			for _, want := range tt.wantErr {
+				require.ErrorContains(t, err, want)
+			}
+		})
+	}
+}
+
+func TestScenarioMarshalRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	loaded, err := LoadScenarios(sampleScenario, LoadOptions{})
+	require.NoError(t, err)
+
+	want := loaded[0]
+	want.Path = ""
+
+	raw, err := yaml.Marshal(want)
+	require.NoError(t, err)
+
+	got, err := ParseScenario(raw)
+	require.NoError(t, err, string(raw))
+	require.Equal(t, want, got)
+}
+
+func TestScenarioMarshalLeavesOutEmptyFields(t *testing.T) {
+	t.Parallel()
+
+	sc, err := ParseScenario([]byte(minimal))
+	require.NoError(t, err)
+
+	raw, err := yaml.Marshal(sc)
+	require.NoError(t, err)
+
+	for _, key := range []string{"tags:", "strategy:", "route:", "default:", "limits:", "config:", "acceptable:", "rubric:", "evidence:"} {
+		require.NotContains(t, string(raw), key)
+	}
+}
