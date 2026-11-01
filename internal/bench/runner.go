@@ -37,6 +37,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/source"
 	"github.com/nourtalaat/sidekick/internal/source/mock"
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/strategy"
 	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
@@ -104,6 +105,29 @@ type Options struct {
 	// ComponentLogger is the logger of the intake, router, queue,
 	// investigator and tool guard of each run. Nil logs nothing.
 	ComponentLogger *slog.Logger
+	// Strategies are the strategies the scenarios can name, in place of
+	// those of Config. A strategy gate uses it to run a version of a
+	// strategy that is not the one in effect. Nil means Config's.
+	Strategies *strategy.Set
+	// Hooks follow and steer Run. The zero value does neither.
+	Hooks Hooks
+	// Budget caps what the runs may cost. Nil means no cap.
+	Budget *Budget
+}
+
+// Hooks let a caller follow the runs of Run and steer them. A nil hook does
+// nothing.
+type Hooks struct {
+	// Done returns the result of a run that finished before, such as one a
+	// gate kept before it was interrupted. Run uses it in place of running
+	// the scenario again, and counts its cost in the budget.
+	Done func(scenarioID string, run int) (RunResult, bool)
+	// Before is called before each run that is not taken from Done. Its
+	// error stops Run, which returns it wrapped.
+	Before func(ctx context.Context, scenarioID string, run int) error
+	// After is called with the result of each run that ran, not those taken
+	// from Done. Its error stops Run, which returns it wrapped.
+	After func(ctx context.Context, scenarioID string, run RunResult) error
 }
 
 // Runner runs benchmark scenarios. Make it with New, which checks every
@@ -120,6 +144,8 @@ type Runner struct {
 	redactor   *redact.Redactor
 	log        *slog.Logger
 	compLog    *slog.Logger
+	hooks      Hooks
+	budget     *Budget
 }
 
 // Run runs every scenario Repeat times, one run at a time, in database, and
@@ -136,9 +162,7 @@ func (r *Runner) Run(ctx context.Context, database *Database) (*Results, error) 
 		sr := ScenarioResult{ID: sc.ID, Title: sc.Title, Path: sc.Path, Expected: sc.Expected}
 
 		for n := 1; n <= r.repeat; n++ {
-			r.log.InfoContext(ctx, "bench run started", "scenario", sc.ID, "run", n, "of", r.repeat)
-
-			run, err := r.runOnce(ctx, database, sc, n)
+			run, err := r.nextRun(ctx, database, sc, n)
 			if err != nil {
 				results.Scenarios = append(results.Scenarios, sr)
 
@@ -155,6 +179,46 @@ func (r *Runner) Run(ctx context.Context, database *Database) (*Results, error) 
 	}
 
 	return results, nil
+}
+
+// nextRun returns run n of the scenario: the one Hooks.Done kept, or a new
+// one. A new run is announced in the log, checked against the budget before
+// it starts, and counted in it when it ends.
+func (r *Runner) nextRun(ctx context.Context, database *Database, sc Scenario, n int) (RunResult, error) {
+	if r.hooks.Done != nil {
+		if kept, ok := r.hooks.Done(sc.ID, n); ok {
+			r.budget.AddRun(kept.CostMicros)
+
+			return kept, nil
+		}
+	}
+
+	if r.hooks.Before != nil {
+		if err := r.hooks.Before(ctx, sc.ID, n); err != nil {
+			return RunResult{}, fmt.Errorf("before the run: %w", err)
+		}
+	}
+
+	if err := r.budget.CheckNext(); err != nil {
+		return RunResult{}, fmt.Errorf("before the run: %w", err)
+	}
+
+	r.log.InfoContext(ctx, "bench run started", "scenario", sc.ID, "run", n, "of", r.repeat)
+
+	run, err := r.runOnce(ctx, database, sc, n)
+	if err != nil {
+		return RunResult{}, err
+	}
+
+	r.budget.AddRun(run.CostMicros)
+
+	if r.hooks.After != nil {
+		if err := r.hooks.After(ctx, sc.ID, run); err != nil {
+			return RunResult{}, fmt.Errorf("after the run: %w", err)
+		}
+	}
+
+	return run, nil
 }
 
 // Judge returns the judge that grades the runs' root causes, with the
@@ -180,6 +244,13 @@ func (r *Runner) Judge() (*Judge, error) {
 	}
 
 	return judge, nil
+}
+
+// Problems returns the problems of one scenario against the config and the
+// registries, as "<field>: <problem>", or nil when it is valid. They are the
+// checks New makes of every scenario.
+func (r *Runner) Problems(ctx context.Context, sc Scenario) []string {
+	return r.checkScenario(ctx, sc)
 }
 
 // Info returns what the runs record about how they run: the connector and
@@ -243,6 +314,12 @@ func New(ctx context.Context, scenarios []Scenario, opts Options) (*Runner, erro
 		repeat:    cmp.Or(opts.Repeat, DefaultRepeat),
 		log:       orDiscard(opts.Logger),
 		compLog:   orDiscard(opts.ComponentLogger),
+		hooks:     opts.Hooks,
+		budget:    opts.Budget,
+	}
+
+	if opts.Strategies != nil {
+		r.cfg = r.cfg.WithStrategySet(opts.Strategies)
 	}
 
 	if r.regs.Sources == nil {
@@ -359,30 +436,41 @@ func (r *Runner) checkScenario(ctx context.Context, sc Scenario) []string {
 // checkEvent checks that the scenario's adapter turns its payload into
 // exactly one event that opens an investigation.
 func (r *Runner) checkEvent(ctx context.Context, sc Scenario) error {
-	adapter, err := r.buildAdapter(ctx, sc, endpointPrefix+"check")
+	ev, err := r.Event(ctx, sc)
 	if err != nil {
-		return fmt.Errorf("event.adapter: %w", err)
+		return err
 	}
 
-	body, err := sc.Body()
-	if err != nil {
-		return fmt.Errorf("event.payload: %w", err)
-	}
-
-	events, err := adapter.Parse(ctx, intake.Request{Endpoint: endpointPrefix + "check", Body: body, ReceivedAt: sc.Now})
-	if err != nil {
-		return fmt.Errorf("event.payload: the %s adapter cannot parse it: %w", sc.Event.Adapter, err)
-	}
-
-	if len(events) != 1 {
-		return fmt.Errorf("event.payload: %w; the %s adapter gives %d", errNotOneEvent, sc.Event.Adapter, len(events))
-	}
-
-	if events[0].Kind == event.KindResolved {
+	if ev.Kind == event.KindResolved {
 		return errors.New("event.payload: the event is a recovery, which opens no investigation")
 	}
 
 	return nil
+}
+
+// Event returns the one event that the scenario's payload gives, as its
+// intake adapter parses it. It is what a strategy's match is tried against.
+func (r *Runner) Event(ctx context.Context, sc Scenario) (event.Event, error) {
+	adapter, err := r.buildAdapter(ctx, sc, endpointPrefix+"check")
+	if err != nil {
+		return event.Event{}, fmt.Errorf("event.adapter: %w", err)
+	}
+
+	body, err := sc.Body()
+	if err != nil {
+		return event.Event{}, fmt.Errorf("event.payload: %w", err)
+	}
+
+	events, err := adapter.Parse(ctx, intake.Request{Endpoint: endpointPrefix + "check", Body: body, ReceivedAt: sc.Now})
+	if err != nil {
+		return event.Event{}, fmt.Errorf("event.payload: the %s adapter cannot parse it: %w", sc.Event.Adapter, err)
+	}
+
+	if len(events) != 1 {
+		return event.Event{}, fmt.Errorf("event.payload: %w; the %s adapter gives %d", errNotOneEvent, sc.Event.Adapter, len(events))
+	}
+
+	return events[0], nil
 }
 
 // runOnce runs a scenario once, the way serve handles an alert: the

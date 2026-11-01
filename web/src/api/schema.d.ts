@@ -425,6 +425,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/strategy-proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Proposed changes to strategies, newest first, a page at a time
+         * @description The changes the model drafted after a strategy version collected
+         *     wrong feedback, with the result of the benchmark gate that checks
+         *     each. Proposals that are still being drafted, and drafts that
+         *     failed, are listed only when asked for with `status`.
+         */
+        get: operations["ListStrategyProposals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/strategy-proposals/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One proposal, with its YAML, the feedback and the gate result
+         * @description `baseBody` and `body` are the strategy before and after the change,
+         *     for a diff. `gate` holds the numbers the gate's decision rests on.
+         *     `stale` is true when the strategy has changed since the draft, so
+         *     approving a proposal for a runtime strategy would fail.
+         */
+        get: operations["GetStrategyProposal"];
+        /**
+         * Replace the YAML of a proposal and send it through the gate again
+         * @description Only a proposal whose gate has ended and that nobody has decided on
+         *     can be edited; any other answers 409 with code `conflict`. The YAML
+         *     goes through the checks of a strategy file, and its name must be the
+         *     proposal's; a failed check answers 422 with code `validation` and
+         *     a field for each problem. The old gate result is dropped. Saving the
+         *     same YAML runs the gate again.
+         */
+        put: operations["EditStrategyProposal"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/strategy-proposals/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply a proposal that passed its gate
+         * @description There is no way to apply a proposal that has not passed: any other
+         *     answers 409 with code `not_passed`, and nothing is changed. For a
+         *     runtime strategy the YAML is saved as its next version, and for a
+         *     built-in one as a runtime strategy of the same name. The answer has
+         *     the `version`. For a strategy in a file, Sidekick cannot change the
+         *     file: the answer has the `yaml` to commit. A strategy that was saved
+         *     since the draft answers 409 with code `stale`, and one that already
+         *     holds the YAML 422 with code `unchanged`.
+         */
+        post: operations["ApproveStrategyProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/strategy-proposals/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set a proposal aside
+         * @description A proposal that has a draft and that nobody has decided on can be
+         *     rejected, whatever its gate result; any other answers 409 with code
+         *     `conflict`. A gate that is still running stops before its next run.
+         */
+        post: operations["RejectStrategyProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/memory/entries": {
         parameters: {
             query?: never;
@@ -1452,6 +1556,149 @@ export interface components {
             leftOutTotal: number;
             /** @description How many active lessons applied. */
             candidates: number;
+        };
+        /**
+         * @description `drafting`: waiting for the model's draft. `draft_failed`: no draft
+         *     could be made; the status detail says why. `pending`: drafted, waiting
+         *     for the gate. `benchmarking`: the gate is running. `passed`: the gate
+         *     passed, and the proposal can be approved. `failed`: the gate ended
+         *     without a pass; the gate result says how. `applied`: approved, and a
+         *     version was saved. `approved`: approved for a strategy in a file.
+         *     `rejected`: set aside.
+         * @enum {string}
+         */
+        StrategyProposalStatus: "drafting" | "draft_failed" | "pending" | "benchmarking" | "passed" | "failed" | "approved" | "rejected" | "applied";
+        /**
+         * @description How the gate ended. `passed`: the lower end of the 95% interval of the
+         *     score difference is above minus `maxDrop`. `failed`: the proposal
+         *     scores lower on average by more than that. `not_enough_evidence`: it
+         *     looks no worse on average, but the interval is too wide to be sure, or
+         *     fewer than three scenarios cover the strategy. `no_benchmark_coverage`:
+         *     no scenario covers the strategy. `over_budget`: the gate stopped before
+         *     it passed its cost cap. `error`: the gate could not finish.
+         * @enum {string}
+         */
+        StrategyGateResult: "passed" | "failed" | "not_enough_evidence" | "no_benchmark_coverage" | "over_budget" | "error";
+        StrategyProposalSummary: {
+            /** Format: uuid */
+            id: string;
+            /** @description The strategy the proposal changes. */
+            name: string;
+            /** @description The version the draft started from, as investigations record it. */
+            baseVersion: string;
+            baseOrigin?: components["schemas"]["StrategyLayer"];
+            /** @description Why the model changed the strategy. It is model output. */
+            rationale?: string;
+            /** @description How many wrong ratings the version had when the proposal was made. */
+            triggerCount: number;
+            status: components["schemas"]["StrategyProposalStatus"];
+            /** @description Why a draft failed. */
+            statusDetail?: string;
+            gateResult?: components["schemas"]["StrategyGateResult"];
+            /**
+             * Format: uuid
+             * @description The benchmark run of the proposal, when the gate ran.
+             */
+            benchRunId?: string;
+            /**
+             * Format: uuid
+             * @description The benchmark run of the current version, when the gate ran.
+             */
+            baselineRunId?: string;
+            /**
+             * Format: uuid
+             * @description The user or API token that last decided on or edited the proposal.
+             */
+            reviewer?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            decidedAt?: string;
+        };
+        StrategyProposalList: {
+            proposals: components["schemas"]["StrategyProposalSummary"][];
+            /** @description Pass as cursor to get the next page. Absent on the last page. */
+            nextCursor?: string;
+        };
+        StrategyProposal: components["schemas"]["StrategyProposalSummary"] & {
+            /** @description The strategy before the change, as YAML. */
+            baseBody?: string;
+            /** @description The strategy after the change, as YAML. */
+            body?: string;
+            /** @description The wrong ratings the proposal was drafted from. */
+            feedback: components["schemas"]["StrategyProposalFeedback"][];
+            gate?: components["schemas"]["StrategyGate"];
+            /** @description True when the strategy has changed since the draft. */
+            stale: boolean;
+            /** @description True when the proposal has passed its gate and can be approved. */
+            approvable: boolean;
+        };
+        StrategyProposalFeedback: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            investigationId: string;
+            targetKind: string;
+            targetRef: string;
+            rating: string;
+            reason?: string;
+            correctVerdict?: string;
+            correctCause?: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        StrategyGate: {
+            result: components["schemas"]["StrategyGateResult"];
+            /** @description The result in a sentence. */
+            reason: string;
+            /**
+             * Format: double
+             * @description The mean over the scenarios of the proposal's overall score minus the current version's.
+             */
+            mean: number;
+            interval: components["schemas"]["BenchInterval"];
+            /**
+             * Format: double
+             * @description The proposal passes when the lower end of the interval is above minus this.
+             */
+            maxDrop: number;
+            resamples: number;
+            /** @description The seed of the resampling, as a decimal string, so the interval can be worked out again. */
+            seed: string;
+            /** @description How many times each scenario ran in each arm. */
+            repeats: number;
+            /** Format: int64 */
+            costMicros: number;
+            /** Format: int64 */
+            maxCostMicros: number;
+            error?: string;
+            scenarios: components["schemas"]["StrategyGateScenario"][];
+        };
+        StrategyGateScenario: {
+            id: string;
+            /** Format: double */
+            baseline: number;
+            /** Format: double */
+            proposal: number;
+            /** Format: double */
+            difference: number;
+        };
+        EditStrategyProposal: {
+            /** @description The strategy as YAML, in the format of a strategy file. */
+            body: string;
+        };
+        RejectStrategyProposal: {
+            /** @description Why the proposal is set aside, at most 500 characters. */
+            reason?: string;
+        };
+        StrategyProposalApproval: {
+            proposal: components["schemas"]["StrategyProposalSummary"];
+            /** @description The runtime version that was saved. Absent for a strategy in a file. */
+            version?: number;
+            /** @description The strategy to commit, for a strategy in a file. */
+            yaml?: string;
         };
         FieldError: {
             /**
@@ -2560,6 +2807,8 @@ export interface components {
         RuleName: string;
         /** @description The name of a strategy. */
         StrategyName: string;
+        /** @description The ID of a strategy proposal. */
+        StrategyProposalID: string;
         InvestigationID: string;
         /** @description The first day of the range, a UTC date. The default is 29 days before `to`. */
         StatsFrom: string;
@@ -3183,6 +3432,139 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Lesson"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListStrategyProposals: {
+        parameters: {
+            query?: {
+                /** @description Only proposals with this status. The default is every status but `drafting` and `draft_failed`. */
+                status?: components["schemas"]["StrategyProposalStatus"];
+                /** @description Only proposals for the strategy with this name. */
+                name?: string;
+                /** @description The nextCursor of the page before. */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of proposals. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyProposalList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetStrategyProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The ID of a strategy proposal. */
+                id: components["parameters"]["StrategyProposalID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The proposal. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyProposal"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    EditStrategyProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The ID of a strategy proposal. */
+                id: components["parameters"]["StrategyProposalID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditStrategyProposal"];
+            };
+        };
+        responses: {
+            /** @description The proposal, now pending. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyProposal"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ApproveStrategyProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The ID of a strategy proposal. */
+                id: components["parameters"]["StrategyProposalID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The proposal as decided. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyProposalApproval"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    RejectStrategyProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The ID of a strategy proposal. */
+                id: components["parameters"]["StrategyProposalID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RejectStrategyProposal"];
+            };
+        };
+        responses: {
+            /** @description The rejected proposal. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyProposalSummary"];
                 };
             };
             default: components["responses"]["Problem"];

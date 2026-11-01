@@ -104,6 +104,18 @@ outputs:
 
 strategies:
   dir: /etc/sidekick/strategies
+  proposals:
+    enabled: true
+    wrongThreshold: 3
+    window: 14d
+
+bench:
+  gate:
+    minRepeats: 5
+    maxDrop: 0.02
+    maxCostUSD: 5
+    publicDir: /opt/sidekick/bench/scenarios/public
+    baseDir: /opt/sidekick
 
 routes:
   - name: payments-latency

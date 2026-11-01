@@ -14,6 +14,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/feedback"
 	"github.com/nourtalaat/sidekick/internal/memory"
+	"github.com/nourtalaat/sidekick/internal/proposals"
 	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/strategy"
 	"github.com/nourtalaat/sidekick/internal/watch"
@@ -25,6 +26,8 @@ type server struct {
 	cfg        *config.Config
 	rules      RuleStore
 	strategies StrategyStore
+	// proposalReviewer reviews strategy proposals.
+	proposalReviewer ProposalReviewer
 	// strategyBase holds the built-in and file strategies.
 	strategyBase *strategy.Set
 	redactor     *redact.Redactor
@@ -35,6 +38,7 @@ type server struct {
 
 	feedbackMetrics *feedback.Metrics
 	memory          memory.SyncOptions
+	proposals       proposals.Trigger
 	draftLessons    bool
 	lessons         LessonStore
 	memoryEntries   MemoryStore

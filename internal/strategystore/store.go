@@ -49,6 +49,12 @@ var (
 	ErrConflict = errors.New("the strategy was created at the same moment by someone else")
 	// ErrNotFound means no runtime strategy or version has that name.
 	ErrNotFound = errors.New("no runtime strategy has that name and version")
+	// ErrProposalNotPassed means a save names a strategy proposal that has
+	// not passed its benchmark gate, that someone has already decided on,
+	// or that does not hold the saved strategy and the benchmark run named.
+	// It is what keeps a proposal that did not pass from becoming a
+	// version.
+	ErrProposalNotPassed = errors.New("the strategy proposal has not passed its benchmark gate, or does not match this save")
 )
 
 // InvalidError is the error of a save that is refused because the reason or
@@ -100,7 +106,10 @@ type SaveInput struct {
 	// version, so the strategy must not exist yet.
 	BaseVersion *int
 	// ProposalID and BenchRunID are set when the version comes from a
-	// strategy proposal and the benchmark run that checked it.
+	// strategy proposal and the benchmark run that checked it. The save is
+	// refused with ErrProposalNotPassed unless the proposal is passed and
+	// undecided, holds Name and Body, and BenchRunID is the run of its
+	// gate. The proposal is locked until the transaction ends.
 	ProposalID, BenchRunID *uuid.UUID
 }
 
@@ -149,34 +158,49 @@ func NewStore(pool *pgxpool.Pool) *Store {
 // each problem in the body. A saved version never changes, and the
 // replicas use it once they reload. The error wraps ErrStale when
 // in.BaseVersion is not the current version, ErrUnchanged when the body is
-// the current one, and ErrConflict when a save of a new strategy of the
-// same name ran at the same moment.
+// the current one, ErrConflict when a save of a new strategy of the same
+// name ran at the same moment, and ErrProposalNotPassed when in.ProposalID
+// names a proposal that may not be applied.
 func (s *Store) Save(ctx context.Context, in SaveInput) (Saved, error) {
+	var saved Saved
+
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		var err error
+
+		saved, err = s.SaveIn(ctx, tx, in)
+		if err != nil {
+			return fmt.Errorf("save in a transaction: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return Saved{}, fmt.Errorf("save strategy %s: %w", in.Name, err)
+	}
+
+	return saved, nil
+}
+
+// SaveIn is Save in the caller's transaction, so the version commits or rolls
+// back with the caller's other changes, such as the decision on a proposal.
+// The strategies_changed notification goes out when the transaction commits.
+// After an error, the transaction must be rolled back, as after any failed
+// statement.
+func (s *Store) SaveIn(ctx context.Context, tx pgx.Tx, in SaveInput) (Saved, error) {
 	st, err := check(in)
 	if err != nil {
 		return Saved{}, fmt.Errorf("check strategy %s: %w", in.Name, err)
 	}
 
-	var saved Saved
-
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		var err error
-
-		saved, err = s.add(ctx, tx, in, st)
-		if err != nil {
-			return fmt.Errorf("add the version: %w", err)
-		}
-
-		return nil
-	})
+	saved, err := s.add(ctx, tx, in, st)
 
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation {
-		return Saved{}, fmt.Errorf("save strategy %s: %w: %w", in.Name, ErrConflict, err)
+		return Saved{}, fmt.Errorf("add the version of strategy %s: %w: %w", in.Name, ErrConflict, err)
 	}
 
 	if err != nil {
-		return Saved{}, fmt.Errorf("save strategy %s: %w", in.Name, err)
+		return Saved{}, fmt.Errorf("add the version of strategy %s: %w", in.Name, err)
 	}
 
 	return saved, nil
@@ -185,6 +209,10 @@ func (s *Store) Save(ctx context.Context, in SaveInput) (Saved, error) {
 // add writes the version, its audit entry and the notification.
 func (s *Store) add(ctx context.Context, tx pgx.Tx, in SaveInput, st strategy.Strategy) (Saved, error) {
 	q := db.New(tx)
+
+	if err := checkProposal(ctx, q, in); err != nil {
+		return Saved{}, fmt.Errorf("check the proposal: %w", err)
+	}
 
 	current, created, err := s.lock(ctx, q, in.Name)
 	if err != nil {
@@ -222,6 +250,35 @@ func (s *Store) add(ctx context.Context, tx pgx.Tx, in SaveInput, st strategy.St
 	st.Version = strategy.RuntimeVersion(v.Number)
 
 	return Saved{Created: created, Version: v, Strategy: st}, nil
+}
+
+// checkProposal checks, and locks until the transaction ends, the proposal a
+// save says the version comes from. It does nothing for a save that names
+// none.
+func checkProposal(ctx context.Context, q *db.Queries, in SaveInput) error {
+	if in.ProposalID == nil {
+		return nil
+	}
+
+	row, err := q.LockPassedStrategyProposal(ctx, *in.ProposalID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("proposal %s: %w", *in.ProposalID, ErrProposalNotPassed)
+	}
+
+	if err != nil {
+		return fmt.Errorf("lock proposal %s: %w", *in.ProposalID, err)
+	}
+
+	switch {
+	case row.Name != in.Name:
+		return fmt.Errorf("proposal %s is for strategy %s: %w", row.ID, row.Name, ErrProposalNotPassed)
+	case row.Body == nil || *row.Body != in.Body:
+		return fmt.Errorf("proposal %s holds another body: %w", row.ID, ErrProposalNotPassed)
+	case row.BenchRunID == nil || in.BenchRunID == nil || *row.BenchRunID != *in.BenchRunID:
+		return fmt.Errorf("proposal %s was checked by another benchmark run: %w", row.ID, ErrProposalNotPassed)
+	}
+
+	return nil
 }
 
 // lock returns the current version of the strategy and locks it, or zero
