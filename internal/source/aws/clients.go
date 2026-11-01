@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -63,6 +64,17 @@ type limitTransport struct {
 	next http.RoundTripper
 }
 
+// plainBody is a request body that shows only Read and Close. The AWS SDK
+// sends a body that also has WriteTo, and WriteTo of that body returns
+// io.EOF once the SDK has closed it. The HTTP transport reads the body one
+// last time after it has sent it, with WriteTo, and treats that io.EOF as a
+// failed write: it closes the connection, even when the response is half
+// read. Read of a closed body returns io.EOF too, which the transport takes
+// as the end of the body.
+type plainBody struct {
+	body io.ReadCloser
+}
+
 // credentialError is a failure to get credentials for an account: a role
 // that cannot be assumed, or no credentials at all. It is a failure of the
 // source, never a tool error.
@@ -83,7 +95,7 @@ func (e *credentialError) Unwrap() error {
 
 // RoundTrip implements http.RoundTripper.
 func (t limitTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	resp, err := t.next.RoundTrip(req)
+	resp, err := t.next.RoundTrip(withPlainBody(req))
 	if err != nil {
 		return nil, fmt.Errorf("send request: %w", err)
 	}
@@ -91,6 +103,20 @@ func (t limitTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp.Body = httpclient.LimitBody(resp.Body, maxResponseSize, errResponseTooLarge)
 
 	return resp, nil
+}
+
+// Read implements io.Reader.
+func (b plainBody) Read(p []byte) (int, error) {
+	return b.body.Read(p) //nolint:wrapcheck // io.Reader callers compare err with io.EOF, so it must stay unwrapped.
+}
+
+// Close implements io.Closer.
+func (b plainBody) Close() error {
+	if err := b.body.Close(); err != nil {
+		return fmt.Errorf("close the request body: %w", err)
+	}
+
+	return nil
 }
 
 // ready gets the credentials of the call's account, so a failure to get
@@ -201,6 +227,20 @@ func newAccounts(accounts []Account, own awssdk.CredentialsProvider, client *sts
 
 		out[a.ID] = acct
 	}
+
+	return out
+}
+
+// withPlainBody returns req with a plainBody, as a copy, because a
+// RoundTripper must not change the request it is given. A request without a
+// body is returned as it is.
+func withPlainBody(req *http.Request) *http.Request {
+	if req.Body == nil || req.Body == http.NoBody {
+		return req
+	}
+
+	out := req.WithContext(req.Context())
+	out.Body = plainBody{body: req.Body}
 
 	return out
 }

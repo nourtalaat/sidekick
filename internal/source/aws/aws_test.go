@@ -472,9 +472,12 @@ func TestSourceCallCutsLongResults(t *testing.T) {
 		name string
 		rows int
 		cell int
+		// wantRowsCut says the result keeps fewer rows than AWS returned,
+		// because it would grow past maxResultSize.
+		wantRowsCut bool
 	}{
 		{name: "a long value is cut", rows: 1, cell: maxCellLen + 100},
-		{name: "a result stops before it grows too large", rows: maxRows, cell: maxCellLen},
+		{name: "a result stops before it grows too large", rows: maxRows, cell: maxCellLen, wantRowsCut: true},
 	}
 
 	for _, tt := range tests {
@@ -490,7 +493,20 @@ func TestSourceCallCutsLongResults(t *testing.T) {
 			require.NoError(t, err)
 
 			s, apis := newTestSource(t, nil)
-			apis.logs.Handle(http.MethodPost, "/", answer(`{"queryId":"q-big"}`), fakehttp.Response{Headers: map[string]string{"Content-Type": jsonType}, Body: data})
+
+			apis.logs.HandleFunc(http.MethodPost, "/", func(w http.ResponseWriter, r *http.Request) {
+				body := []byte(`{"queryId":"q-big"}`)
+
+				switch r.Header.Get("X-Amz-Target") {
+				case targetQueryResults:
+					body = data
+				case targetStopQuery:
+					body = []byte(`{"success":true}`)
+				}
+
+				w.Header().Set("Content-Type", jsonType)
+				_, _ = w.Write(body)
+			})
 
 			res, err := s.Call(t.Context(), source.Call{Tool: toolQueryLogs, Input: json.RawMessage(
 				`{"logGroups":["/ecs/checkout"],"query":"fields @message","since":"2026-05-04T09:00:00Z","until":"2026-05-04T10:00:00Z","limit":500}`)})
@@ -502,8 +518,18 @@ func TestSourceCallCutsLongResults(t *testing.T) {
 			require.NoError(t, json.Unmarshal(res.Structured, &got))
 			require.NotEmpty(t, got.Rows)
 
+			if tt.wantRowsCut {
+				require.Less(t, len(got.Rows), tt.rows)
+			} else {
+				require.Len(t, got.Rows, tt.rows)
+			}
+
 			for _, row := range got.Rows {
 				require.LessOrEqual(t, len(*row[0]), maxCellLen)
+			}
+
+			for _, req := range apis.logs.Requests() {
+				require.NotEqual(t, targetStopQuery, req.Header.Get("X-Amz-Target"), "a cut result is not a stopped query")
 			}
 		})
 	}
