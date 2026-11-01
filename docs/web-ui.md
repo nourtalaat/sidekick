@@ -402,6 +402,56 @@ Every change is written to the audit log with the old and new values, as
 finds them; notes have `target_kind` `service_notes` and the service as the
 target.
 
+## The Lessons and memory page
+
+The **Lessons** item of the navigation (`/lessons`) is one page with three
+tabs: **Lessons**, **Memory** and **Service notes**. The tab is in the address
+(`/lessons?tab=memory`), so a link opens the page on it, and the arrow keys
+move between the tabs. Everyone who can sign in can read the page; changing
+anything needs the `admin` role. Text on the page is plain text, never HTML.
+
+The **Lessons** tab lists every lesson, newest first, a page at a time. Filters
+for the status, the service and words in the text narrow the list, and stay in
+the address. Each lesson shows its status, where it applies, how many times
+people rated the verdict of an investigation that used it correct (found
+helpful) and wrong (found unhelpful), and when it was last used. An `admin` can:
+
+- **Write a lesson.** With no scope field filled in, the lesson is global and
+  applies to every investigation.
+- **Edit** the text and scope of an active or disabled lesson.
+- **Disable** an active lesson, so prompts stop using it, and **enable** a
+  disabled one.
+- **Delete** a lesson. The page asks first, in the page and not in a browser
+  dialog. The record of the investigations that used it goes with it; the audit
+  log keeps its text.
+
+A lesson that waits for review links to the [review queue](#the-review-queue),
+where it is approved or rejected.
+
+The **Memory** tab lists the memory entries, newest confirmation first, with
+filters for the service, the verdict, words and whether an entry is disabled.
+Each entry shows its verdict, summary, cause, service and alert name, when it
+was confirmed and a link to its investigation. An `admin` can edit the summary
+and cause, disable or enable the entry, and delete it. Two things to know:
+
+- An edit lasts until the confirmation of the investigation changes. Then
+  Sidekick writes the entry again from the investigation, and the text you wrote
+  is replaced; the disabled state stays.
+- A delete lasts until the confirmation changes too: Sidekick then writes a new
+  entry. To keep an entry out of prompts for good, disable it.
+
+The edit form and the delete step say so. See
+[Memory entries and service notes](#memory-entries-and-service-notes) for the
+API.
+
+The **Service notes** tab lists the services that have notes. Pick one, or type
+a service name, to read its notes, see who changed them last and when, and, as
+an `admin`, edit them as plain text up to 4,000 characters. Saving empty text
+deletes the notes, after the page asks. The memory source shows the notes to the
+model; see [the memory source](sources/memory.md).
+
+Every change from this page is written to the audit log.
+
 ## The review queue
 
 The **Review queue** (`/review`) is one page with a tab for each kind of
