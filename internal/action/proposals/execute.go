@@ -96,8 +96,12 @@ func (s *Service) Handle(ctx context.Context, job db.Job) (err error) {
 // of the job then leaves it as it is: a new proposal is needed.
 func (s *Service) OnDead(ctx context.Context, job db.Job) error {
 	var p ExecutePayload
-	if err := json.Unmarshal(job.Payload, &p); err != nil || p.ProposalID == uuid.Nil {
-		return nil
+	if err := json.Unmarshal(job.Payload, &p); err != nil {
+		return fmt.Errorf("decode the execute_action payload: %w", err)
+	}
+
+	if p.ProposalID == uuid.Nil {
+		return errNoProposalID
 	}
 
 	reason := fmt.Sprintf("Sidekick tried %d times and stopped.", job.Attempts)

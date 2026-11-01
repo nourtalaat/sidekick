@@ -27,6 +27,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/publish"
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/strategy"
 	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
@@ -75,6 +76,11 @@ type Options struct {
 	// Catalog says which services depend on each other, for routes with
 	// grouping.relatedWindow. Nil means it knows of no dependencies.
 	Catalog *grouper.Catalog
+	// Strategies gives the strategies routes name, with the runtime ones. Nil
+	// means the built-in and file strategies of Config. The router prepares
+	// its routes from the strategies in effect when SetRoutes runs, so call
+	// SetRoutes again when they change.
+	Strategies strategy.Source
 	// WatchPolicy replaces the watcher policy of Config, which holds the
 	// watchers each route's groups start. The benchmark gives an empty
 	// one, so its runs start no watchers. Nil means Config.WatchPolicy().
@@ -91,6 +97,7 @@ type Router struct {
 	// SetRoutes replaces them while events are routed.
 	routes        atomic.Pointer[[]route]
 	cfg           *config.Config
+	strategies    strategy.Source
 	modelSettings map[string]model.Settings
 	watch         watch.Policy
 	watchers      *watch.Recorder
@@ -122,7 +129,12 @@ func New(opts Options) (*Router, error) {
 		policy = *opts.WatchPolicy
 	}
 
-	routes, err := newRoutes(opts.Config, opts.ModelSettings, policy)
+	strategies := opts.Strategies
+	if strategies == nil {
+		strategies = opts.Config.StrategySet()
+	}
+
+	routes, err := newRoutes(opts.Config, strategies.Current(), opts.ModelSettings, policy)
 	if err != nil {
 		return nil, fmt.Errorf("prepare the routes: %w", err)
 	}
@@ -139,6 +151,7 @@ func New(opts Options) (*Router, error) {
 
 	r := &Router{
 		cfg:           opts.Config,
+		strategies:    strategies,
 		modelSettings: opts.ModelSettings,
 		watch:         policy,
 		watchers:      opts.Watchers,
@@ -162,11 +175,12 @@ func New(opts Options) (*Router, error) {
 }
 
 // SetRoutes replaces the routes in effect with ordered, which must already
-// be in the order they are tried, as rules.Effective lists them. Events
+// be in the order they are tried, as rules.Effective lists them, prepared
+// with the strategies in effect now. Events
 // routed after it returns use the new routes. On an error the routes stay
 // as they were.
 func (r *Router) SetRoutes(ordered []config.Route) error {
-	routes, err := compileRoutes(r.cfg, ordered, r.modelSettings, r.watch)
+	routes, err := compileRoutes(r.cfg, r.strategies.Current(), ordered, r.modelSettings, r.watch)
 	if err != nil {
 		return fmt.Errorf("prepare the routes: %w", err)
 	}

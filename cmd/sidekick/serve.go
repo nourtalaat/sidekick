@@ -95,6 +95,11 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
+	strategies, err := registerStrategies(ctx, a)
+	if err != nil {
+		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
+	}
+
 	actions, err := registerActions(a, cache)
 	if err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
@@ -122,7 +127,7 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
-	if err := registerRouter(a, cache); err != nil {
+	if err := registerRouter(a, cache, strategies); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
@@ -156,7 +161,7 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
-	if err := registerInvestigator(a, cache, guard, watchers, actions, modelMetrics, vectors); err != nil {
+	if err := registerInvestigator(a, cache, strategies, guard, watchers, actions, modelMetrics, vectors); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 

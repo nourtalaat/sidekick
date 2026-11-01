@@ -36,10 +36,15 @@ var (
 	yamlPrefix = regexp.MustCompile(`^yaml: (unmarshal errors:\n)?`)
 )
 
-// Set holds the strategies a deployment can use, by name: the built-in ones,
-// with file strategies added on top.
+// Set holds the strategies a deployment can use, by name. Load makes it
+// from the built-in strategies with the file strategies on top. WithRuntime
+// adds the strategies saved at runtime between the two: runtime over
+// built-in, file over runtime. A Set never changes after it is made.
 type Set struct {
+	// byName holds the strategy in effect for each name.
 	byName map[string]Strategy
+	// builtIn, runtime and file hold the strategies of each layer.
+	builtIn, runtime, file map[string]Strategy
 }
 
 // Problem is one problem in one strategy file.
@@ -113,21 +118,17 @@ func Load(builtIn fs.FS, dir string, logger *slog.Logger) (*Set, error) {
 		return nil, problems
 	}
 
-	set := &Set{byName: map[string]Strategy{}}
-	for _, st := range builtIns {
-		set.byName[st.Name] = st
-	}
+	set := &Set{builtIn: byName(builtIns), file: byName(files)}
+	set.byName = effective(set.builtIn, nil, set.file)
 
 	for _, st := range files {
-		if old, ok := set.byName[st.Name]; ok {
+		if old, ok := set.builtIn[st.Name]; ok {
 			logger.Info("file strategy overrides built-in strategy",
 				slog.String("strategy", st.Name),
 				slog.String("file", st.Path),
 				slog.String("builtInVersion", old.Version),
 				slog.String("version", st.Version))
 		}
-
-		set.byName[st.Name] = st
 	}
 
 	return set, nil
@@ -181,10 +182,10 @@ func loadFS(fsys fs.FS, origin Origin, pathOf func(string) string) ([]Strategy, 
 			continue
 		}
 
-		st, msgs := parse(data)
-		if len(msgs) > 0 {
-			for _, m := range msgs {
-				problems = append(problems, Problem{File: p, Message: m})
+		st, found := parse(data)
+		if len(found) > 0 {
+			for _, f := range found {
+				problems = append(problems, Problem{File: p, Message: f.String()})
 			}
 
 			continue
@@ -205,42 +206,43 @@ func loadFS(fsys fs.FS, origin Origin, pathOf func(string) string) ([]Strategy, 
 	return out, problems, nil
 }
 
-// parse decodes and checks one strategy file, and sets its version. It
-// returns every problem found.
-func parse(data []byte) (Strategy, []string) {
+// parse decodes and checks one strategy file, and sets its version and
+// body. It returns every problem found.
+func parse(data []byte) (Strategy, []FieldProblem) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 
 	var st Strategy
 	if err := dec.Decode(&st); err != nil {
 		if errors.Is(err, io.EOF) {
-			return Strategy{}, []string{"the file is empty"}
+			return Strategy{}, []FieldProblem{{Message: "the file is empty"}}
 		}
 
-		return Strategy{}, yamlMessages(err)
+		return Strategy{}, yamlProblems(err)
 	}
 
 	var extra yaml.Node
 	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
-		return Strategy{}, []string{"the file must hold one YAML document"}
+		return Strategy{}, []FieldProblem{{Message: "the file must hold one YAML document"}}
 	}
 
-	if problems := st.validate(); len(problems) > 0 {
-		return Strategy{}, problems
+	if found := st.validate(); len(found) > 0 {
+		return Strategy{}, fieldProblems(data, found)
 	}
 
 	sum := sha256.Sum256(data)
 	st.Version = hex.EncodeToString(sum[:])[:versionLength]
+	st.Body = string(data)
 
 	return st, nil
 }
 
-// yamlMessages splits a YAML library error into one message per problem,
+// yamlProblems splits a YAML library error into one problem per message,
 // and names unknown keys plainly.
-func yamlMessages(err error) []string {
+func yamlProblems(err error) []FieldProblem {
 	msg := yamlPrefix.ReplaceAllString(err.Error(), "")
 
-	var out []string
+	var out []FieldProblem
 
 	for line := range strings.SplitSeq(msg, "\n") {
 		line = strings.TrimSpace(line)
@@ -248,7 +250,7 @@ func yamlMessages(err error) []string {
 			continue
 		}
 
-		out = append(out, yamlUnknownField.ReplaceAllString(line, `unknown key "$1"`))
+		out = append(out, FieldProblem{Message: yamlUnknownField.ReplaceAllString(line, `unknown key "$1"`)})
 	}
 
 	return out

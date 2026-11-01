@@ -398,6 +398,23 @@ type Step struct {
 	Budget           *string
 }
 
+type Strategy struct {
+	Name           string
+	CurrentVersion int32
+	CreatedAt      time.Time
+}
+
+type StrategyVersion struct {
+	Name       string
+	Version    int32
+	Body       string
+	Author     *uuid.UUID
+	Reason     string
+	CreatedAt  time.Time
+	ProposalID *uuid.UUID
+	BenchRunID *uuid.UUID
+}
+
 type User struct {
 	ID          uuid.UUID
 	OidcIssuer  string

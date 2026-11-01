@@ -239,6 +239,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/strategies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The strategies, built-in, from the config file and from runtime, with their status
+         * @description The strategies in effect in name order, then the runtime strategies
+         *     that are stored but not in effect. A runtime strategy replaces a
+         *     built-in one of the same name, and a strategy file replaces both. A
+         *     built-in strategy and a strategy file are read-only. A runtime
+         *     strategy with the name of a strategy file is shadowed. A stored
+         *     version that no longer passes the strategy checks is invalid.
+         */
+        get: operations["ListStrategies"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/strategies/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The strategy in effect with this name, with its YAML
+         * @description For a name with no strategy in effect but an invalid runtime
+         *     version stored, the answer is that runtime strategy with the status
+         *     invalid. Answers 404 when there is neither.
+         */
+        get: operations["GetStrategy"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/strategies/{name}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The saved versions of a runtime strategy, newest first
+         * @description A page of the versions without their YAML. A name that no strategy
+         *     has answers 404; a strategy with no runtime version answers an
+         *     empty list.
+         */
+        get: operations["ListStrategyVersions"];
+        put?: never;
+        /**
+         * Save a new version of a runtime strategy
+         * @description Saves the YAML as the next version of the runtime strategy, and
+         *     creates the strategy with version 1 when none is stored. The YAML
+         *     goes through the checks of a strategy file, and its name must be
+         *     the name in the path. A reason is required. A failed check answers
+         *     422 with code `validation` and a field for each problem: `reason`,
+         *     `body` for the whole YAML, or `body.` and the path in the YAML, such
+         *     as `body.match.textPattern`; a message ends with the line when it is
+         *     known. A body that is the same as the current version answers 422
+         *     with code `unchanged`. `baseVersion` is the version that was read,
+         *     or 0 for a strategy that is not stored yet; if the strategy was
+         *     saved since, the answer is 409 with code `stale`.
+         */
+        post: operations["SaveStrategyVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/strategies/{name}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One saved version of a runtime strategy, with its YAML */
+        get: operations["GetStrategyVersion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/audit": {
         parameters: {
             query?: never;
@@ -986,11 +1086,99 @@ export interface components {
         RouteList: {
             routes: components["schemas"]["Route"][];
         };
+        /**
+         * @description Where the strategy is defined: built-in, runtime or file. A
+         *     built-in strategy and a strategy of the file layer are read-only.
+         *     This is not an enum, because the names of its values would clash
+         *     with those of RuleLayer in the generated Go code.
+         */
+        StrategyLayer: string;
+        /**
+         * @description active: in effect. shadowed: a strategy file has the same name and
+         *     is used instead. invalid: the stored version no longer passes the
+         *     strategy checks. Not an enum, for the reason StrategyLayer gives.
+         */
+        StrategyStatus: string;
+        Strategy: {
+            name: string;
+            description?: string;
+            layer: components["schemas"]["StrategyLayer"];
+            status: components["schemas"]["StrategyStatus"];
+            /** @description Why the strategy is not active. */
+            statusReason?: string;
+            /** @description True for a built-in strategy and a strategy file. */
+            readOnly: boolean;
+            /**
+             * @description The version investigations record: a content hash for a built-in
+             *     strategy and a strategy file, and runtime:N for version N of a
+             *     runtime strategy.
+             */
+            version?: string;
+            /** @description The current version of the runtime strategy of this name, when one is stored. */
+            runtimeVersion?: number;
+            /** @description The layers whose strategy of this name this one replaces. */
+            overrides?: components["schemas"]["StrategyLayer"][];
+            /** @description The name of who saved the current version of a runtime strategy. */
+            updatedBy?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        StrategyList: {
+            strategies: components["schemas"]["Strategy"][];
+        };
+        StrategyDetail: components["schemas"]["Strategy"] & {
+            /** @description The strategy as YAML. */
+            body: string;
+        };
+        StrategyVersion: {
+            name: string;
+            version: number;
+            reason: string;
+            /**
+             * Format: uuid
+             * @description The ID of the user or API token that saved it, when known.
+             */
+            author?: string;
+            /** @description The name of the author, while the user or token exists. */
+            authorName?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** @description True for the version that new investigations use. */
+            current: boolean;
+            /**
+             * Format: uuid
+             * @description The strategy proposal the version comes from, if any.
+             */
+            proposalId?: string;
+            /**
+             * Format: uuid
+             * @description The benchmark run that checked the proposal, if any.
+             */
+            benchRunId?: string;
+        };
+        StrategyVersionDetail: components["schemas"]["StrategyVersion"] & {
+            /** @description The strategy as YAML. */
+            body: string;
+        };
+        StrategyVersionList: {
+            versions: components["schemas"]["StrategyVersion"][];
+            /** @description Pass as before to get the older versions. Absent on the last page. */
+            next?: number;
+        };
+        NewStrategyVersion: {
+            /** @description The strategy as YAML, in the format of a strategy file. */
+            body: string;
+            /** @description Why the version is saved. Required, at most 500 characters. */
+            reason: string;
+            /** @description The version that was read, or 0 for a strategy that is not stored yet. Leave it out to skip the check. */
+            baseVersion?: number;
+        };
         FieldError: {
             /**
              * @description The path of the field in the request body, such as
              *     budgets.maxTokens or match.sender.bots[0]. Empty for a problem
-             *     with the whole body.
+             *     with the whole body. For a strategy, body.match.textPattern
+             *     names a path in its YAML.
              */
             field: string;
             message: string;
@@ -1636,7 +1824,9 @@ export interface components {
             /**
              * @description Names the kind of problem for a program. Only some answers have
              *     it: validation (422), file_rule, exists, stale, conflict
-             *     (409) and not_found (404) on listeners and routes.
+             *     (409) and not_found (404) on listeners and routes; validation
+             *     and unchanged (422), stale and conflict (409) and not_found
+             *     (404) on strategies.
              */
             code?: string;
             /** @description The fields of the request that were refused, when code is validation. */
@@ -2135,6 +2325,8 @@ export interface components {
     parameters: {
         /** @description The name of a listener or route. */
         RuleName: string;
+        /** @description The name of a strategy. */
+        StrategyName: string;
         InvestigationID: string;
         /** @description The ID of an action proposal. */
         ProposalID: string;
@@ -2504,6 +2696,132 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListStrategies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The strategies. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetStrategy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The name of a strategy. */
+                name: components["parameters"]["StrategyName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The strategy. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyDetail"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListStrategyVersions: {
+        parameters: {
+            query?: {
+                /** @description Only versions below this number; the next of the page before. */
+                before?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The name of a strategy. */
+                name: components["parameters"]["StrategyName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of versions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyVersionList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    SaveStrategyVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The name of a strategy. */
+                name: components["parameters"]["StrategyName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewStrategyVersion"];
+            };
+        };
+        responses: {
+            /** @description The version as saved. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyVersionDetail"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetStrategyVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The name of a strategy. */
+                name: components["parameters"]["StrategyName"];
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The version. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyVersionDetail"];
+                };
             };
             default: components["responses"]["Problem"];
         };

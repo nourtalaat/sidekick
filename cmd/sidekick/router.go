@@ -9,13 +9,16 @@ import (
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/router"
 	"github.com/nourtalaat/sidekick/internal/rules"
+	"github.com/nourtalaat/sidekick/internal/strategy"
+	"github.com/nourtalaat/sidekick/internal/strategystore"
 )
 
 // registerRouter runs the route_event jobs that intake enqueues for each
 // new event. When a source is a service catalog, it also reads the
 // catalogs in the background, so related services can share a group. The
-// router takes the routes in effect from cache on every reload.
-func registerRouter(a *app.App, cache *rules.Cache) error {
+// router takes the routes in effect from cache on every reload, and
+// prepares them again when the strategies in effect change.
+func registerRouter(a *app.App, cache *rules.Cache, strategies *strategystore.Cache) error {
 	catalog := grouper.NewCatalog(a.Instances().Sources, a.Logger().With("component", "catalog"))
 
 	recorder, err := newWatchRecorder(a)
@@ -32,6 +35,7 @@ func registerRouter(a *app.App, cache *rules.Cache) error {
 		TracerProvider: a.Telemetry().TracerProvider(),
 		Catalog:        catalog,
 		Watchers:       recorder,
+		Strategies:     strategies,
 	})
 	if err != nil {
 		return fmt.Errorf("set up the router: %w", err)
@@ -44,6 +48,14 @@ func registerRouter(a *app.App, cache *rules.Cache) error {
 	cache.Subscribe(func(_ context.Context, e *rules.Effective) error {
 		if err := r.SetRoutes(e.RouteConfigs()); err != nil {
 			return fmt.Errorf("apply the runtime routes: %w", err)
+		}
+
+		return nil
+	})
+
+	strategies.Subscribe(func(context.Context, *strategy.Set) error {
+		if err := r.SetRoutes(cache.Current().RouteConfigs()); err != nil {
+			return fmt.Errorf("apply the runtime strategies: %w", err)
 		}
 
 		return nil

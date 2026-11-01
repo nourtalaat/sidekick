@@ -2,6 +2,7 @@ package investigator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/strategy"
 	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
@@ -228,7 +230,15 @@ func (r *run) proposeAction(ctx context.Context, call model.ToolCall) (proposals
 // start_watcher call of the last model turn.
 func (r *run) startWatcher(ctx context.Context, call model.ToolCall) (watch.ModelResult, error) {
 	var defaults watch.Settings
-	if st, ok := r.h.opts.Strategies.Get(deref(r.inv.Strategy)); ok && st.WatcherDefaults != nil {
+
+	st, _, err := r.h.opts.Strategies.Version(ctx, deref(r.inv.Strategy), deref(r.inv.StrategyVersion))
+
+	switch {
+	case errors.Is(err, strategy.ErrNotFound):
+		// A strategy that is gone sets no defaults.
+	case err != nil:
+		return watch.ModelResult{}, fmt.Errorf("find the investigation's strategy: %w", err)
+	case st.WatcherDefaults != nil:
 		defaults = *st.WatcherDefaults
 	}
 

@@ -326,6 +326,135 @@ paths:
           description: The route is deleted.
         default:
           $ref: "#/components/responses/Problem"
+  /strategies:
+    get:
+      operationId: ListStrategies
+      summary: The strategies, built-in, from the config file and from runtime, with their status
+      description: |
+        The strategies in effect in name order, then the runtime strategies
+        that are stored but not in effect. A runtime strategy replaces a
+        built-in one of the same name, and a strategy file replaces both. A
+        built-in strategy and a strategy file are read-only. A runtime
+        strategy with the name of a strategy file is shadowed. A stored
+        version that no longer passes the strategy checks is invalid.
+      x-sidekick-role: viewer
+      responses:
+        "200":
+          description: The strategies.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StrategyList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /strategies/{name}:
+    get:
+      operationId: GetStrategy
+      summary: The strategy in effect with this name, with its YAML
+      description: |
+        For a name with no strategy in effect but an invalid runtime
+        version stored, the answer is that runtime strategy with the status
+        invalid. Answers 404 when there is neither.
+      x-sidekick-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/StrategyName"
+      responses:
+        "200":
+          description: The strategy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StrategyDetail"
+        default:
+          $ref: "#/components/responses/Problem"
+  /strategies/{name}/versions:
+    get:
+      operationId: ListStrategyVersions
+      summary: The saved versions of a runtime strategy, newest first
+      description: |
+        A page of the versions without their YAML. A name that no strategy
+        has answers 404; a strategy with no runtime version answers an
+        empty list.
+      x-sidekick-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/StrategyName"
+        - name: before
+          in: query
+          description: Only versions below this number; the next of the page before.
+          schema:
+            type: integer
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: A page of versions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StrategyVersionList"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: SaveStrategyVersion
+      summary: Save a new version of a runtime strategy
+      description: |
+        Saves the YAML as the next version of the runtime strategy, and
+        creates the strategy with version 1 when none is stored. The YAML
+        goes through the checks of a strategy file, and its name must be
+        the name in the path. A reason is required. A failed check answers
+        422 with code `validation` and a field for each problem: `reason`,
+        `body` for the whole YAML, or `body.` and the path in the YAML, such
+        as `body.match.textPattern`; a message ends with the line when it is
+        known. A body that is the same as the current version answers 422
+        with code `unchanged`. `baseVersion` is the version that was read,
+        or 0 for a strategy that is not stored yet; if the strategy was
+        saved since, the answer is 409 with code `stale`.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/StrategyName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewStrategyVersion"
+      responses:
+        "201":
+          description: The version as saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StrategyVersionDetail"
+        default:
+          $ref: "#/components/responses/Problem"
+  /strategies/{name}/versions/{version}:
+    get:
+      operationId: GetStrategyVersion
+      summary: One saved version of a runtime strategy, with its YAML
+      x-sidekick-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/StrategyName"
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: The version.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StrategyVersionDetail"
+        default:
+          $ref: "#/components/responses/Problem"
   /audit:
     get:
       operationId: ListAudit
@@ -1098,6 +1227,13 @@ components:
       description: The name of a listener or route.
       schema:
         type: string
+    StrategyName:
+      name: name
+      in: path
+      required: true
+      description: The name of a strategy.
+      schema:
+        type: string
     InvestigationID:
       name: id
       in: path
@@ -1498,6 +1634,139 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Route"
+    StrategyLayer:
+      type: string
+      description: |
+        Where the strategy is defined: built-in, runtime or file. A
+        built-in strategy and a strategy of the file layer are read-only.
+        This is not an enum, because the names of its values would clash
+        with those of RuleLayer in the generated Go code.
+    StrategyStatus:
+      type: string
+      description: |
+        active: in effect. shadowed: a strategy file has the same name and
+        is used instead. invalid: the stored version no longer passes the
+        strategy checks. Not an enum, for the reason StrategyLayer gives.
+    Strategy:
+      type: object
+      required: [name, layer, status, readOnly]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        layer:
+          $ref: "#/components/schemas/StrategyLayer"
+        status:
+          $ref: "#/components/schemas/StrategyStatus"
+        statusReason:
+          type: string
+          description: Why the strategy is not active.
+        readOnly:
+          type: boolean
+          description: True for a built-in strategy and a strategy file.
+        version:
+          type: string
+          description: |
+            The version investigations record: a content hash for a built-in
+            strategy and a strategy file, and runtime:N for version N of a
+            runtime strategy.
+        runtimeVersion:
+          type: integer
+          description: The current version of the runtime strategy of this name, when one is stored.
+        overrides:
+          type: array
+          description: The layers whose strategy of this name this one replaces.
+          items:
+            $ref: "#/components/schemas/StrategyLayer"
+        updatedBy:
+          type: string
+          description: The name of who saved the current version of a runtime strategy.
+        updatedAt:
+          type: string
+          format: date-time
+    StrategyList:
+      type: object
+      required: [strategies]
+      properties:
+        strategies:
+          type: array
+          items:
+            $ref: "#/components/schemas/Strategy"
+    StrategyDetail:
+      allOf:
+        - $ref: "#/components/schemas/Strategy"
+        - type: object
+          required: [body]
+          properties:
+            body:
+              type: string
+              description: The strategy as YAML.
+    StrategyVersion:
+      type: object
+      required: [name, version, reason, createdAt, current]
+      properties:
+        name:
+          type: string
+        version:
+          type: integer
+        reason:
+          type: string
+        author:
+          type: string
+          format: uuid
+          description: The ID of the user or API token that saved it, when known.
+        authorName:
+          type: string
+          description: The name of the author, while the user or token exists.
+        createdAt:
+          type: string
+          format: date-time
+        current:
+          type: boolean
+          description: True for the version that new investigations use.
+        proposalId:
+          type: string
+          format: uuid
+          description: The strategy proposal the version comes from, if any.
+        benchRunId:
+          type: string
+          format: uuid
+          description: The benchmark run that checked the proposal, if any.
+    StrategyVersionDetail:
+      allOf:
+        - $ref: "#/components/schemas/StrategyVersion"
+        - type: object
+          required: [body]
+          properties:
+            body:
+              type: string
+              description: The strategy as YAML.
+    StrategyVersionList:
+      type: object
+      required: [versions]
+      properties:
+        versions:
+          type: array
+          items:
+            $ref: "#/components/schemas/StrategyVersion"
+        next:
+          type: integer
+          description: Pass as before to get the older versions. Absent on the last page.
+    NewStrategyVersion:
+      type: object
+      required: [body, reason]
+      properties:
+        body:
+          type: string
+          description: The strategy as YAML, in the format of a strategy file.
+        reason:
+          type: string
+          description: Why the version is saved. Required, at most 500 characters.
+        baseVersion:
+          type: integer
+          minimum: 0
+          description: The version that was read, or 0 for a strategy that is not stored yet. Leave it out to skip the check.
     FieldError:
       type: object
       required: [field, message]
@@ -1507,7 +1776,8 @@ components:
           description: |
             The path of the field in the request body, such as
             budgets.maxTokens or match.sender.bots[0]. Empty for a problem
-            with the whole body.
+            with the whole body. For a strategy, body.match.textPattern
+            names a path in its YAML.
         message:
           type: string
     AuditEntry:
@@ -2589,7 +2859,9 @@ components:
           description: |
             Names the kind of problem for a program. Only some answers have
             it: validation (422), file_rule, exists, stale, conflict
-            (409) and not_found (404) on listeners and routes.
+            (409) and not_found (404) on listeners and routes; validation
+            and unchanged (422), stale and conflict (409) and not_found
+            (404) on strategies.
         errors:
           type: array
           description: The fields of the request that were refused, when code is validation.

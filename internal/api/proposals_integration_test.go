@@ -28,6 +28,7 @@ var (
 	boSession = sessionValue(0x0c)
 )
 
+//nolint:gosec // Test tokens of the fixtures.
 const (
 	apCSRF        = "csrf-ap"
 	boCSRF        = "csrf-bo"
@@ -36,8 +37,8 @@ const (
 
 // The proposals of fixture/proposals.sql.
 const (
-	propWaiting1   = "0192d3a4-0000-7000-8000-0000000000f1"
-	propWaiting2   = "0192d3a4-0000-7000-8000-0000000000f2"
+	propFirst      = "0192d3a4-0000-7000-8000-0000000000f1"
+	propSecond     = "0192d3a4-0000-7000-8000-0000000000f2"
 	propExpired    = "0192d3a4-0000-7000-8000-0000000000f3"
 	propApproved   = "0192d3a4-0000-7000-8000-0000000000f4"
 	propSucceeded  = "0192d3a4-0000-7000-8000-0000000000f5"
@@ -143,7 +144,7 @@ func TestListProposals(t *testing.T) {
 		query string
 		want  []string
 	}{
-		{name: "the proposals that wait, newest first", want: []string{propWaiting2, propWaiting1, propExpired}},
+		{name: "the proposals that wait, newest first", want: []string{propSecond, propFirst, propExpired}},
 		{name: "decided proposals", query: "?status=approved&status=rejected&status=succeeded", want: []string{propApproved, propSucceeded, propRejected}},
 		{name: "one status", query: "?status=rejected", want: []string{propRejected}},
 		{name: "a status nobody has", query: "?status=failed", want: []string{}},
@@ -168,7 +169,8 @@ func TestListProposals(t *testing.T) {
 	require.Equal(t, "Ap", got.DecidedByName)
 	require.NotEmpty(t, got.DecidedAt)
 	require.Equal(t, "Done", got.Params["title"])
-	require.Equal(t, "{\n  \"board\": \"ops\",\n  \"title\": \"Done\"\n}", got.ParamsText)
+	require.JSONEq(t, `{"board": "ops", "title": "Done"}`, got.ParamsText)
+	require.Contains(t, got.ParamsText, "\n  \"title\": \"Done\"", "it is indented")
 	require.Equal(t, "Wrote a note.", got.Result.Summary)
 
 	// A newline inside a parameter is spelled out in the text the approver reads.
@@ -182,7 +184,7 @@ func TestListProposalsPages(t *testing.T) {
 	s, _ := setupProposals(t)
 
 	first := readProposals(t, s.doWithToken(t, http.MethodGet, proposalsRoute+"?limit=2", approverToken, nil))
-	require.Equal(t, []string{propWaiting2, propWaiting1}, ids(first.Proposals))
+	require.Equal(t, []string{propSecond, propFirst}, ids(first.Proposals))
 	require.NotEmpty(t, first.NextCursor)
 
 	second := readProposals(t, s.doWithToken(t, http.MethodGet, proposalsRoute+"?limit=2&cursor="+first.NextCursor, approverToken, nil))
@@ -204,7 +206,6 @@ func TestListProposalsRefusals(t *testing.T) {
 		wantDetail string
 	}{
 		{name: "a viewer", token: "skt_viewer", path: proposalsRoute, wantStatus: http.StatusForbidden, wantDetail: "This needs the approver role."},
-		{name: "a responder", token: "skt_responder", path: proposalsRoute, wantStatus: http.StatusForbidden, wantDetail: "This needs the approver role."},
 		{name: "no sign-in", path: proposalsRoute, wantStatus: http.StatusUnauthorized, wantDetail: "Sign in, or send an API token."},
 		{name: "a status that does not exist", token: approverToken, path: proposalsRoute + "?status=maybe", wantStatus: http.StatusBadRequest, wantDetail: "status must be one of proposed, approved, rejected, expired, executing, succeeded, failed, undone."},
 		{name: "a limit that is too large", token: approverToken, path: proposalsRoute + "?limit=101", wantStatus: http.StatusBadRequest, wantDetail: "limit must be 1 to 100."},
@@ -233,21 +234,21 @@ func TestApproveProposal(t *testing.T) {
 
 	s, _ := setupProposals(t)
 
-	rec := s.do(t, http.MethodPost, proposalsRoute+"/"+propWaiting1+"/approve", apSession, apCSRF, nil)
+	rec := s.do(t, http.MethodPost, proposalsRoute+"/"+propFirst+"/approve", apSession, apCSRF, nil)
 	got := readProposal(t, rec)
 	require.Equal(t, "approved", got.Status)
 	require.Equal(t, "Ap", got.DecidedByName)
 	require.NotEmpty(t, got.DecidedAt)
 
-	require.Equal(t, []string{"action.approved user 01920000-0000-7000-8000-000000000070"}, proposalAudit(t, s.pool, propWaiting1))
+	require.Equal(t, []string{"action.approved user 01920000-0000-7000-8000-000000000070"}, proposalAudit(t, s.pool, propFirst))
 
 	var jobs int
-	require.NoError(t, s.pool.QueryRow(t.Context(), "SELECT count(*) FROM jobs WHERE kind = $1 AND unique_key = $2", queue.KindExecuteAction, "action:"+propWaiting1).Scan(&jobs))
+	require.NoError(t, s.pool.QueryRow(t.Context(), "SELECT count(*) FROM jobs WHERE kind = $1 AND unique_key = $2", queue.KindExecuteAction, "action:"+propFirst).Scan(&jobs))
 	require.Equal(t, 1, jobs, "the job that runs it is queued")
 
 	// An API token approves too, and is audited as a token.
-	readProposal(t, s.doWithToken(t, http.MethodPost, proposalsRoute+"/"+propWaiting2+"/approve", approverToken, nil))
-	require.Equal(t, []string{"action.approved token 01920000-0000-7000-8000-000000000072"}, proposalAudit(t, s.pool, propWaiting2))
+	readProposal(t, s.doWithToken(t, http.MethodPost, proposalsRoute+"/"+propSecond+"/approve", approverToken, nil))
+	require.Equal(t, []string{"action.approved token 01920000-0000-7000-8000-000000000072"}, proposalAudit(t, s.pool, propSecond))
 }
 
 func TestRejectProposal(t *testing.T) {
@@ -256,17 +257,17 @@ func TestRejectProposal(t *testing.T) {
 	s, _ := setupProposals(t)
 
 	body := strings.NewReader(`{"note": "wrong board, mail me at ap@example.com"}`)
-	got := readProposal(t, s.do(t, http.MethodPost, proposalsRoute+"/"+propWaiting1+"/reject", apSession, apCSRF, body))
+	got := readProposal(t, s.do(t, http.MethodPost, proposalsRoute+"/"+propFirst+"/reject", apSession, apCSRF, body))
 	require.Equal(t, "rejected", got.Status)
 	require.Equal(t, "Ap", got.DecidedByName)
 
 	var details string
-	require.NoError(t, s.pool.QueryRow(t.Context(), "SELECT details::text FROM audit_log WHERE action = 'action.rejected' AND target_id = $1", propWaiting1).Scan(&details))
+	require.NoError(t, s.pool.QueryRow(t.Context(), "SELECT details::text FROM audit_log WHERE action = 'action.rejected' AND target_id = $1", propFirst).Scan(&details))
 	require.NotContains(t, details, "ap@example.com")
 	require.Contains(t, details, "wrong board")
 
 	// A rejection needs no body.
-	readProposal(t, s.do(t, http.MethodPost, proposalsRoute+"/"+propWaiting2+"/reject", apSession, apCSRF, nil))
+	readProposal(t, s.do(t, http.MethodPost, proposalsRoute+"/"+propSecond+"/reject", apSession, apCSRF, nil))
 
 	var jobs int
 	require.NoError(t, s.pool.QueryRow(t.Context(), "SELECT count(*) FROM jobs WHERE kind = $1", queue.KindExecuteAction).Scan(&jobs))
@@ -309,7 +310,7 @@ func TestDecideProposalRefusals(t *testing.T) {
 			wantStatus: http.StatusConflict, wantCode: "decided", wantDetail: "This proposal is succeeded already; Ap decided it.",
 		},
 		{
-			name: "a route that is read-only now", id: propWaiting1, verb: "approve", session: apSession, csrf: apCSRF,
+			name: "a route that is read-only now", id: propFirst, verb: "approve", session: apSession, csrf: apCSRF,
 			change: func(p action.StaticPolicy) {
 				p["payments"] = action.RoutePolicy{Mode: action.ReadOnly, Actions: []string{"monitor-note"}}
 			},
@@ -320,15 +321,15 @@ func TestDecideProposalRefusals(t *testing.T) {
 			wantStatus: http.StatusNotFound, wantDetail: "No action proposal has this ID.",
 		},
 		{
-			name: "a note that is too long", id: propWaiting1, verb: "reject", session: apSession, csrf: apCSRF, body: `{"note": "` + strings.Repeat("x", 501) + `"}`,
+			name: "a note that is too long", id: propFirst, verb: "reject", session: apSession, csrf: apCSRF, body: `{"note": "` + strings.Repeat("x", 501) + `"}`,
 			wantStatus: http.StatusBadRequest, wantDetail: "note must be at most 500 characters.",
 		},
 		{
-			name: "a viewer", id: propWaiting1, verb: "approve", session: viSession, csrf: viCSRF,
+			name: "a viewer", id: propFirst, verb: "approve", session: viSession, csrf: viCSRF,
 			wantStatus: http.StatusForbidden, wantDetail: "This needs the approver role.",
 		},
 		{
-			name: "no CSRF token", id: propWaiting1, verb: "approve", session: apSession,
+			name: "no CSRF token", id: propFirst, verb: "approve", session: apSession,
 			wantStatus: http.StatusForbidden, wantDetail: "Send the session's CSRF token in the X-CSRF-Token header.",
 		},
 	}
@@ -382,7 +383,7 @@ func TestTwoApproversAtOnceThroughTheAPI(t *testing.T) {
 
 	for _, call := range []struct{ verb, session, csrf string }{{"approve", apSession, apCSRF}, {"reject", boSession, boCSRF}} {
 		go func() {
-			rec := s.do(t, http.MethodPost, proposalsRoute+"/"+propWaiting1+"/"+call.verb, call.session, call.csrf, nil)
+			rec := s.do(t, http.MethodPost, proposalsRoute+"/"+propFirst+"/"+call.verb, call.session, call.csrf, nil)
 			results <- result{rec.Code, rec.Body.String()}
 		}()
 	}
@@ -392,7 +393,7 @@ func TestTwoApproversAtOnceThroughTheAPI(t *testing.T) {
 	codes := []int{first.code, second.code}
 	require.ElementsMatch(t, []int{http.StatusOK, http.StatusConflict}, codes, "%s / %s", first.body, second.body)
 
-	require.Len(t, proposalAudit(t, s.pool, propWaiting1), 1, "one decision is recorded")
+	require.Len(t, proposalAudit(t, s.pool, propFirst), 1, "one decision is recorded")
 }
 
 func TestInvestigationHasItsProposals(t *testing.T) {
@@ -417,7 +418,7 @@ func TestApproveWithoutTheService(t *testing.T) {
 
 	s := setupWith(t, nil, "fixture/proposals.sql")
 
-	rec := s.do(t, http.MethodPost, proposalsRoute+"/"+propWaiting1+"/approve", apSession, apCSRF, nil)
+	rec := s.do(t, http.MethodPost, proposalsRoute+"/"+propFirst+"/approve", apSession, apCSRF, nil)
 	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 }
 

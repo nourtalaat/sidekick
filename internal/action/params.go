@@ -192,10 +192,10 @@ func spell(s string) string {
 
 // needsSpelling reports whether r is shown as a \u escape.
 func needsSpelling(r rune) bool {
-	switch {
-	case r == '`', r == utf8.RuneError:
+	switch r {
+	case '`', utf8.RuneError:
 		return true
-	case r == ' ':
+	case ' ':
 		return false
 	default:
 		return unicode.IsControl(r) || unicode.In(r, unicode.Cf, unicode.Zs, unicode.Zl, unicode.Zp, unicode.Co, unicode.Cs) || !unicode.IsPrint(r)

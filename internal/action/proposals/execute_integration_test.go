@@ -95,7 +95,7 @@ func TestExecute(t *testing.T) {
 	require.Equal(t, action.Invocation{
 		ProposalID:      id.String(),
 		InvestigationID: checkoutInvestigation.String(),
-		Params:          json.RawMessage(row.Params),
+		Params:          row.Params,
 		IdempotencyKey:  "sidekick/" + id.String(),
 		ApprovedBy:      anaUser.String(),
 	}, calls[0])

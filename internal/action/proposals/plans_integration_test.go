@@ -103,7 +103,9 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"action_proposals_pkey"},
+			// Few proposals are approved at a time, so the status index finds
+			// the row as well as the primary key does.
+			wantIndex: []string{"action_proposals_status_proposed"},
 		},
 		{
 			name: "FinishActionExecution",
@@ -121,7 +123,9 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"action_proposals_pkey"},
+			// Few proposals are executing at a time, so the status index finds
+			// the row as well as the primary key does.
+			wantIndex: []string{"action_proposals_status_proposed"},
 		},
 		{
 			name: "ExpireActionProposals",

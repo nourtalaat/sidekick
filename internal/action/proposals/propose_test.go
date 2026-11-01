@@ -203,7 +203,9 @@ func TestProposalID(t *testing.T) {
 
 	inv := uuid.MustParse("0192d3a4-0000-7000-8000-0000000000c1")
 
-	require.Equal(t, proposalID(inv, "call-1"), proposalID(inv, "call-1"), "a repeated call finds its proposal")
+	first, again := proposalID(inv, "call-1"), proposalID(inv, "call-1")
+
+	require.Equal(t, first, again, "a repeated call finds its proposal")
 	require.NotEqual(t, proposalID(inv, "call-1"), proposalID(inv, "call-2"))
 	require.NotEqual(t, proposalID(inv, "call-1"), proposalID(uuid.New(), "call-1"))
 }
