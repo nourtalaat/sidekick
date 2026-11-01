@@ -65,6 +65,25 @@ func (s *Set) WithRuntime(runtime []Strategy) *Set {
 	return out
 }
 
+// With returns a set in which st is the strategy in effect under its name,
+// whichever layer the name comes from. It is how a benchmark runs a version
+// that is not the one in effect. The layers are not changed, so Layer still
+// returns the strategies that were saved. s is not changed, and may be nil.
+func (s *Set) With(st Strategy) *Set {
+	if s == nil {
+		s = &Set{}
+	}
+
+	out := &Set{builtIn: s.builtIn, runtime: s.runtime, file: s.file, byName: maps.Clone(s.byName)}
+	if out.byName == nil {
+		out.byName = map[string]Strategy{}
+	}
+
+	out.byName[st.Name] = st
+
+	return out
+}
+
 // Entries returns every strategy in effect, in name order, with the layers
 // each one takes the place of.
 func (s *Set) Entries() []Entry {

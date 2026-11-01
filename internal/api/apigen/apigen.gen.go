@@ -640,6 +640,75 @@ func (e StepPartType) Valid() bool {
 	}
 }
 
+// Defines values for StrategyGateResult.
+const (
+	StrategyGateResultError               StrategyGateResult = "error"
+	StrategyGateResultFailed              StrategyGateResult = "failed"
+	StrategyGateResultNoBenchmarkCoverage StrategyGateResult = "no_benchmark_coverage"
+	StrategyGateResultNotEnoughEvidence   StrategyGateResult = "not_enough_evidence"
+	StrategyGateResultOverBudget          StrategyGateResult = "over_budget"
+	StrategyGateResultPassed              StrategyGateResult = "passed"
+)
+
+// Valid indicates whether the value is a known member of the StrategyGateResult enum.
+func (e StrategyGateResult) Valid() bool {
+	switch e {
+	case StrategyGateResultError:
+		return true
+	case StrategyGateResultFailed:
+		return true
+	case StrategyGateResultNoBenchmarkCoverage:
+		return true
+	case StrategyGateResultNotEnoughEvidence:
+		return true
+	case StrategyGateResultOverBudget:
+		return true
+	case StrategyGateResultPassed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StrategyProposalStatus.
+const (
+	StrategyProposalStatusApplied      StrategyProposalStatus = "applied"
+	StrategyProposalStatusApproved     StrategyProposalStatus = "approved"
+	StrategyProposalStatusBenchmarking StrategyProposalStatus = "benchmarking"
+	StrategyProposalStatusDraftFailed  StrategyProposalStatus = "draft_failed"
+	StrategyProposalStatusDrafting     StrategyProposalStatus = "drafting"
+	StrategyProposalStatusFailed       StrategyProposalStatus = "failed"
+	StrategyProposalStatusPassed       StrategyProposalStatus = "passed"
+	StrategyProposalStatusPending      StrategyProposalStatus = "pending"
+	StrategyProposalStatusRejected     StrategyProposalStatus = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the StrategyProposalStatus enum.
+func (e StrategyProposalStatus) Valid() bool {
+	switch e {
+	case StrategyProposalStatusApplied:
+		return true
+	case StrategyProposalStatusApproved:
+		return true
+	case StrategyProposalStatusBenchmarking:
+		return true
+	case StrategyProposalStatusDraftFailed:
+		return true
+	case StrategyProposalStatusDrafting:
+		return true
+	case StrategyProposalStatusFailed:
+		return true
+	case StrategyProposalStatusPassed:
+		return true
+	case StrategyProposalStatusPending:
+		return true
+	case StrategyProposalStatusRejected:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for Verdict.
 const (
 	Duplicate     Verdict = "duplicate"
@@ -1035,6 +1104,12 @@ type DowntimeRow struct {
 	// Service Empty when the investigation had no service.
 	Service       string `json:"service"`
 	WatchTimeouts int64  `json:"watchTimeouts"`
+}
+
+// EditStrategyProposal defines model for EditStrategyProposal.
+type EditStrategyProposal struct {
+	// Body The strategy as YAML, in the format of a strategy file.
+	Body string `json:"body"`
 }
 
 // EffectiveConfig defines model for EffectiveConfig.
@@ -1974,6 +2049,12 @@ type QualityTotals struct {
 	Rated int64 `json:"rated"`
 }
 
+// RejectStrategyProposal defines model for RejectStrategyProposal.
+type RejectStrategyProposal struct {
+	// Reason Why the proposal is set aside, at most 500 characters.
+	Reason *string `json:"reason,omitempty"`
+}
+
 // Report The result of the investigation. The model wrote its text from what
 // the sources returned, so show it as plain text.
 type Report struct {
@@ -2466,6 +2547,57 @@ type StrategyDetail struct {
 	Version *string `json:"version,omitempty"`
 }
 
+// StrategyGate defines model for StrategyGate.
+type StrategyGate struct {
+	CostMicros    int64         `json:"costMicros"`
+	Error         *string       `json:"error,omitempty"`
+	Interval      BenchInterval `json:"interval"`
+	MaxCostMicros int64         `json:"maxCostMicros"`
+
+	// MaxDrop The proposal passes when the lower end of the interval is above minus this.
+	MaxDrop float64 `json:"maxDrop"`
+
+	// Mean The mean over the scenarios of the proposal's overall score minus the current version's.
+	Mean float64 `json:"mean"`
+
+	// Reason The result in a sentence.
+	Reason string `json:"reason"`
+
+	// Repeats How many times each scenario ran in each arm.
+	Repeats   int `json:"repeats"`
+	Resamples int `json:"resamples"`
+
+	// Result How the gate ended. `passed`: the lower end of the 95% interval of the
+	// score difference is above minus `maxDrop`. `failed`: the proposal
+	// scores lower on average by more than that. `not_enough_evidence`: it
+	// looks no worse on average, but the interval is too wide to be sure, or
+	// fewer than three scenarios cover the strategy. `no_benchmark_coverage`:
+	// no scenario covers the strategy. `over_budget`: the gate stopped before
+	// it passed its cost cap. `error`: the gate could not finish.
+	Result    StrategyGateResult     `json:"result"`
+	Scenarios []StrategyGateScenario `json:"scenarios"`
+
+	// Seed The seed of the resampling, as a decimal string, so the interval can be worked out again.
+	Seed string `json:"seed"`
+}
+
+// StrategyGateResult How the gate ended. `passed`: the lower end of the 95% interval of the
+// score difference is above minus `maxDrop`. `failed`: the proposal
+// scores lower on average by more than that. `not_enough_evidence`: it
+// looks no worse on average, but the interval is too wide to be sure, or
+// fewer than three scenarios cover the strategy. `no_benchmark_coverage`:
+// no scenario covers the strategy. `over_budget`: the gate stopped before
+// it passed its cost cap. `error`: the gate could not finish.
+type StrategyGateResult string
+
+// StrategyGateScenario defines model for StrategyGateScenario.
+type StrategyGateScenario struct {
+	Baseline   float64 `json:"baseline"`
+	Difference float64 `json:"difference"`
+	Id         string  `json:"id"`
+	Proposal   float64 `json:"proposal"`
+}
+
 // StrategyLayer Where the strategy is defined: built-in, runtime or file. A
 // built-in strategy and a strategy of the file layer are read-only.
 // This is not an enum, because the names of its values would clash
@@ -2475,6 +2607,172 @@ type StrategyLayer = string
 // StrategyList defines model for StrategyList.
 type StrategyList struct {
 	Strategies []Strategy `json:"strategies"`
+}
+
+// StrategyProposal defines model for StrategyProposal.
+type StrategyProposal struct {
+	// Approvable True when the proposal has passed its gate and can be approved.
+	Approvable bool `json:"approvable"`
+
+	// BaseBody The strategy before the change, as YAML.
+	BaseBody *string `json:"baseBody,omitempty"`
+
+	// BaseOrigin Where the strategy is defined: built-in, runtime or file. A
+	// built-in strategy and a strategy of the file layer are read-only.
+	// This is not an enum, because the names of its values would clash
+	// with those of RuleLayer in the generated Go code.
+	BaseOrigin *StrategyLayer `json:"baseOrigin,omitempty"`
+
+	// BaseVersion The version the draft started from, as investigations record it.
+	BaseVersion string `json:"baseVersion"`
+
+	// BaselineRunId The benchmark run of the current version, when the gate ran.
+	BaselineRunId *openapi_types.UUID `json:"baselineRunId,omitempty"`
+
+	// BenchRunId The benchmark run of the proposal, when the gate ran.
+	BenchRunId *openapi_types.UUID `json:"benchRunId,omitempty"`
+
+	// Body The strategy after the change, as YAML.
+	Body      *string    `json:"body,omitempty"`
+	CreatedAt time.Time  `json:"createdAt"`
+	DecidedAt *time.Time `json:"decidedAt,omitempty"`
+
+	// Feedback The wrong ratings the proposal was drafted from.
+	Feedback []StrategyProposalFeedback `json:"feedback"`
+	Gate     *StrategyGate              `json:"gate,omitempty"`
+
+	// GateResult How the gate ended. `passed`: the lower end of the 95% interval of the
+	// score difference is above minus `maxDrop`. `failed`: the proposal
+	// scores lower on average by more than that. `not_enough_evidence`: it
+	// looks no worse on average, but the interval is too wide to be sure, or
+	// fewer than three scenarios cover the strategy. `no_benchmark_coverage`:
+	// no scenario covers the strategy. `over_budget`: the gate stopped before
+	// it passed its cost cap. `error`: the gate could not finish.
+	GateResult *StrategyGateResult `json:"gateResult,omitempty"`
+	Id         openapi_types.UUID  `json:"id"`
+
+	// Name The strategy the proposal changes.
+	Name string `json:"name"`
+
+	// Rationale Why the model changed the strategy. It is model output.
+	Rationale *string `json:"rationale,omitempty"`
+
+	// Reviewer The user or API token that last decided on or edited the proposal.
+	Reviewer *openapi_types.UUID `json:"reviewer,omitempty"`
+
+	// Stale True when the strategy has changed since the draft.
+	Stale bool `json:"stale"`
+
+	// Status `drafting`: waiting for the model's draft. `draft_failed`: no draft
+	// could be made; the status detail says why. `pending`: drafted, waiting
+	// for the gate. `benchmarking`: the gate is running. `passed`: the gate
+	// passed, and the proposal can be approved. `failed`: the gate ended
+	// without a pass; the gate result says how. `applied`: approved, and a
+	// version was saved. `approved`: approved for a strategy in a file.
+	// `rejected`: set aside.
+	Status StrategyProposalStatus `json:"status"`
+
+	// StatusDetail Why a draft failed.
+	StatusDetail *string `json:"statusDetail,omitempty"`
+
+	// TriggerCount How many wrong ratings the version had when the proposal was made.
+	TriggerCount int       `json:"triggerCount"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
+// StrategyProposalApproval defines model for StrategyProposalApproval.
+type StrategyProposalApproval struct {
+	Proposal StrategyProposalSummary `json:"proposal"`
+
+	// Version The runtime version that was saved. Absent for a strategy in a file.
+	Version *int `json:"version,omitempty"`
+
+	// Yaml The strategy to commit, for a strategy in a file.
+	Yaml *string `json:"yaml,omitempty"`
+}
+
+// StrategyProposalFeedback defines model for StrategyProposalFeedback.
+type StrategyProposalFeedback struct {
+	CorrectCause    *string            `json:"correctCause,omitempty"`
+	CorrectVerdict  *string            `json:"correctVerdict,omitempty"`
+	Id              openapi_types.UUID `json:"id"`
+	InvestigationId openapi_types.UUID `json:"investigationId"`
+	Rating          string             `json:"rating"`
+	Reason          *string            `json:"reason,omitempty"`
+	TargetKind      string             `json:"targetKind"`
+	TargetRef       string             `json:"targetRef"`
+	UpdatedAt       time.Time          `json:"updatedAt"`
+}
+
+// StrategyProposalList defines model for StrategyProposalList.
+type StrategyProposalList struct {
+	// NextCursor Pass as cursor to get the next page. Absent on the last page.
+	NextCursor *string                   `json:"nextCursor,omitempty"`
+	Proposals  []StrategyProposalSummary `json:"proposals"`
+}
+
+// StrategyProposalStatus `drafting`: waiting for the model's draft. `draft_failed`: no draft
+// could be made; the status detail says why. `pending`: drafted, waiting
+// for the gate. `benchmarking`: the gate is running. `passed`: the gate
+// passed, and the proposal can be approved. `failed`: the gate ended
+// without a pass; the gate result says how. `applied`: approved, and a
+// version was saved. `approved`: approved for a strategy in a file.
+// `rejected`: set aside.
+type StrategyProposalStatus string
+
+// StrategyProposalSummary defines model for StrategyProposalSummary.
+type StrategyProposalSummary struct {
+	// BaseOrigin Where the strategy is defined: built-in, runtime or file. A
+	// built-in strategy and a strategy of the file layer are read-only.
+	// This is not an enum, because the names of its values would clash
+	// with those of RuleLayer in the generated Go code.
+	BaseOrigin *StrategyLayer `json:"baseOrigin,omitempty"`
+
+	// BaseVersion The version the draft started from, as investigations record it.
+	BaseVersion string `json:"baseVersion"`
+
+	// BaselineRunId The benchmark run of the current version, when the gate ran.
+	BaselineRunId *openapi_types.UUID `json:"baselineRunId,omitempty"`
+
+	// BenchRunId The benchmark run of the proposal, when the gate ran.
+	BenchRunId *openapi_types.UUID `json:"benchRunId,omitempty"`
+	CreatedAt  time.Time           `json:"createdAt"`
+	DecidedAt  *time.Time          `json:"decidedAt,omitempty"`
+
+	// GateResult How the gate ended. `passed`: the lower end of the 95% interval of the
+	// score difference is above minus `maxDrop`. `failed`: the proposal
+	// scores lower on average by more than that. `not_enough_evidence`: it
+	// looks no worse on average, but the interval is too wide to be sure, or
+	// fewer than three scenarios cover the strategy. `no_benchmark_coverage`:
+	// no scenario covers the strategy. `over_budget`: the gate stopped before
+	// it passed its cost cap. `error`: the gate could not finish.
+	GateResult *StrategyGateResult `json:"gateResult,omitempty"`
+	Id         openapi_types.UUID  `json:"id"`
+
+	// Name The strategy the proposal changes.
+	Name string `json:"name"`
+
+	// Rationale Why the model changed the strategy. It is model output.
+	Rationale *string `json:"rationale,omitempty"`
+
+	// Reviewer The user or API token that last decided on or edited the proposal.
+	Reviewer *openapi_types.UUID `json:"reviewer,omitempty"`
+
+	// Status `drafting`: waiting for the model's draft. `draft_failed`: no draft
+	// could be made; the status detail says why. `pending`: drafted, waiting
+	// for the gate. `benchmarking`: the gate is running. `passed`: the gate
+	// passed, and the proposal can be approved. `failed`: the gate ended
+	// without a pass; the gate result says how. `applied`: approved, and a
+	// version was saved. `approved`: approved for a strategy in a file.
+	// `rejected`: set aside.
+	Status StrategyProposalStatus `json:"status"`
+
+	// StatusDetail Why a draft failed.
+	StatusDetail *string `json:"statusDetail,omitempty"`
+
+	// TriggerCount How many wrong ratings the version had when the proposal was made.
+	TriggerCount int       `json:"triggerCount"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
 // StrategyStatus active: in effect. shadowed: a strategy file has the same name and
@@ -2694,6 +2992,9 @@ type StatsVerdict = Verdict
 // StrategyName defines model for StrategyName.
 type StrategyName = string
 
+// StrategyProposalID defines model for StrategyProposalID.
+type StrategyProposalID = openapi_types.UUID
+
 // ListAuditParams defines parameters for ListAudit.
 type ListAuditParams struct {
 	// From Only entries made at or after this time.
@@ -2908,6 +3209,19 @@ type ListStrategyVersionsParams struct {
 	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// ListStrategyProposalsParams defines parameters for ListStrategyProposals.
+type ListStrategyProposalsParams struct {
+	// Status Only proposals with this status. The default is every status but `drafting` and `draft_failed`.
+	Status *StrategyProposalStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// Name Only proposals for the strategy with this name.
+	Name *string `form:"name,omitempty" json:"name,omitempty"`
+
+	// Cursor The nextCursor of the page before.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // CreateInvestigationFeedbackJSONRequestBody defines body for CreateInvestigationFeedback for application/json ContentType.
 type CreateInvestigationFeedbackJSONRequestBody = NewFeedback
 
@@ -2943,6 +3257,12 @@ type PutServiceNotesJSONRequestBody = ServiceNotesUpdate
 
 // SaveStrategyVersionJSONRequestBody defines body for SaveStrategyVersion for application/json ContentType.
 type SaveStrategyVersionJSONRequestBody = NewStrategyVersion
+
+// EditStrategyProposalJSONRequestBody defines body for EditStrategyProposal for application/json ContentType.
+type EditStrategyProposalJSONRequestBody = EditStrategyProposal
+
+// RejectStrategyProposalJSONRequestBody defines body for RejectStrategyProposal for application/json ContentType.
+type RejectStrategyProposalJSONRequestBody = RejectStrategyProposal
 
 // CreateTokenJSONRequestBody defines body for CreateToken for application/json ContentType.
 type CreateTokenJSONRequestBody = NewToken
@@ -3096,6 +3416,21 @@ type ServerInterface interface {
 	// GetStrategyVersion One saved version of a runtime strategy, with its YAML
 	// (GET /strategies/{name}/versions/{version})
 	GetStrategyVersion(w http.ResponseWriter, r *http.Request, name StrategyName, version int)
+	// ListStrategyProposals Proposed changes to strategies, newest first, a page at a time
+	// (GET /strategy-proposals)
+	ListStrategyProposals(w http.ResponseWriter, r *http.Request, params ListStrategyProposalsParams)
+	// GetStrategyProposal One proposal, with its YAML, the feedback and the gate result
+	// (GET /strategy-proposals/{id})
+	GetStrategyProposal(w http.ResponseWriter, r *http.Request, id StrategyProposalID)
+	// EditStrategyProposal Replace the YAML of a proposal and send it through the gate again
+	// (PUT /strategy-proposals/{id})
+	EditStrategyProposal(w http.ResponseWriter, r *http.Request, id StrategyProposalID)
+	// ApproveStrategyProposal Apply a proposal that passed its gate
+	// (POST /strategy-proposals/{id}/approve)
+	ApproveStrategyProposal(w http.ResponseWriter, r *http.Request, id StrategyProposalID)
+	// RejectStrategyProposal Set a proposal aside
+	// (POST /strategy-proposals/{id}/reject)
+	RejectStrategyProposal(w http.ResponseWriter, r *http.Request, id StrategyProposalID)
 	// ListTokens Every API token, revoked and expired ones included, newest first
 	// (GET /tokens)
 	ListTokens(w http.ResponseWriter, r *http.Request)
@@ -5064,6 +5399,182 @@ func (siw *ServerInterfaceWrapper) GetStrategyVersion(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// ListStrategyProposals operation middleware
+func (siw *ServerInterfaceWrapper) ListStrategyProposals(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListStrategyProposalsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "name" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "name", r.URL.Query(), &params.Name, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "name"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListStrategyProposals(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetStrategyProposal operation middleware
+func (siw *ServerInterfaceWrapper) GetStrategyProposal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id StrategyProposalID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetStrategyProposal(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// EditStrategyProposal operation middleware
+func (siw *ServerInterfaceWrapper) EditStrategyProposal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id StrategyProposalID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.EditStrategyProposal(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApproveStrategyProposal operation middleware
+func (siw *ServerInterfaceWrapper) ApproveStrategyProposal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id StrategyProposalID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApproveStrategyProposal(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RejectStrategyProposal operation middleware
+func (siw *ServerInterfaceWrapper) RejectStrategyProposal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id StrategyProposalID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RejectStrategyProposal(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListTokens operation middleware
 func (siw *ServerInterfaceWrapper) ListTokens(w http.ResponseWriter, r *http.Request) {
 
@@ -5289,6 +5800,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/lessons/{id}", wrapper.DeleteLesson)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/lessons/{id}", wrapper.UpdateLesson)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/lessons/{id}/approve", wrapper.ApproveLesson)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/strategy-proposals", wrapper.ListStrategyProposals)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/strategy-proposals/{id}", wrapper.GetStrategyProposal)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/strategy-proposals/{id}", wrapper.EditStrategyProposal)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/strategy-proposals/{id}/approve", wrapper.ApproveStrategyProposal)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/strategy-proposals/{id}/reject", wrapper.RejectStrategyProposal)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/memory/entries", wrapper.ListMemoryEntries)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/memory/entries/{id}", wrapper.DeleteMemoryEntry)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/memory/entries/{id}", wrapper.GetMemoryEntry)
@@ -7240,6 +7756,203 @@ func (response GetStrategyVersiondefaultApplicationProblemPlusJSONResponse) Visi
 	return err
 }
 
+type ListStrategyProposalsRequestObject struct {
+	Params ListStrategyProposalsParams
+}
+
+type ListStrategyProposalsResponseObject interface {
+	VisitListStrategyProposalsResponse(w http.ResponseWriter) error
+}
+
+type ListStrategyProposals200JSONResponse StrategyProposalList
+
+func (response ListStrategyProposals200JSONResponse) VisitListStrategyProposalsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListStrategyProposalsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListStrategyProposalsdefaultApplicationProblemPlusJSONResponse) VisitListStrategyProposalsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStrategyProposalRequestObject struct {
+	Id StrategyProposalID `json:"id"`
+}
+
+type GetStrategyProposalResponseObject interface {
+	VisitGetStrategyProposalResponse(w http.ResponseWriter) error
+}
+
+type GetStrategyProposal200JSONResponse StrategyProposal
+
+func (response GetStrategyProposal200JSONResponse) VisitGetStrategyProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStrategyProposaldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetStrategyProposaldefaultApplicationProblemPlusJSONResponse) VisitGetStrategyProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EditStrategyProposalRequestObject struct {
+	Id   StrategyProposalID `json:"id"`
+	Body *EditStrategyProposalJSONRequestBody
+}
+
+type EditStrategyProposalResponseObject interface {
+	VisitEditStrategyProposalResponse(w http.ResponseWriter) error
+}
+
+type EditStrategyProposal200JSONResponse StrategyProposal
+
+func (response EditStrategyProposal200JSONResponse) VisitEditStrategyProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EditStrategyProposaldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response EditStrategyProposaldefaultApplicationProblemPlusJSONResponse) VisitEditStrategyProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveStrategyProposalRequestObject struct {
+	Id StrategyProposalID `json:"id"`
+}
+
+type ApproveStrategyProposalResponseObject interface {
+	VisitApproveStrategyProposalResponse(w http.ResponseWriter) error
+}
+
+type ApproveStrategyProposal200JSONResponse StrategyProposalApproval
+
+func (response ApproveStrategyProposal200JSONResponse) VisitApproveStrategyProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveStrategyProposaldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ApproveStrategyProposaldefaultApplicationProblemPlusJSONResponse) VisitApproveStrategyProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RejectStrategyProposalRequestObject struct {
+	Id   StrategyProposalID `json:"id"`
+	Body *RejectStrategyProposalJSONRequestBody
+}
+
+type RejectStrategyProposalResponseObject interface {
+	VisitRejectStrategyProposalResponse(w http.ResponseWriter) error
+}
+
+type RejectStrategyProposal200JSONResponse StrategyProposalSummary
+
+func (response RejectStrategyProposal200JSONResponse) VisitRejectStrategyProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RejectStrategyProposaldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RejectStrategyProposaldefaultApplicationProblemPlusJSONResponse) VisitRejectStrategyProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListTokensRequestObject struct {
 }
 
@@ -7538,6 +8251,21 @@ type StrictServerInterface interface {
 	// GetStrategyVersion One saved version of a runtime strategy, with its YAML
 	// (GET /strategies/{name}/versions/{version})
 	GetStrategyVersion(ctx context.Context, request GetStrategyVersionRequestObject) (GetStrategyVersionResponseObject, error)
+	// ListStrategyProposals Proposed changes to strategies, newest first, a page at a time
+	// (GET /strategy-proposals)
+	ListStrategyProposals(ctx context.Context, request ListStrategyProposalsRequestObject) (ListStrategyProposalsResponseObject, error)
+	// GetStrategyProposal One proposal, with its YAML, the feedback and the gate result
+	// (GET /strategy-proposals/{id})
+	GetStrategyProposal(ctx context.Context, request GetStrategyProposalRequestObject) (GetStrategyProposalResponseObject, error)
+	// EditStrategyProposal Replace the YAML of a proposal and send it through the gate again
+	// (PUT /strategy-proposals/{id})
+	EditStrategyProposal(ctx context.Context, request EditStrategyProposalRequestObject) (EditStrategyProposalResponseObject, error)
+	// ApproveStrategyProposal Apply a proposal that passed its gate
+	// (POST /strategy-proposals/{id}/approve)
+	ApproveStrategyProposal(ctx context.Context, request ApproveStrategyProposalRequestObject) (ApproveStrategyProposalResponseObject, error)
+	// RejectStrategyProposal Set a proposal aside
+	// (POST /strategy-proposals/{id}/reject)
+	RejectStrategyProposal(ctx context.Context, request RejectStrategyProposalRequestObject) (RejectStrategyProposalResponseObject, error)
 	// ListTokens Every API token, revoked and expired ones included, newest first
 	// (GET /tokens)
 	ListTokens(ctx context.Context, request ListTokensRequestObject) (ListTokensResponseObject, error)
@@ -8928,6 +9656,153 @@ func (sh *strictHandler) GetStrategyVersion(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetStrategyVersionResponseObject); ok {
 		if err := validResponse.VisitGetStrategyVersionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListStrategyProposals operation middleware
+func (sh *strictHandler) ListStrategyProposals(w http.ResponseWriter, r *http.Request, params ListStrategyProposalsParams) {
+	var request ListStrategyProposalsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListStrategyProposals(ctx, request.(ListStrategyProposalsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListStrategyProposals")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListStrategyProposalsResponseObject); ok {
+		if err := validResponse.VisitListStrategyProposalsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetStrategyProposal operation middleware
+func (sh *strictHandler) GetStrategyProposal(w http.ResponseWriter, r *http.Request, id StrategyProposalID) {
+	var request GetStrategyProposalRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetStrategyProposal(ctx, request.(GetStrategyProposalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetStrategyProposal")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetStrategyProposalResponseObject); ok {
+		if err := validResponse.VisitGetStrategyProposalResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// EditStrategyProposal operation middleware
+func (sh *strictHandler) EditStrategyProposal(w http.ResponseWriter, r *http.Request, id StrategyProposalID) {
+	var request EditStrategyProposalRequestObject
+
+	request.Id = id
+
+	var body EditStrategyProposalJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.EditStrategyProposal(ctx, request.(EditStrategyProposalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "EditStrategyProposal")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(EditStrategyProposalResponseObject); ok {
+		if err := validResponse.VisitEditStrategyProposalResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ApproveStrategyProposal operation middleware
+func (sh *strictHandler) ApproveStrategyProposal(w http.ResponseWriter, r *http.Request, id StrategyProposalID) {
+	var request ApproveStrategyProposalRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ApproveStrategyProposal(ctx, request.(ApproveStrategyProposalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ApproveStrategyProposal")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ApproveStrategyProposalResponseObject); ok {
+		if err := validResponse.VisitApproveStrategyProposalResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RejectStrategyProposal operation middleware
+func (sh *strictHandler) RejectStrategyProposal(w http.ResponseWriter, r *http.Request, id StrategyProposalID) {
+	var request RejectStrategyProposalRequestObject
+
+	request.Id = id
+
+	var body RejectStrategyProposalJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RejectStrategyProposal(ctx, request.(RejectStrategyProposalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RejectStrategyProposal")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RejectStrategyProposalResponseObject); ok {
+		if err := validResponse.VisitRejectStrategyProposalResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

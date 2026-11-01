@@ -88,7 +88,7 @@ func TestUpdateAction(t *testing.T) {
 		{name: "a new cause", after: func(e Entry) Entry { e.Cause = "New."; return e }, want: auditUpdated},
 		{name: "a new summary and disabled", after: func(e Entry) Entry { e.Summary, e.Disabled = "New.", true; return e }, want: auditUpdated},
 		{name: "disabled only", after: func(e Entry) Entry { e.Disabled = true; return e }, want: auditDisabled},
-		{name: "enabled only", after: func(e Entry) Entry { return e }, want: auditEnabled},
+		{name: "enabled only", after: func(e Entry) Entry { e.Disabled = false; return e }, want: auditEnabled},
 	}
 
 	for _, tt := range tests {

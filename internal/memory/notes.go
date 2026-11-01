@@ -138,10 +138,10 @@ func (s *Store) SetNotes(ctx context.Context, actor Actor, service, text string)
 			return err
 		}
 
-		switch {
-		case text == cur.Text:
+		switch text {
+		case cur.Text:
 			return nil
-		case text == "":
+		case "":
 			if _, err := q.DeleteServiceNotes(ctx, service); err != nil {
 				return fmt.Errorf("delete: %w", err)
 			}

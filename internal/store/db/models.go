@@ -412,6 +412,39 @@ type Strategy struct {
 	CreatedAt      time.Time
 }
 
+type StrategyGateRun struct {
+	ProposalID uuid.UUID
+	Arm        string
+	ScenarioID string
+	Repeat     int32
+	Result     json.RawMessage
+	CostMicros int64
+	CreatedAt  time.Time
+}
+
+type StrategyProposal struct {
+	ID            uuid.UUID
+	Name          string
+	BaseVersion   string
+	BaseOrigin    *string
+	BaseBody      *string
+	Body          *string
+	Rationale     *string
+	FeedbackIds   []uuid.UUID
+	TriggerCount  int32
+	Status        string
+	StatusDetail  *string
+	GateResult    *string
+	GateDetail    []byte
+	GateSetHash   *string
+	BenchRunID    *uuid.UUID
+	BaselineRunID *uuid.UUID
+	Reviewer      *uuid.UUID
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	DecidedAt     *time.Time
+}
+
 type StrategyVersion struct {
 	Name       string
 	Version    int32

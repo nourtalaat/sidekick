@@ -36,6 +36,11 @@ const (
 	SchemaPrefix = "sidekick_bench_"
 )
 
+// ErrBadSchemaName is returned by OpenSchemaNamed for a name that does not
+// start with SchemaPrefix, so a gate can never drop a schema that is not a
+// benchmark's.
+var ErrBadSchemaName = errors.New("a benchmark's schema name must start with " + SchemaPrefix)
+
 // ErrCannotCreateSchema is returned when the database role of a --db run
 // may not create the run's schema, which needs CREATE on the database.
 var ErrCannotCreateSchema = errors.New("cannot create the benchmark's schema; the database role needs CREATE on the database")
@@ -112,12 +117,37 @@ func StartTemporary(ctx context.Context, log *slog.Logger) (*Database, error) {
 // not create the schema gives an error that wraps ErrCannotCreateSchema;
 // a database that cannot be reached one that wraps ErrInfrastructure.
 func OpenSchema(ctx context.Context, url string, log *slog.Logger) (*Database, error) {
+	return openSchema(ctx, url, SchemaPrefix+strings.ReplaceAll(ids.New().String(), "-", ""), false, log)
+}
+
+// OpenSchemaNamed is OpenSchema for a schema with a name the caller chooses,
+// which must start with SchemaPrefix. A schema of that name that an earlier,
+// killed run left behind is dropped first. Only one caller may use a name at
+// a time.
+func OpenSchemaNamed(ctx context.Context, url, schema string, log *slog.Logger) (*Database, error) {
+	if !strings.HasPrefix(schema, SchemaPrefix) {
+		return nil, fmt.Errorf("open schema %q: %w", schema, ErrBadSchemaName)
+	}
+
+	return openSchema(ctx, url, schema, true, log)
+}
+
+// openSchema creates and migrates the schema called schema. With replace it
+// drops one of that name first.
+func openSchema(ctx context.Context, url, schema string, replace bool, log *slog.Logger) (*Database, error) {
 	log = orDiscard(log)
-	schema := SchemaPrefix + strings.ReplaceAll(ids.New().String(), "-", "")
 
 	admin, err := store.Open(ctx, url, adminMaxConns)
 	if err != nil {
 		return nil, fmt.Errorf("%w: connect to the database: %w", ErrInfrastructure, err)
+	}
+
+	if replace {
+		if err := store.DropSchema(ctx, admin, schema); err != nil {
+			admin.Close()
+
+			return nil, fmt.Errorf("%w: %w", ErrInfrastructure, err)
+		}
 	}
 
 	if err := store.CreateSchema(ctx, admin, schema); err != nil {
