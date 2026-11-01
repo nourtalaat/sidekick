@@ -2,6 +2,7 @@ import { Check, CircleX, Clock, TriangleAlert, type LucideIcon } from "lucide-re
 import type { Investigation } from "../../api/investigations";
 import { Card } from "../../components/Card";
 import { formatCost, formatDuration, formatTokens } from "../../format";
+import { UsedLessons } from "./UsedLessons";
 import "./SideColumn.css";
 
 type SourceStatus = NonNullable<Investigation["report"]>["checked"][number]["status"];
@@ -41,6 +42,7 @@ export function SideColumn({ inv }: { inv: Investigation }) {
           </ul>
         )}
       </Card>
+      <UsedLessons lessons={inv.lessons} />
       <Card title="This run">
         <dl className="sk-side__facts">
           <Fact name="Cost" value={formatCost(inv.costMicros)} />

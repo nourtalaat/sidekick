@@ -6,6 +6,7 @@ import { Button } from "../../components/Button";
 import { CopyButton } from "../../components/CopyButton";
 import { formatDuration, formatTokens } from "../../format";
 import { PartFeedback } from "./PartFeedback";
+import { StepLessons } from "./StepLessons";
 import "./StepTimeline.css";
 
 const KIND_LABELS: Record<Step["kind"], string> = {
@@ -76,6 +77,7 @@ function StepRow({ step }: { step: Step }) {
       {open && (
         <div id={panelId} className="sk-step__body">
           {step.error && <p className="sk-step__error">{step.error}</p>}
+          {step.lessons && <StepLessons lessons={step.lessons} />}
           {step.parts.map((part, i) => (
             <PartBox key={i} part={part} />
           ))}
@@ -109,6 +111,12 @@ function summaryOf(step: Step): string {
 
   if (step.kind === "tool_result") {
     return `${label}: ${step.tool ?? "tool"}${step.source ? ` (${step.source})` : ""}${step.status === "ok" ? "" : `, ${step.status.replace("_", " ")}`}`;
+  }
+
+  if (step.lessons) {
+    const left = step.lessons.leftOutTotal > 0 ? `, ${step.lessons.leftOutTotal} left out` : "";
+
+    return `${label}: ${step.lessons.used.length} ${step.lessons.used.length === 1 ? "lesson" : "lessons"} used${left}`;
   }
 
   const calls = step.parts.filter((p) => p.type === "tool_call").map((p) => p.name);
