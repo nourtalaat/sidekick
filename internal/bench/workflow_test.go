@@ -22,7 +22,13 @@ var pinnedAction = regexp.MustCompile(`^[^@\s]+@[0-9a-f]{40}$`)
 type workflowFile struct {
 	On          map[string]any         `yaml:"on"`
 	Permissions map[string]string      `yaml:"permissions"`
+	Concurrency workflowConcurrency    `yaml:"concurrency"`
 	Jobs        map[string]workflowJob `yaml:"jobs"`
+}
+
+// workflowConcurrency is the concurrency setting of a workflow.
+type workflowConcurrency struct {
+	CancelInProgress bool `yaml:"cancel-in-progress"`
 }
 
 // workflowJob is one job of a workflow.
@@ -49,14 +55,25 @@ func TestBenchWorkflowIsSafeForAPublicRepository(t *testing.T) {
 	var wf workflowFile
 	require.NoError(t, yaml.Unmarshal(raw, &wf))
 
-	t.Run("it runs on the nightly schedule, release tags, labeled pull requests and by hand", func(t *testing.T) {
+	t.Run("it runs only on the nightly schedule and by hand", func(t *testing.T) {
 		t.Parallel()
 
-		for _, trigger := range []string{"schedule", "push", "pull_request", "workflow_dispatch"} {
-			require.Contains(t, wf.On, trigger)
+		triggers := make([]string, 0, len(wf.On))
+		for trigger := range wf.On {
+			triggers = append(triggers, trigger)
 		}
 
-		require.NotContains(t, wf.On, "pull_request_target", "it would give a fork's code the secret")
+		require.ElementsMatch(t, []string{"schedule", "workflow_dispatch"}, triggers)
+
+		for _, trigger := range []string{"push", "pull_request", "pull_request_target"} {
+			require.NotContains(t, wf.On, trigger, "an event a stranger can cause must not start a run with the secret")
+		}
+	})
+
+	t.Run("a run in progress is never cancelled", func(t *testing.T) {
+		t.Parallel()
+
+		require.False(t, wf.Concurrency.CancelInProgress)
 	})
 
 	t.Run("the default permissions only read", func(t *testing.T) {
@@ -83,26 +100,20 @@ func TestBenchWorkflowIsSafeForAPublicRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("a pull request runs only when labeled bench and from this repository", func(t *testing.T) {
+	t.Run("the only job runs the benchmark and can only read the repository", func(t *testing.T) {
 		t.Parallel()
 
-		bench := wf.Jobs["bench"]
-		require.Contains(t, bench.If, "github.event_name != 'pull_request'")
-		require.Contains(t, bench.If, "github.event.pull_request.head.repo.full_name == github.repository")
-		require.Contains(t, bench.If, "contains(github.event.pull_request.labels.*.name, 'bench')")
+		require.Len(t, wf.Jobs, 1)
+		require.Contains(t, wf.Jobs, "bench")
+		require.Empty(t, wf.Jobs["bench"].If, "the job has no condition that could let an event through")
+		require.Equal(t, map[string]string{"contents": "read"}, wf.Jobs["bench"].Permissions)
 	})
 
-	t.Run("only the job that runs the benchmark sees the key, and it cannot write", func(t *testing.T) {
+	t.Run("it skips with a notice when the key is not set", func(t *testing.T) {
 		t.Parallel()
 
-		require.Equal(t, map[string]string{"contents": "read"}, wf.Jobs["bench"].Permissions)
-		require.Equal(t, map[string]string{"pull-requests": "write"}, wf.Jobs["comment"].Permissions)
-
-		_, comment, found := strings.Cut(string(raw), "\n  comment:\n")
-		require.True(t, found)
-		require.NotContains(t, comment, "secrets.", "the job that writes the comment has no secret")
-		require.NotContains(t, comment, "actions/checkout", "and no checkout of the pull request's code")
-		require.Contains(t, wf.Jobs["comment"].If, "github.event_name == 'pull_request'")
+		require.Contains(t, string(raw), "-z \"$BENCH_ANTHROPIC_API_KEY\"")
+		require.Contains(t, string(raw), "::notice title=Benchmark skipped::")
 	})
 
 	t.Run("the only secret is the benchmark key", func(t *testing.T) {
