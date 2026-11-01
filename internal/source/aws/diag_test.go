@@ -52,6 +52,15 @@ func (c *watchedConn) Read(p []byte) (int, error) {
 	return n, err
 }
 
+func (c *watchedConn) Write(p []byte) (int, error) {
+	n, err := c.Conn.Write(p)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "SK-92: write of %d bytes on %s failed after %d: %v\n", len(p), c.LocalAddr(), n, err)
+	}
+
+	return n, err
+}
+
 func (c *watchedConn) Close() error {
 	c.mu.Lock()
 	if c.stack == nil {
