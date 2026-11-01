@@ -2169,6 +2169,39 @@ type Sender struct {
 // SenderKind defines model for Sender.Kind.
 type SenderKind string
 
+// ServiceNotes defines model for ServiceNotes.
+type ServiceNotes struct {
+	Service string `json:"service"`
+
+	// Text Plain text. Empty for a service without notes.
+	Text      string     `json:"text"`
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
+
+	// UpdatedByName The name of the user who last changed the notes. Not set when an API token did.
+	UpdatedByName *string `json:"updatedByName,omitempty"`
+}
+
+// ServiceNotesList defines model for ServiceNotesList.
+type ServiceNotesList struct {
+	// NextAfter Pass it as `after` to read the next page.
+	NextAfter *string               `json:"nextAfter,omitempty"`
+	Services  []ServiceNotesSummary `json:"services"`
+}
+
+// ServiceNotesSummary defines model for ServiceNotesSummary.
+type ServiceNotesSummary struct {
+	// Preview The first 120 characters of the notes, as plain text.
+	Preview       string    `json:"preview"`
+	Service       string    `json:"service"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+	UpdatedByName *string   `json:"updatedByName,omitempty"`
+}
+
+// ServiceNotesUpdate defines model for ServiceNotesUpdate.
+type ServiceNotesUpdate struct {
+	Text string `json:"text"`
+}
+
 // SourceCheck defines model for SourceCheck.
 type SourceCheck struct {
 	Error     *string           `json:"error,omitempty"`
@@ -2637,6 +2670,9 @@ type MemoryEntryID = openapi_types.UUID
 // RuleName defines model for RuleName.
 type RuleName = string
 
+// ServiceName defines model for ServiceName.
+type ServiceName = string
+
 // StatsFrom defines model for StatsFrom.
 type StatsFrom = openapi_types.Date
 
@@ -2789,6 +2825,13 @@ type ListMemoryEntriesParams struct {
 	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// ListServiceNotesParams defines parameters for ListServiceNotes.
+type ListServiceNotesParams struct {
+	// After The nextAfter of the page before.
+	After *string `form:"after,omitempty" json:"after,omitempty"`
+	Limit *int    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // GetCostStatsParams defines parameters for GetCostStats.
 type GetCostStatsParams struct {
 	// From The first day of the range, a UTC date. The default is 29 days before `to`.
@@ -2894,6 +2937,9 @@ type CreateRouteJSONRequestBody = NewRoute
 
 // UpdateRouteJSONRequestBody defines body for UpdateRoute for application/json ContentType.
 type UpdateRouteJSONRequestBody = RouteUpdate
+
+// PutServiceNotesJSONRequestBody defines body for PutServiceNotes for application/json ContentType.
+type PutServiceNotesJSONRequestBody = ServiceNotesUpdate
 
 // SaveStrategyVersionJSONRequestBody defines body for SaveStrategyVersion for application/json ContentType.
 type SaveStrategyVersionJSONRequestBody = NewStrategyVersion
@@ -3014,6 +3060,15 @@ type ServerInterface interface {
 	// UpdateRoute Replace a runtime route
 	// (PUT /routes/{name})
 	UpdateRoute(w http.ResponseWriter, r *http.Request, name RuleName)
+	// ListServiceNotes The services that have notes, by name, a page at a time
+	// (GET /services/notes)
+	ListServiceNotes(w http.ResponseWriter, r *http.Request, params ListServiceNotesParams)
+	// GetServiceNotes The notes about a service
+	// (GET /services/{name}/notes)
+	GetServiceNotes(w http.ResponseWriter, r *http.Request, name ServiceName)
+	// PutServiceNotes Replace the notes about a service
+	// (PUT /services/{name}/notes)
+	PutServiceNotes(w http.ResponseWriter, r *http.Request, name ServiceName)
 	// GetCostStats Spend, tokens and cost per investigation
 	// (GET /stats/cost)
 	GetCostStats(w http.ResponseWriter, r *http.Request, params GetCostStatsParams)
@@ -4434,6 +4489,104 @@ func (siw *ServerInterfaceWrapper) UpdateRoute(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// ListServiceNotes operation middleware
+func (siw *ServerInterfaceWrapper) ListServiceNotes(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListServiceNotesParams
+
+	// ------------- Optional query parameter "after" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "after", r.URL.Query(), &params.After, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListServiceNotes(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetServiceNotes operation middleware
+func (siw *ServerInterfaceWrapper) GetServiceNotes(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "name" -------------
+	var name ServiceName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetServiceNotes(w, r, name)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutServiceNotes operation middleware
+func (siw *ServerInterfaceWrapper) PutServiceNotes(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "name" -------------
+	var name ServiceName
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutServiceNotes(w, r, name)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetCostStats operation middleware
 func (siw *ServerInterfaceWrapper) GetCostStats(w http.ResponseWriter, r *http.Request) {
 
@@ -5140,6 +5293,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/memory/entries/{id}", wrapper.DeleteMemoryEntry)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/memory/entries/{id}", wrapper.GetMemoryEntry)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/memory/entries/{id}", wrapper.UpdateMemoryEntry)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/services/notes", wrapper.ListServiceNotes)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/services/{name}/notes", wrapper.GetServiceNotes)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/services/{name}/notes", wrapper.PutServiceNotes)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/audit", wrapper.ListAudit)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations", wrapper.ListInvestigations)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/investigations/{id}", wrapper.GetInvestigation)
@@ -6614,6 +6770,124 @@ func (response UpdateRoutedefaultApplicationProblemPlusJSONResponse) VisitUpdate
 	return err
 }
 
+type ListServiceNotesRequestObject struct {
+	Params ListServiceNotesParams
+}
+
+type ListServiceNotesResponseObject interface {
+	VisitListServiceNotesResponse(w http.ResponseWriter) error
+}
+
+type ListServiceNotes200JSONResponse ServiceNotesList
+
+func (response ListServiceNotes200JSONResponse) VisitListServiceNotesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListServiceNotesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListServiceNotesdefaultApplicationProblemPlusJSONResponse) VisitListServiceNotesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetServiceNotesRequestObject struct {
+	Name ServiceName `json:"name"`
+}
+
+type GetServiceNotesResponseObject interface {
+	VisitGetServiceNotesResponse(w http.ResponseWriter) error
+}
+
+type GetServiceNotes200JSONResponse ServiceNotes
+
+func (response GetServiceNotes200JSONResponse) VisitGetServiceNotesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetServiceNotesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetServiceNotesdefaultApplicationProblemPlusJSONResponse) VisitGetServiceNotesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutServiceNotesRequestObject struct {
+	Name ServiceName `json:"name"`
+	Body *PutServiceNotesJSONRequestBody
+}
+
+type PutServiceNotesResponseObject interface {
+	VisitPutServiceNotesResponse(w http.ResponseWriter) error
+}
+
+type PutServiceNotes200JSONResponse ServiceNotes
+
+func (response PutServiceNotes200JSONResponse) VisitPutServiceNotesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutServiceNotesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response PutServiceNotesdefaultApplicationProblemPlusJSONResponse) VisitPutServiceNotesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetCostStatsRequestObject struct {
 	Params GetCostStatsParams
 }
@@ -7228,6 +7502,15 @@ type StrictServerInterface interface {
 	// UpdateRoute Replace a runtime route
 	// (PUT /routes/{name})
 	UpdateRoute(ctx context.Context, request UpdateRouteRequestObject) (UpdateRouteResponseObject, error)
+	// ListServiceNotes The services that have notes, by name, a page at a time
+	// (GET /services/notes)
+	ListServiceNotes(ctx context.Context, request ListServiceNotesRequestObject) (ListServiceNotesResponseObject, error)
+	// GetServiceNotes The notes about a service
+	// (GET /services/{name}/notes)
+	GetServiceNotes(ctx context.Context, request GetServiceNotesRequestObject) (GetServiceNotesResponseObject, error)
+	// PutServiceNotes Replace the notes about a service
+	// (PUT /services/{name}/notes)
+	PutServiceNotes(ctx context.Context, request PutServiceNotesRequestObject) (PutServiceNotesResponseObject, error)
 	// GetCostStats Spend, tokens and cost per investigation
 	// (GET /stats/cost)
 	GetCostStats(ctx context.Context, request GetCostStatsRequestObject) (GetCostStatsResponseObject, error)
@@ -8321,6 +8604,91 @@ func (sh *strictHandler) UpdateRoute(w http.ResponseWriter, r *http.Request, nam
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateRouteResponseObject); ok {
 		if err := validResponse.VisitUpdateRouteResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListServiceNotes operation middleware
+func (sh *strictHandler) ListServiceNotes(w http.ResponseWriter, r *http.Request, params ListServiceNotesParams) {
+	var request ListServiceNotesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListServiceNotes(ctx, request.(ListServiceNotesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListServiceNotes")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListServiceNotesResponseObject); ok {
+		if err := validResponse.VisitListServiceNotesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetServiceNotes operation middleware
+func (sh *strictHandler) GetServiceNotes(w http.ResponseWriter, r *http.Request, name ServiceName) {
+	var request GetServiceNotesRequestObject
+
+	request.Name = name
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetServiceNotes(ctx, request.(GetServiceNotesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetServiceNotes")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetServiceNotesResponseObject); ok {
+		if err := validResponse.VisitGetServiceNotesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutServiceNotes operation middleware
+func (sh *strictHandler) PutServiceNotes(w http.ResponseWriter, r *http.Request, name ServiceName) {
+	var request PutServiceNotesRequestObject
+
+	request.Name = name
+
+	var body PutServiceNotesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutServiceNotes(ctx, request.(PutServiceNotesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutServiceNotes")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutServiceNotesResponseObject); ok {
+		if err := validResponse.VisitPutServiceNotesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

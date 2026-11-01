@@ -484,6 +484,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/services/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The services that have notes, by name, a page at a time
+         * @description Service notes are what people wrote about a service; the memory source
+         *     shows them to the model. Each service comes with the first characters
+         *     of its notes. Read the notes of one service with
+         *     `GET /services/{name}/notes`.
+         */
+        get: operations["ListServiceNotes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/services/{name}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The notes about a service
+         * @description A service without notes answers 200 with empty `text` and no
+         *     `updatedAt`. The text is plain text: show it as such.
+         */
+        get: operations["GetServiceNotes"];
+        /**
+         * Replace the notes about a service
+         * @description Replaces the notes with `text`, which is trimmed and redacted before
+         *     it is stored. Empty text deletes the notes. The last write wins.
+         *     Text longer than 4,000 characters, once redacted, or with control
+         *     characters answers 422 with the field `text`. The change is written
+         *     to the audit log; a request that changes nothing writes nothing.
+         */
+        put: operations["PutServiceNotes"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/audit": {
         parameters: {
             query?: never;
@@ -1347,6 +1399,31 @@ export interface components {
             /** @description Leave it out or empty for an entry without a cause. */
             cause?: string;
             disabled: boolean;
+        };
+        ServiceNotes: {
+            service: string;
+            /** @description Plain text. Empty for a service without notes. */
+            text: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** @description The name of the user who last changed the notes. Not set when an API token did. */
+            updatedByName?: string;
+        };
+        ServiceNotesSummary: {
+            service: string;
+            /** @description The first 120 characters of the notes, as plain text. */
+            preview: string;
+            /** Format: date-time */
+            updatedAt: string;
+            updatedByName?: string;
+        };
+        ServiceNotesList: {
+            services: components["schemas"]["ServiceNotesSummary"][];
+            /** @description Pass it as `after` to read the next page. */
+            nextAfter?: string;
+        };
+        ServiceNotesUpdate: {
+            text: string;
         };
         /** @description A lesson that the prompt of an investigation used, as it is now. */
         UsedLesson: {
@@ -2474,6 +2551,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description The name of a service, up to 200 characters. */
+        ServiceName: string;
         /** @description The ID of the investigation the entry is about. */
         MemoryEntryID: string;
         LessonID: string;
@@ -3212,6 +3291,83 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListServiceNotes: {
+        parameters: {
+            query?: {
+                /** @description The nextAfter of the page before. */
+                after?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of services with notes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceNotesList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetServiceNotes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The name of a service, up to 200 characters. */
+                name: components["parameters"]["ServiceName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The notes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceNotes"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    PutServiceNotes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The name of a service, up to 200 characters. */
+                name: components["parameters"]["ServiceName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServiceNotesUpdate"];
+            };
+        };
+        responses: {
+            /** @description The notes as stored, empty after a delete. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceNotes"];
+                };
             };
             default: components["responses"]["Problem"];
         };

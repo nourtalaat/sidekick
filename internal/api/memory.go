@@ -37,6 +37,9 @@ type MemoryStore interface {
 	Get(ctx context.Context, id uuid.UUID) (memory.Entry, error)
 	Update(ctx context.Context, actor memory.Actor, id uuid.UUID, e memory.Edit) (memory.Entry, error)
 	Delete(ctx context.Context, actor memory.Actor, id uuid.UUID) error
+	Notes(ctx context.Context, service string) (memory.Notes, error)
+	ListNotes(ctx context.Context, after string, pageSize int) (memory.NotesPage, error)
+	SetNotes(ctx context.Context, actor memory.Actor, service, text string) (memory.Notes, error)
 }
 
 var _ MemoryStore = (*memory.Store)(nil)
