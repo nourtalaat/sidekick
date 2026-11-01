@@ -291,7 +291,7 @@ func TestDraftFailsWithoutAModelCall(t *testing.T) {
 		detail string
 	}{
 		{name: "no summarize role", opts: draftOptions{off: true}, detail: "summarize role"},
-		{name: "the strategy has a newer version", opts: draftOptions{baseVersion: "0000000000000000"}, detail: "newer version"},
+		{name: "the version is not available any more", opts: draftOptions{baseVersion: "0000000000000000"}, detail: "not available any more"},
 	}
 
 	for _, tt := range tests {

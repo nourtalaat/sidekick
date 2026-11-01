@@ -91,7 +91,9 @@ func setHash(scenarios []bench.Scenario) (string, error) {
 			return "", fmt.Errorf("hash scenario %s: %w", sc.ID, err)
 		}
 
-		fmt.Fprintf(h, "%s\x00%s\x00%s\x00", sc.ID, body, sc.Expected.Verdict)
+		if _, err := fmt.Fprintf(h, "%s\x00%s\x00%s\x00", sc.ID, body, sc.Expected.Verdict); err != nil {
+			return "", fmt.Errorf("hash scenario %s: %w", sc.ID, err)
+		}
 	}
 
 	return hex.EncodeToString(h.Sum(nil)), nil

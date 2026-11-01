@@ -212,7 +212,7 @@ func TestGetStrategyProposal(t *testing.T) {
 
 	s := setupProposals(t)
 
-	get := func(t *testing.T, id string) (proposalItem, *http.Response) {
+	get := func(t *testing.T, id string) (proposalItem, int) {
 		t.Helper()
 
 		rec := s.sendRule(t, adminCaller, http.MethodGet, proposalsPath+"/"+id, nil)
@@ -222,14 +222,14 @@ func TestGetStrategyProposal(t *testing.T) {
 			decodeRule(t, rec, &got)
 		}
 
-		return got, rec.Result()
+		return got, rec.Code
 	}
 
 	t.Run("a passed proposal with its YAML, feedback and gate", func(t *testing.T) {
 		t.Parallel()
 
-		got, res := get(t, proposalPassed)
-		require.Equal(t, http.StatusOK, res.StatusCode)
+		got, status := get(t, proposalPassed)
+		require.Equal(t, http.StatusOK, status)
 		require.Contains(t, got.BaseBody, "Check what changed.")
 		require.Contains(t, got.Body, "Ask whether a deploy was planned.")
 		require.True(t, got.Approvable)
@@ -279,8 +279,8 @@ func TestGetStrategyProposal(t *testing.T) {
 	t.Run("an unknown proposal", func(t *testing.T) {
 		t.Parallel()
 
-		_, res := get(t, proposalUnknown)
-		require.Equal(t, http.StatusNotFound, res.StatusCode)
+		_, status := get(t, proposalUnknown)
+		require.Equal(t, http.StatusNotFound, status)
 	})
 
 	t.Run("a viewer may not look", func(t *testing.T) {

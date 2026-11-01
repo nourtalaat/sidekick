@@ -57,12 +57,12 @@ CREATE TABLE strategy_proposals (
     ('passed', 'failed', 'not_enough_evidence', 'no_benchmark_coverage', 'over_budget', 'error')),
   CONSTRAINT strategy_proposals_drafted CHECK
     (status IN ('drafting', 'draft_failed') OR (body IS NOT NULL AND base_body IS NOT NULL AND base_origin IS NOT NULL AND rationale IS NOT NULL)),
-  CONSTRAINT strategy_proposals_passed CHECK (status <> 'passed' OR gate_result = 'passed'),
+  CONSTRAINT strategy_proposals_passed CHECK (status <> 'passed' OR coalesce(gate_result = 'passed', false)),
   CONSTRAINT strategy_proposals_failed CHECK
     (status <> 'failed' OR (gate_result IS NOT NULL AND gate_result <> 'passed')),
   CONSTRAINT strategy_proposals_applied CHECK
     (status NOT IN ('approved', 'applied')
-     OR (gate_result = 'passed' AND bench_run_id IS NOT NULL AND baseline_run_id IS NOT NULL))
+     OR (coalesce(gate_result = 'passed', false) AND bench_run_id IS NOT NULL AND baseline_run_id IS NOT NULL))
 );
 
 -- One proposal per strategy version, and finding the proposal of a version.
@@ -96,12 +96,17 @@ ALTER TABLE strategy_versions
 CREATE INDEX feedback_wrong_recent ON feedback (updated_at)
   WHERE rating = 'wrong' AND target_kind IN ('verdict', 'finding');
 
+-- Counting the wrong ratings of one strategy version, and listing them, from
+-- the investigations that ran it.
+CREATE INDEX investigations_strategy_version ON investigations (strategy, strategy_version);
+
 -- Finding the confirmed investigations of a strategy for a draft.
 CREATE INDEX investigations_strategy_confirmed ON investigations (strategy, confirmed_at DESC)
   WHERE confirmed_verdict IS NOT NULL;
 
 -- +goose Down
 DROP INDEX investigations_strategy_confirmed;
+DROP INDEX investigations_strategy_version;
 DROP INDEX feedback_wrong_recent;
 ALTER TABLE strategy_versions
   DROP CONSTRAINT strategy_versions_bench_run,

@@ -142,7 +142,7 @@ func TestApprove(t *testing.T) {
 		require.Equal(t, new(uuid.MustParse(reviewer.ID)), p.Reviewer)
 
 		require.Equal(t, 1, auditRows(t, e.pool, proposals.ActionApproved))
-		require.Equal(t, 1, auditRows(t, e.pool, strategystore.ActionUpdated))
+		require.Equal(t, 2, auditRows(t, e.pool, strategystore.ActionUpdated), "the second version of the set-up, and the approval")
 	})
 
 	t.Run("a built-in strategy gets a runtime strategy that takes its place", func(t *testing.T) {
@@ -158,7 +158,7 @@ func TestApprove(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 1, got.Version.Number)
 		require.Equal(t, proposals.StatusApplied, e.proposal(t, id).Status)
-		require.Equal(t, 1, auditRows(t, e.pool, strategystore.ActionCreated))
+		require.Equal(t, 2, auditRows(t, e.pool, strategystore.ActionCreated), "checkout-latency in the set-up, and generic-alert")
 	})
 
 	t.Run("a file strategy is not changed, and its YAML is returned", func(t *testing.T) {

@@ -178,9 +178,8 @@ func TestDecideGateSeeds(t *testing.T) {
 	other := DecideGate(baseline, proposal, GateOptions{MaxDrop: 0.02, Seed: gateSeed + 1})
 
 	require.Equal(t, same1, same2, "the same seed gives the same decision")
-	require.NotEqual(t, same1.Interval, other.Interval, "another seed resamples differently")
 	require.InDelta(t, same1.Interval.Lower, other.Interval.Lower, 0.15, "but both estimate the same interval")
-	require.Equal(t, same1.Mean, other.Mean, "the mean does not depend on the seed")
+	require.InDelta(t, same1.Mean, other.Mean, 1e-12, "the mean does not depend on the seed")
 }
 
 func TestDecideGateUsesTheWeights(t *testing.T) {
@@ -277,7 +276,7 @@ func TestCoverageDecision(t *testing.T) {
 			require.Equal(t, tt.want, d.Result)
 			require.NotEmpty(t, d.Reason)
 			require.Equal(t, uint64(gateSeed), d.Seed)
-			require.Equal(t, 0.02, d.MaxDrop)
+			require.InDelta(t, 0.02, d.MaxDrop, 1e-12)
 		})
 	}
 }

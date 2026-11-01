@@ -60,6 +60,10 @@ func TestTheWholeFlow(t *testing.T) {
 			e := newEnv(t, envOptions{})
 			storetest.LoadFixture(t, e.pool, "fixture/flow.sql")
 
+			// The strategy is saved in the database too, as an admin would have saved it.
+			_, err := strategystore.NewStore(e.pool).Save(t.Context(), strategystore.SaveInput{Actor: flowAdmin, Name: strategyName, Body: baselineBody, Reason: "Version 1"})
+			require.NoError(t, err)
+
 			summarizer := modeltest.New(t, model.Capabilities{ToolCalling: true, ToolChoice: true}, flowAnswer(t, tt.body))
 			summarizer.ExpectAllUsed()
 
@@ -125,7 +129,7 @@ func TestTheWholeFlow(t *testing.T) {
 			if tt.wantStatus != proposals.StatusPassed {
 				_, err := service.Approve(t.Context(), id, flowAdmin)
 				require.ErrorIs(t, err, proposals.ErrNotPassed, "a proposal that did not pass cannot be applied")
-				require.Equal(t, 1, count(t, e.pool, "SELECT count(*) FROM strategy_versions WHERE name = $1", strategyName))
+				require.Equal(t, 1, count(t, e.pool, "SELECT count(*) FROM strategy_versions WHERE name = $1", strategyName), "no version was saved besides the first")
 
 				return
 			}
