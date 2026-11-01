@@ -163,8 +163,11 @@ func (s *Store) Save(ctx context.Context, in SaveInput) (Saved, error) {
 		var err error
 
 		saved, err = s.add(ctx, tx, in, st)
+		if err != nil {
+			return fmt.Errorf("add the version: %w", err)
+		}
 
-		return err
+		return nil
 	})
 
 	var pgErr *pgconn.PgError
@@ -209,11 +212,11 @@ func (s *Store) add(ctx context.Context, tx pgx.Tx, in SaveInput, st strategy.St
 	}
 
 	if err := s.write(ctx, q, v, created); err != nil {
-		return Saved{}, err
+		return Saved{}, fmt.Errorf("write version %d: %w", v.Number, err)
 	}
 
 	if err := s.record(ctx, tx, in.Actor, v, created); err != nil {
-		return Saved{}, err
+		return Saved{}, fmt.Errorf("record version %d: %w", v.Number, err)
 	}
 
 	st.Version = strategy.RuntimeVersion(v.Number)

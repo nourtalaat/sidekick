@@ -123,7 +123,7 @@ func (c *Cache) Version(ctx context.Context, name, version string) (strategy.Str
 	if n, ok := strategy.RuntimeVersionNumber(version); ok {
 		st, ok, err := c.stored(ctx, name, n)
 		if err != nil {
-			return strategy.Strategy{}, false, err
+			return strategy.Strategy{}, false, fmt.Errorf("read version %d of strategy %s: %w", n, name, err)
 		}
 
 		if ok {
