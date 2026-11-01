@@ -5,6 +5,7 @@ package proposals
 import (
 	"context"
 	"errors"
+	"strconv"
 	"sync"
 	"testing"
 
@@ -197,7 +198,7 @@ func TestDecideAProposalThatCannotBeDecided(t *testing.T) {
 
 			if tt.wantAs != "" {
 				var decided *DecidedError
-				require.True(t, errors.As(err, &decided))
+				require.ErrorAs(t, err, &decided)
 				require.Equal(t, tt.wantAs, decided.Proposal.Status)
 				require.NotEmpty(t, decided.Proposal.DecidedByName+decided.Proposal.DecidedBySlackUser, "it says who decided")
 			}
@@ -229,7 +230,7 @@ func TestTwoApproversAtOnce(t *testing.T) {
 
 	for i := range deciders {
 		wg.Go(func() {
-			by := Decider{SlackUserID: "U0" + string(rune('A'+i))}
+			by := Decider{SlackUserID: "U0" + strconv.Itoa(i)}
 
 			var err error
 			if i%3 == 0 {
