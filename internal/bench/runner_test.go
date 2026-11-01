@@ -14,6 +14,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/model/modeltest"
 	"github.com/nourtalaat/sidekick/internal/report"
+	"github.com/nourtalaat/sidekick/internal/strategy"
 )
 
 // checkedScenario is a scenario for the checks of New, with ADAPTER,
@@ -290,6 +291,141 @@ func TestBenchConfig(t *testing.T) {
 			require.Zero(t, got.Budgets.Daily.MaxCostUSD)
 			require.False(t, got.Watch.AllowModel, "runs never offer start_watcher")
 			require.True(t, tt.cfg.Watch.AllowModel, "the config itself is left as it is")
+		})
+	}
+}
+
+// checkedScenarioWith loads checkedScenario with the defaults of
+// TestNewChecksScenarios, and set on top of them.
+func checkedScenarioWith(t *testing.T, set map[string]string) Scenario {
+	t.Helper()
+
+	values := map[string]string{
+		"ADAPTER":  "alertmanager",
+		"STRATEGY": "generic-alert",
+		"ALERTS":   "[" + firing + "]",
+		"SNAPSHOT": "bench/tools/github.json",
+	}
+
+	content := checkedScenario
+
+	for key, value := range values {
+		if v, ok := set[key]; ok {
+			value = v
+		}
+
+		content = strings.ReplaceAll(content, key, value)
+	}
+
+	file := filepath.Join(t.TempDir(), "checked.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(content), 0o600))
+
+	scenarios, err := LoadScenarios(file, LoadOptions{BaseDir: repoRoot})
+	require.NoError(t, err)
+	require.Len(t, scenarios, 1)
+
+	return scenarios[0]
+}
+
+func TestRunnerEvent(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		set     map[string]string
+		want    string
+		wantErr string
+	}{
+		{name: "the alert name of the one event", want: "A"},
+		{
+			name:    "two events",
+			set:     map[string]string{"ALERTS": "[" + firing + ", " + strings.Replace(firing, "f1", "f2", 1) + "]"},
+			wantErr: "event.payload: the payload must give exactly one event; the alertmanager adapter gives 2",
+		},
+		{name: "a payload the adapter cannot parse", set: map[string]string{"ALERTS": "nothing"}, wantErr: "event.payload: the alertmanager adapter cannot parse it"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg, regs := loadTestConfig(t, modeltest.New(t, model.Capabilities{ToolCalling: true}))
+
+			runner, err := New(t.Context(), nil, Options{Config: cfg, Registries: regs})
+			require.NoError(t, err)
+
+			ev, err := runner.Event(t.Context(), checkedScenarioWith(t, tt.set))
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tt.want, ev.AlertName)
+		})
+	}
+}
+
+func TestRunnerProblems(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		set  map[string]string
+		want []string
+	}{
+		{name: "a valid scenario has none"},
+		{name: "a strategy that is not loaded", set: map[string]string{"STRATEGY": "nope"}, want: []string{`strategy: "nope" is not loaded`}},
+		{name: "a recovery", set: map[string]string{"ALERTS": "[" + strings.Replace(firing, "firing", "resolved", 1) + "]"}, want: []string{"event.payload: the event is a recovery, which opens no investigation"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg, regs := loadTestConfig(t, modeltest.New(t, model.Capabilities{ToolCalling: true}))
+
+			runner, err := New(t.Context(), nil, Options{Config: cfg, Registries: regs})
+			require.NoError(t, err)
+
+			require.Equal(t, tt.want, runner.Problems(t.Context(), checkedScenarioWith(t, tt.set)))
+		})
+	}
+}
+
+func TestNewTakesTheStrategiesOfTheOptions(t *testing.T) {
+	t.Parallel()
+
+	proposal, problems := strategy.ParseRuntime([]byte("name: proposal-only\ndescription: A strategy that only the options have.\n"), 3)
+	require.Empty(t, problems)
+
+	sc := checkedScenarioWith(t, map[string]string{"STRATEGY": "proposal-only"})
+
+	tests := []struct {
+		name       string
+		strategies func(base *strategy.Set) *strategy.Set
+		wantErr    bool
+	}{
+		{name: "the config's strategies do not have it", strategies: func(*strategy.Set) *strategy.Set { return nil }, wantErr: true},
+		{name: "the options' strategies do", strategies: func(base *strategy.Set) *strategy.Set { return base.With(proposal) }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg, regs := loadTestConfig(t, modeltest.New(t, model.Capabilities{ToolCalling: true}))
+
+			runner, err := New(t.Context(), []Scenario{sc}, Options{Config: cfg, Registries: regs, Strategies: tt.strategies(cfg.StrategySet())})
+			if tt.wantErr {
+				require.ErrorIs(t, err, ErrInvalidScenario)
+
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, "runtime:3", runner.Info().Strategies["proposal-only"])
 		})
 	}
 }

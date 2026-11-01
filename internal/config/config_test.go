@@ -15,6 +15,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/secrets"
+	"github.com/nourtalaat/sidekick/internal/strategy"
 )
 
 func TestParseFileProblems(t *testing.T) {
@@ -501,4 +502,20 @@ func nodeStrings(n *yaml.Node) []string {
 	}
 
 	return out
+}
+
+func TestWithStrategySet(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := Parse(t.Context(), []byte(minimalYAML(t)), testOptions())
+	require.NoError(t, err)
+
+	other := cfg.StrategySet().With(strategy.Strategy{Name: "only-in-the-copy", Version: "runtime:1"})
+	got := cfg.WithStrategySet(other)
+
+	_, ok := got.StrategySet().Get("only-in-the-copy")
+	require.True(t, ok)
+
+	_, ok = cfg.StrategySet().Get("only-in-the-copy")
+	require.False(t, ok, "the config it was made from is not changed")
 }

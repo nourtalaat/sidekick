@@ -487,6 +487,16 @@ func (c *Config) StrategySet() *strategy.Set {
 	return c.strategySet
 }
 
+// WithStrategySet returns a copy of the config whose strategies are set. A
+// benchmark uses it to run a version of a strategy that is not the one in
+// effect.
+func (c *Config) WithStrategySet(set *strategy.Set) Config {
+	out := *c
+	out.strategySet = set
+
+	return out
+}
+
 // PriceTable returns the price overrides in micro-dollars, by model ID.
 func (m Model) PriceTable() map[string]model.Price {
 	out := make(map[string]model.Price, len(m.Prices))

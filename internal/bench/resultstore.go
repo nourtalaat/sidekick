@@ -37,6 +37,8 @@ var ErrSchemaNotCurrent = errors.New("the database's schema is older than this S
 // run can touch the default schema's tables. Close it when done.
 type ResultStore struct {
 	pool *pgxpool.Pool
+	// owned is true when the store opened the pool and closes it.
+	owned bool
 }
 
 // StoredSummary is bench_runs.summary: what report.json holds besides the
@@ -78,7 +80,14 @@ func OpenResultStore(ctx context.Context, url string) (*ResultStore, error) {
 		return nil, fmt.Errorf("%w (it is at version %d, this Sidekick needs %d)", ErrSchemaNotCurrent, current, target)
 	}
 
-	return &ResultStore{pool: pool}, nil
+	return &ResultStore{pool: pool, owned: true}, nil
+}
+
+// NewResultStore returns a store that writes into the default schema of the
+// database pool is connected to. The caller keeps the pool, and Close
+// leaves it open.
+func NewResultStore(pool *pgxpool.Pool) *ResultStore {
+	return &ResultStore{pool: pool}
 }
 
 // Save writes rep as one bench_runs row and one bench_results row per run,
@@ -114,9 +123,11 @@ func (s *ResultStore) Save(ctx context.Context, rep *JSONReport) (uuid.UUID, err
 	return run.ID, nil
 }
 
-// Close closes the store's pool.
+// Close closes the store's pool, unless the caller gave it to NewResultStore.
 func (s *ResultStore) Close() {
-	s.pool.Close()
+	if s.owned {
+		s.pool.Close()
+	}
 }
 
 // runRow returns the bench_runs row of rep.
