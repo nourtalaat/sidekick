@@ -254,8 +254,8 @@ type ListLessonsOfStrategyParams struct {
 }
 
 // ListLessonsOfStrategy returns the newest active lessons scoped to a
-// strategy alone, for the draft of a change to that strategy. It reads the
-// lessons through the index of their strategy scope.
+// strategy alone, for the draft of a change to that strategy. The strategies
+// have few such lessons, so it reads the newest active ones by date.
 func (q *Queries) ListLessonsOfStrategy(ctx context.Context, arg ListLessonsOfStrategyParams) ([]string, error) {
 	rows, err := q.db.Query(ctx, listLessonsOfStrategy, arg.Strategy, arg.MaxRows)
 	if err != nil {

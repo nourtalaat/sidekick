@@ -1972,12 +1972,15 @@ whether or not proposals are on.
   stops before a run that would pass it, and ends with the result
   `over_budget`.
 - `publicDir` is a directory with the public benchmark scenarios (see
-  [the public scenarios](benchmark.md#the-public-scenarios)), which the gate
-  uses next to the reviewed scenarios from the database. Sidekick does not
+  [the public scenarios](benchmark.md#the-public-scenarios)) that the gate
+  chooses from. It is the only source of scenarios for now, so proposals need
+  it: Sidekick logs a warning at start-up when proposals are on and it is
+  empty. Sidekick does not
   ship them in its image: mount a checkout of the repository, or just its
   `bench` directory, and set `publicDir` to `<checkout>/bench/scenarios/public`
   and `baseDir` to `<checkout>`, since the tool snapshots the scenarios name
-  are relative to it. Empty means the gate uses the reviewed scenarios alone.
+  are relative to it. Empty means the gate has no scenario, and every gate ends
+  with `no_benchmark_coverage`.
 
 The gate runs its investigations in a schema of its own in the database of
 `database.urlSecret`, and drops it at the end, so they never mix with real

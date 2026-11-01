@@ -38,9 +38,9 @@ const microsPerUSD = 1_000_000
 // idHalf is the number of bytes of a proposal ID that seed its resampling.
 const idHalf = 8
 
-// errDailyCap is returned, to retry the job later, when the day's spending
-// cap is reached. The finished runs are kept, so the gate carries on from
-// there.
+// errDailyCap is returned when the day's spending cap is reached. The job
+// moves itself to the next day; the finished runs are kept, so the gate
+// carries on from there.
 var errDailyCap = errors.New("the daily spending cap is reached")
 
 // Daily are the daily spending caps, as the investigator holds them.
@@ -164,11 +164,62 @@ func (g *Gate) Handle(ctx context.Context, job db.Job) error {
 		return nil
 	}
 
-	if err := g.run(ctx, prop); err != nil {
+	err = g.run(ctx, prop)
+	if errors.Is(err, errDailyCap) {
+		return g.moveToNextDay(ctx, job, prop.ID)
+	}
+
+	if err != nil {
 		return fmt.Errorf("gate of proposal %s: %w", prop.ID, err)
 	}
 
 	return nil
+}
+
+// moveToNextDay holds a gate that reached the day's spending cap until the
+// next day, in the time zone of the caps. The job gives up its unique key and
+// queues itself again, so the wait uses none of its attempts; the proposal
+// stays benchmarking and keeps the runs it finished.
+func (g *Gate) moveToNextDay(ctx context.Context, job db.Job, id uuid.UUID) error {
+	next := g.nextDay()
+
+	err := pgx.BeginFunc(ctx, g.opts.Pool, func(tx pgx.Tx) error {
+		if err := queue.ReleaseUniqueKey(ctx, tx, job); err != nil {
+			return fmt.Errorf("give up the unique key: %w", err)
+		}
+
+		var key string
+		if job.UniqueKey != nil {
+			key = *job.UniqueKey
+		}
+
+		_, err := queue.Enqueue(ctx, tx, queue.NewJob{Kind: queue.KindBenchGate, Payload: job.Payload, UniqueKey: key, RunAt: next, MaxAttempts: proposals.GateMaxAttempts})
+		if err != nil {
+			return fmt.Errorf("queue the job for %s: %w", next.Format("2006-01-02 15:04 MST"), err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("wait for the next day: %w", err)
+	}
+
+	g.log.InfoContext(ctx, "the gate waits for the daily spending cap", "proposal", id, "until", next.Format("2006-01-02 15:04 MST"))
+
+	return nil
+}
+
+// nextDay returns the start of the next day in the time zone of the daily
+// caps, when the cap counts a new day.
+func (g *Gate) nextDay() time.Time {
+	loc := g.opts.Daily.Location
+	if loc == nil {
+		loc = time.UTC
+	}
+
+	y, m, d := g.now().In(loc).Date()
+
+	return time.Date(y, m, d, 0, 0, 0, 0, loc).AddDate(0, 0, 1)
 }
 
 // OnDead ends the gate of a job that died, so its proposal does not wait for

@@ -426,10 +426,15 @@ func (j *DraftJob) fail(ctx context.Context, id uuid.UUID, reason string) error 
 			return nil
 		}
 
-		return j.audit.Write(ctx, tx, audit.Entry{
+		err = j.audit.Write(ctx, tx, audit.Entry{
 			ActorKind: audit.ActorSidekick, Action: ActionDraftFailed, TargetKind: KindProposal, TargetID: id.String(),
 			New: map[string]any{"reason": reason},
 		})
+		if err != nil {
+			return fmt.Errorf("audit the failed draft: %w", err)
+		}
+
+		return nil
 	})
 	if err != nil {
 		return fmt.Errorf("end the draft of proposal %s: %w", id, err)

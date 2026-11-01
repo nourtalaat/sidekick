@@ -23,6 +23,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/model/modeltest"
 	"github.com/nourtalaat/sidekick/internal/proposals"
+	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/store"
@@ -369,4 +370,22 @@ func benchSchemas(t *testing.T, pool *pgxpool.Pool) []string {
 	require.NoError(t, rows.Err())
 
 	return slices.Clone(out)
+}
+
+// claimedGateJob queues the bench_gate job of a proposal and claims it, as a
+// worker of the queue would, so the handler can give up its unique key.
+func claimedGateJob(t *testing.T, pool *pgxpool.Pool, id uuid.UUID) db.Job {
+	t.Helper()
+
+	payload, err := json.Marshal(proposals.BenchGatePayload{ProposalID: id})
+	require.NoError(t, err)
+
+	_, err = queue.Enqueue(t.Context(), pool, queue.NewJob{Kind: queue.KindBenchGate, Payload: payload, UniqueKey: proposals.BenchGateKey(id), MaxAttempts: proposals.GateMaxAttempts})
+	require.NoError(t, err)
+
+	claimed, err := db.New(pool).ClaimJobs(t.Context(), db.ClaimJobsParams{Worker: "test", LeaseSeconds: 60, Kinds: []string{queue.KindBenchGate}, Batch: 1})
+	require.NoError(t, err)
+	require.Len(t, claimed, 1)
+
+	return claimed[0]
 }

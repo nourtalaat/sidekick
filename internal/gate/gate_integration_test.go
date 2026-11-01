@@ -4,6 +4,7 @@ package gate_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/bench"
 	"github.com/nourtalaat/sidekick/internal/gate"
 	"github.com/nourtalaat/sidekick/internal/proposals"
+	"github.com/nourtalaat/sidekick/internal/queue"
 )
 
 func TestGateDecidesAProposal(t *testing.T) {
@@ -233,12 +235,28 @@ func TestGatePausesWhenTheDailyCapIsReached(t *testing.T) {
 	// spent, and the second is not.
 	e := newEnv(t, envOptions{daily: gate.Daily{MaxCostMicros: 1}})
 	id := insertProposal(t, e.pool, betterBody)
+	job := claimedGateJob(t, e.pool, id)
 
-	err := e.gate.Handle(t.Context(), jobFor(t, id))
-	require.Error(t, err, "the job fails, so the queue tries again later")
+	require.NoError(t, e.gate.Handle(t.Context(), job), "waiting for the cap is not a failure, so it uses no attempt")
+
 	require.Equal(t, proposals.StatusBenchmarking, loadProposal(t, e.pool, id).Status)
-	require.Equal(t, 1, count(t, e.pool, "SELECT count(*) FROM strategy_gate_runs"))
+	require.Equal(t, 1, count(t, e.pool, "SELECT count(*) FROM strategy_gate_runs"), "the finished run is kept")
 	require.Equal(t, 1, e.conn.investigations())
+
+	var (
+		pending int
+		runAt   time.Time
+		key     *string
+		max     int32
+	)
+
+	require.NoError(t, e.pool.QueryRow(t.Context(),
+		"SELECT count(*), coalesce(min(run_at), now()), min(unique_key), coalesce(min(max_attempts), 0) FROM jobs WHERE kind = $1 AND status = 'pending'", queue.KindBenchGate,
+	).Scan(&pending, &runAt, &key, &maxAttempts))
+	require.Equal(t, 1, pending, "one gate job waits")
+	require.Equal(t, time.Now().UTC().Truncate(24*time.Hour).Add(24*time.Hour), runAt.UTC(), "for the start of the next day")
+	require.Equal(t, new(proposals.BenchGateKey(id)), key, "under the same unique key")
+	require.Equal(t, int32(proposals.GateMaxAttempts), maxAttempts)
 }
 
 func TestGateLeavesProposalsThatAreNotWaiting(t *testing.T) {

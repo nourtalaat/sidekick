@@ -30,8 +30,9 @@ const MaxBodyBytes = strategy.MaxBodyBytes
 const MaxReasonChars = 500
 
 // GateMaxAttempts is how many times the queue tries a gate job. A gate can be
-// interrupted by a restart, a provider that is down or a day's spending cap,
-// and each try carries on from the runs the last one finished.
+// interrupted by a restart or a provider that is down, and each try carries on
+// from the runs the last one finished. A daily spending cap does not use
+// attempts: the job moves itself to the next day.
 const GateMaxAttempts = 10
 
 // gateResultPassed is the gate_result of a proposal that passed.
@@ -110,10 +111,15 @@ func (s *Service) Approve(ctx context.Context, id uuid.UUID, by strategystore.Ac
 			return fmt.Errorf("apply: %w", err)
 		}
 
-		return s.audit.Write(ctx, tx, audit.Entry{
+		err = s.audit.Write(ctx, tx, audit.Entry{
 			ActorKind: by.Kind, ActorID: by.ID, Action: ActionApproved, TargetKind: KindProposal, TargetID: id.String(),
 			Old: map[string]any{"status": p.Status}, New: approvedView(out),
 		})
+		if err != nil {
+			return fmt.Errorf("audit the approval: %w", err)
+		}
+
+		return nil
 	})
 	if err != nil {
 		return Approved{}, fmt.Errorf("approve proposal %s: %w", id, err)
@@ -159,10 +165,15 @@ func (s *Service) Reject(ctx context.Context, id uuid.UUID, by strategystore.Act
 			return fmt.Errorf("read the proposal: %w", err)
 		}
 
-		return s.audit.Write(ctx, tx, audit.Entry{
+		err = s.audit.Write(ctx, tx, audit.Entry{
 			ActorKind: by.Kind, ActorID: by.ID, Action: ActionRejected, TargetKind: KindProposal, TargetID: id.String(),
 			Old: map[string]any{"status": p.Status}, New: map[string]any{"status": StatusRejected, "reason": reason},
 		})
+		if err != nil {
+			return fmt.Errorf("audit the rejection: %w", err)
+		}
+
+		return nil
 	})
 	if err != nil {
 		return db.StrategyProposal{}, fmt.Errorf("reject proposal %s: %w", id, err)
@@ -212,10 +223,15 @@ func (s *Service) Edit(ctx context.Context, id uuid.UUID, by strategystore.Actor
 			return fmt.Errorf("read the proposal: %w", err)
 		}
 
-		return s.audit.Write(ctx, tx, audit.Entry{
+		err = s.audit.Write(ctx, tx, audit.Entry{
 			ActorKind: by.Kind, ActorID: by.ID, Action: ActionEdited, TargetKind: KindProposal, TargetID: id.String(),
 			Old: bodyView(p.Body), New: bodyView(&body),
 		})
+		if err != nil {
+			return fmt.Errorf("audit the edit: %w", err)
+		}
+
+		return nil
 	})
 	if err != nil {
 		return db.StrategyProposal{}, fmt.Errorf("edit proposal %s: %w", id, err)

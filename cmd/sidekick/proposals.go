@@ -70,11 +70,12 @@ func registerProposals(ctx context.Context, a *app.App, regs config.Registries, 
 	}
 
 	g, err := gate.New(gate.Options{
-		Pool:            a.Pool(),
-		Config:          cfg,
-		Registries:      regs,
-		DatabaseURL:     func(ctx context.Context) (string, error) { return cfg.DatabaseURL(ctx, a.Secrets()) },
-		Strategies:      strategies,
+		Pool:        a.Pool(),
+		Config:      cfg,
+		Registries:  regs,
+		DatabaseURL: func(ctx context.Context) (string, error) { return cfg.DatabaseURL(ctx, a.Secrets()) },
+		Strategies:  strategies,
+		// TODO: [SK-45] Add the reviewed scenarios with scenario.LoadReviewed once #105 merges
 		Scenarios:       gate.MergeScenarios(log, gate.FileScenarios(cfg.Bench.Gate.PublicDir, cfg.Bench.Gate.BaseDir)),
 		Daily:           gate.Daily{Location: loc, MaxCostMicros: cfg.Budgets.Daily.MaxCostMicros()},
 		Logger:          log,
@@ -86,6 +87,10 @@ func registerProposals(ctx context.Context, a *app.App, regs config.Registries, 
 
 	if err := a.RegisterJob(queue.KindBenchGate, g, queue.KindOptions{Long: true, Concurrency: 1, OnDead: g.OnDead}); err != nil {
 		return fmt.Errorf("register the benchmark gate: %w", err)
+	}
+
+	if cfg.Bench.Gate.PublicDir == "" {
+		log.WarnContext(ctx, "bench.gate.publicDir is not set, so the benchmark gate has no scenario and every proposal ends with no_benchmark_coverage")
 	}
 
 	log.InfoContext(ctx, "strategy proposals are on: a strategy version with enough wrong ratings gets a drafted change, and a benchmark gate checks it",

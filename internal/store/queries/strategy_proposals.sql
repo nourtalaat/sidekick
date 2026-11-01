@@ -158,8 +158,8 @@ DELETE FROM strategy_gate_runs WHERE proposal_id = @proposal_id;
 
 -- name: ListLessonsOfStrategy :many
 -- ListLessonsOfStrategy returns the newest active lessons scoped to a
--- strategy alone, for the draft of a change to that strategy. It reads the
--- lessons through the index of their strategy scope.
+-- strategy alone, for the draft of a change to that strategy. The strategies
+-- have few such lessons, so it reads the newest active ones by date.
 SELECT text FROM lessons
 WHERE status = 'active' AND scope_strategy = @strategy::text
   AND scope_service IS NULL AND scope_alert IS NULL AND scope_route IS NULL
