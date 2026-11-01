@@ -1,3 +1,5 @@
+//go:generate mockgen -source daily.go -destination mocks_daily.go -package daily -write_package_comment=false
+
 // Package daily enforces the daily limit of an action that creates things,
 // such as tickets. The day is the one of budgets.daily.timeZone.
 package daily
@@ -20,6 +22,16 @@ var (
 	errBadMax    = errors.New("maxPerDay must be at least 1")
 	errDailyFull = errors.New("daily limit reached")
 )
+
+// Limiter checks the daily limit of an action. Counter implements it;
+// actions take a Limiter so their tests can stand one in.
+type Limiter interface {
+	// Check returns an error wrapping action.ErrLimit when the proposal may
+	// not run because maxPerDay uses of the action are taken today.
+	Check(ctx context.Context, actionName, proposalID string, maxPerDay int) error
+}
+
+var _ Limiter = Counter{}
 
 // Counter counts the uses of an action against its daily limit.
 type Counter struct {
