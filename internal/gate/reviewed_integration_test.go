@@ -51,7 +51,7 @@ func TestGateChoosesReviewedScenarios(t *testing.T) {
 
 	// The covering scenarios of the other tests, kept as the export keeps
 	// them: relative snapshot paths, found again through the base directory.
-	reviewed := coveringScenarios(t, 2)
+	reviewed := coveringScenarios(t, testScenarios)
 	draft := coveringScenarios(t, 1)[0]
 	draft.ID = "draft-scenario"
 
@@ -70,8 +70,9 @@ func TestGateChoosesReviewedScenarios(t *testing.T) {
 	require.NoError(t, e.gate.Handle(t.Context(), jobFor(t, id)))
 
 	p := loadProposal(t, e.pool, id)
-	require.Equal(t, proposals.StatusPassed, p.Status)
-
 	d := detailOf(t, p)
-	require.Len(t, d.Scenarios, 2, "the two reviewed scenarios, not the draft")
+
+	require.Equal(t, bench.GatePassed, d.Result, "reason: %s, error: %s", d.Reason, d.Error)
+	require.Equal(t, proposals.StatusPassed, p.Status)
+	require.Len(t, d.Scenarios, testScenarios, "the reviewed scenarios, not the draft")
 }
