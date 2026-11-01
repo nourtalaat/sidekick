@@ -185,6 +185,15 @@ func (s *Service) run(ctx context.Context, row db.ActionProposal, route string) 
 		return s.fail(ctx, row, "The config does not allow this any more: "+reason+". Propose it again if it is still needed.")
 	}
 
+	if row.UndoOf != nil {
+		undoCtx, cancel := context.WithTimeout(ctx, ExecuteTimeout)
+		defer cancel()
+
+		res, err := s.performUndo(undoCtx, row)
+
+		return s.settle(ctx, row, res, err)
+	}
+
 	a := s.opts.Actions[row.Action]
 
 	if err := s.validate(ctx, a, row); err != nil {
@@ -212,6 +221,13 @@ func (s *Service) run(ctx context.Context, row db.ActionProposal, route string) 
 		Snapshot:        snap,
 	})
 
+	return s.settle(ctx, row, res, err)
+}
+
+// settle ends the proposal from what the action returned, or keeps it for
+// another attempt. It returns an error only when the job should be tried
+// again.
+func (s *Service) settle(ctx context.Context, row db.ActionProposal, res action.Result, err error) error {
 	switch {
 	case err == nil:
 		return s.succeed(ctx, row, res)
@@ -221,11 +237,7 @@ func (s *Service) run(ctx context.Context, row db.ActionProposal, route string) 
 		return s.fail(ctx, row, s.errorText(err))
 	}
 
-	if rerr := db.New(s.opts.Pool).RecordActionAttemptError(ctx, db.RecordActionAttemptErrorParams{ID: row.ID, Error: new(s.errorText(err))}); rerr != nil {
-		s.log.WarnContext(ctx, "could not keep the error of a failed attempt", "proposal_id", row.ID.String(), "error", rerr.Error())
-	}
-
-	s.log.WarnContext(ctx, "action attempt failed; it is tried again", "proposal_id", row.ID.String(), "action", row.Action)
+	s.keepAttemptError(ctx, row, err)
 
 	return fmt.Errorf("execute: %w", err)
 }
@@ -268,6 +280,7 @@ func (s *Service) finish(ctx context.Context, id uuid.UUID, status action.Propos
 	var (
 		row     db.ActionProposal
 		changed bool
+		undone  bool
 	)
 
 	err := pgx.BeginFunc(ctx, s.opts.Pool, func(tx pgx.Tx) error {
@@ -298,6 +311,12 @@ func (s *Service) finish(ctx context.Context, id uuid.UUID, status action.Propos
 			return fmt.Errorf("write the audit entry: %w", err)
 		}
 
+		if status == action.StatusSucceeded && row.UndoOf != nil {
+			if undone, err = s.markUndone(ctx, tx, row); err != nil {
+				return fmt.Errorf("mark the proposal undone: %w", err)
+			}
+		}
+
 		if err := publish.Refresh(ctx, tx, row.InvestigationID); err != nil {
 			return fmt.Errorf("show the result: %w", err)
 		}
@@ -306,6 +325,10 @@ func (s *Service) finish(ctx context.Context, id uuid.UUID, status action.Propos
 	})
 	if err != nil {
 		return fmt.Errorf("end proposal %s as %s: %w", id, status, err)
+	}
+
+	if undone {
+		s.opts.Metrics.reached(row.Action, action.StatusUndone)
 	}
 
 	if changed {
