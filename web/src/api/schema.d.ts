@@ -1250,7 +1250,12 @@ export interface paths {
          *     buckets of growing width, so it is about right (within a third),
          *     not exact. The downtime is the time from the first event of a group
          *     to the last recovery of its watchers, for groups whose watchers all
-         *     recovered. Actions are 0 until actions exist.
+         *     recovered. The actions of an investigation count in its hour:
+         *     `actionsProposed` is every proposal; `actionsApproved` is those a
+         *     person or the policy approved, which are approved, executing,
+         *     succeeded and undone ones and failed ones that have a decision, so
+         *     not rejected or expired ones; `actionsExecuted` is those that ran
+         *     and succeeded, which includes the undone ones.
          */
         get: operations["GetOperationsStats"];
         put?: never;

@@ -23,6 +23,8 @@ const (
 	// pathFence is the fence of the run in the cases that have one.
 	pathFence = 7
 
+	pathProposal = "0192d3a4-0000-7000-8000-0000000000a1"
+
 	// The marks of the investigation, created on 2026-10-26 at 14:00:01 UTC.
 	markStats   = "stats_hourly 2026-10-26 14:00"
 	markQuality = "quality_daily 2026-10-26 00:00"
@@ -51,6 +53,17 @@ func TestEveryPathThatChangesACountedValueMarksItsBuckets(t *testing.T) {
 		passes_to_recover, check_timeout_s, status, started_at, deadline)
 		VALUES ('` + pathWatcher + `', '` + pathGroup + `', '` + pathInvestigation + `', 'health', 'model', 'alert', '{}', 30, 2, 10,
 		'running', now(), now() + interval '1 hour')`
+
+	proposalIn := func(status, expires string) string {
+		return `INSERT INTO action_proposals (id, investigation_id, action, params, mode, status, idempotency_key, proposed_at, expires_at)
+			VALUES ('` + pathProposal + `', '` + pathInvestigation + `', 'note', '{}', 'approved', '` + status + `', 'key-1', now(), ` + expires + `)`
+	}
+	proposalOpen := proposalIn("proposed", "now() + interval '1 hour'")
+	proposalApproved := proposalIn("approved", "now() + interval '1 hour'")
+	proposalExecuting := proposalIn("executing", "now() + interval '1 hour'")
+	proposalPastExpiry := proposalIn("proposed", "now() - interval '1 hour'")
+	proposalID := uuid.MustParse(pathProposal)
+	attemptError := "the service answered 503"
 
 	tests := []struct {
 		name    string
@@ -252,6 +265,73 @@ func TestEveryPathThatChangesACountedValueMarksItsBuckets(t *testing.T) {
 			prepare: []string{startedWatcher},
 			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				_, err := q.EndWatcher(ctx, db.EndWatcherParams{ID: watcher, Status: "recovered", At: time.Now()})
+				require.NoError(t, err)
+			},
+			want: []string{markStats},
+		},
+		{
+			name: "the investigator proposes an action",
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
+				_, err := q.InsertActionProposal(ctx, db.InsertActionProposalParams{
+					ID: proposalID, InvestigationID: id, Action: "note", Params: report, Mode: "approved",
+					IdempotencyKey: "key-1", ProposedAt: time.Now(), ExpiresAt: time.Now().Add(time.Hour),
+				})
+				require.NoError(t, err)
+			},
+			want: []string{markStats},
+		},
+		{
+			name:    "a person approves the proposal",
+			prepare: []string{proposalOpen},
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
+				_, err := q.DecideActionProposal(ctx, db.DecideActionProposalParams{
+					Status: "approved", DecidedBySlackUser: &slackUser, Now: time.Now(), ID: proposalID,
+				})
+				require.NoError(t, err)
+			},
+			want: []string{markStats},
+		},
+		{
+			name:    "a person rejects the proposal",
+			prepare: []string{proposalOpen},
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
+				_, err := q.DecideActionProposal(ctx, db.DecideActionProposalParams{
+					Status: "rejected", DecidedBySlackUser: &slackUser, Now: time.Now(), ID: proposalID,
+				})
+				require.NoError(t, err)
+			},
+			want: []string{markStats},
+		},
+		{
+			name:    "nobody decides before the proposal expires",
+			prepare: []string{proposalPastExpiry},
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
+				_, err := q.ExpireActionProposals(ctx, db.ExpireActionProposalsParams{Now: time.Now(), Batch: 10})
+				require.NoError(t, err)
+			},
+			want: []string{markStats},
+		},
+		{
+			name:    "the action starts to run",
+			prepare: []string{proposalApproved},
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
+				_, err := q.StartActionExecution(ctx, proposalID)
+				require.NoError(t, err)
+			},
+			want: []string{markStats},
+		},
+		{
+			name:    "an attempt of the action fails and will be retried",
+			prepare: []string{proposalExecuting},
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
+				require.NoError(t, q.RecordActionAttemptError(ctx, db.RecordActionAttemptErrorParams{Error: &attemptError, ID: proposalID}))
+			},
+		},
+		{
+			name:    "the action ends",
+			prepare: []string{proposalExecuting},
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
+				_, err := q.FinishActionExecution(ctx, db.FinishActionExecutionParams{Status: "succeeded", Now: time.Now(), ID: proposalID})
 				require.NoError(t, err)
 			},
 			want: []string{markStats},

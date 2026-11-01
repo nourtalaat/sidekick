@@ -25,8 +25,8 @@ const (
 // TestQueryPlans runs EXPLAIN ANALYZE on each query of the rollup job over
 // a year of investigations, and checks that none reads a table whole except
 // the small ones. The recounts find the investigations of a bucket through
-// the index on created_at, and their events, watchers and
-// ratings through the foreign key indexes. Run with -v to see the plans.
+// the index on created_at, and their events, watchers, ratings and action
+// proposals through the foreign key indexes. Run with -v to see the plans.
 func TestQueryPlans(t *testing.T) {
 	t.Parallel()
 
@@ -63,7 +63,7 @@ func TestQueryPlans(t *testing.T) {
 			before: func(ctx context.Context, t *testing.T, q *db.Queries) {
 				require.NoError(t, q.DeleteStatsHourly(ctx, hours))
 			},
-			wantIndex: []string{"investigations_created", "events_group", "watchers_group_name"},
+			wantIndex: []string{"investigations_created", "events_group", "watchers_group_name", "action_proposals_investigation"},
 		},
 		{
 			name: "RecountQualityDaily",
@@ -112,7 +112,7 @@ func TestQueryPlans(t *testing.T) {
 				require.Contains(t, explain.Plan, index)
 			}
 
-			for _, table := range []string{"investigations", "events", "watchers", "feedback"} {
+			for _, table := range []string{"investigations", "events", "watchers", "feedback", "action_proposals"} {
 				require.NotContains(t, explain.Plan, "Seq Scan on "+table)
 			}
 		})
