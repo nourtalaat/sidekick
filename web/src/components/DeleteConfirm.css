@@ -1,0 +1,28 @@
+.sk-delete-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-2);
+  padding: var(--sk-space-4);
+  background: var(--sk-bg-sunken);
+  border: 1px solid var(--sk-border-strong);
+  border-radius: var(--sk-radius-md);
+}
+
+.sk-delete-confirm__question {
+  margin: 0;
+  font: var(--sk-type-label);
+}
+
+.sk-delete-confirm__text {
+  color: var(--sk-text-secondary);
+}
+
+.sk-delete-confirm__text > p {
+  margin: 0;
+}
+
+.sk-delete-confirm__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sk-space-2);
+}
