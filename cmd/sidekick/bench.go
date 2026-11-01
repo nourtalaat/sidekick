@@ -69,6 +69,7 @@ func newBenchCmd(regs config.Registries) *cobra.Command {
 	cmd.AddCommand(newBenchValidateCmd(regs))
 	cmd.AddCommand(newBenchJudgeCheckCmd(regs))
 	cmd.AddCommand(newBenchCompareCmd())
+	cmd.AddCommand(newBenchExportCmd(regs))
 
 	return cmd
 }

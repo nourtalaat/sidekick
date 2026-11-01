@@ -6,6 +6,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/app"
 	"github.com/nourtalaat/sidekick/internal/audit"
+	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/model/instrument"
 	"github.com/nourtalaat/sidekick/internal/model/pricing"
@@ -61,18 +62,7 @@ func newSummarizer(a *app.App, modelMetrics *instrument.Metrics) (*summarize.Cal
 		return summarize.New(summarize.Options{}), nil
 	}
 
-	loc, err := cfg.Budgets.Daily.Location()
-	if err != nil {
-		return nil, fmt.Errorf("set up the daily caps: %w", err)
-	}
-
-	routeCaps := make(map[string]int64, len(cfg.Routes))
-	for _, r := range cfg.Routes {
-		routeCaps[r.Name] = r.Budgets.Daily.MaxCostMicros()
-	}
-
 	prices := pricing.New(cfg.Model.PriceTable())
-	settings := a.Instances().ModelSettings[name]
 
 	wrapped := instrument.Wrap(conn, instrument.Options{
 		Connector: name,
@@ -82,9 +72,31 @@ func newSummarizer(a *app.App, modelMetrics *instrument.Metrics) (*summarize.Cal
 		Tracer:    a.Telemetry().TracerProvider().Tracer(instrument.TracerName),
 	})
 
-	return summarize.New(summarize.Options{
-		Name: name, Connector: wrapped, Model: settings.Model, Prices: prices, Retries: settings.Retries,
-		Daily:  summarize.Daily{Location: loc, MaxCostMicros: cfg.Budgets.Daily.MaxCostMicros(), RouteMicros: routeCaps},
-		Logger: a.Logger().With("component", "summarize"),
-	}), nil
+	opts, err := summarizeOptions(cfg, name, wrapped, a.Instances().ModelSettings[name], prices)
+	if err != nil {
+		return nil, err
+	}
+
+	opts.Logger = a.Logger().With("component", "summarize")
+
+	return summarize.New(opts), nil
+}
+
+// summarizeOptions are the options of the caller of the connector name of
+// the summarize role, with the config's daily caps.
+func summarizeOptions(cfg *config.Config, name string, conn model.Connector, settings model.Settings, prices pricing.Table) (summarize.Options, error) {
+	loc, err := cfg.Budgets.Daily.Location()
+	if err != nil {
+		return summarize.Options{}, fmt.Errorf("set up the daily caps: %w", err)
+	}
+
+	routeCaps := make(map[string]int64, len(cfg.Routes))
+	for _, r := range cfg.Routes {
+		routeCaps[r.Name] = r.Budgets.Daily.MaxCostMicros()
+	}
+
+	return summarize.Options{
+		Name: name, Connector: conn, Model: settings.Model, Prices: prices, Retries: settings.Retries,
+		Daily: summarize.Daily{Location: loc, MaxCostMicros: cfg.Budgets.Daily.MaxCostMicros(), RouteMicros: routeCaps},
+	}, nil
 }
