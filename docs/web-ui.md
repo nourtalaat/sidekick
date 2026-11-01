@@ -579,7 +579,10 @@ same buttons for approvers.
   `status` (repeat it for several, default `proposed`), `cursor` and
   `limit`.
 - `POST /api/v1/proposals/{id}/approve` and `/reject` (approver) decide a
-  proposal. The 409 answers have a `code`: `expired`, `decided` (the detail
+  proposal. Only a person who is signed in approves; an API token answers
+  403 to an approval, because a script that holds a token could otherwise
+  approve every proposal. A token with the approver role can list the queue
+  and reject. The 409 answers have a `code`: `expired`, `decided` (the detail
   says who decided) or `not_allowed`.
 - `GET /api/v1/investigations/{id}` has a `proposals` list.
 
