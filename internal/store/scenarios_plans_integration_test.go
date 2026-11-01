@@ -163,6 +163,15 @@ FROM generate_series(1, $4) AS i`, planScenarios, planGroups, groupID, planScena
 			wantIndex: []string{"scenarios_pkey"},
 		},
 		{
+			name: "ListUserNames",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListUserNames(ctx, []uuid.UUID{userID})
+
+				return explained(err)
+			},
+			wantIndex: []string{"users_pkey"},
+		},
+		{
 			name: "GetFirstAlertEventOfGroup",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.GetFirstAlertEventOfGroup(ctx, groupID)

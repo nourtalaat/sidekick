@@ -11,6 +11,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/auth"
 	"github.com/nourtalaat/sidekick/internal/feedback"
 	"github.com/nourtalaat/sidekick/internal/memory"
+	"github.com/nourtalaat/sidekick/internal/model/instrument"
 	"github.com/nourtalaat/sidekick/internal/rules"
 )
 
@@ -18,7 +19,7 @@ import (
 // under /api/v1 on the main listener, when the config has an oidc
 // section. Without it, neither is served. memorySync says how feedback that
 // changes a confirmed verdict syncs the investigation's memory entry.
-func registerAPI(ctx context.Context, a *app.App, memorySync memory.SyncOptions) error {
+func registerAPI(ctx context.Context, a *app.App, memorySync memory.SyncOptions, modelMetrics *instrument.Metrics) error {
 	cfg := a.Config()
 	log := a.Logger().With("component", "api")
 
@@ -56,20 +57,26 @@ func registerAPI(ctx context.Context, a *app.App, memorySync memory.SyncOptions)
 		return fmt.Errorf("set up the watcher actions of the API: %w", err)
 	}
 
+	scenarios, err := newScenarioService(ctx, a, modelMetrics)
+	if err != nil {
+		return fmt.Errorf("set up scenario export: %w", err)
+	}
+
 	handler, err := api.New(api.Options{
-		Auth:     sessions,
-		Tokens:   sessions,
-		Config:   cfg,
-		Rules:    rules.NewStore(a.Pool(), cfg),
-		Redactor: a.Redactor(),
-		Pool:     a.Pool(),
-		Audit:    audit.NewWriter(),
-		Hub:      hub,
-		Feedback: feedbackMetrics,
-		Memory:   memorySync,
-		Stopper:  stopper,
-		Watchers: recorder,
-		Logger:   log,
+		Auth:      sessions,
+		Tokens:    sessions,
+		Config:    cfg,
+		Rules:     rules.NewStore(a.Pool(), cfg),
+		Redactor:  a.Redactor(),
+		Pool:      a.Pool(),
+		Audit:     audit.NewWriter(),
+		Hub:       hub,
+		Feedback:  feedbackMetrics,
+		Memory:    memorySync,
+		Stopper:   stopper,
+		Watchers:  recorder,
+		Scenarios: scenarios,
+		Logger:    log,
 	})
 	if err != nil {
 		return fmt.Errorf("set up the API: %w", err)

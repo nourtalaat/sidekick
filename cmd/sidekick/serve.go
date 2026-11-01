@@ -109,7 +109,7 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
-	if err := registerAPI(ctx, a, memory.SyncOptions{Embed: vectors != nil}); err != nil {
+	if err := registerAPI(ctx, a, memory.SyncOptions{Embed: vectors != nil}, modelMetrics); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 

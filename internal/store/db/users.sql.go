@@ -79,6 +79,37 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (User, e
 	return i, err
 }
 
+const listUserNames = `-- name: ListUserNames :many
+SELECT id, name FROM users WHERE id = ANY ($1::uuid[])
+`
+
+type ListUserNamesRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+// ListUserNames returns the name of each user with one of ids. An ID that
+// is not a user is left out.
+func (q *Queries) ListUserNames(ctx context.Context, ids []uuid.UUID) ([]ListUserNamesRow, error) {
+	rows, err := q.db.Query(ctx, listUserNames, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserNamesRow
+	for rows.Next() {
+		var i ListUserNamesRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockUserBySubject = `-- name: LockUserBySubject :one
 SELECT id, oidc_issuer, oidc_subject, email, name, groups, role, created_at, last_login_at FROM users
 WHERE oidc_issuer = $1 AND oidc_subject = $2

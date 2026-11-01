@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,9 +39,25 @@ var (
 	// ErrAlreadyReviewed means the scenario is reviewed at that revision
 	// already.
 	ErrAlreadyReviewed = errors.New("the scenario is reviewed already")
-	// ErrInvalid wraps the problems of a scenario file an editor saved.
+	// ErrInvalid is matched by *InvalidError.
 	ErrInvalid = errors.New("invalid scenario")
 )
+
+// InvalidError lists the problems of a scenario file an editor saved, one
+// per line as "<field>: <problem>".
+type InvalidError struct {
+	Problems []string
+}
+
+// Error lists the problems.
+func (e *InvalidError) Error() string {
+	return "invalid scenario: " + strings.Join(e.Problems, "; ")
+}
+
+// Is matches ErrInvalid.
+func (e *InvalidError) Is(target error) bool {
+	return target == ErrInvalid
+}
 
 // Actor is who makes a change, for the audit log.
 type Actor struct {
@@ -127,7 +144,7 @@ func (s *Service) Update(ctx context.Context, id string, revision int32, body []
 	}
 
 	if sc.ID != id {
-		return db.Scenario{}, fmt.Errorf("%w: id: it is %q and cannot change", ErrInvalid, id)
+		return db.Scenario{}, &InvalidError{Problems: []string{fmt.Sprintf("id: it is %q and cannot change", id)}}
 	}
 
 	var row db.Scenario
@@ -171,7 +188,7 @@ func (s *Service) Review(ctx context.Context, id string, revision int32, checked
 			return ErrStale
 		}
 
-		if current.Status == statusReviewed {
+		if current.Status == StatusReviewed {
 			return ErrAlreadyReviewed
 		}
 
@@ -406,12 +423,14 @@ func (s *Service) input(ctx context.Context, q *db.Queries, inv db.Investigation
 func (s *Service) check(body []byte) (bench.Scenario, error) {
 	sc, err := bench.ParseScenario(body)
 	if err != nil {
-		return bench.Scenario{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+		_, lines, _ := strings.Cut(err.Error(), ":\n")
+
+		return bench.Scenario{}, &InvalidError{Problems: strings.Split(lines, "\n")}
 	}
 
 	var doc yaml.Node
 	if err := yaml.Unmarshal(body, &doc); err != nil {
-		return bench.Scenario{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+		return bench.Scenario{}, &InvalidError{Problems: []string{"invalid YAML: " + err.Error()}}
 	}
 
 	if err := s.cleaner.Check(&doc); err != nil {

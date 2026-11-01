@@ -11,8 +11,11 @@ import (
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
-// statusReviewed is the status of a scenario that can be run or downloaded.
-const statusReviewed = "reviewed"
+// The statuses of a scenario. Only a reviewed one can be run or downloaded.
+const (
+	StatusDraft    = "draft"
+	StatusReviewed = "reviewed"
+)
 
 // pathPrefix starts the Path of a scenario read from the database.
 const pathPrefix = "scenario:"
