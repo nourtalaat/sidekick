@@ -8,6 +8,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/rollup"
+	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
@@ -51,7 +52,7 @@ func (s *server) GetOperationsStats(ctx context.Context, req apigen.GetOperation
 		return nil, problemf(http.StatusBadRequest, "An interval of an hour needs a range of at most %d days.", maxHourlyDays)
 	}
 
-	q := db.New(customPlan{db: s.pool})
+	q := db.New(store.CustomPlan{DB: s.pool})
 
 	series, err := operationsSeries(ctx, q, w, f, string(interval))
 	if err != nil {
