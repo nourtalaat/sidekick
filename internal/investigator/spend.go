@@ -73,7 +73,7 @@ func (h *Handler) today() pgtype.Date {
 // starts at zero even for a route with nothing running.
 type spendCollector struct {
 	pool   *pgxpool.Pool
-	routes []string
+	routes func() []string
 	today  func() pgtype.Date
 	log    *slog.Logger
 	desc   *prometheus.Desc
@@ -100,8 +100,8 @@ func (c *spendCollector) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	spent := make(map[string]int64, len(c.routes))
-	for _, route := range c.routes {
+	spent := make(map[string]int64)
+	for _, route := range c.routes() {
 		spent[route] = 0
 	}
 
@@ -118,7 +118,7 @@ func (c *spendCollector) Collect(ch chan<- prometheus.Metric) {
 func newSpendCollector(h *Handler) *spendCollector {
 	return &spendCollector{
 		pool:   h.opts.Pool,
-		routes: slices.Sorted(maps.Keys(h.opts.Routes)),
+		routes: h.opts.Routes.Names,
 		today:  h.today,
 		log:    h.log,
 		desc: prometheus.NewDesc(MetricDailySpend, "What each route's investigations have spent today on model calls, in US dollars, "+

@@ -5,15 +5,17 @@ import (
 	"log/slog"
 
 	"github.com/nourtalaat/sidekick/internal/app"
+	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/rollup"
+	"github.com/nourtalaat/sidekick/internal/rules"
 )
 
 // registerRollup registers the rollup job, which keeps the dashboard's
 // tables up to date, the task that enqueues it every minute in every
 // replica, and the task that exports the dashboard's numbers as metrics in
 // every replica.
-func registerRollup(a *app.App) error {
+func registerRollup(a *app.App, cache *rules.Cache) error {
 	metrics, err := rollup.NewMetrics(a.Telemetry().Registry())
 	if err != nil {
 		return fmt.Errorf("set up the rollup metrics: %w", err)
@@ -32,12 +34,12 @@ func registerRollup(a *app.App) error {
 		return fmt.Errorf("register the rollup schedule: %w", err)
 	}
 
-	return registerDashboardMetrics(a, log)
+	return registerDashboardMetrics(a, cache, log)
 }
 
 // registerDashboardMetrics registers the task that reads the dashboard's
 // numbers from the rollup tables once a minute and serves them on /metrics.
-func registerDashboardMetrics(a *app.App, log *slog.Logger) error {
+func registerDashboardMetrics(a *app.App, cache *rules.Cache, log *slog.Logger) error {
 	cfg := a.Config()
 
 	loc, err := cfg.Budgets.Daily.Location()
@@ -45,18 +47,10 @@ func registerDashboardMetrics(a *app.App, log *slog.Logger) error {
 		return fmt.Errorf("set up the daily caps for the dashboard metrics: %w", err)
 	}
 
-	routeCaps := map[string]int64{}
-
-	for _, r := range cfg.Routes {
-		if micros := r.Budgets.Daily.MaxCostMicros(); micros > 0 {
-			routeCaps[r.Name] = micros
-		}
-	}
-
 	dashboard, err := rollup.NewDashboard(a.Telemetry().Registry(), rollup.DashboardOptions{
 		Pool:            a.Pool(),
 		Location:        loc,
-		RouteCapsMicros: routeCaps,
+		RouteCaps:       func() map[string]int64 { return routeCaps(cache.Current().RouteConfigs()) },
 		GlobalCapMicros: cfg.Budgets.Daily.MaxCostMicros(),
 		Logger:          log,
 	})
@@ -69,4 +63,18 @@ func registerDashboardMetrics(a *app.App, log *slog.Logger) error {
 	}
 
 	return nil
+}
+
+// routeCaps returns the daily cap of each of routes that has one, in
+// micro-dollars.
+func routeCaps(routes []config.Route) map[string]int64 {
+	caps := map[string]int64{}
+
+	for _, r := range routes {
+		if micros := r.Budgets.Daily.MaxCostMicros(); micros > 0 {
+			caps[r.Name] = micros
+		}
+	}
+
+	return caps
 }
