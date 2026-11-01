@@ -81,8 +81,6 @@ func newTestSource(t *testing.T, edit func(*Config)) (*Source, fakeAPIs) {
 		api.ExpectAllCalled()
 	}
 
-	watchCloses(apis.logs.Client())
-
 	cfg := Config{
 		Accounts:  []Account{{ID: testAccount}},
 		Regions:   []string{testRegion},

@@ -45,4 +45,4 @@ jobs:
       - name: Run the long result test
         env:
           COUNT: ${{ matrix.count }}
-        run: go test -race -count="$COUNT" -run 'TestSourceCallCutsLongResults|TestQueryLogsStopsTheQueryInTime' ./internal/source/aws
+        run: go test -race -count="$COUNT" -run 'TestSourceCallCutsLongResults|TestQueryLogsStopsTheQueryInTime|TestLimitTransportSurvivesAClosedRequestBody|TestWithPlainBody' ./internal/source/aws
