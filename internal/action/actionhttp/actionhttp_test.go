@@ -113,3 +113,37 @@ func TestDoReportsATransportFailure(t *testing.T) {
 func isPermanent(err error) bool {
 	return errors.Is(err, action.ErrPermanent)
 }
+
+func TestCheckURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		raw     string
+		wantErr string
+	}{
+		{name: "https", raw: "https://api.linear.app/graphql"},
+		{name: "http on localhost", raw: "http://localhost:8080/x"},
+		{name: "http on a loopback address", raw: "http://127.0.0.1:9000"},
+		{name: "http on another host", raw: "http://api.example.com", wantErr: "apiURL: must use https; plain http is only allowed for localhost"},
+		{name: "a user name", raw: "https://user:pw@api.example.com", wantErr: "apiURL: must not hold a user name or password; use the action's secret instead"},
+		{name: "no host", raw: "https://", wantErr: "apiURL: must be an absolute https URL"},
+		{name: "a relative URL", raw: "/graphql", wantErr: "apiURL: must be an absolute https URL"},
+		{name: "another scheme", raw: "ftp://example.com", wantErr: "apiURL: must be an absolute https URL"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := CheckURL("apiURL", tt.raw)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+
+				return
+			}
+
+			require.EqualError(t, err, tt.wantErr)
+		})
+	}
+}
