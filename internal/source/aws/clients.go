@@ -95,7 +95,7 @@ func (e *credentialError) Unwrap() error {
 
 // RoundTrip implements http.RoundTripper.
 func (t limitTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	resp, err := t.next.RoundTrip(withPlainBody(req))
+	resp, err := t.next.RoundTrip(req)
 	if err != nil {
 		return nil, fmt.Errorf("send request: %w", err)
 	}
