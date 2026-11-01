@@ -39,8 +39,14 @@ SELECT md5('inv' || i)::uuid, 'svc-' || (i % 100), 'Alert' || (i % 50), 'fp-' ||
        i % 10 = 0
 FROM generate_series(1, 20000) AS i;
 
-INSERT INTO service_notes (service, text, updated_at)
-SELECT 'svc-' || i, 'Notes about svc-' || i, '2026-10-26 00:00:00+00'
+INSERT INTO users (id, oidc_issuer, oidc_subject, name, role, created_at, last_login_at)
+SELECT md5('user' || i)::uuid, 'https://idp.example.com', 'sub-' || i, 'User ' || i, 'admin',
+       '2026-10-01 00:00:00+00', '2026-10-01 00:00:00+00'
 FROM generate_series(1, 1000) AS i;
 
-ANALYZE event_groups, events, investigations, memory_entries, service_notes;
+-- Every other service's notes were written by a user; the others by a token.
+INSERT INTO service_notes (service, text, updated_by, updated_at)
+SELECT 'svc-' || i, 'Notes about svc-' || i, CASE WHEN i % 2 = 0 THEN md5('user' || i)::uuid END, '2026-10-26 00:00:00+00'
+FROM generate_series(1, 1000) AS i;
+
+ANALYZE event_groups, events, investigations, memory_entries, service_notes, users;

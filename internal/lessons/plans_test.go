@@ -129,6 +129,43 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"lessons_status_created"},
 		},
 		{
+			name: "ListLessonsOfEveryStatus",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListLessons(ctx, db.ListLessonsParams{PageSize: 51})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"lessons_created", "feedback_pkey"},
+		},
+		{
+			name: "ListLessonsOfEveryStatusAfterACursor",
+			run: func(ctx context.Context, q *db.Queries) error {
+				at, id := time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC), md5UUID(t, pool, "lesson5100")
+				_, err := q.ListLessons(ctx, db.ListLessonsParams{AfterAt: &at, AfterID: &id, PageSize: 51})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"lessons_created"},
+		},
+		{
+			name: "ListLessonsOfAService",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListLessons(ctx, db.ListLessonsParams{Service: new("svc-7"), PageSize: 51})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"lessons_service_created", "feedback_pkey"},
+		},
+		{
+			name: "ListLessonsWithWords",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListLessons(ctx, db.ListLessonsParams{Search: new("4242"), PageSize: 51})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"lessons_search_all"},
+		},
+		{
 			name: "GetLesson",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.GetLesson(ctx, md5UUID(t, pool, "lesson5100"))
