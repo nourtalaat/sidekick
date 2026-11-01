@@ -42,8 +42,11 @@ CREATE TABLE action_proposals (
 
 -- Finding the proposals that have expired.
 CREATE INDEX action_proposals_expiry ON action_proposals (expires_at) WHERE status = 'proposed';
--- Listing the review queue by status, newest first.
+-- Listing the review queue newest first: by status when few proposals have
+-- it, such as those that wait for a decision, and by time alone when most
+-- do, such as the decided ones.
 CREATE INDEX action_proposals_status_proposed ON action_proposals (status, proposed_at DESC, id DESC);
+CREATE INDEX action_proposals_proposed_at ON action_proposals (proposed_at DESC, id DESC);
 -- The proposals of one investigation, and the foreign key.
 CREATE INDEX action_proposals_investigation ON action_proposals (investigation_id, proposed_at);
 

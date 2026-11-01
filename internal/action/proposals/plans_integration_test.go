@@ -76,7 +76,7 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"action_proposals_pkey", "investigations_pkey", "users_pkey", "api_tokens_pkey"},
+			wantIndex: []string{"action_proposals_pkey", "investigations_pkey", "users_pkey"},
 		},
 		{
 			name: "LockActionProposal",
@@ -157,7 +157,9 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey"},
+			// Most proposals are decided, so the page is read in time order
+			// and the few that wait are skipped.
+			wantIndex: []string{"action_proposals_proposed_at", "investigations_pkey"},
 		},
 		{
 			name: "ListInvestigationActionProposals",

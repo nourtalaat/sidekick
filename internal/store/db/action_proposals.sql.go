@@ -205,14 +205,13 @@ func (q *Queries) GetActionProposal(ctx context.Context, id uuid.UUID) (ActionPr
 const getActionProposalView = `-- name: GetActionProposalView :one
 SELECT
   p.id, p.investigation_id, p.action, p.params, p.reason, p.mode, p.status, p.idempotency_key, p.proposed_at, p.expires_at, p.decided_by, p.decided_by_slack_user, p.decided_at, p.executed_at, p.result, p.error,
-  i.route,
-  coalesce(i.alert_title, '')::text AS alert_title,
+  (SELECT i.route FROM investigations i WHERE i.id = p.investigation_id)::text AS route,
+  coalesce((SELECT i.alert_title FROM investigations i WHERE i.id = p.investigation_id), '')::text AS alert_title,
   coalesce(
     (SELECT u.name FROM users u WHERE u.id = p.decided_by),
     (SELECT t.name FROM api_tokens t WHERE t.id = p.decided_by),
     '')::text AS decided_by_name
 FROM action_proposals p
-JOIN investigations i ON i.id = p.investigation_id
 WHERE p.id = $1
 `
 
@@ -224,7 +223,9 @@ type GetActionProposalViewRow struct {
 }
 
 // GetActionProposalView returns a proposal with the route and title of its
-// investigation and the name of who decided it.
+// investigation and the name of who decided it. These are read by primary
+// key for each row returned, after the page is cut, so a page costs the
+// same however many investigations and users there are.
 func (q *Queries) GetActionProposalView(ctx context.Context, id uuid.UUID) (GetActionProposalViewRow, error) {
 	row := q.db.QueryRow(ctx, getActionProposalView, id)
 	var i GetActionProposalViewRow
@@ -315,14 +316,13 @@ func (q *Queries) InsertActionProposal(ctx context.Context, arg InsertActionProp
 const listActionProposals = `-- name: ListActionProposals :many
 SELECT
   p.id, p.investigation_id, p.action, p.params, p.reason, p.mode, p.status, p.idempotency_key, p.proposed_at, p.expires_at, p.decided_by, p.decided_by_slack_user, p.decided_at, p.executed_at, p.result, p.error,
-  i.route,
-  coalesce(i.alert_title, '')::text AS alert_title,
+  (SELECT i.route FROM investigations i WHERE i.id = p.investigation_id)::text AS route,
+  coalesce((SELECT i.alert_title FROM investigations i WHERE i.id = p.investigation_id), '')::text AS alert_title,
   coalesce(
     (SELECT u.name FROM users u WHERE u.id = p.decided_by),
     (SELECT t.name FROM api_tokens t WHERE t.id = p.decided_by),
     '')::text AS decided_by_name
 FROM action_proposals p
-JOIN investigations i ON i.id = p.investigation_id
 WHERE p.status = ANY ($1::text[])
   AND (p.proposed_at, p.id) < ($2::timestamptz, $3::uuid)
 ORDER BY p.proposed_at DESC, p.id DESC
@@ -393,14 +393,13 @@ func (q *Queries) ListActionProposals(ctx context.Context, arg ListActionProposa
 const listInvestigationActionProposals = `-- name: ListInvestigationActionProposals :many
 SELECT
   p.id, p.investigation_id, p.action, p.params, p.reason, p.mode, p.status, p.idempotency_key, p.proposed_at, p.expires_at, p.decided_by, p.decided_by_slack_user, p.decided_at, p.executed_at, p.result, p.error,
-  i.route,
-  coalesce(i.alert_title, '')::text AS alert_title,
+  (SELECT i.route FROM investigations i WHERE i.id = p.investigation_id)::text AS route,
+  coalesce((SELECT i.alert_title FROM investigations i WHERE i.id = p.investigation_id), '')::text AS alert_title,
   coalesce(
     (SELECT u.name FROM users u WHERE u.id = p.decided_by),
     (SELECT t.name FROM api_tokens t WHERE t.id = p.decided_by),
     '')::text AS decided_by_name
 FROM action_proposals p
-JOIN investigations i ON i.id = p.investigation_id
 WHERE p.investigation_id = $1
 ORDER BY p.proposed_at, p.id
 `
