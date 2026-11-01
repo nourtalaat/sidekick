@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"os"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 )
 
 // watchCloses makes client report, on stderr, the stack of the close of
@@ -40,43 +41,20 @@ type bodyWatcher struct {
 }
 
 func (w bodyWatcher) RoundTrip(req *http.Request) (*http.Response, error) {
-	if req.Body != nil && req.Body != http.NoBody {
-		req.Body = &watchedBody{ReadCloser: req.Body, length: req.ContentLength}
+	var first atomic.Bool
+
+	trace := &httptrace.ClientTrace{
+		GotFirstResponseByte: func() { first.Store(true) },
+		WroteRequest: func(info httptrace.WroteRequestInfo) {
+			if info.Err != nil {
+				fmt.Fprintf(os.Stderr, "SK-92: wrote request with error (response started: %v): %v\n", first.Load(), info.Err)
+			}
+		},
 	}
 
-	resp, err := w.next.RoundTrip(req)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "SK-92: round trip error: %v\n", err)
-	}
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
 
-	return resp, err
-}
-
-type watchedBody struct {
-	io.ReadCloser
-
-	length int64
-	read   int64
-}
-
-func (b *watchedBody) Read(p []byte) (int, error) {
-	n, err := b.ReadCloser.Read(p)
-	b.read += int64(n)
-
-	if err != nil && !errors.Is(err, io.EOF) {
-		fmt.Fprintf(os.Stderr, "SK-92: request body read error after %d of %d: %v\n", b.read, b.length, err)
-	}
-
-	return n, err
-}
-
-func (b *watchedBody) Close() error {
-	err := b.ReadCloser.Close()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "SK-92: request body close error: %v\n", err)
-	}
-
-	return err
+	return w.next.RoundTrip(req) //nolint:wrapcheck // temporary diagnostic.
 }
 
 // CloseIdleConnections lets the test servers clean up the transport.
