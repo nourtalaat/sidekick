@@ -2,7 +2,8 @@
 
 The memory source (`type: memory`) lets an investigation search Sidekick's
 own memory: the past investigations whose verdict a responder confirmed,
-and the notes people wrote about services. It reads Sidekick's database and
+the active [lessons](../configuration.md#lessons) that match its query, and
+the notes people wrote about services. It reads Sidekick's database and
 only reads. This page lists its keys and its tools.
 
 Every prompt already shows up to 3 similar confirmed investigations, as
@@ -29,7 +30,7 @@ The model sees each tool as `<source>__<tool>`, for example
 
 | Tool | Returns |
 |---|---|
-| `search` | Up to 10 confirmed investigations whose alert name, summary or cause match a query, best match first: each one's confirmed verdict and cause, service, alert name, summary and when it was confirmed. `service` and `verdict` narrow the search. |
+| `search` | Up to 10 confirmed investigations whose alert name, summary or cause match a query, best match first: each one's confirmed verdict and cause, service, alert name, summary and when it was confirmed. Also up to 5 active lessons whose text matches the query, each with its scope. `service` and `verdict` narrow the search. |
 | `service_notes` | The notes about one service, and when they last changed. |
 
 How it behaves:
@@ -37,12 +38,25 @@ How it behaves:
 - **Only confirmed investigations.** An investigation enters memory when a
   responder marks its verdict correct, and leaves it when a later Wrong
   takes the confirmation back. An entry an admin disabled never matches.
+- **Editing.** An admin can edit, disable or delete entries and write the
+  service notes in the web UI or through the API; see
+  [Memory entries and service notes](../web-ui.md#memory-entries-and-service-notes).
+  An edited entry keeps its text only until the confirmation of its
+  investigation changes again, and a deleted entry comes back then; disable
+  an entry to keep it out.
 - **Queries.** `search` takes words as a web search does: every word must
   match, words in quotes match as a phrase, `or` between words matches
   either, and a word with a leading `-` must not appear. Words match in
   their English base form, so `deploys` finds `deploy`.
-- **No data.** A search that matches nothing, and a service without notes,
-  are reported as no data.
+- **Lessons.** Only active lessons are searched, by the words of their
+  text; a lesson that waits for review, or that an admin disabled or
+  rejected, is never found. They come in a separate `lessons` list of the
+  result. With `service`, lessons scoped to another service are left out;
+  with `verdict`, no lesson is returned, since lessons have no verdict. A
+  lesson is guidance, not evidence, so it is not listed in the evidence of
+  the call. Lessons are found by full text only, also with vector memory on.
+- **No data.** A search that matches no investigation and no lesson, and a
+  service without notes, are reported as no data.
 - **Evidence.** Each investigation found is listed as a past incident in
   the evidence of the call. With `server.publicURL` set, each one links
   to the investigation's page in the web UI, and so do the examples in

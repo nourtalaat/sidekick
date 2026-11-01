@@ -122,6 +122,11 @@ func TestValidateFixtures(t *testing.T) {
 		{file: "unknown-confidence", want: []string{`report.minFalsePositiveConfidence: unknown confidence "hgh" (did you mean "high"?)`}},
 		// Memory
 		{file: "memory-examples", want: []string{"memory.examples: must be between 1 and 10, got 11; set memory.enabled to false for none"}},
+		{file: "lessons-limits", want: []string{
+			"lessons.globalShare: must be between 0 and 1, got 1.5",
+			"lessons.maxPerPrompt: must be between 1 and 50, got 0",
+			"lessons.maxTokens: must be between 200 and 20000, got 100",
+		}},
 		{file: "vector-no-embeddings", want: []string{"memory.vector.embeddings.provider: required when memory.vector.enabled is true"}},
 		{file: "vector-cannot-embed", want: []string{"memory.vector.embeddings.provider: the anthropic provider cannot embed text; use openai, bedrock or voyage"}},
 		{file: "vector-too-wide", want: []string{
@@ -262,6 +267,14 @@ func TestValidateFixtures(t *testing.T) {
 		{file: "watcher-built-in-defaults", want: []string{
 			"the built-in default interval 30s is below routes[0].watcherLimits.minInterval 45s; set routes[0].watcherDefaults.interval or watch.defaults.interval",
 			"the built-in default timeout 1h0m0s is above watch.maxTimeout 30m0s; set watch.defaults.timeout",
+		}},
+		// Strategy proposals and the benchmark gate
+		{file: "proposals-invalid", want: []string{
+			"bench.gate.maxCostUSD: must be positive, got 0",
+			"bench.gate.maxDrop: must be from 0 up to but not including 1, got 1",
+			"bench.gate.minRepeats: must be at least 5, got 3; a gate with fewer runs cannot tell a change from chance",
+			"strategies.proposals.window: must be positive",
+			"strategies.proposals.wrongThreshold: must be at least 1, got 0",
 		}},
 		// Retention
 		{file: "retention-invalid", want: []string{

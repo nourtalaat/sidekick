@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -25,6 +26,9 @@ func TestQueryPlans(t *testing.T) {
 	// busy is one of the seeded investigations, in the middle of the table.
 	var busy uuid.UUID
 	require.NoError(t, pool.QueryRow(t.Context(), "SELECT md5('inv' || 10000)::uuid").Scan(&busy))
+
+	// after is the place of the entry in the middle of the seeded list.
+	after := time.Date(2026, 10, 26, 0, 3, 0, 0, time.UTC).Add(10000 * time.Minute)
 
 	tests := []struct {
 		name      string
@@ -108,6 +112,167 @@ func TestQueryPlans(t *testing.T) {
 			name: "GetServiceNotes",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.GetServiceNotes(ctx, "svc-42")
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"service_notes_pkey"},
+		},
+		{
+			name: "ListMemoryEntries",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListMemoryEntries(ctx, db.ListMemoryEntriesParams{PageSize: 51})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"memory_entries_confirmed"},
+		},
+		{
+			name: "ListMemoryEntriesAfterACursor",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListMemoryEntries(ctx, db.ListMemoryEntriesParams{AfterAt: &after, AfterID: &busy, PageSize: 51})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"memory_entries_confirmed"},
+		},
+		{
+			name: "ListMemoryEntriesOfAService",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListMemoryEntries(ctx, db.ListMemoryEntriesParams{Service: new("svc-42"), PageSize: 51})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"memory_entries_service_listing"},
+		},
+		{
+			name: "ListMemoryEntriesOfAServiceAfterACursor",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListMemoryEntries(ctx, db.ListMemoryEntriesParams{Service: new("svc-42"), AfterAt: &after, AfterID: &busy, PageSize: 51})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"memory_entries_service_listing"},
+		},
+		{
+			name: "ListMemoryEntriesWithAVerdict",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListMemoryEntries(ctx, db.ListMemoryEntriesParams{Verdict: new("false_positive"), PageSize: 51})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"memory_entries_confirmed"},
+		},
+		{
+			name: "ListMemoryEntriesWithWords",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListMemoryEntries(ctx, db.ListMemoryEntriesParams{Search: new("w42"), PageSize: 51})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"memory_entries_search_all"},
+		},
+		{
+			// With enabled entries only, either text index serves.
+			name: "ListMemoryEntriesWithWordsOfEnabledEntries",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListMemoryEntries(ctx, db.ListMemoryEntriesParams{Search: new("w42"), Disabled: new(false), PageSize: 51})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"memory_entries_search"},
+		},
+		{
+			name: "ListMemoryEntriesOfDisabledEntries",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListMemoryEntries(ctx, db.ListMemoryEntriesParams{Disabled: new(true), PageSize: 51})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"memory_entries_disabled_listing"},
+		},
+		{
+			name: "ListMemoryEntriesWithEveryFilter",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListMemoryEntries(ctx, db.ListMemoryEntriesParams{
+					Service: new("svc-40"), Verdict: new("true_positive"), Search: new("w40"), Disabled: new(true),
+					AfterAt: &after, AfterID: &busy, PageSize: 51,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"Index Scan"},
+		},
+		{
+			name: "GetMemoryEntry",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.GetMemoryEntry(ctx, busy)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"memory_entries_pkey"},
+		},
+		{
+			name: "LockMemoryEntry",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.LockMemoryEntry(ctx, busy)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"memory_entries_pkey"},
+		},
+		{
+			name: "UpdateMemoryEntry",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.UpdateMemoryEntry(ctx, db.UpdateMemoryEntryParams{InvestigationID: busy, Summary: "A new summary.", Disabled: true})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"memory_entries_pkey"},
+		},
+		{
+			name: "DeleteMemoryEntry",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.DeleteMemoryEntry(ctx, busy)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"memory_entries_pkey"},
+		},
+		{
+			name: "GetServiceNotesDetail",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.GetServiceNotesDetail(ctx, "svc-42")
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"service_notes_pkey", "users_pkey"},
+		},
+		{
+			name: "ListServiceNotes",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListServiceNotes(ctx, db.ListServiceNotesParams{After: "svc-420", PageSize: 101})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"service_notes_pkey", "users_pkey"},
+		},
+		{
+			name: "LockServiceNotes",
+			run: func(ctx context.Context, q *db.Queries) error {
+				return fmt.Errorf("run query: %w", q.LockServiceNotes(ctx, "svc-42"))
+			},
+		},
+		{
+			name: "UpsertServiceNotes",
+			run: func(ctx context.Context, q *db.Queries) error {
+				return fmt.Errorf("run query: %w", q.UpsertServiceNotes(ctx, db.UpsertServiceNotesParams{Service: "svc-42", Text: "New notes."}))
+			},
+			wantIndex: []string{"Conflict Arbiter Indexes: service_notes_pkey"},
+		},
+		{
+			name: "DeleteServiceNotes",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.DeleteServiceNotes(ctx, "svc-42")
 
 				return fmt.Errorf("run query: %w", err)
 			},

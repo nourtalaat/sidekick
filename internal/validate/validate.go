@@ -262,19 +262,32 @@ func (s *Service) checkRequest(req Request) (checker, error) {
 }
 
 // acquire takes a slot, waiting up to SlotWait, and returns the function
-// that gives it back.
+// that gives it back. A free slot is taken at once, before the wait starts,
+// so a pause between starting the timer and waiting cannot refuse a request
+// while a slot is free.
 func (s *Service) acquire(ctx context.Context) (func(), error) {
+	select {
+	case s.slots <- struct{}{}:
+		return s.release, nil
+	default:
+	}
+
 	wait := time.NewTimer(s.slotWait)
 	defer wait.Stop()
 
 	select {
 	case s.slots <- struct{}{}:
-		return func() { <-s.slots }, nil
+		return s.release, nil
 	case <-wait.C:
 		return nil, fmt.Errorf("%w: %d validations were running for %s", ErrBusy, MaxConcurrent, s.slotWait)
 	case <-ctx.Done():
 		return nil, fmt.Errorf("wait for a free slot: %w", ctx.Err())
 	}
+}
+
+// release gives back a slot taken by acquire.
+func (s *Service) release() {
+	<-s.slots
 }
 
 // isLocalPath reports whether p is a clean relative path with forward

@@ -339,6 +339,307 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/lessons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lessons, newest first, a page at a time
+         * @description Lessons are short pieces of reviewed guidance that prompts show the
+         *     model. A lesson that waits for review has the status `proposed`.
+         *     `counts` is the number of lessons with each status, whatever the
+         *     filters. The text of a lesson came from people and the model: show it
+         *     as plain text.
+         */
+        get: operations["ListLessons"];
+        put?: never;
+        /**
+         * Write a lesson
+         * @description Stores a lesson written by an admin, active at once unless
+         *     `status` is `proposed`. A lesson with no scope field is global and
+         *     applies to every investigation. A failed check answers 422 with the
+         *     field of the problem. The change is written to the audit log.
+         */
+        post: operations["CreateLesson"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lessons/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit a lesson, disable or enable it, or reject it
+         * @description Replaces the text and scope of the lesson. `status` may be omitted to
+         *     keep the status; a lesson that waits for review may be rejected, an
+         *     active one disabled and a disabled one enabled. Approving a lesson
+         *     that waits for review is its own operation. `version` is the version
+         *     that was read; if the lesson changed since, the answer is 409 with
+         *     code `stale`. A lesson drafted from feedback keeps at least one scope
+         *     field (422). The change is written to the audit log.
+         */
+        put: operations["UpdateLesson"];
+        post?: never;
+        /**
+         * Delete a lesson
+         * @description Deletes the lesson and the record of the investigations that used it.
+         *     The audit log keeps its text.
+         */
+        delete: operations["DeleteLesson"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lessons/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a lesson that waits for review
+         * @description Makes the lesson active, so prompts use it, and notes who approved it.
+         *     `version` is the version that was read; if the lesson changed since,
+         *     the answer is 409 with code `stale`. A lesson that does not wait for
+         *     review answers 409 with code `not_proposed`. The change is written to
+         *     the audit log.
+         */
+        post: operations["ApproveLesson"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/strategy-proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Proposed changes to strategies, newest first, a page at a time
+         * @description The changes the model drafted after a strategy version collected
+         *     wrong feedback, with the result of the benchmark gate that checks
+         *     each. Proposals that are still being drafted, and drafts that
+         *     failed, are listed only when asked for with `status`.
+         */
+        get: operations["ListStrategyProposals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/strategy-proposals/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One proposal, with its YAML, the feedback and the gate result
+         * @description `baseBody` and `body` are the strategy before and after the change,
+         *     for a diff. `gate` holds the numbers the gate's decision rests on.
+         *     `stale` is true when the strategy has changed since the draft, so
+         *     approving a proposal for a runtime strategy would fail.
+         */
+        get: operations["GetStrategyProposal"];
+        /**
+         * Replace the YAML of a proposal and send it through the gate again
+         * @description Only a proposal whose gate has ended and that nobody has decided on
+         *     can be edited; any other answers 409 with code `conflict`. The YAML
+         *     goes through the checks of a strategy file, and its name must be the
+         *     proposal's; a failed check answers 422 with code `validation` and
+         *     a field for each problem. The old gate result is dropped. Saving the
+         *     same YAML runs the gate again.
+         */
+        put: operations["EditStrategyProposal"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/strategy-proposals/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply a proposal that passed its gate
+         * @description There is no way to apply a proposal that has not passed: any other
+         *     answers 409 with code `not_passed`, and nothing is changed. For a
+         *     runtime strategy the YAML is saved as its next version, and for a
+         *     built-in one as a runtime strategy of the same name. The answer has
+         *     the `version`. For a strategy in a file, Sidekick cannot change the
+         *     file: the answer has the `yaml` to commit. A strategy that was saved
+         *     since the draft answers 409 with code `stale`, and one that already
+         *     holds the YAML 422 with code `unchanged`.
+         */
+        post: operations["ApproveStrategyProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/strategy-proposals/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set a proposal aside
+         * @description A proposal that has a draft and that nobody has decided on can be
+         *     rejected, whatever its gate result; any other answers 409 with code
+         *     `conflict`. A gate that is still running stops before its next run.
+         */
+        post: operations["RejectStrategyProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memory/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Memory entries, newest confirmation first, a page at a time
+         * @description Memory holds one entry for each investigation whose verdict a
+         *     responder confirmed; prompts show the entries like a new alert. The
+         *     list has disabled entries too. The text of an entry came from the
+         *     model and from people: show it as plain text. The answer has no total,
+         *     since counting every entry would read the whole table.
+         */
+        get: operations["ListMemoryEntries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memory/entries/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One memory entry */
+        get: operations["GetMemoryEntry"];
+        /**
+         * Edit a memory entry, disable it or enable it
+         * @description Replaces the summary, the cause and the disabled flag. A disabled
+         *     entry is never shown to a prompt or found by a search. The last write
+         *     wins; there is no version. The next change of the investigation's
+         *     confirmation replaces the summary and the cause with the
+         *     investigation's own and keeps the flag. A summary or cause that is
+         *     empty (the summary), too long or has control characters answers 422
+         *     with the field. Text that differs from the stored text is redacted
+         *     before it is stored. A request that changes nothing writes nothing.
+         *     The change is written to the audit log.
+         */
+        put: operations["UpdateMemoryEntry"];
+        post?: never;
+        /**
+         * Delete a memory entry
+         * @description Deletes the entry and its embedding. If the confirmation of the
+         *     investigation changes later, a new entry is written; disable an entry
+         *     to keep it out for good. The audit log keeps what the entry said.
+         */
+        delete: operations["DeleteMemoryEntry"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/services/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The services that have notes, by name, a page at a time
+         * @description Service notes are what people wrote about a service; the memory source
+         *     shows them to the model. Each service comes with the first characters
+         *     of its notes. Read the notes of one service with
+         *     `GET /services/{name}/notes`.
+         */
+        get: operations["ListServiceNotes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/services/{name}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The notes about a service
+         * @description A service without notes answers 200 with empty `text` and no
+         *     `updatedAt`. The text is plain text: show it as such.
+         */
+        get: operations["GetServiceNotes"];
+        /**
+         * Replace the notes about a service
+         * @description Replaces the notes with `text`, which is trimmed and redacted before
+         *     it is stored. Empty text deletes the notes. The last write wins.
+         *     Text longer than 4,000 characters, once redacted, or with control
+         *     characters answers 422 with the field `text`. The change is written
+         *     to the audit log; a request that changes nothing writes nothing.
+         */
+        put: operations["PutServiceNotes"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/audit": {
         parameters: {
             query?: never;
@@ -1223,6 +1524,312 @@ export interface components {
             /** @description The version that was read, or 0 for a strategy that is not stored yet. Leave it out to skip the check. */
             baseVersion?: number;
         };
+        /** @enum {string} */
+        LessonStatus: "proposed" | "active" | "disabled" | "rejected";
+        /**
+         * @description Which investigations a lesson applies to. A field that is set must
+         *     equal the investigation's value; a lesson with no field set applies to
+         *     every investigation.
+         */
+        LessonScope: {
+            service?: string;
+            alert?: string;
+            route?: string;
+            strategy?: string;
+        };
+        LessonFeedback: {
+            /** Format: uuid */
+            feedbackId: string;
+            /** Format: uuid */
+            investigationId: string;
+        };
+        Lesson: {
+            /** Format: uuid */
+            id: string;
+            /** @description Plain text, written by a person or drafted by the model. */
+            text: string;
+            scope: components["schemas"]["LessonScope"];
+            status: components["schemas"]["LessonStatus"];
+            /** @enum {string} */
+            origin: "feedback" | "ui" | "slack" | "file";
+            /** @description The feedback a drafted lesson comes from. */
+            feedback: components["schemas"]["LessonFeedback"][];
+            /**
+             * Format: uuid
+             * @description The user who wrote the lesson, when a user did.
+             */
+            createdBy?: string;
+            /**
+             * Format: uuid
+             * @description The user who approved the lesson, when a user did.
+             */
+            approvedBy?: string;
+            /** @description How many people rated the verdict of an investigation that used the lesson correct. */
+            helpful: number;
+            /** @description How many people rated it wrong. */
+            unhelpful: number;
+            /** Format: date-time */
+            lastUsedAt?: string;
+            /** @description Goes up with every change; send it back with an edit or an approval. */
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        LessonList: {
+            lessons: components["schemas"]["Lesson"][];
+            nextCursor?: string;
+            counts: components["schemas"]["LessonCounts"];
+        };
+        /** @description How many lessons there are with each status, whatever the filters. */
+        LessonCounts: {
+            proposed: number;
+            active: number;
+            disabled: number;
+            rejected: number;
+        };
+        NewLesson: {
+            text: string;
+            scope?: components["schemas"]["LessonScope"];
+            /**
+             * @default active
+             * @enum {string}
+             */
+            status: "active" | "proposed";
+        };
+        LessonUpdate: {
+            version: number;
+            text: string;
+            scope?: components["schemas"]["LessonScope"];
+            status?: components["schemas"]["LessonStatus"];
+        };
+        LessonApproval: {
+            version: number;
+        };
+        MemoryEntry: {
+            /**
+             * Format: uuid
+             * @description The investigation the entry is about; it may be gone, as memory outlives investigations.
+             */
+            investigationId: string;
+            service?: string;
+            alertName?: string;
+            verdict: components["schemas"]["Verdict"];
+            /** @description Plain text, from the investigation's report or edited by an admin. */
+            summary: string;
+            /** @description Plain text, the confirmed cause, or edited by an admin. */
+            cause?: string;
+            /** Format: date-time */
+            confirmedAt: string;
+            disabled: boolean;
+        };
+        MemoryEntryList: {
+            entries: components["schemas"]["MemoryEntry"][];
+            nextCursor?: string;
+        };
+        MemoryEntryUpdate: {
+            summary: string;
+            /** @description Leave it out or empty for an entry without a cause. */
+            cause?: string;
+            disabled: boolean;
+        };
+        ServiceNotes: {
+            service: string;
+            /** @description Plain text. Empty for a service without notes. */
+            text: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** @description The name of the user who last changed the notes. Not set when an API token did. */
+            updatedByName?: string;
+        };
+        ServiceNotesSummary: {
+            service: string;
+            /** @description The first 120 characters of the notes, as plain text. */
+            preview: string;
+            /** Format: date-time */
+            updatedAt: string;
+            updatedByName?: string;
+        };
+        ServiceNotesList: {
+            services: components["schemas"]["ServiceNotesSummary"][];
+            /** @description Pass it as `after` to read the next page. */
+            nextAfter?: string;
+        };
+        ServiceNotesUpdate: {
+            text: string;
+        };
+        /** @description A lesson that the prompt of an investigation used, as it is now. */
+        UsedLesson: {
+            /** Format: uuid */
+            id: string;
+            text: string;
+            scope: components["schemas"]["LessonScope"];
+            status: components["schemas"]["LessonStatus"];
+        };
+        LeftOutLesson: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            reason: "max_per_prompt" | "max_tokens" | "global_share";
+            scope: components["schemas"]["LessonScope"];
+        };
+        /**
+         * @description The lessons that the prompt of this step used and the ones that
+         *     applied but were left out, for a prompt or triage prompt step.
+         */
+        StepLessons: {
+            used: string[];
+            /** @description The first lessons left out, at most 50, in rank order. */
+            leftOut: components["schemas"]["LeftOutLesson"][];
+            /** @description How many lessons were left out in all. */
+            leftOutTotal: number;
+            /** @description How many active lessons applied. */
+            candidates: number;
+        };
+        /**
+         * @description `drafting`: waiting for the model's draft. `draft_failed`: no draft
+         *     could be made; the status detail says why. `pending`: drafted, waiting
+         *     for the gate. `benchmarking`: the gate is running. `passed`: the gate
+         *     passed, and the proposal can be approved. `failed`: the gate ended
+         *     without a pass; the gate result says how. `applied`: approved, and a
+         *     version was saved. `approved`: approved for a strategy in a file.
+         *     `rejected`: set aside.
+         * @enum {string}
+         */
+        StrategyProposalStatus: "drafting" | "draft_failed" | "pending" | "benchmarking" | "passed" | "failed" | "approved" | "rejected" | "applied";
+        /**
+         * @description How the gate ended. `passed`: the lower end of the 95% interval of the
+         *     score difference is above minus `maxDrop`. `failed`: the proposal
+         *     scores lower on average by more than that. `not_enough_evidence`: it
+         *     looks no worse on average, but the interval is too wide to be sure, or
+         *     fewer than three scenarios cover the strategy. `no_benchmark_coverage`:
+         *     no scenario covers the strategy. `over_budget`: the gate stopped before
+         *     it passed its cost cap. `error`: the gate could not finish.
+         * @enum {string}
+         */
+        StrategyGateResult: "passed" | "failed" | "not_enough_evidence" | "no_benchmark_coverage" | "over_budget" | "error";
+        StrategyProposalSummary: {
+            /** Format: uuid */
+            id: string;
+            /** @description The strategy the proposal changes. */
+            name: string;
+            /** @description The version the draft started from, as investigations record it. */
+            baseVersion: string;
+            baseOrigin?: components["schemas"]["StrategyLayer"];
+            /** @description Why the model changed the strategy. It is model output. */
+            rationale?: string;
+            /** @description How many wrong ratings the version had when the proposal was made. */
+            triggerCount: number;
+            status: components["schemas"]["StrategyProposalStatus"];
+            /** @description Why a draft failed. */
+            statusDetail?: string;
+            gateResult?: components["schemas"]["StrategyGateResult"];
+            /**
+             * Format: uuid
+             * @description The benchmark run of the proposal, when the gate ran.
+             */
+            benchRunId?: string;
+            /**
+             * Format: uuid
+             * @description The benchmark run of the current version, when the gate ran.
+             */
+            baselineRunId?: string;
+            /**
+             * Format: uuid
+             * @description The user or API token that last decided on or edited the proposal.
+             */
+            reviewer?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            decidedAt?: string;
+        };
+        StrategyProposalList: {
+            proposals: components["schemas"]["StrategyProposalSummary"][];
+            /** @description Pass as cursor to get the next page. Absent on the last page. */
+            nextCursor?: string;
+        };
+        StrategyProposal: components["schemas"]["StrategyProposalSummary"] & {
+            /** @description The strategy before the change, as YAML. */
+            baseBody?: string;
+            /** @description The strategy after the change, as YAML. */
+            body?: string;
+            /** @description The wrong ratings the proposal was drafted from. */
+            feedback: components["schemas"]["StrategyProposalFeedback"][];
+            gate?: components["schemas"]["StrategyGate"];
+            /** @description True when the strategy has changed since the draft. */
+            stale: boolean;
+            /** @description True when the proposal has passed its gate and can be approved. */
+            approvable: boolean;
+        };
+        StrategyProposalFeedback: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            investigationId: string;
+            targetKind: string;
+            targetRef: string;
+            rating: string;
+            reason?: string;
+            correctVerdict?: string;
+            correctCause?: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        StrategyGate: {
+            result: components["schemas"]["StrategyGateResult"];
+            /** @description The result in a sentence. */
+            reason: string;
+            /**
+             * Format: double
+             * @description The mean over the scenarios of the proposal's overall score minus the current version's.
+             */
+            mean: number;
+            interval: components["schemas"]["BenchInterval"];
+            /**
+             * Format: double
+             * @description The proposal passes when the lower end of the interval is above minus this.
+             */
+            maxDrop: number;
+            resamples: number;
+            /** @description The seed of the resampling, as a decimal string, so the interval can be worked out again. */
+            seed: string;
+            /** @description How many times each scenario ran in each arm. */
+            repeats: number;
+            /** Format: int64 */
+            costMicros: number;
+            /** Format: int64 */
+            maxCostMicros: number;
+            error?: string;
+            scenarios: components["schemas"]["StrategyGateScenario"][];
+        };
+        StrategyGateScenario: {
+            id: string;
+            /** Format: double */
+            baseline: number;
+            /** Format: double */
+            proposal: number;
+            /** Format: double */
+            difference: number;
+        };
+        EditStrategyProposal: {
+            /** @description The strategy as YAML, in the format of a strategy file. */
+            body: string;
+        };
+        RejectStrategyProposal: {
+            /** @description Why the proposal is set aside, at most 500 characters. */
+            reason?: string;
+        };
+        StrategyProposalApproval: {
+            proposal: components["schemas"]["StrategyProposalSummary"];
+            /** @description The runtime version that was saved. Absent for a strategy in a file. */
+            version?: number;
+            /** @description The strategy to commit, for a strategy in a file. */
+            yaml?: string;
+        };
         FieldError: {
             /**
              * @description The path of the field in the request body, such as
@@ -1512,6 +2119,12 @@ export interface components {
             events: components["schemas"]["Event"][];
             /** @description Follow-up questions that no run has answered yet, oldest first. */
             pendingFollowUps: components["schemas"]["PendingFollowUp"][];
+            /**
+             * @description The lessons that the prompt, or the triage, of the investigation
+             *     used, with their text and status as they are now. A lesson that
+             *     was deleted is not listed.
+             */
+            lessons?: components["schemas"]["UsedLesson"][];
         };
         /** @description The verdict people agree with. */
         Confirmation: {
@@ -1674,6 +2287,7 @@ export interface components {
             /** Format: int32 */
             durationMs: number;
             parts: components["schemas"]["StepPart"][];
+            lessons?: components["schemas"]["StepLessons"];
         };
         StepTokens: {
             /** Format: int64 */
@@ -2387,10 +3001,17 @@ export interface components {
         };
     };
     parameters: {
+        /** @description The name of a service, up to 200 characters. */
+        ServiceName: string;
+        /** @description The ID of the investigation the entry is about. */
+        MemoryEntryID: string;
+        LessonID: string;
         /** @description The name of a listener or route. */
         RuleName: string;
         /** @description The name of a strategy. */
         StrategyName: string;
+        /** @description The ID of a strategy proposal. */
+        StrategyProposalID: string;
         InvestigationID: string;
         /** @description The id of a scenario. */
         ScenarioID: string;
@@ -2885,6 +3506,454 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StrategyVersionDetail"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListLessons: {
+        parameters: {
+            query?: {
+                /** @description Only lessons with this status. */
+                status?: components["schemas"]["LessonStatus"];
+                /** @description Only lessons scoped to this service. */
+                service?: string;
+                /** @description Only lessons whose text matches these words, as in a web search. */
+                q?: string;
+                /** @description The nextCursor of the page before. */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of lessons. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LessonList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateLesson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewLesson"];
+            };
+        };
+        responses: {
+            /** @description The new lesson. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lesson"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateLesson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["LessonID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LessonUpdate"];
+            };
+        };
+        responses: {
+            /** @description The lesson as saved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lesson"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteLesson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["LessonID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The lesson is deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ApproveLesson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["LessonID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LessonApproval"];
+            };
+        };
+        responses: {
+            /** @description The lesson as saved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lesson"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListStrategyProposals: {
+        parameters: {
+            query?: {
+                /** @description Only proposals with this status. The default is every status but `drafting` and `draft_failed`. */
+                status?: components["schemas"]["StrategyProposalStatus"];
+                /** @description Only proposals for the strategy with this name. */
+                name?: string;
+                /** @description The nextCursor of the page before. */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of proposals. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyProposalList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetStrategyProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The ID of a strategy proposal. */
+                id: components["parameters"]["StrategyProposalID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The proposal. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyProposal"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    EditStrategyProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The ID of a strategy proposal. */
+                id: components["parameters"]["StrategyProposalID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditStrategyProposal"];
+            };
+        };
+        responses: {
+            /** @description The proposal, now pending. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyProposal"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ApproveStrategyProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The ID of a strategy proposal. */
+                id: components["parameters"]["StrategyProposalID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The proposal as decided. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyProposalApproval"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    RejectStrategyProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The ID of a strategy proposal. */
+                id: components["parameters"]["StrategyProposalID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RejectStrategyProposal"];
+            };
+        };
+        responses: {
+            /** @description The rejected proposal. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyProposalSummary"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListMemoryEntries: {
+        parameters: {
+            query?: {
+                /** @description Only entries of this service. */
+                service?: string;
+                /** @description Only entries with this confirmed verdict. */
+                verdict?: components["schemas"]["Verdict"];
+                /** @description Only entries whose service, alert name, summary or cause match these words, as in a web search. */
+                q?: string;
+                /** @description With true, only disabled entries; with false, only enabled ones. Leave it out for both. */
+                disabled?: boolean;
+                /** @description The nextCursor of the page before. */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of memory entries. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryEntryList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetMemoryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The ID of the investigation the entry is about. */
+                id: components["parameters"]["MemoryEntryID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The memory entry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryEntry"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateMemoryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The ID of the investigation the entry is about. */
+                id: components["parameters"]["MemoryEntryID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryEntryUpdate"];
+            };
+        };
+        responses: {
+            /** @description The memory entry as stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryEntry"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteMemoryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The ID of the investigation the entry is about. */
+                id: components["parameters"]["MemoryEntryID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The memory entry is deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListServiceNotes: {
+        parameters: {
+            query?: {
+                /** @description The nextAfter of the page before. */
+                after?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of services with notes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceNotesList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetServiceNotes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The name of a service, up to 200 characters. */
+                name: components["parameters"]["ServiceName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The notes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceNotes"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    PutServiceNotes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The name of a service, up to 200 characters. */
+                name: components["parameters"]["ServiceName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServiceNotesUpdate"];
+            };
+        };
+        responses: {
+            /** @description The notes as stored, empty after a delete. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceNotes"];
                 };
             };
             default: components["responses"]["Problem"];

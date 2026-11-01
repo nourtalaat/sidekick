@@ -1,0 +1,25 @@
+# Settings of strategy proposals and the benchmark gate that are out of
+# range, including a number of repeats below the least a gate may use.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+routes:
+  - name: default
+
+strategies:
+  proposals:
+    enabled: true
+    wrongThreshold: 0
+    window: 0d
+
+bench:
+  gate:
+    minRepeats: 3
+    maxDrop: 1
+    maxCostUSD: 0

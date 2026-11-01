@@ -22,6 +22,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/feedback"
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/problem"
+	"github.com/nourtalaat/sidekick/internal/proposals"
 	"github.com/nourtalaat/sidekick/internal/redact"
 	"github.com/nourtalaat/sidekick/internal/scenario"
 	"github.com/nourtalaat/sidekick/internal/strategy"
@@ -53,6 +54,9 @@ type Options struct {
 	// Strategies reads and saves the runtime strategies. Without it, the
 	// strategy operations answer 503.
 	Strategies StrategyStore
+	// ProposalReviewer approves, rejects and edits strategy proposals.
+	// Without it, those operations answer 503.
+	ProposalReviewer ProposalReviewer
 	// StrategyBase holds the built-in and file strategies that the runtime
 	// ones are added to. Nil means those of Config.
 	StrategyBase *strategy.Set
@@ -78,6 +82,19 @@ type Options struct {
 	// Memory says how feedback that changes the confirmed verdict syncs
 	// the investigation's memory entry; set Embed when vector memory is on.
 	Memory memory.SyncOptions
+	// Lessons reads and changes lessons, for the /lessons operations and
+	// the lessons an investigation shows. Without it, they answer 503.
+	Lessons LessonStore
+	// MemoryStore reads and changes memory entries and service notes, for
+	// the /memory and /services operations. Without it, they answer 503.
+	MemoryStore MemoryStore
+	// Proposals decides whether a rating of wrong makes the
+	// investigation's strategy version get a proposed change. The zero
+	// value is off.
+	Proposals proposals.Trigger
+	// DraftLessons makes feedback with a reason enqueue a job that drafts a
+	// lesson from it. Set it when a summarize role is configured.
+	DraftLessons bool
 	// Stopper stops watchers, for POST /watchers/{id}/stop. Without it,
 	// that operation answers 503.
 	Stopper *watch.Stopper
@@ -133,9 +150,9 @@ func New(opts Options) (http.Handler, error) {
 	h := &handler{auth: opts.Auth, routes: http.NewServeMux(), log: log}
 
 	srv := &server{
-		tokens: opts.Tokens, cfg: opts.Config, rules: opts.Rules, strategies: opts.Strategies, strategyBase: strategyBase, redactor: opts.Redactor, pool: opts.Pool, audit: opts.Audit,
+		tokens: opts.Tokens, cfg: opts.Config, rules: opts.Rules, strategies: opts.Strategies, proposalReviewer: opts.ProposalReviewer, strategyBase: strategyBase, redactor: opts.Redactor, pool: opts.Pool, audit: opts.Audit,
 		hub: opts.Hub, log: log, stopper: opts.Stopper, watchers: opts.Watchers, now: now, scenarios: opts.Scenarios,
-		feedbackMetrics: opts.Feedback, memory: opts.Memory,
+		feedbackMetrics: opts.Feedback, memory: opts.Memory, proposals: opts.Proposals, draftLessons: opts.DraftLessons, lessons: opts.Lessons, memoryEntries: opts.MemoryStore,
 		streamHeartbeat: cmp.Or(opts.StreamHeartbeat, DefaultStreamHeartbeat),
 		streamLifetime:  cmp.Or(opts.StreamLifetime, DefaultStreamLifetime),
 	}

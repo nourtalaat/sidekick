@@ -30,13 +30,13 @@ const insertStep = `-- name: InsertStep :exec
 INSERT INTO steps (
   investigation_id, seq, run, kind, parts, source, tool, tool_call_id, status, error, evidence,
   connector, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_micros,
-  started_at, duration_ms, budget
+  started_at, duration_ms, budget, lessons
 )
 VALUES (
   $1, $2, $3, $4, $5, $6, $7, $8,
   $9, $10, $11, $12, $13,
   $14, $15, $16, $17,
-  $18, $19, $20, $21
+  $18, $19, $20, $21, $22
 )
 `
 
@@ -62,6 +62,7 @@ type InsertStepParams struct {
 	StartedAt        time.Time
 	DurationMs       int32
 	Budget           *string
+	Lessons          []byte
 }
 
 // InsertStep stores one step. Take its seq with AdvanceInvestigation in the
@@ -89,12 +90,13 @@ func (q *Queries) InsertStep(ctx context.Context, arg InsertStepParams) error {
 		arg.StartedAt,
 		arg.DurationMs,
 		arg.Budget,
+		arg.Lessons,
 	)
 	return err
 }
 
 const listSteps = `-- name: ListSteps :many
-SELECT investigation_id, seq, run, kind, parts, source, tool, tool_call_id, status, error, evidence, connector, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_micros, started_at, duration_ms, budget FROM steps WHERE investigation_id = $1 ORDER BY seq
+SELECT investigation_id, seq, run, kind, parts, source, tool, tool_call_id, status, error, evidence, connector, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_micros, started_at, duration_ms, budget, lessons FROM steps WHERE investigation_id = $1 ORDER BY seq
 `
 
 // ListSteps returns the steps of an investigation in order.
@@ -129,6 +131,7 @@ func (q *Queries) ListSteps(ctx context.Context, investigationID uuid.UUID) ([]S
 			&i.StartedAt,
 			&i.DurationMs,
 			&i.Budget,
+			&i.Lessons,
 		); err != nil {
 			return nil, err
 		}
