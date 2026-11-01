@@ -101,3 +101,15 @@ SELECT @id::uuid, @text::text, sqlc.narg(scope_service)::text, sqlc.narg(scope_a
        ARRAY[@feedback_id::uuid]
 WHERE NOT EXISTS (SELECT 1 FROM lessons WHERE feedback_ids @> ARRAY[@feedback_id::uuid])
 RETURNING id;
+
+-- name: SearchLessons :many
+-- SearchLessons returns the active lessons that match a web-search style
+-- query (words, "quoted phrases", or, -word), best rank first. With a
+-- service, it leaves out the lessons scoped to another service.
+SELECT id, text, scope_service, scope_alert, scope_route, scope_strategy
+FROM lessons
+WHERE status = 'active'
+  AND search @@ websearch_to_tsquery('english', @query)
+  AND (sqlc.narg(service)::text IS NULL OR scope_service IS NULL OR scope_service = sqlc.narg(service)::text)
+ORDER BY ts_rank(search, websearch_to_tsquery('english', @query)) DESC, created_at DESC, id DESC
+LIMIT sqlc.arg(max_rows)::int;

@@ -259,6 +259,61 @@ func (q *Queries) ListLessonCandidates(ctx context.Context, arg ListLessonCandid
 	return items, nil
 }
 
+const searchLessons = `-- name: SearchLessons :many
+SELECT id, text, scope_service, scope_alert, scope_route, scope_strategy
+FROM lessons
+WHERE status = 'active'
+  AND search @@ websearch_to_tsquery('english', $1)
+  AND ($2::text IS NULL OR scope_service IS NULL OR scope_service = $2::text)
+ORDER BY ts_rank(search, websearch_to_tsquery('english', $1)) DESC, created_at DESC, id DESC
+LIMIT $3::int
+`
+
+type SearchLessonsParams struct {
+	Query   string
+	Service *string
+	MaxRows int32
+}
+
+type SearchLessonsRow struct {
+	ID            uuid.UUID
+	Text          string
+	ScopeService  *string
+	ScopeAlert    *string
+	ScopeRoute    *string
+	ScopeStrategy *string
+}
+
+// SearchLessons returns the active lessons that match a web-search style
+// query (words, "quoted phrases", or, -word), best rank first. With a
+// service, it leaves out the lessons scoped to another service.
+func (q *Queries) SearchLessons(ctx context.Context, arg SearchLessonsParams) ([]SearchLessonsRow, error) {
+	rows, err := q.db.Query(ctx, searchLessons, arg.Query, arg.Service, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchLessonsRow
+	for rows.Next() {
+		var i SearchLessonsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Text,
+			&i.ScopeService,
+			&i.ScopeAlert,
+			&i.ScopeRoute,
+			&i.ScopeStrategy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const touchLessonsUsed = `-- name: TouchLessonsUsed :exec
 UPDATE lessons
 SET last_used_at = now()

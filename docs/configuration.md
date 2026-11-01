@@ -996,8 +996,9 @@ How it behaves:
 #### Memory sources (`type: memory`)
 
 A memory source lets the model search Sidekick's own memory: the past
-investigations whose verdict a responder confirmed, and the notes people
-wrote about services. It has only the keys every source has. [The memory
+investigations whose verdict a responder confirmed, the active
+[lessons](#lessons) that match, and the notes people wrote about services.
+It has only the keys every source has. [The memory
 source](sources/memory.md) lists what its tools return.
 
 ```yaml

@@ -25,6 +25,8 @@ const Type = "memory"
 const (
 	// maxResults is the most entries one search returns.
 	maxResults = 10
+	// maxLessons is the most lessons one search returns.
+	maxLessons = 5
 	// maxEntryText is the most bytes of an entry's summary or cause a
 	// result keeps.
 	maxEntryText = 1000
@@ -34,7 +36,8 @@ const (
 
 // Texts of results with no data.
 const (
-	noMatchText = "No confirmed investigation matches. Only investigations whose verdict a person confirmed are in memory."
+	noMatchText = "No confirmed investigation or active lesson matches. " +
+		"Only investigations whose verdict a person confirmed are in memory."
 	noNotesText = "Nobody has written notes about this service."
 )
 
@@ -123,7 +126,6 @@ func (s *Source) search(ctx context.Context, input json.RawMessage) (source.Resu
 		return source.Result{}, fmt.Errorf("read the input: %w", err)
 	}
 
-	// TODO: [SK-41] search the active lessons too
 	rows, err := mem.Search(ctx, s.db, mem.SearchParams{
 		Query:   in.Query,
 		Service: nonEmpty(in.Service),
@@ -133,11 +135,16 @@ func (s *Source) search(ctx context.Context, input json.RawMessage) (source.Resu
 		return source.Result{}, fmt.Errorf("search memory: %w", err)
 	}
 
-	if len(rows) == 0 {
+	found, err := s.searchLessons(ctx, in)
+	if err != nil {
+		return source.Result{}, fmt.Errorf("search lessons: %w", err)
+	}
+
+	if len(rows) == 0 && len(found) == 0 {
 		return source.Result{NoData: true, Text: noMatchText}, nil
 	}
 
-	out := searchResult{Entries: make([]entry, 0, len(rows))}
+	out := searchResult{Entries: make([]entry, 0, len(rows)), Lessons: found}
 	evidence := make([]source.Evidence, 0, len(rows))
 
 	var truncated bool
@@ -164,6 +171,32 @@ func (s *Source) search(ctx context.Context, input json.RawMessage) (source.Resu
 	}
 
 	return structured(out, evidence, truncated)
+}
+
+// searchLessons returns the active lessons that match the query. Lessons
+// have no verdict, so a search for one verdict finds none.
+func (s *Source) searchLessons(ctx context.Context, in searchInput) ([]lessonEntry, error) {
+	if in.Verdict != "" {
+		return nil, nil
+	}
+
+	rows, err := db.New(s.db).SearchLessons(ctx, db.SearchLessonsParams{Query: in.Query, Service: nonEmpty(in.Service), MaxRows: maxLessons})
+	if err != nil {
+		return nil, fmt.Errorf("query: %w", err)
+	}
+
+	out := make([]lessonEntry, len(rows))
+	for i, r := range rows {
+		out[i] = lessonEntry{
+			ID:   r.ID.String(),
+			Text: r.Text,
+			Scope: lessonScope{
+				Service: deref(r.ScopeService), Alert: deref(r.ScopeAlert), Route: deref(r.ScopeRoute), Strategy: deref(r.ScopeStrategy),
+			},
+		}
+	}
+
+	return out, nil
 }
 
 // serviceNotes runs service_notes.
@@ -198,9 +231,28 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (source
 	return &Source{db: deps.DB, publicURL: deps.PublicURL}, nil
 }
 
-// searchResult is the result of search.
+// searchResult is the result of search: the confirmed investigations that
+// match, and the active lessons that match.
 type searchResult struct {
-	Entries []entry `json:"entries"`
+	Entries []entry       `json:"entries"`
+	Lessons []lessonEntry `json:"lessons,omitempty"`
+}
+
+// lessonEntry is one lesson in a search result. Its text was written or
+// approved by an admin.
+type lessonEntry struct {
+	ID    string      `json:"id"`
+	Text  string      `json:"text"`
+	Scope lessonScope `json:"scope"`
+}
+
+// lessonScope says which investigations a lesson applies to; a field that
+// is not set is left out, and a lesson with none applies to all.
+type lessonScope struct {
+	Service  string `json:"service,omitempty"`
+	Alert    string `json:"alert,omitempty"`
+	Route    string `json:"route,omitempty"`
+	Strategy string `json:"strategy,omitempty"`
 }
 
 // entry is one confirmed investigation in a search result.

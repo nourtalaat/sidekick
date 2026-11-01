@@ -97,6 +97,15 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"Insert on lessons", "lessons_feedback"},
 		},
 		{
+			name: "SearchLessons",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.SearchLessons(ctx, db.SearchLessonsParams{Query: "4242", Service: new("svc-242"), MaxRows: 5})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"lessons_search"},
+		},
+		{
 			name: "InsertLessonUses",
 			run: func(ctx context.Context, q *db.Queries) error {
 				return fmt.Errorf("run query: %w", q.InsertLessonUses(ctx, db.InsertLessonUsesParams{LessonIds: ids, InvestigationID: finalInvestigation}))
