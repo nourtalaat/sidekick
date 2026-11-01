@@ -37,14 +37,14 @@ const (
 
 // The proposals of fixture/proposals.sql.
 const (
-	propFirst      = "0192d3a4-0000-7000-8000-0000000000f1"
-	propSecond     = "0192d3a4-0000-7000-8000-0000000000f2"
-	propExpired    = "0192d3a4-0000-7000-8000-0000000000f3"
-	propApproved   = "0192d3a4-0000-7000-8000-0000000000f4"
-	propSucceeded  = "0192d3a4-0000-7000-8000-0000000000f5"
-	propRejected   = "0192d3a4-0000-7000-8000-0000000000f6"
-	propInvestgn   = "0192d3a4-0000-7000-8000-0000000000e2"
-	propNotThere   = "0192d3a4-0000-7000-8000-0000000000ff"
+	propFirst            = "0192d3a4-0000-7000-8000-0000000000f1"
+	propSecond           = "0192d3a4-0000-7000-8000-0000000000f2"
+	propExpired          = "0192d3a4-0000-7000-8000-0000000000f3"
+	propApproved         = "0192d3a4-0000-7000-8000-0000000000f4"
+	propSucceeded        = "0192d3a4-0000-7000-8000-0000000000f5"
+	propRejected         = "0192d3a4-0000-7000-8000-0000000000f6"
+	propInvestgn         = "0192d3a4-0000-7000-8000-0000000000e2"
+	propNotThere         = "0192d3a4-0000-7000-8000-0000000000ff"
 	actionProposalsRoute = "/api/v1/proposals"
 )
 
@@ -71,7 +71,7 @@ type actionProposalBody struct {
 // actionProposalListBody is the response of GET /proposals.
 type actionProposalListBody struct {
 	Proposals  []actionProposalBody `json:"proposals"`
-	NextCursor string         `json:"nextCursor"`
+	NextCursor string               `json:"nextCursor"`
 }
 
 // apiNoteAction is an action that the API tests never run.
