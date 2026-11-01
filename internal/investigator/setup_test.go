@@ -135,7 +135,7 @@ func setup(t *testing.T, o options) *harness {
 
 	h := &harness{pool: pool, conn: conn, spans: tracetest.NewSpanRecorder(), registry: prometheus.NewRegistry()}
 	h.handler = newHandler(t, pool, conn, src, h.spans, h.registry)
-	h.handler.opts.Routes["payments"] = o.route
+	h.handler.opts.Routes = StaticRoutes{"payments": o.route}
 	h.handler.opts.Daily = o.daily
 
 	if o.stoppedTime {
@@ -179,7 +179,7 @@ func newHandler(t *testing.T, pool *pgxpool.Pool, conn model.Connector, src sour
 		Connectors:     map[string]Connector{"claude": {Connector: conn}},
 		Prices:         pricing.Shipped(),
 		Strategies:     set,
-		Routes:         map[string]Route{"payments": {}},
+		Routes:         StaticRoutes{"payments": {}},
 		Rules:          report.Rules{},
 		Metrics:        metrics,
 		TracerProvider: sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans)),

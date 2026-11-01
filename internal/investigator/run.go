@@ -50,6 +50,9 @@ type run struct {
 	hist   *history
 	budget Budget
 	tools  *tools.Run
+	// route is the route as it was when the run started, kept for the whole
+	// run even when the route changes meanwhile.
+	route Route
 
 	// conn is the investigate connector, connector its name and modelID
 	// the model its steps are priced as.
@@ -123,7 +126,7 @@ func (h *Handler) newRun(ctx context.Context, inv db.Investigation, log *slog.Lo
 		r.runStart, r.before = r.hist.runUse(h.now(), inv)
 	}
 
-	r.tools = h.opts.Guard.Start(ctx, inv.ID.String(), h.opts.Routes[inv.Route].Sources)
+	r.tools = h.opts.Guard.Start(ctx, inv.ID.String(), r.route.Sources)
 
 	if len(steps) == 0 && !r.withTriage {
 		if err := r.savePrompt(ctx); err != nil {
@@ -143,7 +146,7 @@ func (r *run) followUp() bool {
 }
 
 // settings reads the investigation's stored settings and finds the
-// configured connector and route they name.
+// configured connector and the route in effect that they name.
 func (r *run) settings() error {
 	var conns Connectors
 	if err := json.Unmarshal(r.inv.Connectors, &conns); err != nil {
@@ -163,11 +166,14 @@ func (r *run) settings() error {
 		return fmt.Errorf("%w: connector %q is not configured", queue.ErrGiveUp, rc.Connector)
 	}
 
-	if _, ok := r.h.opts.Routes[r.inv.Route]; !ok {
-		r.log.Error("the investigation's route is not configured")
+	route, ok := r.h.opts.Routes.Route(r.inv.Route)
+	if !ok {
+		r.log.Error("the investigation's route is no longer in effect")
 
-		return fmt.Errorf("%w: route %q is not configured", queue.ErrGiveUp, r.inv.Route)
+		return fmt.Errorf("%w: route %q is no longer in effect", queue.ErrGiveUp, r.inv.Route)
 	}
+
+	r.route = route
 
 	r.conn, r.connector, r.modelID = conn, rc.Connector, rc.Model
 	r.summarize, r.summarizer, r.summaryModel = conn, rc.Connector, rc.Model

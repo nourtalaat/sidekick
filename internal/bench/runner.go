@@ -536,7 +536,7 @@ func (r *Runner) jobQueue(database *Database, sc Scenario, guard *tools.Guard, r
 		Connectors: r.connectors,
 		Prices:     r.prices,
 		Strategies: cfg.StrategySet(),
-		Routes:     map[string]investigator.Route{RouteName: {Sources: sc.SourceNames()}},
+		Routes:     investigator.StaticRoutes{RouteName: {Sources: sc.SourceNames()}},
 		Rules:      cfg.Report.Rules(),
 		Daily:      investigator.DailyCaps{Location: time.UTC},
 		Logger:     r.compLog,

@@ -42,6 +42,8 @@ type capped struct {
 	limit int64
 	// skip ends new investigations instead of holding them.
 	skip bool
+	// outputs are the route's outputs, which get the notice.
+	outputs []string
 }
 
 // holdForDailyCap checks, before the first run of the investigation with
@@ -88,7 +90,8 @@ func (h *Handler) holdForDailyCap(ctx context.Context, job db.Job, id uuid.UUID)
 // dailyCap returns the daily cap that route has reached, if any: the
 // route's own, then the global one.
 func (h *Handler) dailyCap(ctx context.Context, route string) (capped, bool, error) {
-	rc, global := h.opts.Routes[route], h.opts.Daily
+	rc, _ := h.opts.Routes.Route(route)
+	global := h.opts.Daily
 
 	if rc.DailyMaxCostMicros <= 0 && global.MaxCostMicros <= 0 {
 		return capped{}, false, nil
@@ -101,9 +104,9 @@ func (h *Handler) dailyCap(ctx context.Context, route string) (capped, bool, err
 
 	switch {
 	case rc.DailyMaxCostMicros > 0 && spent.RouteMicros >= rc.DailyMaxCostMicros:
-		return capped{route: route, limit: rc.DailyMaxCostMicros, skip: rc.DailySkip}, true, nil
+		return capped{route: route, limit: rc.DailyMaxCostMicros, skip: rc.DailySkip, outputs: rc.Outputs}, true, nil
 	case global.MaxCostMicros > 0 && spent.TotalMicros >= global.MaxCostMicros:
-		return capped{route: route, global: true, limit: global.MaxCostMicros, skip: global.Skip}, true, nil
+		return capped{route: route, global: true, limit: global.MaxCostMicros, skip: global.Skip, outputs: rc.Outputs}, true, nil
 	default:
 		return capped{}, false, nil
 	}
@@ -219,7 +222,7 @@ func (h *Handler) noticeDailyCap(ctx context.Context, tx pgx.Tx, c capped) error
 		Key:       key,
 		At:        now,
 		NotBefore: h.startOfDay(now),
-		Sinks:     h.opts.Routes[c.route].Outputs,
+		Sinks:     c.outputs,
 		Notice: output.Notice{
 			Kind:  output.NoticeDailyCap,
 			Title: noticeTitleDailyCap,

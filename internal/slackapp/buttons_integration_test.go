@@ -856,7 +856,7 @@ func newInvestigator(t *testing.T, pool *pgxpool.Pool, conn model.Connector, can
 		Connectors: map[string]investigator.Connector{"fake": {Connector: conn}},
 		Prices:     pricing.Shipped(),
 		Strategies: set,
-		Routes:     map[string]investigator.Route{"default": {}},
+		Routes:     investigator.StaticRoutes{"default": {}},
 		Rules:      report.Rules{},
 		Canceller:  canceller,
 	})

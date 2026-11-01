@@ -64,8 +64,9 @@ type Options struct {
 	// runtime. An investigation keeps the version of its strategy that it
 	// started with, as long as the source still has it.
 	Strategies strategy.Source
-	// Routes are the settings of each route, by name.
-	Routes map[string]Route
+	// Routes gives the settings of each route in effect. Use StaticRoutes
+	// for a fixed set, and ConfigRoutes to follow the routes in effect.
+	Routes RouteSource
 	// Rules are the checks a submitted report must pass.
 	Rules report.Rules
 	// Daily are the daily spending caps and their time zone.
@@ -162,6 +163,10 @@ func New(opts Options) (*Handler, error) {
 	triage, err := tools.ParseInputSchema(submitTriageSchema)
 	if err != nil {
 		return nil, fmt.Errorf("new investigator: %s: %w", prompt.SubmitTriageTool, err)
+	}
+
+	if opts.Routes == nil {
+		opts.Routes = StaticRoutes{}
 	}
 
 	tp := opts.TracerProvider

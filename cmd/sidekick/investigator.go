@@ -13,6 +13,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/model/instrument"
 	"github.com/nourtalaat/sidekick/internal/model/pricing"
 	"github.com/nourtalaat/sidekick/internal/queue"
+	"github.com/nourtalaat/sidekick/internal/rules"
 	"github.com/nourtalaat/sidekick/internal/strategy"
 	"github.com/nourtalaat/sidekick/internal/watch"
 )
@@ -21,8 +22,10 @@ import (
 // for each new investigation, and the follow_up jobs of follow-up
 // questions, with every source behind guard, every model connector
 // wrapped with its span and metrics, and start_watcher through watchers,
-// and listens for Stops of the runs on this replica.
-func registerInvestigator(a *app.App, strategies strategy.Source, guard *tools.Guard, watchers *watch.ModelStarter, modelMetrics *instrument.Metrics, vectors *memory.Vectors) error {
+// and listens for Stops of the runs on this replica. Each run takes its
+// route's sources, outputs and daily cap from the routes in effect in cache,
+// the file's and the runtime ones, as the router does.
+func registerInvestigator(a *app.App, cache *rules.Cache, strategies strategy.Source, guard *tools.Guard, watchers *watch.ModelStarter, modelMetrics *instrument.Metrics, vectors *memory.Vectors) error {
 	cfg := a.Config()
 	prices := pricing.New(cfg.Model.PriceTable())
 
@@ -37,15 +40,7 @@ func registerInvestigator(a *app.App, strategies strategy.Source, guard *tools.G
 		return fmt.Errorf("set up the daily caps: %w", err)
 	}
 
-	routes := make(map[string]investigator.Route, len(cfg.Routes))
-	for _, r := range cfg.Routes {
-		routes[r.Name] = investigator.Route{
-			Sources:            r.Sources,
-			Outputs:            r.Outputs,
-			DailyMaxCostMicros: r.Budgets.Daily.MaxCostMicros(),
-			DailySkip:          r.Budgets.Daily.OnDailyCap == config.OnDailyCapSkip,
-		}
-	}
+	routes := investigator.ConfigRoutes(func() []config.Route { return cache.Current().RouteConfigs() })
 
 	canceller := investigator.NewCanceller(a.Pool(), a.Logger().With("component", "investigator"))
 
