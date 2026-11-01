@@ -43,7 +43,7 @@ const (
 	detailExpired   = "This proposal expired before anyone decided it."
 	detailLongNote  = "note must be at most 500 characters."
 
-	detailTokenApprove = "An action is approved by a person who is signed in, not by an API token."
+	detailApproveByPerson = "An action is approved by a person who is signed in, not by an API token."
 )
 
 // proposalListed are the statuses GET /proposals lists when none is asked.
@@ -121,7 +121,7 @@ func (s *server) ApproveProposal(ctx context.Context, req apigen.ApproveProposal
 
 	p, _ := auth.PrincipalFrom(ctx)
 	if p.Kind != auth.KindUser {
-		return nil, problemf(http.StatusForbidden, detailTokenApprove)
+		return nil, problemf(http.StatusForbidden, detailApproveByPerson)
 	}
 
 	got, err := s.actions.Approve(ctx, req.Id, deciderOf(p))
@@ -173,7 +173,7 @@ func decisionProblem(err error) error {
 
 	switch {
 	case errors.Is(err, actionproposals.ErrTokenCannotApprove):
-		return problemf(http.StatusForbidden, detailTokenApprove)
+		return problemf(http.StatusForbidden, detailApproveByPerson)
 	case errors.Is(err, actionproposals.ErrNotFound):
 		return problemf(http.StatusNotFound, detailNoProp)
 	case errors.Is(err, actionproposals.ErrExpired):
