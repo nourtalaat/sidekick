@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/auth"
@@ -246,7 +245,7 @@ func scenarioView(id string, investigation *uuid.UUID, title, status string, rev
 	}
 
 	if investigation != nil {
-		out.InvestigationId = (*openapi_types.UUID)(investigation)
+		out.InvestigationId = investigation
 	}
 
 	if reviewedBy != nil {

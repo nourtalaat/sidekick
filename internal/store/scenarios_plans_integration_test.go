@@ -36,6 +36,8 @@ func TestScenarioQueryPlans(t *testing.T) {
 	seed, err := pool.Begin(t.Context())
 	require.NoError(t, err)
 
+	defer func() { _ = seed.Rollback(t.Context()) }()
+
 	_, err = seed.Exec(t.Context(), `
 INSERT INTO users (id, oidc_issuer, oidc_subject, name, role, created_at, last_login_at)
 VALUES ($1, 'https://issuer.example', 'subject-1', 'Plan Reviewer', 'admin', now(), now())`, userID)
@@ -52,8 +54,8 @@ FROM generate_series(1, $2) AS i`, userID, planScenarios)
 	_, err = seed.Exec(t.Context(), `
 INSERT INTO events (id, intake, key, kind, trusted, labels, fingerprint, status, raw, group_id, received_at)
 SELECT gen_random_uuid(), 'alertmanager', 'key-' || i, 'alert', false, '{}', 'fp-' || i, 'grouped', '{}',
-       CASE WHEN i % $2 = 0 THEN $3::uuid ELSE gen_random_uuid() END, now() - (i || ' seconds')::interval
-FROM generate_series(1, $4) AS i`, planScenarios, planGroups, groupID, planScenarios)
+       CASE WHEN i % $1 = 0 THEN $2::uuid ELSE gen_random_uuid() END, now() - (i || ' seconds')::interval
+FROM generate_series(1, $3) AS i`, planGroups, groupID, planScenarios)
 	require.NoError(t, err)
 
 	_, err = seed.Exec(t.Context(), `ANALYZE scenarios, events`)
@@ -193,7 +195,7 @@ FROM generate_series(1, $4) AS i`, planScenarios, planGroups, groupID, planScena
 
 			explain := storetest.NewExplainer(t, tx)
 
-			require.ErrorIs(t, tt.run(t.Context(), db.New(explain)), storetest.ErrExplained, fmt.Sprintf("query %s", tt.name))
+			require.ErrorIs(t, tt.run(t.Context(), db.New(explain)), storetest.ErrExplained, tt.name)
 
 			for _, index := range tt.wantIndex {
 				require.Contains(t, explain.Plan, index)

@@ -112,7 +112,7 @@ func TestFixturesOf(t *testing.T) {
 			if tt.wantErr != nil {
 				require.Error(t, err)
 
-				if tt.wantErr != errAny {
+				if !errors.Is(tt.wantErr, errAny) {
 					require.ErrorIs(t, err, tt.wantErr)
 				}
 
