@@ -116,6 +116,50 @@ func (q *Queries) GetEventByKey(ctx context.Context, arg GetEventByKeyParams) (E
 	return i, err
 }
 
+const getFirstAlertEventOfGroup = `-- name: GetFirstAlertEventOfGroup :one
+SELECT id, intake, key, kind, sender_kind, sender_id, sender_name, trusted, alert_name, title, body, service, severity, labels, links, fingerprint, slack, raw, status, skip_reason, route, group_id, starts_at, ends_at, received_at, teams FROM events
+WHERE group_id = $1::uuid AND kind = 'alert' AND raw IS NOT NULL
+ORDER BY received_at, id
+LIMIT 1
+`
+
+// GetFirstAlertEventOfGroup returns the oldest alert in a group that kept
+// its original payload, the one a scenario is built from. It returns no row
+// when there is none.
+func (q *Queries) GetFirstAlertEventOfGroup(ctx context.Context, groupID uuid.UUID) (Event, error) {
+	row := q.db.QueryRow(ctx, getFirstAlertEventOfGroup, groupID)
+	var i Event
+	err := row.Scan(
+		&i.ID,
+		&i.Intake,
+		&i.Key,
+		&i.Kind,
+		&i.SenderKind,
+		&i.SenderID,
+		&i.SenderName,
+		&i.Trusted,
+		&i.AlertName,
+		&i.Title,
+		&i.Body,
+		&i.Service,
+		&i.Severity,
+		&i.Labels,
+		&i.Links,
+		&i.Fingerprint,
+		&i.Slack,
+		&i.Raw,
+		&i.Status,
+		&i.SkipReason,
+		&i.Route,
+		&i.GroupID,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.ReceivedAt,
+		&i.Teams,
+	)
+	return i, err
+}
+
 const insertEvent = `-- name: InsertEvent :one
 INSERT INTO events (
   id, intake, key, kind, sender_kind, sender_id, sender_name, trusted,
