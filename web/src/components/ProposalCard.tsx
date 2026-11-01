@@ -19,6 +19,9 @@ const STATUS: Record<ProposalStatus, { label: string; status: Status; spinning?:
   undone: { label: "Undone", status: "neutral" },
 };
 
+/** How a proposal that the route's policy approved is described in place of a person's name. */
+const POLICY_APPROVAL = "Approved by policy (read + write route)";
+
 /** The longest note a rejection takes, as the API limits it. */
 const MAX_NOTE = 500;
 
@@ -188,7 +191,11 @@ function Decide({ proposal }: { proposal: Proposal }) {
   );
 }
 
-/** Who decided: the name of the user or token, or a Slack user's ID, or empty. */
+/** Who decided: the name of the user or token, or a Slack user's ID, or that the route's policy approved it, or empty. */
 function decider(p: Proposal): string {
+  if (p.approvedByPolicy) {
+    return POLICY_APPROVAL;
+  }
+
   return p.decidedByName ?? (p.decidedBySlackUser ? `Slack user ${p.decidedBySlackUser}` : "");
 }
