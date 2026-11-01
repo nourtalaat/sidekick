@@ -110,11 +110,13 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
-	if err := registerSlackApp(ctx, a, cache, memory.SyncOptions{Embed: vectors != nil}); err != nil {
+	trigger := proposalTrigger(ctx, a)
+
+	if err := registerSlackApp(ctx, a, cache, memory.SyncOptions{Embed: vectors != nil}, trigger); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
-	if err := registerAPI(ctx, a, memory.SyncOptions{Embed: vectors != nil}); err != nil {
+	if err := registerAPI(ctx, a, memory.SyncOptions{Embed: vectors != nil}, trigger); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
@@ -157,6 +159,10 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 	}
 
 	if err := registerInvestigator(a, cache, strategies, guard, watchers, modelMetrics, vectors); err != nil {
+		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
+	}
+
+	if err := registerProposals(ctx, a, opts.Registries, strategies, modelMetrics); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 

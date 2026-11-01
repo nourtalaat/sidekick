@@ -1541,6 +1541,47 @@ apply to them and to the watchers the model starts during its
 investigations. They are checked with the limits of each route that names
 the strategy, and a problem is reported at that route's `strategy` field.
 
+#### Proposed changes
+
+```yaml
+strategies:
+  proposals:
+    enabled: false        # default false
+    wrongThreshold: 3     # default 3
+    window: 14d           # default 14d
+```
+
+When people keep rating one version of a strategy wrong, Sidekick can draft a
+change to it and check the change in the benchmark before anyone applies it.
+This is off unless `enabled` is `true`. Off, Sidekick counts nothing, drafts
+nothing, runs no gate and spends nothing.
+
+- **The trigger.** A strategy version that has `wrongThreshold` ratings of
+  wrong on a verdict or a finding within `window`, counted on investigations
+  that ran that exact version, gets a proposal. Each rating of one person on
+  one part counts once. A version gets one proposal, ever, however many wrong
+  ratings follow.
+- **The draft.** The model of the `summarize` role gets the strategy, the
+  wrong ratings with their reasons, the confirmed investigations of the
+  strategy and the lessons already in use for it, and answers with the whole
+  changed strategy and a short reason. The text must pass the checks of a
+  saved strategy, keep the name and differ from the current text; the model
+  gets one more try with the problems when it does not. A draft that still
+  fails, or a strategy that has a newer version by then, ends the proposal as
+  `draft_failed` with the reason, and that version gets no other proposal.
+  Without a `summarize` role, no proposal is drafted and Sidekick logs that
+  once at start-up.
+- **The gate.** A drafted change goes through the [benchmark
+  gate](benchmark.md#the-strategy-gate) at once. Only a change that passed it
+  can be approved, in the [review queue](web-ui.md#the-review-queue).
+
+Turning proposals on costs money. Each proposal is one `summarize` call, and
+each gate runs every scenario that covers the strategy `bench.gate.minRepeats`
+times with the current version and again with the change, so at least
+`2 x minRepeats x (the number of scenarios)` investigations, plus the judge's
+grading of each. Every call is priced and counted in the daily spend and the
+daily caps. [`bench.gate.maxCostUSD`](#bench) caps what one gate may spend.
+
 ### `routes`
 
 Routes decide how an event is investigated and where the report goes. They
@@ -1906,6 +1947,47 @@ lessons come after all scoped ones. Global lessons may use at most
 specific ones. Lessons that did not fit are listed in the investigation's
 record, so you can see when a scope is too broad.
 
+### `bench`
+
+```yaml
+bench:
+  gate:
+    minRepeats: 5          # at least 5; default 5
+    maxDrop: 0.02          # 0 to under 1; default 0.02
+    maxCostUSD: 5          # above 0; default 5
+    publicDir: ""          # default none
+    baseDir: ""            # default the working directory
+```
+
+These settings are for the benchmark gate that checks
+[proposed changes to strategies](#proposed-changes). They are checked
+whether or not proposals are on.
+
+- `minRepeats` is how many times the gate runs each scenario with each
+  version. It cannot be set below 5, because fewer runs cannot tell a change
+  from chance.
+- `maxDrop` is how far below the current version the lower end of the 95%
+  interval of the change's score difference may be and still pass.
+- `maxCostUSD` caps what one gate may spend on runs and grading. The gate
+  stops before a run that would pass it, and ends with the result
+  `over_budget`.
+- `publicDir` is a directory with the public benchmark scenarios (see
+  [the public scenarios](benchmark.md#the-public-scenarios)) that the gate
+  chooses from. It is the only source of scenarios for now, so proposals need
+  it: Sidekick logs a warning at start-up when proposals are on and it is
+  empty. Sidekick does not
+  ship them in its image: mount a checkout of the repository, or just its
+  `bench` directory, and set `publicDir` to `<checkout>/bench/scenarios/public`
+  and `baseDir` to `<checkout>`, since the tool snapshots the scenarios name
+  are relative to it. Empty means the gate has no scenario, and every gate ends
+  with `no_benchmark_coverage`.
+
+The gate runs its investigations in a schema of its own in the database of
+`database.urlSecret`, and drops it at the end, so they never mix with real
+ones. The database role must therefore be allowed to create a schema: give it
+`CREATE` on the database when proposals are on. Without it a gate ends with
+the result `error` and says so.
+
 ### `redaction`
 
 Redaction removes secrets and personal data from event text, raw webhook
@@ -2176,6 +2258,13 @@ with access to the database, who can turn the guard off.
 | `lessons.maxPerPrompt` | `10` |
 | `lessons.maxTokens` | `1500` |
 | `lessons.globalShare` | `0.3` |
+| `strategies.proposals.enabled` | `false` |
+| `strategies.proposals.wrongThreshold` | `3` |
+| `strategies.proposals.window` | `14d` |
+| `bench.gate.minRepeats` | `5` |
+| `bench.gate.maxDrop` | `0.02` |
+| `bench.gate.maxCostUSD` | `5` |
+| `bench.gate.publicDir`, `bench.gate.baseDir` | none |
 | `redaction.builtIn` | every built-in rule except `ip_addresses` |
 | `telemetry.logLevel` | `info` |
 | `routes[].watcherLimits.types` | every check type: `http`, `tool` and `alert` |
@@ -2253,6 +2342,7 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   `dimensions`, and `dimensions` is a length the model returns and at most
   2000. No `model.connectors` entry sets `dimensions` or names an embedding
   model.
+- `strategies.proposals.wrongThreshold` is at least 1 and `window` is positive. `bench.gate.minRepeats` is at least 5, `maxDrop` is at least 0 and below 1, and `maxCostUSD` is above 0.
 - `lessons.maxPerPrompt` is 1 to 50, `lessons.maxTokens` is 200 to 20000, and
   `lessons.globalShare` is 0 to 1.
 - Every `redaction.builtIn` entry is a built-in rule. Every custom

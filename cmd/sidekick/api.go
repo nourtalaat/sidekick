@@ -12,6 +12,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/feedback"
 	"github.com/nourtalaat/sidekick/internal/lessons"
 	"github.com/nourtalaat/sidekick/internal/memory"
+	"github.com/nourtalaat/sidekick/internal/proposals"
 	"github.com/nourtalaat/sidekick/internal/rules"
 	"github.com/nourtalaat/sidekick/internal/strategystore"
 )
@@ -20,7 +21,7 @@ import (
 // under /api/v1 on the main listener, when the config has an oidc
 // section. Without it, neither is served. memorySync says how feedback that
 // changes a confirmed verdict syncs the investigation's memory entry.
-func registerAPI(ctx context.Context, a *app.App, memorySync memory.SyncOptions) error {
+func registerAPI(ctx context.Context, a *app.App, memorySync memory.SyncOptions, trigger proposals.Trigger) error {
 	cfg := a.Config()
 	log := a.Logger().With("component", "api")
 
@@ -58,21 +59,25 @@ func registerAPI(ctx context.Context, a *app.App, memorySync memory.SyncOptions)
 		return fmt.Errorf("set up the watcher actions of the API: %w", err)
 	}
 
+	strategies := strategystore.NewStore(a.Pool())
+
 	handler, err := api.New(api.Options{
-		Auth:       sessions,
-		Tokens:     sessions,
-		Config:     cfg,
-		Rules:      rules.NewStore(a.Pool(), cfg),
-		Strategies: strategystore.NewStore(a.Pool()),
-		Redactor:   a.Redactor(),
-		Pool:       a.Pool(),
-		Audit:      audit.NewWriter(),
-		Hub:        hub,
-		Feedback:   feedbackMetrics,
-		Memory:     memorySync,
-		Stopper:    stopper,
-		Watchers:   recorder,
-		Logger:     log,
+		Auth:             sessions,
+		Tokens:           sessions,
+		Config:           cfg,
+		Rules:            rules.NewStore(a.Pool(), cfg),
+		Strategies:       strategies,
+		ProposalReviewer: proposals.NewService(a.Pool(), strategies),
+		Redactor:         a.Redactor(),
+		Pool:             a.Pool(),
+		Audit:            audit.NewWriter(),
+		Hub:              hub,
+		Feedback:         feedbackMetrics,
+		Memory:           memorySync,
+		Proposals:        trigger,
+		Stopper:          stopper,
+		Watchers:         recorder,
+		Logger:           log,
 
 		DraftLessons: summarizeConfigured(cfg),
 		Lessons:      lessons.NewStore(a.Pool(), a.Redactor()),

@@ -129,3 +129,53 @@ func TestSetVersion(t *testing.T) {
 
 	require.Same(t, set, set.Current())
 }
+
+func TestSetWith(t *testing.T) {
+	t.Parallel()
+
+	base, err := Load(strategies.FS, filepath.Join("fixture", "valid"), nil)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		with Strategy
+	}{
+		{name: "replaces a built-in strategy", with: runtimeStrategy(t, GenericAlert, 3)},
+		{name: "replaces a file strategy", with: runtimeStrategy(t, "checkout-latency", 5)},
+		{name: "adds a strategy", with: runtimeStrategy(t, "brand-new", 1)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			before, existed := base.Get(tt.with.Name)
+			names := base.Names()
+
+			set := base.With(tt.with)
+
+			got, ok := set.Get(tt.with.Name)
+			require.True(t, ok)
+			require.Equal(t, tt.with.Version, got.Version)
+
+			after, stillThere := base.Get(tt.with.Name)
+			require.Equal(t, existed, stillThere, "the set it was made from is not changed")
+			require.Equal(t, before, after)
+
+			if existed {
+				require.Equal(t, names, set.Names())
+			}
+		})
+	}
+}
+
+func TestSetWithOnANilSet(t *testing.T) {
+	t.Parallel()
+
+	var set *Set
+
+	got, ok := set.With(runtimeStrategy(t, "only-one", 1)).Get("only-one")
+
+	require.True(t, ok)
+	require.Equal(t, "runtime:1", got.Version)
+}
