@@ -117,6 +117,57 @@ func TestValidateWaitsForAFreeSlot(t *testing.T) {
 	}
 }
 
+// acquireRepeats is how often a free-slot case calls acquire. Before the fix
+// each call with a spent wait was refused about half the time, so this many
+// calls make the old behavior fail every run.
+const acquireRepeats = 200
+
+func TestAcquireTakesAFreeSlotBeforeWaiting(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		busy     int
+		slotWait time.Duration
+		wantErr  error
+	}{
+		{name: "no wait at all", busy: 0, slotWait: 0},
+		{name: "one nanosecond of wait", busy: 0, slotWait: time.Nanosecond},
+		{name: "last free slot", busy: MaxConcurrent - 1, slotWait: 0},
+		{name: "every slot busy", busy: MaxConcurrent, slotWait: 0, wantErr: ErrBusy},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := newService(t, Options{})
+			s.slotWait = tt.slotWait
+
+			for range tt.busy {
+				s.slots <- struct{}{}
+			}
+
+			for range acquireRepeats {
+				release, err := s.acquire(t.Context())
+				if tt.wantErr != nil {
+					require.ErrorIs(t, err, tt.wantErr)
+					require.Nil(t, release)
+
+					continue
+				}
+
+				require.NoError(t, err)
+				require.NotNil(t, release)
+				require.Len(t, s.slots, tt.busy+1)
+
+				release()
+				require.Len(t, s.slots, tt.busy)
+			}
+		})
+	}
+}
+
 func TestValidateGivesUpWhenTheCallerDoes(t *testing.T) {
 	t.Parallel()
 
