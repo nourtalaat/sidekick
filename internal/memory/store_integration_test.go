@@ -134,7 +134,7 @@ func TestStoreList(t *testing.T) {
 
 			page, err := s.List(t.Context(), tt.params)
 			require.NoError(t, err)
-			require.Equal(t, tt.want, idsOf(page))
+			require.Equal(t, tt.want, append([]uuid.UUID(nil), idsOf(page)...))
 			require.Nil(t, page.Next)
 		})
 	}
