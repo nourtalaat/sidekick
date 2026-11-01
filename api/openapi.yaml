@@ -2233,12 +2233,17 @@ components:
           description: A duration such as 15m. Empty turns it off.
     RouteMode:
       type: string
-      enum: [read-only, approved]
+      enum: [read-only, approved, read-write]
       description: |
         The action mode. In read-only mode, the default, the model cannot
         propose changes. In approved mode it may propose the route's
-        actions, and a person approves each one. A route in approved mode
-        lists at least one action.
+        actions, and a person approves each one. In read-write mode a
+        proposal of an event from a trusted sender runs without a person.
+        A route in approved or read-write mode lists at least one action.
+        A read-write route may select only trusted intakes and listeners,
+        unless `allowUntrustedWrite` is set. An investigation of an event
+        that is not trusted runs in approved mode instead. Only the config
+        file and an admin here can set read-write; Slack commands cannot.
     RouteSpec:
       type: object
       description: The parts of a route that a person sets, with the keys they have in sidekick.yaml.
@@ -2260,6 +2265,13 @@ components:
             type: string
         mode:
           $ref: "#/components/schemas/RouteMode"
+        allowUntrustedWrite:
+          type: boolean
+          description: |
+            Lets a read-write route select intakes and listeners that are
+            not trusted, and keeps read-write mode for their events. Every
+            start logs a warning for it, and the change is in the audit
+            log. It has no effect in other modes.
         actions:
           type: array
           description: The actions the route may propose, by their names in the config file's actions section. Empty in read-only mode.
