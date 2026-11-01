@@ -1,6 +1,7 @@
 package slack
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -219,7 +220,7 @@ func TestOnlyTheFirstProposalsAreShown(t *testing.T) {
 	for _, status := range []action.ProposalStatus{action.StatusRejected, action.StatusRejected, action.StatusProposed, action.StatusRejected, action.StatusRejected} {
 		p := waitingProposal()
 		p.Status = status
-		p.ID = proposalID[:len(proposalID)-1] + string(rune('a'+len(list)))
+		p.ID = proposalID[:len(proposalID)-1] + strconv.Itoa(len(list))
 		list = append(list, p)
 	}
 
@@ -255,7 +256,7 @@ func TestChunksOf(t *testing.T) {
 		want []string
 	}{
 		{name: "fits", text: "abc", size: 5, want: []string{"abc"}},
-		{name: "cuts at a line end", text: "aaaa\nbbbb\ncccc", size: 7, want: []string{"aaaa\n", "bbbb\ncccc"}},
+		{name: "cuts at a line end", text: "aaaa\nbbbb\ncccc", size: 7, want: []string{"aaaa\n", "bbbb\n", "cccc"}},
 		{name: "cuts inside a long line", text: "abcdefghij", size: 4, want: []string{"abcd", "efgh", "ij"}},
 	}
 

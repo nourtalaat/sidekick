@@ -244,9 +244,9 @@ func (n *Note) create(ctx context.Context, p Params, key string) (created, error
 		_ = resp.Body.Close()
 	}()
 
-	switch {
-	case resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated:
-	case resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusForbidden:
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusCreated:
+	case http.StatusBadRequest, http.StatusNotFound, http.StatusForbidden:
 		// A repeat cannot fix these, so the proposal fails at once.
 		return created{}, fmt.Errorf("status %d: %w: %w", resp.StatusCode, action.ErrPermanent, errRefused)
 	default:
