@@ -240,6 +240,42 @@ func (q *Queries) ListFeedbackByIDs(ctx context.Context, ids []uuid.UUID) ([]Lis
 	return items, nil
 }
 
+const listLessonsOfStrategy = `-- name: ListLessonsOfStrategy :many
+SELECT text FROM lessons
+WHERE status = 'active' AND scope_strategy = $1::text
+  AND scope_service IS NULL AND scope_alert IS NULL AND scope_route IS NULL
+ORDER BY created_at DESC, id DESC
+LIMIT $2
+`
+
+type ListLessonsOfStrategyParams struct {
+	Strategy string
+	MaxRows  int32
+}
+
+// ListLessonsOfStrategy returns the newest active lessons scoped to a
+// strategy alone, for the draft of a change to that strategy. It reads the
+// lessons through the index of their strategy scope.
+func (q *Queries) ListLessonsOfStrategy(ctx context.Context, arg ListLessonsOfStrategyParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listLessonsOfStrategy, arg.Strategy, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var text string
+		if err := rows.Scan(&text); err != nil {
+			return nil, err
+		}
+		items = append(items, text)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStrategyGateRuns = `-- name: ListStrategyGateRuns :many
 SELECT arm, scenario_id, repeat, result, cost_micros
 FROM strategy_gate_runs

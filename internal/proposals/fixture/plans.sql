@@ -47,4 +47,8 @@ INSERT INTO strategy_gate_runs (proposal_id, arm, scenario_id, repeat, result, c
 SELECT md5('prop' || 1)::uuid, a, 'scenario-' || s, r, '{}', 1000, now()
 FROM unnest(ARRAY['baseline', 'proposal']) AS a, generate_series(1, 13) AS s, generate_series(1, 5) AS r;
 
-ANALYZE event_groups, investigations, feedback, strategy_proposals, strategy_gate_runs;
+INSERT INTO lessons (id, text, scope_strategy, status, origin, created_at)
+SELECT md5('lesson' || l)::uuid, 'Lesson ' || l, 'strategy-' || (l % 20), 'active', 'ui', now() - l * interval '1 minute'
+FROM generate_series(1, 4000) AS l;
+
+ANALYZE lessons, event_groups, investigations, feedback, strategy_proposals, strategy_gate_runs;

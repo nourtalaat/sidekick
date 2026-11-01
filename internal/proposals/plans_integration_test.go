@@ -77,6 +77,15 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"investigations_strategy_confirmed"},
 		},
 		{
+			name: "ListLessonsOfStrategy",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListLessonsOfStrategy(ctx, db.ListLessonsOfStrategyParams{Strategy: strategy, MaxRows: 10})
+
+				return explained(err)
+			},
+			wantIndex: []string{"lessons_active_strategy"},
+		},
+		{
 			name: "InsertStrategyProposal",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.InsertStrategyProposal(ctx, db.InsertStrategyProposalParams{ID: uuid.New(), Name: strategy, BaseVersion: "v3", TriggerCount: 3})

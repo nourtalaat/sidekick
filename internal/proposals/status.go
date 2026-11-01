@@ -30,12 +30,13 @@ const (
 
 // The audit log names of changes to proposals.
 const (
-	ActionCreated  = "strategy_proposal.created"
-	ActionDrafted  = "strategy_proposal.drafted"
-	ActionGate     = "strategy_proposal.gate_ended"
-	ActionEdited   = "strategy_proposal.edited"
-	ActionApproved = "strategy_proposal.approved"
-	ActionRejected = "strategy_proposal.rejected"
+	ActionCreated     = "strategy_proposal.created"
+	ActionDrafted     = "strategy_proposal.drafted"
+	ActionDraftFailed = "strategy_proposal.draft_failed"
+	ActionGate        = "strategy_proposal.gate_ended"
+	ActionEdited      = "strategy_proposal.edited"
+	ActionApproved    = "strategy_proposal.approved"
+	ActionRejected    = "strategy_proposal.rejected"
 	// KindProposal is the kind of what those entries change.
 	KindProposal = "strategy_proposal"
 )

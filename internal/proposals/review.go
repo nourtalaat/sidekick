@@ -22,8 +22,8 @@ import (
 )
 
 // MaxBodyBytes is the most bytes the body of a proposal may have, whether a
-// model drafted it or an admin edited it.
-const MaxBodyBytes = 32 << 10
+// model drafted it or an admin edited it: the most a saved strategy may have.
+const MaxBodyBytes = strategy.MaxBodyBytes
 
 // MaxReasonChars is the most characters of a reason an admin gives when
 // rejecting.
@@ -223,10 +223,6 @@ func (s *Service) Edit(ctx context.Context, id uuid.UUID, by strategystore.Actor
 // checked: it must be a valid strategy file for the strategy called name, and
 // not too large. The error is a *strategystore.InvalidError.
 func CheckBody(body, name string) error {
-	if len(body) > MaxBodyBytes {
-		return &strategystore.InvalidError{Body: []strategy.FieldProblem{{Message: fmt.Sprintf("the strategy is longer than %d bytes", MaxBodyBytes)}}}
-	}
-
 	st, problems := strategy.Check([]byte(body))
 	if len(problems) > 0 {
 		return &strategystore.InvalidError{Body: problems}
