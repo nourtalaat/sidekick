@@ -289,19 +289,21 @@ SELECT id, name, base_version, base_origin, rationale, trigger_count, status, st
        created_at, updated_at, decided_at
 FROM strategy_proposals
 WHERE ($1::text IS NULL OR status = $1::text)
-  AND ($2::text IS NULL OR name = $2::text)
-  AND ($3::timestamptz IS NULL
-       OR (created_at, id) < ($3::timestamptz, $4::uuid))
+  AND ($2::boolean OR status NOT IN ('drafting', 'draft_failed'))
+  AND ($3::text IS NULL OR name = $3::text)
+  AND ($4::timestamptz IS NULL
+       OR (created_at, id) < ($4::timestamptz, $5::uuid))
 ORDER BY created_at DESC, id DESC
-LIMIT $5
+LIMIT $6
 `
 
 type ListStrategyProposalsParams struct {
-	Status   *string
-	Name     *string
-	CursorAt *time.Time
-	CursorID *uuid.UUID
-	PageSize int32
+	Status        *string
+	IncludeDrafts bool
+	Name          *string
+	CursorAt      *time.Time
+	CursorID      *uuid.UUID
+	PageSize      int32
 }
 
 type ListStrategyProposalsRow struct {
@@ -324,11 +326,14 @@ type ListStrategyProposalsRow struct {
 
 // ListStrategyProposals returns a page of proposals, newest first, without
 // their bodies. A page starts after the proposal with cursor_id created at
-// cursor_at. With a status it reads strategy_proposals_status_created, and
-// without one strategy_proposals_created.
+// cursor_at. Proposals that are still being drafted, and drafts that failed,
+// are left out unless include_drafts is set. With a status it reads
+// strategy_proposals_status_created, and without one
+// strategy_proposals_created.
 func (q *Queries) ListStrategyProposals(ctx context.Context, arg ListStrategyProposalsParams) ([]ListStrategyProposalsRow, error) {
 	rows, err := q.db.Query(ctx, listStrategyProposals,
 		arg.Status,
+		arg.IncludeDrafts,
 		arg.Name,
 		arg.CursorAt,
 		arg.CursorID,

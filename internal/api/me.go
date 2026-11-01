@@ -26,6 +26,8 @@ type server struct {
 	cfg        *config.Config
 	rules      RuleStore
 	strategies StrategyStore
+	// proposalReviewer reviews strategy proposals.
+	proposalReviewer ProposalReviewer
 	// strategyBase holds the built-in and file strategies.
 	strategyBase *strategy.Set
 	redactor     *redact.Redactor

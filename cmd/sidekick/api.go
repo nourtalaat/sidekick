@@ -58,22 +58,25 @@ func registerAPI(ctx context.Context, a *app.App, memorySync memory.SyncOptions,
 		return fmt.Errorf("set up the watcher actions of the API: %w", err)
 	}
 
+	strategies := strategystore.NewStore(a.Pool())
+
 	handler, err := api.New(api.Options{
-		Auth:       sessions,
-		Tokens:     sessions,
-		Config:     cfg,
-		Rules:      rules.NewStore(a.Pool(), cfg),
-		Strategies: strategystore.NewStore(a.Pool()),
-		Redactor:   a.Redactor(),
-		Pool:       a.Pool(),
-		Audit:      audit.NewWriter(),
-		Hub:        hub,
-		Feedback:   feedbackMetrics,
-		Memory:     memorySync,
-		Proposals:  trigger,
-		Stopper:    stopper,
-		Watchers:   recorder,
-		Logger:     log,
+		Auth:             sessions,
+		Tokens:           sessions,
+		Config:           cfg,
+		Rules:            rules.NewStore(a.Pool(), cfg),
+		Strategies:       strategies,
+		ProposalReviewer: proposals.NewService(a.Pool(), strategies),
+		Redactor:         a.Redactor(),
+		Pool:             a.Pool(),
+		Audit:            audit.NewWriter(),
+		Hub:              hub,
+		Feedback:         feedbackMetrics,
+		Memory:           memorySync,
+		Proposals:        trigger,
+		Stopper:          stopper,
+		Watchers:         recorder,
+		Logger:           log,
 	})
 	if err != nil {
 		return fmt.Errorf("set up the API: %w", err)

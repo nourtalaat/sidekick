@@ -36,13 +36,16 @@ SELECT * FROM strategy_proposals WHERE id = @id AND status = 'passed' AND gate_r
 -- name: ListStrategyProposals :many
 -- ListStrategyProposals returns a page of proposals, newest first, without
 -- their bodies. A page starts after the proposal with cursor_id created at
--- cursor_at. With a status it reads strategy_proposals_status_created, and
--- without one strategy_proposals_created.
+-- cursor_at. Proposals that are still being drafted, and drafts that failed,
+-- are left out unless include_drafts is set. With a status it reads
+-- strategy_proposals_status_created, and without one
+-- strategy_proposals_created.
 SELECT id, name, base_version, base_origin, rationale, trigger_count, status, status_detail, gate_result,
        bench_run_id, baseline_run_id, reviewer,
        created_at, updated_at, decided_at
 FROM strategy_proposals
 WHERE (sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status)::text)
+  AND (@include_drafts::boolean OR status NOT IN ('drafting', 'draft_failed'))
   AND (sqlc.narg(name)::text IS NULL OR name = sqlc.narg(name)::text)
   AND (sqlc.narg(cursor_at)::timestamptz IS NULL
        OR (created_at, id) < (sqlc.narg(cursor_at)::timestamptz, sqlc.narg(cursor_id)::uuid))

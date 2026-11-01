@@ -455,6 +455,148 @@ paths:
                 $ref: "#/components/schemas/StrategyVersionDetail"
         default:
           $ref: "#/components/responses/Problem"
+  /strategy-proposals:
+    get:
+      operationId: ListStrategyProposals
+      summary: Proposed changes to strategies, newest first, a page at a time
+      description: |
+        The changes the model drafted after a strategy version collected
+        wrong feedback, with the result of the benchmark gate that checks
+        each. Proposals that are still being drafted, and drafts that
+        failed, are listed only when asked for with `status`.
+      x-sidekick-role: admin
+      parameters:
+        - name: status
+          in: query
+          description: Only proposals with this status. The default is every status but `drafting` and `draft_failed`.
+          schema:
+            $ref: "#/components/schemas/StrategyProposalStatus"
+        - name: name
+          in: query
+          description: Only proposals for the strategy with this name.
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          description: The nextCursor of the page before.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: A page of proposals.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StrategyProposalList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /strategy-proposals/{id}:
+    get:
+      operationId: GetStrategyProposal
+      summary: One proposal, with its YAML, the feedback and the gate result
+      description: |
+        `baseBody` and `body` are the strategy before and after the change,
+        for a diff. `gate` holds the numbers the gate's decision rests on.
+        `stale` is true when the strategy has changed since the draft, so
+        approving a proposal for a runtime strategy would fail.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/StrategyProposalID"
+      responses:
+        "200":
+          description: The proposal.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StrategyProposal"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      operationId: EditStrategyProposal
+      summary: Replace the YAML of a proposal and send it through the gate again
+      description: |
+        Only a proposal whose gate has ended and that nobody has decided on
+        can be edited; any other answers 409 with code `conflict`. The YAML
+        goes through the checks of a strategy file, and its name must be the
+        proposal's; a failed check answers 422 with code `validation` and
+        a field for each problem. The old gate result is dropped. Saving the
+        same YAML runs the gate again.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/StrategyProposalID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EditStrategyProposal"
+      responses:
+        "200":
+          description: The proposal, now pending.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StrategyProposal"
+        default:
+          $ref: "#/components/responses/Problem"
+  /strategy-proposals/{id}/approve:
+    post:
+      operationId: ApproveStrategyProposal
+      summary: Apply a proposal that passed its gate
+      description: |
+        There is no way to apply a proposal that has not passed: any other
+        answers 409 with code `not_passed`, and nothing is changed. For a
+        runtime strategy the YAML is saved as its next version, and for a
+        built-in one as a runtime strategy of the same name. The answer has
+        the `version`. For a strategy in a file, Sidekick cannot change the
+        file: the answer has the `yaml` to commit. A strategy that was saved
+        since the draft answers 409 with code `stale`, and one that already
+        holds the YAML 422 with code `unchanged`.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/StrategyProposalID"
+      responses:
+        "200":
+          description: The proposal as decided.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StrategyProposalApproval"
+        default:
+          $ref: "#/components/responses/Problem"
+  /strategy-proposals/{id}/reject:
+    post:
+      operationId: RejectStrategyProposal
+      summary: Set a proposal aside
+      description: |
+        A proposal that has a draft and that nobody has decided on can be
+        rejected, whatever its gate result; any other answers 409 with code
+        `conflict`. A gate that is still running stops before its next run.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/StrategyProposalID"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RejectStrategyProposal"
+      responses:
+        "200":
+          description: The rejected proposal.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StrategyProposalSummary"
+        default:
+          $ref: "#/components/responses/Problem"
   /audit:
     get:
       operationId: ListAudit
@@ -1142,6 +1284,14 @@ components:
       description: The name of a strategy.
       schema:
         type: string
+    StrategyProposalID:
+      name: id
+      in: path
+      required: true
+      description: The ID of a strategy proposal.
+      schema:
+        type: string
+        format: uuid
     InvestigationID:
       name: id
       in: path
@@ -1658,6 +1808,217 @@ components:
           type: integer
           minimum: 0
           description: The version that was read, or 0 for a strategy that is not stored yet. Leave it out to skip the check.
+    StrategyProposalStatus:
+      type: string
+      enum: [drafting, draft_failed, pending, benchmarking, passed, failed, approved, rejected, applied]
+      description: |
+        `drafting`: waiting for the model's draft. `draft_failed`: no draft
+        could be made; the status detail says why. `pending`: drafted, waiting
+        for the gate. `benchmarking`: the gate is running. `passed`: the gate
+        passed, and the proposal can be approved. `failed`: the gate ended
+        without a pass; the gate result says how. `applied`: approved, and a
+        version was saved. `approved`: approved for a strategy in a file.
+        `rejected`: set aside.
+    StrategyGateResult:
+      type: string
+      enum: [passed, failed, not_enough_evidence, no_benchmark_coverage, over_budget, error]
+      description: |
+        How the gate ended. `passed`: the lower end of the 95% interval of the
+        score difference is above minus `maxDrop`. `failed`: the proposal
+        scores lower on average by more than that. `not_enough_evidence`: it
+        looks no worse on average, but the interval is too wide to be sure, or
+        fewer than three scenarios cover the strategy. `no_benchmark_coverage`:
+        no scenario covers the strategy. `over_budget`: the gate stopped before
+        it passed its cost cap. `error`: the gate could not finish.
+    StrategyProposalSummary:
+      type: object
+      required: [id, name, baseVersion, triggerCount, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: The strategy the proposal changes.
+        baseVersion:
+          type: string
+          description: The version the draft started from, as investigations record it.
+        baseOrigin:
+          $ref: "#/components/schemas/StrategyLayer"
+        rationale:
+          type: string
+          description: Why the model changed the strategy. It is model output.
+        triggerCount:
+          type: integer
+          description: How many wrong ratings the version had when the proposal was made.
+        status:
+          $ref: "#/components/schemas/StrategyProposalStatus"
+        statusDetail:
+          type: string
+          description: Why a draft failed.
+        gateResult:
+          $ref: "#/components/schemas/StrategyGateResult"
+        benchRunId:
+          type: string
+          format: uuid
+          description: The benchmark run of the proposal, when the gate ran.
+        baselineRunId:
+          type: string
+          format: uuid
+          description: The benchmark run of the current version, when the gate ran.
+        reviewer:
+          type: string
+          format: uuid
+          description: The user or API token that last decided on or edited the proposal.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        decidedAt:
+          type: string
+          format: date-time
+    StrategyProposalList:
+      type: object
+      required: [proposals]
+      properties:
+        proposals:
+          type: array
+          items:
+            $ref: "#/components/schemas/StrategyProposalSummary"
+        nextCursor:
+          type: string
+          description: Pass as cursor to get the next page. Absent on the last page.
+    StrategyProposal:
+      allOf:
+        - $ref: "#/components/schemas/StrategyProposalSummary"
+        - type: object
+          required: [feedback, stale, approvable]
+          properties:
+            baseBody:
+              type: string
+              description: The strategy before the change, as YAML.
+            body:
+              type: string
+              description: The strategy after the change, as YAML.
+            feedback:
+              type: array
+              description: The wrong ratings the proposal was drafted from.
+              items:
+                $ref: "#/components/schemas/StrategyProposalFeedback"
+            gate:
+              $ref: "#/components/schemas/StrategyGate"
+            stale:
+              type: boolean
+              description: True when the strategy has changed since the draft.
+            approvable:
+              type: boolean
+              description: True when the proposal has passed its gate and can be approved.
+    StrategyProposalFeedback:
+      type: object
+      required: [id, investigationId, targetKind, targetRef, rating, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        investigationId:
+          type: string
+          format: uuid
+        targetKind:
+          type: string
+        targetRef:
+          type: string
+        rating:
+          type: string
+        reason:
+          type: string
+        correctVerdict:
+          type: string
+        correctCause:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    StrategyGate:
+      type: object
+      required: [result, reason, mean, interval, maxDrop, resamples, seed, repeats, costMicros, maxCostMicros, scenarios]
+      properties:
+        result:
+          $ref: "#/components/schemas/StrategyGateResult"
+        reason:
+          type: string
+          description: The result in a sentence.
+        mean:
+          type: number
+          format: double
+          description: The mean over the scenarios of the proposal's overall score minus the current version's.
+        interval:
+          $ref: "#/components/schemas/BenchInterval"
+        maxDrop:
+          type: number
+          format: double
+          description: The proposal passes when the lower end of the interval is above minus this.
+        resamples:
+          type: integer
+        seed:
+          type: string
+          description: The seed of the resampling, as a decimal string, so the interval can be worked out again.
+        repeats:
+          type: integer
+          description: How many times each scenario ran in each arm.
+        costMicros:
+          type: integer
+          format: int64
+        maxCostMicros:
+          type: integer
+          format: int64
+        error:
+          type: string
+        scenarios:
+          type: array
+          items:
+            $ref: "#/components/schemas/StrategyGateScenario"
+    StrategyGateScenario:
+      type: object
+      required: [id, baseline, proposal, difference]
+      properties:
+        id:
+          type: string
+        baseline:
+          type: number
+          format: double
+        proposal:
+          type: number
+          format: double
+        difference:
+          type: number
+          format: double
+    EditStrategyProposal:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          description: The strategy as YAML, in the format of a strategy file.
+    RejectStrategyProposal:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Why the proposal is set aside, at most 500 characters.
+    StrategyProposalApproval:
+      type: object
+      required: [proposal]
+      properties:
+        proposal:
+          $ref: "#/components/schemas/StrategyProposalSummary"
+        version:
+          type: integer
+          description: The runtime version that was saved. Absent for a strategy in a file.
+        yaml:
+          type: string
+          description: The strategy to commit, for a strategy in a file.
     FieldError:
       type: object
       required: [field, message]

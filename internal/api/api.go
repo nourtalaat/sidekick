@@ -53,6 +53,9 @@ type Options struct {
 	// Strategies reads and saves the runtime strategies. Without it, the
 	// strategy operations answer 503.
 	Strategies StrategyStore
+	// ProposalReviewer approves, rejects and edits strategy proposals.
+	// Without it, those operations answer 503.
+	ProposalReviewer ProposalReviewer
 	// StrategyBase holds the built-in and file strategies that the runtime
 	// ones are added to. Nil means those of Config.
 	StrategyBase *strategy.Set
@@ -134,7 +137,7 @@ func New(opts Options) (http.Handler, error) {
 	h := &handler{auth: opts.Auth, routes: http.NewServeMux(), log: log}
 
 	srv := &server{
-		tokens: opts.Tokens, cfg: opts.Config, rules: opts.Rules, strategies: opts.Strategies, strategyBase: strategyBase, redactor: opts.Redactor, pool: opts.Pool, audit: opts.Audit,
+		tokens: opts.Tokens, cfg: opts.Config, rules: opts.Rules, strategies: opts.Strategies, proposalReviewer: opts.ProposalReviewer, strategyBase: strategyBase, redactor: opts.Redactor, pool: opts.Pool, audit: opts.Audit,
 		hub: opts.Hub, log: log, stopper: opts.Stopper, watchers: opts.Watchers, now: now,
 		feedbackMetrics: opts.Feedback, memory: opts.Memory, proposals: opts.Proposals,
 		streamHeartbeat: cmp.Or(opts.StreamHeartbeat, DefaultStreamHeartbeat),
