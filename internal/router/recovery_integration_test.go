@@ -204,13 +204,21 @@ func (h *harness) investigate(t *testing.T, conn model.Connector) error {
 	guard, err := tools.New(nil, tools.Options{Redactor: redactor, Logger: slog.New(slog.DiscardHandler)})
 	require.NoError(t, err)
 
+	return h.investigateOn(t, conn, guard, investigator.StaticRoutes{"crashloop": {}})
+}
+
+// investigateOn runs the pending investigate job with conn as the fake
+// connector, guard for the sources and routes for the routes in effect.
+func (h *harness) investigateOn(t *testing.T, conn model.Connector, guard *tools.Guard, routes investigator.RouteSource) error {
+	t.Helper()
+
 	handler, err := investigator.New(investigator.Options{
 		Pool:       h.pool,
 		Guard:      guard,
 		Connectors: map[string]investigator.Connector{"fake": {Connector: conn}},
 		Prices:     pricing.Shipped(),
 		Strategies: h.cfg.StrategySet(),
-		Routes:     investigator.StaticRoutes{"crashloop": {}},
+		Routes:     routes,
 	})
 	require.NoError(t, err)
 
