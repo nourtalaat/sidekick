@@ -21,17 +21,18 @@ SELECT * FROM action_proposals WHERE id = @id;
 
 -- name: GetActionProposalView :one
 -- GetActionProposalView returns a proposal with the route and title of its
--- investigation and the name of who decided it.
+-- investigation and the name of who decided it. These are read by primary
+-- key for each row returned, after the page is cut, so a page costs the
+-- same however many investigations and users there are.
 SELECT
   sqlc.embed(p),
-  i.route,
-  coalesce(i.alert_title, '')::text AS alert_title,
+  (SELECT i.route FROM investigations i WHERE i.id = p.investigation_id)::text AS route,
+  coalesce((SELECT i.alert_title FROM investigations i WHERE i.id = p.investigation_id), '')::text AS alert_title,
   coalesce(
     (SELECT u.name FROM users u WHERE u.id = p.decided_by),
     (SELECT t.name FROM api_tokens t WHERE t.id = p.decided_by),
     '')::text AS decided_by_name
 FROM action_proposals p
-JOIN investigations i ON i.id = p.investigation_id
 WHERE p.id = @id;
 
 -- name: LockActionProposal :one
@@ -97,14 +98,13 @@ RETURNING id, investigation_id, action;
 -- first, from the page that starts after the cursor (before_at, before_id).
 SELECT
   sqlc.embed(p),
-  i.route,
-  coalesce(i.alert_title, '')::text AS alert_title,
+  (SELECT i.route FROM investigations i WHERE i.id = p.investigation_id)::text AS route,
+  coalesce((SELECT i.alert_title FROM investigations i WHERE i.id = p.investigation_id), '')::text AS alert_title,
   coalesce(
     (SELECT u.name FROM users u WHERE u.id = p.decided_by),
     (SELECT t.name FROM api_tokens t WHERE t.id = p.decided_by),
     '')::text AS decided_by_name
 FROM action_proposals p
-JOIN investigations i ON i.id = p.investigation_id
 WHERE p.status = ANY (@statuses::text[])
   AND (p.proposed_at, p.id) < (@before_at::timestamptz, @before_id::uuid)
 ORDER BY p.proposed_at DESC, p.id DESC
@@ -115,13 +115,12 @@ LIMIT @page_size;
 -- investigation, oldest first.
 SELECT
   sqlc.embed(p),
-  i.route,
-  coalesce(i.alert_title, '')::text AS alert_title,
+  (SELECT i.route FROM investigations i WHERE i.id = p.investigation_id)::text AS route,
+  coalesce((SELECT i.alert_title FROM investigations i WHERE i.id = p.investigation_id), '')::text AS alert_title,
   coalesce(
     (SELECT u.name FROM users u WHERE u.id = p.decided_by),
     (SELECT t.name FROM api_tokens t WHERE t.id = p.decided_by),
     '')::text AS decided_by_name
 FROM action_proposals p
-JOIN investigations i ON i.id = p.investigation_id
 WHERE p.investigation_id = @investigation_id
 ORDER BY p.proposed_at, p.id;
