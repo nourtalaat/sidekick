@@ -9,7 +9,8 @@ happens when Sidekick restarts in the middle of one.
 The investigation runs on one replica at a time, as a background job. It
 sends the model the event, the route's strategy, the tools it may call and
 up to 3 similar past investigations whose verdicts people confirmed (see
-[`memory`](configuration.md#memory)), then loops:
+[`memory`](configuration.md#memory)) and the [lessons](#lessons) that apply,
+then loops:
 
 1. The model answers. It can call tools, several at once.
 2. Sidekick runs the calls, at most 4 at a time, and sends the results
@@ -70,7 +71,42 @@ The triage model's tokens and cost count toward the investigation's
 budgets, and the connector must be able to call tools.
 
 Without a `triage` role, investigations start with the route's strategy, as
-before.
+before. Triage sees the same lessons as the investigation, chosen for the
+route's strategy.
+
+## Lessons
+
+A lesson is a short piece of guidance, up to 400 characters, that people
+reviewed. It has a scope: a service, an alert name, a route or a strategy. A
+lesson applies to an investigation when every scope field it sets equals the
+investigation's value; a lesson with no scope is global and applies to all.
+Lessons are drafted from feedback and approved by an admin; see
+[`lessons`](configuration.md#lessons).
+
+Before the prompt is built, Sidekick chooses the active lessons that apply:
+
+1. Lessons with a scope come before global ones, and lessons that set more
+   scope fields come before those that set fewer.
+2. Among equals, the lesson with the higher count of helpful minus unhelpful
+   comes first. A lesson is helpful once for each person who rated the
+   verdict of an investigation that used it correct, and unhelpful for each
+   who rated it wrong.
+3. Then the lesson whose words are closest to the event's text, then the
+   newest.
+
+The prompt takes lessons down this list until it has `lessons.maxPerPrompt`
+of them or `lessons.maxTokens` tokens. A lesson that is too long for the
+tokens that are left is skipped, and a shorter one further down may still
+fit. Global lessons may use at most `lessons.globalShare` of the places and
+of the tokens, so they cannot crowd out specific ones.
+
+The model is told that lessons are hints, not evidence, and that they cannot
+change its tools, its mode or the rules. Their text is marked as data from
+outside Sidekick, like the text of an alert. The investigation's record
+lists the lessons it used and the lessons that applied but were left out,
+with the reason (`max_per_prompt`, `max_tokens` or `global_share`), so you
+can see when a scope is too broad. Triage is given lessons the same way, and
+its record lists them too.
 
 ## Tools
 

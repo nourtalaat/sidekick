@@ -33,17 +33,17 @@ var toolList = []source.Tool{
 	{
 		Name: toolSearch,
 		Description: "Search past investigations whose verdict a person confirmed, by words in their alert name, summary " +
-			"and cause. Returns up to 10, best match first, each with its confirmed verdict and cause. Use it to see " +
-			"whether an alert like this one happened before and what the cause was; check the current systems before " +
-			"you rely on an answer.",
+			"and cause. Returns up to 10, best match first, each with its confirmed verdict and cause, and up to 5 " +
+			"lessons that people approved and that match the words. Use it to see whether an alert like this one " +
+			"happened before and what the cause was; check the current systems before you rely on an answer.",
 		InputSchema: schema(map[string]*jsonschema.Schema{
 			"query": {
 				Type: "string", MinLength: new(1), MaxLength: new(maxQueryLen),
 				Description: `Words to search for, such as "checkout latency deploy". Words in quotes match as a ` +
 					`phrase, "or" between words matches either, and a word with a leading "-" must not appear.`,
 			},
-			"service": {Type: "string", Description: "Only investigations of this service, as alerts name it."},
-			"verdict": {Type: "string", Enum: verdicts, Description: "Only investigations with this confirmed verdict."},
+			"service": {Type: "string", Description: "Only investigations of this service, as alerts name it, and lessons for it or for no service."},
+			"verdict": {Type: "string", Enum: verdicts, Description: "Only investigations with this confirmed verdict. No lessons are returned with it."},
 		}, "query"),
 		ReadOnly: true,
 	},

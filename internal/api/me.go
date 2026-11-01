@@ -36,6 +36,7 @@ type server struct {
 
 	feedbackMetrics *feedback.Metrics
 	memory          memory.SyncOptions
+	draftLessons    bool
 	// stopper stops watchers and watchers records the changes that
 	// resolving a group makes to them; now is the clock.
 	stopper  *watch.Stopper
