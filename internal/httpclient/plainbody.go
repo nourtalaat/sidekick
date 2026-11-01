@@ -71,7 +71,7 @@ func (b plainBody) Close() error {
 // RoundTripper must not change the request it is given. Its GetBody gives a
 // plain body too. A request without a body is returned as it is.
 func withPlainBody(req *http.Request) *http.Request {
-	if req.Body == nil && req.GetBody == nil {
+	if (req.Body == nil || req.Body == http.NoBody) && req.GetBody == nil {
 		return req
 	}
 
