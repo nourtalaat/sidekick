@@ -1,10 +1,10 @@
-.sk-review__tabs {
+.sk-tabs {
   display: flex;
   gap: var(--sk-space-1);
   border-bottom: 1px solid var(--sk-border-subtle);
 }
 
-.sk-review__tab {
+.sk-tabs__tab {
   min-height: var(--sk-size-control-md);
   padding: 0 var(--sk-space-4);
   border: 0;
@@ -15,16 +15,16 @@
   cursor: pointer;
 }
 
-.sk-review__tab[aria-selected="true"] {
+.sk-tabs__tab[aria-selected="true"] {
   border-bottom-color: var(--sk-action-primary-bg);
   color: var(--sk-text-primary);
 }
 
-.sk-review__tab:hover {
+.sk-tabs__tab:hover {
   color: var(--sk-text-primary);
 }
 
-.sk-review__panel {
+.sk-tabs__panel {
   display: flex;
   flex-direction: column;
   gap: var(--sk-space-4);
