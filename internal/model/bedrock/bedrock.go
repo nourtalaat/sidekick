@@ -237,6 +237,8 @@ func build(ctx context.Context, name string, cfg Config, deps registry.Deps, loa
 		httpClient = httpclient.New()
 	}
 
+	httpClient = httpclient.WithPlainBody(httpClient)
+
 	awsCfg, err := awsauth.Load(ctx, load, cfg.Region, httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("set up AWS credentials: %w", err)
