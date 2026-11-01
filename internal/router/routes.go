@@ -43,18 +43,20 @@ type route struct {
 	watchers []watch.Definition
 }
 
-// newRoutes prepares the routes of cfg in the order they are tried.
-// modelSettings are the shared settings of each built connector, for the
-// model IDs, and policy holds the watchers of each file route.
-func newRoutes(cfg *config.Config, modelSettings map[string]model.Settings, policy watch.Policy) ([]route, error) {
-	return compileRoutes(cfg, cfg.RoutesInOrder(), modelSettings, policy)
+// newRoutes prepares the routes of cfg in the order they are tried, with
+// the strategies in effect. modelSettings are the shared settings of each
+// built connector, for the model IDs, and policy holds the watchers of each
+// file route.
+func newRoutes(cfg *config.Config, strategies *strategy.Set, modelSettings map[string]model.Settings, policy watch.Policy) ([]route, error) {
+	return compileRoutes(cfg, strategies, cfg.RoutesInOrder(), modelSettings, policy)
 }
 
 // compileRoutes prepares ordered, routes already in the order they are
-// tried, with the roles and strategies of cfg. A route that policy does not
-// list, one added at runtime, gets its watchers from its strategy.
-func compileRoutes(cfg *config.Config, ordered []config.Route, modelSettings map[string]model.Settings, policy watch.Policy) ([]route, error) {
-	strategies := cfg.StrategySet()
+// tried, with the roles of cfg and the strategies in effect. A route that
+// policy does not list, one added at runtime, gets its watchers from its
+// strategy, and so does any route whose strategy is saved at runtime, since
+// the policy knows the strategies of the config only.
+func compileRoutes(cfg *config.Config, strategies *strategy.Set, ordered []config.Route, modelSettings map[string]model.Settings, policy watch.Policy) ([]route, error) {
 	if strategies == nil {
 		return nil, errNoStrategies
 	}
@@ -70,6 +72,10 @@ func compileRoutes(cfg *config.Config, ordered []config.Route, modelSettings map
 		rp, ok := policy.Routes[rc.Name]
 		if !ok && !slices.ContainsFunc(cfg.Routes, func(f config.Route) bool { return f.Name == rc.Name }) {
 			rp = cfg.RuntimeRoutePolicy(rc)
+		}
+
+		if st, _ := strategies.Get(r.strategy); st.Origin == strategy.Runtime {
+			rp = cfg.RoutePolicyWith(rc, &st)
 		}
 
 		r.watchers = rp.Definitions
