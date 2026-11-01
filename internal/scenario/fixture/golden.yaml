@@ -1,0 +1,99 @@
+id: latency-alert-checkout-api-p99-latency-above-2s-for-5m-0198f2
+title: checkout-api p99 latency above 2s for 5m
+tags:
+  - exported
+  - latency-alert
+strategy: latency-alert
+now: 2026-05-04T10:20:00Z
+route:
+  mode: read-only
+event:
+  adapter: alertmanager
+  payload:
+    status: firing
+    alerts:
+      - status: firing
+        labels:
+          alertname: CheckoutLatencyHigh
+          env: prod
+          instance: host-1:9100
+          service: checkout-api
+        annotations:
+          summary: checkout-api p99 latency above 2s for 5m
+          owner: user-1
+          contact: '[REDACTED:emails:3fa9c1]'
+        startsAt: "2026-05-04T10:12:00Z"
+        generatorURL: http://host-3:9090/graph?g0.expr=latency
+sources:
+  github:
+    tools:
+      snapshot: bench/tools/github.json
+    fixtures:
+      - tool: get_commit
+        match:
+          args:
+            ref:
+              regex: ^abc1234
+            repo:
+              equals: acme/checkout
+        respond:
+          text: 'abc1234: config/database.yaml: pool_size 20 -> 5'
+      - tool: list_commits
+        match:
+          args:
+            repo:
+              equals: acme/checkout
+        respond:
+          text: abc1234 2026-05-04T10:05Z 'Lower DB pool size to 5 to save connections' by user-1
+          evidence:
+            - kind: commit
+              title: abc1234
+              url: https://github.com/acme/checkout/commit/abc1234def5678
+  k8s:
+    unavailable: true
+  prometheus:
+    tools:
+      snapshot: bench/tools/prometheus.json
+    fixtures:
+      - tool: query
+        match:
+          args:
+            query:
+              regex: (?i)db_pool_wait_seconds_sum|instance|host-1
+        respond:
+          text: db_pool_wait_seconds_sum{instance="host-1:9100"} 0.2 0.9 4.1
+  signoz:
+    tools:
+      snapshot: bench/tools/signoz.json
+    fixtures:
+      - tool: search_logs
+        match:
+          args:
+            service:
+              equals: checkout-api
+        responses:
+          - text: |-
+              10:10:04 ERROR pq: timeout acquiring connection from pool (size=5) host=host-1 db=host-4:5432 user=user-2
+              10:10:09 ERROR pq: timeout acquiring connection from pool (size=5) client=ip-1
+              {"level":"error","msg":"upstream failed","host":"host-4","trace":"tokXYZ1234567890tokXYZ123456"}
+            evidence:
+              - kind: log_query
+                title: pool timeouts
+                url: https://host-5/logs?q=pool&user=user-1
+          - noData: true
+default: no_data
+expected:
+  verdict: true_positive
+  rootCause:
+    summary: DB connection pool exhausted on host-1 after commit abc1234def5678 by user-1 lowered the pool size to 5; host-4 (ip-1) refused new connections.
+    rubric:
+      - id: r1
+        text: Names DB connection pool exhaustion on host-1 as the cause
+        weight: 2
+        required: true
+      - id: r2
+        text: Links the cause to commit abc1234def5678
+        weight: 2
+        required: true
+  unavailableReported:
+    - k8s
