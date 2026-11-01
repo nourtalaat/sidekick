@@ -107,6 +107,7 @@ func (v *validator) run() {
 	v.checkOIDC()
 	v.checkOutputs()
 	v.checkActions()
+	v.checkMonitorValidator()
 	v.loadStrategies()
 	v.checkRoutes()
 	v.checkBudgets()

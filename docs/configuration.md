@@ -1496,6 +1496,26 @@ How a proposal is handled:
 - An approved proposal runs once, even if a worker crashes and the job is
   tried again: the action gets the same idempotency key each time.
 
+### `validator`
+
+How Sidekick reaches the [monitor validator](validator.md), which checks
+the files of a pull request action before the pull request opens. The
+chart's `validator` values set the validator up; this section only says
+where Sidekick finds it.
+
+```yaml
+validator:
+  mode: sidecar                  # sidecar is the only mode that works for now
+  url: http://127.0.0.1:8200     # where the sidecar listens; this is the default
+  allowDownloads: false          # the chart's setting of the same name; Sidekick does not read it
+```
+
+`mode: job` is accepted by the chart but not yet by Sidekick: the config
+check refuses it with a message. The default `url` is the address of the
+chart's sidecar, so with `validator.enabled: true` in the chart values
+there is nothing to set here. An action that needs the validator reports
+an error when it cannot reach it; nothing else in Sidekick uses it.
+
 ### `strategies`
 
 A strategy tells an investigation what to check first, the usual causes and
@@ -2300,6 +2320,8 @@ with access to the database, who can turn the guard off.
 | `routes[].mode` | `read-only` |
 | `actions.proposalTTL` | `24h` |
 | `actions.maxPerInvestigation` | `5` |
+| `validator.mode` | `sidecar` |
+| `validator.url` | `http://127.0.0.1:8200` |
 | `routes[].budgets` | the values in `budgets.perInvestigation` |
 | `routes[].budgets.daily.maxCostUSD` | none: only `budgets.daily.maxCostUSD` applies |
 | `routes[].budgets.daily.onDailyCap` | `budgets.daily.onDailyCap` |
