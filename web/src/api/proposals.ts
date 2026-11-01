@@ -1,0 +1,78 @@
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useApi } from "./ApiContext";
+import { ApiError, detailOf } from "./client";
+import { keys } from "./investigations";
+import type { components } from "./schema";
+
+export type Proposal = components["schemas"]["Proposal"];
+export type ProposalStatus = components["schemas"]["ProposalStatus"];
+
+/** The statuses of a proposal that waits for a decision. */
+export const WAITING: readonly ProposalStatus[] = ["proposed"];
+
+/** The statuses of a proposal that was decided, or went past that. */
+export const DECIDED: readonly ProposalStatus[] = ["approved", "rejected", "expired", "executing", "succeeded", "failed", "undone"];
+
+/** How many proposals one request asks for. */
+export const PROPOSALS_PAGE_SIZE = 25;
+
+/** The key of the review queue's queries, so a decision can refresh them. */
+export const PROPOSALS_KEY = ["proposals"] as const;
+
+/** The review queue, newest first, a page at a time: the next page is fetched with the cursor of the last. */
+export function useProposals(statuses: readonly ProposalStatus[]) {
+  const api = useApi();
+
+  return useInfiniteQuery({
+    queryKey: [...PROPOSALS_KEY, statuses],
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam }) => {
+      const { data, error, response } = await api.client.GET("/proposals", {
+        params: { query: { status: [...statuses], cursor: pageParam, limit: PROPOSALS_PAGE_SIZE } },
+      });
+      if (data === undefined) {
+        throw new ApiError(response.status, detailOf(error, response.statusText));
+      }
+
+      return data;
+    },
+    getNextPageParam: (last) => last.nextCursor,
+  });
+}
+
+/** What a person decides about a proposal. */
+export type Decision = { kind: "approve" } | { kind: "reject"; note: string };
+
+/**
+ * Approves or rejects the proposal with id. The answer can be 409 when the
+ * proposal expired, someone else decided first, or the config no longer
+ * allows it; its detail says which, and who, so it is shown as it is.
+ */
+export function useDecideProposal(id: string, investigationId: string) {
+  const api = useApi();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (decision: Decision) => {
+      const params = { params: { path: { id } } };
+      const result =
+        decision.kind === "approve"
+          ? await api.client.POST("/proposals/{id}/approve", params)
+          : await api.client.POST("/proposals/{id}/reject", { ...params, body: decision.note.trim() === "" ? undefined : { note: decision.note.trim() } });
+
+      if (result.data === undefined) {
+        throw new ApiError(result.response.status, detailOf(result.error, result.response.statusText));
+      }
+
+      return result.data;
+    },
+    // A decision that was refused, because someone else decided first or
+    // the proposal expired, also means the lists are out of date.
+    onSettled: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: PROPOSALS_KEY }),
+        queryClient.invalidateQueries({ queryKey: keys.investigation(investigationId) }),
+      ]);
+    },
+  });
+}

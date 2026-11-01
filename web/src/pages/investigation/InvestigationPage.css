@@ -29,3 +29,9 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.sk-proposals {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-4);
+}
