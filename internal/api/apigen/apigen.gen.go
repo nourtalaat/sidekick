@@ -535,6 +535,24 @@ func (e RunKind) Valid() bool {
 	}
 }
 
+// Defines values for ScenarioStatus.
+const (
+	Draft    ScenarioStatus = "draft"
+	Reviewed ScenarioStatus = "reviewed"
+)
+
+// Valid indicates whether the value is a known member of the ScenarioStatus enum.
+func (e ScenarioStatus) Valid() bool {
+	switch e {
+	case Draft:
+		return true
+	case Reviewed:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SenderKind.
 const (
 	SenderKindBot    SenderKind = "bot"
@@ -2374,6 +2392,95 @@ type RuntimeRules struct {
 	Routes    []RuntimeRule `json:"routes"`
 }
 
+// Scenario defines model for Scenario.
+type Scenario struct {
+	CreatedAt time.Time `json:"createdAt"`
+	Id        string    `json:"id"`
+
+	// InvestigationId The investigation the scenario was exported from, until it is deleted.
+	InvestigationId *openapi_types.UUID `json:"investigationId,omitempty"`
+	ReviewedAt      *time.Time          `json:"reviewedAt,omitempty"`
+
+	// ReviewedBy The name of the user who reviewed it.
+	ReviewedBy *string `json:"reviewedBy,omitempty"`
+
+	// Revision Counts the edits. Review and update send the revision they read.
+	Revision  int32          `json:"revision"`
+	Status    ScenarioStatus `json:"status"`
+	Title     string         `json:"title"`
+	UpdatedAt time.Time      `json:"updatedAt"`
+}
+
+// ScenarioCandidate defines model for ScenarioCandidate.
+type ScenarioCandidate struct {
+	End int `json:"end"`
+
+	// Path The field, for example `sources.signoz.fixtures[0].responses[0].text`.
+	Path   string `json:"path"`
+	Reason string `json:"reason"`
+
+	// Start Byte offset into the field's text where the value starts.
+	Start int `json:"start"`
+}
+
+// ScenarioDetail defines model for ScenarioDetail.
+type ScenarioDetail struct {
+	// Body The scenario file, as YAML.
+	Body string `json:"body"`
+
+	// Candidates Places the cleaner kept that look like IDs, for the reviewer to check.
+	Candidates []ScenarioCandidate `json:"candidates"`
+
+	// Notes What the exporter skipped, merged or dropped, in words.
+	Notes []ScenarioNote `json:"notes"`
+
+	// Pairs Each part of the scenario next to the recorded original it was made from.
+	Pairs    []ScenarioPair `json:"pairs"`
+	Scenario Scenario       `json:"scenario"`
+}
+
+// ScenarioList defines model for ScenarioList.
+type ScenarioList struct {
+	// NextCursor Pass it as `cursor` for the next page. Absent on the last page.
+	NextCursor *string    `json:"nextCursor,omitempty"`
+	Scenarios  []Scenario `json:"scenarios"`
+}
+
+// ScenarioNote defines model for ScenarioNote.
+type ScenarioNote struct {
+	Kind string `json:"kind"`
+	Text string `json:"text"`
+}
+
+// ScenarioPair defines model for ScenarioPair.
+type ScenarioPair struct {
+	Cleaned string  `json:"cleaned"`
+	Label   string  `json:"label"`
+	Note    *string `json:"note,omitempty"`
+
+	// Original What the investigation recorded, redacted when it was stored. Absent when it is not shown; `note` says why.
+	Original *string `json:"original,omitempty"`
+	Ref      string  `json:"ref"`
+}
+
+// ScenarioReview defines model for ScenarioReview.
+type ScenarioReview struct {
+	Revision int32 `json:"revision"`
+
+	// SensitiveDataChecked Must be true. The reviewer says they checked the scenario for sensitive data.
+	SensitiveDataChecked bool `json:"sensitiveDataChecked"`
+}
+
+// ScenarioStatus defines model for ScenarioStatus.
+type ScenarioStatus string
+
+// ScenarioUpdate defines model for ScenarioUpdate.
+type ScenarioUpdate struct {
+	// Body The whole scenario file, as YAML.
+	Body     string `json:"body"`
+	Revision int32  `json:"revision"`
+}
+
 // Sender defines model for Sender.
 type Sender struct {
 	Kind *SenderKind `json:"kind,omitempty"`
@@ -3104,6 +3211,9 @@ type ProposalID = openapi_types.UUID
 // RuleName defines model for RuleName.
 type RuleName = string
 
+// ScenarioID defines model for ScenarioID.
+type ScenarioID = string
+
 // ServiceName defines model for ServiceName.
 type ServiceName = string
 
@@ -3272,6 +3382,16 @@ type ListProposalsParams struct {
 	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// ListScenariosParams defines parameters for ListScenarios.
+type ListScenariosParams struct {
+	// Status Only scenarios with this status.
+	Status *ScenarioStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// Cursor The nextCursor of the page before.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // ListServiceNotesParams defines parameters for ListServiceNotes.
 type ListServiceNotesParams struct {
 	// After The nextAfter of the page before.
@@ -3401,6 +3521,12 @@ type CreateRouteJSONRequestBody = NewRoute
 // UpdateRouteJSONRequestBody defines body for UpdateRoute for application/json ContentType.
 type UpdateRouteJSONRequestBody = RouteUpdate
 
+// UpdateScenarioJSONRequestBody defines body for UpdateScenario for application/json ContentType.
+type UpdateScenarioJSONRequestBody = ScenarioUpdate
+
+// ReviewScenarioJSONRequestBody defines body for ReviewScenario for application/json ContentType.
+type ReviewScenarioJSONRequestBody = ScenarioReview
+
 // PutServiceNotesJSONRequestBody defines body for PutServiceNotes for application/json ContentType.
 type PutServiceNotesJSONRequestBody = ServiceNotesUpdate
 
@@ -3460,6 +3586,9 @@ type ServerInterface interface {
 	// ResolveInvestigation Mark the investigation's group as resolved
 	// (POST /investigations/{id}/resolve)
 	ResolveInvestigation(w http.ResponseWriter, r *http.Request, id InvestigationID)
+	// CreateScenarioDraft Export a confirmed investigation as a benchmark scenario draft
+	// (POST /investigations/{id}/scenario-draft)
+	CreateScenarioDraft(w http.ResponseWriter, r *http.Request, id InvestigationID)
 	// ListInvestigationSteps The steps of an investigation, in order, a page at a time
 	// (GET /investigations/{id}/steps)
 	ListInvestigationSteps(w http.ResponseWriter, r *http.Request, id InvestigationID, params ListInvestigationStepsParams)
@@ -3538,6 +3667,21 @@ type ServerInterface interface {
 	// UpdateRoute Replace a runtime route
 	// (PUT /routes/{name})
 	UpdateRoute(w http.ResponseWriter, r *http.Request, name RuleName)
+	// ListScenarios Benchmark scenarios, most recently changed first, a page at a time
+	// (GET /scenarios)
+	ListScenarios(w http.ResponseWriter, r *http.Request, params ListScenariosParams)
+	// GetScenario A scenario with what a reviewer needs to check it
+	// (GET /scenarios/{id})
+	GetScenario(w http.ResponseWriter, r *http.Request, id ScenarioID)
+	// UpdateScenario Replace the file of a scenario
+	// (PUT /scenarios/{id})
+	UpdateScenario(w http.ResponseWriter, r *http.Request, id ScenarioID)
+	// GetScenarioFile Download a reviewed scenario
+	// (GET /scenarios/{id}/file)
+	GetScenarioFile(w http.ResponseWriter, r *http.Request, id ScenarioID)
+	// ReviewScenario Mark a scenario draft as reviewed
+	// (POST /scenarios/{id}/review)
+	ReviewScenario(w http.ResponseWriter, r *http.Request, id ScenarioID)
 	// ListServiceNotes The services that have notes, by name, a page at a time
 	// (GET /services/notes)
 	ListServiceNotes(w http.ResponseWriter, r *http.Request, params ListServiceNotesParams)
@@ -4204,6 +4348,32 @@ func (siw *ServerInterfaceWrapper) ResolveInvestigation(w http.ResponseWriter, r
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ResolveInvestigation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateScenarioDraft operation middleware
+func (siw *ServerInterfaceWrapper) CreateScenarioDraft(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id InvestigationID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateScenarioDraft(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5084,6 +5254,169 @@ func (siw *ServerInterfaceWrapper) UpdateRoute(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateRoute(w, r, name)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListScenarios operation middleware
+func (siw *ServerInterfaceWrapper) ListScenarios(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListScenariosParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListScenarios(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetScenario operation middleware
+func (siw *ServerInterfaceWrapper) GetScenario(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ScenarioID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetScenario(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateScenario operation middleware
+func (siw *ServerInterfaceWrapper) UpdateScenario(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ScenarioID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateScenario(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetScenarioFile operation middleware
+func (siw *ServerInterfaceWrapper) GetScenarioFile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ScenarioID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetScenarioFile(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReviewScenario operation middleware
+func (siw *ServerInterfaceWrapper) ReviewScenario(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ScenarioID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReviewScenario(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6098,6 +6431,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/proposals/{id}/reject", wrapper.RejectProposal)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/investigations/{id}/fix-applied", wrapper.UnmarkFixApplied)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/investigations/{id}/fix-applied", wrapper.MarkFixApplied)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{id}/scenario-draft", wrapper.CreateScenarioDraft)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/scenarios", wrapper.ListScenarios)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/scenarios/{id}", wrapper.GetScenario)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/scenarios/{id}", wrapper.UpdateScenario)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/scenarios/{id}/review", wrapper.ReviewScenario)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/scenarios/{id}/file", wrapper.GetScenarioFile)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stats/quality", wrapper.GetQualityStats)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stats/filters", wrapper.GetStatsFilters)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stats/cost", wrapper.GetCostStats)
@@ -6647,6 +6986,59 @@ type ResolveInvestigationdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ResolveInvestigationdefaultApplicationProblemPlusJSONResponse) VisitResolveInvestigationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateScenarioDraftRequestObject struct {
+	Id InvestigationID `json:"id"`
+}
+
+type CreateScenarioDraftResponseObject interface {
+	VisitCreateScenarioDraftResponse(w http.ResponseWriter) error
+}
+
+type CreateScenarioDraft200JSONResponse Scenario
+
+func (response CreateScenarioDraft200JSONResponse) VisitCreateScenarioDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateScenarioDraft201JSONResponse Scenario
+
+func (response CreateScenarioDraft201JSONResponse) VisitCreateScenarioDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateScenarioDraftdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateScenarioDraftdefaultApplicationProblemPlusJSONResponse) VisitCreateScenarioDraftResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -7676,6 +8068,209 @@ func (response UpdateRoutedefaultApplicationProblemPlusJSONResponse) VisitUpdate
 	return err
 }
 
+type ListScenariosRequestObject struct {
+	Params ListScenariosParams
+}
+
+type ListScenariosResponseObject interface {
+	VisitListScenariosResponse(w http.ResponseWriter) error
+}
+
+type ListScenarios200JSONResponse ScenarioList
+
+func (response ListScenarios200JSONResponse) VisitListScenariosResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListScenariosdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListScenariosdefaultApplicationProblemPlusJSONResponse) VisitListScenariosResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetScenarioRequestObject struct {
+	Id ScenarioID `json:"id"`
+}
+
+type GetScenarioResponseObject interface {
+	VisitGetScenarioResponse(w http.ResponseWriter) error
+}
+
+type GetScenario200JSONResponse ScenarioDetail
+
+func (response GetScenario200JSONResponse) VisitGetScenarioResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetScenariodefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetScenariodefaultApplicationProblemPlusJSONResponse) VisitGetScenarioResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateScenarioRequestObject struct {
+	Id   ScenarioID `json:"id"`
+	Body *UpdateScenarioJSONRequestBody
+}
+
+type UpdateScenarioResponseObject interface {
+	VisitUpdateScenarioResponse(w http.ResponseWriter) error
+}
+
+type UpdateScenario200JSONResponse Scenario
+
+func (response UpdateScenario200JSONResponse) VisitUpdateScenarioResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateScenariodefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UpdateScenariodefaultApplicationProblemPlusJSONResponse) VisitUpdateScenarioResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetScenarioFileRequestObject struct {
+	Id ScenarioID `json:"id"`
+}
+
+type GetScenarioFileResponseObject interface {
+	VisitGetScenarioFileResponse(w http.ResponseWriter) error
+}
+
+type GetScenarioFile200ApplicationyamlResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response GetScenarioFile200ApplicationyamlResponse) VisitGetScenarioFileResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "application/yaml")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetScenarioFiledefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetScenarioFiledefaultApplicationProblemPlusJSONResponse) VisitGetScenarioFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReviewScenarioRequestObject struct {
+	Id   ScenarioID `json:"id"`
+	Body *ReviewScenarioJSONRequestBody
+}
+
+type ReviewScenarioResponseObject interface {
+	VisitReviewScenarioResponse(w http.ResponseWriter) error
+}
+
+type ReviewScenario200JSONResponse Scenario
+
+func (response ReviewScenario200JSONResponse) VisitReviewScenarioResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReviewScenariodefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ReviewScenariodefaultApplicationProblemPlusJSONResponse) VisitReviewScenarioResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListServiceNotesRequestObject struct {
 	Params ListServiceNotesParams
 }
@@ -8536,6 +9131,9 @@ type StrictServerInterface interface {
 	// ResolveInvestigation Mark the investigation's group as resolved
 	// (POST /investigations/{id}/resolve)
 	ResolveInvestigation(ctx context.Context, request ResolveInvestigationRequestObject) (ResolveInvestigationResponseObject, error)
+	// CreateScenarioDraft Export a confirmed investigation as a benchmark scenario draft
+	// (POST /investigations/{id}/scenario-draft)
+	CreateScenarioDraft(ctx context.Context, request CreateScenarioDraftRequestObject) (CreateScenarioDraftResponseObject, error)
 	// ListInvestigationSteps The steps of an investigation, in order, a page at a time
 	// (GET /investigations/{id}/steps)
 	ListInvestigationSteps(ctx context.Context, request ListInvestigationStepsRequestObject) (ListInvestigationStepsResponseObject, error)
@@ -8614,6 +9212,21 @@ type StrictServerInterface interface {
 	// UpdateRoute Replace a runtime route
 	// (PUT /routes/{name})
 	UpdateRoute(ctx context.Context, request UpdateRouteRequestObject) (UpdateRouteResponseObject, error)
+	// ListScenarios Benchmark scenarios, most recently changed first, a page at a time
+	// (GET /scenarios)
+	ListScenarios(ctx context.Context, request ListScenariosRequestObject) (ListScenariosResponseObject, error)
+	// GetScenario A scenario with what a reviewer needs to check it
+	// (GET /scenarios/{id})
+	GetScenario(ctx context.Context, request GetScenarioRequestObject) (GetScenarioResponseObject, error)
+	// UpdateScenario Replace the file of a scenario
+	// (PUT /scenarios/{id})
+	UpdateScenario(ctx context.Context, request UpdateScenarioRequestObject) (UpdateScenarioResponseObject, error)
+	// GetScenarioFile Download a reviewed scenario
+	// (GET /scenarios/{id}/file)
+	GetScenarioFile(ctx context.Context, request GetScenarioFileRequestObject) (GetScenarioFileResponseObject, error)
+	// ReviewScenario Mark a scenario draft as reviewed
+	// (POST /scenarios/{id}/review)
+	ReviewScenario(ctx context.Context, request ReviewScenarioRequestObject) (ReviewScenarioResponseObject, error)
 	// ListServiceNotes The services that have notes, by name, a page at a time
 	// (GET /services/notes)
 	ListServiceNotes(ctx context.Context, request ListServiceNotesRequestObject) (ListServiceNotesResponseObject, error)
@@ -9087,6 +9700,32 @@ func (sh *strictHandler) ResolveInvestigation(w http.ResponseWriter, r *http.Req
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ResolveInvestigationResponseObject); ok {
 		if err := validResponse.VisitResolveInvestigationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateScenarioDraft operation middleware
+func (sh *strictHandler) CreateScenarioDraft(w http.ResponseWriter, r *http.Request, id InvestigationID) {
+	var request CreateScenarioDraftRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateScenarioDraft(ctx, request.(CreateScenarioDraftRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateScenarioDraft")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateScenarioDraftResponseObject); ok {
+		if err := validResponse.VisitCreateScenarioDraftResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -9819,6 +10458,150 @@ func (sh *strictHandler) UpdateRoute(w http.ResponseWriter, r *http.Request, nam
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateRouteResponseObject); ok {
 		if err := validResponse.VisitUpdateRouteResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListScenarios operation middleware
+func (sh *strictHandler) ListScenarios(w http.ResponseWriter, r *http.Request, params ListScenariosParams) {
+	var request ListScenariosRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListScenarios(ctx, request.(ListScenariosRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListScenarios")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListScenariosResponseObject); ok {
+		if err := validResponse.VisitListScenariosResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetScenario operation middleware
+func (sh *strictHandler) GetScenario(w http.ResponseWriter, r *http.Request, id ScenarioID) {
+	var request GetScenarioRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetScenario(ctx, request.(GetScenarioRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetScenario")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetScenarioResponseObject); ok {
+		if err := validResponse.VisitGetScenarioResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateScenario operation middleware
+func (sh *strictHandler) UpdateScenario(w http.ResponseWriter, r *http.Request, id ScenarioID) {
+	var request UpdateScenarioRequestObject
+
+	request.Id = id
+
+	var body UpdateScenarioJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateScenario(ctx, request.(UpdateScenarioRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateScenario")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateScenarioResponseObject); ok {
+		if err := validResponse.VisitUpdateScenarioResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetScenarioFile operation middleware
+func (sh *strictHandler) GetScenarioFile(w http.ResponseWriter, r *http.Request, id ScenarioID) {
+	var request GetScenarioFileRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetScenarioFile(ctx, request.(GetScenarioFileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetScenarioFile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetScenarioFileResponseObject); ok {
+		if err := validResponse.VisitGetScenarioFileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReviewScenario operation middleware
+func (sh *strictHandler) ReviewScenario(w http.ResponseWriter, r *http.Request, id ScenarioID) {
+	var request ReviewScenarioRequestObject
+
+	request.Id = id
+
+	var body ReviewScenarioJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReviewScenario(ctx, request.(ReviewScenarioRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReviewScenario")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReviewScenarioResponseObject); ok {
+		if err := validResponse.VisitReviewScenarioResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

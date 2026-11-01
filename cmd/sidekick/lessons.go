@@ -67,37 +67,24 @@ func newSummarizer(a *app.App, modelMetrics *instrument.Metrics) (*summarize.Cal
 		return summarize.New(summarize.Options{Logger: log}), nil
 	}
 
-	loc, err := cfg.Budgets.Daily.Location()
-	if err != nil {
-		return nil, fmt.Errorf("set up the daily caps: %w", err)
-	}
-
 	prices := pricing.New(cfg.Model.PriceTable())
-	settings := a.Instances().ModelSettings[name]
 
-	routeCaps := make(map[string]int64)
+	wrapped := instrument.Wrap(conn, instrument.Options{
+		Connector: name,
+		Provider:  cfg.Model.Connectors[name].Type,
+		Metrics:   modelMetrics,
+		Prices:    prices,
+		Tracer:    a.Telemetry().TracerProvider().Tracer(instrument.TracerName),
+	})
 
-	for _, r := range cfg.Routes {
-		if limit := r.Budgets.Daily.MaxCostMicros(); limit > 0 {
-			routeCaps[r.Name] = limit
-		}
+	opts, err := summarizeOptions(cfg, name, wrapped, a.Instances().ModelSettings[name], prices)
+	if err != nil {
+		return nil, fmt.Errorf("set up the summarize options: %w", err)
 	}
 
-	return summarize.New(summarize.Options{
-		Connector: instrument.Wrap(conn, instrument.Options{
-			Connector: name,
-			Provider:  cfg.Model.Connectors[name].Type,
-			Metrics:   modelMetrics,
-			Prices:    prices,
-			Tracer:    a.Telemetry().TracerProvider().Tracer(instrument.TracerName),
-		}),
-		Name:    name,
-		Model:   settings.Model,
-		Retries: settings.Retries,
-		Prices:  prices,
-		Daily:   summarize.Daily{Location: loc, MaxCostMicros: cfg.Budgets.Daily.MaxCostMicros(), RouteMicros: routeCaps},
-		Logger:  log,
-	}), nil
+	opts.Logger = log
+
+	return summarize.New(opts), nil
 }
 
 // summarizeConfigured reports whether model.roles.summarize is set, which

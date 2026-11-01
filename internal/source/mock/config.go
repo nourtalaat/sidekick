@@ -38,15 +38,15 @@ var knownEvidenceKinds = []source.EvidenceKind{
 // Config is one mock source: a scenario's entry under sources.
 type Config struct {
 	// Tools names the snapshot file the tool list comes from.
-	Tools Tools `yaml:"tools"`
+	Tools Tools `yaml:"tools,omitempty"`
 	// Fixtures answer the calls, tried in order.
-	Fixtures []Fixture `yaml:"fixtures"`
+	Fixtures []Fixture `yaml:"fixtures,omitempty"`
 	// Unavailable makes the source fail to list its tools and every call,
 	// as a source that is down does.
-	Unavailable bool `yaml:"unavailable"`
+	Unavailable bool `yaml:"unavailable,omitempty"`
 	// Default is what a call no fixture matches returns. Empty means
 	// DefaultNoData.
-	Default Default `yaml:"default"`
+	Default Default `yaml:"default,omitempty"`
 	// Now is the clock that within matchers count from: the scenario's
 	// clock. Zero means the current time.
 	Now time.Time `yaml:"-"`
@@ -56,7 +56,7 @@ type Config struct {
 type Tools struct {
 	// Snapshot is a JSON file of the form {"tools": [{"name",
 	// "description", "inputSchema"}]}, as the files in bench/tools are.
-	Snapshot string `yaml:"snapshot"`
+	Snapshot string `yaml:"snapshot,omitempty"`
 }
 
 // Fixture answers the calls to the tools that match Tool and whose
@@ -65,21 +65,21 @@ type Fixture struct {
 	// Tool is a tool name, or a glob in path.Match syntax.
 	Tool string `yaml:"tool"`
 	// Match holds the matchers of the call's arguments.
-	Match Match `yaml:"match"`
+	Match Match `yaml:"match,omitempty"`
 	// Strict makes a call that has an argument Match does not name fail to
 	// match. Without it such arguments are ignored.
-	Strict bool `yaml:"strict"`
+	Strict bool `yaml:"strict,omitempty"`
 	// Respond is the one answer. Set it or Responses, not both.
-	Respond *Response `yaml:"respond"`
+	Respond *Response `yaml:"respond,omitempty"`
 	// Responses are answers given in order, one per matching call; the
 	// last one repeats.
-	Responses []Response `yaml:"responses"`
+	Responses []Response `yaml:"responses,omitempty"`
 }
 
 // Match holds the matchers of one fixture.
 type Match struct {
 	// Args are matchers by argument name. Every one must hold.
-	Args map[string]Matcher `yaml:"args"`
+	Args map[string]Matcher `yaml:"args,omitempty"`
 }
 
 // Matcher checks one argument. Every operator that is set must hold, and at
@@ -87,43 +87,43 @@ type Match struct {
 type Matcher struct {
 	// Equals holds when the argument is this value. Numbers compare by
 	// value, so 5 equals 5.0.
-	Equals any `yaml:"equals"`
+	Equals any `yaml:"equals,omitempty"`
 	// Regex holds when the argument is a string the expression matches
 	// somewhere. Use ^ and $ to match all of it, and (?i) to ignore case.
-	Regex string `yaml:"regex"`
+	Regex string `yaml:"regex,omitempty"`
 	// Contains holds when the argument is a string with this text in it,
 	// or a list with this value in it.
-	Contains any `yaml:"contains"`
+	Contains any `yaml:"contains,omitempty"`
 	// OneOf holds when the argument equals one of the values.
-	OneOf []any `yaml:"oneOf"`
+	OneOf []any `yaml:"oneOf,omitempty"`
 	// Exists holds, when true, if the call has the argument, and, when
 	// false, if it does not.
-	Exists *bool `yaml:"exists"`
+	Exists *bool `yaml:"exists,omitempty"`
 	// GTE and LTE hold when the argument is a number at least or at most
 	// this value.
-	GTE *float64 `yaml:"gte"`
-	LTE *float64 `yaml:"lte"`
+	GTE *float64 `yaml:"gte,omitempty"`
+	LTE *float64 `yaml:"lte,omitempty"`
 	// Within holds when the argument is an RFC 3339 time no further than
 	// this from the scenario clock, before or after it.
-	Within time.Duration `yaml:"within"`
+	Within time.Duration `yaml:"within,omitempty"`
 }
 
 // Response is one answer to a call.
 type Response struct {
 	// Text is the result the model reads.
-	Text string `yaml:"text"`
+	Text string `yaml:"text,omitempty"`
 	// NoData marks a result that found nothing. Without Text it reads
 	// NoDataText.
-	NoData bool `yaml:"noData"`
+	NoData bool `yaml:"noData,omitempty"`
 	// Evidence are the links the result gives.
-	Evidence []Evidence `yaml:"evidence"`
+	Evidence []Evidence `yaml:"evidence,omitempty"`
 }
 
 // Evidence is one link of a response.
 type Evidence struct {
 	Kind  source.EvidenceKind `yaml:"kind"`
 	Title string              `yaml:"title"`
-	URL   string              `yaml:"url"`
+	URL   string              `yaml:"url,omitempty"`
 }
 
 // Validate checks the config without reading the snapshot. Each error

@@ -159,9 +159,12 @@ way to apply a change that did not pass.
 
 **Which scenarios.** A scenario covers a strategy when it names it in
 `strategy`, or names none (or `generic-alert`) and the strategy's `match` fits
-its event. For now the gate chooses only from the scenario files under
-`bench.gate.publicDir`; with that empty no scenario exists, and every gate ends
-with `no_benchmark_coverage`. It runs each chosen scenario with the strategy
+its event. The gate chooses from the scenario files under
+`bench.gate.publicDir` and the [reviewed scenarios](#exporting-a-real-investigation)
+of the database together; a scenario that is still a draft is never chosen. When
+a scenario of the directory and a reviewed one have the same ID, the one from the
+directory is used. With neither source, or none that covers the strategy, the
+gate ends with `no_benchmark_coverage`. It runs each chosen scenario with the strategy
 under test. A scenario that is not valid is left out with a warning in
 the log.
 
@@ -402,6 +405,117 @@ Each entry under `sources` is a mock source, named as the model sees it:
 | `within: <duration>` | is an RFC 3339 time no further than the duration, such as `2h`, from `now`, before or after it. |
 
 One matcher can set several operators, and all of them must hold.
+
+## Exporting a real investigation
+
+A confirmed investigation can become a scenario, so the benchmark covers
+the alerts your own systems raise. An admin exports it, Sidekick cleans it,
+and an admin reviews it. Only a reviewed scenario can be run or downloaded.
+
+1. **Export.** Use `sidekick bench export --investigation <id>`, or
+   `POST /api/v1/investigations/{id}/scenario-draft` (admin). The
+   investigation must have a verdict that people confirmed. The command prints the
+   scenario's ID and keeps the draft in the database, with the status
+   `draft`. Asking again for the same investigation returns the same
+   scenario.
+2. **Review.** An admin opens the draft, reads it next to the original, edits
+   it, and ticks "I checked this for sensitive data" before it becomes
+   `reviewed`. The review needs a signed-in person; an API token cannot do
+   it. Any edit puts a reviewed scenario back to `draft`.
+3. **Use.** `sidekick bench export --scenario <id> --out <file>` writes a
+   reviewed scenario to a file, and `GET /api/v1/scenarios/{id}/file`
+   downloads it. Both refuse a draft. Put the file in a scenario directory
+   and run it like any other scenario.
+
+```sh
+sidekick bench export --investigation 0198f2a4-7c3e-7b1d-9a52-3f6e8d1c4b70
+sidekick bench export --scenario latency-alert-checkout-api-p99-3f6e8d1c4b70 --out bench/scenarios/private/checkout-pool.yaml
+```
+
+`bench export` reads the config file for the database
+(`database.urlSecret`), the intake endpoints, the redaction settings and the
+`summarize` model. The database must have every migration (`sidekick migrate`).
+With `--scenario` it needs `--out`, and it refuses to replace a file unless
+you pass `--force`. It exits with `0` on success, `1` for a draft or for an
+investigation that cannot be exported, `2` for bad flags, a bad config file or
+an ID that does not exist, and `3` when the database cannot be reached.
+
+### What the draft holds
+
+- **The alert.** The payload of the first alert of the investigation, as
+  the intake adapter received it (after the redaction that runs when data
+  is stored), with the adapter of the endpoint it came in on. An
+  investigation that a Slack or Teams message opened has no payload to
+  replay and cannot be exported, nor can one whose webhook endpoint is no
+  longer in the config.
+- **The sources.** One fixture for each recorded call to a source. A
+  fixture keeps only the arguments that identify the query (service,
+  repository, namespace, pod, resource, commit and similar) and ignores
+  time ranges, limits and the model's wording of a free-text query. Calls
+  with the same match share one fixture whose answers come in call order.
+  A call that failed, timed out or was refused is left out. A source that
+  was unavailable stays unavailable, and the scenario expects the report to
+  say so. The tool list of a source is read from `bench/tools/<source
+  type>.json`; `bench export --scenario` warns when the file is not in
+  the current directory.
+- **The outcome.** The confirmed verdict, and the confirmed cause as the
+  expected cause.
+- **The rubric.** Rubric items drafted by the model of
+  `model.roles.summarize` from the cleaned cause. Without a `summarize` role
+  the draft has no rubric items, Sidekick says so once at start-up, and the
+  reviewer writes them. The model call is priced and counted in the daily
+  spend of the investigation's route and in the daily caps like any other
+  model call; when a cap is reached the draft is made without rubric items.
+  The model sees only the cleaned cause.
+
+Checks that need your judgment, such as which tools a good run calls
+(`expected.evidence`), are not drafted. Add them in the editor.
+
+### How the draft is cleaned
+
+The draft goes through a stricter pass than the redaction that runs when
+data is stored. Every email, user name, account ID, host name and IP address
+that Sidekick can find anywhere in the draft is replaced by a numbered
+placeholder: `host-1`, `user-2`, `account-1`, `ip-3`. The same value always
+gets the same placeholder in the alert, the fixtures and the expected cause,
+so the story still reads. Then all the built-in [redaction](configuration.md#redaction)
+rules run over the result, IP addresses included, and the draft is refused
+if anything that looks like an email, a host name or an IP address is left.
+The same check runs when someone saves an edit and when someone reviews.
+
+Sidekick finds these values in three ways: by their shape (emails, IP
+addresses, URLs, and dotted names that end in a domain such as `.com`, `.io` or
+`.internal`), by the key they sit under (`host`, `instance`, `user`,
+`author`, `account_id`, `tenant`, `project` and similar, in JSON, in
+`key=value` pairs, and in URL query strings), and by what it has already
+found: once a value is known, it is replaced everywhere, also inside URLs,
+inside JSON that is written as a string, and inside log lines. Values in
+URL-encoded form are replaced too.
+
+### What the cleaner cannot catch
+
+Please read this before you tick the box.
+
+- A host name with no dot that sits under no known key, for example
+  `db-prod-3` written once in a log line, stays. If the same name appears
+  anywhere else as a host, it is replaced everywhere.
+- A person's name in free text, for example "Rhea restarted the pod", stays,
+  unless the same name sits under a key such as `author` or `user`
+  somewhere in the scenario.
+- Names of companies and products stay on purpose, because they are the
+  evidence: repository names, service names, namespaces, team names, and the
+  owner in a GitHub or GitLab URL.
+- Opaque IDs stay: commit hashes, trace IDs, UUIDs and customer numbers.
+  Replacing them would break links and checks. The review lists the
+  UUIDs, long mixed tokens and code host owners it kept as places to look at.
+- A secret in a shape that no built-in rule or custom rule knows stays.
+- Some harmless text is replaced: a version such as `10.0.19.1` looks like an
+  IP address, and a word such as `socket.io` looks like a host name.
+
+This is why a person reviews. The review page puts each part of the scenario
+next to the recorded original it was made from while the investigation's
+events and steps are kept (the retention job deletes them later), and it
+lists the places the cleaner kept but could not classify.
 
 ## Comparing two runs
 

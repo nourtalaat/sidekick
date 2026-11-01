@@ -1029,6 +1029,136 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations/{id}/scenario-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export a confirmed investigation as a benchmark scenario draft
+         * @description Builds a draft of a benchmark scenario from the investigation and
+         *     saves it: the payload of the alert that opened it, one fixture for
+         *     each recorded source call, the confirmed verdict and cause as the
+         *     expected outcome, and rubric items drafted by the `summarize` model
+         *     when one is configured. Fixtures keep only the arguments that
+         *     identify a query. Emails, user names, account IDs, host names and
+         *     IP addresses are replaced by numbered placeholders such as `host-1`,
+         *     the same everywhere in the scenario, and the draft is refused if
+         *     anything of that kind is left.
+         *
+         *     The draft has to be reviewed (`POST /scenarios/{id}/review`) before
+         *     it can be run or downloaded. An investigation that has a scenario
+         *     already answers 200 with it and builds nothing. The investigation
+         *     must be confirmed (409 otherwise), and the alert that opened it
+         *     must have come in on a webhook endpoint that is still in the
+         *     config; a Slack or Teams message cannot be exported (422).
+         */
+        post: operations["CreateScenarioDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scenarios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Benchmark scenarios, most recently changed first, a page at a time */
+        get: operations["ListScenarios"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scenarios/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A scenario with what a reviewer needs to check it
+         * @description The scenario file, what the exporter skipped or merged, the places
+         *     the cleaner kept but could not classify, and each part of the
+         *     scenario next to the recorded original it was made from. The
+         *     originals are read while the investigation's events and steps are
+         *     kept; later they are left out.
+         */
+        get: operations["GetScenario"];
+        /**
+         * Replace the file of a scenario
+         * @description Replaces the scenario file. It must be a valid scenario with the same
+         *     id, and hold no email, host name or IP address (422 otherwise).
+         *     `revision` is the revision the editor read; if the scenario changed
+         *     since, the answer is 409. Whatever the status was, the scenario is a
+         *     draft again afterwards and has to be reviewed again.
+         */
+        put: operations["UpdateScenario"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scenarios/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a scenario draft as reviewed
+         * @description Needs `sensitiveDataChecked` true: the reviewer says they checked
+         *     the scenario for sensitive data. The file is checked again first.
+         *     `revision` is the revision the reviewer read; if the scenario
+         *     changed since, the answer is 409. API tokens are refused with 403,
+         *     since a person has to review. Only reviewed scenarios can be run or
+         *     downloaded.
+         */
+        post: operations["ReviewScenario"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scenarios/{id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a reviewed scenario
+         * @description The scenario file, as an attachment. A scenario that is not reviewed
+         *     answers 409. The download is written to the audit log.
+         */
+        get: operations["GetScenarioFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stats/quality": {
         parameters: {
             query?: never;
@@ -2425,6 +2555,79 @@ export interface components {
             detail?: string;
             durationMs: number;
         };
+        /** @enum {string} */
+        ScenarioStatus: "draft" | "reviewed";
+        Scenario: {
+            id: string;
+            title: string;
+            status: components["schemas"]["ScenarioStatus"];
+            /**
+             * Format: int32
+             * @description Counts the edits. Review and update send the revision they read.
+             */
+            revision: number;
+            /**
+             * Format: uuid
+             * @description The investigation the scenario was exported from, until it is deleted.
+             */
+            investigationId?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            reviewedAt?: string;
+            /** @description The name of the user who reviewed it. */
+            reviewedBy?: string;
+        };
+        ScenarioList: {
+            scenarios: components["schemas"]["Scenario"][];
+            /** @description Pass it as `cursor` for the next page. Absent on the last page. */
+            nextCursor?: string;
+        };
+        ScenarioDetail: {
+            scenario: components["schemas"]["Scenario"];
+            /** @description The scenario file, as YAML. */
+            body: string;
+            /** @description What the exporter skipped, merged or dropped, in words. */
+            notes: components["schemas"]["ScenarioNote"][];
+            /** @description Places the cleaner kept that look like IDs, for the reviewer to check. */
+            candidates: components["schemas"]["ScenarioCandidate"][];
+            /** @description Each part of the scenario next to the recorded original it was made from. */
+            pairs: components["schemas"]["ScenarioPair"][];
+        };
+        ScenarioNote: {
+            kind: string;
+            text: string;
+        };
+        ScenarioCandidate: {
+            /** @description The field, for example `sources.signoz.fixtures[0].responses[0].text`. */
+            path: string;
+            /** @description Byte offset into the field's text where the value starts. */
+            start: number;
+            end: number;
+            reason: string;
+        };
+        ScenarioPair: {
+            ref: string;
+            label: string;
+            /** @description What the investigation recorded, redacted when it was stored. Absent when it is not shown; `note` says why. */
+            original?: string;
+            cleaned: string;
+            note?: string;
+        };
+        ScenarioUpdate: {
+            /** Format: int32 */
+            revision: number;
+            /** @description The whole scenario file, as YAML. */
+            body: string;
+        };
+        ScenarioReview: {
+            /** Format: int32 */
+            revision: number;
+            /** @description Must be true. The reviewer says they checked the scenario for sensitive data. */
+            sensitiveDataChecked: boolean;
+        };
         /** @description Problem details, as RFC 9457 describes. */
         Problem: {
             /** @description A URI that names the kind of problem; about:blank when the status says it all. */
@@ -2951,6 +3154,8 @@ export interface components {
         InvestigationID: string;
         /** @description The ID of an action proposal. */
         ProposalID: string;
+        /** @description The id of a scenario. */
+        ScenarioID: string;
         /** @description The first day of the range, a UTC date. The default is 29 days before `to`. */
         StatsFrom: string;
         /** @description The last day of the range, a UTC date, included. The default is today. The range is at most 400 days. */
@@ -4344,6 +4549,169 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FixApplied"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateScenarioDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["InvestigationID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The investigation had a scenario already. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scenario"];
+                };
+            };
+            /** @description The new draft. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scenario"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListScenarios: {
+        parameters: {
+            query?: {
+                /** @description Only scenarios with this status. */
+                status?: components["schemas"]["ScenarioStatus"];
+                /** @description The nextCursor of the page before. */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of scenarios. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetScenario: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The id of a scenario. */
+                id: components["parameters"]["ScenarioID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The scenario. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioDetail"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateScenario: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The id of a scenario. */
+                id: components["parameters"]["ScenarioID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScenarioUpdate"];
+            };
+        };
+        responses: {
+            /** @description The scenario, as a draft. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scenario"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ReviewScenario: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The id of a scenario. */
+                id: components["parameters"]["ScenarioID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScenarioReview"];
+            };
+        };
+        responses: {
+            /** @description The reviewed scenario. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scenario"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetScenarioFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The id of a scenario. */
+                id: components["parameters"]["ScenarioID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The scenario file. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/yaml": string;
                 };
             };
             default: components["responses"]["Problem"];

@@ -81,3 +81,12 @@ SELECT group_id::uuid AS group_id FROM events
 WHERE fingerprint = @fingerprint AND group_id IS NOT NULL
 ORDER BY received_at DESC
 LIMIT 1;
+
+-- name: GetFirstAlertEventOfGroup :one
+-- GetFirstAlertEventOfGroup returns the oldest alert in a group that kept
+-- its original payload, the one a scenario is built from. It returns no row
+-- when there is none.
+SELECT * FROM events
+WHERE group_id = @group_id::uuid AND kind = 'alert' AND raw IS NOT NULL
+ORDER BY received_at, id
+LIMIT 1;

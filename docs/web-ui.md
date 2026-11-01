@@ -528,6 +528,35 @@ The API behind the tab, all for an `admin`:
   not passed answers 409 with the code `not_passed`.
 - `POST /api/v1/strategy-proposals/{id}/reject` takes an optional `reason`.
 
+### Scenarios (admin)
+
+The **Scenarios** tab lists the benchmark scenarios exported from confirmed
+investigations, most recently changed first, and filters them by status. To
+make one, an admin opens a confirmed investigation and chooses **Export as
+scenario**; the draft opens on this tab. The same export is
+`sidekick bench export`; see
+[Exporting a real investigation](benchmark.md#exporting-a-real-investigation)
+for what the draft holds and how it is cleaned.
+
+A scenario opens with:
+
+- **What to check first:** a reminder of what the cleaner can and cannot
+  find, the places it kept because it could not tell what they are, and what the
+  exporter skipped or merged.
+- **Original and cleaned:** each part of the scenario (the alert payload, what
+  each fixture matches on, each answer, the expected cause) next to the recorded
+  original it was made from. Values the cleaner replaced, such as `host-1`, and
+  the places it kept, are marked; the marks have text or a tooltip, never colour
+  alone. The original is read from the investigation's events and steps; once the
+  retention job has deleted them, the part says that the original is no longer
+  kept.
+- **Scenario file:** the whole YAML file, to edit. Saving checks the file and
+  refuses one that is not a valid scenario or holds an email, a host name or an
+  IP address. A saved edit puts the scenario back to draft.
+- **Review:** the box "I checked this for sensitive data" and **Mark as
+  reviewed**. The button works only after the tick and with no unsaved edits. A
+  reviewed scenario shows who reviewed it and when, and can be downloaded.
+
 ## Listeners and routes
 
 The listeners and routes that people add at runtime, and those of the
@@ -642,6 +671,20 @@ An investigation's page links its `runtime:N` version to that version.
   attempts reset. The retry is written to the audit log. A job that is
   not dead, or whose unique key a pending or running job holds, answers
   409.
+- `POST /api/v1/investigations/{id}/scenario-draft` exports a confirmed
+  investigation as a benchmark scenario draft (201, or 200 with the scenario
+  it has already). It answers 409 when nobody confirmed the verdict, and 422
+  when the alert has no payload to replay. `GET /api/v1/scenarios` lists
+  scenarios (`status` takes `draft` or `reviewed`), `GET
+  /api/v1/scenarios/{id}` returns one with the notes and the places to
+  check, and each part next to its original, and `PUT /api/v1/scenarios/{id}`
+  replaces its file. `POST /api/v1/scenarios/{id}/review` needs
+  `sensitiveDataChecked: true` and the `revision` that was read, and a
+  signed-in user (an API token gets 403). `GET /api/v1/scenarios/{id}/file`
+  downloads a reviewed scenario and answers 409 for a draft. A stale
+  `revision` answers 409, and a file that is not a valid scenario or still
+  holds an email, a host name or an IP address answers 422. See
+  [Exporting a real investigation](benchmark.md#exporting-a-real-investigation).
 
 ## Listeners, routes and the audit log in the UI
 

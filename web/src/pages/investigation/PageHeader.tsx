@@ -3,12 +3,15 @@ import { useResolve, useStopRun, type Investigation } from "../../api/investigat
 import { Button } from "../../components/Button";
 import { CopyButton } from "../../components/CopyButton";
 import { formatTime } from "../../format";
+import { ExportScenario } from "./ExportScenario";
 import "./PageHeader.css";
 
 interface PageHeaderProps {
   inv: Investigation;
   /** Whether the viewer is a responder or higher, so the action buttons show. */
   canAct: boolean;
+  /** Whether the viewer is an admin, so a confirmed investigation can be exported as a scenario. */
+  canExport: boolean;
   onAskFollowUp(): void;
 }
 
@@ -17,7 +20,7 @@ interface PageHeaderProps {
  * are for responders and above, and show only when they can apply: Stop
  * while a run goes, Resolve while the group is open.
  */
-export function PageHeader({ inv, canAct, onAskFollowUp }: PageHeaderProps) {
+export function PageHeader({ inv, canAct, canExport, onAskFollowUp }: PageHeaderProps) {
   const stop = useStopRun(inv.id);
   const resolve = useResolve(inv.id);
 
@@ -32,6 +35,7 @@ export function PageHeader({ inv, canAct, onAskFollowUp }: PageHeaderProps) {
         <div className="sk-inv-header__actions">
           {canAct && <Button onClick={onAskFollowUp}>Ask a follow-up</Button>}
           <CopyButton text={window.location.href} label="Copy link" />
+          {canExport && inv.confirmation && <ExportScenario investigationId={inv.id} />}
           {canAct && running && inv.cancelRequestedAt === undefined && (
             <Button variant="destructive" onClick={() => stop.mutate()} disabled={stop.isPending}>
               <OctagonX size={16} aria-hidden="true" />

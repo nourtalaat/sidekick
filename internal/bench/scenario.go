@@ -48,27 +48,27 @@ type Scenario struct {
 	// ID names the scenario in results. It is unique in a run.
 	ID    string   `yaml:"id"`
 	Title string   `yaml:"title"`
-	Tags  []string `yaml:"tags"`
+	Tags  []string `yaml:"tags,omitempty"`
 	// Strategy is the strategy the investigation uses. Empty means the
 	// default strategy.
-	Strategy string `yaml:"strategy"`
+	Strategy string `yaml:"strategy,omitempty"`
 	// Now is the scenario clock: the time the event arrives at, and the
 	// time within matchers count from.
 	Now time.Time `yaml:"now"`
 	// Route holds the route settings of the run.
-	Route Route `yaml:"route"`
+	Route Route `yaml:"route,omitempty"`
 	// Event is the payload that opens the investigation.
 	Event Event `yaml:"event"`
 	// Sources are the mock sources, by source name.
 	Sources map[string]mock.Config `yaml:"sources"`
 	// Default is what a call no fixture matches returns, for every source
 	// that does not set its own. Empty means mock.DefaultNoData.
-	Default mock.Default `yaml:"default"`
+	Default mock.Default `yaml:"default,omitempty"`
 	// Expected is the outcome the run is scored against.
 	Expected Expected `yaml:"expected"`
 	// Limits bound each run of the scenario. Zero values take the
 	// config's per-investigation limits.
-	Limits Limits `yaml:"limits"`
+	Limits Limits `yaml:"limits,omitempty"`
 
 	// Path is the file the scenario was read from.
 	Path string `yaml:"-"`
@@ -77,7 +77,7 @@ type Scenario struct {
 // Route holds the route settings of a scenario's run.
 type Route struct {
 	// Mode is the action mode. Only read-only exists until M4.
-	Mode action.Mode `yaml:"mode"`
+	Mode action.Mode `yaml:"mode,omitempty"`
 }
 
 // Event is a scenario's payload and the adapter that turns it into an
@@ -87,17 +87,17 @@ type Event struct {
 	Adapter string `yaml:"adapter"`
 	// Config is the adapter's own settings, as they would be under
 	// intake.webhooks.<name> in sidekick.yaml. Most adapters have none.
-	Config yaml.Node `yaml:"config"`
+	Config yaml.Node `yaml:"config,omitempty"`
 	// Payload is the webhook body, written as YAML. It is sent as JSON.
 	Payload any `yaml:"payload"`
 }
 
 // Limits bound one run, as a route's budgets do.
 type Limits struct {
-	MaxTokens    int           `yaml:"maxTokens"`
-	MaxToolCalls int           `yaml:"maxToolCalls"`
-	MaxWallTime  time.Duration `yaml:"maxWallTime"`
-	MaxCostUSD   float64       `yaml:"maxCostUSD"`
+	MaxTokens    int           `yaml:"maxTokens,omitempty"`
+	MaxToolCalls int           `yaml:"maxToolCalls,omitempty"`
+	MaxWallTime  time.Duration `yaml:"maxWallTime,omitempty"`
+	MaxCostUSD   float64       `yaml:"maxCostUSD,omitempty"`
 }
 
 // Expected is the outcome a good investigation of the scenario reaches.
@@ -105,21 +105,21 @@ type Expected struct {
 	// Verdict is the right verdict.
 	Verdict report.Verdict `yaml:"verdict"`
 	// Acceptable are other verdicts that still count as correct.
-	Acceptable []report.Verdict `yaml:"acceptable"`
+	Acceptable []report.Verdict `yaml:"acceptable,omitempty"`
 	// RootCause is the cause the report should find, with the rubric it is
 	// graded by.
 	RootCause RootCause `yaml:"rootCause"`
 	// Evidence are checks of the run made in code, without a judge.
-	Evidence []EvidenceCheck `yaml:"evidence"`
+	Evidence []EvidenceCheck `yaml:"evidence,omitempty"`
 	// UnavailableReported are the sources the report must list as
 	// unavailable in checked.
-	UnavailableReported []string `yaml:"unavailableReported"`
+	UnavailableReported []string `yaml:"unavailableReported,omitempty"`
 }
 
 // RootCause is the expected cause and its rubric.
 type RootCause struct {
 	Summary string       `yaml:"summary"`
-	Rubric  []RubricItem `yaml:"rubric"`
+	Rubric  []RubricItem `yaml:"rubric,omitempty"`
 }
 
 // RubricItem is one point a judge grades as met or not met.
@@ -128,16 +128,16 @@ type RubricItem struct {
 	Text   string  `yaml:"text"`
 	Weight float64 `yaml:"weight"`
 	// Required items must be met for the root cause to match.
-	Required bool `yaml:"required"`
+	Required bool `yaml:"required,omitempty"`
 }
 
 // EvidenceCheck is one check of the run. Exactly one field is set.
 type EvidenceCheck struct {
 	// CalledTool is a tool the run must call, as the model names it, for
 	// example github__list_commits.
-	CalledTool string `yaml:"calledTool"`
+	CalledTool string `yaml:"calledTool,omitempty"`
 	// CitedURL is a URL the report must cite.
-	CitedURL string `yaml:"citedURL"`
+	CitedURL string `yaml:"citedURL,omitempty"`
 }
 
 // LoadOptions change how scenarios are read.
@@ -202,6 +202,25 @@ func LoadScenarios(path string, opts LoadOptions) ([]Scenario, error) {
 	return out, nil
 }
 
+// ParseScenario reads one scenario from YAML text and checks it as
+// LoadScenarios checks a file. Problems give one error that wraps
+// ErrInvalidScenario and lists every problem, one per line, as
+// "<field>: <problem>". Snapshot paths stay as written.
+func ParseScenario(raw []byte) (Scenario, error) {
+	var sc Scenario
+
+	problems := decodeStrict(raw, &sc)
+	if len(problems) == 0 {
+		problems = sc.validate()
+	}
+
+	if len(problems) > 0 {
+		return Scenario{}, fmt.Errorf("%w:\n%s", ErrInvalidScenario, strings.Join(problems, "\n"))
+	}
+
+	return sc, nil
+}
+
 // loadScenario reads and checks one scenario file. It returns the
 // problems as "<file>: <field>: <problem>".
 func loadScenario(file string, opts LoadOptions) (Scenario, []string) {
@@ -227,7 +246,7 @@ func loadScenario(file string, opts LoadOptions) (Scenario, []string) {
 	}
 
 	sc.Path = file
-	sc.resolveSnapshots(opts.BaseDir)
+	sc.ResolveSnapshots(opts.BaseDir)
 
 	return sc, nil
 }
@@ -307,8 +326,10 @@ func (s Scenario) Body() ([]byte, error) {
 	return body, nil
 }
 
-// resolveSnapshots makes each relative snapshot path relative to baseDir.
-func (s *Scenario) resolveSnapshots(baseDir string) {
+// ResolveSnapshots makes each relative snapshot path relative to baseDir.
+// LoadScenarios does it for the files it reads; call it on a scenario read
+// from text with ParseScenario.
+func (s *Scenario) ResolveSnapshots(baseDir string) {
 	if baseDir == "" {
 		return
 	}
