@@ -99,7 +99,7 @@ func TestGetOperationsStats(t *testing.T) {
 		require.Equal(t, "2026-10-20T00:00:00Z", oct20.Bucket)
 		require.Equal(t, operationsFigures{
 			Investigations: 14, Finished: 14, DurationN: 14, DurationMsSum: 2_400_000, FirstFindingN: 12, FirstFindingMsSum: 520_000,
-			ToolCalls: 90, NoisyFixed: 2, Recoveries: 2, DowntimeMsSum: 1_440_000, WatchTimeouts: 1,
+			ToolCalls: 90, NoisyFixed: 2, ActionsProposed: 6, ActionsApproved: 5, ActionsExecuted: 3, Recoveries: 2, DowntimeMsSum: 1_440_000, WatchTimeouts: 1,
 		}, oct20.operationsFigures)
 		require.Len(t, oct20.Verdicts, 2)
 		require.Equal(t, "false_positive", oct20.Verdicts[0].Verdict)
@@ -110,7 +110,7 @@ func TestGetOperationsStats(t *testing.T) {
 		require.Equal(t, "2026-10-21T00:00:00Z", oct21.Bucket)
 		require.Equal(t, operationsFigures{
 			Investigations: 8, Finished: 8, DurationN: 8, DurationMsSum: 460_000, FirstFindingN: 6, FirstFindingMsSum: 360_000,
-			ToolCalls: 14, NoisyFixed: 1, Recoveries: 1, DowntimeMsSum: 600_000,
+			ToolCalls: 14, NoisyFixed: 1, ActionsProposed: 3, ActionsApproved: 2, ActionsExecuted: 1, Recoveries: 1, DowntimeMsSum: 600_000,
 		}, oct21.operationsFigures)
 
 		require.Equal(t, "2026-10-22T00:00:00Z", oct22.Bucket)
@@ -120,7 +120,7 @@ func TestGetOperationsStats(t *testing.T) {
 
 		require.Equal(t, operationsFigures{
 			Investigations: 23, Finished: 22, DurationN: 22, DurationMsSum: 2_860_000, FirstFindingN: 18, FirstFindingMsSum: 880_000,
-			ToolCalls: 105, NoisyFixed: 3, Recoveries: 3, DowntimeMsSum: 2_040_000, WatchTimeouts: 1,
+			ToolCalls: 105, NoisyFixed: 3, ActionsProposed: 9, ActionsApproved: 7, ActionsExecuted: 4, Recoveries: 3, DowntimeMsSum: 2_040_000, WatchTimeouts: 1,
 		}, got.Totals.operationsFigures)
 
 		// 18 first findings: 4 in bucket 9 of the histogram, 8 in bucket 10
