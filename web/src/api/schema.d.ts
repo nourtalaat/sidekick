@@ -2007,6 +2007,12 @@ export interface components {
             decidedByName?: string;
             /** @description The Slack user ID of someone who decided in Slack. */
             decidedBySlackUser?: string;
+            /**
+             * @description True when nobody decided the proposal: its investigation ran in
+             *     read-write mode, so the route's policy approved it as it was
+             *     stored, and `decidedAt` is the time of that approval.
+             */
+            approvedByPolicy?: boolean;
             /** Format: date-time */
             decidedAt?: string;
             result?: components["schemas"]["ActionResult"];

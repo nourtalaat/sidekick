@@ -442,6 +442,20 @@ func (q *Queries) GetInvestigation(ctx context.Context, id uuid.UUID) (Investiga
 	return i, err
 }
 
+const getInvestigationMode = `-- name: GetInvestigationMode :one
+SELECT mode FROM investigations WHERE id = $1
+`
+
+// GetInvestigationMode returns the action mode an investigation has now. A
+// read-write investigation becomes approved when an event that is not
+// trusted joins it. It reads one row by its primary key.
+func (q *Queries) GetInvestigationMode(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getInvestigationMode, id)
+	var mode string
+	err := row.Scan(&mode)
+	return mode, err
+}
+
 const getInvestigationWithEvent = `-- name: GetInvestigationWithEvent :one
 SELECT investigations.id, investigations.group_id, investigations.route, investigations.strategy, investigations.strategy_version, investigations.mode, investigations.status, investigations.run, investigations.next_seq, investigations.fence, investigations.verdict, investigations.confidence, investigations.report, investigations.stop_reason, investigations.connectors, investigations.budget, investigations.input_tokens, investigations.output_tokens, investigations.cost_micros, investigations.tool_calls, investigations.created_at, investigations.started_at, investigations.first_finding_at, investigations.finished_at, investigations.cancel_requested_at, investigations.cancel_requested_by, investigations.cancel_requested_by_slack_user, investigations.confirmed_verdict, investigations.confirmed_cause, investigations.confirmed_by, investigations.confirmed_by_slack_user, investigations.confirmed_at, investigations.run_kind, investigations.alert_title, investigations.service, investigations.model, investigations.fix_applied_at, investigations.fix_applied_by, investigations.fix_applied_by_slack_user, events.id, events.intake, events.key, events.kind, events.sender_kind, events.sender_id, events.sender_name, events.trusted, events.alert_name, events.title, events.body, events.service, events.severity, events.labels, events.links, events.fingerprint, events.slack, events.raw, events.status, events.skip_reason, events.route, events.group_id, events.starts_at, events.ends_at, events.received_at, events.teams
 FROM investigations

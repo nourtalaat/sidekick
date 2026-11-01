@@ -2099,8 +2099,13 @@ type Proposal struct {
 	Action string `json:"action"`
 
 	// AlertTitle The title of the alert of the investigation. Set in the review queue only.
-	AlertTitle *string    `json:"alertTitle,omitempty"`
-	DecidedAt  *time.Time `json:"decidedAt,omitempty"`
+	AlertTitle *string `json:"alertTitle,omitempty"`
+
+	// ApprovedByPolicy True when nobody decided the proposal: its investigation ran in
+	// read-write mode, so the route's policy approved it as it was
+	// stored, and `decidedAt` is the time of that approval.
+	ApprovedByPolicy *bool      `json:"approvedByPolicy,omitempty"`
+	DecidedAt        *time.Time `json:"decidedAt,omitempty"`
 
 	// DecidedByName The name of the user or API token that approved or rejected it.
 	DecidedByName *string `json:"decidedByName,omitempty"`

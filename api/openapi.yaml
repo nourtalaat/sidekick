@@ -3095,6 +3095,12 @@ components:
         decidedBySlackUser:
           type: string
           description: The Slack user ID of someone who decided in Slack.
+        approvedByPolicy:
+          type: boolean
+          description: |
+            True when nobody decided the proposal: its investigation ran in
+            read-write mode, so the route's policy approved it as it was
+            stored, and `decidedAt` is the time of that approval.
         decidedAt:
           type: string
           format: date-time
