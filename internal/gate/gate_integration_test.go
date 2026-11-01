@@ -244,10 +244,10 @@ func TestGatePausesWhenTheDailyCapIsReached(t *testing.T) {
 	require.Equal(t, 1, e.conn.investigations())
 
 	var (
-		pending int
-		runAt   time.Time
-		key     *string
-		max     int32
+		pending     int
+		runAt       time.Time
+		key         *string
+		maxAttempts int32
 	)
 
 	require.NoError(t, e.pool.QueryRow(t.Context(),
