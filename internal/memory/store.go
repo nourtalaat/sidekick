@@ -374,9 +374,15 @@ func entryOf(row db.GetMemoryEntryRow) Entry {
 // writeAudit writes the audit entry of a change to the memory entry of
 // investigation id.
 func writeAudit(ctx context.Context, tx pgx.Tx, actor Actor, action string, id uuid.UUID, before, after any) error {
+	return writeAuditFor(ctx, tx, actor, action, auditTargetEntry, id.String(), &id, before, after)
+}
+
+// writeAuditFor writes the audit entry of a change to what kind and target
+// name, for the investigation when there is one.
+func writeAuditFor(ctx context.Context, tx pgx.Tx, actor Actor, action, kind, target string, investigation *uuid.UUID, before, after any) error {
 	err := auditor.Write(ctx, tx, audit.Entry{
-		ActorKind: actor.Kind, ActorID: actor.ID, Action: action, TargetKind: auditTargetEntry, TargetID: id.String(),
-		InvestigationID: &id, Old: before, New: after,
+		ActorKind: actor.Kind, ActorID: actor.ID, Action: action, TargetKind: kind, TargetID: target,
+		InvestigationID: investigation, Old: before, New: after,
 	})
 	if err != nil {
 		return fmt.Errorf("audit the change: %w", err)
