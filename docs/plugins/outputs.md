@@ -94,8 +94,8 @@ investigation is created, `running` while it runs, and `final` once it has
 a result. After a follow-up question, `follow_up` carries the report with
 the new answer last in `Report.FollowUps`; an answer that changes the
 verdict comes as a new `final` instead. `watcher` reports a change of a
-watcher's state; see [Watcher changes](#watcher-changes). Later releases
-add a phase for action proposals. `Accepts` returns true for the phases
+watcher's state; see [Watcher changes](#watcher-changes). Action proposals
+do not have a phase: every update carries them in `Proposals`. `Accepts` returns true for the phases
 your output shows; the publish job skips the others without calling
 `Publish`. A webhook callback, for example, accepts `final` and
 `watcher`; a chat message that updates in place accepts all of them, so
@@ -115,6 +115,11 @@ to their questions.
   too, so nothing stays on "investigating" forever;
 - `Watchers`, the state of every watcher of the investigation's group,
   oldest first, in every phase;
+- `Proposals`, the action proposals the model made in the investigation,
+  oldest first, in every phase, with their status, who decided and what the
+  action made. Their `Params`, `ParamsText` and `Reason` are text the model
+  wrote: escape them like the report's text. `ParamsText` is what an approver
+  reads, so if your output lets people decide, show it whole or not at all;
 - `Previous`, the `Ref` your sink returned last time, or nil the first
   time;
 - `Seq`, which increases with every state of the investigation.

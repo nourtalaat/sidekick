@@ -304,6 +304,39 @@ caller it also has `mine`, the caller's own opinion of the part, with the
 reason and the real verdict and cause they gave. Parts nobody rated, and
 the parts of an earlier run, are left out.
 
+## The review queue and action proposals
+
+The review queue (`/review`) is one page with a tab for each kind of thing
+that waits for a person. The Actions tab (`/review?tab=actions`) lists the
+actions the model proposed on routes in `approved` mode, newest first, for
+the `approver` and `admin` roles. It shows the proposals that wait for a
+decision, or those already decided. Each proposal shows its action, route,
+investigation, when it expires, the parameters whole, exactly as the action
+will run with them, and the model's reason, which is the model's own words
+and not checked. The parameters are plain text in which characters that
+could hide something, such as right-to-left marks and zero-width spaces,
+are written as `\u` escapes, and nothing is cut. Approve runs the action
+once; Reject takes an optional note for the audit log. Of two people who
+decide at the same moment, one decides and the other is told who did. A
+proposal that expired, or that the config no longer allows because its
+route is read-only now or no longer lists the action, answers 409 and can
+only be rejected. The investigation page lists its proposals too, with the
+same buttons for approvers.
+
+- `GET /api/v1/proposals` (approver) lists proposals a page at a time, with
+  `status` (repeat it for several, default `proposed`), `cursor` and
+  `limit`.
+- `POST /api/v1/proposals/{id}/approve` and `/reject` (approver) decide a
+  proposal. The 409 answers have a `code`: `expired`, `decided` (the detail
+  says who decided) or `not_allowed`.
+- `GET /api/v1/investigations/{id}` has a `proposals` list.
+
+Every proposal, approval, rejection, expiry and result is in the audit log
+as `action.proposed`, `action.approved`, `action.rejected`,
+`action.expired`, `action.executing`, `action.succeeded` or
+`action.failed`. Operators write [the actions](configuration.md#actions) and
+developers add types with [Writing an action](plugins/actions.md).
+
 ## Listeners and routes
 
 The listeners and routes that people add at runtime, and those of the
@@ -325,11 +358,14 @@ used by every replica within seconds.
   rule and turns it on or off with `enabled`. The body has the keys the
   rule has in the config file: for a listener `channel`, `source`,
   `match`, `extract` and `recovery`; for a route `priority`, `match`,
-  `strategy`, `sources`, `outputs`, `mode`, `budgets` and `grouping`.
-  Durations are written as `5m`. A route needs a `match`, uses only the
-  sources, outputs and strategies of the config file, keeps its budgets at
-  or below the global ones, and has the mode `read-only`, the only mode
-  there is for now. A runtime listener is never trusted.
+  `strategy`, `sources`, `outputs`, `mode`, `actions`, `budgets` and
+  `grouping`. Durations are written as `5m`. A route needs a `match`, uses
+  only the sources, outputs, strategies and actions of the config file,
+  keeps its budgets at or below the global ones, and has the mode
+  `read-only` or `approved`; an `approved` route lists at least one action.
+  Only an admin can save a route, so only an admin can let the model
+  propose actions, and Slack commands cannot. A runtime listener is never
+  trusted.
 - `PUT` takes the `version` of the rule that was read. If the rule has
   changed since, the answer is 409 with the code `stale`.
 - `DELETE /{name}` removes a runtime rule. It also removes a runtime rule
