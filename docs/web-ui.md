@@ -345,6 +345,30 @@ under `/api/v1`:
 
 The text of a lesson came from people and the model: show it as plain text.
 
+## The review queue
+
+The **Review queue** (`/review`) is one page with a tab for each kind of
+thing that waits for a person. The tab is in the address
+(`/review?tab=lessons`), so a link opens the queue on it, and the arrow keys
+move between the tabs.
+
+The **Lessons** tab lists the lessons drafted from feedback that wait for
+review, newest first, each with its text, where it applies and links to the
+investigations whose feedback it came from. Everyone who can sign in can read
+it. An `admin` can:
+
+- **Approve** the lesson, so prompts use it from now on.
+- **Edit** its text, up to 400 characters, and its scope (service, alert
+  name, route and strategy). A lesson drafted from feedback keeps at least
+  one scope field. The lesson stays in the queue until it is approved or
+  rejected.
+- **Reject** it. The lesson is kept, with the status `rejected`, and never
+  used.
+
+If someone else changed the lesson while the page was open, the page says
+so and the queue shows the new version. The text of a lesson is shown as
+plain text, never as HTML.
+
 ## Listeners and routes
 
 The listeners and routes that people add at runtime, and those of the
