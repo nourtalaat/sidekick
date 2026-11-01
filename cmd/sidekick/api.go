@@ -10,6 +10,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/auth"
 	"github.com/nourtalaat/sidekick/internal/feedback"
+	"github.com/nourtalaat/sidekick/internal/lessons"
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/rules"
 )
@@ -72,6 +73,7 @@ func registerAPI(ctx context.Context, a *app.App, memorySync memory.SyncOptions)
 		Logger:   log,
 
 		DraftLessons: summarizeConfigured(cfg),
+		Lessons:      lessons.NewStore(a.Pool()),
 	})
 	if err != nil {
 		return fmt.Errorf("set up the API: %w", err)

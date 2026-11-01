@@ -308,6 +308,43 @@ caller it also has `mine`, the caller's own opinion of the part, with the
 reason and the real verdict and cause they gave. Parts nobody rated, and
 the parts of an earlier run, are left out.
 
+## Lessons
+
+Lessons are short pieces of guidance, up to 400 characters, that prompts show
+the model; see [`lessons`](configuration.md#lessons). Anyone with the
+`viewer` role can read them, and an `admin` changes them. All of it is
+under `/api/v1`:
+
+- `GET /lessons` lists lessons newest first, a page at a time (`limit`, at
+  most 200, and `cursor`). `status` (`proposed`, `active`, `disabled` or
+  `rejected`), `service` and `q`, words the text matches as in a web
+  search, narrow the list. The answer also has `counts`, how many lessons
+  have each status whatever the filters. A lesson has its text, its scope
+  (`service`, `alert`, `route` and `strategy`; a lesson with none applies to
+  every investigation), its status and origin (`feedback`, `ui`, `slack` or
+  `file`), the feedback a drafted lesson comes from, how many people rated
+  the verdicts of investigations that used it correct (`helpful`) and wrong
+  (`unhelpful`), and a `version`.
+- `POST /lessons` writes a lesson, active at once or with `status:
+  proposed`. A lesson with no scope field is global.
+- `PUT /lessons/{id}` replaces the text and scope, and may set `status`: a
+  lesson that waits for review can be rejected, an active one disabled, a
+  disabled one enabled. A lesson drafted from feedback keeps at least one
+  scope field. `POST /lessons/{id}/approve` makes a lesson that waits for
+  review active and notes who approved it. `DELETE /lessons/{id}` deletes
+  one, with the record of the investigations that used it.
+- An edit or approval sends the `version` it read. If the lesson changed
+  since, the answer is 409 with code `stale`; approving a lesson that does
+  not wait for review is 409 with code `not_proposed`. A text or scope that
+  fails the checks is 422 with the field. Every change is written to the
+  audit log.
+- `GET /investigations/{id}` lists the `lessons` the investigation used, with
+  their text and status as they are now. A prompt step in
+  `GET /investigations/{id}/steps` has `lessons`: the ones it used and the
+  first 50 it left out, each with the reason, and how many applied.
+
+The text of a lesson came from people and the model: show it as plain text.
+
 ## Listeners and routes
 
 The listeners and routes that people add at runtime, and those of the
