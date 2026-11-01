@@ -4,6 +4,7 @@ package investigator
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -32,7 +33,7 @@ VALUES
 
 // lessonID returns the ID of the lesson with number n in insertLessons.
 func lessonID(n int) uuid.UUID {
-	return uuid.MustParse("0192d3a4-0000-7000-8000-00000000000" + string(rune('0'+n)))
+	return uuid.MustParse(fmt.Sprintf("0192d3a4-0000-7000-8000-%012d", n))
 }
 
 var defaultLessonLimits = lessons.Limits{MaxPerPrompt: 10, MaxTokens: 1500, GlobalPercent: 30}

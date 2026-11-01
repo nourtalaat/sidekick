@@ -452,7 +452,12 @@ func refID(ref, kind string) (string, bool) {
 		return "", false
 	}
 
-	return strings.CutPrefix(rest, kind+":")
+	id, ok := strings.CutPrefix(rest, kind+":")
+	if !ok {
+		return "", false
+	}
+
+	return id, true
 }
 
 // giveUpIfInvalid wraps queue.ErrGiveUp into err when it is a model error

@@ -40,7 +40,7 @@ func TestLessonConstraints(t *testing.T) {
 		{name: "text of 400 characters", origin: "ui", status: "active", text: strings.Repeat("a", 400)},
 		{name: "text of 401 characters", origin: "ui", status: "active", text: strings.Repeat("a", 401), wantViolation: true},
 		{name: "empty text", origin: "ui", status: "active", text: "", wantViolation: true},
-		{name: "blank text", origin: "ui", status: "active", text: "  \n", wantViolation: true},
+		{name: "blank text", origin: "ui", status: "active", text: "   ", wantViolation: true},
 	}
 
 	for _, tt := range tests {

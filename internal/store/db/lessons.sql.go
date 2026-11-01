@@ -115,7 +115,7 @@ func (q *Queries) InsertDraftedLesson(ctx context.Context, arg InsertDraftedLess
 const insertLessonUses = `-- name: InsertLessonUses :exec
 INSERT INTO lesson_uses (lesson_id, investigation_id)
 SELECT unnest($1::uuid[]), $2::uuid
-ON CONFLICT DO NOTHING
+ON CONFLICT (lesson_id, investigation_id) DO NOTHING
 `
 
 type InsertLessonUsesParams struct {

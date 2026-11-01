@@ -391,7 +391,7 @@ func TestDraftJob(t *testing.T) {
 				require.True(t, strings.HasPrefix(got[i].text, want.text), "text %q starts with %q", got[i].text, want.text)
 			}
 
-			require.Equal(t, 1.0, testutil.ToFloat64(h.metrics.drafts.WithLabelValues(tt.wantMetric)))
+			require.InDelta(t, 1.0, testutil.ToFloat64(h.metrics.drafts.WithLabelValues(tt.wantMetric)), 0.001)
 			require.Equal(t, len(tt.wantLessons), h.count(t, "SELECT count(*) FROM audit_log WHERE action = 'lesson.drafted' AND details->'new'->>'feedbackId' = $1", testFeedback.String()))
 			require.Equal(t, int64(tt.wantCalls*draftCost), h.spend(t), "every call is added to the spend of the route")
 
@@ -486,7 +486,7 @@ func TestDraftJobDoesNothing(t *testing.T) {
 			require.NoError(t, h.run(t, id))
 			require.Empty(t, h.conn.Requests(), "the model is not called")
 			require.Len(t, h.lessons(t), tt.wantLessons)
-			require.Equal(t, 1.0, testutil.ToFloat64(h.metrics.drafts.WithLabelValues(resultSkipped)))
+			require.InDelta(t, 1.0, testutil.ToFloat64(h.metrics.drafts.WithLabelValues(resultSkipped)), 0.001)
 		})
 	}
 }
@@ -538,7 +538,7 @@ func TestDraftJobAtTheDailyCap(t *testing.T) {
 	require.NoError(t, h.run(t, testFeedback))
 	require.Empty(t, h.conn.Requests(), "the model is not called")
 	require.Empty(t, h.lessons(t))
-	require.Equal(t, 1.0, testutil.ToFloat64(h.metrics.drafts.WithLabelValues(resultOverCap)))
+	require.InDelta(t, 1.0, testutil.ToFloat64(h.metrics.drafts.WithLabelValues(resultOverCap)), 0.001)
 
 	// The job waits for tomorrow, with the unique key of the feedback.
 	require.Equal(t, 1, h.count(t, `

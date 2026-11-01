@@ -60,7 +60,7 @@ LIMIT sqlc.arg(max_rows)::int;
 -- prompt.
 INSERT INTO lesson_uses (lesson_id, investigation_id)
 SELECT unnest(@lesson_ids::uuid[]), @investigation_id::uuid
-ON CONFLICT DO NOTHING;
+ON CONFLICT (lesson_id, investigation_id) DO NOTHING;
 
 -- name: TouchLessonsUsed :exec
 -- TouchLessonsUsed sets the time lessons were last used. A lesson used in
