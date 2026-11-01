@@ -144,12 +144,20 @@ func encodeStream(t *testing.T, path string) []byte {
 func newTestConnector(t *testing.T, api *fakehttp.Server, modelID string, edit func(*Config)) *Connector {
 	t.Helper()
 
+	return newTestConnectorWith(t, api, api.Client(), modelID, edit)
+}
+
+// newTestConnectorWith is newTestConnector with the HTTP client the
+// connector is given, which must reach api.
+func newTestConnectorWith(t *testing.T, api *fakehttp.Server, client *http.Client, modelID string, edit func(*Config)) *Connector {
+	t.Helper()
+
 	cfg := Config{Settings: model.Settings{Model: modelID}, Region: testRegion, Endpoint: api.URL()}
 	if edit != nil {
 		edit(&cfg)
 	}
 
-	c, err := build(t.Context(), "claude", cfg, registry.Deps{HTTP: api.Client()}, fakeAWSConfig)
+	c, err := build(t.Context(), "claude", cfg, registry.Deps{HTTP: client}, fakeAWSConfig)
 	require.NoError(t, err)
 
 	return c
