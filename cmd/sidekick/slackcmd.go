@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/nourtalaat/sidekick/internal/app"
 	"github.com/nourtalaat/sidekick/internal/buildinfo"
+	"github.com/nourtalaat/sidekick/internal/lessons"
 	"github.com/nourtalaat/sidekick/internal/rules"
 	"github.com/nourtalaat/sidekick/internal/slackapp"
 	"github.com/nourtalaat/sidekick/internal/slackcmd"
@@ -21,6 +22,7 @@ func newSlackCommands(a *app.App, h *slackapp.Handler, cache *rules.Cache, looku
 		Rules:        cache,
 		Roles:        lookup,
 		Investigator: h,
+		Lessons:      lessons.NewStore(a.Pool(), a.Redactor()),
 		Logger:       a.Logger().With("component", "slackcmd"),
 		Version:      buildinfo.Current().Version,
 	})

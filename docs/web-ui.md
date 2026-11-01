@@ -268,9 +268,12 @@ The web UI shows the investigations in two pages, which every role from
 - **The investigation page** (`/investigations/<id>`, the address the
   Slack link opens) shows the verdict, how sure Sidekick is, the reason,
   the state of the watchers, the report, what was checked, the cost and
-  the model, the alerts of the group, and the record of the run, one line
-  for each step. A step opens to show the tool call or result in a box
-  with a copy button.
+  the model, the lessons the prompt used, the alerts of the group, and the
+  record of the run, one line for each step. A step opens to show the tool
+  call or result in a box with a copy button. The prompt step, and the
+  triage prompt step, also say how many lessons they used and which
+  lessons applied but were left out, with the reason; see
+  [Lessons](#lessons).
 
 Under the verdict, each finding, each fix and each tool result, the page
 says how many people rated that part correct and how many wrong, from
@@ -308,10 +311,70 @@ caller it also has `mine`, the caller's own opinion of the part, with the
 reason and the real verdict and cause they gave. Parts nobody rated, and
 the parts of an earlier run, are left out.
 
-## The review queue and action proposals
+## Lessons
 
-The review queue (`/review`) is one page with a tab for each kind of thing
-that waits for a person. The Actions tab (`/review?tab=actions`) lists the
+Lessons are short pieces of guidance, up to 400 characters, that prompts show
+the model; see [`lessons`](configuration.md#lessons). Anyone with the
+`viewer` role can read them, and an `admin` changes them. All of it is
+under `/api/v1`:
+
+- `GET /lessons` lists lessons newest first, a page at a time (`limit`, at
+  most 200, and `cursor`). `status` (`proposed`, `active`, `disabled` or
+  `rejected`), `service` and `q`, words the text matches as in a web
+  search, narrow the list. The answer also has `counts`, how many lessons
+  have each status whatever the filters. A lesson has its text, its scope
+  (`service`, `alert`, `route` and `strategy`; a lesson with none applies to
+  every investigation), its status and origin (`feedback`, `ui`, `slack` or
+  `file`), the feedback a drafted lesson comes from, how many people rated
+  the verdicts of investigations that used it correct (`helpful`) and wrong
+  (`unhelpful`), and a `version`.
+- `POST /lessons` writes a lesson, active at once or with `status:
+  proposed`. A lesson with no scope field is global.
+- `PUT /lessons/{id}` replaces the text and scope, and may set `status`: a
+  lesson that waits for review can be rejected, an active one disabled, a
+  disabled one enabled. A lesson drafted from feedback keeps at least one
+  scope field. `POST /lessons/{id}/approve` makes a lesson that waits for
+  review active and notes who approved it. `DELETE /lessons/{id}` deletes
+  one, with the record of the investigations that used it.
+- An edit or approval sends the `version` it read (400 without one). If the
+  lesson changed since, the answer is 409 with code `stale`; approving a lesson that does
+  not wait for review is 409 with code `not_proposed`. A text or scope that
+  fails the checks is 422 with the field. Every change is written to the
+  audit log.
+- `GET /investigations/{id}` lists the `lessons` the investigation used, with
+  their text and status as they are now. A prompt step in
+  `GET /investigations/{id}/steps` has `lessons`: the ones it used and the
+  first 50 it left out, each with the reason, and how many applied.
+
+Secrets in the text of a lesson are redacted when it is saved, as in feedback. The text of a lesson came from people and the model: show it as plain text.
+
+## The review queue
+
+The **Review queue** (`/review`) is one page with a tab for each kind of
+thing that waits for a person. The tab is in the address
+(`/review?tab=lessons`), so a link opens the queue on it, and the arrow keys
+move between the tabs.
+
+The **Lessons** tab lists the lessons drafted from feedback that wait for
+review, newest first, each with its text, where it applies and links to the
+investigations whose feedback it came from. Everyone who can sign in can read
+it. An `admin` can:
+
+- **Approve** the lesson, so prompts use it from now on.
+- **Edit** its text, up to 400 characters, and its scope (service, alert
+  name, route and strategy). A lesson drafted from feedback keeps at least
+  one scope field. The lesson stays in the queue until it is approved or
+  rejected.
+- **Reject** it. The lesson is kept, with the status `rejected`, and never
+  used.
+
+If someone else changed the lesson while the page was open, the page says
+so and the queue shows the new version. The text of a lesson is shown as
+plain text, never as HTML.
+
+## Action proposals
+
+The **Actions** tab of the review queue (`/review?tab=actions`) lists the
 actions the model proposed on routes in `approved` mode, newest first, for
 the `approver` and `admin` roles. It shows the proposals that wait for a
 decision, or those already decided. Each proposal shows its action, route,

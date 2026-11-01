@@ -7,7 +7,7 @@ import { QueryError } from "../../components/QueryError";
 import { Select } from "../../components/Select";
 import { hasRole } from "../../roles";
 import { useCurrentUser } from "../../session";
-import "./review.css";
+import "./ActionsTab.css";
 
 const FILTERS = [
   { value: "waiting", label: "Waiting for a decision" },
@@ -23,7 +23,7 @@ export function ActionsTab() {
   const me = useCurrentUser();
 
   if (!hasRole(me.role, "approver")) {
-    return <p className="sk-review__note">Only approvers can see and decide the actions the model proposed.</p>;
+    return <p className="sk-actions__note">Only approvers can see and decide the actions the model proposed.</p>;
   }
 
   return <Queue />;
@@ -37,7 +37,7 @@ function Queue() {
   const items = proposals.data?.pages.flatMap((page) => page.proposals) ?? [];
 
   return (
-    <div className="sk-review__list">
+    <div className="sk-actions">
       <Select label="Show" value={filter} onChange={(e) => setFilter(e.target.value)} options={FILTERS} />
       {proposals.isPending && (
         <p role="status" className="sk-loading">

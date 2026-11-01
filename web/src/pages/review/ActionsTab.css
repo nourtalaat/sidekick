@@ -1,0 +1,10 @@
+.sk-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-4);
+  max-width: 60rem;
+}
+
+.sk-actions__note {
+  color: var(--sk-text-secondary);
+}

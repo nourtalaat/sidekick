@@ -11,6 +11,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/auth"
 	"github.com/nourtalaat/sidekick/internal/feedback"
+	"github.com/nourtalaat/sidekick/internal/lessons"
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/rules"
 	"github.com/nourtalaat/sidekick/internal/strategystore"
@@ -76,6 +77,7 @@ func registerAPI(ctx context.Context, a *app.App, actions *proposals.Service, me
 		Logger:     log,
 
 		DraftLessons: summarizeConfigured(cfg),
+		Lessons:      lessons.NewStore(a.Pool(), a.Redactor()),
 	})
 	if err != nil {
 		return fmt.Errorf("set up the API: %w", err)
