@@ -12,6 +12,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	lessons "github.com/nourtalaat/sidekick/internal/lessons"
 	roles "github.com/nourtalaat/sidekick/internal/roles"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -52,6 +53,45 @@ func (m *MockInvestigator) InvestigateLink(ctx context.Context, teamID, appID, k
 func (mr *MockInvestigatorMockRecorder) InvestigateLink(ctx, teamID, appID, key, link any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InvestigateLink", reflect.TypeOf((*MockInvestigator)(nil).InvestigateLink), ctx, teamID, appID, key, link)
+}
+
+// MockLessonWriter is a mock of LessonWriter interface.
+type MockLessonWriter struct {
+	ctrl     *gomock.Controller
+	recorder *MockLessonWriterMockRecorder
+	isgomock struct{}
+}
+
+// MockLessonWriterMockRecorder is the mock recorder for MockLessonWriter.
+type MockLessonWriterMockRecorder struct {
+	mock *MockLessonWriter
+}
+
+// NewMockLessonWriter creates a new mock instance.
+func NewMockLessonWriter(ctrl *gomock.Controller) *MockLessonWriter {
+	mock := &MockLessonWriter{ctrl: ctrl}
+	mock.recorder = &MockLessonWriterMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockLessonWriter) EXPECT() *MockLessonWriterMockRecorder {
+	return m.recorder
+}
+
+// Create mocks base method.
+func (m *MockLessonWriter) Create(ctx context.Context, actor lessons.Actor, n lessons.New) (lessons.Stored, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Create", ctx, actor, n)
+	ret0, _ := ret[0].(lessons.Stored)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Create indicates an expected call of Create.
+func (mr *MockLessonWriterMockRecorder) Create(ctx, actor, n any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockLessonWriter)(nil).Create), ctx, actor, n)
 }
 
 // MockRoleLookup is a mock of RoleLookup interface.

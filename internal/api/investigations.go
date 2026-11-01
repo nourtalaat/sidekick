@@ -18,6 +18,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/investigator"
+	"github.com/nourtalaat/sidekick/internal/lessons"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/source"
 	"github.com/nourtalaat/sidekick/internal/store"
@@ -138,6 +139,13 @@ func (s *server) GetInvestigation(ctx context.Context, req apigen.GetInvestigati
 	if err != nil {
 		return nil, fmt.Errorf("investigation %s: %w", req.Id, err)
 	}
+
+	used, err := lessons.Used(ctx, s.pool, req.Id, maxUsedLessons)
+	if err != nil {
+		return nil, fmt.Errorf("investigation %s: %w", req.Id, err)
+	}
+
+	inv.Lessons = usedLessonsOf(used)
 
 	return apigen.GetInvestigation200JSONResponse(inv), nil
 }

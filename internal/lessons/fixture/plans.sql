@@ -56,4 +56,9 @@ SELECT md5('inv' || i)::uuid, q, 1, 'tool_result', '[]', 'signoz', 'search_logs'
        '2026-10-26 00:00:10+00'::timestamptz + i * interval '1 minute', 100
 FROM generate_series(1, 1000) AS i, generate_series(0, 49) AS q;
 
-ANALYZE lessons, event_groups, investigations, feedback, steps;
+-- Each of the first 5,000 investigations used three of the first 5,000 lessons.
+INSERT INTO lesson_uses (lesson_id, investigation_id)
+SELECT md5('lesson' || ((i + j) % 5000 + 1))::uuid, md5('inv' || i)::uuid
+FROM generate_series(1, 5000) AS i, generate_series(0, 2) AS j;
+
+ANALYZE lessons, lesson_uses, event_groups, investigations, feedback, steps;

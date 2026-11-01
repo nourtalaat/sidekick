@@ -113,6 +113,15 @@ func stepOf(row db.Step) (apigen.Step, error) {
 		Parts:      partsOf(parts),
 	}
 
+	if len(row.Lessons) > 0 {
+		rec, err := stepLessonsOf(row.Lessons)
+		if err != nil {
+			return apigen.Step{}, fmt.Errorf("read the lessons of step %d: %w", row.Seq, err)
+		}
+
+		step.Lessons = &rec
+	}
+
 	if row.InputTokens != nil || row.OutputTokens != nil {
 		step.Tokens = &apigen.StepTokens{
 			Input: deref(row.InputTokens), Output: deref(row.OutputTokens),

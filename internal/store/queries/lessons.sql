@@ -113,3 +113,92 @@ WHERE status = 'active'
   AND (sqlc.narg(service)::text IS NULL OR scope_service IS NULL OR scope_service = sqlc.narg(service)::text)
 ORDER BY ts_rank(search, websearch_to_tsquery('english', @query)) DESC, created_at DESC, id DESC
 LIMIT sqlc.arg(max_rows)::int;
+
+-- name: ListLessons :many
+-- ListLessons returns lessons, newest first, a page at a time. Every filter
+-- is optional: a status, the service a lesson is scoped to, words its text
+-- matches (a web-search style query), and the place after which the page
+-- starts (the time and ID of the last lesson of the page before). Each
+-- lesson comes with the feedback it was drafted from.
+SELECT l.id, l.text, l.scope_service, l.scope_alert, l.scope_route, l.scope_strategy, l.status, l.origin, l.created_by,
+       l.approved_by, l.created_at, l.updated_at, l.helpful, l.unhelpful, l.last_used_at, l.version,
+       coalesce((
+         SELECT jsonb_agg(jsonb_build_object('feedbackId', f.id, 'investigationId', f.investigation_id) ORDER BY f.created_at, f.id)
+         FROM feedback AS f
+         WHERE f.id = ANY (l.feedback_ids)
+       ), '[]'::jsonb)::jsonb AS feedback_links
+FROM lessons AS l
+WHERE (sqlc.narg(status)::text IS NULL OR l.status = sqlc.narg(status)::text)
+  AND (sqlc.narg(service)::text IS NULL OR l.scope_service = sqlc.narg(service)::text)
+  AND (sqlc.narg(search)::text IS NULL OR l.search @@ websearch_to_tsquery('english', sqlc.narg(search)::text))
+  AND (sqlc.narg(after_at)::timestamptz IS NULL OR (l.created_at, l.id) < (sqlc.narg(after_at)::timestamptz, sqlc.narg(after_id)::uuid))
+ORDER BY l.created_at DESC, l.id DESC
+LIMIT sqlc.arg(page_size)::int;
+
+-- name: GetLesson :one
+-- GetLesson returns one lesson with the feedback it was drafted from. It
+-- returns no row for a lesson that does not exist.
+SELECT l.id, l.text, l.scope_service, l.scope_alert, l.scope_route, l.scope_strategy, l.status, l.origin, l.created_by,
+       l.approved_by, l.created_at, l.updated_at, l.helpful, l.unhelpful, l.last_used_at, l.version,
+       coalesce((
+         SELECT jsonb_agg(jsonb_build_object('feedbackId', f.id, 'investigationId', f.investigation_id) ORDER BY f.created_at, f.id)
+         FROM feedback AS f
+         WHERE f.id = ANY (l.feedback_ids)
+       ), '[]'::jsonb)::jsonb AS feedback_links
+FROM lessons AS l
+WHERE l.id = @id;
+
+-- name: CountLessonsByStatus :many
+-- CountLessonsByStatus returns how many lessons there are with each status.
+SELECT status, count(*)::int AS n FROM lessons GROUP BY status;
+
+-- name: LockLesson :one
+-- LockLesson returns the fields of a lesson that a change checks and holds a
+-- lock on its row until the transaction ends, so two admins who change the
+-- same lesson at once are applied in turn.
+SELECT id, text, scope_service, scope_alert, scope_route, scope_strategy, status, origin, version
+FROM lessons
+WHERE id = @id
+FOR UPDATE;
+
+-- name: InsertLesson :one
+-- InsertLesson stores a lesson that an admin wrote, and returns its ID.
+INSERT INTO lessons (id, text, scope_service, scope_alert, scope_route, scope_strategy, status, origin, created_by)
+VALUES (@id, @text, sqlc.narg(scope_service), sqlc.narg(scope_alert), sqlc.narg(scope_route), sqlc.narg(scope_strategy),
+        @status, @origin, sqlc.narg(created_by))
+RETURNING id;
+
+-- name: UpdateLesson :execrows
+-- UpdateLesson replaces the text, scope and status of a lesson and raises its
+-- version. It changes nothing, and returns 0 rows, when the lesson is not at
+-- the version the caller read.
+UPDATE lessons
+SET text = @text,
+    scope_service = sqlc.narg(scope_service), scope_alert = sqlc.narg(scope_alert),
+    scope_route = sqlc.narg(scope_route), scope_strategy = sqlc.narg(scope_strategy),
+    status = @status, version = version + 1, updated_at = now()
+WHERE id = @id AND version = @version;
+
+-- name: ApproveLesson :execrows
+-- ApproveLesson makes a lesson that waits for review active, notes who
+-- approved it and raises its version. It changes nothing, and returns 0
+-- rows, when the lesson is not at the version the caller read, or does not
+-- wait for review.
+UPDATE lessons
+SET status = 'active', approved_by = sqlc.narg(approved_by), version = version + 1, updated_at = now()
+WHERE id = @id AND version = @version AND status = 'proposed';
+
+-- name: DeleteLesson :execrows
+-- DeleteLesson deletes a lesson, and with it the record of the
+-- investigations that used it.
+DELETE FROM lessons WHERE id = @id;
+
+-- name: ListLessonsUsedBy :many
+-- ListLessonsUsedBy returns the lessons an investigation used, in the order
+-- they were written.
+SELECT l.id, l.text, l.scope_service, l.scope_alert, l.scope_route, l.scope_strategy, l.status
+FROM lesson_uses AS u
+JOIN lessons AS l ON l.id = u.lesson_id
+WHERE u.investigation_id = @investigation_id
+ORDER BY l.created_at, l.id
+LIMIT sqlc.arg(max_rows)::int;
