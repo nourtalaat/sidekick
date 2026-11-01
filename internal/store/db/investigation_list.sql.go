@@ -463,7 +463,7 @@ func (q *Queries) ListRecentWatcherChecks(ctx context.Context, arg ListRecentWat
 }
 
 const listStepsPage = `-- name: ListStepsPage :many
-SELECT investigation_id, seq, run, kind, parts, source, tool, tool_call_id, status, error, evidence, connector, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_micros, started_at, duration_ms, budget FROM steps
+SELECT investigation_id, seq, run, kind, parts, source, tool, tool_call_id, status, error, evidence, connector, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_micros, started_at, duration_ms, budget, lessons FROM steps
 WHERE investigation_id = $1 AND seq > $2::int
   AND ($3::int IS NULL OR run = $3::int)
 ORDER BY seq
@@ -515,6 +515,7 @@ func (q *Queries) ListStepsPage(ctx context.Context, arg ListStepsPageParams) ([
 			&i.StartedAt,
 			&i.DurationMs,
 			&i.Budget,
+			&i.Lessons,
 		); err != nil {
 			return nil, err
 		}
