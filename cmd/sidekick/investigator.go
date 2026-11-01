@@ -36,15 +36,7 @@ func registerInvestigator(a *app.App, guard *tools.Guard, watchers *watch.ModelS
 		return fmt.Errorf("set up the daily caps: %w", err)
 	}
 
-	routes := make(map[string]investigator.Route, len(cfg.Routes))
-	for _, r := range cfg.Routes {
-		routes[r.Name] = investigator.Route{
-			Sources:            r.Sources,
-			Outputs:            r.Outputs,
-			DailyMaxCostMicros: r.Budgets.Daily.MaxCostMicros(),
-			DailySkip:          r.Budgets.Daily.OnDailyCap == config.OnDailyCapSkip,
-		}
-	}
+	routes := investigator.ConfigRoutes(func() []config.Route { return cfg.Routes })
 
 	canceller := investigator.NewCanceller(a.Pool(), a.Logger().With("component", "investigator"))
 

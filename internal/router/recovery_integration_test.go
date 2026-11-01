@@ -210,7 +210,7 @@ func (h *harness) investigate(t *testing.T, conn model.Connector) error {
 		Connectors: map[string]investigator.Connector{"fake": {Connector: conn}},
 		Prices:     pricing.Shipped(),
 		Strategies: h.cfg.StrategySet(),
-		Routes:     map[string]investigator.Route{"crashloop": {}},
+		Routes:     investigator.StaticRoutes{"crashloop": {}},
 	})
 	require.NoError(t, err)
 
