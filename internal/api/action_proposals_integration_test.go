@@ -265,9 +265,11 @@ func TestApproveProposal(t *testing.T) {
 	require.NoError(t, s.pool.QueryRow(t.Context(), "SELECT count(*) FROM jobs WHERE kind = $1 AND unique_key = $2", queue.KindExecuteAction, "action:"+propFirst).Scan(&jobs))
 	require.Equal(t, 1, jobs, "the job that runs it is queued")
 
-	// An API token approves too, and is audited as a token.
-	readActionProposal(t, s.doWithToken(t, http.MethodPost, actionProposalsRoute+"/"+propSecond+"/approve", approverToken, nil))
-	require.Equal(t, []string{"action.approved token 01920000-0000-7000-8000-000000000072"}, actionProposalAudit(t, s.pool, propSecond))
+	// An API token does not approve: only a person who is signed in does.
+	rec = s.doWithToken(t, http.MethodPost, actionProposalsRoute+"/"+propSecond+"/approve", approverToken, nil)
+	require.Equal(t, http.StatusForbidden, rec.Code, rec.Body.String())
+	require.JSONEq(t, problem(http.StatusForbidden, "An action is approved by a person who is signed in, not by an API token.", actionProposalsRoute+"/"+propSecond+"/approve"), rec.Body.String())
+	require.Empty(t, actionProposalAudit(t, s.pool, propSecond), "a refused approval writes nothing")
 }
 
 func TestRejectProposal(t *testing.T) {
@@ -285,8 +287,9 @@ func TestRejectProposal(t *testing.T) {
 	require.NotContains(t, details, "ap@example.com")
 	require.Contains(t, details, "wrong board")
 
-	// A rejection needs no body.
-	readActionProposal(t, s.do(t, http.MethodPost, actionProposalsRoute+"/"+propSecond+"/reject", apSession, apCSRF, nil))
+	// A rejection needs no body, and an API token may reject: it is audited as a token.
+	readActionProposal(t, s.doWithToken(t, http.MethodPost, actionProposalsRoute+"/"+propSecond+"/reject", approverToken, nil))
+	require.Equal(t, []string{"action.rejected token 01920000-0000-7000-8000-000000000072"}, actionProposalAudit(t, s.pool, propSecond))
 
 	var jobs int
 	require.NoError(t, s.pool.QueryRow(t.Context(), "SELECT count(*) FROM jobs WHERE kind = $1", queue.KindExecuteAction).Scan(&jobs))
