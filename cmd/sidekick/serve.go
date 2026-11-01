@@ -160,6 +160,10 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
+	if err := registerLessons(a, modelMetrics); err != nil {
+		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
+	}
+
 	if err := a.Run(ctx); err != nil {
 		return fmt.Errorf("serve: %w", err)
 	}

@@ -203,6 +203,32 @@ type Job struct {
 	FinishedAt  *time.Time
 }
 
+type Lesson struct {
+	ID            uuid.UUID
+	Text          string
+	ScopeService  *string
+	ScopeAlert    *string
+	ScopeRoute    *string
+	ScopeStrategy *string
+	Status        string
+	Origin        string
+	FeedbackIds   []uuid.UUID
+	CreatedBy     *uuid.UUID
+	ApprovedBy    *uuid.UUID
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	Helpful       int32
+	Unhelpful     int32
+	LastUsedAt    *time.Time
+	Version       int32
+	Search        interface{}
+}
+
+type LessonUse struct {
+	LessonID        uuid.UUID
+	InvestigationID uuid.UUID
+}
+
 type Listener struct {
 	Name         string
 	SlackChannel string
@@ -377,6 +403,7 @@ type Step struct {
 	StartedAt        time.Time
 	DurationMs       int32
 	Budget           *string
+	Lessons          []byte
 }
 
 type Strategy struct {

@@ -293,15 +293,22 @@ func (r *run) saveTriagePrompt(ctx context.Context) error {
 		strategies = append(strategies, st)
 	}
 
+	chosen, err := r.chooseLessons(ctx, group, deref(r.inv.Strategy))
+	if err != nil {
+		return fmt.Errorf("choose the lessons: %w", err)
+	}
+
 	req := prompt.BuildTriage(prompt.TriageInput{
 		Strategies:    strategies,
 		RouteStrategy: deref(r.inv.Strategy),
 		Tool:          model.ToolSpec{Name: prompt.SubmitTriageTool, Description: submitTriageDescription, InputSchema: submitTriageSchema},
 		Group:         group,
 		Route:         prompt.RouteContext{Name: r.inv.Route},
+		Lessons:       promptLessons(chosen),
 	})
 
-	if _, err := r.save(ctx, newStep{kind: kindTriagePrompt, prompt: &req, status: statusOK, startedAt: time.Now()}); err != nil {
+	step := newStep{kind: kindTriagePrompt, prompt: &req, status: statusOK, startedAt: time.Now(), lessons: lessonsOf(chosen, r.h.opts.Lessons)}
+	if _, err := r.save(ctx, step); err != nil {
 		return fmt.Errorf("save: %w", err)
 	}
 

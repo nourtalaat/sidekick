@@ -153,3 +153,89 @@ func TestServiceNotes(t *testing.T) {
 		})
 	}
 }
+
+// The lessons in fixture/memory.sql that are active.
+const (
+	lessonCheckout = "0192d3a4-0000-7000-8000-0000000000f1"
+	lessonGlobal   = "0192d3a4-0000-7000-8000-0000000000f2"
+	lessonOrders   = "0192d3a4-0000-7000-8000-0000000000f3"
+)
+
+func TestSearchLessons(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		// wantLessons are the lessons found, and wantEntries the confirmed
+		// investigations, each in any order.
+		wantLessons, wantEntries []string
+	}{
+		{
+			name:        "active lessons that match, with no lesson that waits for review or is disabled",
+			input:       `{"query":"latency"}`,
+			wantLessons: []string{lessonCheckout, lessonGlobal, lessonOrders},
+			wantEntries: []string{entryFlapping, entryDeploy, entryBatchSlow},
+		},
+		{
+			name:        "a service leaves out the lessons of other services",
+			input:       `{"query":"latency","service":"checkout-api"}`,
+			wantLessons: []string{lessonCheckout, lessonGlobal},
+			wantEntries: []string{entryFlapping, entryDeploy},
+		},
+		{
+			name:        "a verdict finds no lesson, which has none",
+			input:       `{"query":"latency","verdict":"flapping"}`,
+			wantEntries: []string{entryFlapping},
+		},
+		{
+			name:        "a lesson alone is a result",
+			input:       `{"query":"release"}`,
+			wantLessons: []string{lessonCheckout},
+		},
+		{
+			name:        "lessons and investigations match the same words",
+			input:       `{"query":"slow query"}`,
+			wantLessons: []string{lessonCheckout},
+			wantEntries: []string{entryDeploy},
+		},
+	}
+
+	src := setup(t)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			res, err := src.Call(t.Context(), source.Call{ID: "c1", Tool: toolSearch, Input: json.RawMessage(tt.input)})
+			require.NoError(t, err)
+			require.False(t, res.NoData)
+
+			var got searchResult
+			require.NoError(t, json.Unmarshal(res.Structured, &got))
+
+			var lessons, entries []string
+
+			for _, l := range got.Lessons {
+				lessons = append(lessons, l.ID)
+			}
+
+			for _, e := range got.Entries {
+				entries = append(entries, e.InvestigationID)
+			}
+
+			require.ElementsMatch(t, tt.wantLessons, lessons)
+			require.ElementsMatch(t, tt.wantEntries, entries)
+			require.Len(t, res.Evidence, len(entries), "only investigations are evidence")
+		})
+	}
+}
+
+func TestSearchLessonResult(t *testing.T) {
+	t.Parallel()
+
+	res, err := setup(t).Call(t.Context(), source.Call{ID: "c1", Tool: toolSearch, Input: json.RawMessage(`{"query":"release"}`)})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"entries":[],"lessons":[{"id":"0192d3a4-0000-7000-8000-0000000000f1",
+		"text":"Latency after a release usually means a new slow query.","scope":{"service":"checkout-api"}}]}`, string(res.Structured))
+}
