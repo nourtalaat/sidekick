@@ -1,0 +1,29 @@
+.sk-review-tabs__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sk-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-bottom: 1px solid var(--sk-border-subtle);
+}
+
+.sk-review-tabs__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--sk-size-control-md);
+  padding: 0 var(--sk-space-4);
+  color: var(--sk-text-secondary);
+  border-bottom: 2px solid transparent;
+  text-decoration: none;
+}
+
+.sk-review-tabs__link:hover {
+  background: var(--sk-bg-hover);
+}
+
+.sk-review-tabs__link--current {
+  color: var(--sk-text-primary);
+  border-bottom-color: var(--sk-text-primary);
+  font-weight: 600;
+}

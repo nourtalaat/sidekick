@@ -489,6 +489,41 @@ for the range of equal length before it, for showing the change.
   lines up two runs: each metric with the change and whether the intervals
   overlap (`clear` or `none`), and the correct runs of each scenario.
 
+## The review queue
+
+The **Review queue** page (`/review`) has one tab for each kind of thing that
+waits for a person. The tab is in the address (`/review?tab=scenarios`), so a
+link opens the right one, and a tab shows only to the roles that may use it.
+
+### Scenarios (admin)
+
+The **Scenarios** tab lists the benchmark scenarios exported from confirmed
+investigations, most recently changed first, and filters them by status. To
+make one, an admin opens a confirmed investigation and chooses **Export as
+scenario**; the draft opens on this tab. The same export is
+`sidekick bench export`; see
+[Exporting a real investigation](benchmark.md#exporting-a-real-investigation)
+for what the draft holds and how it is cleaned.
+
+A scenario opens with:
+
+- **What to check first:** a reminder of what the cleaner can and cannot
+  find, the places it kept because it could not tell what they are, and what the
+  exporter skipped or merged.
+- **Original and cleaned:** each part of the scenario (the alert payload, what
+  each fixture matches on, each answer, the expected cause) next to the recorded
+  original it was made from. Values the cleaner replaced, such as `host-1`, and
+  the places it kept, are marked; the marks have text or a tooltip, never colour
+  alone. The original is read from the investigation's events and steps; once the
+  retention job has deleted them, the part says that the original is no longer
+  kept.
+- **Scenario file:** the whole YAML file, to edit. Saving checks the file and
+  refuses one that is not a valid scenario or holds an email, a host name or an
+  IP address. A saved edit puts the scenario back to draft.
+- **Review:** the box "I checked this for sensitive data" and **Mark as
+  reviewed**. The button works only after the tick and with no unsaved edits. A
+  reviewed scenario shows who reviewed it and when, and can be downloaded.
+
 ## The JSON API
 
 The API is under `/api/v1`, described in OpenAPI 3.1 in
