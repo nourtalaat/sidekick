@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	apispec "github.com/nourtalaat/sidekick/api"
+	actionproposals "github.com/nourtalaat/sidekick/internal/action/proposals"
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/auth"
@@ -102,6 +103,9 @@ type Options struct {
 	// group ends. Nil writes and shows the changes, but logs and counts
 	// nothing.
 	Watchers *watch.Recorder
+	// Actions approves and rejects action proposals. Without it, those
+	// operations answer 503.
+	Actions *actionproposals.Service
 	// Scenarios exports, edits and reviews benchmark scenarios. Without it,
 	// those operations answer 503.
 	Scenarios *scenario.Service
@@ -151,7 +155,7 @@ func New(opts Options) (http.Handler, error) {
 
 	srv := &server{
 		tokens: opts.Tokens, cfg: opts.Config, rules: opts.Rules, strategies: opts.Strategies, proposalReviewer: opts.ProposalReviewer, strategyBase: strategyBase, redactor: opts.Redactor, pool: opts.Pool, audit: opts.Audit,
-		hub: opts.Hub, log: log, stopper: opts.Stopper, watchers: opts.Watchers, now: now, scenarios: opts.Scenarios,
+		hub: opts.Hub, log: log, stopper: opts.Stopper, watchers: opts.Watchers, actions: opts.Actions, now: now, scenarios: opts.Scenarios,
 		feedbackMetrics: opts.Feedback, memory: opts.Memory, proposals: opts.Proposals, draftLessons: opts.DraftLessons, lessons: opts.Lessons, memoryEntries: opts.MemoryStore,
 		streamHeartbeat: cmp.Or(opts.StreamHeartbeat, DefaultStreamHeartbeat),
 		streamLifetime:  cmp.Or(opts.StreamLifetime, DefaultStreamLifetime),

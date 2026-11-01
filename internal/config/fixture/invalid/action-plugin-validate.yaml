@@ -1,0 +1,16 @@
+# An action whose own section is invalid, and a bad name.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+actions:
+  monitor-note: { type: note.create, tokenSecret: { name: notes, key: token } }
+  Bad-Name: { type: note.create, tokenSecret: { name: notes, key: token }, limits: { boards: [ops] } }
+
+routes:
+  - name: default

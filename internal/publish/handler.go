@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/feedback"
 	"github.com/nourtalaat/sidekick/internal/output"
@@ -57,6 +58,9 @@ type Options struct {
 	// Watchers returns the state of every watcher of a group, for the live
 	// display in every update. Nil shows no watchers.
 	Watchers func(ctx context.Context, q db.DBTX, groupID uuid.UUID) ([]output.WatcherState, error)
+	// Proposals returns the action proposals of an investigation, oldest
+	// first, for Update.Proposals in every update. Nil shows none.
+	Proposals func(ctx context.Context, q db.DBTX, investigationID uuid.UUID) ([]action.Proposal, error)
 	// PublicURL is server.publicURL. With it, each update has the address of
 	// the investigation page in Update.URL. Empty leaves the URL out.
 	PublicURL string
@@ -70,6 +74,7 @@ type Handler struct {
 	log       *slog.Logger
 	tracer    trace.Tracer
 	watchers  func(ctx context.Context, q db.DBTX, groupID uuid.UUID) ([]output.WatcherState, error)
+	proposals func(ctx context.Context, q db.DBTX, investigationID uuid.UUID) ([]action.Proposal, error)
 	publicURL string
 }
 
@@ -87,7 +92,7 @@ func New(opts Options) *Handler {
 		log = slog.New(slog.DiscardHandler)
 	}
 
-	return &Handler{pool: opts.Pool, sinks: opts.Sinks, log: log, tracer: tp.Tracer(tracerName), watchers: opts.Watchers, publicURL: opts.PublicURL}
+	return &Handler{pool: opts.Pool, sinks: opts.Sinks, log: log, tracer: tp.Tracer(tracerName), watchers: opts.Watchers, proposals: opts.Proposals, publicURL: opts.PublicURL}
 }
 
 // Handle shows the newest state of one investigation in one sink, inside
@@ -305,6 +310,13 @@ func (h *Handler) update(ctx context.Context, investigationID uuid.UUID, state d
 		u.Watchers, err = h.watchers(ctx, h.pool, state.GroupID)
 		if err != nil {
 			return output.Update{}, fmt.Errorf("load the watchers of group %s: %w", state.GroupID, err)
+		}
+	}
+
+	if h.proposals != nil {
+		u.Proposals, err = h.proposals(ctx, h.pool, investigationID)
+		if err != nil {
+			return output.Update{}, fmt.Errorf("load the action proposals of investigation %s: %w", investigationID, err)
 		}
 	}
 

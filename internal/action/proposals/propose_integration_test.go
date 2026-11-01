@@ -1,0 +1,158 @@
+//go:build integration
+
+package proposals
+
+import (
+	"encoding/json"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/nourtalaat/sidekick/internal/action"
+)
+
+func TestPropose(t *testing.T) {
+	t.Parallel()
+
+	h := setup(t)
+	before := h.publishSeq(t, checkoutInvestigation)
+
+	id := h.propose(t, "call-1", noteInput)
+
+	row := h.row(t, id)
+	require.Equal(t, "proposed", row.Status)
+	require.Equal(t, "monitor-note", row.Action)
+	require.JSONEq(t, `{"board":"ops","title":"Slow checkout"}`, string(row.Params))
+	require.Equal(t, "p99 doubled after the deploy.", row.Reason)
+	require.Equal(t, "approved", row.Mode)
+	require.Equal(t, "sidekick/"+id.String(), row.IdempotencyKey)
+	require.Equal(t, row.ProposedAt.Add(action.DefaultProposalTTL), row.ExpiresAt)
+
+	require.Equal(t, []string{AuditProposed}, h.auditActions(t, id))
+	require.Greater(t, h.publishSeq(t, checkoutInvestigation), before, "the outputs show the proposal")
+
+	proposals, err := OfInvestigation(t.Context(), h.pool, checkoutInvestigation)
+	require.NoError(t, err)
+	require.Len(t, proposals, 1)
+	require.Equal(t, action.StatusProposed, proposals[0].Status)
+	require.Equal(t, "payments", proposals[0].Route)
+	require.Contains(t, proposals[0].ParamsText, `"title": "Slow checkout"`)
+}
+
+func TestProposeRefusals(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		route       string
+		mode        action.Mode
+		input       string
+		change      func(h *harness)
+		wantRefusal string
+	}{
+		{name: "an action outside the limits", input: `{"action": "monitor-note", "params": {"board": "finance", "title": "t"}, "reason": "x"}`, wantRefusal: "outside configured limits"},
+		{name: "a read-only investigation", mode: action.ReadOnly, input: noteInput, wantRefusal: "read-only"},
+		{
+			name: "a route changed to read-only since the investigation started", input: noteInput,
+			change:      func(h *harness) { h.policy.set("payments", action.RoutePolicy{Mode: action.ReadOnly}) },
+			wantRefusal: `route "payments" is read-only`,
+		},
+		{
+			name: "an action taken off the route since the investigation started", input: noteInput,
+			change: func(h *harness) {
+				h.policy.set("payments", action.RoutePolicy{Mode: action.Approved, Actions: []string{"other"}})
+			},
+			wantRefusal: `route "payments" does not list action "monitor-note"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := setup(t)
+
+			if tt.change != nil {
+				tt.change(h)
+			}
+
+			mode := cmpMode(tt.mode)
+
+			res, err := h.svc.Propose(t.Context(), ProposeRequest{
+				InvestigationID: checkoutInvestigation, ToolCallID: "call-1", Route: "payments", Mode: mode, Input: json.RawMessage(tt.input),
+			})
+			require.NoError(t, err)
+			require.Contains(t, res.Refusal, tt.wantRefusal)
+
+			require.Zero(t, countRows(t, h, "SELECT count(*) FROM action_proposals"), "a refused call stores nothing")
+			require.Empty(t, h.jobs(t))
+		})
+	}
+}
+
+func TestProposeIsRepeatable(t *testing.T) {
+	t.Parallel()
+
+	h := setup(t)
+	svc := h.service(t, Options{MaxPerInvestigation: 1})
+	h.svc = svc
+
+	first := h.propose(t, "call-1", noteInput)
+	again := h.propose(t, "call-1", noteInput)
+
+	require.Equal(t, first, again, "a call repeated after a crash finds its proposal, even at the cap")
+
+	require.EqualValues(t, 1, countRows(t, h, "SELECT count(*) FROM action_proposals"))
+	require.Equal(t, []string{AuditProposed}, h.auditActions(t, first), "and writes its audit entry once")
+
+	res, err := svc.Propose(t.Context(), ProposeRequest{
+		InvestigationID: checkoutInvestigation, ToolCallID: "call-2", Route: "payments", Mode: action.Approved, Input: json.RawMessage(noteInput),
+	})
+	require.NoError(t, err)
+	require.Contains(t, res.Refusal, "the most it may make")
+}
+
+func TestProposeLetsTheProposalExpireAfterTheTTL(t *testing.T) {
+	t.Parallel()
+
+	h := setup(t)
+	h.svc = h.service(t, Options{TTL: 2 * time.Hour})
+
+	row := h.row(t, h.propose(t, "call-1", noteInput))
+	require.Equal(t, 2*time.Hour, row.ExpiresAt.Sub(row.ProposedAt))
+}
+
+func TestStoredParamsCannotChange(t *testing.T) {
+	t.Parallel()
+
+	h := setup(t)
+	id := h.propose(t, "call-1", noteInput)
+
+	for _, column := range []string{"params = '{}'", "action = 'other'", "reason = 'x'", "idempotency_key = 'x'", "expires_at = now() + interval '1 year'"} {
+		_, err := h.pool.Exec(t.Context(), "UPDATE action_proposals SET "+column+" WHERE id = $1", id)
+		require.ErrorContains(t, err, "what an action proposal asks for cannot be changed", column)
+	}
+
+	_, err := h.pool.Exec(t.Context(), "UPDATE action_proposals SET error = 'x' WHERE id = $1", id)
+	require.NoError(t, err, "the other columns change")
+}
+
+// cmpMode returns m, or approved for the zero value.
+func cmpMode(m action.Mode) action.Mode {
+	if m == "" {
+		return action.Approved
+	}
+
+	return m
+}
+
+// countRows returns the number the query counts.
+func countRows(t *testing.T, h *harness, query string) int64 {
+	t.Helper()
+
+	var n int64
+	require.NoError(t, h.pool.QueryRow(t.Context(), query).Scan(&n))
+
+	return n
+}

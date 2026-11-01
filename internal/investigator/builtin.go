@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/nourtalaat/sidekick/internal/action/proposals"
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/report"
@@ -269,7 +270,7 @@ func isBuiltin(s db.Step, name string) bool {
 
 // isBuiltinName reports whether name is a built-in tool.
 func isBuiltinName(name string) bool {
-	return slices.Contains([]string{report.SubmitVerdictTool, RecordFindingTool, watch.StartWatcherTool, report.AnswerFollowUpTool}, name)
+	return slices.Contains([]string{report.SubmitVerdictTool, RecordFindingTool, watch.StartWatcherTool, proposals.ProposeActionTool, report.AnswerFollowUpTool}, name)
 }
 
 // specNames returns the names of specs.

@@ -1,0 +1,17 @@
+# An approved route that names an action the file does not define.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+actions:
+  monitor-note: { type: note.create, tokenSecret: { name: notes, key: token }, limits: { boards: [ops] } }
+
+routes:
+  - name: default
+    mode: approved
+    actions: [monitor-nte]

@@ -1,4 +1,4 @@
-# A route in a mode that arrives in M4.
+# An approved route that lists an action twice.
 database:
   urlSecret: { name: sidekick-db, key: url }
 
@@ -8,6 +8,10 @@ model:
   roles:
     investigate: claude
 
+actions:
+  monitor-note: { type: note.create, tokenSecret: { name: notes, key: token }, limits: { boards: [ops] } }
+
 routes:
   - name: default
     mode: approved
+    actions: [monitor-note, monitor-note]

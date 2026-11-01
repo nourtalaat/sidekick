@@ -84,9 +84,21 @@ func TestCheckRuntimeRoute(t *testing.T) {
 			},
 		},
 		{
-			name:  "a mode other than read-only",
+			name:  "read-write",
+			route: route(func(r *Route) { r.Mode = action.ReadWrite }),
+			want: []string{
+				`routes.checkout.mode: mode "read-write" is not available yet: use "approved", where a person approves each action`,
+			},
+		},
+		{
+			name:  "approved with no action",
 			route: route(func(r *Route) { r.Mode = action.Approved }),
-			want:  []string{`routes.checkout.mode: mode "approved" is not available yet: routes are read-only until action modes arrive in M4`},
+			want:  []string{"routes.checkout.actions: list at least one action: mode approved lets the model propose only these"},
+		},
+		{
+			name:  "an action the file does not define",
+			route: route(func(r *Route) { r.Mode, r.Actions = action.Approved, []string{"ship-it"} }),
+			want:  []string{`routes.checkout.actions[0]: action "ship-it" is not defined`},
 		},
 	}
 

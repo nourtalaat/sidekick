@@ -20,7 +20,7 @@ import (
 func TestValidateFixtures(t *testing.T) {
 	t.Parallel()
 
-	const readOnlyUntilM4 = "routes are read-only until action modes arrive in M4"
+	const readWriteLater = `is not available yet: use "approved", where a person approves each action`
 
 	const listenersNeedSlack = "listeners: listeners need the Slack app to receive events: set slack.appTokenSecret, or slack.mode: events with slack.signingSecret"
 
@@ -67,9 +67,18 @@ func TestValidateFixtures(t *testing.T) {
 		{file: "undefined-output", want: []string{`routes[0].outputs[1]: output "slak-thread" is not defined (did you mean "slack-thread"?)`}},
 		{file: "undefined-source", want: []string{`routes[0].sources[0]: source "signz" is not defined (did you mean "signoz"?)`}},
 		{file: "undefined-intake", want: []string{`routes[0].match.intake[0]: intake "alertmanger" is not defined (did you mean "alertmanager"?)`}},
-		{file: "mode-approved", want: []string{`routes[0].mode: mode "approved" is not available yet: ` + readOnlyUntilM4}},
+		{file: "mode-approved-no-actions", want: []string{"routes[0].actions: list at least one action: mode approved lets the model propose only these"}},
 		{file: "unknown-mode", want: []string{`routes[0].mode: unknown mode "readonly" (did you mean "read-only"?)`}},
-		{file: "actions-set", want: []string{"routes[0].actions: must be empty: " + readOnlyUntilM4}},
+		{file: "actions-set", want: []string{"routes[0].actions: must be empty while mode is read-only"}},
+		{file: "undefined-action", want: []string{`routes[0].actions[0]: action "monitor-nte" is not defined (did you mean "monitor-note"?)`}},
+		{file: "duplicate-action", want: []string{`routes[0].actions[1]: action "monitor-note" is listed twice`}},
+		// Actions
+		{file: "action-unknown-type", want: []string{`actions.monitor-note.type: action type "note.creat" is not registered (did you mean "note.create"?)`}},
+		{file: "action-plugin-validate", want: []string{
+			`actions.Bad-Name: name "Bad-Name" ` + nameRule,
+			"actions.monitor-note.limits.boards: at least one board is required",
+		}},
+		{file: "actions-bad-settings", want: []string{"actions.maxPerInvestigation: must be positive", "actions.proposalTTL: must be positive"}},
 		{file: "undefined-strategy", want: []string{`routes[0].strategy: strategy "generic-alrt" is not defined (did you mean "generic-alert"?)`}},
 		{file: "bad-strategy-file", want: []string{`strategies.dir: fixture/strategies-invalid/generic-alert.yaml: line 3: unknown key "frist"`}},
 		{file: "unknown-severity", want: []string{`routes[0].match.severity[0]: unknown severity "critcal" (did you mean "critical"?)`}},
@@ -286,7 +295,7 @@ func TestValidateFixtures(t *testing.T) {
 		// Several problems, reported together and sorted by path.
 		{file: "three-errors", want: []string{
 			`report.minFalsePositiveConfidence: unknown confidence "hgh" (did you mean "high"?)`,
-			`routes[0].mode: mode "read-write" is not available yet: ` + readOnlyUntilM4,
+			`routes[0].mode: mode "read-write" ` + readWriteLater,
 			`routes[0].outputs[0]: output "slak-thread" is not defined (did you mean "slack-thread"?)`,
 		}},
 	}

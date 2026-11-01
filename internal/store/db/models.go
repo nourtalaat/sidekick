@@ -12,6 +12,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ActionProposal struct {
+	ID                 uuid.UUID
+	InvestigationID    uuid.UUID
+	Action             string
+	Params             json.RawMessage
+	Reason             string
+	Mode               string
+	Status             string
+	IdempotencyKey     string
+	ProposedAt         time.Time
+	ExpiresAt          time.Time
+	DecidedBy          *uuid.UUID
+	DecidedBySlackUser *string
+	DecidedAt          *time.Time
+	ExecutedAt         *time.Time
+	Result             []byte
+	Error              *string
+}
+
 type ApiToken struct {
 	ID         uuid.UUID
 	Name       string

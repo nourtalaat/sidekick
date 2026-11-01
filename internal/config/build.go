@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/intake"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/output"
@@ -19,6 +20,8 @@ type Instances struct {
 	Sources map[string]source.Source
 	Intakes map[string]intake.Adapter
 	Outputs map[string]output.Sink
+	// Actions are the configured action instances, by name.
+	Actions map[string]action.Action
 	// SourceSettings are the shared settings of each built source, from
 	// configs that embed source.Settings; other sources have the zero value,
 	// which means the defaults.
@@ -76,6 +79,7 @@ func Build(ctx context.Context, cfg *Config, regs Registries, deps registry.Deps
 		Sources: buildAll(ctx, regs.Sources, cfg.Sources, deps, &errs),
 		Intakes: buildAll(ctx, regs.Intakes, webhooks, deps, &errs),
 		Outputs: buildAll(ctx, regs.Outputs, cfg.Outputs, deps, &errs),
+		Actions: buildAll(ctx, regs.Actions, cfg.Actions.Definitions, deps, &errs),
 	}
 
 	in.SourceSettings = sharedSettings(ctx, regs.Sources, cfg.Sources, in.Sources, source.Configured.SourceSettings, &errs)

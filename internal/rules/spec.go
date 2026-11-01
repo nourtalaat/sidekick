@@ -37,6 +37,7 @@ type routeSpec struct {
 	Strategy string       `json:"strategy,omitempty"`
 	Sources  []string     `json:"sources,omitempty"`
 	Mode     string       `json:"mode"`
+	Actions  []string     `json:"actions,omitempty"`
 	Outputs  []string     `json:"outputs,omitempty"`
 	Budgets  budgetSpec   `json:"budgets,omitzero"`
 	Grouping groupingSpec `json:"grouping,omitzero"`
@@ -128,6 +129,7 @@ func routeOfRow(row db.Route) (Route, error) {
 	r := config.NewRoute(row.Name)
 	r.Priority = int(row.Priority)
 	r.Sources = s.Sources
+	r.Actions = s.Actions
 	r.Outputs = s.Outputs
 	r.Grouping.FingerprintLabels = s.Grouping.FingerprintLabels
 	r.Budgets.MaxTokens = s.Budgets.MaxTokens
@@ -190,6 +192,7 @@ func specOfRoute(r config.Route) routeSpec {
 		Strategy: r.Strategy,
 		Sources:  r.Sources,
 		Mode:     string(r.Mode),
+		Actions:  r.Actions,
 		Outputs:  r.Outputs,
 		Budgets: budgetSpec{
 			MaxTokens:    r.Budgets.MaxTokens,

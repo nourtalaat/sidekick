@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/proposals"
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/report"
@@ -160,6 +162,19 @@ func (r *run) builtin(ctx context.Context, call model.ToolCall) (newStep, error)
 		if !finding {
 			content = rejectedText("finding", problems)
 		}
+	case proposals.ProposeActionTool:
+		res, err := r.proposeAction(ctx, call)
+		if err != nil {
+			return newStep{}, fmt.Errorf("propose the action: %w", err)
+		}
+
+		content = fmt.Sprintf("Proposed %s as proposal %s. Nothing has run: it waits for an approver, and expires at %s. "+
+			"Go on with the investigation, and do not propose the same change again.", res.Action, res.ID, res.ExpiresAt.UTC().Format(time.RFC3339))
+
+		if res.Refusal != "" {
+			problems = []string{res.Refusal}
+			content = rejectedText("proposal", problems) + "\nNothing was proposed."
+		}
 	case watch.StartWatcherTool:
 		res, err := r.startWatcher(ctx, call)
 		if err != nil {
@@ -191,6 +206,24 @@ func (r *run) builtin(ctx context.Context, call model.ToolCall) (newStep, error)
 	}
 
 	return s, nil
+}
+
+// proposeAction hands a propose_action call of the last model turn to the
+// proposal service, which checks it against the route's rules as they are
+// now and stores the proposal.
+func (r *run) proposeAction(ctx context.Context, call model.ToolCall) (proposals.ProposeResult, error) {
+	res, err := r.h.opts.Actions.Propose(ctx, proposals.ProposeRequest{
+		InvestigationID: r.inv.ID,
+		ToolCallID:      call.ID,
+		Route:           r.inv.Route,
+		Mode:            action.Mode(r.inv.Mode),
+		Input:           call.Input,
+	})
+	if err != nil {
+		return proposals.ProposeResult{}, fmt.Errorf("propose_action: %w", err)
+	}
+
+	return res, nil
 }
 
 // startWatcher asks the watch package to start the watcher of a

@@ -1449,6 +1449,52 @@ The types:
   [Webhook callbacks](webhook-callbacks.md) describes the body, the
   headers and how to check them.
 
+### `actions`
+
+Actions are the changes Sidekick may make, such as opening a pull request
+or commenting on a ticket. They are defined here once, with their
+credentials and limits, and each route lists the ones it may use in its
+`actions`. A route in `approved` mode lets the model propose one of its
+actions. Nothing runs until a person with the approver role approves the
+proposal in Slack or in the web UI.
+
+```yaml
+actions:
+  proposalTTL: 24h              # how long a proposal waits for a decision; default 24h
+  maxPerInvestigation: 5        # most proposals one investigation may make; default 5
+  monitor-note:                 # the action's name: lower-case letters, digits and "-"
+    type: note.create           # the action type; it decodes the other keys
+    tokenSecret: { name: notes, key: token }
+    limits: { boards: [ops] }   # what the action may touch
+```
+
+`proposalTTL` and `maxPerInvestigation` are the only keys that are not
+action names. Which keys an action takes, and what its `limits` mean,
+depend on its `type`. Credentials are `{ name, key }` references to
+mounted secrets like everywhere else, and an action should have a
+credential of its own, with no more rights than its limits allow. No
+action type ships in this release.
+
+How a proposal is handled:
+
+- The model gives the action, its parameters and a reason. Sidekick checks
+  the parameters against the action's schema and limits before it stores
+  the proposal; a failed check goes back to the model as an error. The
+  parameters are text from the model, so approvers see them exactly as they
+  will run, with unusual characters spelled out.
+- A proposal waits for `proposalTTL`, then expires and can no longer be
+  approved.
+- Only a person approves: someone signed in to the web UI, or a Slack user
+  with the approver role. An API token can list the proposals and reject
+  them, but an approval from a token is refused.
+- Approving checks again that the route still lists the action and is not
+  read-only. Running checks that and the action's limits once more. If the
+  config changed in between so that the proposal is no longer allowed, it
+  fails with the reason and does nothing; the model or a person must
+  propose again.
+- An approved proposal runs once, even if a worker crashes and the job is
+  tried again: the action gets the same idempotency key each time.
+
 ### `strategies`
 
 A strategy tells an investigation what to check first, the usual causes and
@@ -1603,6 +1649,8 @@ routes:
     strategy: latency-alert
     roles: { investigate: claude }     # overrides model.roles for this route
     sources: [signoz]
+    mode: approved                     # read-only (default) or approved
+    actions: [monitor-note]            # actions the model may propose, defined in `actions`
     outputs: [slack-thread]
     budgets:                           # at or below the global budgets
       maxToolCalls: 30
@@ -1740,9 +1788,20 @@ A route without `watcherLimits` lets the model start watchers of every
 check type, with no tool checks (the tool list is empty) and HTTP checks
 only to the hosts in `watch.http.allowHosts`.
 
-For now every route is `mode: read-only`, which is also the default, and
-`actions` must be empty. Modes that let Sidekick take actions come in a
-later release.
+#### Action modes
+
+A route's `mode` is `read-only` or `approved`. `read-only` is the default:
+the model has no way to propose a change, and fixes appear only as text in
+the report. In `approved` mode the model may propose the route's `actions`
+and a person approves or rejects each proposal; see
+[`actions`](#actions). `actions` lists names from the `actions` section,
+and must be empty in `read-only` mode and have at least one name in
+`approved` mode. A `read-write` mode, where Sidekick runs an action
+without asking, is not available yet.
+
+The mode is fixed when the investigation is created, like the other
+settings above. The route's `actions` are read again when the model
+proposes and when a proposal runs; see [`actions`](#actions).
 
 ### `budgets`
 
@@ -2238,6 +2297,8 @@ with access to the database, who can turn the guard off.
 | `routes[].priority` | `100` |
 | `routes[].strategy` | `generic-alert` |
 | `routes[].mode` | `read-only` |
+| `actions.proposalTTL` | `24h` |
+| `actions.maxPerInvestigation` | `5` |
 | `routes[].budgets` | the values in `budgets.perInvestigation` |
 | `routes[].budgets.daily.maxCostUSD` | none: only `budgets.daily.maxCostUSD` applies |
 | `routes[].budgets.daily.onDailyCap` | `budgets.daily.onDailyCap` |
@@ -2332,7 +2393,10 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   http on a loopback address).
 - Every strategy file in `strategies.dir` is valid, and no two of them have
   the same name.
-- Every route is `read-only` with no `actions`, and its budgets, daily
+- Every `actions` entry is a registered type with a valid section, and the
+  two settings are positive. Every route is `read-only` with no `actions`,
+  or `approved` with at least one, listed once and defined in `actions`,
+  and its budgets, daily
   cap and `concurrency` are at or below the global ones, and its
   `rateLimit` is no looser than `budgets.rateLimit`. The global
   per-investigation limits and `budgets.concurrency` are positive, dollar

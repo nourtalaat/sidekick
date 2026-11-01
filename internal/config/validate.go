@@ -106,6 +106,7 @@ func (v *validator) run() {
 	v.checkTeams()
 	v.checkOIDC()
 	v.checkOutputs()
+	v.checkActions()
 	v.loadStrategies()
 	v.checkRoutes()
 	v.checkBudgets()
@@ -316,6 +317,21 @@ func (v *validator) checkOutputs() {
 	}
 }
 
+// checkActions checks the actions section: the settings, and each action
+// instance through its type.
+func (v *validator) checkActions() {
+	a := v.cfg.Actions
+
+	v.positiveDuration("actions.proposalTTL", a.ProposalTTL)
+	v.positive("actions.maxPerInvestigation", a.MaxPerInvestigation)
+
+	for _, name := range sortedKeys(a.Definitions) {
+		s := a.Definitions[name]
+		v.checkName(s.Path(), name)
+		checkPlugin(v, v.regs.Actions, "action type", typeKey, name, s)
+	}
+}
+
 // checkRoutes checks every route and that exactly one default route exists.
 func (v *validator) checkRoutes() {
 	seen := map[string]string{}
@@ -369,23 +385,45 @@ func (v *validator) checkRoute(path string, r Route) {
 		v.reference(path+".strategy", "strategy", r.Strategy, v.strategies.Names())
 	}
 
-	switch {
-	case r.Mode == action.ReadOnly:
-	case slices.Contains(knownModes, r.Mode):
-		v.errs.add(path+".mode", "mode %q is not available yet: routes are read-only until action modes arrive in M4", r.Mode)
-	default:
-		v.errs.add(path+".mode", "unknown mode %q%s", r.Mode, didYouMean(string(r.Mode), asStrings(knownModes)))
-	}
-
-	if len(r.Actions) > 0 {
-		v.errs.add(path+".actions", "must be empty: routes are read-only until action modes arrive in M4")
-	}
+	v.checkRouteActions(path, r)
 
 	v.checkRouteBudgets(path+".budgets", r.Budgets.Limits)
 	v.checkRouteDaily(path+".budgets.daily", r.Budgets.Daily)
 	v.checkRouteConcurrency(path+".concurrency", r.Concurrency)
 	v.checkRouteRateLimit(path+".rateLimit", r.RateLimit)
 	v.checkGrouping(path+".grouping", r.Grouping)
+}
+
+// checkRouteActions checks a route's action mode and its list of actions:
+// the mode is known, a read-only route lists none, an approved route lists
+// at least one, and each is defined once in the actions section.
+func (v *validator) checkRouteActions(path string, r Route) {
+	switch {
+	case !slices.Contains(knownModes, r.Mode):
+		v.errs.add(path+".mode", "unknown mode %q%s", r.Mode, didYouMean(string(r.Mode), asStrings(knownModes)))
+	case r.Mode == action.ReadWrite:
+		// TODO: [SK-48] Allow read-write routes, with the trusted-sender rule.
+		v.errs.add(path+".mode", "mode %q is not available yet: use %q, where a person approves each action", r.Mode, action.Approved)
+	}
+
+	switch {
+	case r.Mode == action.ReadOnly && len(r.Actions) > 0:
+		v.errs.add(path+".actions", "must be empty while mode is %s", action.ReadOnly)
+	case r.Mode == action.Approved && len(r.Actions) == 0:
+		v.errs.add(path+".actions", "list at least one action: mode %s lets the model propose only these", action.Approved)
+	}
+
+	v.references(path+".actions", "action", r.Actions, slices.Collect(maps.Keys(v.cfg.Actions.Definitions)))
+
+	seen := map[string]bool{}
+
+	for i, name := range r.Actions {
+		if seen[name] {
+			v.errs.add(fmt.Sprintf("%s.actions[%d]", path, i), "action %q is listed twice", name)
+		}
+
+		seen[name] = true
+	}
 }
 
 func (v *validator) checkMatch(at string, m Match) {

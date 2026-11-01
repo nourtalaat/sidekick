@@ -5,6 +5,7 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/nourtalaat/sidekick/internal/action/proposals"
 	"github.com/nourtalaat/sidekick/internal/app"
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/investigator"
@@ -22,11 +23,12 @@ import (
 // registerInvestigator runs the investigate jobs that the router enqueues
 // for each new investigation, and the follow_up jobs of follow-up
 // questions, with every source behind guard, every model connector
-// wrapped with its span and metrics, and start_watcher through watchers,
-// and listens for Stops of the runs on this replica. Each run takes its
-// route's sources, outputs and daily cap from the routes in effect in cache,
-// the file's and the runtime ones, as the router does.
-func registerInvestigator(a *app.App, cache *rules.Cache, strategies strategy.Source, guard *tools.Guard, watchers *watch.ModelStarter, modelMetrics *instrument.Metrics, vectors *memory.Vectors) error {
+// wrapped with its span and metrics, start_watcher through watchers and
+// propose_action through actions, and listens for Stops of the runs on this
+// replica. Each run takes its route's sources, outputs and daily cap from
+// the routes in effect in cache, the file's and the runtime ones, as the
+// router does.
+func registerInvestigator(a *app.App, cache *rules.Cache, strategies strategy.Source, guard *tools.Guard, watchers *watch.ModelStarter, actions *proposals.Service, modelMetrics *instrument.Metrics, vectors *memory.Vectors) error {
 	cfg := a.Config()
 	prices := pricing.New(cfg.Model.PriceTable())
 
@@ -67,6 +69,7 @@ func registerInvestigator(a *app.App, cache *rules.Cache, strategies strategy.So
 		MemoryVectors:  vectors,
 		Lessons:        lessons.NewSelector(lessons.LimitsOf(cfg.Lessons.MaxPerPrompt, cfg.Lessons.MaxTokens, cfg.Lessons.GlobalShare)),
 		Watchers:       watchers,
+		Actions:        actions,
 		Logger:         a.Logger().With("component", "investigator"),
 		Metrics:        metrics,
 		Canceller:      canceller,
