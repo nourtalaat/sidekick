@@ -2,9 +2,9 @@
 
 // Package slackcmd answers the /sidekick slash command: adding and
 // removing runtime listeners, listing listeners and routes, setting a few
-// fields of runtime routes, investigating a linked message, and status and
-// help. Each change is checked against the user's role first: listeners
-// need the responder role and routes need admin. Over Socket Mode the
+// fields of runtime routes, investigating a linked message, writing a
+// lesson, and status and help. Each change is checked against the user's role first: listeners
+// need the responder role and routes and lessons need admin. Over Socket Mode the
 // Slack app hands it commands; with the Events API it serves
 // POST /slack/commands.
 package slackcmd
@@ -22,6 +22,7 @@ import (
 	"github.com/slack-go/slack"
 
 	"github.com/nourtalaat/sidekick/internal/config"
+	"github.com/nourtalaat/sidekick/internal/lessons"
 	"github.com/nourtalaat/sidekick/internal/roles"
 	"github.com/nourtalaat/sidekick/internal/rules"
 	"github.com/nourtalaat/sidekick/internal/slackapp"
@@ -35,6 +36,7 @@ const (
 	cmdRoutes      = "routes"
 	cmdRoute       = "route"
 	cmdInvestigate = "investigate"
+	cmdLesson      = "lesson"
 	cmdStatus      = "status"
 	cmdHelp        = "help"
 )
@@ -58,6 +60,7 @@ const helpText = "*/sidekick* commands:\n" +
 	"• `/sidekick routes`: list the routes, in the order they are tried.\n" +
 	"• `/sidekick route set <name> <field> <value>`: change a field of a route added from Slack, or add the route. Needs the admin role. `/sidekick route set` lists the fields.\n" +
 	"• `/sidekick investigate <message link>`: investigate any message. Needs the responder role.\n" +
+	"• `/sidekick lesson add \"<text>\" service:<name>`: write a lesson that prompts use for a service, alert, route or strategy. Needs the admin role.\n" +
 	"• `/sidekick status`: what Sidekick runs with, and your role.\n" +
 	"• `/sidekick help`: this list."
 
@@ -65,6 +68,11 @@ const helpText = "*/sidekick* commands:\n" +
 // *slackapp.Handler is one.
 type Investigator interface {
 	InvestigateLink(ctx context.Context, teamID, appID, key, link string) error
+}
+
+// LessonWriter stores lessons that admins write. *lessons.Store is one.
+type LessonWriter interface {
+	Create(ctx context.Context, actor lessons.Actor, n lessons.New) (lessons.Stored, error)
 }
 
 // RoleLookup finds Slack users' roles. Refresh is like Role but reads the
@@ -87,6 +95,8 @@ type Options struct {
 	Roles RoleLookup
 	// Investigator starts investigations of linked messages.
 	Investigator Investigator
+	// Lessons stores the lessons /sidekick lesson add writes.
+	Lessons LessonWriter
 	// Logger gets a line per change and per failure. Command text is not
 	// logged.
 	Logger *slog.Logger
@@ -104,6 +114,7 @@ type Handler struct {
 	rules        *rules.Cache
 	roles        RoleLookup
 	investigator Investigator
+	lessons      LessonWriter
 	log          *slog.Logger
 	version      string
 	timeout      time.Duration
@@ -140,6 +151,7 @@ func New(opts Options) *Handler {
 		rules:        opts.Rules,
 		roles:        opts.Roles,
 		investigator: opts.Investigator,
+		lessons:      opts.Lessons,
 		log:          log,
 		version:      opts.Version,
 		timeout:      cmp.Or(opts.Timeout, slackapp.AckBudget),
@@ -189,6 +201,8 @@ func (h *Handler) run(ctx context.Context, cmd slack.SlashCommand) (string, erro
 		return h.route(ctx, cmd, rest)
 	case cmdInvestigate:
 		return h.investigate(ctx, cmd, rest)
+	case cmdLesson:
+		return h.lesson(ctx, cmd, rest)
 	case cmdStatus:
 		return h.status(ctx, cmd)
 	case cmdHelp:

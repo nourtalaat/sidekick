@@ -104,3 +104,19 @@
   color: var(--sk-text-secondary);
   font: var(--sk-type-caption);
 }
+
+.sk-step__lessons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-2);
+  margin-bottom: var(--sk-space-3);
+}
+
+.sk-step__lessons p,
+.sk-step__lessons ul {
+  margin: 0;
+}
+
+.sk-step__lessons ul {
+  padding-left: var(--sk-space-5);
+}

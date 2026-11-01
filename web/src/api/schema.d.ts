@@ -339,6 +339,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/lessons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lessons, newest first, a page at a time
+         * @description Lessons are short pieces of reviewed guidance that prompts show the
+         *     model. A lesson that waits for review has the status `proposed`.
+         *     `counts` is the number of lessons with each status, whatever the
+         *     filters. The text of a lesson came from people and the model: show it
+         *     as plain text.
+         */
+        get: operations["ListLessons"];
+        put?: never;
+        /**
+         * Write a lesson
+         * @description Stores a lesson written by an admin, active at once unless
+         *     `status` is `proposed`. A lesson with no scope field is global and
+         *     applies to every investigation. A failed check answers 422 with the
+         *     field of the problem. The change is written to the audit log.
+         */
+        post: operations["CreateLesson"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lessons/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit a lesson, disable or enable it, or reject it
+         * @description Replaces the text and scope of the lesson. `status` may be omitted to
+         *     keep the status; a lesson that waits for review may be rejected, an
+         *     active one disabled and a disabled one enabled. Approving a lesson
+         *     that waits for review is its own operation. `version` is the version
+         *     that was read; if the lesson changed since, the answer is 409 with
+         *     code `stale`. A lesson drafted from feedback keeps at least one scope
+         *     field (422). The change is written to the audit log.
+         */
+        put: operations["UpdateLesson"];
+        post?: never;
+        /**
+         * Delete a lesson
+         * @description Deletes the lesson and the record of the investigations that used it.
+         *     The audit log keeps its text.
+         */
+        delete: operations["DeleteLesson"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lessons/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a lesson that waits for review
+         * @description Makes the lesson active, so prompts use it, and notes who approved it.
+         *     `version` is the version that was read; if the lesson changed since,
+         *     the answer is 409 with code `stale`. A lesson that does not wait for
+         *     review answers 409 with code `not_proposed`. The change is written to
+         *     the audit log.
+         */
+        post: operations["ApproveLesson"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/strategy-proposals": {
         parameters: {
             query?: never;
@@ -1197,6 +1283,117 @@ export interface components {
             /** @description The version that was read, or 0 for a strategy that is not stored yet. Leave it out to skip the check. */
             baseVersion?: number;
         };
+        /** @enum {string} */
+        LessonStatus: "proposed" | "active" | "disabled" | "rejected";
+        /**
+         * @description Which investigations a lesson applies to. A field that is set must
+         *     equal the investigation's value; a lesson with no field set applies to
+         *     every investigation.
+         */
+        LessonScope: {
+            service?: string;
+            alert?: string;
+            route?: string;
+            strategy?: string;
+        };
+        LessonFeedback: {
+            /** Format: uuid */
+            feedbackId: string;
+            /** Format: uuid */
+            investigationId: string;
+        };
+        Lesson: {
+            /** Format: uuid */
+            id: string;
+            /** @description Plain text, written by a person or drafted by the model. */
+            text: string;
+            scope: components["schemas"]["LessonScope"];
+            status: components["schemas"]["LessonStatus"];
+            /** @enum {string} */
+            origin: "feedback" | "ui" | "slack" | "file";
+            /** @description The feedback a drafted lesson comes from. */
+            feedback: components["schemas"]["LessonFeedback"][];
+            /**
+             * Format: uuid
+             * @description The user who wrote the lesson, when a user did.
+             */
+            createdBy?: string;
+            /**
+             * Format: uuid
+             * @description The user who approved the lesson, when a user did.
+             */
+            approvedBy?: string;
+            /** @description How many people rated the verdict of an investigation that used the lesson correct. */
+            helpful: number;
+            /** @description How many people rated it wrong. */
+            unhelpful: number;
+            /** Format: date-time */
+            lastUsedAt?: string;
+            /** @description Goes up with every change; send it back with an edit or an approval. */
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        LessonList: {
+            lessons: components["schemas"]["Lesson"][];
+            nextCursor?: string;
+            counts: components["schemas"]["LessonCounts"];
+        };
+        /** @description How many lessons there are with each status, whatever the filters. */
+        LessonCounts: {
+            proposed: number;
+            active: number;
+            disabled: number;
+            rejected: number;
+        };
+        NewLesson: {
+            text: string;
+            scope?: components["schemas"]["LessonScope"];
+            /**
+             * @default active
+             * @enum {string}
+             */
+            status: "active" | "proposed";
+        };
+        LessonUpdate: {
+            version: number;
+            text: string;
+            scope?: components["schemas"]["LessonScope"];
+            status?: components["schemas"]["LessonStatus"];
+        };
+        LessonApproval: {
+            version: number;
+        };
+        /** @description A lesson that the prompt of an investigation used, as it is now. */
+        UsedLesson: {
+            /** Format: uuid */
+            id: string;
+            text: string;
+            scope: components["schemas"]["LessonScope"];
+            status: components["schemas"]["LessonStatus"];
+        };
+        LeftOutLesson: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            reason: "max_per_prompt" | "max_tokens" | "global_share";
+            scope: components["schemas"]["LessonScope"];
+        };
+        /**
+         * @description The lessons that the prompt of this step used and the ones that
+         *     applied but were left out, for a prompt or triage prompt step.
+         */
+        StepLessons: {
+            used: string[];
+            /** @description The first lessons left out, at most 50, in rank order. */
+            leftOut: components["schemas"]["LeftOutLesson"][];
+            /** @description How many lessons were left out in all. */
+            leftOutTotal: number;
+            /** @description How many active lessons applied. */
+            candidates: number;
+        };
         /**
          * @description `drafting`: waiting for the model's draft. `draft_failed`: no draft
          *     could be made; the status detail says why. `pending`: drafted, waiting
@@ -1629,6 +1826,12 @@ export interface components {
             events: components["schemas"]["Event"][];
             /** @description Follow-up questions that no run has answered yet, oldest first. */
             pendingFollowUps: components["schemas"]["PendingFollowUp"][];
+            /**
+             * @description The lessons that the prompt, or the triage, of the investigation
+             *     used, with their text and status as they are now. A lesson that
+             *     was deleted is not listed.
+             */
+            lessons?: components["schemas"]["UsedLesson"][];
         };
         /** @description The verdict people agree with. */
         Confirmation: {
@@ -1791,6 +1994,7 @@ export interface components {
             /** Format: int32 */
             durationMs: number;
             parts: components["schemas"]["StepPart"][];
+            lessons?: components["schemas"]["StepLessons"];
         };
         StepTokens: {
             /** Format: int64 */
@@ -2431,6 +2635,7 @@ export interface components {
         };
     };
     parameters: {
+        LessonID: string;
         /** @description The name of a listener or route. */
         RuleName: string;
         /** @description The name of a strategy. */
@@ -2929,6 +3134,137 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StrategyVersionDetail"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListLessons: {
+        parameters: {
+            query?: {
+                /** @description Only lessons with this status. */
+                status?: components["schemas"]["LessonStatus"];
+                /** @description Only lessons scoped to this service. */
+                service?: string;
+                /** @description Only lessons whose text matches these words, as in a web search. */
+                q?: string;
+                /** @description The nextCursor of the page before. */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of lessons. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LessonList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateLesson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewLesson"];
+            };
+        };
+        responses: {
+            /** @description The new lesson. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lesson"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateLesson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["LessonID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LessonUpdate"];
+            };
+        };
+        responses: {
+            /** @description The lesson as saved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lesson"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteLesson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["LessonID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The lesson is deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ApproveLesson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["LessonID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LessonApproval"];
+            };
+        };
+        responses: {
+            /** @description The lesson as saved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lesson"];
                 };
             };
             default: components["responses"]["Problem"];

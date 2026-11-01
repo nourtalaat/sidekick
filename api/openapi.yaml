@@ -455,6 +455,151 @@ paths:
                 $ref: "#/components/schemas/StrategyVersionDetail"
         default:
           $ref: "#/components/responses/Problem"
+  /lessons:
+    get:
+      operationId: ListLessons
+      summary: Lessons, newest first, a page at a time
+      description: |
+        Lessons are short pieces of reviewed guidance that prompts show the
+        model. A lesson that waits for review has the status `proposed`.
+        `counts` is the number of lessons with each status, whatever the
+        filters. The text of a lesson came from people and the model: show it
+        as plain text.
+      x-sidekick-role: viewer
+      parameters:
+        - name: status
+          in: query
+          description: Only lessons with this status.
+          schema:
+            $ref: "#/components/schemas/LessonStatus"
+        - name: service
+          in: query
+          description: Only lessons scoped to this service.
+          schema:
+            type: string
+        - name: q
+          in: query
+          description: Only lessons whose text matches these words, as in a web search.
+          schema:
+            type: string
+            maxLength: 200
+        - name: cursor
+          in: query
+          description: The nextCursor of the page before.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: A page of lessons.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LessonList"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: CreateLesson
+      summary: Write a lesson
+      description: |
+        Stores a lesson written by an admin, active at once unless
+        `status` is `proposed`. A lesson with no scope field is global and
+        applies to every investigation. A failed check answers 422 with the
+        field of the problem. The change is written to the audit log.
+      x-sidekick-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewLesson"
+      responses:
+        "201":
+          description: The new lesson.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lesson"
+        default:
+          $ref: "#/components/responses/Problem"
+  /lessons/{id}:
+    put:
+      operationId: UpdateLesson
+      summary: Edit a lesson, disable or enable it, or reject it
+      description: |
+        Replaces the text and scope of the lesson. `status` may be omitted to
+        keep the status; a lesson that waits for review may be rejected, an
+        active one disabled and a disabled one enabled. Approving a lesson
+        that waits for review is its own operation. `version` is the version
+        that was read; if the lesson changed since, the answer is 409 with
+        code `stale`. A lesson drafted from feedback keeps at least one scope
+        field (422). The change is written to the audit log.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/LessonID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LessonUpdate"
+      responses:
+        "200":
+          description: The lesson as saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lesson"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: DeleteLesson
+      summary: Delete a lesson
+      description: |
+        Deletes the lesson and the record of the investigations that used it.
+        The audit log keeps its text.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/LessonID"
+      responses:
+        "204":
+          description: The lesson is deleted.
+        default:
+          $ref: "#/components/responses/Problem"
+  /lessons/{id}/approve:
+    post:
+      operationId: ApproveLesson
+      summary: Approve a lesson that waits for review
+      description: |
+        Makes the lesson active, so prompts use it, and notes who approved it.
+        `version` is the version that was read; if the lesson changed since,
+        the answer is 409 with code `stale`. A lesson that does not wait for
+        review answers 409 with code `not_proposed`. The change is written to
+        the audit log.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/LessonID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LessonApproval"
+      responses:
+        "200":
+          description: The lesson as saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lesson"
+        default:
+          $ref: "#/components/responses/Problem"
   /strategy-proposals:
     get:
       operationId: ListStrategyProposals
@@ -1270,6 +1415,13 @@ components:
       scheme: bearer
       description: An API token an admin created.
   parameters:
+    LessonID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     RuleName:
       name: name
       in: path
@@ -1808,6 +1960,197 @@ components:
           type: integer
           minimum: 0
           description: The version that was read, or 0 for a strategy that is not stored yet. Leave it out to skip the check.
+    LessonStatus:
+      type: string
+      enum: [proposed, active, disabled, rejected]
+      x-enum-varnames: [LessonProposed, LessonActive, LessonDisabled, LessonRejected]
+    LessonScope:
+      type: object
+      description: |
+        Which investigations a lesson applies to. A field that is set must
+        equal the investigation's value; a lesson with no field set applies to
+        every investigation.
+      properties:
+        service:
+          type: string
+          maxLength: 200
+        alert:
+          type: string
+          maxLength: 200
+        route:
+          type: string
+          maxLength: 200
+        strategy:
+          type: string
+          maxLength: 200
+    LessonFeedback:
+      type: object
+      required: [feedbackId, investigationId]
+      properties:
+        feedbackId:
+          type: string
+          format: uuid
+        investigationId:
+          type: string
+          format: uuid
+    Lesson:
+      type: object
+      required: [id, text, scope, status, origin, feedback, helpful, unhelpful, version, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        text:
+          type: string
+          maxLength: 400
+          description: Plain text, written by a person or drafted by the model.
+        scope:
+          $ref: "#/components/schemas/LessonScope"
+        status:
+          $ref: "#/components/schemas/LessonStatus"
+        origin:
+          type: string
+          enum: [feedback, ui, slack, file]
+          x-enum-varnames: [LessonOriginFeedback, LessonOriginUI, LessonOriginSlack, LessonOriginFile]
+        feedback:
+          type: array
+          description: The feedback a drafted lesson comes from.
+          items:
+            $ref: "#/components/schemas/LessonFeedback"
+        createdBy:
+          type: string
+          format: uuid
+          description: The user who wrote the lesson, when a user did.
+        approvedBy:
+          type: string
+          format: uuid
+          description: The user who approved the lesson, when a user did.
+        helpful:
+          type: integer
+          description: How many people rated the verdict of an investigation that used the lesson correct.
+        unhelpful:
+          type: integer
+          description: How many people rated it wrong.
+        lastUsedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          description: Goes up with every change; send it back with an edit or an approval.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    LessonList:
+      type: object
+      required: [lessons, counts]
+      properties:
+        lessons:
+          type: array
+          items:
+            $ref: "#/components/schemas/Lesson"
+        nextCursor:
+          type: string
+        counts:
+          $ref: "#/components/schemas/LessonCounts"
+    LessonCounts:
+      type: object
+      required: [proposed, active, disabled, rejected]
+      description: How many lessons there are with each status, whatever the filters.
+      properties:
+        proposed:
+          type: integer
+        active:
+          type: integer
+        disabled:
+          type: integer
+        rejected:
+          type: integer
+    NewLesson:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          maxLength: 400
+        scope:
+          $ref: "#/components/schemas/LessonScope"
+        status:
+          type: string
+          enum: [active, proposed]
+          x-enum-varnames: [NewLessonActive, NewLessonProposed]
+          default: active
+    LessonUpdate:
+      type: object
+      required: [version, text]
+      properties:
+        version:
+          type: integer
+        text:
+          type: string
+          maxLength: 400
+        scope:
+          $ref: "#/components/schemas/LessonScope"
+        status:
+          $ref: "#/components/schemas/LessonStatus"
+    LessonApproval:
+      type: object
+      required: [version]
+      properties:
+        version:
+          type: integer
+    UsedLesson:
+      type: object
+      required: [id, text, scope, status]
+      description: A lesson that the prompt of an investigation used, as it is now.
+      properties:
+        id:
+          type: string
+          format: uuid
+        text:
+          type: string
+        scope:
+          $ref: "#/components/schemas/LessonScope"
+        status:
+          $ref: "#/components/schemas/LessonStatus"
+    LeftOutLesson:
+      type: object
+      required: [id, reason, scope]
+      properties:
+        id:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          enum: [max_per_prompt, max_tokens, global_share]
+          x-enum-varnames: [LeftOutMaxPerPrompt, LeftOutMaxTokens, LeftOutGlobalShare]
+        scope:
+          $ref: "#/components/schemas/LessonScope"
+    StepLessons:
+      type: object
+      required: [used, leftOut, leftOutTotal, candidates]
+      description: |
+        The lessons that the prompt of this step used and the ones that
+        applied but were left out, for a prompt or triage prompt step.
+      properties:
+        used:
+          type: array
+          items:
+            type: string
+            format: uuid
+        leftOut:
+          type: array
+          description: The first lessons left out, at most 50, in rank order.
+          items:
+            $ref: "#/components/schemas/LeftOutLesson"
+        leftOutTotal:
+          type: integer
+          description: How many lessons were left out in all.
+        candidates:
+          type: integer
+          description: How many active lessons applied.
     StrategyProposalStatus:
       type: string
       enum: [drafting, draft_failed, pending, benchmarking, passed, failed, approved, rejected, applied]
@@ -2482,6 +2825,14 @@ components:
           description: Follow-up questions that no run has answered yet, oldest first.
           items:
             $ref: "#/components/schemas/PendingFollowUp"
+        lessons:
+          type: array
+          description: |
+            The lessons that the prompt, or the triage, of the investigation
+            used, with their text and status as they are now. A lesson that
+            was deleted is not listed.
+          items:
+            $ref: "#/components/schemas/UsedLesson"
     Confirmation:
       type: object
       required: [verdict, at]
@@ -2783,6 +3134,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/StepPart"
+        lessons:
+          $ref: "#/components/schemas/StepLessons"
     StepTokens:
       type: object
       required: [input, output]

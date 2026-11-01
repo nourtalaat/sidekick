@@ -244,6 +244,75 @@ func (e InvestigationStatus) Valid() bool {
 	}
 }
 
+// Defines values for LeftOutLessonReason.
+const (
+	LeftOutGlobalShare  LeftOutLessonReason = "global_share"
+	LeftOutMaxPerPrompt LeftOutLessonReason = "max_per_prompt"
+	LeftOutMaxTokens    LeftOutLessonReason = "max_tokens"
+)
+
+// Valid indicates whether the value is a known member of the LeftOutLessonReason enum.
+func (e LeftOutLessonReason) Valid() bool {
+	switch e {
+	case LeftOutGlobalShare:
+		return true
+	case LeftOutMaxPerPrompt:
+		return true
+	case LeftOutMaxTokens:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LessonOrigin.
+const (
+	LessonOriginFeedback LessonOrigin = "feedback"
+	LessonOriginFile     LessonOrigin = "file"
+	LessonOriginSlack    LessonOrigin = "slack"
+	LessonOriginUI       LessonOrigin = "ui"
+)
+
+// Valid indicates whether the value is a known member of the LessonOrigin enum.
+func (e LessonOrigin) Valid() bool {
+	switch e {
+	case LessonOriginFeedback:
+		return true
+	case LessonOriginFile:
+		return true
+	case LessonOriginSlack:
+		return true
+	case LessonOriginUI:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LessonStatus.
+const (
+	LessonActive   LessonStatus = "active"
+	LessonDisabled LessonStatus = "disabled"
+	LessonProposed LessonStatus = "proposed"
+	LessonRejected LessonStatus = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the LessonStatus enum.
+func (e LessonStatus) Valid() bool {
+	switch e {
+	case LessonActive:
+		return true
+	case LessonDisabled:
+		return true
+	case LessonProposed:
+		return true
+	case LessonRejected:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for MeKind.
 const (
 	MeKindToken MeKind = "token"
@@ -256,6 +325,24 @@ func (e MeKind) Valid() bool {
 	case MeKindToken:
 		return true
 	case MeKindUser:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NewLessonStatus.
+const (
+	NewLessonActive   NewLessonStatus = "active"
+	NewLessonProposed NewLessonStatus = "proposed"
+)
+
+// Valid indicates whether the value is a known member of the NewLessonStatus enum.
+func (e NewLessonStatus) Valid() bool {
+	switch e {
+	case NewLessonActive:
+		return true
+	case NewLessonProposed:
 		return true
 	default:
 		return false
@@ -1257,6 +1344,11 @@ type Investigation struct {
 	Id          openapi_types.UUID       `json:"id"`
 	InputTokens int64                    `json:"inputTokens"`
 
+	// Lessons The lessons that the prompt, or the triage, of the investigation
+	// used, with their text and status as they are now. A lesson that
+	// was deleted is not listed.
+	Lessons *[]UsedLesson `json:"lessons,omitempty"`
+
 	// Mode The action mode in effect, such as read-only.
 	Mode string `json:"mode"`
 
@@ -1370,6 +1462,109 @@ type JobList struct {
 
 	// NextCursor Pass as cursor for the next page. Absent on the last page.
 	NextCursor *string `json:"nextCursor,omitempty"`
+}
+
+// LeftOutLesson defines model for LeftOutLesson.
+type LeftOutLesson struct {
+	Id     openapi_types.UUID  `json:"id"`
+	Reason LeftOutLessonReason `json:"reason"`
+
+	// Scope Which investigations a lesson applies to. A field that is set must
+	// equal the investigation's value; a lesson with no field set applies to
+	// every investigation.
+	Scope LessonScope `json:"scope"`
+}
+
+// LeftOutLessonReason defines model for LeftOutLesson.Reason.
+type LeftOutLessonReason string
+
+// Lesson defines model for Lesson.
+type Lesson struct {
+	// ApprovedBy The user who approved the lesson, when a user did.
+	ApprovedBy *openapi_types.UUID `json:"approvedBy,omitempty"`
+	CreatedAt  time.Time           `json:"createdAt"`
+
+	// CreatedBy The user who wrote the lesson, when a user did.
+	CreatedBy *openapi_types.UUID `json:"createdBy,omitempty"`
+
+	// Feedback The feedback a drafted lesson comes from.
+	Feedback []LessonFeedback `json:"feedback"`
+
+	// Helpful How many people rated the verdict of an investigation that used the lesson correct.
+	Helpful    int                `json:"helpful"`
+	Id         openapi_types.UUID `json:"id"`
+	LastUsedAt *time.Time         `json:"lastUsedAt,omitempty"`
+	Origin     LessonOrigin       `json:"origin"`
+
+	// Scope Which investigations a lesson applies to. A field that is set must
+	// equal the investigation's value; a lesson with no field set applies to
+	// every investigation.
+	Scope  LessonScope  `json:"scope"`
+	Status LessonStatus `json:"status"`
+
+	// Text Plain text, written by a person or drafted by the model.
+	Text string `json:"text"`
+
+	// Unhelpful How many people rated it wrong.
+	Unhelpful int       `json:"unhelpful"`
+	UpdatedAt time.Time `json:"updatedAt"`
+
+	// Version Goes up with every change; send it back with an edit or an approval.
+	Version int `json:"version"`
+}
+
+// LessonOrigin defines model for Lesson.Origin.
+type LessonOrigin string
+
+// LessonApproval defines model for LessonApproval.
+type LessonApproval struct {
+	Version int `json:"version"`
+}
+
+// LessonCounts How many lessons there are with each status, whatever the filters.
+type LessonCounts struct {
+	Active   int `json:"active"`
+	Disabled int `json:"disabled"`
+	Proposed int `json:"proposed"`
+	Rejected int `json:"rejected"`
+}
+
+// LessonFeedback defines model for LessonFeedback.
+type LessonFeedback struct {
+	FeedbackId      openapi_types.UUID `json:"feedbackId"`
+	InvestigationId openapi_types.UUID `json:"investigationId"`
+}
+
+// LessonList defines model for LessonList.
+type LessonList struct {
+	// Counts How many lessons there are with each status, whatever the filters.
+	Counts     LessonCounts `json:"counts"`
+	Lessons    []Lesson     `json:"lessons"`
+	NextCursor *string      `json:"nextCursor,omitempty"`
+}
+
+// LessonScope Which investigations a lesson applies to. A field that is set must
+// equal the investigation's value; a lesson with no field set applies to
+// every investigation.
+type LessonScope struct {
+	Alert    *string `json:"alert,omitempty"`
+	Route    *string `json:"route,omitempty"`
+	Service  *string `json:"service,omitempty"`
+	Strategy *string `json:"strategy,omitempty"`
+}
+
+// LessonStatus defines model for LessonStatus.
+type LessonStatus string
+
+// LessonUpdate defines model for LessonUpdate.
+type LessonUpdate struct {
+	// Scope Which investigations a lesson applies to. A field that is set must
+	// equal the investigation's value; a lesson with no field set applies to
+	// every investigation.
+	Scope   *LessonScope  `json:"scope,omitempty"`
+	Status  *LessonStatus `json:"status,omitempty"`
+	Text    string        `json:"text"`
+	Version int           `json:"version"`
 }
 
 // Listener defines model for Listener.
@@ -1507,6 +1702,19 @@ type NewFeedback struct {
 	// current run N, or the ID of a tool call.
 	TargetRef string `json:"targetRef"`
 }
+
+// NewLesson defines model for NewLesson.
+type NewLesson struct {
+	// Scope Which investigations a lesson applies to. A field that is set must
+	// equal the investigation's value; a lesson with no field set applies to
+	// every investigation.
+	Scope  *LessonScope     `json:"scope,omitempty"`
+	Status *NewLessonStatus `json:"status,omitempty"`
+	Text   string           `json:"text"`
+}
+
+// NewLessonStatus defines model for NewLesson.Status.
+type NewLessonStatus string
 
 // NewListener defines model for NewListener.
 type NewListener struct {
@@ -2103,16 +2311,20 @@ type StatsFilters struct {
 // hold text from alerts, sources and the model: show it as plain text.
 type Step struct {
 	// CallId For a tool result, the ID of the call it answers.
-	CallId     *string    `json:"callId,omitempty"`
-	Connector  *string    `json:"connector,omitempty"`
-	CostMicros *int64     `json:"costMicros,omitempty"`
-	DurationMs int32      `json:"durationMs"`
-	Error      *string    `json:"error,omitempty"`
-	Kind       StepKind   `json:"kind"`
-	Model      *string    `json:"model,omitempty"`
-	Parts      []StepPart `json:"parts"`
-	Run        int        `json:"run"`
-	Seq        int32      `json:"seq"`
+	CallId     *string  `json:"callId,omitempty"`
+	Connector  *string  `json:"connector,omitempty"`
+	CostMicros *int64   `json:"costMicros,omitempty"`
+	DurationMs int32    `json:"durationMs"`
+	Error      *string  `json:"error,omitempty"`
+	Kind       StepKind `json:"kind"`
+
+	// Lessons The lessons that the prompt of this step used and the ones that
+	// applied but were left out, for a prompt or triage prompt step.
+	Lessons *StepLessons `json:"lessons,omitempty"`
+	Model   *string      `json:"model,omitempty"`
+	Parts   []StepPart   `json:"parts"`
+	Run     int          `json:"run"`
+	Seq     int32        `json:"seq"`
 
 	// Source For a tool result, the source that answered. Absent for a built-in tool.
 	Source    *string     `json:"source,omitempty"`
@@ -2127,6 +2339,20 @@ type StepKind string
 
 // StepStatus defines model for Step.Status.
 type StepStatus string
+
+// StepLessons The lessons that the prompt of this step used and the ones that
+// applied but were left out, for a prompt or triage prompt step.
+type StepLessons struct {
+	// Candidates How many active lessons applied.
+	Candidates int `json:"candidates"`
+
+	// LeftOut The first lessons left out, at most 50, in rank order.
+	LeftOut []LeftOutLesson `json:"leftOut"`
+
+	// LeftOutTotal How many lessons were left out in all.
+	LeftOutTotal int                  `json:"leftOutTotal"`
+	Used         []openapi_types.UUID `json:"used"`
+}
 
 // StepList defines model for StepList.
 type StepList struct {
@@ -2564,6 +2790,18 @@ type TokenList struct {
 	Tokens []Token `json:"tokens"`
 }
 
+// UsedLesson A lesson that the prompt of an investigation used, as it is now.
+type UsedLesson struct {
+	Id openapi_types.UUID `json:"id"`
+
+	// Scope Which investigations a lesson applies to. A field that is set must
+	// equal the investigation's value; a lesson with no field set applies to
+	// every investigation.
+	Scope  LessonScope  `json:"scope"`
+	Status LessonStatus `json:"status"`
+	Text   string       `json:"text"`
+}
+
 // Verdict defines model for Verdict.
 type Verdict string
 
@@ -2655,6 +2893,9 @@ type BenchRunID = openapi_types.UUID
 
 // InvestigationID defines model for InvestigationID.
 type InvestigationID = openapi_types.UUID
+
+// LessonID defines model for LessonID.
+type LessonID = openapi_types.UUID
 
 // RuleName defines model for RuleName.
 type RuleName = string
@@ -2779,6 +3020,22 @@ type ListJobsParams struct {
 // ListJobsParamsStatus defines parameters for ListJobs.
 type ListJobsParamsStatus string
 
+// ListLessonsParams defines parameters for ListLessons.
+type ListLessonsParams struct {
+	// Status Only lessons with this status.
+	Status *LessonStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// Service Only lessons scoped to this service.
+	Service *string `form:"service,omitempty" json:"service,omitempty"`
+
+	// Q Only lessons whose text matches these words, as in a web search.
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Cursor The nextCursor of the page before.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // GetCostStatsParams defines parameters for GetCostStats.
 type GetCostStatsParams struct {
 	// From The first day of the range, a UTC date. The default is 29 days before `to`.
@@ -2874,6 +3131,15 @@ type CreateInvestigationFeedbackJSONRequestBody = NewFeedback
 // AskFollowUpJSONRequestBody defines body for AskFollowUp for application/json ContentType.
 type AskFollowUpJSONRequestBody = FollowUpRequest
 
+// CreateLessonJSONRequestBody defines body for CreateLesson for application/json ContentType.
+type CreateLessonJSONRequestBody = NewLesson
+
+// UpdateLessonJSONRequestBody defines body for UpdateLesson for application/json ContentType.
+type UpdateLessonJSONRequestBody = LessonUpdate
+
+// ApproveLessonJSONRequestBody defines body for ApproveLesson for application/json ContentType.
+type ApproveLessonJSONRequestBody = LessonApproval
+
 // CreateListenerJSONRequestBody defines body for CreateListener for application/json ContentType.
 type CreateListenerJSONRequestBody = NewListener
 
@@ -2957,6 +3223,21 @@ type ServerInterface interface {
 	// RetryJob Retry a dead job
 	// (POST /jobs/{id}/retry)
 	RetryJob(w http.ResponseWriter, r *http.Request, id int64)
+	// ListLessons Lessons, newest first, a page at a time
+	// (GET /lessons)
+	ListLessons(w http.ResponseWriter, r *http.Request, params ListLessonsParams)
+	// CreateLesson Write a lesson
+	// (POST /lessons)
+	CreateLesson(w http.ResponseWriter, r *http.Request)
+	// DeleteLesson Delete a lesson
+	// (DELETE /lessons/{id})
+	DeleteLesson(w http.ResponseWriter, r *http.Request, id LessonID)
+	// UpdateLesson Edit a lesson, disable or enable it, or reject it
+	// (PUT /lessons/{id})
+	UpdateLesson(w http.ResponseWriter, r *http.Request, id LessonID)
+	// ApproveLesson Approve a lesson that waits for review
+	// (POST /lessons/{id}/approve)
+	ApproveLesson(w http.ResponseWriter, r *http.Request, id LessonID)
 	// ListListeners The listeners, from the config file and from runtime, with their status
 	// (GET /listeners)
 	ListListeners(w http.ResponseWriter, r *http.Request)
@@ -3883,6 +4164,183 @@ func (siw *ServerInterfaceWrapper) RetryJob(w http.ResponseWriter, r *http.Reque
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RetryJob(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListLessons operation middleware
+func (siw *ServerInterfaceWrapper) ListLessons(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListLessonsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "service" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "service", r.URL.Query(), &params.Service, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "service"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "service", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListLessons(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateLesson operation middleware
+func (siw *ServerInterfaceWrapper) CreateLesson(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateLesson(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteLesson operation middleware
+func (siw *ServerInterfaceWrapper) DeleteLesson(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id LessonID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteLesson(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateLesson operation middleware
+func (siw *ServerInterfaceWrapper) UpdateLesson(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id LessonID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateLesson(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApproveLesson operation middleware
+func (siw *ServerInterfaceWrapper) ApproveLesson(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id LessonID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApproveLesson(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4939,6 +5397,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/strategies/{name}/versions", wrapper.ListStrategyVersions)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/strategies/{name}/versions", wrapper.SaveStrategyVersion)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/strategies/{name}/versions/{version}", wrapper.GetStrategyVersion)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/lessons", wrapper.ListLessons)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/lessons", wrapper.CreateLesson)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/lessons/{id}", wrapper.DeleteLesson)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/lessons/{id}", wrapper.UpdateLesson)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/lessons/{id}/approve", wrapper.ApproveLesson)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/strategy-proposals", wrapper.ListStrategyProposals)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/strategy-proposals/{id}", wrapper.GetStrategyProposal)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/strategy-proposals/{id}", wrapper.EditStrategyProposal)
@@ -5727,6 +6190,197 @@ type RetryJobdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response RetryJobdefaultApplicationProblemPlusJSONResponse) VisitRetryJobResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListLessonsRequestObject struct {
+	Params ListLessonsParams
+}
+
+type ListLessonsResponseObject interface {
+	VisitListLessonsResponse(w http.ResponseWriter) error
+}
+
+type ListLessons200JSONResponse LessonList
+
+func (response ListLessons200JSONResponse) VisitListLessonsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListLessonsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListLessonsdefaultApplicationProblemPlusJSONResponse) VisitListLessonsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateLessonRequestObject struct {
+	Body *CreateLessonJSONRequestBody
+}
+
+type CreateLessonResponseObject interface {
+	VisitCreateLessonResponse(w http.ResponseWriter) error
+}
+
+type CreateLesson201JSONResponse Lesson
+
+func (response CreateLesson201JSONResponse) VisitCreateLessonResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateLessondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateLessondefaultApplicationProblemPlusJSONResponse) VisitCreateLessonResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteLessonRequestObject struct {
+	Id LessonID `json:"id"`
+}
+
+type DeleteLessonResponseObject interface {
+	VisitDeleteLessonResponse(w http.ResponseWriter) error
+}
+
+type DeleteLesson204Response struct {
+}
+
+func (response DeleteLesson204Response) VisitDeleteLessonResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteLessondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteLessondefaultApplicationProblemPlusJSONResponse) VisitDeleteLessonResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateLessonRequestObject struct {
+	Id   LessonID `json:"id"`
+	Body *UpdateLessonJSONRequestBody
+}
+
+type UpdateLessonResponseObject interface {
+	VisitUpdateLessonResponse(w http.ResponseWriter) error
+}
+
+type UpdateLesson200JSONResponse Lesson
+
+func (response UpdateLesson200JSONResponse) VisitUpdateLessonResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateLessondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UpdateLessondefaultApplicationProblemPlusJSONResponse) VisitUpdateLessonResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveLessonRequestObject struct {
+	Id   LessonID `json:"id"`
+	Body *ApproveLessonJSONRequestBody
+}
+
+type ApproveLessonResponseObject interface {
+	VisitApproveLessonResponse(w http.ResponseWriter) error
+}
+
+type ApproveLesson200JSONResponse Lesson
+
+func (response ApproveLesson200JSONResponse) VisitApproveLessonResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveLessondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ApproveLessondefaultApplicationProblemPlusJSONResponse) VisitApproveLessonResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -6833,6 +7487,21 @@ type StrictServerInterface interface {
 	// RetryJob Retry a dead job
 	// (POST /jobs/{id}/retry)
 	RetryJob(ctx context.Context, request RetryJobRequestObject) (RetryJobResponseObject, error)
+	// ListLessons Lessons, newest first, a page at a time
+	// (GET /lessons)
+	ListLessons(ctx context.Context, request ListLessonsRequestObject) (ListLessonsResponseObject, error)
+	// CreateLesson Write a lesson
+	// (POST /lessons)
+	CreateLesson(ctx context.Context, request CreateLessonRequestObject) (CreateLessonResponseObject, error)
+	// DeleteLesson Delete a lesson
+	// (DELETE /lessons/{id})
+	DeleteLesson(ctx context.Context, request DeleteLessonRequestObject) (DeleteLessonResponseObject, error)
+	// UpdateLesson Edit a lesson, disable or enable it, or reject it
+	// (PUT /lessons/{id})
+	UpdateLesson(ctx context.Context, request UpdateLessonRequestObject) (UpdateLessonResponseObject, error)
+	// ApproveLesson Approve a lesson that waits for review
+	// (POST /lessons/{id}/approve)
+	ApproveLesson(ctx context.Context, request ApproveLessonRequestObject) (ApproveLessonResponseObject, error)
 	// ListListeners The listeners, from the config file and from runtime, with their status
 	// (GET /listeners)
 	ListListeners(ctx context.Context, request ListListenersRequestObject) (ListListenersResponseObject, error)
@@ -7456,6 +8125,155 @@ func (sh *strictHandler) RetryJob(w http.ResponseWriter, r *http.Request, id int
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RetryJobResponseObject); ok {
 		if err := validResponse.VisitRetryJobResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListLessons operation middleware
+func (sh *strictHandler) ListLessons(w http.ResponseWriter, r *http.Request, params ListLessonsParams) {
+	var request ListLessonsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListLessons(ctx, request.(ListLessonsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListLessons")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListLessonsResponseObject); ok {
+		if err := validResponse.VisitListLessonsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateLesson operation middleware
+func (sh *strictHandler) CreateLesson(w http.ResponseWriter, r *http.Request) {
+	var request CreateLessonRequestObject
+
+	var body CreateLessonJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateLesson(ctx, request.(CreateLessonRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateLesson")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateLessonResponseObject); ok {
+		if err := validResponse.VisitCreateLessonResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteLesson operation middleware
+func (sh *strictHandler) DeleteLesson(w http.ResponseWriter, r *http.Request, id LessonID) {
+	var request DeleteLessonRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteLesson(ctx, request.(DeleteLessonRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteLesson")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteLessonResponseObject); ok {
+		if err := validResponse.VisitDeleteLessonResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateLesson operation middleware
+func (sh *strictHandler) UpdateLesson(w http.ResponseWriter, r *http.Request, id LessonID) {
+	var request UpdateLessonRequestObject
+
+	request.Id = id
+
+	var body UpdateLessonJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateLesson(ctx, request.(UpdateLessonRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateLesson")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateLessonResponseObject); ok {
+		if err := validResponse.VisitUpdateLessonResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ApproveLesson operation middleware
+func (sh *strictHandler) ApproveLesson(w http.ResponseWriter, r *http.Request, id LessonID) {
+	var request ApproveLessonRequestObject
+
+	request.Id = id
+
+	var body ApproveLessonJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ApproveLesson(ctx, request.(ApproveLessonRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ApproveLesson")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ApproveLessonResponseObject); ok {
+		if err := validResponse.VisitApproveLessonResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
