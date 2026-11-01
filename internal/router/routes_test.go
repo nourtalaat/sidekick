@@ -1,6 +1,7 @@
 package router
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -20,7 +21,7 @@ func TestPick(t *testing.T) {
 
 	cfg, in := loadConfig(t)
 
-	routes, err := newRoutes(cfg, in.ModelSettings, cfg.WatchPolicy())
+	routes, err := newRoutes(cfg, cfg.StrategySet(), in.ModelSettings, cfg.WatchPolicy())
 	require.NoError(t, err)
 
 	names := make([]string, 0, len(routes))
@@ -82,7 +83,7 @@ func TestNewRoutesSettings(t *testing.T) {
 	generic, ok := cfg.StrategySet().Get(strategy.GenericAlert)
 	require.True(t, ok)
 
-	routes, err := newRoutes(cfg, in.ModelSettings, cfg.WatchPolicy())
+	routes, err := newRoutes(cfg, cfg.StrategySet(), in.ModelSettings, cfg.WatchPolicy())
 	require.NoError(t, err)
 
 	byName := map[string]route{}
@@ -202,10 +203,41 @@ func TestNewRoutesErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := newRoutes(tt.cfg(t), nil, watch.Policy{})
+			cfg := tt.cfg(t)
+
+			_, err := newRoutes(cfg, cfg.StrategySet(), nil, watch.Policy{})
 			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
+}
+
+func TestNewRoutesWithRuntimeStrategy(t *testing.T) {
+	t.Parallel()
+
+	cfg, in := loadConfig(t)
+
+	saved, problems := strategy.ParseRuntime([]byte("name: generic-alert\ndescription: Saved at runtime.\nbudgets:\n  maxToolCalls: 10\n"), 3)
+	require.Empty(t, problems)
+
+	routes, err := newRoutes(cfg, cfg.StrategySet().WithRuntime([]strategy.Strategy{saved}), in.ModelSettings, cfg.WatchPolicy())
+	require.NoError(t, err)
+
+	byName := map[string]route{}
+	for _, r := range routes {
+		byName[r.name] = r
+	}
+
+	crashloop := byName["crashloop"]
+	require.Equal(t, strategy.GenericAlert, crashloop.strategy)
+	require.Equal(t, "runtime:3", crashloop.strategyVersion, "the route records the runtime version")
+
+	var budget investigator.Budget
+
+	require.NoError(t, json.Unmarshal(crashloop.budget, &budget))
+	require.Equal(t, 10, budget.MaxToolCalls, "the budget comes from the version in effect")
+
+	latency, _ := cfg.StrategySet().Get("latency-alert")
+	require.Equal(t, latency.Version, byName["payments-latency"].strategyVersion, "a strategy file wins over a runtime strategy, so other routes are unchanged")
 }
 
 func TestEffectiveBudget(t *testing.T) {

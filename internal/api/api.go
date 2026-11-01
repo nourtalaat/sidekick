@@ -23,6 +23,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/problem"
 	"github.com/nourtalaat/sidekick/internal/redact"
+	"github.com/nourtalaat/sidekick/internal/strategy"
 	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
@@ -48,6 +49,12 @@ type Options struct {
 	Config *config.Config
 	// Rules reads and changes the runtime listeners and routes.
 	Rules RuleStore
+	// Strategies reads and saves the runtime strategies. Without it, the
+	// strategy operations answer 503.
+	Strategies StrategyStore
+	// StrategyBase holds the built-in and file strategies that the runtime
+	// ones are added to. Nil means those of Config.
+	StrategyBase *strategy.Set
 	// Redactor redacts the strings GET /config and GET /jobs show. Nil
 	// shows them as they are.
 	Redactor *redact.Redactor
@@ -120,10 +127,15 @@ func New(opts Options) (http.Handler, error) {
 		now = time.Now
 	}
 
+	strategyBase := opts.StrategyBase
+	if strategyBase == nil && opts.Config != nil {
+		strategyBase = opts.Config.StrategySet()
+	}
+
 	h := &handler{auth: opts.Auth, routes: http.NewServeMux(), log: log}
 
 	srv := &server{
-		tokens: opts.Tokens, cfg: opts.Config, rules: opts.Rules, redactor: opts.Redactor, pool: opts.Pool, audit: opts.Audit,
+		tokens: opts.Tokens, cfg: opts.Config, rules: opts.Rules, strategies: opts.Strategies, strategyBase: strategyBase, redactor: opts.Redactor, pool: opts.Pool, audit: opts.Audit,
 		hub: opts.Hub, log: log, stopper: opts.Stopper, watchers: opts.Watchers, now: now,
 		feedbackMetrics: opts.Feedback, memory: opts.Memory, draftLessons: opts.DraftLessons, lessons: opts.Lessons,
 		streamHeartbeat: cmp.Or(opts.StreamHeartbeat, DefaultStreamHeartbeat),
