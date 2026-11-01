@@ -340,6 +340,56 @@ used by every replica within seconds.
   the config file answers 409 with the code `file_rule`, a name that is
   taken 409 with `exists`, and an unknown name 404 with `not_found`.
 
+## Strategies
+
+The strategies in effect, and the versions of those saved at runtime, are
+under `/api/v1/strategies`. A `viewer` can read them; an `admin` can save a
+new version. See [`strategies`](configuration.md#strategies) for how
+built-in strategies, strategy files and runtime strategies replace each
+other.
+
+- `GET /api/v1/strategies` lists every strategy. Each has a `layer`,
+  `built-in`, `file` or `runtime`, and a `status`: `active`; `shadowed`, a
+  runtime strategy with the name of a strategy file, which wins; or
+  `invalid`, a stored version that no longer passes the checks, with the
+  reason in `statusReason`. The `version` is a content hash for a built-in
+  strategy and a strategy file, and `runtime:N` for a runtime one, as an
+  investigation records it. Strategies in effect come first, by name, then
+  the runtime ones that are not. Built-in strategies and strategy files are
+  `readOnly`.
+- `GET /api/v1/strategies/{name}` returns the strategy in effect with its
+  YAML in `body`.
+- `GET /api/v1/strategies/{name}/versions` lists the saved versions of a
+  runtime strategy, newest first and without their YAML, 50 at a time
+  (`limit` takes up to 200); pass the answer's `next` as `before` for the
+  older ones. `GET /api/v1/strategies/{name}/versions/{version}` returns
+  one version with its YAML.
+- `POST /api/v1/strategies/{name}/versions` saves the `body`, a YAML text
+  in the format of a strategy file, as the next version, with a required
+  `reason` of at most 500 characters. It creates the runtime strategy when
+  none is stored, also with the name of a built-in strategy or a strategy
+  file. `baseVersion` is the version that was read, or 0 when none was
+  stored; if the strategy was saved since, the answer is 409 with the code
+  `stale`.
+- A save that fails the checks answers 422 with the code `validation` and
+  an `errors` list: the field `reason`, `body` for a problem with the whole
+  text such as a syntax error, or `body.` and the path in the YAML, such as
+  `body.match.textPattern`, with the line at the end of the message. A text
+  that is the same as the current version answers 422 with the code
+  `unchanged`. Every save is written to the audit log in the same
+  transaction as the version.
+
+The **Strategies** page (`/strategies`) lists them. The page of a strategy
+shows its text. An admin edits a runtime strategy in a text box with a
+reason, and sees the problems of a refused save with their path and line.
+A built-in strategy has the button **Edit as runtime strategy**, which
+starts a runtime strategy of the same name from its text; a strategy file
+can only be read. The history lists the saved versions. Any two can be
+compared in a diff, which marks added and removed lines with a sign and
+words as well as color, and **Use this version as the base** starts the
+editor from an older version, which brings its text back as a new version.
+An investigation's page links its `runtime:N` version to that version.
+
 ## Admin operations
 
 - `GET /api/v1/config` returns the config Sidekick runs with: `file`, the
@@ -505,6 +555,6 @@ role that may call it in `x-sidekick-role`. Errors are problem details
 | 400 | A parameter or body that is not valid. |
 | 401 | No session or API token, or one that expired or was revoked. |
 | 403 | A change without the CSRF token, or a role below the one the operation needs. |
-| 409 | The change conflicts with the current state, such as retrying a job that is not dead, or changing a rule of the config file. |
-| 422 | A body that is valid but names something that is not there, such as a finding the report does not have, or a listener or route that fails the config checks (the answer lists the fields). |
+| 409 | The change conflicts with the current state, such as retrying a job that is not dead, changing a rule of the config file, or saving a strategy that was saved again since it was read. |
+| 422 | A body that is valid but names something that is not there, such as a finding the report does not have, a listener or route that fails the config checks, or a strategy that fails the strategy checks (the answer lists the fields). |
 | 404, 405 | No operation has this path, or this method on it. |

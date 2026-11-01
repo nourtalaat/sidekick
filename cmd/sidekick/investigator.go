@@ -14,6 +14,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/model/pricing"
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/rules"
+	"github.com/nourtalaat/sidekick/internal/strategy"
 	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
@@ -24,7 +25,7 @@ import (
 // and listens for Stops of the runs on this replica. Each run takes its
 // route's sources, outputs and daily cap from the routes in effect in cache,
 // the file's and the runtime ones, as the router does.
-func registerInvestigator(a *app.App, cache *rules.Cache, guard *tools.Guard, watchers *watch.ModelStarter, modelMetrics *instrument.Metrics, vectors *memory.Vectors) error {
+func registerInvestigator(a *app.App, cache *rules.Cache, strategies strategy.Source, guard *tools.Guard, watchers *watch.ModelStarter, modelMetrics *instrument.Metrics, vectors *memory.Vectors) error {
 	cfg := a.Config()
 	prices := pricing.New(cfg.Model.PriceTable())
 
@@ -52,7 +53,7 @@ func registerInvestigator(a *app.App, cache *rules.Cache, guard *tools.Guard, wa
 		Guard:      guard,
 		Connectors: connectors,
 		Prices:     prices,
-		Strategies: cfg.StrategySet(),
+		Strategies: strategies,
 		Routes:     routes,
 		Rules:      cfg.Report.Rules(),
 		Daily: investigator.DailyCaps{

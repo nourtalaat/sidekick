@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 
+	"github.com/nourtalaat/sidekick/internal/strategy"
 	"github.com/nourtalaat/sidekick/internal/watch"
 )
 
@@ -84,9 +85,18 @@ func (c *Config) ResolveRuntimeRoute(r Route) Route {
 // RuntimeRoutePolicy returns the watcher policy of a route saved at
 // runtime: the watchers of its strategy, with the global settings.
 func (c *Config) RuntimeRoutePolicy(r Route) watch.RoutePolicy {
+	return c.RoutePolicyWith(r, c.routeStrategy(r))
+}
+
+// RoutePolicyWith returns the watcher policy of the route r when st is its
+// strategy: the route's own watchers, then those of st, with the global
+// settings. The router uses it for a strategy saved at runtime, which the
+// strategies the config was loaded with do not hold. A watcher that fails
+// the checks is left out.
+func (c *Config) RoutePolicyWith(r Route, st *strategy.Strategy) watch.RoutePolicy {
 	w := watcherChecker{cfg: c, errs: &errorList{}, seen: map[string]bool{}}
 
-	return w.routePolicy(joinPath(runtimeRoutesPath, r.Name), r, c.routeStrategy(r))
+	return w.routePolicy(joinPath(runtimeRoutesPath, r.Name), r, st)
 }
 
 // runtimeValidator returns a validator for runtime rules on c, with the

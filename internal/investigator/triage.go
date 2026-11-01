@@ -88,7 +88,7 @@ const triageOnlyDetail = "Triage only: no full investigation ran."
 // database, so its tests need only a fake connector.
 type triager struct {
 	schema     *tools.InputSchema
-	strategies *strategy.Set
+	strategies strategy.Source
 }
 
 // triageDecision is what Sidekick made of the triage model's answer.
@@ -286,8 +286,10 @@ func (r *run) saveTriagePrompt(ctx context.Context) error {
 
 	var strategies []strategy.Strategy
 
-	for _, name := range r.h.opts.Strategies.Names() {
-		st, _ := r.h.opts.Strategies.Get(name)
+	current := r.h.opts.Strategies.Current()
+
+	for _, name := range current.Names() {
+		st, _ := current.Get(name)
 		strategies = append(strategies, st)
 	}
 
@@ -402,7 +404,7 @@ func (r *run) triageDecision() triageDecision {
 // already the investigation's, or that is not loaded, changes nothing;
 // savePrompt reports the second.
 func (r *run) useStrategy(ctx context.Context, name string) error {
-	st, ok := r.h.opts.Strategies.Get(name)
+	st, ok := r.h.opts.Strategies.Current().Get(name)
 	if !ok || name == deref(r.inv.Strategy) {
 		return nil
 	}
@@ -518,7 +520,7 @@ func (t triager) check(parts []model.Part) triageDecision {
 		return d
 	}
 
-	if _, ok := t.strategies.Get(in.Strategy); !ok {
+	if _, ok := t.strategies.Current().Get(in.Strategy); !ok {
 		d.problems = append(d.problems, fmt.Sprintf("strategy %q is not one of the strategies", in.Strategy))
 	}
 
