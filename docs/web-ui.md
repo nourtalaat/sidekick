@@ -368,6 +368,20 @@ used by every replica within seconds.
   attempts reset. The retry is written to the audit log. A job that is
   not dead, or whose unique key a pending or running job holds, answers
   409.
+- `POST /api/v1/investigations/{id}/scenario-draft` exports a confirmed
+  investigation as a benchmark scenario draft (201, or 200 with the scenario
+  it has already). It answers 409 when nobody confirmed the verdict, and 422
+  when the alert has no payload to replay. `GET /api/v1/scenarios` lists
+  scenarios (`status` takes `draft` or `reviewed`), `GET
+  /api/v1/scenarios/{id}` returns one with the notes and the places to
+  check, and each part next to its original, and `PUT /api/v1/scenarios/{id}`
+  replaces its file. `POST /api/v1/scenarios/{id}/review` needs
+  `sensitiveDataChecked: true` and the `revision` that was read, and a
+  signed-in user (an API token gets 403). `GET /api/v1/scenarios/{id}/file`
+  downloads a reviewed scenario and answers 409 for a draft. A stale
+  `revision` answers 409, and a file that is not a valid scenario or still
+  holds an email, a host name or an IP address answers 422. See
+  [Exporting a real investigation](benchmark.md#exporting-a-real-investigation).
 
 ## Listeners, routes and the audit log in the UI
 

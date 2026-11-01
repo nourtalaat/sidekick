@@ -85,7 +85,7 @@ model:
     investigate: claude      # required, and the model must be able to call tools
     triage: claude           # optional; see "Triage" in investigations.md
     judge: claude            # grades benchmark runs; must call tools; default: the investigate connector
-    summarize: claude
+    summarize: claude        # shortens old tool results; drafts the rubric of exported scenarios (see benchmark.md)
   prices:
     claude-opus-5-5: { inputPerMTok: 4, outputPerMTok: 20, cacheReadPerMTok: 0.2, cacheWritePerMTok: 5 }   # replaces the shipped price
 ```
