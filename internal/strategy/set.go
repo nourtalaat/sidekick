@@ -53,8 +53,12 @@ func (s *Set) Version(_ context.Context, name, version string) (Strategy, bool, 
 // WithRuntime returns a set with the runtime strategies added. The layers
 // are, from the lowest, built-in, runtime and file: a runtime strategy
 // replaces the built-in one of its name, and a file strategy replaces both.
-// s is not changed.
+// s is not changed, and may be nil.
 func (s *Set) WithRuntime(runtime []Strategy) *Set {
+	if s == nil {
+		s = &Set{}
+	}
+
 	out := &Set{builtIn: s.builtIn, file: s.file, runtime: byName(runtime)}
 	out.byName = effective(out.builtIn, out.runtime, out.file)
 
