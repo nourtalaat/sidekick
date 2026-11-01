@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/intake"
 	"github.com/nourtalaat/sidekick/internal/model"
@@ -161,6 +163,32 @@ func (fakeSink) Publish(context.Context, output.Update) (output.Ref, error) {
 	return output.Ref{}, nil
 }
 
+// fakeActionConfig is the config of the fake note.create action.
+type fakeActionConfig struct {
+	TokenSecret registry.SecretRef `yaml:"tokenSecret"`
+	Limits      struct {
+		Boards []string `yaml:"boards"`
+	} `yaml:"limits"`
+}
+
+func (c *fakeActionConfig) Validate() error {
+	if len(c.Limits.Boards) == 0 {
+		return errors.New("limits.boards: at least one board is required")
+	}
+
+	return nil
+}
+
+type fakeAction struct{ name string }
+
+func (a fakeAction) Spec() action.Spec { return action.Spec{Name: a.name} }
+
+func (fakeAction) Validate(context.Context, json.RawMessage) error { return nil }
+
+func (fakeAction) Execute(context.Context, action.Invocation) (action.Result, error) {
+	return action.Result{}, nil
+}
+
 // testRegistries returns registries of their own with fake plugin types, so
 // tests never touch the global registries. The mcp type checks its section
 // with the real mcp.Config but builds a fake source.
@@ -170,6 +198,7 @@ func testRegistries() Registries {
 		Sources: registry.New[source.Source]("source"),
 		Intakes: registry.New[intake.Adapter]("intake"),
 		Outputs: registry.New[output.Sink]("output"),
+		Actions: registry.New[action.Action]("action"),
 	}
 
 	declared := registry.Typed(func(_ context.Context, _ string, cfg fakeModelConfig, _ registry.Deps) (model.Connector, error) {
@@ -208,6 +237,9 @@ func testRegistries() Registries {
 	}))
 	regs.Outputs.Register("teams", registry.Typed(func(context.Context, string, fakeSlackConfig, registry.Deps) (output.Sink, error) {
 		return fakeSink{}, nil
+	}))
+	regs.Actions.Register("note.create", registry.Typed(func(_ context.Context, name string, _ fakeActionConfig, _ registry.Deps) (action.Action, error) {
+		return fakeAction{name: name}, nil
 	}))
 	regs.Outputs.Register("webhook", registry.Typed(func(context.Context, string, fakeWebhookOutputConfig, registry.Deps) (output.Sink, error) {
 		return fakeSink{}, nil

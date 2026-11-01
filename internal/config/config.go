@@ -71,6 +71,7 @@ type Config struct {
 	Teams      *Teams             `yaml:"teams"`
 	OIDC       *OIDC              `yaml:"oidc"`
 	Outputs    map[string]Section `yaml:"outputs"`
+	Actions    Actions            `yaml:"actions"`
 	Strategies Strategies         `yaml:"strategies"`
 	Routes     []Route            `yaml:"routes"`
 	Budgets    Budgets            `yaml:"budgets"`
@@ -153,6 +154,22 @@ type Intake struct {
 	Webhooks map[string]Webhook `yaml:"webhooks"`
 }
 
+// Actions holds the actions Sidekick may propose, and how proposals are
+// handled. Besides the two settings, every key is the name of an action
+// instance, such as monitor-pr. The action's type decodes the rest of its
+// section, for example its credentials and limits. Names are lowercase,
+// so they never collide with the settings.
+type Actions struct {
+	// ProposalTTL is how long a proposal waits for a decision before it
+	// expires.
+	ProposalTTL time.Duration `yaml:"proposalTTL"`
+	// MaxPerInvestigation is the most proposals one investigation may
+	// make, decided or not.
+	MaxPerInvestigation int `yaml:"maxPerInvestigation"`
+	// Definitions are the action instances, by name.
+	Definitions map[string]Section `yaml:",inline"`
+}
+
 // Strategies says where file strategies are read from.
 type Strategies struct {
 	// Dir holds file strategies, one YAML file each. They are read, never
@@ -176,9 +193,12 @@ type Route struct {
 	Roles map[model.Role]string `yaml:"roles"`
 	// Sources lists the sources the investigation may use.
 	Sources []string `yaml:"sources"`
-	// Mode is the action mode. Only read-only exists until M4.
+	// Mode is the action mode: read-only, or approved, where the model may
+	// propose the route's actions and a person approves each one.
+	// TODO: [SK-48] Allow read-write.
 	Mode action.Mode `yaml:"mode"`
-	// Actions lists allowed actions. It is empty until M4.
+	// Actions lists the actions the route may propose, by their names in
+	// the actions section. It is empty in read-only mode.
 	Actions []string `yaml:"actions"`
 	// Outputs lists where reports go (OUT-5).
 	Outputs []string `yaml:"outputs"`
@@ -413,6 +433,7 @@ type Registries struct {
 	Sources *registry.Registry[source.Source]
 	Intakes *registry.Registry[intake.Adapter]
 	Outputs *registry.Registry[output.Sink]
+	Actions *registry.Registry[action.Action]
 }
 
 // LoadOptions change how a config is checked.
@@ -438,6 +459,7 @@ func (r Registries) WithDefaults() Registries {
 		Sources: cmp.Or(r.Sources, registry.Sources),
 		Intakes: cmp.Or(r.Intakes, registry.Intakes),
 		Outputs: cmp.Or(r.Outputs, registry.Outputs),
+		Actions: cmp.Or(r.Actions, registry.Actions),
 	}
 }
 
@@ -604,6 +626,7 @@ func (c *Config) setDefaults() {
 	c.Secrets.setDefaults()
 	c.Budgets.setDefaults()
 	c.Telemetry.setDefaults()
+	c.Actions.setDefaults()
 	c.Watch.setDefaults()
 	c.Memory.setDefaults()
 	c.Retention.setDefaults()
@@ -650,6 +673,11 @@ func (b *Budgets) setDefaults() {
 
 func (t *Telemetry) setDefaults() {
 	t.LogLevel = DefaultLogLevel
+}
+
+func (a *Actions) setDefaults() {
+	a.ProposalTTL = action.DefaultProposalTTL
+	a.MaxPerInvestigation = action.DefaultMaxPerInvestigation
 }
 
 func (w *Watch) setDefaults() {

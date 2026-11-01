@@ -5,6 +5,15 @@ import (
 	"time"
 )
 
+// Defaults of the actions section of the config.
+const (
+	// DefaultProposalTTL is how long a proposal waits for a decision.
+	DefaultProposalTTL = 24 * time.Hour
+	// DefaultMaxPerInvestigation is the most proposals one investigation
+	// may make.
+	DefaultMaxPerInvestigation = 5
+)
+
 // ProposalStatus tracks a proposal from creation to result.
 type ProposalStatus string
 

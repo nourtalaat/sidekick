@@ -1,4 +1,4 @@
-# A route with actions before M4.
+# A read-only route that lists an action.
 database:
   urlSecret: { name: sidekick-db, key: url }
 
@@ -8,6 +8,9 @@ model:
   roles:
     investigate: claude
 
+actions:
+  monitor-note: { type: note.create, tokenSecret: { name: notes, key: token }, limits: { boards: [ops] } }
+
 routes:
   - name: default
-    actions: [monitor-pr]
+    actions: [monitor-note]
