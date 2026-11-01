@@ -112,18 +112,58 @@ func NewService(opts Options) *Service {
 // Export builds the draft of a confirmed investigation, saves it and
 // returns it with true. An investigation that has a scenario already gets
 // that scenario back, with false.
+//
+// The investigation is read and the draft built outside a transaction: the
+// model call that drafts the rubric can take seconds, and its cost is
+// written to the day's spend at once, so a draft that fails afterwards still
+// counts in the daily caps. Only the insert and its audit entry share a
+// transaction.
 func (s *Service) Export(ctx context.Context, investigationID uuid.UUID, actor Actor) (db.Scenario, bool, error) {
+	q := db.New(s.pool)
+
+	inv, err := q.GetInvestigation(ctx, investigationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return db.Scenario{}, false, ErrInvestigationNotFound
+	}
+
+	if err != nil {
+		return db.Scenario{}, false, fmt.Errorf("read investigation %s: %w", investigationID, err)
+	}
+
+	existing, err := q.GetScenarioByInvestigation(ctx, &investigationID)
+	if err == nil {
+		return existing, false, nil
+	}
+
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return db.Scenario{}, false, fmt.Errorf("look for a scenario of investigation %s: %w", investigationID, err)
+	}
+
+	if inv.ConfirmedVerdict == nil {
+		return db.Scenario{}, false, ErrNotConfirmed
+	}
+
+	in, err := s.input(ctx, q, inv)
+	if err != nil {
+		return db.Scenario{}, false, fmt.Errorf("gather investigation %s: %w", investigationID, err)
+	}
+
+	draft, err := s.builder.Build(ctx, s.pool, in)
+	if err != nil {
+		return db.Scenario{}, false, fmt.Errorf("build the draft of investigation %s: %w", investigationID, err)
+	}
+
 	var (
 		row     db.Scenario
 		created bool
 	)
 
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		var err error
 
-		row, created, err = s.export(ctx, tx, investigationID, actor)
+		row, created, err = s.save(ctx, tx, inv, draft, actor)
 		if err != nil {
-			return fmt.Errorf("export: %w", err)
+			return fmt.Errorf("save: %w", err)
 		}
 
 		return nil
@@ -298,45 +338,6 @@ func (s *Service) List(ctx context.Context, status string, after *Cursor, limit 
 	last := out[limit-1]
 
 	return out, &Cursor{UpdatedAt: last.UpdatedAt, ID: last.ID}, nil
-}
-
-// export is Export in a transaction.
-func (s *Service) export(ctx context.Context, tx pgx.Tx, investigationID uuid.UUID, actor Actor) (db.Scenario, bool, error) {
-	q := db.New(tx)
-
-	inv, err := q.GetInvestigation(ctx, investigationID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return db.Scenario{}, false, ErrInvestigationNotFound
-	}
-
-	if err != nil {
-		return db.Scenario{}, false, fmt.Errorf("read the investigation: %w", err)
-	}
-
-	existing, err := q.GetScenarioByInvestigation(ctx, &investigationID)
-	if err == nil {
-		return existing, false, nil
-	}
-
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return db.Scenario{}, false, fmt.Errorf("look for a scenario of the investigation: %w", err)
-	}
-
-	if inv.ConfirmedVerdict == nil {
-		return db.Scenario{}, false, ErrNotConfirmed
-	}
-
-	in, err := s.input(ctx, q, inv)
-	if err != nil {
-		return db.Scenario{}, false, fmt.Errorf("gather the investigation: %w", err)
-	}
-
-	draft, err := s.builder.Build(ctx, tx, in)
-	if err != nil {
-		return db.Scenario{}, false, fmt.Errorf("build the draft: %w", err)
-	}
-
-	return s.save(ctx, tx, inv, draft, actor)
 }
 
 // save stores a draft. When another request stored the investigation's

@@ -31,7 +31,7 @@ func newScenarioService(ctx context.Context, a *app.App, modelMetrics *instrumen
 
 	caller, err := newSummarizer(a, modelMetrics)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("set up the summarize role: %w", err)
 	}
 
 	if !caller.Enabled() {

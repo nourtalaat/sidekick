@@ -26,13 +26,16 @@ import (
 	"github.com/nourtalaat/sidekick/internal/scrub"
 	"github.com/nourtalaat/sidekick/internal/source/mock"
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/summarize"
 )
 
 const (
 	// idPrefixLen is how long the readable part of a scenario ID may be;
-	// the investigation ID adds idSuffixLen hex characters.
+	// the investigation ID adds idSuffixLen hex characters, taken from the
+	// random end of the UUID, since its start is a timestamp that repeats
+	// for hours.
 	idPrefixLen = 60
-	idSuffixLen = 6
+	idSuffixLen = 12
 	// untitled is the title of a scenario whose alert has none.
 	untitled = "Exported investigation"
 	// rubricIDPrefix starts the IDs of drafted rubric items.
@@ -245,6 +248,10 @@ func (b *Builder) addRubric(ctx context.Context, q db.DBTX, doc *yaml.Node, sess
 
 // reasonOf is a short reason for a note, without the error's details.
 func reasonOf(err error) string {
+	if errors.Is(err, summarize.ErrOverCap) {
+		return "a daily spending cap is reached"
+	}
+
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return "it timed out"
 	}
@@ -299,7 +306,8 @@ func scenarioID(title, strategy string, investigationID uuid.UUID) string {
 		slug = strings.Trim(slug[:idPrefixLen], "-")
 	}
 
-	suffix := strings.ReplaceAll(investigationID.String(), "-", "")[:idSuffixLen]
+	hex := strings.ReplaceAll(investigationID.String(), "-", "")
+	suffix := hex[len(hex)-idSuffixLen:]
 
 	if slug == "" {
 		return "scenario-" + suffix

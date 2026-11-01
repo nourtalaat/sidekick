@@ -429,7 +429,7 @@ and an admin reviews it. Only a reviewed scenario can be run or downloaded.
 
 ```sh
 sidekick bench export --investigation 0198f2a4-7c3e-7b1d-9a52-3f6e8d1c4b70
-sidekick bench export --scenario latency-alert-checkout-api-p99-0198f2 --out bench/scenarios/private/checkout-pool.yaml
+sidekick bench export --scenario latency-alert-checkout-api-p99-3f6e8d1c4b70 --out bench/scenarios/private/checkout-pool.yaml
 ```
 
 `bench export` reads the config file for the database

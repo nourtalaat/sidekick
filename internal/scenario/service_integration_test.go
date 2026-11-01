@@ -55,7 +55,7 @@ func TestExport(t *testing.T) {
 	got, err := bench.ParseScenario([]byte(row.Body))
 	require.NoError(t, err)
 	require.Equal(t, parseGolden(t), got)
-	require.Equal(t, "latency-alert-checkout-api-p99-latency-above-2s-for-5m-0198f2", row.ID)
+	require.Equal(t, "latency-alert-checkout-api-p99-latency-above-2s-for-5m-3f6e8d1c4b70", row.ID)
 
 	require.Equal(t, 1, auditCount(t.Context(), t, f.pool, ActionDrafted, row.ID))
 
@@ -428,4 +428,73 @@ func TestList(t *testing.T) {
 	page, _, err = f.service.List(ctx, "draft", nil, 5)
 	require.NoError(t, err)
 	require.Equal(t, []string{"third", "first"}, ids(page))
+}
+
+// copyInvestigation makes a second investigation of the seed's alert, with
+// the same title, strategy and steps, under the ID newID.
+func copyInvestigation(t *testing.T, f fixture, newID uuid.UUID) {
+	t.Helper()
+
+	_, err := f.pool.Exec(t.Context(), `INSERT INTO investigations
+		(id, group_id, route, strategy, mode, status, run, next_seq, verdict, confidence, connectors, budget, created_at, finished_at,
+		 alert_title, service, confirmed_verdict, confirmed_cause, confirmed_by, confirmed_at)
+		SELECT $2, group_id, route, strategy, mode, status, run, next_seq, verdict, confidence, connectors, budget, created_at, finished_at,
+		       alert_title, service, confirmed_verdict, confirmed_cause, confirmed_by, confirmed_at
+		FROM investigations WHERE id = $1`, f.seed.InvestigationID, newID)
+	require.NoError(t, err)
+
+	_, err = f.pool.Exec(t.Context(), `INSERT INTO steps
+		(investigation_id, seq, run, kind, parts, source, tool, tool_call_id, status, evidence, started_at, duration_ms)
+		SELECT $2, seq, run, kind, parts, source, tool, tool_call_id, status, evidence, started_at, duration_ms
+		FROM steps WHERE investigation_id = $1`, f.seed.InvestigationID, newID)
+	require.NoError(t, err)
+}
+
+func TestExportOfTheSameAlertTwiceInOneWindow(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, false)
+
+	// UUIDv7 IDs made within hours of each other share their first six hex
+	// characters; the scenario IDs must still differ.
+	second := uuid.MustParse("0198f2ff-1111-7000-8000-00000000abcd")
+	require.Equal(t, f.seed.InvestigationID.String()[:6], second.String()[:6])
+
+	copyInvestigation(t, f, second)
+
+	first, created, err := f.service.Export(t.Context(), f.seed.InvestigationID, admin)
+	require.NoError(t, err)
+	require.True(t, created)
+
+	other, created, err := f.service.Export(t.Context(), second, admin)
+	require.NoError(t, err)
+	require.True(t, created)
+
+	require.NotEqual(t, first.ID, other.ID)
+	require.Equal(t, first.Title, other.Title)
+}
+
+func TestExportKeepsTheSpendOfARubricThatWasNotSaved(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, true)
+
+	// A scenario of another investigation has the ID the export will take, so
+	// the insert fails after the rubric was drafted and paid for.
+	_, err := f.pool.Exec(t.Context(), `INSERT INTO scenarios (id, title, status, body, provenance, notes, created_at, updated_at)
+		VALUES ('latency-alert-checkout-api-p99-latency-above-2s-for-5m-3f6e8d1c4b70', 'taken', 'draft', 'id: x', '[]', '[]', now(), now())`)
+	require.NoError(t, err)
+
+	_, _, err = f.service.Export(t.Context(), f.seed.InvestigationID, admin)
+	require.Error(t, err)
+
+	spend, err := db.New(f.pool).GetDailySpend(t.Context(), db.GetDailySpendParams{Route: f.seed.Route, Day: dayOf(spendDayTime)})
+	require.NoError(t, err)
+	require.EqualValues(t, rubricCostMicros, spend.RouteMicros)
+
+	var n int
+
+	require.NoError(t, f.pool.QueryRow(t.Context(), `SELECT count(*) FROM scenarios`).Scan(&n))
+	require.Equal(t, 1, n)
+	require.Zero(t, auditCount(t.Context(), t, f.pool, ActionDrafted, "latency-alert-checkout-api-p99-latency-above-2s-for-5m-3f6e8d1c4b70"))
 }
