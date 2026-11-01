@@ -73,11 +73,12 @@ WHERE id = @id AND status IN ('pending', 'benchmarking');
 
 -- name: SetStrategyProposalGate :execrows
 -- SetStrategyProposalGate stores the end of the gate: passed, or failed with
--- the reason.
+-- the reason. A gate that ends before it runs anything, because no scenario
+-- covers the strategy, ends a proposal that is still pending.
 UPDATE strategy_proposals
 SET status = @status, gate_result = @gate_result, gate_detail = @gate_detail,
     bench_run_id = sqlc.narg(bench_run_id), baseline_run_id = sqlc.narg(baseline_run_id), updated_at = now()
-WHERE id = @id AND status = 'benchmarking';
+WHERE id = @id AND status IN ('pending', 'benchmarking');
 
 -- name: SetStrategyProposalGateError :execrows
 -- SetStrategyProposalGateError ends a gate that could not run, such as a

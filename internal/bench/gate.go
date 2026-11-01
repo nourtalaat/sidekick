@@ -1,6 +1,7 @@
 package bench
 
 import (
+	"fmt"
 	"math/rand/v2"
 	"slices"
 	"strings"
@@ -127,17 +128,10 @@ func DecideGate(baseline, proposal []ScenarioResult, opts GateOptions) GateDecis
 
 	d := GateDecision{MaxDrop: opts.MaxDrop, Resamples: resamples, Seed: opts.Seed, Scenarios: gateScenarios(baseline, proposal, weights)}
 
-	switch n := len(d.Scenarios); {
-	case n == 0:
-		d.Result = GateNoBenchmarkCoverage
-		d.Reason = "No scenario covers the strategy. Export confirmed investigations of it as scenarios."
+	if short, ok := CoverageDecision(len(d.Scenarios), opts); ok {
+		short.Scenarios = d.Scenarios
 
-		return d
-	case n < MinGateScenarios:
-		d.Result = GateNotEnoughEvidence
-		d.Reason = "Too few scenarios cover the strategy to tell a change from chance. Export more confirmed investigations as scenarios."
-
-		return d
+		return short
 	}
 
 	diffs := make([]float64, len(d.Scenarios))
@@ -149,6 +143,32 @@ func DecideGate(baseline, proposal []ScenarioResult, opts GateOptions) GateDecis
 	d.Result, d.Reason = judgeGate(d.Mean, d.Interval.Lower, opts.MaxDrop)
 
 	return d
+}
+
+// CoverageDecision returns the decision of a gate that has n scenarios to
+// run, when n is too few to run it at all: no benchmark coverage for none,
+// and not enough evidence for fewer than MinGateScenarios. It reports false
+// when there are enough. A gate uses it to end before it spends anything.
+func CoverageDecision(n int, opts GateOptions) (GateDecision, bool) {
+	resamples := opts.Resamples
+	if resamples <= 0 {
+		resamples = GateResamples
+	}
+
+	d := GateDecision{MaxDrop: opts.MaxDrop, Resamples: resamples, Seed: opts.Seed}
+
+	switch {
+	case n <= 0:
+		d.Result = GateNoBenchmarkCoverage
+		d.Reason = "No scenario covers the strategy. Export confirmed investigations of it as scenarios."
+	case n < MinGateScenarios:
+		d.Result = GateNotEnoughEvidence
+		d.Reason = fmt.Sprintf("Only %d of the scenarios cover the strategy, and the gate needs at least %d to tell a change from chance. Export more confirmed investigations as scenarios.", n, MinGateScenarios)
+	default:
+		return GateDecision{}, false
+	}
+
+	return d, true
 }
 
 // judgeGate applies the pass rule to the mean of the differences and the

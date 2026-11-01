@@ -244,3 +244,40 @@ func TestGateResultPassed(t *testing.T) {
 
 	require.True(t, GatePassed.Passed())
 }
+
+func TestCoverageDecision(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		n          int
+		want       GateResult
+		wantEnough bool
+	}{
+		{name: "no scenario", n: 0, want: GateNoBenchmarkCoverage},
+		{name: "a negative count is none", n: -1, want: GateNoBenchmarkCoverage},
+		{name: "one scenario", n: 1, want: GateNotEnoughEvidence},
+		{name: "one fewer than the least", n: MinGateScenarios - 1, want: GateNotEnoughEvidence},
+		{name: "the least", n: MinGateScenarios, wantEnough: true},
+		{name: "more than the least", n: 40, wantEnough: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d, short := CoverageDecision(tt.n, GateOptions{MaxDrop: 0.02, Seed: gateSeed})
+
+			require.Equal(t, !tt.wantEnough, short)
+
+			if tt.wantEnough {
+				return
+			}
+
+			require.Equal(t, tt.want, d.Result)
+			require.NotEmpty(t, d.Reason)
+			require.Equal(t, uint64(gateSeed), d.Seed)
+			require.Equal(t, 0.02, d.MaxDrop)
+		})
+	}
+}

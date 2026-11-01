@@ -632,7 +632,7 @@ const setStrategyProposalGate = `-- name: SetStrategyProposalGate :execrows
 UPDATE strategy_proposals
 SET status = $1, gate_result = $2, gate_detail = $3,
     bench_run_id = $4, baseline_run_id = $5, updated_at = now()
-WHERE id = $6 AND status = 'benchmarking'
+WHERE id = $6 AND status IN ('pending', 'benchmarking')
 `
 
 type SetStrategyProposalGateParams struct {
@@ -645,7 +645,8 @@ type SetStrategyProposalGateParams struct {
 }
 
 // SetStrategyProposalGate stores the end of the gate: passed, or failed with
-// the reason.
+// the reason. A gate that ends before it runs anything, because no scenario
+// covers the strategy, ends a proposal that is still pending.
 func (q *Queries) SetStrategyProposalGate(ctx context.Context, arg SetStrategyProposalGateParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setStrategyProposalGate,
 		arg.Status,
