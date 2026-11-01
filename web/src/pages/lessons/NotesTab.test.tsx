@@ -46,7 +46,7 @@ describe("the service notes tab", () => {
 
     await user.click(await screen.findByRole("tab", { name: "Service notes" }));
 
-    expect(await screen.findByRole("table", { name: "Services with notes" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Services with notes" })).toBeInTheDocument();
     expect(screen.getByRole("tabpanel")).toHaveAccessibleName("Service notes");
   });
 
@@ -54,7 +54,7 @@ describe("the service notes tab", () => {
     const { handler } = server({ billing: notes("billing", { text: "<b>Quiet</b> at night." }), "checkout-api": notes("checkout-api", { updatedByName: undefined }) });
     renderApp({ me: VIEWER, route: ROUTE, handler });
 
-    const table = await screen.findByRole("table", { name: "Services with notes" });
+    const table = await screen.findByRole("region", { name: "Services with notes" });
     const rows = within(table).getAllByRole("row");
 
     expect(rows).toHaveLength(3);
@@ -111,7 +111,7 @@ describe("the service notes tab", () => {
 
     renderApp({ me: ADMIN, route: ROUTE, handler });
 
-    await user.type(await screen.findByRole("textbox", { name: "Service" }), "team/checkout");
+    await user.type(await screen.findByRole("combobox", { name: "Service" }), "team/checkout");
     await user.click(screen.getByRole("button", { name: "Open notes" }));
 
     expect(await screen.findByText("Nobody has written notes about this service yet.")).toBeInTheDocument();
@@ -124,7 +124,7 @@ describe("the service notes tab", () => {
     renderApp({ me: ADMIN, route: `${ROUTE}&service=billing`, handler });
 
     expect(await screen.findByRole("textbox", { name: "Notes" })).toHaveValue("Notes about billing.");
-    expect(screen.getByRole("textbox", { name: "Service" })).toHaveValue("billing");
+    expect(screen.getByRole("combobox", { name: "Service" })).toHaveValue("billing");
   });
 
   it("saves the notes as plain text", async () => {

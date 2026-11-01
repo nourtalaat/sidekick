@@ -57,10 +57,7 @@ function NotesBody({ notes, canChange, onChanged, onChanging }: { notes: Service
       {canChange ? (
         <NotesForm key={`${notes.service}:${notes.updatedAt ?? ""}`} notes={notes} onChanged={onChanged} onChanging={onChanging} />
       ) : (
-        <>
-          {notes.text !== "" && <p className="sk-manage__text">{notes.text}</p>}
-          <p className="sk-manage__note">Changing notes needs the admin role.</p>
-        </>
+        notes.text !== "" && <p className="sk-manage__text">{notes.text}</p>
       )}
     </>
   );

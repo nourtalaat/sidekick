@@ -204,7 +204,6 @@ describe("the memory tab", () => {
     renderApp({ me: ADMIN, route: ROUTE, handler });
 
     await user.click(await screen.findByRole("button", { name: /^Edit memory entry/ }));
-    await user.clear(screen.getByRole("textbox", { name: "Summary" }));
     await user.type(screen.getByRole("textbox", { name: "Cause" }), " more");
     await user.click(screen.getByRole("button", { name: "Save entry" }));
 

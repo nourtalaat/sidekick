@@ -210,13 +210,14 @@ describe("the lessons tab", () => {
     renderApp({ me: ADMIN, route: "/lessons", handler });
 
     await user.click(await screen.findByRole("button", { name: "Write a lesson" }));
-    await user.type(screen.getByRole("textbox", { name: "Lesson" }), "x");
-    await user.type(screen.getByRole("textbox", { name: "Service" }), "db");
-    expect(screen.getByText(/It applies when every field that is filled in matches/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Save lesson" }));
+    const form = screen.getByRole("form", { name: "Write a lesson" });
+    await user.type(within(form).getByRole("textbox", { name: "Lesson" }), "x");
+    await user.type(within(form).getByRole("textbox", { name: "Service" }), "db");
+    expect(within(form).getByText(/It applies when every field that is filled in matches/)).toBeInTheDocument();
+    await user.click(within(form).getByRole("button", { name: "Save lesson" }));
 
     expect(await screen.findByText("The text is required")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Lesson" })).toHaveValue("x");
+    expect(within(form).getByRole("textbox", { name: "Lesson" })).toHaveValue("x");
     expect(seen.find((r) => r.method === "POST")?.body).toEqual({ text: "x", scope: { service: "db" }, status: "active" });
   });
 
