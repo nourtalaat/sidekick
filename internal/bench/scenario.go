@@ -246,7 +246,7 @@ func loadScenario(file string, opts LoadOptions) (Scenario, []string) {
 	}
 
 	sc.Path = file
-	sc.resolveSnapshots(opts.BaseDir)
+	sc.ResolveSnapshots(opts.BaseDir)
 
 	return sc, nil
 }
@@ -326,8 +326,10 @@ func (s Scenario) Body() ([]byte, error) {
 	return body, nil
 }
 
-// resolveSnapshots makes each relative snapshot path relative to baseDir.
-func (s *Scenario) resolveSnapshots(baseDir string) {
+// ResolveSnapshots makes each relative snapshot path relative to baseDir.
+// LoadScenarios does it for the files it reads; call it on a scenario read
+// from text with ParseScenario.
+func (s *Scenario) ResolveSnapshots(baseDir string) {
 	if baseDir == "" {
 		return
 	}
