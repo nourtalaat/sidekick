@@ -394,6 +394,63 @@ words as well as color, and **Use this version as the base** starts the
 editor from an older version, which brings its text back as a new version.
 An investigation's page links its `runtime:N` version to that version.
 
+## The review queue
+
+The **Review queue** page (`/review`) has a tab for each kind of thing that
+waits for a person to decide. The tab is in the address, as `/review?tab=strategies`.
+
+### Proposed strategy changes
+
+The **Strategies** tab lists the changes Sidekick drafted to strategies after
+repeated wrong feedback. See [`strategies.proposals`](configuration.md#proposed-changes)
+for what turns them on and what they cost. Only an `admin` sees them.
+
+Each proposal shows its status: being drafted, draft failed, waiting for the
+gate, gate running, passed the gate, did not pass, applied, approved (for a
+strategy in a file) or rejected. Opening one shows:
+
+- why the model changed the strategy, in its own words, which is model output;
+- the change as a diff of the strategy before and after;
+- the wrong ratings it was drafted from, with their reasons and links to the
+  investigations;
+- the result of the [benchmark gate](benchmark.md#the-strategy-gate): what it
+  means and what to do about it, the mean difference of the scores with its 95%
+  interval against the allowed drop, the score of each scenario with the
+  current version and with the change, and what the gate cost.
+
+An admin can then:
+
+- **Approve** a proposal that passed. For a runtime strategy the change
+  becomes its next version, and for a built-in strategy a runtime strategy of the
+  same name that takes its place; the version records the proposal and the
+  benchmark run that checked it. Sidekick cannot change a strategy file, so for
+  one the page gives the YAML to download or copy and you commit it. The button
+  is off for any proposal that has not passed, and the server refuses it too:
+  there is no way around the gate.
+- **Edit** a proposal whose gate has ended. The new text goes through the same
+  checks as a saved strategy, the old gate result is dropped, and the proposal
+  goes through the gate again. Saving the same text runs the gate again, which
+  is the way to retry a gate that could not finish.
+- **Reject** a proposal, with a reason if you like. A gate that is still
+  running stops before its next run.
+
+Approving is refused with `stale` when the strategy was saved again since the
+draft; reject the proposal or edit it to run the gate on the strategy as it is.
+Everything an admin does is written to the audit log in the same transaction.
+
+The API behind the tab, all for an `admin`:
+
+- `GET /api/v1/strategy-proposals` lists them, newest first, 50 at a time
+  (`limit` up to 200, `cursor` from the answer's `nextCursor`), filtered by
+  `status` or `name`. Without a `status` the proposals that are still being
+  drafted, and failed drafts, are left out.
+- `GET /api/v1/strategy-proposals/{id}` returns one with `baseBody` and `body`,
+  its feedback, its `gate` and whether it is `stale`.
+- `PUT /api/v1/strategy-proposals/{id}` with a `body` edits it.
+- `POST /api/v1/strategy-proposals/{id}/approve` applies it. A proposal that has
+  not passed answers 409 with the code `not_passed`.
+- `POST /api/v1/strategy-proposals/{id}/reject` takes an optional `reason`.
+
 ## Admin operations
 
 - `GET /api/v1/config` returns the config Sidekick runs with: `file`, the

@@ -148,6 +148,71 @@ code.
 - The scenario files are validated by a unit test on every pull request, and
   by `sidekick bench validate`.
 
+## The strategy gate
+
+Sidekick can propose a change to a strategy when people keep rating it wrong
+(see [`strategies.proposals`](configuration.md#proposed-changes)). The
+benchmark is how it checks the change before anyone applies it: the gate runs
+the scenarios that cover the strategy with the current version and with the
+change, and lets the change pass only when it is not clearly worse. There is no
+way to apply a change that did not pass.
+
+**Which scenarios.** A scenario covers a strategy when it names it in
+`strategy`, or names none (or `generic-alert`) and the strategy's `match` fits
+its event. The gate chooses from the reviewed scenarios in the database and
+from `bench.gate.publicDir` when that is set, and runs each of them with the
+strategy under test. A scenario that is not valid is left out with a warning in
+the log.
+
+**The two runs.** The current version and the change each run every chosen
+scenario `bench.gate.minRepeats` times, with the same models, in turn. The
+runs are graded by the judge as `sidekick bench run` grades them, and both are
+stored as benchmark runs with the trigger `gate`, so they show in the
+[dashboard](web-ui.md#dashboard-numbers-and-benchmark-runs).
+
+**The pass rule.** For each scenario the gate takes the mean overall score of
+the change minus that of the current version. It resamples those differences
+with replacement 10,000 times to get a 95% interval for their mean. The change
+`passes` when the lower end of the interval is above minus
+`bench.gate.maxDrop` (0.02 by default): it is not clearly worse. Comparing
+two single averages would let a neutral change pass or fail by chance, and a
+slightly worse one pass on a lucky run.
+
+| Result | Means |
+|---|---|
+| `passed` | The lower end of the interval is above the allowed drop. |
+| `failed` | The change scores lower on average by more than the allowed drop. |
+| `not_enough_evidence` | The change looks no worse on average, but the interval is too wide to be sure, or fewer than 3 scenarios cover the strategy. Run more repeats or add scenarios. |
+| `no_benchmark_coverage` | No scenario covers the strategy. Export confirmed investigations of it as scenarios. |
+| `over_budget` | The gate stopped before a run that would pass `bench.gate.maxCostUSD`. |
+| `error` | The gate could not finish, for example because the database role may not create a schema. |
+
+At least 3 scenarios must cover the strategy (a constant in the code,
+`MinGateScenarios`), because resampling one or two differences shows almost no
+spread. With fewer, the gate ends at once with `no_benchmark_coverage` or
+`not_enough_evidence` and spends nothing. Both runs, the interval, its seed and
+the cost are stored with the proposal, so a reviewer sees how sure the result
+is and the interval can be worked out again.
+
+**What it costs.** A gate makes `2 x minRepeats x (the number of scenarios)`
+investigations and the judge's grading of each. With 5 repeats and 8 scenarios
+that is 80 investigations. The cost of each counts in `spend_daily` under the
+route `bench`, with the investigate connector and model, so it shows in the
+dashboard and counts toward `budgets.daily.maxCostUSD`; while that cap is
+reached, a gate waits and carries on later. `bench.gate.maxCostUSD` caps one
+gate.
+
+**It survives a restart.** A gate can run for a long time. Every finished run is
+kept, together with its cost, so a gate that is interrupted by a restart, by
+a provider that is down or by a daily cap carries on from the runs it finished
+and does not pay for them again. If the chosen scenarios changed in the
+meantime, it starts over.
+
+**Needs.** The gate runs in a schema of its own in the database of
+`database.urlSecret`, which it drops at the end. The database role needs
+`CREATE` on the database for that; this is the same need as `sidekick bench
+run --db`. A `summarize` role must be set to draft the changes at all.
+
 ## Scores
 
 Each run gets these scores:
