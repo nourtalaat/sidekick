@@ -1,0 +1,111 @@
+{
+  "investigation_id": "0198f2a4-7c3e-7b1d-9a52-3f6e8d1c4b70",
+  "route": "default",
+  "strategy": "latency-alert",
+  "title": "checkout-api p99 latency above 2s for 5m",
+  "verdict": "true_positive",
+  "cause": "DB connection pool exhausted on checkout-7f9c.prod.acme.com after commit abc1234def5678 by dana.reyes@acme.com lowered the pool size to 5; orders-db-1.prod.acme.com (10.42.7.19) refused new connections.",
+  "event": {
+    "intake": "alertmanager",
+    "adapter": "alertmanager",
+    "received_at": "2026-05-04T10:20:00Z",
+    "payload": {
+      "status": "firing",
+      "alerts": [
+        {
+          "status": "firing",
+          "labels": {
+            "alertname": "CheckoutLatencyHigh",
+            "env": "prod",
+            "instance": "checkout-7f9c.prod.acme.com:9100",
+            "service": "checkout-api"
+          },
+          "annotations": {
+            "summary": "checkout-api p99 latency above 2s for 5m",
+            "owner": "dana.reyes@acme.com",
+            "contact": "[REDACTED:emails:3fa9c1]"
+          },
+          "startsAt": "2026-05-04T10:12:00Z",
+          "generatorURL": "http://prometheus.acme.internal:9090/graph?g0.expr=latency"
+        }
+      ]
+    }
+  },
+  "source_types": {
+    "github": "github",
+    "k8s": "kubernetes",
+    "prometheus": "prometheus",
+    "signoz": "signoz"
+  },
+  "calls": [
+    {
+      "seq": 2,
+      "source": "signoz",
+      "tool": "search_logs",
+      "name": "signoz__search_logs",
+      "input": {"query": "pool timeout checkout", "service": "checkout-api", "start": "2026-05-04T09:50:00Z", "end": "2026-05-04T10:20:00Z", "limit": 100},
+      "status": "ok",
+      "text": "10:10:04 ERROR pq: timeout acquiring connection from pool (size=5) host=checkout-7f9c.prod.acme.com db=orders-db-1.prod.acme.com:5432 user=checkout_svc\n10:10:09 ERROR pq: timeout acquiring connection from pool (size=5) client=10.42.7.19\n{\"level\":\"error\",\"msg\":\"upstream failed\",\"host\":\"orders-db-1.prod.acme.com\",\"trace\":\"tokXYZ1234567890tokXYZ123456\"}",
+      "evidence": [
+        {"kind": "log_query", "title": "pool timeouts", "url": "https://signoz.acme.com/logs?q=pool&user=dana.reyes%40acme.com"}
+      ]
+    },
+    {
+      "seq": 4,
+      "source": "github",
+      "tool": "list_commits",
+      "name": "github__list_commits",
+      "input": {"repo": "acme/checkout", "since": "2026-05-04T08:00:00Z"},
+      "status": "ok",
+      "text": "abc1234 2026-05-04T10:05Z 'Lower DB pool size to 5 to save connections' by dana.reyes@acme.com",
+      "evidence": [
+        {"kind": "commit", "title": "abc1234", "url": "https://github.com/acme/checkout/commit/abc1234def5678"}
+      ]
+    },
+    {
+      "seq": 6,
+      "source": "github",
+      "tool": "get_commit",
+      "name": "github__get_commit",
+      "input": {"repo": "acme/checkout", "ref": "abc1234def5678"},
+      "status": "ok",
+      "text": "abc1234: config/database.yaml: pool_size 20 -> 5"
+    },
+    {
+      "seq": 8,
+      "source": "k8s",
+      "tool": "get_pod_events",
+      "name": "k8s__get_pod_events",
+      "input": {"namespace": "prod", "pod": "checkout-api-7f9c-x2"},
+      "status": "unavailable",
+      "text": "The source is unavailable."
+    },
+    {
+      "seq": 10,
+      "source": "prometheus",
+      "tool": "query",
+      "name": "prometheus__query",
+      "input": {"query": "rate(db_pool_wait_seconds_sum{instance=\"checkout-7f9c.prod.acme.com:9100\"}[5m])", "time": "2026-05-04T10:15:00Z"},
+      "status": "ok",
+      "text": "db_pool_wait_seconds_sum{instance=\"checkout-7f9c.prod.acme.com:9100\"} 0.2 0.9 4.1"
+    },
+    {
+      "seq": 12,
+      "source": "signoz",
+      "tool": "search_logs",
+      "name": "signoz__search_logs",
+      "input": {"query": "timeout pool", "service": "checkout-api", "limit": 50},
+      "status": "no_data",
+      "text": "The tool ran and found no data."
+    },
+    {
+      "seq": 14,
+      "source": "github",
+      "tool": "list_workflow_runs",
+      "name": "github__list_workflow_runs",
+      "input": {"repo": "acme/checkout"},
+      "status": "error",
+      "text": "rate limited"
+    }
+  ]
+}

@@ -72,7 +72,7 @@ export default function InvestigationPage() {
     <FeedbackProvider value={{ investigationId: id, canAct, parts: feedback.data, reportedVerdict: investigation.data.verdict }}>
       <div className="sk-inv">
         <div className="sk-inv__main">
-          <PageHeader inv={investigation.data} canAct={canAct} onAskFollowUp={() => followUpField.current?.focus()} />
+          <PageHeader inv={investigation.data} canAct={canAct} canExport={hasRole(me.role, "admin")} onAskFollowUp={() => followUpField.current?.focus()} />
           <VerdictPanel inv={investigation.data} steps={steps.length} />
           <WatcherBox
             watchers={watchers.data ?? []}

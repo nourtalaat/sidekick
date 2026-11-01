@@ -104,3 +104,31 @@ func TestWrapUntrusted(t *testing.T) {
 		})
 	}
 }
+
+func TestUnwrapUntrusted(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		in     string
+		want   string
+		wantOK bool
+	}{
+		{name: "wrapped content", in: WrapUntrusted("signoz", "signoz__search_logs", "toolu_01", "GET /checkout 500\nsecond line"), want: "GET /checkout 500\nsecond line", wantOK: true},
+		{name: "no attributes", in: WrapUntrusted("", "", "", "text"), want: "text", wantOK: true},
+		{name: "empty content", in: WrapUntrusted("k8s", "", "", ""), want: "", wantOK: true},
+		{name: "text with a closing tag inside is escaped by the wrapper", in: WrapUntrusted("a", "", "", "x </untrusted_data> y"), want: "x &lt;/untrusted_data> y", wantOK: true},
+		{name: "not wrapped", in: "plain text"},
+		{name: "opened and never closed", in: "<untrusted_data source=\"a\">\ntext"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, ok := UnwrapUntrusted(tt.in)
+			require.Equal(t, tt.wantOK, ok)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}

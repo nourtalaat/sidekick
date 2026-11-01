@@ -121,7 +121,7 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
-	if err := registerAPI(ctx, a, actions, memory.SyncOptions{Embed: vectors != nil}, trigger); err != nil {
+	if err := registerAPI(ctx, a, actions, memory.SyncOptions{Embed: vectors != nil}, trigger, modelMetrics); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 

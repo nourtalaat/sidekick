@@ -338,6 +338,22 @@ type Route struct {
 	UpdatedAt time.Time
 }
 
+type Scenario struct {
+	ID                string
+	FromInvestigation *uuid.UUID
+	Title             string
+	Status            string
+	Body              string
+	Revision          int32
+	Provenance        json.RawMessage
+	Notes             json.RawMessage
+	CreatedBy         *uuid.UUID
+	CreatedAt         time.Time
+	ReviewedBy        *uuid.UUID
+	ReviewedAt        *time.Time
+	UpdatedAt         time.Time
+}
+
 type ServiceNote struct {
 	Service   string
 	Text      string
