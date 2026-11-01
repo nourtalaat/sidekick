@@ -33,6 +33,12 @@ WHERE events.id = @event_id;
 -- trusted joins it. It reads one row by its primary key.
 SELECT mode FROM investigations WHERE id = @id;
 
+-- name: DowngradeInvestigationToApproved :execrows
+-- DowngradeInvestigationToApproved moves a read-write investigation to
+-- approved mode, so its proposals wait for a person. It changes nothing in
+-- any other mode. It writes one row by its primary key.
+UPDATE investigations SET mode = 'approved' WHERE id = @id AND mode = 'read-write';
+
 -- name: GetInvestigation :one
 SELECT * FROM investigations WHERE id = @id;
 

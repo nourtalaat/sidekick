@@ -66,6 +66,21 @@ func (q *Queries) AdvanceInvestigation(ctx context.Context, arg AdvanceInvestiga
 	return i, err
 }
 
+const downgradeInvestigationToApproved = `-- name: DowngradeInvestigationToApproved :execrows
+UPDATE investigations SET mode = 'approved' WHERE id = $1 AND mode = 'read-write'
+`
+
+// DowngradeInvestigationToApproved moves a read-write investigation to
+// approved mode, so its proposals wait for a person. It changes nothing in
+// any other mode. It writes one row by its primary key.
+func (q *Queries) DowngradeInvestigationToApproved(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, downgradeInvestigationToApproved, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const endFollowUpRun = `-- name: EndFollowUpRun :one
 UPDATE investigations
 SET status = $1, report = $2, finished_at = now(), run_kind = 'investigate'

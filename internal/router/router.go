@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -298,6 +299,12 @@ func (r *Router) handleRecovery(ctx context.Context, span trace.Span, log *slog.
 			return fmt.Errorf("recover: %w", err)
 		}
 
+		if linked {
+			if err := r.downgradeOnUntrustedEvent(ctx, tx, ev, res); err != nil {
+				return fmt.Errorf("group %s: %w", res.GroupID, err)
+			}
+		}
+
 		return nil
 	})
 	if err != nil {
@@ -385,6 +392,8 @@ func (r *Router) route(ctx context.Context, ev db.Event, rt route) (res grouper.
 		if err := r.startWatchers(ctx, tx, ev, rt, res); err != nil {
 			return grouper.Result{}, false, fmt.Errorf("group %s: %w", res.GroupID, err)
 		}
+	} else if err := r.downgradeOnUntrustedEvent(ctx, tx, ev, res); err != nil {
+		return grouper.Result{}, false, fmt.Errorf("group %s: %w", res.GroupID, err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -392,6 +401,41 @@ func (r *Router) route(ctx context.Context, ev db.Event, rt route) (res grouper.
 	}
 
 	return res, true, nil
+}
+
+// downgradeOnUntrustedEvent moves the read-write investigation that ev
+// joined, or that ev's recovery was linked to, to approved mode when ev is
+// not trusted and the group's route does not allow untrusted writes. The
+// text of such an event reaches the model, so what the model proposes next
+// waits for a person, as an event of that sender would have. It does
+// nothing for a group with no investigation.
+func (r *Router) downgradeOnUntrustedEvent(ctx context.Context, tx pgx.Tx, ev db.Event, res grouper.Result) error {
+	if res.InvestigationID == uuid.Nil {
+		return nil
+	}
+
+	routes := *r.routes.Load()
+
+	var allow bool
+	if i := slices.IndexFunc(routes, func(rt route) bool { return rt.name == res.Route }); i >= 0 {
+		allow = routes[i].allowUntrustedWrite
+	}
+
+	if action.EffectiveMode(action.ReadWrite, trust(ev), allow) == action.ReadWrite {
+		return nil
+	}
+
+	n, err := db.New(tx).DowngradeInvestigationToApproved(ctx, res.InvestigationID)
+	if err != nil {
+		return fmt.Errorf("move investigation %s to approved mode: %w", res.InvestigationID, err)
+	}
+
+	if n > 0 {
+		r.log.InfoContext(ctx, "read-write investigation moved to approved mode: an event that is not trusted joined it",
+			"event_id", ev.ID.String(), "investigation_id", res.InvestigationID.String(), "route", res.Route)
+	}
+
+	return nil
 }
 
 // startInvestigation creates the queued investigation of the group the
