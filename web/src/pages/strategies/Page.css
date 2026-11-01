@@ -1,0 +1,5 @@
+.sk-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sk-space-3);
+}

@@ -4,8 +4,9 @@
 // A strategy tells the investigation what to check first, the common causes
 // and the signs of a false positive for one kind of event. Strategies are
 // YAML files, decoded strictly: an unknown key is an error. File strategies
-// are read-only; Sidekick never writes them. Runtime strategies, stored in
-// Postgres with versions, come in a later milestone.
+// are read-only; Sidekick never writes them. Runtime strategies are stored
+// in Postgres with a new version for each save; the strategystore package
+// holds them, and this package checks them like any other strategy.
 package strategy
 
 import (
@@ -37,6 +38,9 @@ const (
 	BuiltIn Origin = "built-in"
 	// File strategies come from strategies.dir.
 	File Origin = "file"
+	// Runtime strategies are saved in the database, a new version with
+	// each save.
+	Runtime Origin = "runtime"
 )
 
 // Strategy is one investigation strategy.
@@ -72,10 +76,13 @@ type Strategy struct {
 	// only checked for shape until M1.
 	WatcherDefaults *WatcherSettings `yaml:"watcherDefaults"`
 
-	// Version is a hash of the file content, set when the strategy is
-	// loaded. Investigations record it, so results always refer to an exact
-	// version.
+	// Version is a hash of the file content for a built-in or file
+	// strategy, and runtime:<n> for version n of a runtime one. It is set
+	// when the strategy is loaded. Investigations record it, so results
+	// always refer to an exact version.
 	Version string `yaml:"-"`
+	// Body is the YAML the strategy was decoded from.
+	Body string `yaml:"-"`
 	// Origin says where the strategy was loaded from.
 	Origin Origin `yaml:"-"`
 	// Path is the file the strategy was loaded from. For a built-in

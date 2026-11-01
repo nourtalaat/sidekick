@@ -1522,6 +1522,35 @@ exists but cannot be read stops Sidekick from starting.
 - Each strategy's version is a hash of its file content, so every
   investigation records the exact strategy text it used.
 
+#### Strategies saved at runtime
+
+An admin can also save a strategy in the [web UI](web-ui.md#strategies) or
+through the API. It is stored in the database, and every save is a new
+version with its author and a required reason. A stored version is never
+changed or deleted.
+
+- The three kinds are layered by name: a runtime strategy replaces the
+  built-in strategy of the same name, and a strategy file replaces both.
+  Editing a built-in strategy in the UI saves a runtime strategy with its
+  name. A runtime strategy whose name a strategy file has is shown as
+  shadowed, and is used again if the file is removed.
+- A runtime strategy goes through the same checks as a strategy file, and
+  a save that fails them is refused with the path and line of each
+  problem.
+- The version of a runtime strategy is written `runtime:N`, where N is its
+  version number, so it cannot be mistaken for the hash of a file. An
+  investigation records the version it started with and keeps it: a
+  version saved later is used by investigations that start after it, and
+  a follow-up uses the text the first run had.
+- Every replica uses a saved version within seconds. Routes that name the
+  strategy, in the file or at runtime, use its newest version for the
+  investigations they start from then on.
+- A route in the config file names a strategy that is built in or in a
+  strategy file, and so does a route added at runtime. A strategy that
+  exists only at runtime is used when triage picks it, and when it has the
+  name of a built-in strategy, which replaces that one wherever it is
+  named.
+
 A strategy file looks like this. Unknown keys are errors, as in
 `sidekick.yaml`.
 
