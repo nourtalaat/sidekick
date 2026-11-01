@@ -9,6 +9,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/audit"
@@ -73,6 +75,9 @@ type Options struct {
 	Logger *slog.Logger
 	// Now returns the current time. Nil means time.Now.
 	Now func() time.Time
+	// TracerProvider makes the tracer of the action.execute spans. Nil
+	// means the global tracer provider.
+	TracerProvider trace.TracerProvider
 }
 
 // Service is the one place that creates proposals and moves them from one
@@ -129,6 +134,19 @@ func New(opts Options) (*Service, error) {
 	}
 
 	return s, nil
+}
+
+// tracerName names the tracer of this package.
+const tracerName = "github.com/nourtalaat/sidekick/internal/action/proposals"
+
+// tracer returns the tracer of the execute spans.
+func (o Options) tracer() trace.Tracer {
+	tp := o.TracerProvider
+	if tp == nil {
+		tp = otel.GetTracerProvider()
+	}
+
+	return tp.Tracer(tracerName)
 }
 
 // notAllowed returns why the route may not use the action now, or "" when
