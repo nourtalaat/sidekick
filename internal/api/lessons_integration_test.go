@@ -57,7 +57,7 @@ type lessonListBody struct {
 func setupLessons(t *testing.T) server {
 	t.Helper()
 
-	return setupWith(t, func(o *api.Options) { o.Lessons = lessons.NewStore(o.Pool) }, "fixture/investigations.sql", "fixture/lessons.sql")
+	return setupWith(t, func(o *api.Options) { o.Lessons = lessons.NewStore(o.Pool) }, "fixture/rules_api.sql", "fixture/investigations.sql", "fixture/lessons.sql")
 }
 
 func lessonIDsOf(l lessonListBody) []string {

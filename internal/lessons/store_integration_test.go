@@ -507,11 +507,12 @@ func TestUsed(t *testing.T) {
 	got, err := Used(t.Context(), pool, finalInvestigation, 50)
 	require.NoError(t, err)
 
-	// In the order they were written, with the status they have now.
+	// In the order they were written (these were all written at the same
+	// time, so by ID), with the status they have now.
 	require.Len(t, got, 3)
-	require.Equal(t, []uuid.UUID{lessonID(lessonDisabled), lessonID(lessonActive), lessonID(lessonGlobal)}, []uuid.UUID{got[0].ID, got[1].ID, got[2].ID})
-	require.Equal(t, StatusDisabled, got[0].Status)
-	require.Equal(t, Scope{Service: "checkout-api"}, got[1].Scope)
+	require.Equal(t, []uuid.UUID{lessonID(lessonActive), lessonID(lessonGlobal), lessonID(lessonDisabled)}, []uuid.UUID{got[0].ID, got[1].ID, got[2].ID})
+	require.Equal(t, Scope{Service: "checkout-api"}, got[0].Scope)
+	require.Equal(t, StatusDisabled, got[2].Status)
 
 	none, err := Used(t.Context(), pool, runningInvestigation, 50)
 	require.NoError(t, err)

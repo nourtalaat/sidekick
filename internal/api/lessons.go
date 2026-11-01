@@ -52,6 +52,9 @@ var _ LessonStore = (*lessons.Store)(nil)
 // knownLessonStatuses are the statuses the list can filter by.
 var knownLessonStatuses = []apigen.LessonStatus{apigen.LessonProposed, apigen.LessonActive, apigen.LessonDisabled, apigen.LessonRejected}
 
+// errLessonVersion answers an edit or approval that names no version.
+var errLessonVersion = problemf(http.StatusBadRequest, "version is required: send the version of the lesson you read.")
+
 // errBadLessonCursor means a cursor is not one GET /lessons returned.
 var errBadLessonCursor = errors.New("not a cursor")
 
@@ -114,6 +117,10 @@ func (s *server) CreateLesson(ctx context.Context, req apigen.CreateLessonReques
 func (s *server) UpdateLesson(ctx context.Context, req apigen.UpdateLessonRequestObject) (apigen.UpdateLessonResponseObject, error) {
 	body := req.Body
 
+	if body.Version < 1 {
+		return nil, errLessonVersion
+	}
+
 	e := lessons.Edit{Text: body.Text, Scope: lessonScopeOf(body.Scope)}
 	if body.Status != nil {
 		e.Status = string(*body.Status)
@@ -129,6 +136,10 @@ func (s *server) UpdateLesson(ctx context.Context, req apigen.UpdateLessonReques
 
 // ApproveLesson makes a lesson that waits for review active.
 func (s *server) ApproveLesson(ctx context.Context, req apigen.ApproveLessonRequestObject) (apigen.ApproveLessonResponseObject, error) {
+	if req.Body.Version < 1 {
+		return nil, errLessonVersion
+	}
+
 	stored, err := s.lessons.Approve(ctx, lessonActor(ctx), req.Id, req.Body.Version)
 	if err != nil {
 		return nil, lessonError(err)

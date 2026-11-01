@@ -336,8 +336,8 @@ under `/api/v1`:
   scope field. `POST /lessons/{id}/approve` makes a lesson that waits for
   review active and notes who approved it. `DELETE /lessons/{id}` deletes
   one, with the record of the investigations that used it.
-- An edit or approval sends the `version` it read. If the lesson changed
-  since, the answer is 409 with code `stale`; approving a lesson that does
+- An edit or approval sends the `version` it read (400 without one). If the
+  lesson changed since, the answer is 409 with code `stale`; approving a lesson that does
   not wait for review is 409 with code `not_proposed`. A text or scope that
   fails the checks is 422 with the field. Every change is written to the
   audit log.
