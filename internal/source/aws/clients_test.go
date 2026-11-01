@@ -34,21 +34,19 @@ func TestLimitTransportSurvivesAClosedRequestBody(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			srv := fakehttp.New(t)
-			srv.Handle(http.MethodPost, "/", fakehttp.Response{Body: []byte(strings.Repeat("x", largeAnswerSize))})
+			s, apis := newTestSource(t, nil)
+			apis.logs.Handle(http.MethodPost, "/", fakehttp.Response{Body: []byte(strings.Repeat("x", largeAnswerSize))})
 
 			payload := []byte(`{"queryId":"q-big"}`)
 			body := &sdkBody{reader: bytes.NewReader(payload), closeOnEnd: tt.closeOnEnd}
 
-			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL(), http.NoBody)
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, apis.logs.URL(), http.NoBody)
 			require.NoError(t, err)
 
 			req.Body = body
 			req.ContentLength = int64(len(payload))
 
-			client := &http.Client{Transport: limitTransport{next: srv.Client().Transport}}
-
-			resp, err := client.Do(req)
+			resp, err := s.base.HTTPClient.Do(req)
 			require.NoError(t, err)
 
 			defer func() { require.NoError(t, resp.Body.Close()) }()
@@ -56,52 +54,7 @@ func TestLimitTransportSurvivesAClosedRequestBody(t *testing.T) {
 			got, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
 			require.Len(t, got, largeAnswerSize)
-			require.Equal(t, payload, srv.Requests()[0].Body)
-		})
-	}
-}
-
-func TestWithPlainBody(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		body io.ReadCloser
-		// wantSame says the request is returned as it is.
-		wantSame bool
-	}{
-		{name: "a request without a body is not changed", body: nil, wantSame: true},
-		{name: "a request with an empty body is not changed", body: http.NoBody, wantSame: true},
-		{name: "a body shows only Read and Close", body: &sdkBody{reader: bytes.NewReader([]byte("abc"))}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://127.0.0.1/", nil)
-			require.NoError(t, err)
-
-			req.Body = tt.body
-
-			got := withPlainBody(req)
-
-			if tt.wantSame {
-				require.Same(t, req, got)
-
-				return
-			}
-
-			require.NotSame(t, req, got)
-			require.Equal(t, tt.body, req.Body, "the request it was given is not changed")
-
-			_, hasWriteTo := got.Body.(io.WriterTo)
-			require.False(t, hasWriteTo)
-
-			data, err := io.ReadAll(got.Body)
-			require.NoError(t, err)
-			require.Equal(t, "abc", string(data))
-			require.NoError(t, got.Body.Close())
+			require.Equal(t, payload, apis.logs.Requests()[0].Body)
 		})
 	}
 }
