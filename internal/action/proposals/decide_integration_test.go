@@ -28,7 +28,6 @@ func TestApprove(t *testing.T) {
 		wantAuditBy string
 	}{
 		{name: "a web user", by: Decider{UserID: anaUser}, wantUser: &anaUser, wantName: "Ana", wantAuditBy: "user"},
-		{name: "an API token", by: Decider{UserID: ciToken, Token: true}, wantUser: &ciToken, wantName: "ci-approver", wantAuditBy: "token"},
 		{name: "a Slack user", by: Decider{SlackUserID: "U01ABCDEF"}, wantSlack: new("U01ABCDEF"), wantAuditBy: "user"},
 	}
 
@@ -61,6 +60,30 @@ func TestApprove(t *testing.T) {
 			require.EqualValues(t, executeMaxAttempts, jobs[0].MaxAttempts)
 		})
 	}
+}
+
+// TestAnAPITokenCannotApprove checks that the service refuses a token, so
+// no caller can get around the check of the API, and that a token may
+// reject.
+func TestAnAPITokenCannotApprove(t *testing.T) {
+	t.Parallel()
+
+	h := setup(t)
+	id := h.propose(t, "call-1", noteInput)
+	other := h.propose(t, "call-2", noteInput)
+	token := Decider{UserID: ciToken, Token: true}
+
+	_, err := h.svc.Approve(t.Context(), id, token)
+	require.ErrorIs(t, err, ErrTokenCannotApprove)
+	require.Equal(t, "proposed", h.row(t, id).Status)
+	require.Equal(t, []string{AuditProposed}, h.auditActions(t, id))
+	require.Empty(t, h.jobs(t))
+
+	got, err := h.svc.Reject(t.Context(), other, token, "not now")
+	require.NoError(t, err)
+	require.Equal(t, action.StatusRejected, got.Status)
+	require.Equal(t, "ci-approver", got.DecidedByName)
+	require.Equal(t, []string{AuditProposed, AuditRejected}, h.auditActions(t, other))
 }
 
 func TestReject(t *testing.T) {

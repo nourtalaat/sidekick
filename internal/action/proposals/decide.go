@@ -27,6 +27,11 @@ const uniqueKeyPrefix = "action:"
 var (
 	// ErrExpired means the proposal was not decided before it expired.
 	ErrExpired = errors.New("the proposal expired before it was decided")
+	// ErrTokenCannotApprove means an API token tried to approve. Only a
+	// person who is signed in, or a Slack user, approves a proposal: a
+	// script that holds a token could otherwise approve every proposal,
+	// which is running actions without a person.
+	ErrTokenCannotApprove = errors.New("an action is approved by a person, not by an API token")
 	// ErrNotAllowed means the config does not allow the proposal any more:
 	// the route no longer lists its action or is read-only now, or the
 	// action is no longer defined. The error says which.
@@ -84,9 +89,13 @@ type ExecutePayload struct {
 // that the config still allows it. It returns the proposal as it is now.
 //
 // Of two people who decide at the same time, one wins and the other gets a
-// *DecidedError that names the winner. It returns ErrNotFound, ErrExpired
-// or ErrNotAllowed otherwise.
+// *DecidedError that names the winner. It returns ErrTokenCannotApprove for
+// an API token, and ErrNotFound, ErrExpired or ErrNotAllowed otherwise.
 func (s *Service) Approve(ctx context.Context, id uuid.UUID, by Decider) (action.Proposal, error) {
+	if by.Token {
+		return action.Proposal{}, ErrTokenCannotApprove
+	}
+
 	return s.decide(ctx, id, by, action.StatusApproved, "")
 }
 

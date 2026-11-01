@@ -1485,6 +1485,9 @@ How a proposal is handled:
   will run, with unusual characters spelled out.
 - A proposal waits for `proposalTTL`, then expires and can no longer be
   approved.
+- Only a person approves: someone signed in to the web UI, or a Slack user
+  with the approver role. An API token can list the proposals and reject
+  them, but an approval from a token is refused.
 - Approving checks again that the route still lists the action and is not
   read-only. Running checks that and the action's limits once more. If the
   config changed in between so that the proposal is no longer allowed, it
