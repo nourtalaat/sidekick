@@ -404,7 +404,7 @@ func startInvestigation(ctx context.Context, tx pgx.Tx, ev db.Event, rt route, r
 		Route:           rt.name,
 		Strategy:        &rt.strategy,
 		StrategyVersion: &rt.strategyVersion,
-		Mode:            string(action.EffectiveMode(rt.mode, trust(ev), false)),
+		Mode:            string(action.EffectiveMode(rt.mode, trust(ev), rt.allowUntrustedWrite)),
 		Status:          investigator.StatusQueued,
 		Connectors:      rt.connectors,
 		Budget:          rt.budget,
