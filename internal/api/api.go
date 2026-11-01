@@ -24,6 +24,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/problem"
 	"github.com/nourtalaat/sidekick/internal/proposals"
 	"github.com/nourtalaat/sidekick/internal/redact"
+	"github.com/nourtalaat/sidekick/internal/scenario"
 	"github.com/nourtalaat/sidekick/internal/strategy"
 	"github.com/nourtalaat/sidekick/internal/watch"
 )
@@ -101,6 +102,9 @@ type Options struct {
 	// group ends. Nil writes and shows the changes, but logs and counts
 	// nothing.
 	Watchers *watch.Recorder
+	// Scenarios exports, edits and reviews benchmark scenarios. Without it,
+	// those operations answer 503.
+	Scenarios *scenario.Service
 	// Now returns the current time. Nil means time.Now.
 	Now func() time.Time
 	// Logger gets the errors that answer 500. Nil logs nothing.
@@ -147,7 +151,7 @@ func New(opts Options) (http.Handler, error) {
 
 	srv := &server{
 		tokens: opts.Tokens, cfg: opts.Config, rules: opts.Rules, strategies: opts.Strategies, proposalReviewer: opts.ProposalReviewer, strategyBase: strategyBase, redactor: opts.Redactor, pool: opts.Pool, audit: opts.Audit,
-		hub: opts.Hub, log: log, stopper: opts.Stopper, watchers: opts.Watchers, now: now,
+		hub: opts.Hub, log: log, stopper: opts.Stopper, watchers: opts.Watchers, now: now, scenarios: opts.Scenarios,
 		feedbackMetrics: opts.Feedback, memory: opts.Memory, proposals: opts.Proposals, draftLessons: opts.DraftLessons, lessons: opts.Lessons, memoryEntries: opts.MemoryStore,
 		streamHeartbeat: cmp.Or(opts.StreamHeartbeat, DefaultStreamHeartbeat),
 		streamLifetime:  cmp.Or(opts.StreamLifetime, DefaultStreamLifetime),

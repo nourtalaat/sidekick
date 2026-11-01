@@ -1398,6 +1398,174 @@ paths:
                 $ref: "#/components/schemas/FixApplied"
         default:
           $ref: "#/components/responses/Problem"
+  /investigations/{id}/scenario-draft:
+    post:
+      operationId: CreateScenarioDraft
+      summary: Export a confirmed investigation as a benchmark scenario draft
+      description: |
+        Builds a draft of a benchmark scenario from the investigation and
+        saves it: the payload of the alert that opened it, one fixture for
+        each recorded source call, the confirmed verdict and cause as the
+        expected outcome, and rubric items drafted by the `summarize` model
+        when one is configured. Fixtures keep only the arguments that
+        identify a query. Emails, user names, account IDs, host names and
+        IP addresses are replaced by numbered placeholders such as `host-1`,
+        the same everywhere in the scenario, and the draft is refused if
+        anything of that kind is left.
+
+        The draft has to be reviewed (`POST /scenarios/{id}/review`) before
+        it can be run or downloaded. An investigation that has a scenario
+        already answers 200 with it and builds nothing. The investigation
+        must be confirmed (409 otherwise), and the alert that opened it
+        must have come in on a webhook endpoint that is still in the
+        config; a Slack or Teams message cannot be exported (422).
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/InvestigationID"
+      responses:
+        "200":
+          description: The investigation had a scenario already.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Scenario"
+        "201":
+          description: The new draft.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Scenario"
+        default:
+          $ref: "#/components/responses/Problem"
+  /scenarios:
+    get:
+      operationId: ListScenarios
+      summary: Benchmark scenarios, most recently changed first, a page at a time
+      x-sidekick-role: admin
+      parameters:
+        - name: status
+          in: query
+          description: Only scenarios with this status.
+          schema:
+            $ref: "#/components/schemas/ScenarioStatus"
+        - name: cursor
+          in: query
+          description: The nextCursor of the page before.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: A page of scenarios.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /scenarios/{id}:
+    get:
+      operationId: GetScenario
+      summary: A scenario with what a reviewer needs to check it
+      description: |
+        The scenario file, what the exporter skipped or merged, the places
+        the cleaner kept but could not classify, and each part of the
+        scenario next to the recorded original it was made from. The
+        originals are read while the investigation's events and steps are
+        kept; later they are left out.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/ScenarioID"
+      responses:
+        "200":
+          description: The scenario.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioDetail"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      operationId: UpdateScenario
+      summary: Replace the file of a scenario
+      description: |
+        Replaces the scenario file. It must be a valid scenario with the same
+        id, and hold no email, host name or IP address (422 otherwise).
+        `revision` is the revision the editor read; if the scenario changed
+        since, the answer is 409. Whatever the status was, the scenario is a
+        draft again afterwards and has to be reviewed again.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/ScenarioID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScenarioUpdate"
+      responses:
+        "200":
+          description: The scenario, as a draft.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Scenario"
+        default:
+          $ref: "#/components/responses/Problem"
+  /scenarios/{id}/review:
+    post:
+      operationId: ReviewScenario
+      summary: Mark a scenario draft as reviewed
+      description: |
+        Needs `sensitiveDataChecked` true: the reviewer says they checked
+        the scenario for sensitive data. The file is checked again first.
+        `revision` is the revision the reviewer read; if the scenario
+        changed since, the answer is 409. API tokens are refused with 403,
+        since a person has to review. Only reviewed scenarios can be run or
+        downloaded.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/ScenarioID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScenarioReview"
+      responses:
+        "200":
+          description: The reviewed scenario.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Scenario"
+        default:
+          $ref: "#/components/responses/Problem"
+  /scenarios/{id}/file:
+    get:
+      operationId: GetScenarioFile
+      summary: Download a reviewed scenario
+      description: |
+        The scenario file, as an attachment. A scenario that is not reviewed
+        answers 409. The download is written to the audit log.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/ScenarioID"
+      responses:
+        "200":
+          description: The scenario file.
+          content:
+            application/yaml:
+              schema:
+                type: string
+        default:
+          $ref: "#/components/responses/Problem"
   /stats/quality:
     get:
       operationId: GetQualityStats
@@ -1660,6 +1828,14 @@ components:
       schema:
         type: string
         format: uuid
+    ScenarioID:
+      name: id
+      in: path
+      required: true
+      description: The id of a scenario.
+      schema:
+        type: string
+        pattern: "^[a-z0-9][a-z0-9._-]{0,99}$"
     StatsFrom:
       name: from
       in: query
@@ -3647,6 +3823,131 @@ components:
           type: string
         durationMs:
           type: integer
+    ScenarioStatus:
+      type: string
+      enum: [draft, reviewed]
+    Scenario:
+      type: object
+      required: [id, title, status, revision, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        status:
+          $ref: "#/components/schemas/ScenarioStatus"
+        revision:
+          type: integer
+          format: int32
+          description: Counts the edits. Review and update send the revision they read.
+        investigationId:
+          type: string
+          format: uuid
+          description: The investigation the scenario was exported from, until it is deleted.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        reviewedAt:
+          type: string
+          format: date-time
+        reviewedBy:
+          type: string
+          description: The name of the user who reviewed it.
+    ScenarioList:
+      type: object
+      required: [scenarios]
+      properties:
+        scenarios:
+          type: array
+          items:
+            $ref: "#/components/schemas/Scenario"
+        nextCursor:
+          type: string
+          description: Pass it as `cursor` for the next page. Absent on the last page.
+    ScenarioDetail:
+      type: object
+      required: [scenario, body, notes, candidates, pairs]
+      properties:
+        scenario:
+          $ref: "#/components/schemas/Scenario"
+        body:
+          type: string
+          description: The scenario file, as YAML.
+        notes:
+          type: array
+          description: What the exporter skipped, merged or dropped, in words.
+          items:
+            $ref: "#/components/schemas/ScenarioNote"
+        candidates:
+          type: array
+          description: Places the cleaner kept that look like IDs, for the reviewer to check.
+          items:
+            $ref: "#/components/schemas/ScenarioCandidate"
+        pairs:
+          type: array
+          description: Each part of the scenario next to the recorded original it was made from.
+          items:
+            $ref: "#/components/schemas/ScenarioPair"
+    ScenarioNote:
+      type: object
+      required: [kind, text]
+      properties:
+        kind:
+          type: string
+        text:
+          type: string
+    ScenarioCandidate:
+      type: object
+      required: [path, start, end, reason]
+      properties:
+        path:
+          type: string
+          description: The field, for example `sources.signoz.fixtures[0].responses[0].text`.
+        start:
+          type: integer
+          description: Byte offset into the field's text where the value starts.
+        end:
+          type: integer
+        reason:
+          type: string
+    ScenarioPair:
+      type: object
+      required: [ref, label, cleaned]
+      properties:
+        ref:
+          type: string
+        label:
+          type: string
+        original:
+          type: string
+          description: What the investigation recorded, redacted when it was stored. Absent when it is not shown; `note` says why.
+        cleaned:
+          type: string
+        note:
+          type: string
+    ScenarioUpdate:
+      type: object
+      required: [revision, body]
+      properties:
+        revision:
+          type: integer
+          format: int32
+        body:
+          type: string
+          description: The whole scenario file, as YAML.
+    ScenarioReview:
+      type: object
+      required: [revision, sensitiveDataChecked]
+      properties:
+        revision:
+          type: integer
+          format: int32
+        sensitiveDataChecked:
+          type: boolean
+          description: Must be true. The reviewer says they checked the scenario for sensitive data.
     Problem:
       type: object
       description: Problem details, as RFC 9457 describes.

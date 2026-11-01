@@ -16,6 +16,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/proposals"
 	"github.com/nourtalaat/sidekick/internal/redact"
+	"github.com/nourtalaat/sidekick/internal/scenario"
 	"github.com/nourtalaat/sidekick/internal/strategy"
 	"github.com/nourtalaat/sidekick/internal/watch"
 )
@@ -47,6 +48,8 @@ type server struct {
 	stopper  *watch.Stopper
 	watchers *watch.Recorder
 	now      func() time.Time
+	// scenarios exports, edits and reviews benchmark scenarios.
+	scenarios *scenario.Service
 
 	streamHeartbeat time.Duration
 	streamLifetime  time.Duration

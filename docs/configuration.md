@@ -85,7 +85,7 @@ model:
     investigate: claude      # required, and the model must be able to call tools
     triage: claude           # optional; see "Triage" in investigations.md
     judge: claude            # grades benchmark runs; must call tools; default: the investigate connector
-    summarize: claude
+    summarize: claude        # shortens old tool results; drafts the rubric of exported scenarios (see benchmark.md)
   prices:
     claude-opus-5-5: { inputPerMTok: 4, outputPerMTok: 20, cacheReadPerMTok: 0.2, cacheWritePerMTok: 5 }   # replaces the shipped price
 ```
@@ -1973,14 +1973,18 @@ whether or not proposals are on.
   `over_budget`.
 - `publicDir` is a directory with the public benchmark scenarios (see
   [the public scenarios](benchmark.md#the-public-scenarios)) that the gate
-  chooses from. It is the only source of scenarios for now, so proposals need
-  it: Sidekick logs a warning at start-up when proposals are on and it is
-  empty. Sidekick does not
+  chooses from, together with the reviewed scenarios of the database
+  (exported from confirmed investigations, see
+  [Exporting a real investigation](benchmark.md#exporting-a-real-investigation)).
+  Either source is enough; Sidekick logs a note at start-up when proposals are
+  on and `publicDir` is empty, since only reviewed scenarios can then be
+  chosen. Sidekick does not
   ship them in its image: mount a checkout of the repository, or just its
   `bench` directory, and set `publicDir` to `<checkout>/bench/scenarios/public`
   and `baseDir` to `<checkout>`, since the tool snapshots the scenarios name
-  are relative to it. Empty means the gate has no scenario, and every gate ends
-  with `no_benchmark_coverage`.
+  are relative to it, also those of the reviewed scenarios. Empty means the
+  gate has only the reviewed scenarios, and a gate with none that covers the
+  strategy ends with `no_benchmark_coverage`.
 
 The gate runs its investigations in a schema of its own in the database of
 `database.urlSecret`, and drops it at the end, so they never mix with real

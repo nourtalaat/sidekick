@@ -34,3 +34,8 @@ RETURNING *;
 SELECT
   coalesce((SELECT u.name FROM users u WHERE u.id = @id::uuid), (SELECT t.name FROM api_tokens t WHERE t.id = @id::uuid), '')::text AS name,
   EXISTS (SELECT 1 FROM api_tokens t WHERE t.id = @id::uuid) AS is_token;
+
+-- name: ListUserNames :many
+-- ListUserNames returns the name of each user with one of ids. An ID that
+-- is not a user is left out.
+SELECT id, name FROM users WHERE id = ANY (@ids::uuid[]);

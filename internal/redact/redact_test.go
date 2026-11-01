@@ -520,3 +520,36 @@ func placeholderFor(key []byte, rule, value string) string {
 func fakeJWTPart(json string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(json))
 }
+
+func TestSpans(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		builtIn []string
+		in      string
+		// want are the matched values with their rules, in order.
+		want [][2]string
+	}{
+		{name: "email and ip", builtIn: []string{Emails, IPAddresses}, in: "mail bob@example.com from 10.1.2.3 now", want: [][2]string{{"bob@example.com", Emails}, {"10.1.2.3", IPAddresses}}},
+		{name: "rule off", builtIn: []string{Emails}, in: "from 10.1.2.3", want: nil},
+		{name: "existing placeholder is skipped", builtIn: []string{Emails}, in: "[REDACTED:emails:0a1b2c] and bob@example.com", want: [][2]string{{"bob@example.com", Emails}}},
+		{name: "nothing", builtIn: []string{Emails, IPAddresses}, in: "plain text", want: nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			r, err := New(Options{BuiltIn: tt.builtIn, HashKey: testKey})
+			require.NoError(t, err)
+
+			var got [][2]string
+			for _, sp := range r.Spans(tt.in) {
+				got = append(got, [2]string{tt.in[sp.Start:sp.End], sp.Rule})
+			}
+
+			require.Equal(t, tt.want, got)
+		})
+	}
+}

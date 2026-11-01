@@ -134,6 +134,28 @@ func (r *Redactor) Text(s string) Result {
 	return Result{Text: out.text, Stats: Stats{Truncated: truncated, Counts: out.counts}}
 }
 
+// Span is one value a rule finds in a text, as byte offsets into it.
+type Span struct {
+	Start, End int
+	// Rule is the name of the rule that found the value.
+	Rule string
+}
+
+// Spans returns where the rules find values in s, in order and without
+// overlaps, without changing s. Text that is already a placeholder is not
+// reported. It does not cut s to MaxSize.
+func (r *Redactor) Spans(s string) []Span {
+	protected := placeholderPattern.FindAllStringIndex(s, -1)
+	matches := r.matches(s, protected)
+
+	out := make([]Span, len(matches))
+	for i, m := range matches {
+		out[i] = Span{Start: m.start, End: m.end, Rule: r.rules[m.rule].name}
+	}
+
+	return out
+}
+
 // redacted is the output of redact.
 type redacted struct {
 	text   string
