@@ -189,12 +189,12 @@ func (s *Store) Update(ctx context.Context, actor Actor, id uuid.UUID, e Edit) (
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		cur, err := lockEntry(ctx, tx, id)
 		if err != nil {
-			return err
+			return fmt.Errorf("lock the entry: %w", err)
 		}
 
 		next, err := s.checked(cur, e)
 		if err != nil {
-			return err
+			return fmt.Errorf("check the edit: %w", err)
 		}
 
 		if next == cur {
@@ -237,7 +237,7 @@ func (s *Store) Delete(ctx context.Context, actor Actor, id uuid.UUID) error {
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		cur, err := lockEntry(ctx, tx, id)
 		if err != nil {
-			return err
+			return fmt.Errorf("lock the entry: %w", err)
 		}
 
 		if _, err := db.New(tx).DeleteMemoryEntry(ctx, id); err != nil {
@@ -289,12 +289,12 @@ func (s *Store) checked(cur Entry, e Edit) (Entry, error) {
 
 	summary, err := s.checkText("summary", e.Summary, cur.Summary, MaxSummaryChars, true)
 	if err != nil {
-		return Entry{}, err
+		return Entry{}, fmt.Errorf("check the summary: %w", err)
 	}
 
 	cause, err := s.checkText("cause", e.Cause, cur.Cause, MaxCauseChars, false)
 	if err != nil {
-		return Entry{}, err
+		return Entry{}, fmt.Errorf("check the cause: %w", err)
 	}
 
 	next.Summary, next.Cause = summary, cause
@@ -374,7 +374,11 @@ func entryOf(row db.GetMemoryEntryRow) Entry {
 // writeAudit writes the audit entry of a change to the memory entry of
 // investigation id.
 func writeAudit(ctx context.Context, tx pgx.Tx, actor Actor, action string, id uuid.UUID, before, after any) error {
-	return writeAuditFor(ctx, tx, actor, action, auditTargetEntry, id.String(), &id, before, after)
+	if err := writeAuditFor(ctx, tx, actor, action, auditTargetEntry, id.String(), &id, before, after); err != nil {
+		return fmt.Errorf("audit the change to memory entry %s: %w", id, err)
+	}
+
+	return nil
 }
 
 // writeAuditFor writes the audit entry of a change to what kind and target
