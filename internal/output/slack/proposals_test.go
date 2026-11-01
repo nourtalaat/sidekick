@@ -258,6 +258,8 @@ func TestChunksOf(t *testing.T) {
 		{name: "fits", text: "abc", size: 5, want: []string{"abc"}},
 		{name: "cuts at a line end", text: "aaaa\nbbbb\ncccc", size: 7, want: []string{"aaaa\n", "bbbb\n", "cccc"}},
 		{name: "cuts inside a long line", text: "abcdefghij", size: 4, want: []string{"abcd", "efgh", "ij"}},
+		{name: "counts an escape whole", text: "a&b", size: 5, want: []string{"a", "&amp;", "b"}},
+		{name: "always takes a character", text: "<<", size: 1, want: []string{"&lt;", "&lt;"}},
 	}
 
 	for _, tt := range tests {
@@ -266,7 +268,63 @@ func TestChunksOf(t *testing.T) {
 
 			got := chunksOf(tt.text, tt.size)
 			require.Equal(t, tt.want, got)
-			require.Equal(t, tt.text, strings.Join(got, ""))
+			require.Equal(t, escape(tt.text), strings.Join(got, ""))
 		})
 	}
+}
+
+// TestChunksNeverCutAnEscape cuts a single line of characters that escape
+// into several characters, many times over, at every size from 5 up: the
+// pieces joined are exactly the escaped text, and none ends or starts in
+// the middle of an entity.
+func TestChunksNeverCutAnEscape(t *testing.T) {
+	t.Parallel()
+
+	text := strings.Repeat(`a&b<c>d`, 700)
+
+	for size := 5; size <= 40; size++ {
+		t.Run(strconv.Itoa(size), func(t *testing.T) {
+			t.Parallel()
+
+			chunks := chunksOf(text, size)
+			require.Greater(t, len(chunks), 1)
+			require.Equal(t, escape(text), strings.Join(chunks, ""))
+
+			for _, c := range chunks {
+				require.LessOrEqual(t, len([]rune(c)), size)
+				require.Equal(t, strings.Count(c, "&"), strings.Count(c, ";"), "every & in a piece has its ; there: %q", c)
+			}
+		})
+	}
+}
+
+// TestALongLineOfEscapesIsShownWholeInBlocks puts the same line in a
+// proposal, so it is split into several code blocks.
+func TestALongLineOfEscapesIsShownWholeInBlocks(t *testing.T) {
+	t.Parallel()
+
+	p := waitingProposal()
+	p.Params = []byte(`{"q": "` + strings.Repeat("a&b<c>d", 250) + `"}`)
+	p.ParamsText = action.DisplayParams(p.Params)
+
+	u := runningUpdate(1)
+	u.Proposals = []action.Proposal{p}
+
+	var shown strings.Builder
+
+	sections := 0
+
+	for _, b := range proposalBlocks(u) {
+		if b.Type == blockSection && b.Text != nil && strings.Contains(b.Text.Text, "```") {
+			sections++
+
+			require.LessOrEqual(t, len(b.Text.Text), 3000)
+
+			shown.WriteString(strings.NewReplacer("*Parameters, exactly as they will run*\n", "", "```", "").Replace(b.Text.Text))
+		}
+	}
+
+	require.Greater(t, sections, 1)
+	require.Equal(t, escape(p.ParamsText), shown.String())
+	require.Contains(t, buttonsOf(proposalBlocks(u)), ActionApproveProposal)
 }

@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useDecideProposal, type Proposal, type ProposalStatus } from "../api/proposals";
 import { formatTime } from "../format";
@@ -117,25 +117,50 @@ function Outcome({ proposal }: { proposal: Proposal }) {
   return null;
 }
 
-/** Approve, and Reject with an optional note. A refused decision shows the reason the server gave. */
+/**
+ * Approve and Reject. Each asks once more before it sends anything: Approve
+ * to confirm that the action runs with the parameters above, as the Slack
+ * button does, and Reject for an optional note. A refused decision shows the
+ * reason the server gave.
+ */
 function Decide({ proposal }: { proposal: Proposal }) {
   const decide = useDecideProposal(proposal.id, proposal.investigationId);
-  const [rejecting, setRejecting] = useState(false);
+  const [step, setStep] = useState<"choose" | "approve" | "reject">("choose");
   const [note, setNote] = useState("");
+  const confirm = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (step === "approve") {
+      confirm.current?.focus();
+    }
+  }, [step]);
 
   return (
     <div className="sk-proposal__reject">
-      <div className="sk-proposal__buttons">
-        <Button variant="primary" disabled={decide.isPending} aria-label={`Approve ${proposal.action}`} onClick={() => decide.mutate({ kind: "approve" })}>
-          Approve
-        </Button>
-        {!rejecting && (
-          <Button variant="destructive" disabled={decide.isPending} aria-label={`Reject ${proposal.action}`} onClick={() => setRejecting(true)}>
+      {step === "choose" && (
+        <div className="sk-proposal__buttons">
+          <Button variant="primary" aria-label={`Approve ${proposal.action}`} onClick={() => setStep("approve")}>
+            Approve
+          </Button>
+          <Button variant="destructive" aria-label={`Reject ${proposal.action}`} onClick={() => setStep("reject")}>
             Reject
           </Button>
-        )}
-      </div>
-      {rejecting && (
+        </div>
+      )}
+      {step === "approve" && (
+        <div role="group" aria-label={`Confirm approving ${proposal.action}`} className="sk-proposal__reject">
+          <p className="sk-proposal__text">{`Run ${proposal.action} with the parameters above?`}</p>
+          <div className="sk-proposal__buttons">
+            <Button ref={confirm} variant="primary" disabled={decide.isPending} onClick={() => decide.mutate({ kind: "approve" })}>
+              Approve it
+            </Button>
+            <Button disabled={decide.isPending} onClick={() => setStep("choose")}>
+              Not yet
+            </Button>
+          </div>
+        </div>
+      )}
+      {step === "reject" && (
         <>
           <TextArea
             label="Why reject it? (optional)"
@@ -148,7 +173,7 @@ function Decide({ proposal }: { proposal: Proposal }) {
             <Button variant="destructive" disabled={decide.isPending} onClick={() => decide.mutate({ kind: "reject", note })}>
               Reject it
             </Button>
-            <Button disabled={decide.isPending} onClick={() => setRejecting(false)}>
+            <Button disabled={decide.isPending} onClick={() => setStep("choose")}>
               Keep it
             </Button>
           </div>

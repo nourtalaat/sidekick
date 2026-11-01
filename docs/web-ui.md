@@ -567,7 +567,7 @@ investigation, when it expires, the parameters whole, exactly as the action
 will run with them, and the model's reason, which is the model's own words
 and not checked. The parameters are plain text in which characters that
 could hide something, such as right-to-left marks and zero-width spaces,
-are written as `\u` escapes, and nothing is cut. Approve runs the action
+are written as `\u` escapes, and nothing is cut. Approve asks to confirm, as it does in Slack, and then runs the action
 once; Reject takes an optional note for the audit log. Of two people who
 decide at the same moment, one decides and the other is told who did. A
 proposal that expired, or that the config no longer allows because its

@@ -55,8 +55,29 @@ describe("ProposalCard", () => {
 
     await user.click(screen.getByRole("button", { name: "Approve monitor-note" }));
 
+    expect(sent).toHaveLength(0);
+    expect(screen.getByText("Run monitor-note with the parameters above?")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Approve it" }));
+
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]).toEqual({ path: `${BASE}/approve`, csrf: "csrf-ada", body: undefined });
+  });
+
+  it("asks before it approves, and sends nothing if the person is not sure", async () => {
+    const user = userEvent.setup();
+    const { api, sent } = server();
+    renderWithProviders(<ProposalCard proposal={proposal()} canDecide />, { api });
+
+    await user.click(screen.getByRole("button", { name: "Approve monitor-note" }));
+
+    expect(screen.getByRole("button", { name: "Approve it" })).toHaveFocus();
+
+    await user.click(screen.getByRole("button", { name: "Not yet" }));
+
+    expect(screen.queryByText("Run monitor-note with the parameters above?")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve monitor-note" })).toBeInTheDocument();
+    expect(sent).toHaveLength(0);
   });
 
   it("rejects with a note", async () => {
@@ -91,6 +112,7 @@ describe("ProposalCard", () => {
     renderWithProviders(<ProposalCard proposal={proposal()} canDecide />, { api });
 
     await user.click(screen.getByRole("button", { name: "Approve monitor-note" }));
+    await user.click(screen.getByRole("button", { name: "Approve it" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("This proposal is rejected already; Bo decided it.");
   });
@@ -140,8 +162,13 @@ describe("ProposalCard", () => {
     expect(screen.getByRole("link", { name: "checkout-api p99 latency above 2s" })).toHaveAttribute("href", "/investigations/0192d3a4-0000-7000-8000-0000000000e2");
   });
 
-  it("has no WCAG 2.2 AA violations", async () => {
+  it("has no WCAG 2.2 AA violations, also while it asks to confirm", async () => {
+    const user = userEvent.setup();
     const { container } = renderWithProviders(<ProposalCard proposal={proposal({ status: "proposed" })} canDecide />);
+
+    expect(await wcagViolations(container)).toEqual([]);
+
+    await user.click(screen.getByRole("button", { name: "Approve monitor-note" }));
 
     expect(await wcagViolations(container)).toEqual([]);
   });

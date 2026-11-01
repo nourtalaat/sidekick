@@ -90,11 +90,10 @@ func proposalRank(p action.Proposal) int {
 func pendingProposal(u output.Update, p action.Proposal) []block {
 	blocks := []block{section(fmt.Sprintf(":bulb: *Proposed action: %s*\n%s", escape(cut(p.Action, maxTitleChars)), expiryLine(p)))}
 
-	text := escape(p.ParamsText)
-	complete := len([]rune(text)) <= maxParamsChars
+	complete := escapedLen(p.ParamsText) <= maxParamsChars
 
 	if complete {
-		for i, chunk := range chunksOf(text, maxParamsChunk) {
+		for i, chunk := range chunksOf(p.ParamsText, maxParamsChunk) {
 			heading := ""
 			if i == 0 {
 				heading = "*Parameters, exactly as they will run*\n"
@@ -205,25 +204,65 @@ func resultPart(p action.Proposal) string {
 	return ": " + strings.Join(parts, " · ")
 }
 
-// chunksOf cuts text into pieces of at most size characters, at line ends
-// where it can.
+// chunksOf cuts text into pieces whose escaped text has at most size
+// characters, at line ends where it can, and returns each piece escaped.
+// Text is cut before it is escaped, so a cut never falls inside an escape
+// such as &lt; and the pieces, joined, are exactly escape(text).
 func chunksOf(text string, size int) []string {
 	runes := []rune(text)
 
 	var chunks []string
 
-	for len(runes) > size {
-		cutAt := size
+	for {
+		fit, width := 0, 0
 
-		if i := lastNewline(runes[:size]); i > size/2 {
+		for fit < len(runes) && width+escapedWidth(runes[fit]) <= size {
+			width += escapedWidth(runes[fit])
+			fit++
+		}
+
+		if fit == len(runes) {
+			return append(chunks, escape(string(runes)))
+		}
+
+		cutAt := max(fit, 1)
+
+		if i := lastNewline(runes[:fit]); i >= fit/2 && i >= 0 {
 			cutAt = i + 1
 		}
 
-		chunks = append(chunks, string(runes[:cutAt]))
+		chunks = append(chunks, escape(string(runes[:cutAt])))
 		runes = runes[cutAt:]
+
+		if len(runes) == 0 {
+			return chunks
+		}
+	}
+}
+
+// escapedLen is the length of escape(text) in characters.
+func escapedLen(text string) int {
+	n := 0
+
+	for _, r := range text {
+		n += escapedWidth(r)
 	}
 
-	return append(chunks, string(runes))
+	return n
+}
+
+// escapedWidth is how many characters r takes once escaped.
+func escapedWidth(r rune) int {
+	switch r {
+	case '&':
+		return len("&amp;")
+	case '<':
+		return len("&lt;")
+	case '>':
+		return len("&gt;")
+	default:
+		return 1
+	}
 }
 
 // lastNewline returns the index of the last newline in runes, or -1.
