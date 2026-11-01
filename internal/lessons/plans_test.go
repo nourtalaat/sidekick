@@ -5,6 +5,8 @@ package lessons
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,6 +47,9 @@ func TestQueryPlans(t *testing.T) {
 		name      string
 		run       func(ctx context.Context, q *db.Queries) error
 		wantIndex []string
+		// wantOneOf are indexes of which the plan uses at least one, for a
+		// query that two indexes serve about equally.
+		wantOneOf []string
 		// allowSeqScan is set for a query that counts every row of a table,
 		// which cannot avoid reading it.
 		allowSeqScan bool
@@ -116,7 +121,8 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"lessons_status_created", "feedback_pkey"},
+			wantIndex: []string{"feedback_pkey"},
+			wantOneOf: []string{"lessons_status_created", "lessons_created"},
 		},
 		{
 			name: "ListLessonsAfterACursor",
@@ -126,7 +132,44 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"lessons_status_created"},
+			wantOneOf: []string{"lessons_status_created", "lessons_created"},
+		},
+		{
+			name: "ListLessonsOfEveryStatus",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListLessons(ctx, db.ListLessonsParams{PageSize: 51})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"lessons_created", "feedback_pkey"},
+		},
+		{
+			name: "ListLessonsOfEveryStatusAfterACursor",
+			run: func(ctx context.Context, q *db.Queries) error {
+				at, id := time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC), md5UUID(t, pool, "lesson5100")
+				_, err := q.ListLessons(ctx, db.ListLessonsParams{AfterAt: &at, AfterID: &id, PageSize: 51})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"lessons_created"},
+		},
+		{
+			name: "ListLessonsOfAService",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListLessons(ctx, db.ListLessonsParams{Service: new("svc-7"), PageSize: 51})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"lessons_service_created", "feedback_pkey"},
+		},
+		{
+			name: "ListLessonsWithWords",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListLessons(ctx, db.ListLessonsParams{Search: new("4242"), PageSize: 51})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"lessons_search_all"},
 		},
 		{
 			name: "GetLesson",
@@ -231,6 +274,11 @@ func TestQueryPlans(t *testing.T) {
 
 			for _, index := range tt.wantIndex {
 				require.Contains(t, explain.Plan, index)
+			}
+
+			if len(tt.wantOneOf) > 0 {
+				require.True(t, slices.ContainsFunc(tt.wantOneOf, func(index string) bool { return strings.Contains(explain.Plan, index) }),
+					"want one of %v in the plan", tt.wantOneOf)
 			}
 
 			if !tt.allowSeqScan {

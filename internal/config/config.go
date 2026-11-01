@@ -49,6 +49,18 @@ const (
 	DefaultLogLevel       = LogLevelInfo
 	// DefaultStrategy is the strategy of a route that names none.
 	DefaultStrategy = strategy.GenericAlert
+	// DefaultProposalWrongThreshold is how many ratings of wrong make a
+	// strategy version get a proposal.
+	DefaultProposalWrongThreshold = 3
+	// DefaultProposalWindow is how far back those ratings are counted.
+	DefaultProposalWindow = 14 * Day
+	// MinGateRepeats is the fewest times a gate runs each scenario. The
+	// config cannot set bench.gate.minRepeats lower.
+	MinGateRepeats = 5
+	// DefaultGateMaxDrop is the default of bench.gate.maxDrop.
+	DefaultGateMaxDrop = 0.02
+	// DefaultGateMaxCostUSD is the default of bench.gate.maxCostUSD.
+	DefaultGateMaxCostUSD = 5.0
 )
 
 // DefaultRouteName is the name of the route that takes every event no other
@@ -74,6 +86,7 @@ type Config struct {
 	Outputs    map[string]Section `yaml:"outputs"`
 	Actions    Actions            `yaml:"actions"`
 	Strategies Strategies         `yaml:"strategies"`
+	Bench      Bench              `yaml:"bench"`
 	Routes     []Route            `yaml:"routes"`
 	Budgets    Budgets            `yaml:"budgets"`
 	Report     Report             `yaml:"report"`
@@ -178,6 +191,56 @@ type Strategies struct {
 	// written. Empty, or a directory that does not exist, means only the
 	// built-in strategies are used.
 	Dir string `yaml:"dir"`
+	// Proposals says when wrong feedback leads to a proposed change to a
+	// strategy.
+	Proposals StrategyProposals `yaml:"proposals"`
+}
+
+// StrategyProposals says when a strategy version gets a proposed change. A
+// proposal costs one summarize call to draft and at least twice
+// bench.gate.minRepeats benchmark runs of every scenario that covers the
+// strategy to check, so it is off unless enabled.
+type StrategyProposals struct {
+	// Enabled turns proposals on. Off, nothing is counted, drafted or run,
+	// and nothing is spent.
+	Enabled bool `yaml:"enabled"`
+	// WrongThreshold is how many ratings of wrong on the verdict or a
+	// finding, on investigations that ran one version of a strategy, make
+	// that version get a proposal.
+	WrongThreshold int `yaml:"wrongThreshold"`
+	// Window is how far back the ratings are counted.
+	Window Period `yaml:"window"`
+}
+
+// Bench holds the settings of the benchmark that run inside Sidekick, as
+// opposed to those of bench.yaml, which `sidekick bench run` reads.
+type Bench struct {
+	// Gate sets the benchmark gate that checks a proposed strategy change.
+	Gate BenchGate `yaml:"gate"`
+}
+
+// BenchGate sets the benchmark gate: it runs the scenarios that cover a
+// strategy with its current version and with a proposed change, and lets
+// the proposal pass only when it is not clearly worse.
+type BenchGate struct {
+	// MinRepeats is how many times each scenario runs in each arm. It
+	// cannot be lower than MinGateRepeats.
+	MinRepeats int `yaml:"minRepeats"`
+	// MaxDrop is how far below the current version the lower end of the 95%
+	// interval of the proposal's score difference may be and still pass.
+	MaxDrop float64 `yaml:"maxDrop"`
+	// MaxCostUSD caps what one gate may spend on benchmark runs and
+	// grading. The gate stops and fails with over_budget when the next run
+	// would pass it.
+	MaxCostUSD float64 `yaml:"maxCostUSD"`
+	// PublicDir is a directory with the public benchmark scenarios, which
+	// join the reviewed scenarios from the database. Empty means the gate
+	// uses the reviewed scenarios alone.
+	PublicDir string `yaml:"publicDir"`
+	// BaseDir is the directory the tool snapshot paths in PublicDir's
+	// scenarios are relative to, the root of a Sidekick checkout. Empty
+	// means the working directory.
+	BaseDir string `yaml:"baseDir"`
 }
 
 // Route decides how matching events are investigated and where the report
@@ -527,6 +590,16 @@ func (c *Config) StrategySet() *strategy.Set {
 	return c.strategySet
 }
 
+// WithStrategySet returns a copy of the config whose strategies are set. A
+// benchmark uses it to run a version of a strategy that is not the one in
+// effect.
+func (c *Config) WithStrategySet(set *strategy.Set) Config {
+	out := *c
+	out.strategySet = set
+
+	return out
+}
+
 // PriceTable returns the price overrides in micro-dollars, by model ID.
 func (m Model) PriceTable() map[string]model.Price {
 	out := make(map[string]model.Price, len(m.Prices))
@@ -649,6 +722,8 @@ func (c *Config) setDefaults() {
 	c.Memory.setDefaults()
 	c.Lessons.setDefaults()
 	c.Retention.setDefaults()
+	c.Strategies.setDefaults()
+	c.Bench.setDefaults()
 }
 
 // resolveBudgets fills each route's unset limits with the global ones.
@@ -705,6 +780,17 @@ func (w *Watch) setDefaults() {
 	w.MinInterval = watch.DefaultMinInterval
 	w.MaxInterval = watch.DefaultMaxInterval
 	w.MaxTimeout = watch.DefaultMaxTimeout
+}
+
+func (s *Strategies) setDefaults() {
+	s.Proposals.WrongThreshold = DefaultProposalWrongThreshold
+	s.Proposals.Window = Period(DefaultProposalWindow)
+}
+
+func (b *Bench) setDefaults() {
+	b.Gate.MinRepeats = MinGateRepeats
+	b.Gate.MaxDrop = DefaultGateMaxDrop
+	b.Gate.MaxCostUSD = DefaultGateMaxCostUSD
 }
 
 func (m *Memory) setDefaults() {
