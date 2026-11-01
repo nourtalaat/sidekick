@@ -223,8 +223,16 @@ func (s *Service) prepare(ctx context.Context, req ProposeRequest) (prepared, st
 		return p, "params: " + cut(err.Error(), maxRefusalChars)
 	}
 
-	if err := s.opts.Actions[in.Action].Validate(ctx, params); err != nil {
+	a := s.opts.Actions[in.Action]
+
+	if err := a.Validate(ctx, params); err != nil {
 		return p, fmt.Sprintf("action %s refused these parameters: %s", in.Action, cut(err.Error(), maxRefusalChars))
+	}
+
+	if checker, ok := a.(action.ProposalChecker); ok {
+		if err := checker.CheckProposal(ctx, params); err != nil {
+			return p, fmt.Sprintf("action %s checked these parameters and refused them: %s", in.Action, cut(err.Error(), maxCheckRefusalChars))
+		}
 	}
 
 	p.params, p.reason = params, s.redactReason(reason)

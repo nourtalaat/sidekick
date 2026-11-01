@@ -42,6 +42,9 @@ const (
 	maxReasonChars  = 1000
 	maxNoteChars    = 500
 	maxRefusalChars = 500
+	// maxCheckRefusalChars is longer, because a check that calls another
+	// service can list several errors for the model to fix.
+	maxCheckRefusalChars = 2000
 )
 
 var (

@@ -99,6 +99,12 @@ limit without one.
 - The error text goes back to the model (when proposing) or is stored on the
   proposal (when running), so say what is wrong and which limit it breaks,
   without secrets.
+- A check that needs another service, such as validating the files of a pull
+  request with a tool, does not belong in `Validate`, which runs twice. Implement
+  `action.ProposalChecker` for it: `CheckProposal(ctx, params)` runs once, when the
+  model proposes, after `Validate`. Its error goes back to the model as a refusal
+  (cut at 2000 characters) and nothing is stored. It is not called again before
+  `Execute`, so `Execute` makes the check again if the result can change.
 - Call `Validate` at the start of `Execute` too. Sidekick already checked, but
   an action must not rely on its caller for its safety.
 

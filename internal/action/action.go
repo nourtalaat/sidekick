@@ -25,6 +25,16 @@ type Action interface {
 	Execute(ctx context.Context, inv Invocation) (Result, error)
 }
 
+// ProposalChecker is implemented by actions that can check a proposal only
+// by calling another service, for example to validate the files of a pull
+// request. Sidekick calls CheckProposal when the model proposes the action,
+// after Validate; an error is sent back to the model as a refusal and
+// nothing is stored. It is not called again when the proposal runs, so
+// Execute does its own checks.
+type ProposalChecker interface {
+	CheckProposal(ctx context.Context, params json.RawMessage) error
+}
+
 // Snapshotter is implemented by actions that change a definition in place,
 // such as a monitor or an alert rule (ACT-7, ACT-9). Snapshot reads the
 // current definition and computes the new one without changing anything.

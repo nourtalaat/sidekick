@@ -3,6 +3,8 @@ package proposals
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -216,4 +218,71 @@ func TestCut(t *testing.T) {
 	require.Equal(t, "abc", cut("abc", 3))
 	require.Equal(t, "ab…", cut("abcd", 3))
 	require.Equal(t, "日本…", cut("日本語です", 3))
+}
+
+// checkedNote is a fake note that also checks proposals the way an action
+// that calls another service does.
+type checkedNote struct {
+	*fakeNote
+
+	checkErr error
+	checks   atomic.Int32
+}
+
+var _ action.ProposalChecker = (*checkedNote)(nil)
+
+func (c *checkedNote) CheckProposal(context.Context, json.RawMessage) error {
+	c.checks.Add(1)
+
+	return c.checkErr
+}
+
+func TestPrepareProposalChecker(t *testing.T) {
+	t.Parallel()
+
+	policy := action.StaticPolicy{"payments": {Mode: action.Approved, Actions: []string{"monitor-note"}}}
+
+	tests := []struct {
+		name        string
+		board       string
+		checkErr    error
+		wantRefusal string
+		wantChecks  int32
+	}{
+		{name: "a check that passes", board: "ops", wantChecks: 1},
+		{
+			name: "a check that refuses", board: "ops", checkErr: errors.New("prometheus/rules/a.yaml:3: bad rule"),
+			wantRefusal: "action monitor-note checked these parameters and refused them: prometheus/rules/a.yaml:3: bad rule", wantChecks: 1,
+		},
+		{
+			name: "a refusal longer than the usual cut", board: "ops", checkErr: errors.New(repeat("e", maxRefusalChars+100)),
+			wantRefusal: repeat("e", maxRefusalChars+100), wantChecks: 1,
+		},
+		{name: "no check when the limits refuse first", board: "finance", wantRefusal: "refused these parameters", wantChecks: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			note := &checkedNote{fakeNote: newFakeNote("monitor-note"), checkErr: tt.checkErr}
+
+			s, err := New(Options{Pool: new(pgxpool.Pool), Actions: map[string]action.Action{"monitor-note": note}, Policy: policy})
+			require.NoError(t, err)
+
+			input := json.RawMessage(`{"action": "monitor-note", "params": {"board": "` + tt.board + `", "title": "t"}, "reason": "x"}`)
+
+			got, refusal := s.prepare(t.Context(), ProposeRequest{InvestigationID: uuid.New(), ToolCallID: "call-1", Route: "payments", Mode: action.Approved, Input: input})
+			require.Equal(t, tt.wantChecks, note.checks.Load())
+
+			if tt.wantRefusal != "" {
+				require.Contains(t, refusal, tt.wantRefusal)
+
+				return
+			}
+
+			require.Empty(t, refusal)
+			require.JSONEq(t, `{"board":"ops","title":"t"}`, string(got.params))
+		})
+	}
 }
