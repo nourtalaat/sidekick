@@ -140,7 +140,7 @@ func TestQueryPlans(t *testing.T) {
 			name: "ListActionProposals",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.ListActionProposals(ctx, db.ListActionProposalsParams{
-					Statuses: []string{"proposed"}, BeforeAt: farFuture, BeforeID: uuid.Max, PageSize: 51,
+					Status: "proposed", BeforeAt: farFuture, BeforeID: uuid.Max, PageSize: 51,
 				})
 
 				return fmt.Errorf("run query: %w", err)
@@ -148,18 +148,15 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey"},
 		},
 		{
-			name: "ListActionProposalsHistory",
+			name: "ListActionProposalsDecided",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.ListActionProposals(ctx, db.ListActionProposalsParams{
-					Statuses: []string{"approved", "rejected", "expired", "executing", "succeeded", "failed"},
-					BeforeAt: farFuture, BeforeID: uuid.Max, PageSize: 51,
+					Status: "succeeded", BeforeAt: farFuture, BeforeID: uuid.Max, PageSize: 51,
 				})
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			// Most proposals are decided, so the page is read in time order
-			// and the few that wait are skipped.
-			wantIndex: []string{"action_proposals_proposed_at", "investigations_pkey"},
+			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey"},
 		},
 		{
 			name: "ListInvestigationActionProposals",
