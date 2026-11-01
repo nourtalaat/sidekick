@@ -102,6 +102,23 @@ the sources returned.
   and the same message then shows its progress and its verdict. It works
   once: a second click, or one on any other result, changes nothing.
 
+- **Approve** and **Reject** are on each action the model proposed on a
+  route in `approved` mode (see [`actions`](configuration.md#actions)), for
+  as long as the proposal waits for a decision. Only the approver and
+  admin roles may press them. The message shows the action, the
+  parameters it will run with, and the model's reason. The parameters are
+  shown whole, exactly as they are stored, with hidden characters such as
+  right-to-left marks written as `\u` escapes; the reason is the model's
+  own words and is not checked. Approve asks to confirm. A proposal whose
+  parameters are too long for the message has no Approve button: open the
+  investigation in the web UI, read them all there, and decide there.
+  After a decision the message shows who decided, then whether the action
+  ran, with the links it made, or why it failed. Of two people who press
+  at the same moment, one decides, and the other gets a note saying who
+  did. A proposal that expired cannot be approved, and one the config no
+  longer allows, for example because its route is read-only now, can only
+  be rejected.
+
 The feedback form asks which part it is about: the verdict, a finding, a
 fix, or, when `server.publicURL` is set, a tool call (enter its ID, which
 the investigation page in the web UI shows next to the call, and the form
@@ -129,7 +146,7 @@ Every click, and the sending of the feedback form, is checked against the
 person's role at that time: **Stop**, **Correct**, **Wrong**,
 **Details**, **Stop watching** and **Investigate anyway** need the
 `responder` role, so a `viewer` cannot
-press them. Roles come from `slack.roleGroups` and `slack.roleUsers`, and
+press them. **Approve** and **Reject** need the `approver` role. Roles come from `slack.roleGroups` and `slack.roleUsers`, and
 a Slack user in neither is a `responder`; see [Roles](#roles). A refused
 user's groups are read again before the click is refused, so someone just
 added to a group can press at once. When a click cannot do anything, for

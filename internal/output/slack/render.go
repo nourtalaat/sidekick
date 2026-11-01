@@ -275,7 +275,7 @@ func runningView(u output.Update, title string) view {
 	}
 
 	blocks = append(blocks, contextBlock(runningContext(u)))
-	blocks = slices.Concat(blocks, watcherContext(u), []block{stopButtons(u)}, watcherButtons(u))
+	blocks = slices.Concat(blocks, proposalBlocks(u), watcherContext(u), []block{stopButtons(u)}, watcherButtons(u))
 
 	return view{
 		text:       escape("Investigating: " + title),
@@ -306,6 +306,8 @@ func finalView(u output.Update, title string) view {
 	if fixes, _ := fixLines(r.Fixes); len(fixes) > 0 {
 		blocks = append(blocks, section("*Proposed fixes*\n"+strings.Join(fixes, "\n")))
 	}
+
+	blocks = append(blocks, proposalBlocks(u)...)
 
 	checked := checkedLine(r)
 
@@ -353,7 +355,7 @@ func failedView(u output.Update, title string) view {
 		blocks = append(blocks, contextBlock(checked))
 	}
 
-	blocks = slices.Concat(blocks, watcherContext(u), watcherButtons(u))
+	blocks = slices.Concat(blocks, proposalBlocks(u), watcherContext(u), watcherButtons(u))
 
 	return view{
 		text:       escape(failedStyle.label + ": " + title),

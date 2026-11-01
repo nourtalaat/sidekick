@@ -110,7 +110,7 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
-	if err := registerSlackApp(ctx, a, cache, memory.SyncOptions{Embed: vectors != nil}); err != nil {
+	if err := registerSlackApp(ctx, a, cache, actions, memory.SyncOptions{Embed: vectors != nil}); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
