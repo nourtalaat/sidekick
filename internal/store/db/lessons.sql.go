@@ -7,9 +7,79 @@ package db
 
 import (
 	"context"
+	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 )
+
+const approveLesson = `-- name: ApproveLesson :execrows
+UPDATE lessons
+SET status = 'active', approved_by = $1, version = version + 1, updated_at = now()
+WHERE id = $2 AND version = $3 AND status = 'proposed'
+`
+
+type ApproveLessonParams struct {
+	ApprovedBy *uuid.UUID
+	ID         uuid.UUID
+	Version    int32
+}
+
+// ApproveLesson makes a lesson that waits for review active, notes who
+// approved it and raises its version. It changes nothing, and returns 0
+// rows, when the lesson is not at the version the caller read, or does not
+// wait for review.
+func (q *Queries) ApproveLesson(ctx context.Context, arg ApproveLessonParams) (int64, error) {
+	result, err := q.db.Exec(ctx, approveLesson, arg.ApprovedBy, arg.ID, arg.Version)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const countLessonsByStatus = `-- name: CountLessonsByStatus :many
+SELECT status, count(*)::int AS n FROM lessons GROUP BY status
+`
+
+type CountLessonsByStatusRow struct {
+	Status string
+	N      int32
+}
+
+// CountLessonsByStatus returns how many lessons there are with each status.
+func (q *Queries) CountLessonsByStatus(ctx context.Context) ([]CountLessonsByStatusRow, error) {
+	rows, err := q.db.Query(ctx, countLessonsByStatus)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountLessonsByStatusRow
+	for rows.Next() {
+		var i CountLessonsByStatusRow
+		if err := rows.Scan(&i.Status, &i.N); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const deleteLesson = `-- name: DeleteLesson :execrows
+DELETE FROM lessons WHERE id = $1
+`
+
+// DeleteLesson deletes a lesson, and with it the record of the
+// investigations that used it.
+func (q *Queries) DeleteLesson(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteLesson, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
 
 const getFeedbackToDraft = `-- name: GetFeedbackToDraft :one
 SELECT id, investigation_id, target_kind, target_ref, rating, reason, correct_verdict, correct_cause
@@ -42,6 +112,65 @@ func (q *Queries) GetFeedbackToDraft(ctx context.Context, id uuid.UUID) (GetFeed
 		&i.Reason,
 		&i.CorrectVerdict,
 		&i.CorrectCause,
+	)
+	return i, err
+}
+
+const getLesson = `-- name: GetLesson :one
+SELECT l.id, l.text, l.scope_service, l.scope_alert, l.scope_route, l.scope_strategy, l.status, l.origin, l.created_by,
+       l.approved_by, l.created_at, l.updated_at, l.helpful, l.unhelpful, l.last_used_at, l.version,
+       coalesce((
+         SELECT jsonb_agg(jsonb_build_object('feedbackId', f.id, 'investigationId', f.investigation_id) ORDER BY f.created_at, f.id)
+         FROM feedback AS f
+         WHERE f.id = ANY (l.feedback_ids)
+       ), '[]'::jsonb)::jsonb AS feedback_links
+FROM lessons AS l
+WHERE l.id = $1
+`
+
+type GetLessonRow struct {
+	ID            uuid.UUID
+	Text          string
+	ScopeService  *string
+	ScopeAlert    *string
+	ScopeRoute    *string
+	ScopeStrategy *string
+	Status        string
+	Origin        string
+	CreatedBy     *uuid.UUID
+	ApprovedBy    *uuid.UUID
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	Helpful       int32
+	Unhelpful     int32
+	LastUsedAt    *time.Time
+	Version       int32
+	FeedbackLinks json.RawMessage
+}
+
+// GetLesson returns one lesson with the feedback it was drafted from. It
+// returns no row for a lesson that does not exist.
+func (q *Queries) GetLesson(ctx context.Context, id uuid.UUID) (GetLessonRow, error) {
+	row := q.db.QueryRow(ctx, getLesson, id)
+	var i GetLessonRow
+	err := row.Scan(
+		&i.ID,
+		&i.Text,
+		&i.ScopeService,
+		&i.ScopeAlert,
+		&i.ScopeRoute,
+		&i.ScopeStrategy,
+		&i.Status,
+		&i.Origin,
+		&i.CreatedBy,
+		&i.ApprovedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Helpful,
+		&i.Unhelpful,
+		&i.LastUsedAt,
+		&i.Version,
+		&i.FeedbackLinks,
 	)
 	return i, err
 }
@@ -106,6 +235,43 @@ func (q *Queries) InsertDraftedLesson(ctx context.Context, arg InsertDraftedLess
 		arg.ScopeStrategy,
 		arg.Status,
 		arg.FeedbackID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertLesson = `-- name: InsertLesson :one
+INSERT INTO lessons (id, text, scope_service, scope_alert, scope_route, scope_strategy, status, origin, created_by)
+VALUES ($1, $2, $3, $4, $5, $6,
+        $7, $8, $9)
+RETURNING id
+`
+
+type InsertLessonParams struct {
+	ID            uuid.UUID
+	Text          string
+	ScopeService  *string
+	ScopeAlert    *string
+	ScopeRoute    *string
+	ScopeStrategy *string
+	Status        string
+	Origin        string
+	CreatedBy     *uuid.UUID
+}
+
+// InsertLesson stores a lesson that an admin wrote, and returns its ID.
+func (q *Queries) InsertLesson(ctx context.Context, arg InsertLessonParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertLesson,
+		arg.ID,
+		arg.Text,
+		arg.ScopeService,
+		arg.ScopeAlert,
+		arg.ScopeRoute,
+		arg.ScopeStrategy,
+		arg.Status,
+		arg.Origin,
+		arg.CreatedBy,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
@@ -259,6 +425,195 @@ func (q *Queries) ListLessonCandidates(ctx context.Context, arg ListLessonCandid
 	return items, nil
 }
 
+const listLessons = `-- name: ListLessons :many
+SELECT l.id, l.text, l.scope_service, l.scope_alert, l.scope_route, l.scope_strategy, l.status, l.origin, l.created_by,
+       l.approved_by, l.created_at, l.updated_at, l.helpful, l.unhelpful, l.last_used_at, l.version,
+       coalesce((
+         SELECT jsonb_agg(jsonb_build_object('feedbackId', f.id, 'investigationId', f.investigation_id) ORDER BY f.created_at, f.id)
+         FROM feedback AS f
+         WHERE f.id = ANY (l.feedback_ids)
+       ), '[]'::jsonb)::jsonb AS feedback_links
+FROM lessons AS l
+WHERE ($1::text IS NULL OR l.status = $1::text)
+  AND ($2::text IS NULL OR l.scope_service = $2::text)
+  AND ($3::text IS NULL OR l.search @@ websearch_to_tsquery('english', $3::text))
+  AND ($4::timestamptz IS NULL OR (l.created_at, l.id) < ($4::timestamptz, $5::uuid))
+ORDER BY l.created_at DESC, l.id DESC
+LIMIT $6::int
+`
+
+type ListLessonsParams struct {
+	Status   *string
+	Service  *string
+	Search   *string
+	AfterAt  *time.Time
+	AfterID  *uuid.UUID
+	PageSize int32
+}
+
+type ListLessonsRow struct {
+	ID            uuid.UUID
+	Text          string
+	ScopeService  *string
+	ScopeAlert    *string
+	ScopeRoute    *string
+	ScopeStrategy *string
+	Status        string
+	Origin        string
+	CreatedBy     *uuid.UUID
+	ApprovedBy    *uuid.UUID
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	Helpful       int32
+	Unhelpful     int32
+	LastUsedAt    *time.Time
+	Version       int32
+	FeedbackLinks json.RawMessage
+}
+
+// ListLessons returns lessons, newest first, a page at a time. Every filter
+// is optional: a status, the service a lesson is scoped to, words its text
+// matches (a web-search style query), and the place after which the page
+// starts (the time and ID of the last lesson of the page before). Each
+// lesson comes with the feedback it was drafted from.
+func (q *Queries) ListLessons(ctx context.Context, arg ListLessonsParams) ([]ListLessonsRow, error) {
+	rows, err := q.db.Query(ctx, listLessons,
+		arg.Status,
+		arg.Service,
+		arg.Search,
+		arg.AfterAt,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLessonsRow
+	for rows.Next() {
+		var i ListLessonsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Text,
+			&i.ScopeService,
+			&i.ScopeAlert,
+			&i.ScopeRoute,
+			&i.ScopeStrategy,
+			&i.Status,
+			&i.Origin,
+			&i.CreatedBy,
+			&i.ApprovedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Helpful,
+			&i.Unhelpful,
+			&i.LastUsedAt,
+			&i.Version,
+			&i.FeedbackLinks,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLessonsUsedBy = `-- name: ListLessonsUsedBy :many
+SELECT l.id, l.text, l.scope_service, l.scope_alert, l.scope_route, l.scope_strategy, l.status
+FROM lesson_uses AS u
+JOIN lessons AS l ON l.id = u.lesson_id
+WHERE u.investigation_id = $1
+ORDER BY l.created_at, l.id
+LIMIT $2::int
+`
+
+type ListLessonsUsedByParams struct {
+	InvestigationID uuid.UUID
+	MaxRows         int32
+}
+
+type ListLessonsUsedByRow struct {
+	ID            uuid.UUID
+	Text          string
+	ScopeService  *string
+	ScopeAlert    *string
+	ScopeRoute    *string
+	ScopeStrategy *string
+	Status        string
+}
+
+// ListLessonsUsedBy returns the lessons an investigation used, in the order
+// they were written.
+func (q *Queries) ListLessonsUsedBy(ctx context.Context, arg ListLessonsUsedByParams) ([]ListLessonsUsedByRow, error) {
+	rows, err := q.db.Query(ctx, listLessonsUsedBy, arg.InvestigationID, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLessonsUsedByRow
+	for rows.Next() {
+		var i ListLessonsUsedByRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Text,
+			&i.ScopeService,
+			&i.ScopeAlert,
+			&i.ScopeRoute,
+			&i.ScopeStrategy,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockLesson = `-- name: LockLesson :one
+SELECT id, text, scope_service, scope_alert, scope_route, scope_strategy, status, origin, version
+FROM lessons
+WHERE id = $1
+FOR UPDATE
+`
+
+type LockLessonRow struct {
+	ID            uuid.UUID
+	Text          string
+	ScopeService  *string
+	ScopeAlert    *string
+	ScopeRoute    *string
+	ScopeStrategy *string
+	Status        string
+	Origin        string
+	Version       int32
+}
+
+// LockLesson returns the fields of a lesson that a change checks and holds a
+// lock on its row until the transaction ends, so two admins who change the
+// same lesson at once are applied in turn.
+func (q *Queries) LockLesson(ctx context.Context, id uuid.UUID) (LockLessonRow, error) {
+	row := q.db.QueryRow(ctx, lockLesson, id)
+	var i LockLessonRow
+	err := row.Scan(
+		&i.ID,
+		&i.Text,
+		&i.ScopeService,
+		&i.ScopeAlert,
+		&i.ScopeRoute,
+		&i.ScopeStrategy,
+		&i.Status,
+		&i.Origin,
+		&i.Version,
+	)
+	return i, err
+}
+
 const searchLessons = `-- name: SearchLessons :many
 SELECT id, text, scope_service, scope_alert, scope_route, scope_strategy
 FROM lessons
@@ -327,4 +682,44 @@ WHERE id = ANY ($1::uuid[])
 func (q *Queries) TouchLessonsUsed(ctx context.Context, lessonIds []uuid.UUID) error {
 	_, err := q.db.Exec(ctx, touchLessonsUsed, lessonIds)
 	return err
+}
+
+const updateLesson = `-- name: UpdateLesson :execrows
+UPDATE lessons
+SET text = $1,
+    scope_service = $2, scope_alert = $3,
+    scope_route = $4, scope_strategy = $5,
+    status = $6, version = version + 1, updated_at = now()
+WHERE id = $7 AND version = $8
+`
+
+type UpdateLessonParams struct {
+	Text          string
+	ScopeService  *string
+	ScopeAlert    *string
+	ScopeRoute    *string
+	ScopeStrategy *string
+	Status        string
+	ID            uuid.UUID
+	Version       int32
+}
+
+// UpdateLesson replaces the text, scope and status of a lesson and raises its
+// version. It changes nothing, and returns 0 rows, when the lesson is not at
+// the version the caller read.
+func (q *Queries) UpdateLesson(ctx context.Context, arg UpdateLessonParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateLesson,
+		arg.Text,
+		arg.ScopeService,
+		arg.ScopeAlert,
+		arg.ScopeRoute,
+		arg.ScopeStrategy,
+		arg.Status,
+		arg.ID,
+		arg.Version,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
