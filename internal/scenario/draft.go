@@ -30,9 +30,11 @@ import (
 
 const (
 	// idPrefixLen is how long the readable part of a scenario ID may be;
-	// the investigation ID adds idSuffixLen hex characters.
+	// the investigation ID adds idSuffixLen hex characters, taken from the
+	// random end of the UUID, since its start is a timestamp that repeats
+	// for hours.
 	idPrefixLen = 60
-	idSuffixLen = 6
+	idSuffixLen = 12
 	// untitled is the title of a scenario whose alert has none.
 	untitled = "Exported investigation"
 	// rubricIDPrefix starts the IDs of drafted rubric items.
@@ -299,7 +301,8 @@ func scenarioID(title, strategy string, investigationID uuid.UUID) string {
 		slug = strings.Trim(slug[:idPrefixLen], "-")
 	}
 
-	suffix := strings.ReplaceAll(investigationID.String(), "-", "")[:idSuffixLen]
+	hex := strings.ReplaceAll(investigationID.String(), "-", "")
+	suffix := hex[len(hex)-idSuffixLen:]
 
 	if slug == "" {
 		return "scenario-" + suffix

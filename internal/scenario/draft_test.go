@@ -116,7 +116,7 @@ func TestBuildGolden(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, string(want), string(got.Body))
-	require.Equal(t, "latency-alert-checkout-api-p99-latency-above-2s-for-5m-0198f2", got.ID)
+	require.Equal(t, "latency-alert-checkout-api-p99-latency-above-2s-for-5m-3f6e8d1c4b70", got.ID)
 	require.Equal(t, "checkout-api p99 latency above 2s for 5m", got.Title)
 
 	require.Equal(t, []Provenance{
@@ -265,12 +265,12 @@ func TestScenarioID(t *testing.T) {
 		strategy string
 		want     string
 	}{
-		{name: "strategy and title", title: "Cart: error rate!", strategy: "error-rate-alert", want: "error-rate-alert-cart-error-rate-0198f2"},
-		{name: "no title words", title: "???", want: "scenario-0198f2"},
+		{name: "strategy and title", title: "Cart: error rate!", strategy: "error-rate-alert", want: "error-rate-alert-cart-error-rate-3f6e8d1c4b70"},
+		{name: "no title words", title: "???", want: "scenario-3f6e8d1c4b70"},
 		{
 			name:  "long title is cut",
 			title: "a very long alert title that goes on and on and on and on and on and on and on",
-			want:  "a-very-long-alert-title-that-goes-on-and-on-and-on-and-on-an-0198f2",
+			want:  "a-very-long-alert-title-that-goes-on-and-on-and-on-and-on-an-3f6e8d1c4b70",
 		},
 	}
 
