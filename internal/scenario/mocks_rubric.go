@@ -10,10 +10,12 @@ package scenario
 
 import (
 	context "context"
+	json "encoding/json"
 	reflect "reflect"
 
 	bench "github.com/nourtalaat/sidekick/internal/bench"
 	db "github.com/nourtalaat/sidekick/internal/store/db"
+	summarize "github.com/nourtalaat/sidekick/internal/summarize"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -68,4 +70,57 @@ func (m *MockRubricDrafter) Enabled() bool {
 func (mr *MockRubricDrafterMockRecorder) Enabled() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Enabled", reflect.TypeOf((*MockRubricDrafter)(nil).Enabled))
+}
+
+// MockToolCaller is a mock of ToolCaller interface.
+type MockToolCaller struct {
+	ctrl     *gomock.Controller
+	recorder *MockToolCallerMockRecorder
+	isgomock struct{}
+}
+
+// MockToolCallerMockRecorder is the mock recorder for MockToolCaller.
+type MockToolCallerMockRecorder struct {
+	mock *MockToolCaller
+}
+
+// NewMockToolCaller creates a new mock instance.
+func NewMockToolCaller(ctrl *gomock.Controller) *MockToolCaller {
+	mock := &MockToolCaller{ctrl: ctrl}
+	mock.recorder = &MockToolCallerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockToolCaller) EXPECT() *MockToolCallerMockRecorder {
+	return m.recorder
+}
+
+// CallTool mocks base method.
+func (m *MockToolCaller) CallTool(ctx context.Context, q db.DBTX, req summarize.Request) (json.RawMessage, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CallTool", ctx, q, req)
+	ret0, _ := ret[0].(json.RawMessage)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CallTool indicates an expected call of CallTool.
+func (mr *MockToolCallerMockRecorder) CallTool(ctx, q, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CallTool", reflect.TypeOf((*MockToolCaller)(nil).CallTool), ctx, q, req)
+}
+
+// Enabled mocks base method.
+func (m *MockToolCaller) Enabled() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Enabled")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// Enabled indicates an expected call of Enabled.
+func (mr *MockToolCallerMockRecorder) Enabled() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Enabled", reflect.TypeOf((*MockToolCaller)(nil).Enabled))
 }
