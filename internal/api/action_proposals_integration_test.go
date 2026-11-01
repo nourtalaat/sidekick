@@ -146,6 +146,7 @@ func TestListProposals(t *testing.T) {
 	}{
 		{name: "the proposals that wait, newest first", want: []string{propSecond, propFirst, propExpired}},
 		{name: "decided proposals", query: "?status=approved&status=rejected&status=succeeded", want: []string{propApproved, propSucceeded, propRejected}},
+		{name: "a status given twice is listed once", query: "?status=proposed&status=proposed", want: []string{propSecond, propFirst, propExpired}},
 		{name: "one status", query: "?status=rejected", want: []string{propRejected}},
 		{name: "a status nobody has", query: "?status=failed", want: []string{}},
 	}

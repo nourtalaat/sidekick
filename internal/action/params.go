@@ -135,7 +135,7 @@ func checkValue(dec *json.Decoder, depth int) error {
 		}
 
 		if err := checkValue(dec, depth+1); err != nil {
-			return err
+			return fmt.Errorf("check the value: %w", err)
 		}
 	}
 

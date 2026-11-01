@@ -95,7 +95,8 @@ func Get(ctx context.Context, q db.DBTX, id uuid.UUID) (View, error) {
 
 // List returns one page of proposals with one of the statuses, newest
 // first. It reads PageSize proposals; ask for one more than the page holds
-// to know whether another page follows. Each status is read from its own
+// to know whether another page follows. A status given twice is read once.
+// Each status is read from its own
 // part of the index, in order and up to a page, and the pages are merged,
 // so the cost of a page does not grow with the number of proposals.
 func List(ctx context.Context, q db.DBTX, opts ListOptions) ([]View, error) {
@@ -108,7 +109,7 @@ func List(ctx context.Context, q db.DBTX, opts ListOptions) ([]View, error) {
 
 	var rows []db.ListActionProposalsRow
 
-	for _, status := range opts.Statuses {
+	for _, status := range slices.Compact(slices.Sorted(slices.Values(opts.Statuses))) {
 		page, err := queries.ListActionProposals(ctx, db.ListActionProposalsParams{
 			Status: string(status), BeforeAt: after.ProposedAt, BeforeID: after.ID, PageSize: opts.PageSize,
 		})
