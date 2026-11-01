@@ -38,6 +38,12 @@ How it behaves:
 - **Only confirmed investigations.** An investigation enters memory when a
   responder marks its verdict correct, and leaves it when a later Wrong
   takes the confirmation back. An entry an admin disabled never matches.
+- **Editing.** An admin can edit, disable or delete entries and write the
+  service notes in the web UI or through the API; see
+  [Memory entries and service notes](../web-ui.md#memory-entries-and-service-notes).
+  An edited entry keeps its text only until the confirmation of its
+  investigation changes again, and a deleted entry comes back then; disable
+  an entry to keep it out.
 - **Queries.** `search` takes words as a web search does: every word must
   match, words in quotes match as a phrase, `or` between words matches
   either, and a word with a leading `-` must not appear. Words match in
