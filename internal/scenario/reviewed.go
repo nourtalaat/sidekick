@@ -43,6 +43,25 @@ func LoadReviewed(ctx context.Context, q db.DBTX, baseDir string) ([]bench.Scena
 	return out, nil
 }
 
+// ReviewedSource gives the reviewed scenarios of a database to a reader of
+// scenarios, such as the benchmark gate of strategy proposals. It reads
+// them again on each call, so a scenario reviewed or edited since is seen.
+type ReviewedSource struct {
+	q       db.DBTX
+	baseDir string
+}
+
+// NewReviewedSource returns a source of the reviewed scenarios in the
+// database q, whose snapshot paths are relative to baseDir.
+func NewReviewedSource(q db.DBTX, baseDir string) *ReviewedSource {
+	return &ReviewedSource{q: q, baseDir: baseDir}
+}
+
+// Scenarios returns every reviewed scenario. A draft is never returned.
+func (s *ReviewedSource) Scenarios(ctx context.Context) ([]bench.Scenario, error) {
+	return LoadReviewed(ctx, s.q, s.baseDir)
+}
+
 // LoadOneReviewed reads one reviewed scenario. A scenario that is not
 // reviewed gives ErrNotReviewed, and one that does not exist ErrNotFound.
 func LoadOneReviewed(ctx context.Context, q db.DBTX, id, baseDir string) (bench.Scenario, error) {

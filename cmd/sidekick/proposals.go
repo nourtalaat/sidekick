@@ -10,6 +10,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/model/instrument"
 	"github.com/nourtalaat/sidekick/internal/proposals"
 	"github.com/nourtalaat/sidekick/internal/queue"
+	"github.com/nourtalaat/sidekick/internal/scenario"
 	"github.com/nourtalaat/sidekick/internal/strategy"
 )
 
@@ -37,7 +38,8 @@ func proposalTrigger(ctx context.Context, a *app.App) proposals.Trigger {
 // strategy and run its benchmark gate. They are registered only when
 // strategies.proposals.enabled is true and a summarize role is set; a job
 // queued before that stays queued, and spends nothing. The gate runs the
-// scenarios in bench.gate.publicDir with the reviewed ones.
+// scenarios in bench.gate.publicDir and the reviewed scenarios of the
+// database together.
 func registerProposals(ctx context.Context, a *app.App, regs config.Registries, strategies strategy.Source, modelMetrics *instrument.Metrics) error {
 	cfg := a.Config()
 	if !cfg.Strategies.Proposals.Enabled || !summarizeConfigured(cfg) {
@@ -75,8 +77,9 @@ func registerProposals(ctx context.Context, a *app.App, regs config.Registries, 
 		Registries:  regs,
 		DatabaseURL: func(ctx context.Context) (string, error) { return cfg.DatabaseURL(ctx, a.Secrets()) },
 		Strategies:  strategies,
-		// TODO: [SK-45] Add the reviewed scenarios with scenario.LoadReviewed once #105 merges
-		Scenarios:       gate.MergeScenarios(log, gate.FileScenarios(cfg.Bench.Gate.PublicDir, cfg.Bench.Gate.BaseDir)),
+		Scenarios: gate.MergeScenarios(log,
+			gate.FileScenarios(cfg.Bench.Gate.PublicDir, cfg.Bench.Gate.BaseDir),
+			scenario.NewReviewedSource(a.Pool(), cfg.Bench.Gate.BaseDir)),
 		Daily:           gate.Daily{Location: loc, MaxCostMicros: cfg.Budgets.Daily.MaxCostMicros()},
 		Logger:          log,
 		ComponentLogger: a.Logger().With("component", "gate-bench"),
@@ -90,7 +93,7 @@ func registerProposals(ctx context.Context, a *app.App, regs config.Registries, 
 	}
 
 	if cfg.Bench.Gate.PublicDir == "" {
-		log.WarnContext(ctx, "bench.gate.publicDir is not set, so the benchmark gate has no scenario and every proposal ends with no_benchmark_coverage")
+		log.InfoContext(ctx, "bench.gate.publicDir is not set, so the benchmark gate chooses only from reviewed scenarios; a proposal ends with no_benchmark_coverage until one covers its strategy")
 	}
 
 	log.InfoContext(ctx, "strategy proposals are on: a strategy version with enough wrong ratings gets a drafted change, and a benchmark gate checks it",

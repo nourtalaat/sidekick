@@ -159,9 +159,12 @@ way to apply a change that did not pass.
 
 **Which scenarios.** A scenario covers a strategy when it names it in
 `strategy`, or names none (or `generic-alert`) and the strategy's `match` fits
-its event. For now the gate chooses only from the scenario files under
-`bench.gate.publicDir`; with that empty no scenario exists, and every gate ends
-with `no_benchmark_coverage`. It runs each chosen scenario with the strategy
+its event. The gate chooses from the scenario files under
+`bench.gate.publicDir` and the [reviewed scenarios](#exporting-a-real-investigation)
+of the database together; a scenario that is still a draft is never chosen. When
+a scenario of the directory and a reviewed one have the same ID, the one from the
+directory is used. With neither source, or none that covers the strategy, the
+gate ends with `no_benchmark_coverage`. It runs each chosen scenario with the strategy
 under test. A scenario that is not valid is left out with a warning in
 the log.
 

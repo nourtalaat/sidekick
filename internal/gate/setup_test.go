@@ -196,6 +196,9 @@ type envOptions struct {
 	daily gate.Daily
 	// failFrom is the dispatcher's failFrom.
 	failFrom int
+	// source, when set, is where the gate gets its scenarios, in place of
+	// scenarios.
+	source func(pool *pgxpool.Pool) gate.ScenarioSource
 }
 
 // env is a database, a scripted model and a gate on them.
@@ -255,13 +258,18 @@ func newEnv(t *testing.T, opts envOptions) *env {
 
 	set := base.WithRuntime([]strategy.Strategy{saved})
 
+	var source gate.ScenarioSource = gate.ScenarioFunc(func(context.Context) ([]bench.Scenario, error) { return scenarios, nil })
+	if opts.source != nil {
+		source = opts.source(pool)
+	}
+
 	g, err := gate.New(gate.Options{
 		Pool:        pool,
 		Config:      cfg,
 		Registries:  regs,
 		DatabaseURL: func(context.Context) (string, error) { return url, nil },
 		Strategies:  set,
-		Scenarios:   gate.ScenarioFunc(func(context.Context) ([]bench.Scenario, error) { return scenarios, nil }),
+		Scenarios:   source,
 		Daily:       opts.daily,
 	})
 	require.NoError(t, err)
