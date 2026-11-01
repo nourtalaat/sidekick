@@ -37,8 +37,8 @@ const (
 
 // The proposals of fixture/proposals.sql.
 const (
-	propFirst   = "0192d3a4-0000-7000-8000-0000000000f1"
-	propSecond   = "0192d3a4-0000-7000-8000-0000000000f2"
+	propFirst      = "0192d3a4-0000-7000-8000-0000000000f1"
+	propSecond     = "0192d3a4-0000-7000-8000-0000000000f2"
 	propExpired    = "0192d3a4-0000-7000-8000-0000000000f3"
 	propApproved   = "0192d3a4-0000-7000-8000-0000000000f4"
 	propSucceeded  = "0192d3a4-0000-7000-8000-0000000000f5"
