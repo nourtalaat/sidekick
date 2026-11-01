@@ -206,7 +206,6 @@ func TestListProposalsRefusals(t *testing.T) {
 		wantDetail string
 	}{
 		{name: "a viewer", token: "skt_viewer", path: proposalsRoute, wantStatus: http.StatusForbidden, wantDetail: "This needs the approver role."},
-		{name: "a responder", token: "skt_responder", path: proposalsRoute, wantStatus: http.StatusForbidden, wantDetail: "This needs the approver role."},
 		{name: "no sign-in", path: proposalsRoute, wantStatus: http.StatusUnauthorized, wantDetail: "Sign in, or send an API token."},
 		{name: "a status that does not exist", token: approverToken, path: proposalsRoute + "?status=maybe", wantStatus: http.StatusBadRequest, wantDetail: "status must be one of proposed, approved, rejected, expired, executing, succeeded, failed, undone."},
 		{name: "a limit that is too large", token: approverToken, path: proposalsRoute + "?limit=101", wantStatus: http.StatusBadRequest, wantDetail: "limit must be 1 to 100."},

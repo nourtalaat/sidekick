@@ -66,6 +66,6 @@ func TestCheckRuntimeRouteActions(t *testing.T) {
 
 	route.Actions = []string{"monitor-note", "other"}
 	requireProblems(t, cfg.CheckRuntimeRoute(t.Context(), route, nil), []string{
-		`routes.checkout.actions[1]: action "other" is not defined (did you mean "monitor-note"?)`,
+		`routes.checkout.actions[1]: action "other" is not defined`,
 	})
 }

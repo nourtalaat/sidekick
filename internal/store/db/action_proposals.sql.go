@@ -207,11 +207,12 @@ SELECT
   p.id, p.investigation_id, p.action, p.params, p.reason, p.mode, p.status, p.idempotency_key, p.proposed_at, p.expires_at, p.decided_by, p.decided_by_slack_user, p.decided_at, p.executed_at, p.result, p.error,
   i.route,
   coalesce(i.alert_title, '')::text AS alert_title,
-  coalesce(u.name, t.name, '')::text AS decided_by_name
+  coalesce(
+    (SELECT u.name FROM users u WHERE u.id = p.decided_by),
+    (SELECT t.name FROM api_tokens t WHERE t.id = p.decided_by),
+    '')::text AS decided_by_name
 FROM action_proposals p
 JOIN investigations i ON i.id = p.investigation_id
-LEFT JOIN users u ON u.id = p.decided_by
-LEFT JOIN api_tokens t ON t.id = p.decided_by
 WHERE p.id = $1
 `
 
@@ -316,11 +317,12 @@ SELECT
   p.id, p.investigation_id, p.action, p.params, p.reason, p.mode, p.status, p.idempotency_key, p.proposed_at, p.expires_at, p.decided_by, p.decided_by_slack_user, p.decided_at, p.executed_at, p.result, p.error,
   i.route,
   coalesce(i.alert_title, '')::text AS alert_title,
-  coalesce(u.name, t.name, '')::text AS decided_by_name
+  coalesce(
+    (SELECT u.name FROM users u WHERE u.id = p.decided_by),
+    (SELECT t.name FROM api_tokens t WHERE t.id = p.decided_by),
+    '')::text AS decided_by_name
 FROM action_proposals p
 JOIN investigations i ON i.id = p.investigation_id
-LEFT JOIN users u ON u.id = p.decided_by
-LEFT JOIN api_tokens t ON t.id = p.decided_by
 WHERE p.status = ANY ($1::text[])
   AND (p.proposed_at, p.id) < ($2::timestamptz, $3::uuid)
 ORDER BY p.proposed_at DESC, p.id DESC
@@ -393,11 +395,12 @@ SELECT
   p.id, p.investigation_id, p.action, p.params, p.reason, p.mode, p.status, p.idempotency_key, p.proposed_at, p.expires_at, p.decided_by, p.decided_by_slack_user, p.decided_at, p.executed_at, p.result, p.error,
   i.route,
   coalesce(i.alert_title, '')::text AS alert_title,
-  coalesce(u.name, t.name, '')::text AS decided_by_name
+  coalesce(
+    (SELECT u.name FROM users u WHERE u.id = p.decided_by),
+    (SELECT t.name FROM api_tokens t WHERE t.id = p.decided_by),
+    '')::text AS decided_by_name
 FROM action_proposals p
 JOIN investigations i ON i.id = p.investigation_id
-LEFT JOIN users u ON u.id = p.decided_by
-LEFT JOIN api_tokens t ON t.id = p.decided_by
 WHERE p.investigation_id = $1
 ORDER BY p.proposed_at, p.id
 `

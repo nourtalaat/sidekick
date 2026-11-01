@@ -26,11 +26,12 @@ SELECT
   sqlc.embed(p),
   i.route,
   coalesce(i.alert_title, '')::text AS alert_title,
-  coalesce(u.name, t.name, '')::text AS decided_by_name
+  coalesce(
+    (SELECT u.name FROM users u WHERE u.id = p.decided_by),
+    (SELECT t.name FROM api_tokens t WHERE t.id = p.decided_by),
+    '')::text AS decided_by_name
 FROM action_proposals p
 JOIN investigations i ON i.id = p.investigation_id
-LEFT JOIN users u ON u.id = p.decided_by
-LEFT JOIN api_tokens t ON t.id = p.decided_by
 WHERE p.id = @id;
 
 -- name: LockActionProposal :one
@@ -98,11 +99,12 @@ SELECT
   sqlc.embed(p),
   i.route,
   coalesce(i.alert_title, '')::text AS alert_title,
-  coalesce(u.name, t.name, '')::text AS decided_by_name
+  coalesce(
+    (SELECT u.name FROM users u WHERE u.id = p.decided_by),
+    (SELECT t.name FROM api_tokens t WHERE t.id = p.decided_by),
+    '')::text AS decided_by_name
 FROM action_proposals p
 JOIN investigations i ON i.id = p.investigation_id
-LEFT JOIN users u ON u.id = p.decided_by
-LEFT JOIN api_tokens t ON t.id = p.decided_by
 WHERE p.status = ANY (@statuses::text[])
   AND (p.proposed_at, p.id) < (@before_at::timestamptz, @before_id::uuid)
 ORDER BY p.proposed_at DESC, p.id DESC
@@ -115,10 +117,11 @@ SELECT
   sqlc.embed(p),
   i.route,
   coalesce(i.alert_title, '')::text AS alert_title,
-  coalesce(u.name, t.name, '')::text AS decided_by_name
+  coalesce(
+    (SELECT u.name FROM users u WHERE u.id = p.decided_by),
+    (SELECT t.name FROM api_tokens t WHERE t.id = p.decided_by),
+    '')::text AS decided_by_name
 FROM action_proposals p
 JOIN investigations i ON i.id = p.investigation_id
-LEFT JOIN users u ON u.id = p.decided_by
-LEFT JOIN api_tokens t ON t.id = p.decided_by
 WHERE p.investigation_id = @investigation_id
 ORDER BY p.proposed_at, p.id;
