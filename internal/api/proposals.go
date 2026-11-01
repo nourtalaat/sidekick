@@ -15,6 +15,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/gate"
 	"github.com/nourtalaat/sidekick/internal/proposals"
+	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 	"github.com/nourtalaat/sidekick/internal/strategystore"
 )
@@ -51,7 +52,7 @@ func (s *server) ListStrategyProposals(ctx context.Context, req apigen.ListStrat
 		return nil, err
 	}
 
-	rows, err := db.New(customPlan{db: s.pool}).ListStrategyProposals(ctx, params)
+	rows, err := db.New(store.CustomPlan{DB: s.pool}).ListStrategyProposals(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("list strategy proposals: %w", err)
 	}

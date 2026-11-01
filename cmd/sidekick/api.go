@@ -81,6 +81,7 @@ func registerAPI(ctx context.Context, a *app.App, memorySync memory.SyncOptions,
 
 		DraftLessons: summarizeConfigured(cfg),
 		Lessons:      lessons.NewStore(a.Pool(), a.Redactor()),
+		MemoryStore:  memory.NewStore(a.Pool(), a.Redactor(), memorySync),
 	})
 	if err != nil {
 		return fmt.Errorf("set up the API: %w", err)

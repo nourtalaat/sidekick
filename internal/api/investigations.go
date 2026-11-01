@@ -80,7 +80,7 @@ func (s *server) ListInvestigations(ctx context.Context, req apigen.ListInvestig
 		return nil, err
 	}
 
-	rows, err := db.New(customPlan{db: s.pool}).ListInvestigations(ctx, params)
+	rows, err := db.New(store.CustomPlan{DB: s.pool}).ListInvestigations(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("list investigations: %w", err)
 	}

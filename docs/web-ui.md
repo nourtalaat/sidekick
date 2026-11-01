@@ -348,6 +348,60 @@ under `/api/v1`:
 
 Secrets in the text of a lesson are redacted when it is saved, as in feedback. The text of a lesson came from people and the model: show it as plain text.
 
+## Memory entries and service notes
+
+Memory keeps one entry for each investigation whose verdict a responder
+confirmed; see [`memory`](configuration.md#memory). An admin can fix an entry
+that misleads, or switch it off. Anyone with the `viewer` role can read
+entries and notes, and an `admin` changes them. All of it is under `/api/v1`:
+
+- `GET /memory/entries` lists entries, newest confirmation first, a page at
+  a time (`limit`, at most 200, and `cursor`). `service`, `verdict`, `q`
+  (words from the service, alert name, summary and cause, as in a web
+  search) and `disabled` (`true` for only disabled entries, `false` for only
+  enabled ones) narrow the list. An entry has its investigation ID (the
+  investigation may be gone, since memory outlives investigations), service,
+  alert name, confirmed verdict, summary, cause, when it was confirmed and
+  whether it is disabled. The list has no total.
+- `GET /memory/entries/{id}` reads one entry; the ID is the investigation's.
+- `PUT /memory/entries/{id}` replaces the `summary` (required, up to 2,000
+  characters), the `cause` (up to 2,000, empty for none) and the `disabled`
+  flag, and answers with the entry as stored. There is no version: the last
+  write wins. A disabled entry is never shown to a prompt or found by a
+  search. A request that changes nothing writes nothing.
+- `DELETE /memory/entries/{id}` deletes an entry and its embedding.
+- `GET /services/notes` lists the services that have notes, by name, a page
+  at a time (`limit`, at most 500, and `after`, the `nextAfter` of the page
+  before), with the first 120 characters of each and who changed them last.
+  `GET /services/{name}/notes` reads the notes about one service, up to
+  4,000 characters of plain text; a service without notes answers 200 with
+  empty `text`. `PUT /services/{name}/notes` replaces them, and empty text
+  deletes them. A name with a slash in it is sent as `%2F`.
+- A summary, cause or notes text that fails the checks is 422 with the
+  field. An entry that does not exist is 404. Text you send is redacted
+  before it is stored, as for lessons, and the length checks run on the
+  redacted text.
+
+Two things to know about editing memory:
+
+- **An edit lasts until the confirmation changes.** When someone changes the
+  confirmed verdict or cause of the investigation, Sidekick writes the
+  entry again from the investigation: the summary and cause you edited are
+  replaced. The `disabled` flag stays.
+- **A delete lasts until the confirmation changes too.** The next change
+  of the investigation's confirmation writes a new entry. To keep an entry
+  out for good, disable it instead of deleting it.
+
+With vector memory on, an edit of the summary or cause embeds the entry
+again.
+
+Every change is written to the audit log with the old and new values, as
+`memory.updated`, `memory.disabled`, `memory.enabled`, `memory.deleted`,
+`service_notes.updated` or `service_notes.deleted`. The memory entries have
+`target_kind` `memory_entry` and the investigation filter of the audit log
+finds them; notes have `target_kind` `service_notes` and the service as the
+target.
+
 ## The review queue
 
 The **Review queue** (`/review`) is one page with a tab for each kind of

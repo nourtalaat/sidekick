@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
+	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
@@ -37,7 +38,7 @@ func (s *server) GetCostStats(ctx context.Context, req apigen.GetCostStatsReques
 		return nil, err
 	}
 
-	q := db.New(customPlan{db: s.pool})
+	q := db.New(store.CustomPlan{DB: s.pool})
 	out := apigen.GetCostStats200JSONResponse{From: dateOf(w.from), To: dateOf(w.to), IgnoredFilters: ignoredSpendFilters(f)}
 
 	if out.Totals, err = spendTotals(ctx, q, w, f); err != nil {

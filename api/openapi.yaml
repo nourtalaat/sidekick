@@ -742,6 +742,200 @@ paths:
                 $ref: "#/components/schemas/StrategyProposalSummary"
         default:
           $ref: "#/components/responses/Problem"
+  /memory/entries:
+    get:
+      operationId: ListMemoryEntries
+      summary: Memory entries, newest confirmation first, a page at a time
+      description: |
+        Memory holds one entry for each investigation whose verdict a
+        responder confirmed; prompts show the entries like a new alert. The
+        list has disabled entries too. The text of an entry came from the
+        model and from people: show it as plain text. The answer has no total,
+        since counting every entry would read the whole table.
+      x-sidekick-role: viewer
+      parameters:
+        - name: service
+          in: query
+          description: Only entries of this service.
+          schema:
+            type: string
+        - name: verdict
+          in: query
+          description: Only entries with this confirmed verdict.
+          schema:
+            $ref: "#/components/schemas/Verdict"
+        - name: q
+          in: query
+          description: Only entries whose service, alert name, summary or cause match these words, as in a web search.
+          schema:
+            type: string
+            maxLength: 200
+        - name: disabled
+          in: query
+          description: With true, only disabled entries; with false, only enabled ones. Leave it out for both.
+          schema:
+            type: boolean
+        - name: cursor
+          in: query
+          description: The nextCursor of the page before.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: A page of memory entries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryEntryList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /memory/entries/{id}:
+    get:
+      operationId: GetMemoryEntry
+      summary: One memory entry
+      x-sidekick-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/MemoryEntryID"
+      responses:
+        "200":
+          description: The memory entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryEntry"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      operationId: UpdateMemoryEntry
+      summary: Edit a memory entry, disable it or enable it
+      description: |
+        Replaces the summary, the cause and the disabled flag. A disabled
+        entry is never shown to a prompt or found by a search. The last write
+        wins; there is no version. The next change of the investigation's
+        confirmation replaces the summary and the cause with the
+        investigation's own and keeps the flag. A summary or cause that is
+        empty (the summary), too long or has control characters answers 422
+        with the field. Text that differs from the stored text is redacted
+        before it is stored. A request that changes nothing writes nothing.
+        The change is written to the audit log.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/MemoryEntryID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemoryEntryUpdate"
+      responses:
+        "200":
+          description: The memory entry as stored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryEntry"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: DeleteMemoryEntry
+      summary: Delete a memory entry
+      description: |
+        Deletes the entry and its embedding. If the confirmation of the
+        investigation changes later, a new entry is written; disable an entry
+        to keep it out for good. The audit log keeps what the entry said.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/MemoryEntryID"
+      responses:
+        "204":
+          description: The memory entry is deleted.
+        default:
+          $ref: "#/components/responses/Problem"
+  /services/notes:
+    get:
+      operationId: ListServiceNotes
+      summary: The services that have notes, by name, a page at a time
+      description: |
+        Service notes are what people wrote about a service; the memory source
+        shows them to the model. Each service comes with the first characters
+        of its notes. Read the notes of one service with
+        `GET /services/{name}/notes`.
+      x-sidekick-role: viewer
+      parameters:
+        - name: after
+          in: query
+          description: The nextAfter of the page before.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: A page of services with notes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceNotesList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /services/{name}/notes:
+    get:
+      operationId: GetServiceNotes
+      summary: The notes about a service
+      description: |
+        A service without notes answers 200 with empty `text` and no
+        `updatedAt`. The text is plain text: show it as such.
+      x-sidekick-role: viewer
+      parameters:
+        - $ref: "#/components/parameters/ServiceName"
+      responses:
+        "200":
+          description: The notes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceNotes"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      operationId: PutServiceNotes
+      summary: Replace the notes about a service
+      description: |
+        Replaces the notes with `text`, which is trimmed and redacted before
+        it is stored. Empty text deletes the notes. The last write wins.
+        Text longer than 4,000 characters, once redacted, or with control
+        characters answers 422 with the field `text`. The change is written
+        to the audit log; a request that changes nothing writes nothing.
+      x-sidekick-role: admin
+      parameters:
+        - $ref: "#/components/parameters/ServiceName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceNotesUpdate"
+      responses:
+        "200":
+          description: The notes as stored, empty after a delete.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceNotes"
+        default:
+          $ref: "#/components/responses/Problem"
   /audit:
     get:
       operationId: ListAudit
@@ -1415,6 +1609,21 @@ components:
       scheme: bearer
       description: An API token an admin created.
   parameters:
+    ServiceName:
+      name: name
+      in: path
+      required: true
+      description: The name of a service, up to 200 characters.
+      schema:
+        type: string
+    MemoryEntryID:
+      name: id
+      in: path
+      required: true
+      description: The ID of the investigation the entry is about.
+      schema:
+        type: string
+        format: uuid
     LessonID:
       name: id
       in: path
@@ -2101,6 +2310,102 @@ components:
       properties:
         version:
           type: integer
+    MemoryEntry:
+      type: object
+      required: [investigationId, verdict, summary, confirmedAt, disabled]
+      properties:
+        investigationId:
+          type: string
+          format: uuid
+          description: The investigation the entry is about; it may be gone, as memory outlives investigations.
+        service:
+          type: string
+        alertName:
+          type: string
+        verdict:
+          $ref: "#/components/schemas/Verdict"
+        summary:
+          type: string
+          description: Plain text, from the investigation's report or edited by an admin.
+        cause:
+          type: string
+          description: Plain text, the confirmed cause, or edited by an admin.
+        confirmedAt:
+          type: string
+          format: date-time
+        disabled:
+          type: boolean
+    MemoryEntryList:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemoryEntry"
+        nextCursor:
+          type: string
+    MemoryEntryUpdate:
+      type: object
+      required: [summary, disabled]
+      properties:
+        summary:
+          type: string
+          maxLength: 2000
+        cause:
+          type: string
+          maxLength: 2000
+          description: Leave it out or empty for an entry without a cause.
+        disabled:
+          type: boolean
+    ServiceNotes:
+      type: object
+      required: [service, text]
+      properties:
+        service:
+          type: string
+        text:
+          type: string
+          maxLength: 4000
+          description: Plain text. Empty for a service without notes.
+        updatedAt:
+          type: string
+          format: date-time
+        updatedByName:
+          type: string
+          description: The name of the user who last changed the notes. Not set when an API token did.
+    ServiceNotesSummary:
+      type: object
+      required: [service, preview, updatedAt]
+      properties:
+        service:
+          type: string
+        preview:
+          type: string
+          description: The first 120 characters of the notes, as plain text.
+        updatedAt:
+          type: string
+          format: date-time
+        updatedByName:
+          type: string
+    ServiceNotesList:
+      type: object
+      required: [services]
+      properties:
+        services:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceNotesSummary"
+        nextAfter:
+          type: string
+          description: Pass it as `after` to read the next page.
+    ServiceNotesUpdate:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          maxLength: 4000
     UsedLesson:
       type: object
       required: [id, text, scope, status]

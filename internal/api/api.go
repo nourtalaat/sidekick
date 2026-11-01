@@ -84,6 +84,9 @@ type Options struct {
 	// Lessons reads and changes lessons, for the /lessons operations and
 	// the lessons an investigation shows. Without it, they answer 503.
 	Lessons LessonStore
+	// MemoryStore reads and changes memory entries and service notes, for
+	// the /memory and /services operations. Without it, they answer 503.
+	MemoryStore MemoryStore
 	// Proposals decides whether a rating of wrong makes the
 	// investigation's strategy version get a proposed change. The zero
 	// value is off.
@@ -145,7 +148,7 @@ func New(opts Options) (http.Handler, error) {
 	srv := &server{
 		tokens: opts.Tokens, cfg: opts.Config, rules: opts.Rules, strategies: opts.Strategies, proposalReviewer: opts.ProposalReviewer, strategyBase: strategyBase, redactor: opts.Redactor, pool: opts.Pool, audit: opts.Audit,
 		hub: opts.Hub, log: log, stopper: opts.Stopper, watchers: opts.Watchers, now: now,
-		feedbackMetrics: opts.Feedback, memory: opts.Memory, proposals: opts.Proposals, draftLessons: opts.DraftLessons, lessons: opts.Lessons,
+		feedbackMetrics: opts.Feedback, memory: opts.Memory, proposals: opts.Proposals, draftLessons: opts.DraftLessons, lessons: opts.Lessons, memoryEntries: opts.MemoryStore,
 		streamHeartbeat: cmp.Or(opts.StreamHeartbeat, DefaultStreamHeartbeat),
 		streamLifetime:  cmp.Or(opts.StreamLifetime, DefaultStreamLifetime),
 	}

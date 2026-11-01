@@ -41,6 +41,7 @@ type server struct {
 	proposals       proposals.Trigger
 	draftLessons    bool
 	lessons         LessonStore
+	memoryEntries   MemoryStore
 	// stopper stops watchers and watchers records the changes that
 	// resolving a group makes to them; now is the clock.
 	stopper  *watch.Stopper

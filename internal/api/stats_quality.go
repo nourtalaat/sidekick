@@ -6,6 +6,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/report"
+	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
@@ -29,7 +30,7 @@ func (s *server) GetQualityStats(ctx context.Context, req apigen.GetQualityStats
 		return nil, err
 	}
 
-	q := db.New(customPlan{db: s.pool})
+	q := db.New(store.CustomPlan{DB: s.pool})
 
 	totals, err := qualityTotals(ctx, q, w, f)
 	if err != nil {

@@ -2,15 +2,12 @@ package api
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"slices"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -55,9 +52,6 @@ var knownLessonStatuses = []apigen.LessonStatus{apigen.LessonProposed, apigen.Le
 // errLessonVersion answers an edit or approval that names no version.
 var errLessonVersion = problemf(http.StatusBadRequest, "version is required: send the version of the lesson you read.")
 
-// errBadLessonCursor means a cursor is not one GET /lessons returned.
-var errBadLessonCursor = errors.New("not a cursor")
-
 // ListLessons returns a page of lessons, newest first, with the number of
 // lessons of each status.
 func (s *server) ListLessons(ctx context.Context, req apigen.ListLessonsRequestObject) (apigen.ListLessonsResponseObject, error) {
@@ -89,7 +83,7 @@ func (s *server) ListLessons(ctx context.Context, req apigen.ListLessonsRequestO
 	}
 
 	if page.Next != nil {
-		cursor := lessonCursor{createdAt: page.Next.CreatedAt, id: page.Next.ID}.String()
+		cursor := timeCursor{at: page.Next.CreatedAt, id: page.Next.ID}.String()
 		list.NextCursor = &cursor
 	}
 
@@ -191,12 +185,12 @@ func lessonListParams(p apigen.ListLessonsParams) (lessons.ListParams, error) {
 	}
 
 	if p.Cursor != nil {
-		c, err := parseLessonCursor(*p.Cursor)
+		c, err := parseTimeCursor(*p.Cursor)
 		if err != nil {
 			return lessons.ListParams{}, problemf(http.StatusBadRequest, "cursor is not one this API returned.")
 		}
 
-		params.AfterAt, params.AfterID = c.createdAt, c.id
+		params.AfterAt, params.AfterID = c.at, c.id
 	}
 
 	return params, nil
@@ -296,43 +290,6 @@ func lessonError(err error) error {
 	default:
 		return fmt.Errorf("change a lesson: %w", err)
 	}
-}
-
-// lessonCursor is where a page of lessons starts: after the lesson created
-// at createdAt with id.
-type lessonCursor struct {
-	createdAt time.Time
-	id        uuid.UUID
-}
-
-// String encodes c for the nextCursor of a page.
-func (c lessonCursor) String() string {
-	return base64.RawURLEncoding.EncodeToString([]byte(strconv.FormatInt(c.createdAt.UnixMicro(), 10) + "." + c.id.String()))
-}
-
-// parseLessonCursor decodes what lessonCursor.String encoded.
-func parseLessonCursor(s string) (lessonCursor, error) {
-	raw, err := base64.RawURLEncoding.DecodeString(s)
-	if err != nil {
-		return lessonCursor{}, errBadLessonCursor
-	}
-
-	parts := strings.SplitN(string(raw), ".", cursorParts)
-	if len(parts) != cursorParts {
-		return lessonCursor{}, errBadLessonCursor
-	}
-
-	micros, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil {
-		return lessonCursor{}, errBadLessonCursor
-	}
-
-	id, err := uuid.Parse(parts[1])
-	if err != nil {
-		return lessonCursor{}, errBadLessonCursor
-	}
-
-	return lessonCursor{createdAt: time.UnixMicro(micros).UTC(), id: id}, nil
 }
 
 // usedLessonsOf is the API's view of the lessons an investigation used.
