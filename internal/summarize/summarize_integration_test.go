@@ -75,10 +75,11 @@ func TestCallTool(t *testing.T) {
 			wantChoice: model.ToolChoice{Mode: model.ToolChoiceRequired, Name: toolName},
 		},
 		{
-			name:   "a failed call costs nothing",
-			turns:  []modeltest.Turn{modeltest.Fail(errProviderDown)},
-			caps:   model.Capabilities{ToolCalling: true, ToolChoice: true},
-			wantIs: errProviderDown,
+			name:       "a failed call costs nothing",
+			turns:      []modeltest.Turn{modeltest.Fail(errProviderDown)},
+			caps:       model.Capabilities{ToolCalling: true, ToolChoice: true},
+			wantIs:     errProviderDown,
+			wantChoice: model.ToolChoice{Mode: model.ToolChoiceRequired, Name: toolName},
 		},
 		{
 			name:   "the route's cap is reached",
