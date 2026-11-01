@@ -746,6 +746,98 @@ paths:
                 $ref: "#/components/schemas/StopWatcherResult"
         default:
           $ref: "#/components/responses/Problem"
+  /proposals:
+    get:
+      operationId: ListProposals
+      summary: Action proposals, newest first, a page at a time
+      description: |
+        The review queue. Without `status` it lists the proposals that wait
+        for a decision. The proposals are ordered by the time they were
+        made, newest first, and a page starts after the proposal the
+        cursor names. `params`, `paramsText` and `reason` are text the
+        model wrote: show them as plain text, and show `paramsText`, which
+        spells out characters that could hide something, to the person who
+        decides.
+      x-sidekick-role: approver
+      parameters:
+        - name: status
+          in: query
+          description: Only proposals with one of these statuses. The default is proposed.
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/ProposalStatus"
+        - name: cursor
+          in: query
+          description: The nextCursor of the page before.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: A page of proposals.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProposalList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /proposals/{id}/approve:
+    post:
+      operationId: ApproveProposal
+      summary: Approve an action proposal
+      description: |
+        Approves a proposal that waits for a decision and queues the job
+        that runs it. The answer is 409 when the proposal expired
+        (`code` expired), was decided already by someone else (`code`
+        decided, with who in the detail), or is not allowed by the config
+        any more (`code` not_allowed): the route no longer lists the
+        action or is read-only now, or the action is no longer defined.
+        When two people decide at the same time, one gets 200 and the
+        other 409.
+      x-sidekick-role: approver
+      parameters:
+        - $ref: "#/components/parameters/ProposalID"
+      responses:
+        "200":
+          description: The proposal, approved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Proposal"
+        default:
+          $ref: "#/components/responses/Problem"
+  /proposals/{id}/reject:
+    post:
+      operationId: RejectProposal
+      summary: Reject an action proposal
+      description: |
+        Rejects a proposal that waits for a decision. Nothing runs. The
+        note, if given, is redacted and kept in the audit log. The answers
+        are those of approving, except that the config is not checked.
+      x-sidekick-role: approver
+      parameters:
+        - $ref: "#/components/parameters/ProposalID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RejectProposalRequest"
+      responses:
+        "200":
+          description: The proposal, rejected.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Proposal"
+        default:
+          $ref: "#/components/responses/Problem"
   /investigations/{id}/fix-applied:
     put:
       operationId: MarkFixApplied
@@ -1010,6 +1102,14 @@ components:
       name: id
       in: path
       required: true
+      schema:
+        type: string
+        format: uuid
+    ProposalID:
+      name: id
+      in: path
+      required: true
+      description: The ID of an action proposal.
       schema:
         type: string
         format: uuid
@@ -1304,8 +1404,12 @@ components:
           description: A duration such as 15m. Empty turns it off.
     RouteMode:
       type: string
-      enum: [read-only]
-      description: The action mode. Only read-only exists until action modes arrive.
+      enum: [read-only, approved]
+      description: |
+        The action mode. In read-only mode, the default, the model cannot
+        propose changes. In approved mode it may propose the route's
+        actions, and a person approves each one. A route in approved mode
+        lists at least one action.
     RouteSpec:
       type: object
       description: The parts of a route that a person sets, with the keys they have in sidekick.yaml.
@@ -1327,6 +1431,11 @@ components:
             type: string
         mode:
           $ref: "#/components/schemas/RouteMode"
+        actions:
+          type: array
+          description: The actions the route may propose, by their names in the config file's actions section. Empty in read-only mode.
+          items:
+            type: string
         budgets:
           $ref: "#/components/schemas/RouteBudgets"
         grouping:
@@ -1445,6 +1554,100 @@ components:
         nextCursor:
           type: string
           description: Pass it as cursor to get the next page. Absent on the last page.
+    ProposalStatus:
+      type: string
+      enum: [proposed, approved, rejected, expired, executing, succeeded, failed, undone]
+    ActionLink:
+      type: object
+      required: [title, url]
+      properties:
+        title:
+          type: string
+        url:
+          type: string
+    ActionResult:
+      type: object
+      required: [summary]
+      properties:
+        summary:
+          type: string
+        links:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActionLink"
+    Proposal:
+      type: object
+      description: |
+        An action the model proposed. `params`, `paramsText` and `reason`
+        are text the model wrote, so a screen shows them as plain text.
+        What `params` holds never changes, and it is what runs.
+      required: [id, investigationId, route, action, params, paramsText, reason, mode, status, proposedAt, expiresAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        investigationId:
+          type: string
+          format: uuid
+        alertTitle:
+          type: string
+          description: The title of the alert of the investigation. Set in the review queue only.
+        route:
+          type: string
+        action:
+          type: string
+          description: The name of the action in the config file.
+        params:
+          type: object
+          additionalProperties: true
+          description: The parameters, as the action runs with them.
+        paramsText:
+          type: string
+          description: The parameters as the approver reads them. Characters that could hide something are written as \u escapes, and nothing is cut.
+        reason:
+          type: string
+        mode:
+          type: string
+        status:
+          $ref: "#/components/schemas/ProposalStatus"
+        proposedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        decidedByName:
+          type: string
+          description: The name of the user or API token that approved or rejected it.
+        decidedBySlackUser:
+          type: string
+          description: The Slack user ID of someone who decided in Slack.
+        decidedAt:
+          type: string
+          format: date-time
+        result:
+          $ref: "#/components/schemas/ActionResult"
+        error:
+          type: string
+          description: Why it failed. While it is tried again, the last failed attempt.
+    ProposalList:
+      type: object
+      required: [proposals]
+      properties:
+        proposals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Proposal"
+        nextCursor:
+          type: string
+          description: Pass it as cursor to get the next page. Absent on the last page.
+    RejectProposalRequest:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 500
+          description: Why it is rejected. Redacted, and kept in the audit log.
     Job:
       type: object
       required: [id, kind, attempts, maxAttempts, createdAt]
@@ -1753,6 +1956,7 @@ components:
         - eventCount
         - events
         - pendingFollowUps
+        - proposals
       properties:
         id:
           type: string
@@ -1851,6 +2055,11 @@ components:
           description: Follow-up questions that no run has answered yet, oldest first.
           items:
             $ref: "#/components/schemas/PendingFollowUp"
+        proposals:
+          type: array
+          description: The action proposals of the investigation, oldest first.
+          items:
+            $ref: "#/components/schemas/Proposal"
     Confirmation:
       type: object
       required: [verdict, at]

@@ -56,6 +56,7 @@ func routeOf(name string, spec apigen.RouteSpec) (config.Route, error) {
 	}
 
 	r.Sources = valueOf(spec.Sources)
+	r.Actions = valueOf(spec.Actions)
 	r.Outputs = valueOf(spec.Outputs)
 	r.Match = matchOf(spec.Match)
 

@@ -57,6 +57,7 @@ func routeView(r config.Route) apigen.Route {
 		Sources:  listOf(r.Sources),
 		Outputs:  listOf(r.Outputs),
 		Mode:     new(apigen.RouteMode(r.Mode)),
+		Actions:  listOf(r.Actions),
 		Budgets: &apigen.RouteBudgets{
 			MaxTokens:    nonZero(r.Budgets.MaxTokens),
 			MaxToolCalls: nonZero(r.Budgets.MaxToolCalls),

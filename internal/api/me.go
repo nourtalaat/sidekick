@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/nourtalaat/sidekick/internal/action/proposals"
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/auth"
@@ -35,7 +36,9 @@ type server struct {
 	// resolving a group makes to them; now is the clock.
 	stopper  *watch.Stopper
 	watchers *watch.Recorder
-	now      func() time.Time
+	// actions decides the action proposals.
+	actions *proposals.Service
+	now     func() time.Time
 
 	streamHeartbeat time.Duration
 	streamLifetime  time.Duration

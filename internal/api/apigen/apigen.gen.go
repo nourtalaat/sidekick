@@ -280,6 +280,42 @@ func (e OperationsStatsInterval) Valid() bool {
 	}
 }
 
+// Defines values for ProposalStatus.
+const (
+	ProposalStatusApproved  ProposalStatus = "approved"
+	ProposalStatusExecuting ProposalStatus = "executing"
+	ProposalStatusExpired   ProposalStatus = "expired"
+	ProposalStatusFailed    ProposalStatus = "failed"
+	ProposalStatusProposed  ProposalStatus = "proposed"
+	ProposalStatusRejected  ProposalStatus = "rejected"
+	ProposalStatusSucceeded ProposalStatus = "succeeded"
+	ProposalStatusUndone    ProposalStatus = "undone"
+)
+
+// Valid indicates whether the value is a known member of the ProposalStatus enum.
+func (e ProposalStatus) Valid() bool {
+	switch e {
+	case ProposalStatusApproved:
+		return true
+	case ProposalStatusExecuting:
+		return true
+	case ProposalStatusExpired:
+		return true
+	case ProposalStatusFailed:
+		return true
+	case ProposalStatusProposed:
+		return true
+	case ProposalStatusRejected:
+		return true
+	case ProposalStatusSucceeded:
+		return true
+	case ProposalStatusUndone:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ReportStopReason.
 const (
 	ReportStopReasonBudget    ReportStopReason = "budget"
@@ -336,13 +372,16 @@ func (e Role) Valid() bool {
 
 // Defines values for RouteMode.
 const (
-	ReadOnly RouteMode = "read-only"
+	RouteModeApproved RouteMode = "approved"
+	RouteModeReadOnly RouteMode = "read-only"
 )
 
 // Valid indicates whether the value is a known member of the RouteMode enum.
 func (e RouteMode) Valid() bool {
 	switch e {
-	case ReadOnly:
+	case RouteModeApproved:
+		return true
+	case RouteModeReadOnly:
 		return true
 	default:
 		return false
@@ -659,6 +698,18 @@ func (e GetOperationsStatsParamsInterval) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// ActionLink defines model for ActionLink.
+type ActionLink struct {
+	Title string `json:"title"`
+	Url   string `json:"url"`
+}
+
+// ActionResult defines model for ActionResult.
+type ActionResult struct {
+	Links   *[]ActionLink `json:"links,omitempty"`
+	Summary string        `json:"summary"`
 }
 
 // AuditEntry defines model for AuditEntry.
@@ -1191,6 +1242,9 @@ type Investigation struct {
 	// PendingFollowUps Follow-up questions that no run has answered yet, oldest first.
 	PendingFollowUps []PendingFollowUp `json:"pendingFollowUps"`
 
+	// Proposals The action proposals of the investigation, oldest first.
+	Proposals []Proposal `json:"proposals"`
+
 	// Report The result of the investigation. The model wrote its text from what
 	// the sources returned, so show it as plain text.
 	Report *Report `json:"report,omitempty"`
@@ -1451,12 +1505,18 @@ type NewListener struct {
 
 // NewRoute defines model for NewRoute.
 type NewRoute struct {
+	// Actions The actions the route may propose, by their names in the config file's actions section. Empty in read-only mode.
+	Actions *[]string `json:"actions,omitempty"`
+
 	// Budgets Limits of one investigation. Zero or empty uses the global value.
 	Budgets  *RouteBudgets  `json:"budgets,omitempty"`
 	Grouping *RouteGrouping `json:"grouping,omitempty"`
 	Match    *RouteMatch    `json:"match,omitempty"`
 
-	// Mode The action mode. Only read-only exists until action modes arrive.
+	// Mode The action mode. In read-only mode, the default, the model cannot
+	// propose changes. In approved mode it may propose the route's
+	// actions, and a person approves each one. A route in approved mode
+	// lists at least one action.
 	Mode    *RouteMode `json:"mode,omitempty"`
 	Name    string     `json:"name"`
 	Outputs *[]string  `json:"outputs,omitempty"`
@@ -1669,6 +1729,52 @@ type Problem struct {
 	Type string `json:"type"`
 }
 
+// Proposal An action the model proposed. `params`, `paramsText` and `reason`
+// are text the model wrote, so a screen shows them as plain text.
+// What `params` holds never changes, and it is what runs.
+type Proposal struct {
+	// Action The name of the action in the config file.
+	Action string `json:"action"`
+
+	// AlertTitle The title of the alert of the investigation. Set in the review queue only.
+	AlertTitle *string    `json:"alertTitle,omitempty"`
+	DecidedAt  *time.Time `json:"decidedAt,omitempty"`
+
+	// DecidedByName The name of the user or API token that approved or rejected it.
+	DecidedByName *string `json:"decidedByName,omitempty"`
+
+	// DecidedBySlackUser The Slack user ID of someone who decided in Slack.
+	DecidedBySlackUser *string `json:"decidedBySlackUser,omitempty"`
+
+	// Error Why it failed. While it is tried again, the last failed attempt.
+	Error           *string            `json:"error,omitempty"`
+	ExpiresAt       time.Time          `json:"expiresAt"`
+	Id              openapi_types.UUID `json:"id"`
+	InvestigationId openapi_types.UUID `json:"investigationId"`
+	Mode            string             `json:"mode"`
+
+	// Params The parameters, as the action runs with them.
+	Params map[string]interface{} `json:"params"`
+
+	// ParamsText The parameters as the approver reads them. Characters that could hide something are written as \u escapes, and nothing is cut.
+	ParamsText string         `json:"paramsText"`
+	ProposedAt time.Time      `json:"proposedAt"`
+	Reason     string         `json:"reason"`
+	Result     *ActionResult  `json:"result,omitempty"`
+	Route      string         `json:"route"`
+	Status     ProposalStatus `json:"status"`
+}
+
+// ProposalList defines model for ProposalList.
+type ProposalList struct {
+	// NextCursor Pass it as cursor to get the next page. Absent on the last page.
+	NextCursor *string    `json:"nextCursor,omitempty"`
+	Proposals  []Proposal `json:"proposals"`
+}
+
+// ProposalStatus defines model for ProposalStatus.
+type ProposalStatus string
+
 // QualityComparison defines model for QualityComparison.
 type QualityComparison struct {
 	Correct int64 `json:"correct"`
@@ -1719,6 +1825,12 @@ type QualityTotals struct {
 	Rated int64 `json:"rated"`
 }
 
+// RejectProposalRequest defines model for RejectProposalRequest.
+type RejectProposalRequest struct {
+	// Note Why it is rejected. Redacted, and kept in the audit log.
+	Note *string `json:"note,omitempty"`
+}
+
 // Report The result of the investigation. The model wrote its text from what
 // the sources returned, so show it as plain text.
 type Report struct {
@@ -1755,6 +1867,9 @@ type Role string
 
 // Route defines model for Route.
 type Route struct {
+	// Actions The actions the route may propose, by their names in the config file's actions section. Empty in read-only mode.
+	Actions *[]string `json:"actions,omitempty"`
+
 	// Budgets Limits of one investigation. Zero or empty uses the global value.
 	Budgets  *RouteBudgets  `json:"budgets,omitempty"`
 	Enabled  bool           `json:"enabled"`
@@ -1764,7 +1879,10 @@ type Route struct {
 	Layer RuleLayer   `json:"layer"`
 	Match *RouteMatch `json:"match,omitempty"`
 
-	// Mode The action mode. Only read-only exists until action modes arrive.
+	// Mode The action mode. In read-only mode, the default, the model cannot
+	// propose changes. In approved mode it may propose the route's
+	// actions, and a person approves each one. A route in approved mode
+	// lists at least one action.
 	Mode    *RouteMode `json:"mode,omitempty"`
 	Name    string     `json:"name"`
 	Outputs *[]string  `json:"outputs,omitempty"`
@@ -1836,17 +1954,26 @@ type RouteMatch struct {
 	Text *string `json:"text,omitempty"`
 }
 
-// RouteMode The action mode. Only read-only exists until action modes arrive.
+// RouteMode The action mode. In read-only mode, the default, the model cannot
+// propose changes. In approved mode it may propose the route's
+// actions, and a person approves each one. A route in approved mode
+// lists at least one action.
 type RouteMode string
 
 // RouteSpec The parts of a route that a person sets, with the keys they have in sidekick.yaml.
 type RouteSpec struct {
+	// Actions The actions the route may propose, by their names in the config file's actions section. Empty in read-only mode.
+	Actions *[]string `json:"actions,omitempty"`
+
 	// Budgets Limits of one investigation. Zero or empty uses the global value.
 	Budgets  *RouteBudgets  `json:"budgets,omitempty"`
 	Grouping *RouteGrouping `json:"grouping,omitempty"`
 	Match    *RouteMatch    `json:"match,omitempty"`
 
-	// Mode The action mode. Only read-only exists until action modes arrive.
+	// Mode The action mode. In read-only mode, the default, the model cannot
+	// propose changes. In approved mode it may propose the route's
+	// actions, and a person approves each one. A route in approved mode
+	// lists at least one action.
 	Mode    *RouteMode `json:"mode,omitempty"`
 	Outputs *[]string  `json:"outputs,omitempty"`
 
@@ -1858,13 +1985,19 @@ type RouteSpec struct {
 
 // RouteUpdate defines model for RouteUpdate.
 type RouteUpdate struct {
+	// Actions The actions the route may propose, by their names in the config file's actions section. Empty in read-only mode.
+	Actions *[]string `json:"actions,omitempty"`
+
 	// Budgets Limits of one investigation. Zero or empty uses the global value.
 	Budgets  *RouteBudgets  `json:"budgets,omitempty"`
 	Enabled  bool           `json:"enabled"`
 	Grouping *RouteGrouping `json:"grouping,omitempty"`
 	Match    *RouteMatch    `json:"match,omitempty"`
 
-	// Mode The action mode. Only read-only exists until action modes arrive.
+	// Mode The action mode. In read-only mode, the default, the model cannot
+	// propose changes. In approved mode it may propose the route's
+	// actions, and a person approves each one. A route in approved mode
+	// lists at least one action.
 	Mode    *RouteMode `json:"mode,omitempty"`
 	Outputs *[]string  `json:"outputs,omitempty"`
 
@@ -2195,6 +2328,9 @@ type BenchRunID = openapi_types.UUID
 // InvestigationID defines model for InvestigationID.
 type InvestigationID = openapi_types.UUID
 
+// ProposalID defines model for ProposalID.
+type ProposalID = openapi_types.UUID
+
 // RuleName defines model for RuleName.
 type RuleName = string
 
@@ -2312,6 +2448,16 @@ type ListJobsParams struct {
 // ListJobsParamsStatus defines parameters for ListJobs.
 type ListJobsParamsStatus string
 
+// ListProposalsParams defines parameters for ListProposals.
+type ListProposalsParams struct {
+	// Status Only proposals with one of these statuses. The default is proposed.
+	Status *[]ProposalStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// Cursor The nextCursor of the page before.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // GetCostStatsParams defines parameters for GetCostStats.
 type GetCostStatsParams struct {
 	// From The first day of the range, a UTC date. The default is 29 days before `to`.
@@ -2392,6 +2538,9 @@ type CreateListenerJSONRequestBody = NewListener
 
 // UpdateListenerJSONRequestBody defines body for UpdateListener for application/json ContentType.
 type UpdateListenerJSONRequestBody = ListenerUpdate
+
+// RejectProposalJSONRequestBody defines body for RejectProposal for application/json ContentType.
+type RejectProposalJSONRequestBody = RejectProposalRequest
 
 // CreateRouteJSONRequestBody defines body for CreateRoute for application/json ContentType.
 type CreateRouteJSONRequestBody = NewRoute
@@ -2476,6 +2625,15 @@ type ServerInterface interface {
 	// GetMe The signed-in user or API token, and its role
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
+	// ListProposals Action proposals, newest first, a page at a time
+	// (GET /proposals)
+	ListProposals(w http.ResponseWriter, r *http.Request, params ListProposalsParams)
+	// ApproveProposal Approve an action proposal
+	// (POST /proposals/{id}/approve)
+	ApproveProposal(w http.ResponseWriter, r *http.Request, id ProposalID)
+	// RejectProposal Reject an action proposal
+	// (POST /proposals/{id}/reject)
+	RejectProposal(w http.ResponseWriter, r *http.Request, id ProposalID)
 	// ListRoutes The routes, from the config file and from runtime, with their status
 	// (GET /routes)
 	ListRoutes(w http.ResponseWriter, r *http.Request)
@@ -3460,6 +3618,117 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 	handler.ServeHTTP(w, r)
 }
 
+// ListProposals operation middleware
+func (siw *ServerInterfaceWrapper) ListProposals(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListProposalsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListProposals(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApproveProposal operation middleware
+func (siw *ServerInterfaceWrapper) ApproveProposal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ProposalID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApproveProposal(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RejectProposal operation middleware
+func (siw *ServerInterfaceWrapper) RejectProposal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ProposalID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RejectProposal(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListRoutes operation middleware
 func (siw *ServerInterfaceWrapper) ListRoutes(w http.ResponseWriter, r *http.Request) {
 
@@ -4088,6 +4357,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{id}/cancel", wrapper.CancelInvestigation)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{id}/resolve", wrapper.ResolveInvestigation)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/watchers/{id}/stop", wrapper.StopWatcher)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/proposals", wrapper.ListProposals)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/proposals/{id}/approve", wrapper.ApproveProposal)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/proposals/{id}/reject", wrapper.RejectProposal)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/investigations/{id}/fix-applied", wrapper.UnmarkFixApplied)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/investigations/{id}/fix-applied", wrapper.MarkFixApplied)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/stats/quality", wrapper.GetQualityStats)
@@ -5058,6 +5330,124 @@ func (response GetMedefaultApplicationProblemPlusJSONResponse) VisitGetMeRespons
 	return err
 }
 
+type ListProposalsRequestObject struct {
+	Params ListProposalsParams
+}
+
+type ListProposalsResponseObject interface {
+	VisitListProposalsResponse(w http.ResponseWriter) error
+}
+
+type ListProposals200JSONResponse ProposalList
+
+func (response ListProposals200JSONResponse) VisitListProposalsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListProposalsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListProposalsdefaultApplicationProblemPlusJSONResponse) VisitListProposalsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveProposalRequestObject struct {
+	Id ProposalID `json:"id"`
+}
+
+type ApproveProposalResponseObject interface {
+	VisitApproveProposalResponse(w http.ResponseWriter) error
+}
+
+type ApproveProposal200JSONResponse Proposal
+
+func (response ApproveProposal200JSONResponse) VisitApproveProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApproveProposaldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ApproveProposaldefaultApplicationProblemPlusJSONResponse) VisitApproveProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RejectProposalRequestObject struct {
+	Id   ProposalID `json:"id"`
+	Body *RejectProposalJSONRequestBody
+}
+
+type RejectProposalResponseObject interface {
+	VisitRejectProposalResponse(w http.ResponseWriter) error
+}
+
+type RejectProposal200JSONResponse Proposal
+
+func (response RejectProposal200JSONResponse) VisitRejectProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RejectProposaldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RejectProposaldefaultApplicationProblemPlusJSONResponse) VisitRejectProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListRoutesRequestObject struct {
 }
 
@@ -5586,6 +5976,15 @@ type StrictServerInterface interface {
 	// GetMe The signed-in user or API token, and its role
 	// (GET /me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
+	// ListProposals Action proposals, newest first, a page at a time
+	// (GET /proposals)
+	ListProposals(ctx context.Context, request ListProposalsRequestObject) (ListProposalsResponseObject, error)
+	// ApproveProposal Approve an action proposal
+	// (POST /proposals/{id}/approve)
+	ApproveProposal(ctx context.Context, request ApproveProposalRequestObject) (ApproveProposalResponseObject, error)
+	// RejectProposal Reject an action proposal
+	// (POST /proposals/{id}/reject)
+	RejectProposal(ctx context.Context, request RejectProposalRequestObject) (RejectProposalResponseObject, error)
 	// ListRoutes The routes, from the config file and from runtime, with their status
 	// (GET /routes)
 	ListRoutes(ctx context.Context, request ListRoutesRequestObject) (ListRoutesResponseObject, error)
@@ -6302,6 +6701,94 @@ func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetMeResponseObject); ok {
 		if err := validResponse.VisitGetMeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListProposals operation middleware
+func (sh *strictHandler) ListProposals(w http.ResponseWriter, r *http.Request, params ListProposalsParams) {
+	var request ListProposalsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListProposals(ctx, request.(ListProposalsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListProposals")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListProposalsResponseObject); ok {
+		if err := validResponse.VisitListProposalsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ApproveProposal operation middleware
+func (sh *strictHandler) ApproveProposal(w http.ResponseWriter, r *http.Request, id ProposalID) {
+	var request ApproveProposalRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ApproveProposal(ctx, request.(ApproveProposalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ApproveProposal")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ApproveProposalResponseObject); ok {
+		if err := validResponse.VisitApproveProposalResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RejectProposal operation middleware
+func (sh *strictHandler) RejectProposal(w http.ResponseWriter, r *http.Request, id ProposalID) {
+	var request RejectProposalRequestObject
+
+	request.Id = id
+
+	var body RejectProposalJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RejectProposal(ctx, request.(RejectProposalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RejectProposal")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RejectProposalResponseObject); ok {
+		if err := validResponse.VisitRejectProposalResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

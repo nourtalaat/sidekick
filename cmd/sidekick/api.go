@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/nourtalaat/sidekick/internal/action/proposals"
 	"github.com/nourtalaat/sidekick/internal/api"
 	"github.com/nourtalaat/sidekick/internal/app"
 	"github.com/nourtalaat/sidekick/internal/audit"
@@ -18,7 +19,7 @@ import (
 // under /api/v1 on the main listener, when the config has an oidc
 // section. Without it, neither is served. memorySync says how feedback that
 // changes a confirmed verdict syncs the investigation's memory entry.
-func registerAPI(ctx context.Context, a *app.App, memorySync memory.SyncOptions) error {
+func registerAPI(ctx context.Context, a *app.App, actions *proposals.Service, memorySync memory.SyncOptions) error {
 	cfg := a.Config()
 	log := a.Logger().With("component", "api")
 
@@ -69,6 +70,7 @@ func registerAPI(ctx context.Context, a *app.App, memorySync memory.SyncOptions)
 		Memory:   memorySync,
 		Stopper:  stopper,
 		Watchers: recorder,
+		Actions:  actions,
 		Logger:   log,
 	})
 	if err != nil {

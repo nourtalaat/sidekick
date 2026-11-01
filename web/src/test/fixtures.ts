@@ -72,6 +72,7 @@ export function detail(overrides: Partial<Investigation> = {}): Investigation {
       },
     ],
     pendingFollowUps: [],
+    proposals: [],
     report: {
       verdict: "true_positive",
       confidence: "high",

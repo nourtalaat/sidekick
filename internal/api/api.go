@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	apispec "github.com/nourtalaat/sidekick/api"
+	"github.com/nourtalaat/sidekick/internal/action/proposals"
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/auth"
@@ -77,6 +78,9 @@ type Options struct {
 	// group ends. Nil writes and shows the changes, but logs and counts
 	// nothing.
 	Watchers *watch.Recorder
+	// Actions approves and rejects action proposals. Without it, those
+	// operations answer 503.
+	Actions *proposals.Service
 	// Now returns the current time. Nil means time.Now.
 	Now func() time.Time
 	// Logger gets the errors that answer 500. Nil logs nothing.
@@ -118,7 +122,7 @@ func New(opts Options) (http.Handler, error) {
 
 	srv := &server{
 		tokens: opts.Tokens, cfg: opts.Config, rules: opts.Rules, redactor: opts.Redactor, pool: opts.Pool, audit: opts.Audit,
-		hub: opts.Hub, log: log, stopper: opts.Stopper, watchers: opts.Watchers, now: now,
+		hub: opts.Hub, log: log, stopper: opts.Stopper, watchers: opts.Watchers, actions: opts.Actions, now: now,
 		feedbackMetrics: opts.Feedback, memory: opts.Memory,
 		streamHeartbeat: cmp.Or(opts.StreamHeartbeat, DefaultStreamHeartbeat),
 		streamLifetime:  cmp.Or(opts.StreamLifetime, DefaultStreamLifetime),

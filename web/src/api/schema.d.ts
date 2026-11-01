@@ -522,6 +522,81 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Action proposals, newest first, a page at a time
+         * @description The review queue. Without `status` it lists the proposals that wait
+         *     for a decision. The proposals are ordered by the time they were
+         *     made, newest first, and a page starts after the proposal the
+         *     cursor names. `params`, `paramsText` and `reason` are text the
+         *     model wrote: show them as plain text, and show `paramsText`, which
+         *     spells out characters that could hide something, to the person who
+         *     decides.
+         */
+        get: operations["ListProposals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/proposals/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve an action proposal
+         * @description Approves a proposal that waits for a decision and queues the job
+         *     that runs it. The answer is 409 when the proposal expired
+         *     (`code` expired), was decided already by someone else (`code`
+         *     decided, with who in the detail), or is not allowed by the config
+         *     any more (`code` not_allowed): the route no longer lists the
+         *     action or is read-only now, or the action is no longer defined.
+         *     When two people decide at the same time, one gets 200 and the
+         *     other 409.
+         */
+        post: operations["ApproveProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/proposals/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject an action proposal
+         * @description Rejects a proposal that waits for a decision. Nothing runs. The
+         *     note, if given, is redacted and kept in the audit log. The answers
+         *     are those of approving, except that the config is not checked.
+         */
+        post: operations["RejectProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/investigations/{id}/fix-applied": {
         parameters: {
             query?: never;
@@ -862,10 +937,13 @@ export interface components {
             relatedWindow?: string;
         };
         /**
-         * @description The action mode. Only read-only exists until action modes arrive.
+         * @description The action mode. In read-only mode, the default, the model cannot
+         *     propose changes. In approved mode it may propose the route's
+         *     actions, and a person approves each one. A route in approved mode
+         *     lists at least one action.
          * @enum {string}
          */
-        RouteMode: "read-only";
+        RouteMode: "read-only" | "approved";
         /** @description The parts of a route that a person sets, with the keys they have in sidekick.yaml. */
         RouteSpec: {
             /** @description Lower is tried first. Defaults to 100. */
@@ -875,6 +953,8 @@ export interface components {
             sources?: string[];
             outputs?: string[];
             mode?: components["schemas"]["RouteMode"];
+            /** @description The actions the route may propose, by their names in the config file's actions section. Empty in read-only mode. */
+            actions?: string[];
             budgets?: components["schemas"]["RouteBudgets"];
             grouping?: components["schemas"]["RouteGrouping"];
         };
@@ -941,6 +1021,63 @@ export interface components {
             entries: components["schemas"]["AuditEntry"][];
             /** @description Pass it as cursor to get the next page. Absent on the last page. */
             nextCursor?: string;
+        };
+        /** @enum {string} */
+        ProposalStatus: "proposed" | "approved" | "rejected" | "expired" | "executing" | "succeeded" | "failed" | "undone";
+        ActionLink: {
+            title: string;
+            url: string;
+        };
+        ActionResult: {
+            summary: string;
+            links?: components["schemas"]["ActionLink"][];
+        };
+        /**
+         * @description An action the model proposed. `params`, `paramsText` and `reason`
+         *     are text the model wrote, so a screen shows them as plain text.
+         *     What `params` holds never changes, and it is what runs.
+         */
+        Proposal: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            investigationId: string;
+            /** @description The title of the alert of the investigation. Set in the review queue only. */
+            alertTitle?: string;
+            route: string;
+            /** @description The name of the action in the config file. */
+            action: string;
+            /** @description The parameters, as the action runs with them. */
+            params: {
+                [key: string]: unknown;
+            };
+            /** @description The parameters as the approver reads them. Characters that could hide something are written as \u escapes, and nothing is cut. */
+            paramsText: string;
+            reason: string;
+            mode: string;
+            status: components["schemas"]["ProposalStatus"];
+            /** Format: date-time */
+            proposedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** @description The name of the user or API token that approved or rejected it. */
+            decidedByName?: string;
+            /** @description The Slack user ID of someone who decided in Slack. */
+            decidedBySlackUser?: string;
+            /** Format: date-time */
+            decidedAt?: string;
+            result?: components["schemas"]["ActionResult"];
+            /** @description Why it failed. While it is tried again, the last failed attempt. */
+            error?: string;
+        };
+        ProposalList: {
+            proposals: components["schemas"]["Proposal"][];
+            /** @description Pass it as cursor to get the next page. Absent on the last page. */
+            nextCursor?: string;
+        };
+        RejectProposalRequest: {
+            /** @description Why it is rejected. Redacted, and kept in the audit log. */
+            note?: string;
         };
         Job: {
             /** Format: int64 */
@@ -1194,6 +1331,8 @@ export interface components {
             events: components["schemas"]["Event"][];
             /** @description Follow-up questions that no run has answered yet, oldest first. */
             pendingFollowUps: components["schemas"]["PendingFollowUp"][];
+            /** @description The action proposals of the investigation, oldest first. */
+            proposals: components["schemas"]["Proposal"][];
         };
         /** @description The verdict people agree with. */
         Confirmation: {
@@ -1997,6 +2136,8 @@ export interface components {
         /** @description The name of a listener or route. */
         RuleName: string;
         InvestigationID: string;
+        /** @description The ID of an action proposal. */
+        ProposalID: string;
         /** @description The first day of the range, a UTC date. The default is 29 days before `to`. */
         StatsFrom: string;
         /** @description The last day of the range, a UTC date, included. The default is today. The range is at most 400 days. */
@@ -2691,6 +2832,85 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StopWatcherResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListProposals: {
+        parameters: {
+            query?: {
+                /** @description Only proposals with one of these statuses. The default is proposed. */
+                status?: components["schemas"]["ProposalStatus"][];
+                /** @description The nextCursor of the page before. */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of proposals. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ApproveProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The ID of an action proposal. */
+                id: components["parameters"]["ProposalID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The proposal, approved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Proposal"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    RejectProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The ID of an action proposal. */
+                id: components["parameters"]["ProposalID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RejectProposalRequest"];
+            };
+        };
+        responses: {
+            /** @description The proposal, rejected. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Proposal"];
                 };
             };
             default: components["responses"]["Problem"];

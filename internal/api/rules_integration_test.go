@@ -550,8 +550,16 @@ func TestCreateRoute(t *testing.T) {
 			wantStatus: http.StatusUnprocessableEntity, wantCode: "validation", wantField: "outputs[1]",
 		},
 		{
-			name: "a mode that does not exist yet", who: adminCaller, body: with("mode", "approved"),
+			name: "a mode that does not exist yet", who: adminCaller, body: with("mode", "read-write"),
 			wantStatus: http.StatusUnprocessableEntity, wantCode: "validation", wantField: "mode",
+		},
+		{
+			name: "approved with no action", who: adminCaller, body: with("mode", "approved"),
+			wantStatus: http.StatusUnprocessableEntity, wantCode: "validation", wantField: "actions",
+		},
+		{
+			name: "an action the file does not define", who: adminCaller, body: func() map[string]any { b := with("mode", "approved"); b["actions"] = []string{"gone"}; return b }(),
+			wantStatus: http.StatusUnprocessableEntity, wantCode: "validation", wantField: "actions[0]",
 		},
 		{
 			name: "an intake that does not exist", who: adminCaller, body: with("match", map[string]any{"intake": []string{"gone"}}),

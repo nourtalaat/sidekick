@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/nourtalaat/sidekick/internal/action/proposals"
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/investigator"
@@ -138,6 +139,13 @@ func (s *server) GetInvestigation(ctx context.Context, req apigen.GetInvestigati
 	if err != nil {
 		return nil, fmt.Errorf("investigation %s: %w", req.Id, err)
 	}
+
+	stored, err := proposals.OfInvestigation(ctx, s.pool, req.Id)
+	if err != nil {
+		return nil, fmt.Errorf("list the action proposals of investigation %s: %w", req.Id, err)
+	}
+
+	inv.Proposals = s.proposalsOf(stored)
 
 	return apigen.GetInvestigation200JSONResponse(inv), nil
 }
@@ -263,6 +271,7 @@ func investigationOf(row db.GetInvestigationDetailRow) (apigen.Investigation, er
 		EventCount:        int(row.EventCount),
 		Events:            []apigen.Event{},
 		PendingFollowUps:  []apigen.PendingFollowUp{},
+		Proposals:         []apigen.Proposal{},
 	}
 
 	if inv.Verdict != nil {

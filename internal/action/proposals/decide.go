@@ -39,6 +39,23 @@ var (
 	errNoDecider = errors.New("a decision needs a user, an API token or a Slack user")
 )
 
+// NotAllowedError is the error of approving a proposal that the config does
+// not allow any more. It matches ErrNotAllowed with errors.Is, and Reason
+// says what changed, for example that the route is read-only now.
+type NotAllowedError struct {
+	Reason string
+}
+
+// Error implements error.
+func (e *NotAllowedError) Error() string {
+	return ErrNotAllowed.Error() + ": " + e.Reason
+}
+
+// Is makes the error match ErrNotAllowed.
+func (e *NotAllowedError) Is(target error) bool {
+	return target == ErrNotAllowed
+}
+
 // DecidedError means the proposal was decided already, or is past that, so
 // this decision changed nothing. Proposal is its current state, with who
 // decided it. A person who clicked second at the same time gets this.
@@ -149,7 +166,7 @@ func (s *Service) decideIn(ctx context.Context, tx pgx.Tx, id uuid.UUID, by Deci
 
 	if status == action.StatusApproved {
 		if reason := s.notAllowed(locked.Route, row.Action); reason != "" {
-			return db.ActionProposal{}, fmt.Errorf("%w: %s", ErrNotAllowed, reason)
+			return db.ActionProposal{}, &NotAllowedError{Reason: reason}
 		}
 	}
 
