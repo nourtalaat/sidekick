@@ -137,7 +137,7 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
-	if err := registerRollup(a); err != nil {
+	if err := registerRollup(a, cache); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
