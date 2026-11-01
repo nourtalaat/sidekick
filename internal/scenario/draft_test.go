@@ -2,6 +2,7 @@ package scenario
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,6 +18,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/scrub"
 	"github.com/nourtalaat/sidekick/internal/source"
+	"github.com/nourtalaat/sidekick/internal/summarize"
 )
 
 var testKey = []byte("test-hash-key")
@@ -162,6 +164,8 @@ func TestBuildWithoutRubric(t *testing.T) {
 		rubric   func(ctrl *gomock.Controller) RubricDrafter
 		cause    string
 		wantNote string
+		// wantText, when set, is in the text of that note.
+		wantText string
 	}{
 		{name: "no drafter", wantNote: NoteNoRubric},
 		{
@@ -184,6 +188,18 @@ func TestBuildWithoutRubric(t *testing.T) {
 				return d
 			},
 			wantNote: NoteNoRubric,
+		},
+		{
+			name: "drafter that is stopped by a daily cap",
+			rubric: func(ctrl *gomock.Controller) RubricDrafter {
+				d := NewMockRubricDrafter(ctrl)
+				d.EXPECT().Enabled().Return(true)
+				d.EXPECT().Draft(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, fmt.Errorf("draft: %w", summarize.ErrOverCap))
+
+				return d
+			},
+			wantNote: NoteNoRubric,
+			wantText: "a daily spending cap is reached",
 		},
 		{name: "no confirmed cause", cause: "-", wantNote: NoteNoCause},
 	}
@@ -210,7 +226,9 @@ func TestBuildWithoutRubric(t *testing.T) {
 			sc, err := bench.ParseScenario(got.Body)
 			require.NoError(t, err)
 			require.Empty(t, sc.Expected.RootCause.Rubric)
-			require.Equal(t, tt.wantNote, got.Notes[len(got.Notes)-1].Kind)
+			last := got.Notes[len(got.Notes)-1]
+			require.Equal(t, tt.wantNote, last.Kind)
+			require.Contains(t, last.Text, tt.wantText)
 		})
 	}
 }

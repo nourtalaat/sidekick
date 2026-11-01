@@ -26,6 +26,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/scrub"
 	"github.com/nourtalaat/sidekick/internal/source/mock"
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/summarize"
 )
 
 const (
@@ -247,6 +248,10 @@ func (b *Builder) addRubric(ctx context.Context, q db.DBTX, doc *yaml.Node, sess
 
 // reasonOf is a short reason for a note, without the error's details.
 func reasonOf(err error) string {
+	if errors.Is(err, summarize.ErrOverCap) {
+		return "a daily spending cap is reached"
+	}
+
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return "it timed out"
 	}
