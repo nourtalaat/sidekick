@@ -17,6 +17,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/ids"
 	"github.com/nourtalaat/sidekick/internal/redact"
+	"github.com/nourtalaat/sidekick/internal/store"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
@@ -163,7 +164,8 @@ func NewStore(pool *pgxpool.Pool, redactor *redact.Redactor) *Store {
 	return &Store{pool: pool, redactor: redactor}
 }
 
-// List returns a page of lessons, newest first.
+// List returns a page of lessons, newest first. It runs with a plan made
+// for the filters of the call, since the query has optional filters.
 func (s *Store) List(ctx context.Context, p ListParams) (Page, error) {
 	size := min(max(p.PageSize, 1), MaxPageSize)
 
@@ -175,7 +177,7 @@ func (s *Store) List(ctx context.Context, p ListParams) (Page, error) {
 		params.AfterAt, params.AfterID = &p.AfterAt, &p.AfterID
 	}
 
-	rows, err := db.New(s.pool).ListLessons(ctx, params)
+	rows, err := db.New(store.CustomPlan{DB: s.pool}).ListLessons(ctx, params)
 	if err != nil {
 		return Page{}, fmt.Errorf("list lessons: %w", err)
 	}
