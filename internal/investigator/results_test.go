@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/model"
+	"github.com/nourtalaat/sidekick/internal/prompt"
+	"github.com/nourtalaat/sidekick/internal/source"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
@@ -82,4 +84,66 @@ func step(t *testing.T, seq int32, kind, src, tool, status string, part model.Pa
 	}
 
 	return s
+}
+
+func TestRecordedCalls(t *testing.T) {
+	t.Parallel()
+
+	wrapped := prompt.WrapUntrusted("signoz", "signoz__search_logs", "c1", "error rate 5%")
+
+	withEvidence := step(t, 5, kindToolResult, "github", "list_commits", statusOK, model.ToolResult{CallID: "c3", Content: prompt.WrapUntrusted("github", "github__list_commits", "c3", "abc123 lowered the pool")})
+	withEvidence.Evidence = json.RawMessage(`[{"kind":"commit","title":"abc123","url":"https://github.com/acme/checkout/commit/abc123","toolCallId":"c3"}]`)
+
+	tests := []struct {
+		name    string
+		steps   []db.Step
+		want    []RecordedCall
+		wantErr string
+	}{
+		{
+			name: "source calls joined with their input, built-in tools left out",
+			steps: []db.Step{
+				step(t, 0, kindPrompt, "", "", statusOK, model.Text{Text: "the prompt"}),
+				step(t, 1, kindModelTurn, "", "", statusOK, model.ToolCall{ID: "c1", Name: "signoz__search_logs", Input: json.RawMessage(`{"query":"pool"}`)}),
+				step(t, 2, kindToolResult, "signoz", "search_logs", statusOK, model.ToolResult{CallID: "c1", Content: wrapped}),
+				step(t, 3, kindModelTurn, "", "", statusOK, model.ToolCall{ID: "c2", Name: "k8s__get_pod", Input: json.RawMessage(`{"pod":"x"}`)}),
+				step(t, 4, kindToolResult, "k8s", "get_pod", statusUnavailable, model.ToolResult{CallID: "c2", Content: "down", IsError: true}),
+				step(t, 5, kindToolResult, "", "submit_verdict", statusOK, model.ToolResult{CallID: "v1", Content: "accepted"}),
+			},
+			want: []RecordedCall{
+				{Seq: 2, CallID: "c1", Source: "signoz", Tool: "search_logs", Name: "signoz__search_logs", Input: json.RawMessage(`{"query":"pool"}`), Status: statusOK, Text: "error rate 5%"},
+				{Seq: 4, CallID: "c2", Source: "k8s", Tool: "get_pod", Name: "k8s__get_pod", Input: json.RawMessage(`{"pod":"x"}`), Status: statusUnavailable, Text: "down"},
+			},
+		},
+		{
+			name:  "evidence is decoded",
+			steps: []db.Step{withEvidence},
+			want: []RecordedCall{{
+				Seq: 5, CallID: "c3", Source: "github", Tool: "list_commits", Status: statusOK, Text: "abc123 lowered the pool",
+				Evidence: []source.Evidence{{Kind: source.EvidenceCommit, Title: "abc123", URL: "https://github.com/acme/checkout/commit/abc123", ToolCallID: "c3"}},
+			}},
+		},
+		{name: "no steps"},
+		{
+			name:    "parts that do not decode",
+			steps:   []db.Step{{Seq: 2, Kind: kindModelTurn, Parts: json.RawMessage(`[{"type": "image"}]`)}},
+			wantErr: "step 2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := RecordedCalls(tt.steps)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
 }

@@ -77,3 +77,24 @@ func escapeUntrusted(content string) string {
 		return "&lt;" + m[size:]
 	})
 }
+
+// UnwrapUntrusted returns the content of text that WrapUntrusted wrapped,
+// without the markers and the one line break the wrapper adds. It reports
+// false for text that is not wrapped. The content is still untrusted.
+func UnwrapUntrusted(text string) (string, bool) {
+	closing := "</" + untrustedTag + ">"
+
+	if !strings.HasPrefix(text, "<"+untrustedTag) || !strings.HasSuffix(text, closing) {
+		return "", false
+	}
+
+	// Attribute values are escaped, so the first ">" ends the opening tag.
+	_, rest, ok := strings.Cut(text, ">\n")
+	if !ok {
+		return "", false
+	}
+
+	content := strings.TrimSuffix(rest, closing)
+
+	return strings.TrimSuffix(content, "\n"), true
+}
