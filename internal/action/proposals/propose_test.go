@@ -26,7 +26,14 @@ func offline(t *testing.T, policy action.Policy, actions ...*fakeNote) *Service 
 		byName[a.name] = a
 	}
 
-	s, err := New(Options{Pool: new(pgxpool.Pool), Actions: byName, Policy: policy})
+	return offlineWith(t, policy, byName)
+}
+
+// offlineWith is offline for actions of any kind, by name.
+func offlineWith(t *testing.T, policy action.Policy, actions map[string]action.Action) *Service {
+	t.Helper()
+
+	s, err := New(Options{Pool: new(pgxpool.Pool), Actions: actions, Policy: policy})
 	require.NoError(t, err)
 
 	return s
@@ -189,6 +196,82 @@ func TestPrepare(t *testing.T) {
 			require.Equal(t, "monitor-note", got.action)
 			require.JSONEq(t, tt.wantParams, string(got.params))
 			require.Equal(t, tt.wantReason, got.reason)
+		})
+	}
+}
+
+func TestPrepareSnapshot(t *testing.T) {
+	t.Parallel()
+
+	policy := action.StaticPolicy{"payments": {Mode: action.Approved, Actions: []string{"monitor", "monitor-note"}}}
+
+	call := func(name, params string) json.RawMessage {
+		return json.RawMessage(`{"action": "` + name + `", "params": ` + params + `, "reason": "Too noisy."}`)
+	}
+
+	tests := []struct {
+		name         string
+		input        json.RawMessage
+		readErr      error
+		wantRefusal  string
+		wantSnapshot bool
+		wantUndoable bool
+	}{
+		{
+			name: "a change the limits allow", input: call("monitor", `{"threshold": 90}`),
+			wantSnapshot: true, wantUndoable: true,
+		},
+		{
+			name: "a field outside the limits", input: call("monitor", `{"threshold": 90, "message": "New text"}`),
+			wantRefusal: `action monitor refused this change: check the fields: the field "message" is not one of limits.fields`,
+		},
+		{
+			name: "a change that changes nothing", input: call("monitor", `{"threshold": 80}`),
+			wantRefusal: "action monitor: the change leaves the definition as it is",
+		},
+		{
+			name: "a definition that cannot be read", input: call("monitor", `{"threshold": 90}`), readErr: errors.New("connection refused"),
+			wantRefusal: "could not read the current definition of the target, so nothing was proposed; try again later: connection refused",
+		},
+		{
+			name: "a limit hit while reading", input: call("monitor", `{"threshold": 90}`), readErr: action.ErrLimit,
+			wantRefusal: "action monitor refused this change: outside configured limits",
+		},
+		{name: "parameters outside the limits stop before the snapshot", input: call("monitor", `{"threshold": 900}`), readErr: errors.New("never read"), wantRefusal: "refused these parameters"},
+		{name: "an action with no snapshot", input: call("monitor-note", `{"board": "ops", "title": "t"}`)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			monitor := newFakeMonitor("monitor")
+			monitor.readErr = tt.readErr
+
+			s := offlineWith(t, policy, map[string]action.Action{"monitor": monitor, "monitor-note": newFakeNote("monitor-note")})
+
+			got, refusal := s.prepare(t.Context(), ProposeRequest{InvestigationID: uuid.New(), ToolCallID: "call-1", Route: "payments", Mode: action.Approved, Input: tt.input})
+			if tt.wantRefusal != "" {
+				require.Contains(t, refusal, tt.wantRefusal)
+
+				return
+			}
+
+			require.Empty(t, refusal)
+			require.Equal(t, tt.wantSnapshot, got.snapshot != nil)
+			require.Equal(t, tt.wantUndoable, got.undoable)
+
+			if !tt.wantSnapshot {
+				return
+			}
+
+			var snap action.Snapshot
+
+			require.NoError(t, json.Unmarshal(got.snapshot, &snap))
+			require.Equal(t, "fake:monitor/1", snap.Target)
+			require.Equal(t, "1", snap.Version)
+			require.JSONEq(t, startMonitor, string(snap.Before))
+			require.JSONEq(t, `{"message":"Checkout is slow","options":{"critical":90,"notify_no_data":false},"tags":["team:payments"]}`, string(snap.After))
 		})
 	}
 }

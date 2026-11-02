@@ -52,6 +52,27 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"Insert on action_proposals"},
 		},
 		{
+			name: "InsertUndoProposal",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.InsertUndoProposal(ctx, db.InsertUndoProposalParams{
+					ID: uuid.New(), InvestigationID: busyInvestigation, Action: "monitor-note", Params: []byte(`{}`), Mode: "approved",
+					IdempotencyKey: "sidekick/undo", Now: now, UndoOf: busy,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"Insert on action_proposals"},
+		},
+		{
+			name: "MarkActionUndone",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.MarkActionUndone(ctx, busy)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"action_proposals_pkey"},
+		},
+		{
 			name: "CountInvestigationProposals",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.CountInvestigationProposals(ctx, busyInvestigation)
