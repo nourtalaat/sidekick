@@ -89,7 +89,7 @@ func (t *tokenSource) Invalidate(token string) {
 }
 
 // exchange signs an app JWT and trades it for an installation token that
-// can only read.
+// carries only the permissions the caller named.
 func (t *tokenSource) exchange(ctx context.Context) (string, time.Time, error) {
 	signed, err := t.appJWT(ctx)
 	if err != nil {

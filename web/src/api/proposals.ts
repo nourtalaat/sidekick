@@ -6,6 +6,7 @@ import type { components } from "./schema";
 
 export type Proposal = components["schemas"]["Proposal"];
 export type ProposalStatus = components["schemas"]["ProposalStatus"];
+export type ProposalChange = components["schemas"]["ProposalChange"];
 
 /** The statuses of a proposal that waits for a decision. */
 export const WAITING: readonly ProposalStatus[] = ["proposed"];
@@ -68,6 +69,57 @@ export function useDecideProposal(id: string, investigationId: string) {
     },
     // A decision that was refused, because someone else decided first or
     // the proposal expired, also means the lists are out of date.
+    onSettled: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: PROPOSALS_KEY }),
+        queryClient.invalidateQueries({ queryKey: keys.investigation(investigationId) }),
+      ]);
+    },
+  });
+}
+
+/**
+ * The answer to an undo when someone changed a field since the action
+ * changed it, and force was not set: nothing was restored. `changes` is what
+ * a restore would overwrite, field by field; asking again with force set
+ * restores it.
+ */
+export class UndoConflictError extends ApiError {
+  readonly changes: ProposalChange[];
+
+  constructor(message: string, changes: ProposalChange[]) {
+    super(409, message);
+    this.name = "UndoConflictError";
+    this.changes = changes;
+  }
+}
+
+/**
+ * Undoes the succeeded proposal with id. The first request has force false;
+ * a UndoConflictError carries the difference for the person to read, and
+ * the request is sent again with force true if they confirm. Other refusals
+ * are ApiErrors whose message is the detail the server gave.
+ */
+export function useUndoProposal(id: string, investigationId: string) {
+  const api = useApi();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (force: boolean) => {
+      const result = await api.client.POST("/proposals/{id}/undo", { params: { path: { id } }, body: { force } });
+
+      if (result.data === undefined) {
+        const detail = detailOf(result.error, result.response.statusText);
+
+        if (result.response.status === 409 && result.error?.code === "conflict") {
+          throw new UndoConflictError(detail, result.error.changes ?? []);
+        }
+
+        throw new ApiError(result.response.status, detail);
+      }
+
+      return result.data;
+    },
     onSettled: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: PROPOSALS_KEY }),
