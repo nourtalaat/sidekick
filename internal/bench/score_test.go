@@ -3,6 +3,7 @@ package bench
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -174,8 +175,10 @@ func TestScoreRootCause(t *testing.T) {
 		name       string
 		runs       []RunResult
 		setupMocks func(g *MockGrader)
-		wantErr    error
-		want       func(t *testing.T, results *Results)
+		// keep sets ScoreOptions.KeepInfrastructureErrors.
+		keep    bool
+		wantErr error
+		want    func(t *testing.T, results *Results)
 	}{
 		{
 			name: "met weight over total weight, and a match needs the required items",
@@ -246,6 +249,39 @@ func TestScoreRootCause(t *testing.T) {
 			},
 			wantErr: ErrInfrastructure,
 		},
+		{
+			name: "an unreachable judge is kept on its run when asked, and scoring goes on",
+			runs: []RunResult{summaryRun("down"), summaryRun("all")},
+			keep: true,
+			setupMocks: func(g *MockGrader) {
+				gomock.InOrder(
+					g.EXPECT().Grade(gomock.Any(), gomock.Any(), summaryRun("down").Report).
+						Return(Grade{}, fmt.Errorf("judge model call: %w", ErrProviderUnreachable)),
+					g.EXPECT().Grade(gomock.Any(), gomock.Any(), summaryRun("all").Report).Return(allMet, nil),
+				)
+			},
+			want: func(t *testing.T, results *Results) {
+				t.Helper()
+
+				runs := results.Scenarios[0].Runs
+				require.Contains(t, runs[0].RootCause.Error, ErrProviderUnreachable.Error())
+				require.Zero(t, runs[0].RootCause.Score)
+				require.False(t, runs[0].RootCause.Match)
+				require.Empty(t, runs[1].RootCause.Error)
+				require.True(t, runs[1].RootCause.Match)
+				require.Equal(t, 1, results.Summary.Metrics.JudgeErrors)
+				requireShare(t, new(0.5), results.Summary.Metrics.RootCauseMatch)
+			},
+		},
+		{
+			name: "a spent budget stops scoring even when infrastructure errors are kept",
+			runs: []RunResult{summaryRun("all")},
+			keep: true,
+			setupMocks: func(g *MockGrader) {
+				g.EXPECT().Grade(gomock.Any(), gomock.Any(), gomock.Any()).Return(Grade{}, fmt.Errorf("%w: $1 spent of $1", ErrOverBudget))
+			},
+			wantErr: ErrOverBudget,
+		},
 	}
 
 	for _, tt := range tests {
@@ -263,7 +299,7 @@ func TestScoreRootCause(t *testing.T) {
 				Runs:     tt.runs,
 			}}}
 
-			err := Score(t.Context(), results, ScoreOptions{Grader: grader, Seed: DefaultSeed})
+			err := Score(t.Context(), results, ScoreOptions{Grader: grader, Seed: DefaultSeed, KeepInfrastructureErrors: tt.keep})
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
 
