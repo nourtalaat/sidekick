@@ -63,7 +63,7 @@ func (p *PR) Execute(ctx context.Context, inv action.Invocation) (action.Result,
 
 	pr, branchExists, err := p.existing(ctx, owner, name, branch)
 	if err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("look for an earlier attempt: %w", err)
 	}
 
 	if pr != nil {
@@ -83,7 +83,7 @@ func (p *PR) Execute(ctx context.Context, inv action.Invocation) (action.Result,
 		if err := p.push(ctx, pre, branch, inv); err != nil {
 			p.metrics.pullRequest(resultError)
 
-			return action.Result{}, err
+			return action.Result{}, fmt.Errorf("push the branch: %w", err)
 		}
 	}
 
@@ -91,7 +91,7 @@ func (p *PR) Execute(ctx context.Context, inv action.Invocation) (action.Result,
 	if err != nil {
 		p.metrics.pullRequest(resultError)
 
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("make the pull request from %s: %w", branch, err)
 	}
 
 	p.metrics.pullRequest(resultOpened)
@@ -114,7 +114,7 @@ func (p *PR) existing(ctx context.Context, owner, name, branch string) (pr *gh.P
 
 	pr, err = p.pullRequestFrom(ctx, owner, name, branch)
 	if err != nil {
-		return nil, true, err
+		return nil, true, fmt.Errorf("look for the pull request of an earlier attempt: %w", err)
 	}
 
 	return pr, true, nil
@@ -190,7 +190,7 @@ func (p *PR) open(ctx context.Context, params Params, owner, name, branch string
 	if alreadyExists(err) {
 		found, ferr := p.pullRequestFrom(ctx, owner, name, branch)
 		if ferr != nil {
-			return nil, ferr
+			return nil, fmt.Errorf("find the pull request made meanwhile: %w", ferr)
 		}
 
 		if found != nil {
@@ -214,7 +214,7 @@ func (p *PR) open(ctx context.Context, params Params, owner, name, branch string
 func (p *PR) description(body string, inv action.Invocation) string {
 	var b strings.Builder
 
-	b.WriteString(source.CutText(plainText(body), maxPullRequestBodyBytes))
+	b.WriteString(source.CutText(markdownText(body), maxPullRequestBodyBytes))
 	b.WriteString("\n\n---\n")
 	fmt.Fprintf(&b, "Opened by Sidekick for proposal `%s`.", inv.ProposalID)
 
@@ -229,19 +229,25 @@ func (p *PR) description(body string, inv action.Invocation) string {
 func (p *PR) result(owner, name string, pr *gh.PullRequest, how string) action.Result {
 	title := fmt.Sprintf("%s/%s#%d", owner, name, pr.GetNumber())
 
-	summary := "Opened "
-	if how == resultExisting {
-		summary = "Found the already opened "
-	}
-
+	draft := ""
 	if pr.GetDraft() {
-		summary += "draft "
+		draft = "draft "
 	}
 
-	return action.Result{
-		Summary: summary + "pull request " + title,
-		Links:   []action.Link{{Title: title, URL: pr.GetHTMLURL()}},
+	var summary string
+
+	switch state := stateOf(pr); {
+	case how == resultOpened:
+		summary = "Opened " + draft + "pull request " + title
+	case state == StateMerged:
+		summary = "Found pull request " + title + ", which has been merged since it was opened"
+	case state == StateClosed:
+		summary = "Found pull request " + title + ", which has been closed since it was opened"
+	default:
+		summary = "Found the already opened " + draft + "pull request " + title
 	}
+
+	return action.Result{Summary: summary, Links: []action.Link{{Title: title, URL: pr.GetHTMLURL()}}}
 }
 
 // commitMessage returns the message of the commit: the title on one line,

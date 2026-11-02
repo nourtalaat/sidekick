@@ -26,7 +26,7 @@ type prepared struct {
 func (p *PR) prepare(ctx context.Context, raw json.RawMessage) (*prepared, error) {
 	params, err := decodeParams(raw)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read the parameters: %w", err)
 	}
 
 	changes, err := p.limits.plan(params)
@@ -38,17 +38,17 @@ func (p *PR) prepare(ctx context.Context, raw json.RawMessage) (*prepared, error
 
 	head, err := baseOf(ctx, p.client, owner, name, params.BaseBranch)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read the base branch: %w", err)
 	}
 
 	r := newReader(p.client, owner, name, head.commit)
 
 	if err := p.checkLines(ctx, r, changes); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("check the changed lines: %w", err)
 	}
 
 	if err := p.validateFiles(ctx, r, changes); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate the files: %w", err)
 	}
 
 	return &prepared{params: params, owner: owner, name: name, base: head, changes: changes}, nil
@@ -64,7 +64,7 @@ func (p *PR) checkLines(ctx context.Context, r *reader, changes []change) error 
 	for _, c := range changes {
 		old, exists, err := r.file(ctx, c.path)
 		if err != nil {
-			return err
+			return fmt.Errorf("read the file at the base: %w", err)
 		}
 
 		if c.deleted() && !exists {

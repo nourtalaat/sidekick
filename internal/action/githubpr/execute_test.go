@@ -150,7 +150,16 @@ func TestExecuteRetryAfterCrash(t *testing.T) {
 		{
 			name:     "the pull request was closed meanwhile",
 			prs:      `[{"number":12,"draft":false,"state":"closed","html_url":"https://github.com/acme/monitors/pull/12"}]`,
-			wantText: "Found the already opened pull request acme/monitors#12",
+			wantText: "Found pull request acme/monitors#12, which has been closed since it was opened",
+			want: []string{
+				"GET /repos/acme/monitors/git/ref/heads/" + testBranch,
+				"GET /repos/acme/monitors/pulls",
+			},
+		},
+		{
+			name:     "the pull request was merged meanwhile",
+			prs:      `[{"number":12,"draft":false,"state":"closed","html_url":"https://github.com/acme/monitors/pull/12","merged_at":"2026-11-03T10:00:00Z"}]`,
+			wantText: "Found pull request acme/monitors#12, which has been merged since it was opened",
 			want: []string{
 				"GET /repos/acme/monitors/git/ref/heads/" + testBranch,
 				"GET /repos/acme/monitors/pulls",

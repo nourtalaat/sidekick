@@ -25,6 +25,19 @@ func plainText(s string) string {
 	return closingPattern.ReplaceAllString(s, "$1$2`$3`")
 }
 
+// markdownText is plainText for the description of a pull request, which
+// GitHub renders as Markdown. It also stops the description from loading
+// anything when the pull request is opened: an image, which GitHub fetches
+// through its proxy as soon as someone views the page, would carry out
+// whatever the model read, and so would raw HTML such as an img tag. An image
+// shows as its text, and < is written as an HTML entity. A link stays, because
+// a person has to click it.
+func markdownText(s string) string {
+	s = strings.ReplaceAll(plainText(s), "![", `!\[`)
+
+	return strings.ReplaceAll(s, "<", "&lt;")
+}
+
 // oneLine returns s as a single line: runs of whitespace and control
 // characters become one space.
 func oneLine(s string) string {
