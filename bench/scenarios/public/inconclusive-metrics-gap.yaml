@@ -35,6 +35,12 @@ sources:
       - tool: list_targets
         respond:
           text: "1 scrape target down for job webhook-dispatcher since 20:53, last error: context deadline exceeded. 11 targets are healthy."
+      - tool: get_rules
+        respond:
+          text: |
+            Alert WebhookQueueLagHigh, group dispatch-queue, health ok
+            expr max(webhook_dispatcher_queue_oldest_message_age_seconds{service="webhook-dispatcher"}) > 300
+            for 5m, labels severity=warning, last evaluation 2026-09-24T21:09:30Z
   k8s:
     tools: { snapshot: bench/tools/kubernetes.json }
     fixtures:
