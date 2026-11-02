@@ -1192,7 +1192,8 @@ without access to the real system.
 Each webhook endpoint receives alerts at `/hooks/<name>`. It names an
 `adapter` that reads the sender's payload, and it must authenticate
 deliveries with exactly one of `bearer` or `hmac`. Set `trusted: true` only
-for senders you control.
+for senders you control: routes in `read-write` mode can select only trusted
+endpoints (see [action modes](#action-modes)).
 
 ```yaml
 intake:
@@ -1704,7 +1705,7 @@ routes:
     strategy: latency-alert
     roles: { investigate: claude }     # overrides model.roles for this route
     sources: [signoz]
-    mode: approved                     # read-only (default) or approved
+    mode: approved                     # read-only (default), approved or read-write
     actions: [monitor-note]            # actions the model may propose, defined in `actions`
     outputs: [slack-thread]
     budgets:                           # at or below the global budgets
@@ -1845,18 +1846,74 @@ only to the hosts in `watch.http.allowHosts`.
 
 #### Action modes
 
-A route's `mode` is `read-only` or `approved`. `read-only` is the default:
-the model has no way to propose a change, and fixes appear only as text in
-the report. In `approved` mode the model may propose the route's `actions`
-and a person approves or rejects each proposal; see
-[`actions`](#actions). `actions` lists names from the `actions` section,
+A route's `mode` is `read-only`, `approved` or `read-write`. `read-only` is
+the default: the model has no way to propose a change, and fixes appear only
+as text in the report. In `approved` mode the model may propose the route's
+`actions` and a person approves or rejects each proposal; see
+[`actions`](#actions). In `read-write` mode the model proposes the same way,
+but a proposal that passes its checks is approved by the route's policy and
+runs at once, with no person involved. The audit log records that approval
+with the actor `policy`, and Slack and the web UI show "approved by policy
+(read + write route)". `actions` lists names from the `actions` section,
 and must be empty in `read-only` mode and have at least one name in
-`approved` mode. A `read-write` mode, where Sidekick runs an action
-without asking, is not available yet.
+`approved` and `read-write` mode.
 
 The mode is fixed when the investigation is created, like the other
 settings above. The route's `actions` are read again when the model
 proposes and when a proposal runs; see [`actions`](#actions).
+
+#### Read + write mode and trusted senders
+
+Read + write mode runs changes on the strength of an alert, and the text of
+an alert comes from outside. So it is limited to senders you control:
+
+- A webhook endpoint or listener is trusted only with `trusted: true`. A
+  listener also needs the bots in `slack.trustedBots` or `teams.trustedBots`,
+  and only a bot message from them counts as trusted; a message from a
+  person in that listener is not. Runtime listeners and mentions of Sidekick
+  (`slack-mention`, `teams-mention`) are never trusted.
+- A `read-write` route whose `match` can select an intake or listener that
+  is not trusted is a config error. `match.intake` is what the route can
+  select; a route with no `intake` in its match can select every intake and
+  listener, including mentions when the `slack` or `teams` section exists.
+  The `default` route has no match, so it can be `read-write` only when
+  every intake is trusted. The same check runs when an admin saves a route
+  in the web UI or the API.
+- At run time an event that is not trusted never gets read + write mode:
+  its investigation runs in `approved` mode and its proposals wait for a
+  person. The same happens to a `read-write` investigation when an event
+  that is not trusted joins it later, by the same fingerprint, through
+  `grouping.relatedWindow`, or as a recovery event: it becomes `approved`
+  from then on, because the text of that event reaches the model. A
+  follow-up question does the same, from Slack or the web UI, because it
+  comes from whoever is in the thread or signed in and its text steers the
+  model. `allowUntrustedWrite` does not change this: it is about the senders
+  the config names.
+- Only the config file and an admin in the web UI or the API can set
+  `read-write`. Slack commands cannot.
+
+```yaml
+routes:
+  - name: payments-notes
+    match: { intake: [alertmanager] }  # alertmanager sets trusted: true
+    mode: read-write
+    actions: [monitor-note]
+  - name: ci-notes
+    match: { intake: [generic-ci] }    # not trusted
+    mode: read-write
+    allowUntrustedWrite: true          # the explicit override; without it the file is refused
+    actions: [monitor-note]
+```
+
+`allowUntrustedWrite: true` lifts both limits for one route: it may select
+senders that are not trusted, and their events keep `read-write` mode. It
+does not keep that mode after a follow-up question.
+Sidekick logs a warning for each such route, from the file or saved in the
+web UI, every time it starts. A runtime route saved with it is in the audit
+log like every route change, with the old and new values. In the web UI the
+admin must confirm the override before the route is saved. Use it only when
+something else already guards the sender, for example a network policy in
+front of the endpoint.
 
 ### `budgets`
 
@@ -2450,8 +2507,9 @@ Besides unknown keys and values of the wrong type, Sidekick checks that:
   the same name.
 - Every `actions` entry is a registered type with a valid section, and the
   two settings are positive. Every route is `read-only` with no `actions`,
-  or `approved` with at least one, listed once and defined in `actions`,
-  and its budgets, daily
+  or `approved` or `read-write` with at least one, listed once and defined
+  in `actions`, a `read-write` route can select only trusted intakes and
+  listeners unless it sets `allowUntrustedWrite: true`, and its budgets, daily
   cap and `concurrency` are at or below the global ones, and its
   `rateLimit` is no looser than `budgets.rateLimit`. The global
   per-investigation limits and `budgets.concurrency` are positive, dollar

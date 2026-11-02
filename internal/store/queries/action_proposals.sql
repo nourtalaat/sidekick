@@ -56,6 +56,18 @@ SET status = @status,
 WHERE id = @id AND status = 'proposed' AND expires_at > @now::timestamptz
 RETURNING *;
 
+-- name: ApproveActionProposalByPolicy :one
+-- ApproveActionProposalByPolicy approves a proposal that is still proposed
+-- because its investigation runs in read-write mode. Nobody decides it, so
+-- decided_by and decided_by_slack_user stay NULL, and decided_at is the
+-- time of the approval, like a decision by a person. It returns no row
+-- for a proposal in any other status. It reads and writes one row by its
+-- primary key.
+UPDATE action_proposals
+SET status = 'approved', decided_at = @now::timestamptz
+WHERE id = @id AND status = 'proposed'
+RETURNING *;
+
 -- name: StartActionExecution :one
 -- StartActionExecution moves an approved proposal to executing. It returns
 -- no row for a proposal in any other status.

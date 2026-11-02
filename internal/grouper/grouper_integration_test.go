@@ -93,7 +93,7 @@ func TestGroup(t *testing.T) {
 			received := time.Date(2026, 10, 26, 9, 10, 0, 0, time.UTC)
 
 			if tt.wantJoin {
-				require.Equal(t, Result{GroupID: diskGroup, InvestigationID: diskInvestigation}, res)
+				require.Equal(t, Result{GroupID: diskGroup, Route: "default", InvestigationID: diskInvestigation}, res)
 				require.Equal(t, int32(2), seeded.EventCount)
 				require.True(t, received.Equal(seeded.LastEventAt))
 				require.True(t, received.Add(rt.Window).Equal(*seeded.WindowUntil))

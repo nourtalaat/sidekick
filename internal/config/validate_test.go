@@ -20,8 +20,6 @@ import (
 func TestValidateFixtures(t *testing.T) {
 	t.Parallel()
 
-	const readWriteLater = `is not available yet: use "approved", where a person approves each action`
-
 	const listenersNeedSlack = "listeners: listeners need the Slack app to receive events: set slack.appTokenSecret, or slack.mode: events with slack.signingSecret"
 
 	tests := []struct {
@@ -299,7 +297,7 @@ func TestValidateFixtures(t *testing.T) {
 		// Several problems, reported together and sorted by path.
 		{file: "three-errors", want: []string{
 			`report.minFalsePositiveConfidence: unknown confidence "hgh" (did you mean "high"?)`,
-			`routes[0].mode: mode "read-write" ` + readWriteLater,
+			`routes[0].mode: unknown mode "read-writ" (did you mean "read-write"?)`,
 			`routes[0].outputs[0]: output "slak-thread" is not defined (did you mean "slack-thread"?)`,
 		}},
 	}

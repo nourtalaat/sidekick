@@ -128,12 +128,18 @@ The model sees the built-in tools and the tools of the route's sources:
   after the investigation ends.
 - **`propose_action`** proposes one change, from the actions the route
   lists, for a person to approve or reject. It is offered only when the
-  investigation's route is in `approved` mode (see
-  [`actions`](configuration.md#actions)). Proposing runs nothing. Sidekick
-  checks the parameters against the action's schema and limits, and a
-  proposal that fails comes back to the model as an error. The proposal
-  waits for an approver for `actions.proposalTTL` (24 hours by default) and
-  then expires.
+  investigation's route is in `approved` or `read-write` mode (see
+  [`actions`](configuration.md#actions)). Sidekick checks the parameters
+  against the action's schema and limits, and a proposal that fails comes
+  back to the model as an error. In `approved` mode proposing runs nothing:
+  the proposal waits for an approver for `actions.proposalTTL` (24 hours by
+  default) and then expires. In `read-write` mode the route's policy
+  approves a proposal that passes its checks and it runs at once. An
+  investigation is in `read-write` mode only when its first event came from
+  a trusted sender; when an event that is not trusted starts it or joins it
+  later, or someone asks a follow-up question, it is in `approved` mode and
+  proposals wait for a person (see
+  [read + write mode](configuration.md#read--write-mode-and-trusted-senders)).
 - **Source tools** are named `<source>__<tool>`, for example
   `signoz__search_logs`. A route's `sources` list limits them to those
   sources; without one, every source's tools are offered. See
@@ -231,7 +237,9 @@ questions that waited, in one message, with who asked each one. It has
 the same tools, and `answer_follow_up` to answer without changing the
 verdict; it calls `submit_verdict` with a full new report when the answer
 changes the verdict. Questions are what to look at: they cannot change the
-tools, the action mode or the verdict rules. Questions that arrive while a
+tools or the verdict rules, and they cannot raise the action mode. A
+question on a `read-write` investigation lowers it to `approved`, so what
+the run proposes waits for a person. Questions that arrive while a
 run is going on wait for the next run. A triage-only result takes no
 questions until **Investigate anyway** has started a full investigation.
 

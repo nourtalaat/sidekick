@@ -118,6 +118,19 @@ describe.each(THEMES)("accessibility of the rule pages, theme $name", (theme) =>
       expect(await wcagViolations(container)).toEqual([]);
     });
 
+    it("has no WCAG 2.2 AA violations on the route form while the override is confirmed", async () => {
+      const user = userEvent.setup();
+      const { handler } = recording(() => json(200, { routes: [] }));
+      const { container } = renderApp({ me: ADMIN, route: "/routes/new", handler });
+      await user.type(await screen.findByLabelText("Name"), "search");
+      await user.selectOptions(screen.getByLabelText("Mode"), "read-write");
+      await user.click(screen.getByLabelText("Also allow senders that are not trusted"));
+      await user.click(screen.getByRole("button", { name: "Add route" }));
+      await screen.findByRole("group", { name: "Confirm writes for senders that are not trusted" });
+
+      expect(await wcagViolations(container)).toEqual([]);
+    });
+
     it("has no WCAG 2.2 AA violations on the form of a route", async () => {
       const { handler } = recording(() => json(200, { routes: [route()] }));
       const { container } = renderApp({ me: ADMIN, route: "/routes/checkout", handler });
