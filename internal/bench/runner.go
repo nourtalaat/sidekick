@@ -170,7 +170,8 @@ func (r *Runner) Run(ctx context.Context, database *Database) (*Results, error) 
 			}
 
 			r.log.InfoContext(ctx, "bench run ended", "scenario", sc.ID, "run", n,
-				"verdict", string(run.Report.Verdict), "stop_reason", string(run.Report.StopReason))
+				"verdict", string(run.Report.Verdict), "stop_reason", string(run.Report.StopReason),
+				"stop_detail", run.Report.StopDetail)
 
 			sr.Runs = append(sr.Runs, run)
 		}

@@ -24,3 +24,5 @@ falsePositiveSigns:
 verdictHints:
   truePositive: Say what is down and since when, and put the fix that brings it back fastest first, such as a rollback or a restart.
   falsePositive: Propose more failed checks in a row before it fires, checks from more than one place, or silencing it during maintenance.
+  duplicate: Name the open incident or alert that covers it, and point the responder to it instead of a separate fix.
+  knownIssue: Name the ticket that tracks it, and say what it plans.
