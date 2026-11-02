@@ -50,6 +50,25 @@ func TestReportMatchesSchema(t *testing.T) {
 	}{
 		{name: "a scored run matches the schema"},
 		{
+			name: "a run with tool calls matches the schema",
+			edit: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+
+				scenarios, ok := doc["scenarios"].([]any)
+				require.True(t, ok)
+
+				sc, ok := scenarios[0].(map[string]any)
+				require.True(t, ok)
+
+				runs, ok := sc["runs"].([]any)
+				require.True(t, ok)
+
+				run, ok := runs[0].(map[string]any)
+				require.True(t, ok)
+				require.Contains(t, run, "tools")
+			},
+		},
+		{
 			name:    "a field the schema does not know is caught",
 			edit:    func(_ *testing.T, doc map[string]any) { doc["colour"] = "red" },
 			wantErr: "colour",
