@@ -10,6 +10,7 @@ import (
 	authenticationv1 "k8s.io/api/authentication/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
@@ -145,8 +146,13 @@ func (c *cluster) ownSecrets() []string {
 }
 
 // configFor returns a copy of rc with Sidekick's user agent and rate limits.
+// It asks for JSON, because client-go's typed clients send protobuf by
+// default, which a test server cannot read, and a call is too rare for the
+// size of the answer to matter.
 func (*cluster) configFor(rc *rest.Config) *rest.Config {
 	rc = rest.CopyConfig(rc)
+	rc.ContentType = runtime.ContentTypeJSON
+	rc.AcceptContentTypes = runtime.ContentTypeJSON
 	rc.UserAgent = "sidekick/" + buildinfo.Version
 	rc.QPS = clientQPS
 	rc.Burst = clientBurst
