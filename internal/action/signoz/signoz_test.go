@@ -999,3 +999,59 @@ func TestEveryRequestAsksForTheRuleOnly(t *testing.T) {
 
 	require.False(t, slices.ContainsFunc(methods, func(m string) bool { return strings.HasSuffix(m, "/test") }), "the test endpoint sends a real notification")
 }
+
+func TestARecoveryTargetOfZeroIsAValue(t *testing.T) {
+	t.Parallel()
+
+	api, sz := newFakeSigNoz(t, storedV2)
+	a := newTestAction(t, api, limitsOf())
+
+	setZero := paramsOf(`{"condition.thresholds.spec[1].recoveryTarget": 0}`)
+	snap := proposed(t, a, setZero)
+
+	changes, err := action.Changes(snap)
+	require.NoError(t, err)
+	require.Equal(t, []action.Change{{Path: "condition.thresholds.spec[1].recoveryTarget", Before: new("null"), After: new("0")}}, changes)
+
+	_, err = a.Execute(t.Context(), invocationOf(setZero, &snap))
+	require.NoError(t, err)
+	requireHoldsAfter(t, sz, snap)
+
+	held, err := holdsBefore(sz.definitionNow(t), snap)
+	require.NoError(t, err)
+	require.False(t, held, "0 is not the same as unset")
+
+	removeIt := paramsOf(`{"condition.thresholds.spec[1].recoveryTarget": null}`)
+	removal := proposed(t, a, removeIt)
+
+	changes, err = action.Changes(removal)
+	require.NoError(t, err)
+	require.Equal(t, []action.Change{{Path: "condition.thresholds.spec[1].recoveryTarget", Before: new("0")}}, changes)
+
+	_, err = a.Execute(t.Context(), invocationOf(removeIt, &removal))
+	require.NoError(t, err)
+	requireHoldsAfter(t, sz, removal)
+
+	held, err = holdsBefore(sz.definitionNow(t), removal)
+	require.NoError(t, err)
+	require.False(t, held, "the 0 is gone")
+	require.Equal(t, 2, sz.putCount())
+
+	_, err = a.Undo(t.Context(), invocationOf(removeIt, &removal), removal, false)
+	require.NoError(t, err)
+	requireHoldsBefore(t, sz, removal)
+
+	var read struct {
+		Condition struct {
+			Thresholds struct {
+				Spec []struct {
+					RecoveryTarget *float64 `json:"recoveryTarget"`
+				} `json:"spec"`
+			} `json:"thresholds"`
+		} `json:"condition"`
+	}
+
+	require.NoError(t, json.Unmarshal(sz.definitionNow(t), &read))
+	require.NotNil(t, read.Condition.Thresholds.Spec[1].RecoveryTarget, "the 0 is back")
+	require.InDelta(t, 0.0, *read.Condition.Thresholds.Spec[1].RecoveryTarget, 0)
+}

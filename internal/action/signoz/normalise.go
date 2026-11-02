@@ -24,25 +24,43 @@ var lowercased = [][]string{
 	p("notificationSettings", "renotify", "alertStates", anyPos),
 }
 
-// droppedWhenEmpty are the optional values SigNoz reads back as not there
-// when they are empty, and the ones it shows with a null or empty value when
-// they were not set.
-var droppedWhenEmpty = [][]string{
-	p("description"),
-	p("labels"),
-	p("annotations"),
-	p("preferredChannels"),
-	p("condition", "alertOnAbsent"),
-	p("condition", "absentFor"),
-	p("condition", "requireMinPoints"),
-	p("condition", "requiredNumPoints"),
-	p("condition", "targetUnit"),
-	p("condition", "thresholds", "spec", anyPos, "recoveryTarget"),
-	p("condition", "thresholds", "spec", anyPos, "targetUnit"),
-	p("condition", "thresholds", "spec", anyPos, "channels"),
-	p("notificationSettings", "groupBy"),
-	p("notificationSettings", "newGroupEvalDelay"),
-	p("notificationSettings", "renotify", "alertStates"),
+// dropRule says that SigNoz reads the optional value at path back as not
+// there when empty reports the value empty.
+type dropRule struct {
+	path  []string
+	empty func(v any) bool
+}
+
+// droppedWhenEmpty are the optional values SigNoz reads back as not there,
+// or shows as null or empty when they were not set. What counts as empty
+// depends on how SigNoz's type keeps the value, at v0.148.1 in
+// pkg/types/ruletypes: a value with omitempty is left out when it is the Go
+// zero value, so null, empty text, false, 0 and an empty list or object are
+// all "not there"; a pointer without omitempty shows null when unset, so only
+// null is "not there" and 0 is a value; a list with omitzero is left out when
+// nil, so only null is "not there" and [] is a value.
+var droppedWhenEmpty = []dropRule{
+	// api_params.go:66, 72, 73, 79: string, maps and list with omitempty.
+	{p("description"), omitsEmpty},
+	{p("labels"), omitsEmpty},
+	{p("annotations"), omitsEmpty},
+	{p("preferredChannels"), omitsEmpty},
+	// alerting.go:114, 115, 117, 121, 122: bool, uint64, string, bool, int with omitempty.
+	{p("condition", "alertOnAbsent"), omitsEmpty},
+	{p("condition", "absentFor"), omitsEmpty},
+	{p("condition", "requireMinPoints"), omitsEmpty},
+	{p("condition", "requiredNumPoints"), omitsEmpty},
+	{p("condition", "targetUnit"), omitsEmpty},
+	// threshold.go:139: *float64 without omitempty, null when unset, 0 is a value.
+	{p("condition", "thresholds", "spec", anyPos, "recoveryTarget"), isNull},
+	// threshold.go:138: string without omitempty, "" when unset.
+	{p("condition", "thresholds", "spec", anyPos, "targetUnit"), isNullOrBlank},
+	// threshold.go:142: list without omitempty, null when nil, [] when empty.
+	{p("condition", "thresholds", "spec", anyPos, "channels"), isNull},
+	// api_params.go:90, 93, 99: lists and a duration with omitzero.
+	{p("notificationSettings", "groupBy"), isNull},
+	{p("notificationSettings", "newGroupEvalDelay"), isNull},
+	{p("notificationSettings", "renotify", "alertStates"), isNull},
 }
 
 // normalise returns the rule as it compares between a write and a read.
@@ -73,7 +91,7 @@ func normalised(node any, path []string) any {
 			childPath := append(slices.Clone(path), key)
 
 			child = normalised(child, childPath)
-			if matchesAny(droppedWhenEmpty, childPath) && isEmpty(child) {
+			if dropped(childPath, child) {
 				delete(v, key)
 
 				continue
@@ -100,9 +118,20 @@ func normalised(node any, path []string) any {
 	}
 }
 
-// isEmpty reports whether a value is one SigNoz does not keep for an
-// optional field: null, empty text, false, zero, or an empty list or object.
-func isEmpty(v any) bool {
+// dropped reports whether SigNoz reads the value at path back as not there.
+func dropped(path []string, value any) bool {
+	for _, rule := range droppedWhenEmpty {
+		if pathMatches(rule.path, path) {
+			return rule.empty(value)
+		}
+	}
+
+	return false
+}
+
+// omitsEmpty reports whether a value is one that a field with omitempty is
+// left out for: null, empty text, false, zero, or an empty list or object.
+func omitsEmpty(v any) bool {
 	switch x := v.(type) {
 	case nil:
 		return true
@@ -121,6 +150,18 @@ func isEmpty(v any) bool {
 	default:
 		return false
 	}
+}
+
+// isNull reports whether a value is null.
+func isNull(v any) bool {
+	return v == nil
+}
+
+// isNullOrBlank reports whether a value is null or empty text.
+func isNullOrBlank(v any) bool {
+	text, isText := v.(string)
+
+	return v == nil || (isText && text == "")
 }
 
 // sameDefinition reports whether two rules are the same, as SigNoz reads

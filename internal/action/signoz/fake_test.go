@@ -355,7 +355,7 @@ func lowerKeys(obj map[string]any, keys ...string) {
 // optional value when it writes a rule out.
 func dropEmpty(obj map[string]any, keys ...string) {
 	for _, key := range keys {
-		if isEmpty(obj[key]) {
+		if omitsEmpty(obj[key]) {
 			delete(obj, key)
 		}
 	}

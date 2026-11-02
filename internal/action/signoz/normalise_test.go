@@ -35,12 +35,22 @@ func TestNormalise(t *testing.T) {
 		{
 			name: "a threshold that SigNoz shows with null and empty values",
 			in:   `{"condition": {"thresholds": {"spec": [{"name": "a", "target": 0, "targetUnit": "", "recoveryTarget": null, "channels": null}, {"name": "b", "channels": []}]}}}`,
-			want: `{"condition": {"thresholds": {"spec": [{"name": "a", "target": 0}, {"name": "b"}]}}}`,
+			want: `{"condition": {"thresholds": {"spec": [{"name": "a", "target": 0}, {"name": "b", "channels": []}]}}}`,
 		},
 		{
 			name: "notification settings that are empty",
-			in:   `{"notificationSettings": {"groupBy": [], "usePolicy": false, "newGroupEvalDelay": "", "renotify": {"enabled": false, "alertStates": []}}}`,
+			in:   `{"notificationSettings": {"groupBy": null, "usePolicy": false, "newGroupEvalDelay": null, "renotify": {"enabled": false, "alertStates": null}}}`,
 			want: `{"notificationSettings": {"usePolicy": false, "renotify": {"enabled": false}}}`,
+		},
+		{
+			name: "zero, false and empty lists SigNoz keeps for fields without omitempty",
+			in:   `{"condition": {"thresholds": {"spec": [{"name": "a", "recoveryTarget": 0, "targetUnit": "", "channels": []}]}}, "notificationSettings": {"groupBy": [], "renotify": {"alertStates": []}}}`,
+			want: `{"condition": {"thresholds": {"spec": [{"name": "a", "recoveryTarget": 0, "channels": []}]}}, "notificationSettings": {"groupBy": [], "renotify": {"alertStates": []}}}`,
+		},
+		{
+			name: "a recovery target of zero is a value, a null one is not",
+			in:   `{"condition": {"thresholds": {"spec": [{"recoveryTarget": 0.0}, {"recoveryTarget": null}]}}}`,
+			want: `{"condition": {"thresholds": {"spec": [{"recoveryTarget": 0.0}, {}]}}}`,
 		},
 		{
 			name: "values that are kept",
