@@ -78,8 +78,8 @@ func (c *Config) serviceAccount() string {
 func (l Limits) check() []error {
 	var errs []error
 
-	errs = append(errs, checkList("limits.namespaces", l.Namespaces, func(s string) []string { return validation.IsDNS1123Label(s) })...)
-	errs = append(errs, checkList("limits.names", l.Names, func(s string) []string { return validation.IsDNS1123Subdomain(s) })...)
+	errs = append(errs, checkList("limits.namespaces", l.Namespaces, validation.IsDNS1123Label)...)
+	errs = append(errs, checkList("limits.names", l.Names, validation.IsDNS1123Subdomain)...)
 	errs = append(errs, checkList("limits.groups", l.Groups, groupProblems)...)
 
 	if len(l.Fields) == 0 {
