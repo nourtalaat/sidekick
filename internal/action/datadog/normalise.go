@@ -44,7 +44,7 @@ func normalise(doc json.RawMessage) (json.RawMessage, error) {
 
 	for _, key := range []string{"query", "message"} {
 		if err := mapText(top, key, strings.TrimSpace); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("normalise the %s: %w", key, err)
 		}
 	}
 
@@ -55,7 +55,7 @@ func normalise(doc json.RawMessage) (json.RawMessage, error) {
 
 		return t
 	}); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("normalise the type: %w", err)
 	}
 
 	out, err := json.Marshal(top)
@@ -102,7 +102,7 @@ func textOf(raw json.RawMessage) (string, bool) {
 func holdsAfter(live json.RawMessage, snap action.Snapshot) (bool, error) {
 	cur, deltas, err := normalised(live, snap)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("normalise for the after check: %w", err)
 	}
 
 	ok, err := action.AtAfter(cur, deltas)
@@ -117,7 +117,7 @@ func holdsAfter(live json.RawMessage, snap action.Snapshot) (bool, error) {
 func holdsBefore(live json.RawMessage, snap action.Snapshot) (bool, error) {
 	cur, deltas, err := normalised(live, snap)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("normalise for the before check: %w", err)
 	}
 
 	ok, err := action.AtBefore(cur, deltas)
