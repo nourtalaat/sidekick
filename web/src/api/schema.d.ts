@@ -1545,6 +1545,18 @@ export interface components {
             allowUntrustedWrite?: boolean;
             /** @description The actions the route may propose, by their names in the config file's actions section. Empty in read-only mode. */
             actions?: string[];
+            /**
+             * @description Fixed facts about the route, such as the owning team or the
+             *     environment, that the investigation prompt shows to the model
+             *     as trusted text. They must hold no secrets and no text copied
+             *     from alerts or other outside sources. At most 20 keys; a key is
+             *     1 to 64 letters, digits, `-`, `_` or `.`; a value is one line of
+             *     at most 500 characters with no control characters, and is not
+             *     empty. A body without `details` removes them.
+             */
+            details?: {
+                [key: string]: string;
+            };
             budgets?: components["schemas"]["RouteBudgets"];
             grouping?: components["schemas"]["RouteGrouping"];
         };

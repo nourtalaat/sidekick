@@ -55,6 +55,15 @@ func TestCheckRuntimeRoute(t *testing.T) {
 			route: route(func(r *Route) { r.Name = "Checkout" }),
 			want:  []string{`routes.Checkout: route name "Checkout" ` + nameRule},
 		},
+		{name: "details", route: route(func(r *Route) { r.Details = map[string]string{"owner": "payments team"} })},
+		{
+			name:  "bad details",
+			route: route(func(r *Route) { r.Details = map[string]string{"owner": "a\nb", "bad key": "x"} }),
+			want: []string{
+				`routes.checkout.details: key "bad key" must be 1 to 64 characters from letters, digits, "-", "_" and "."`,
+				`routes.checkout.details: key "owner": the value must be one line with no control characters`,
+			},
+		},
 		{
 			name:  "no match",
 			route: route(func(r *Route) { r.Match = nil }),

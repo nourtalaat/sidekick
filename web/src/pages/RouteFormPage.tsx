@@ -32,6 +32,7 @@ const FIELDS = [
   "strategy",
   "sources",
   "outputs",
+  "details",
   "mode",
   "actions",
   "budgets.maxTokens",
@@ -68,6 +69,7 @@ interface RouteValues {
   strategy: string;
   sources: string;
   outputs: string;
+  details: string;
   mode: string;
   allowUntrustedWrite: boolean;
   actions: string;
@@ -92,6 +94,7 @@ const EMPTY: RouteValues = {
   strategy: "",
   sources: "",
   outputs: "",
+  details: "",
   mode: "read-only",
   allowUntrustedWrite: false,
   actions: "",
@@ -343,6 +346,15 @@ function RouteForm({ mode, initial, version }: RouteFormProps) {
           error={byField.outputs}
           help="Names of outputs from the config file, separated by commas."
         />
+        <TextArea
+          label="Details"
+          mono
+          value={values.details}
+          onChange={(e) => set({ details: e.target.value })}
+          error={byField.details}
+          help="Facts the model is told about this route, one key=value to a line, such as owner=payments team. They are shown as trusted text, so put in no secrets and no text copied from alerts. Up to 20 lines; a key is letters, digits, -, _ and ., up to 64 characters; a value is one line of up to 500 characters."
+          spellCheck={false}
+        />
         <Select
           label="Mode"
           value={values.mode}
@@ -470,6 +482,11 @@ function specOf(values: RouteValues, mode: "new" | "edit"): Built {
     problems["match.labels"] = labels.error;
   }
 
+  const details = parseLabels(values.details);
+  if (details.error) {
+    problems.details = details.error;
+  }
+
   if (Object.keys(problems).length > 0) {
     return { problems };
   }
@@ -491,6 +508,7 @@ function specOf(values: RouteValues, mode: "new" | "edit"): Built {
       strategy: textOrUndefined(values.strategy),
       sources: orUndefined(splitList(values.sources)),
       outputs: orUndefined(splitList(values.outputs)),
+      details: Object.keys(details.labels).length > 0 ? details.labels : undefined,
       mode: modeOf(values.mode),
       allowUntrustedWrite: values.mode === "read-write" && values.allowUntrustedWrite ? true : undefined,
       actions: orUndefined(splitList(values.actions)),
@@ -528,6 +546,7 @@ function valuesOf(r: Route): RouteValues {
     strategy: r.strategy ?? "",
     sources: joinList(r.sources),
     outputs: joinList(r.outputs),
+    details: formatLabels(r.details),
     mode: r.mode ?? "read-only",
     allowUntrustedWrite: r.allowUntrustedWrite ?? false,
     actions: joinList(r.actions),

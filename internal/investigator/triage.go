@@ -303,7 +303,7 @@ func (r *run) saveTriagePrompt(ctx context.Context) error {
 		RouteStrategy: deref(r.inv.Strategy),
 		Tool:          model.ToolSpec{Name: prompt.SubmitTriageTool, Description: submitTriageDescription, InputSchema: submitTriageSchema},
 		Group:         group,
-		Route:         prompt.RouteContext{Name: r.inv.Route},
+		Route:         prompt.RouteContext{Name: r.inv.Route, Details: r.route.Details},
 		Lessons:       promptLessons(chosen),
 	})
 

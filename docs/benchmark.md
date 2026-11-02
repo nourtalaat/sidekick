@@ -375,6 +375,9 @@ limits: { maxToolCalls: 30, maxCostUSD: 0.50 }
 - `now` is the time the event arrives at, and the time `within` matchers
   count from.
 - The payload must give exactly one event, and not a recovery.
+- `route.details` gives the run's route fixed facts that the prompt shows
+  to the model, as `details` does for a [route](configuration.md#routes) in
+  the config file, with the same limits. A scenario without it has none.
 - `limits` take `maxTokens`, `maxToolCalls`, `maxWallTime` and
   `maxCostUSD`. A limit the scenario does not set takes the config's
   `budgets.perInvestigation` value, and the strategy's own limits still

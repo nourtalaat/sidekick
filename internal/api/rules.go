@@ -99,7 +99,7 @@ func (s *server) CreateRoute(ctx context.Context, req apigen.CreateRouteRequestO
 
 	spec := apigen.RouteSpec{
 		Priority: body.Priority, Match: body.Match, Strategy: body.Strategy, Sources: body.Sources, Outputs: body.Outputs,
-		Mode: body.Mode, AllowUntrustedWrite: body.AllowUntrustedWrite, Actions: body.Actions, Budgets: body.Budgets, Grouping: body.Grouping,
+		Mode: body.Mode, AllowUntrustedWrite: body.AllowUntrustedWrite, Actions: body.Actions, Details: body.Details, Budgets: body.Budgets, Grouping: body.Grouping,
 	}
 
 	route, err := routeOf(body.Name, spec)
@@ -125,7 +125,7 @@ func (s *server) UpdateRoute(ctx context.Context, req apigen.UpdateRouteRequestO
 
 	spec := apigen.RouteSpec{
 		Priority: body.Priority, Match: body.Match, Strategy: body.Strategy, Sources: body.Sources, Outputs: body.Outputs,
-		Mode: body.Mode, AllowUntrustedWrite: body.AllowUntrustedWrite, Actions: body.Actions, Budgets: body.Budgets, Grouping: body.Grouping,
+		Mode: body.Mode, AllowUntrustedWrite: body.AllowUntrustedWrite, Actions: body.Actions, Details: body.Details, Budgets: body.Budgets, Grouping: body.Grouping,
 	}
 
 	route, err := routeOf(req.Name, spec)

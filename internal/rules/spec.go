@@ -33,14 +33,15 @@ type senderSpec struct {
 // route that Slack can set, without its name and priority. Durations are
 // written as Go durations, such as 10m0s.
 type routeSpec struct {
-	Match    *matchSpec   `json:"match,omitempty"`
-	Strategy string       `json:"strategy,omitempty"`
-	Sources  []string     `json:"sources,omitempty"`
-	Mode     string       `json:"mode"`
-	Actions  []string     `json:"actions,omitempty"`
-	Outputs  []string     `json:"outputs,omitempty"`
-	Budgets  budgetSpec   `json:"budgets,omitzero"`
-	Grouping groupingSpec `json:"grouping,omitzero"`
+	Match    *matchSpec        `json:"match,omitempty"`
+	Strategy string            `json:"strategy,omitempty"`
+	Sources  []string          `json:"sources,omitempty"`
+	Mode     string            `json:"mode"`
+	Actions  []string          `json:"actions,omitempty"`
+	Outputs  []string          `json:"outputs,omitempty"`
+	Details  map[string]string `json:"details,omitempty"`
+	Budgets  budgetSpec        `json:"budgets,omitzero"`
+	Grouping groupingSpec      `json:"grouping,omitzero"`
 
 	// AllowUntrustedWrite is the override of the trusted-sender rule. It
 	// is part of the route's audit record.
@@ -136,6 +137,7 @@ func routeOfRow(row db.Route) (Route, error) {
 	r.Actions = s.Actions
 	r.AllowUntrustedWrite = s.AllowUntrustedWrite
 	r.Outputs = s.Outputs
+	r.Details = s.Details
 	r.Grouping.FingerprintLabels = s.Grouping.FingerprintLabels
 	r.Budgets.MaxTokens = s.Budgets.MaxTokens
 	r.Budgets.MaxToolCalls = s.Budgets.MaxToolCalls
@@ -199,6 +201,7 @@ func specOfRoute(r config.Route) routeSpec {
 		Mode:     string(r.Mode),
 		Actions:  r.Actions,
 		Outputs:  r.Outputs,
+		Details:  r.Details,
 		Budgets: budgetSpec{
 			MaxTokens:    r.Budgets.MaxTokens,
 			MaxToolCalls: r.Budgets.MaxToolCalls,

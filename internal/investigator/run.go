@@ -244,7 +244,7 @@ func (r *run) savePrompt(ctx context.Context) error {
 		Strategy: st,
 		Tools:    append(specs, r.tools.Tools()...),
 		Group:    group,
-		Route:    prompt.RouteContext{Name: r.inv.Route},
+		Route:    prompt.RouteContext{Name: r.inv.Route, Details: r.route.Details},
 		Memory:   examples,
 		Lessons:  promptLessons(chosen),
 	})

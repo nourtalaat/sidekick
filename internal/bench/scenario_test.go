@@ -75,6 +75,22 @@ func TestLoadScenariosSample(t *testing.T) {
 	}
 }
 
+func TestLoadScenariosReadsRouteDetails(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	content := minimal + "route: { details: { owner: payments team, environment: prod } }\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.yaml"), []byte(content), 0o600))
+
+	got, err := LoadScenarios(dir, LoadOptions{})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, map[string]string{"owner": "payments team", "environment": "prod"}, got[0].Route.Details)
+
+	r := &Runner{}
+	require.Equal(t, got[0].Route.Details, r.route(got[0]).Details, "the run's route has the details")
+}
+
 func TestLoadScenariosProblems(t *testing.T) {
 	t.Parallel()
 
@@ -114,6 +130,14 @@ func TestLoadScenariosProblems(t *testing.T) {
 				"a.yaml: expected.evidence[0]: set calledTool or citedURL, not both",
 				`a.yaml: expected.unavailableReported[0]: "signoz" is not a source of the scenario`,
 				"a.yaml: limits.maxToolCalls: must not be negative",
+			},
+		},
+		{
+			name:  "bad route details",
+			files: map[string]string{"a.yaml": minimal + "route: { details: { owner: \"a\\nb\", \"on call\": x } }\n"},
+			want: []string{
+				`a.yaml: route.details: key "on call" must be 1 to 64 characters`,
+				`a.yaml: route.details: key "owner": the value must be one line`,
 			},
 		},
 		{

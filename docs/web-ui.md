@@ -633,8 +633,8 @@ used by every replica within seconds.
   rule and turns it on or off with `enabled`. The body has the keys the
   rule has in the config file: for a listener `channel`, `source`,
   `match`, `extract` and `recovery`; for a route `priority`, `match`,
-  `strategy`, `sources`, `outputs`, `mode`, `actions`, `budgets` and
-  `grouping`. Durations are written as `5m`. A route needs a `match`, uses
+  `strategy`, `sources`, `outputs`, `details`, `mode`, `actions`,
+  `budgets` and `grouping`. Durations are written as `5m`. A route needs a `match`, uses
   only the sources, outputs, strategies and actions of the config file,
   keeps its budgets at or below the global ones, and has the mode
   `read-only`, `approved` or `read-write`; an `approved` or `read-write`
@@ -766,7 +766,9 @@ The navigation has a page for each:
   Delete asks first. A save runs the same checks as the config file and
   the `/sidekick` commands, and the form shows each problem under its
   field, with problems that belong to no field in a message at the top.
-  The route form offers the three modes. In `read-write` mode it also
+  The route form has a Details box, one `key=value` to a line, for the
+  [facts the model is told](configuration.md#routes) about the route; the
+  routes table lists them. The route form offers the three modes. In `read-write` mode it also
   shows the checkbox for senders that are not trusted, and saving with it
   on first asks you to confirm, naming the route; Cancel sends nothing.
   If someone else

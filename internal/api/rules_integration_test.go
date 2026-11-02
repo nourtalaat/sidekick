@@ -4,8 +4,11 @@ package api_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,23 +21,24 @@ import (
 // ruleItem is a listener or a route of the lists, with the fields the
 // tests look at.
 type ruleItem struct {
-	Name         string         `json:"name"`
-	Layer        string         `json:"layer"`
-	Status       string         `json:"status"`
-	StatusReason string         `json:"statusReason"`
-	ReadOnly     bool           `json:"readOnly"`
-	Enabled      bool           `json:"enabled"`
-	Version      int            `json:"version"`
-	UpdatedBy    string         `json:"updatedBy"`
-	Position     int            `json:"position"`
-	Channel      string         `json:"channel"`
-	Priority     int            `json:"priority"`
-	Mode         string         `json:"mode"`
-	Actions      []string       `json:"actions"`
-	AllowUntrust bool           `json:"allowUntrustedWrite"`
-	Match        map[string]any `json:"match"`
-	Budgets      map[string]any `json:"budgets"`
-	Sources      []string       `json:"sources"`
+	Name         string            `json:"name"`
+	Layer        string            `json:"layer"`
+	Status       string            `json:"status"`
+	StatusReason string            `json:"statusReason"`
+	ReadOnly     bool              `json:"readOnly"`
+	Enabled      bool              `json:"enabled"`
+	Version      int               `json:"version"`
+	UpdatedBy    string            `json:"updatedBy"`
+	Position     int               `json:"position"`
+	Channel      string            `json:"channel"`
+	Priority     int               `json:"priority"`
+	Mode         string            `json:"mode"`
+	Actions      []string          `json:"actions"`
+	AllowUntrust bool              `json:"allowUntrustedWrite"`
+	Match        map[string]any    `json:"match"`
+	Budgets      map[string]any    `json:"budgets"`
+	Sources      []string          `json:"sources"`
+	Details      map[string]string `json:"details"`
 }
 
 // ruleRef names a rule by layer and name, with its status.
@@ -965,4 +969,149 @@ func TestRuleChangesAreUsedByAnotherReplica(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
 
 	require.Eventually(t, func() bool { return !slices.Contains(routeNames(), "search") }, notifyDeadline, 10*time.Millisecond)
+}
+
+func TestCreateRouteWithDetails(t *testing.T) {
+	t.Parallel()
+
+	details := map[string]any{"owner": "payments team", "environment": "prod"}
+
+	tooMany := map[string]any{}
+	for i := range 21 {
+		tooMany[fmt.Sprintf("key-%d", i)] = "value"
+	}
+
+	tests := []struct {
+		name        string
+		who         ruleCaller
+		details     map[string]any
+		wantStatus  int
+		wantMessage string
+	}{
+		{name: "details", who: adminCaller, details: details, wantStatus: http.StatusCreated},
+		{name: "no details", who: adminCaller, wantStatus: http.StatusCreated},
+		{name: "an admin token", who: adminTokenCaller, details: details, wantStatus: http.StatusCreated},
+		{name: "a responder", who: responderCaller, details: details, wantStatus: http.StatusForbidden},
+		{name: "a viewer", who: viewerCaller, details: details, wantStatus: http.StatusForbidden},
+		{name: "too many keys", who: adminCaller, details: tooMany, wantStatus: http.StatusUnprocessableEntity, wantMessage: "at most 20 keys are allowed, got 21"},
+		{
+			name: "a bad key", who: adminCaller, details: map[string]any{"on call": "x"},
+			wantStatus: http.StatusUnprocessableEntity, wantMessage: `key "on call" must be 1 to 64 characters`,
+		},
+		{
+			name: "a multi-line value", who: adminCaller, details: map[string]any{"owner": "a\nb"},
+			wantStatus: http.StatusUnprocessableEntity, wantMessage: `key "owner": the value must be one line`,
+		},
+		{
+			name: "a value that is too long", who: adminCaller, details: map[string]any{"owner": strings.Repeat("v", 501)},
+			wantStatus: http.StatusUnprocessableEntity, wantMessage: `key "owner": the value must be at most 500 characters, got 501`,
+		},
+		{
+			name: "an empty value", who: adminCaller, details: map[string]any{"owner": ""},
+			wantStatus: http.StatusUnprocessableEntity, wantMessage: `key "owner": the value must not be empty`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := setupRules(t)
+
+			body := map[string]any{"name": "search", "match": map[string]any{"service": "search-*"}, "outputs": []string{"slack-thread"}}
+			if tt.details != nil {
+				body["details"] = tt.details
+			}
+
+			rec := s.sendRule(t, tt.who, http.MethodPost, "/api/v1/routes", body)
+			require.Equal(t, tt.wantStatus, rec.Code, rec.Body.String())
+
+			audits := s.ruleAudits(t)
+
+			if tt.wantStatus != http.StatusCreated {
+				require.Empty(t, audits)
+				require.Len(t, s.listRoutes(t, adminCaller), 5, "a refused change stores nothing")
+
+				if tt.wantMessage != "" {
+					require.Contains(t, ruleProblemOf(t, rec).fieldMessages()["details"], tt.wantMessage)
+				}
+
+				return
+			}
+
+			var created ruleItem
+			decodeRule(t, rec, &created)
+
+			stored := find(t, s.listRoutes(t, viewerCaller), "runtime", "search")
+			require.Equal(t, created, stored)
+			require.Len(t, audits, 1)
+
+			spec := audits[0].Details["new"].(map[string]any)["spec"].(map[string]any)
+
+			if tt.details == nil {
+				require.Nil(t, created.Details)
+				require.NotContains(t, spec, "details")
+
+				return
+			}
+
+			require.Equal(t, map[string]string{"owner": "payments team", "environment": "prod"}, created.Details)
+			require.Equal(t, tt.details, spec["details"], "the audit row shows the details")
+		})
+	}
+}
+
+func TestUpdateRouteDetails(t *testing.T) {
+	t.Parallel()
+
+	s := setupRules(t)
+
+	body := func(version int, details map[string]any) map[string]any {
+		b := map[string]any{
+			"enabled": true, "version": version, "match": map[string]any{"service": "checkout-*"}, "outputs": []string{"slack-thread"},
+		}
+
+		if details != nil {
+			b["details"] = details
+		}
+
+		return b
+	}
+
+	put := func(version int, details map[string]any) *httptest.ResponseRecorder {
+		return s.sendRule(t, adminCaller, http.MethodPut, "/api/v1/routes/checkout", body(version, details))
+	}
+
+	rec := put(1, map[string]any{"owner": "payments team"})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var saved ruleItem
+	decodeRule(t, rec, &saved)
+	require.Equal(t, map[string]string{"owner": "payments team"}, saved.Details)
+	require.Equal(t, saved, find(t, s.listRoutes(t, viewerCaller), "runtime", "checkout"))
+
+	rec = put(2, map[string]any{"owner": "checkout team", "environment": "prod"})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	saved = ruleItem{}
+	decodeRule(t, rec, &saved)
+	require.Equal(t, map[string]string{"owner": "checkout team", "environment": "prod"}, saved.Details, "the new details replace the old ones")
+
+	rec = put(3, map[string]any{"owner": "a\nb"})
+	require.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
+	require.Contains(t, ruleProblemOf(t, rec).fieldMessages()["details"], "the value must be one line")
+	require.Equal(t, saved, find(t, s.listRoutes(t, viewerCaller), "runtime", "checkout"), "the refused change stored nothing")
+
+	rec = put(3, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	saved = ruleItem{}
+	decodeRule(t, rec, &saved)
+	require.Nil(t, saved.Details, "a body without details removes them")
+	require.Nil(t, find(t, s.listRoutes(t, viewerCaller), "runtime", "checkout").Details)
+
+	audits := s.ruleAudits(t)
+	require.Len(t, audits, 3)
+	require.Equal(t, map[string]any{"owner": "checkout team", "environment": "prod"}, audits[2].Details["old"].(map[string]any)["spec"].(map[string]any)["details"])
+	require.NotContains(t, audits[2].Details["new"].(map[string]any)["spec"], "details")
 }

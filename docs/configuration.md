@@ -2440,6 +2440,10 @@ routes:
     mode: approved                     # read-only (default), approved or read-write
     actions: [monitor-note]            # actions the model may propose, defined in `actions`
     outputs: [slack-thread]
+    details:                           # facts the model is told, as trusted text
+      owner: payments team
+      environment: prod
+      runbook: payments-latency page in the on-call wiki
     budgets:                           # at or below the global budgets
       maxToolCalls: 30
       maxCostUSD: 0.75
@@ -2456,6 +2460,28 @@ routes:
 ```
 
 A route without `strategy` uses the built-in `generic-alert` strategy.
+
+`details` gives the model fixed facts about the route, such as the owning
+team, the environment or the runbook to follow. Each one is shown as a
+`key: value` line under `Route:` in the first request of an investigation
+and in its triage request, sorted by key. The limits are:
+
+- at most 20 keys;
+- a key is 1 to 64 letters, digits, `-`, `_` or `.`;
+- a value is not empty, is one line of at most 500 characters, and holds no
+  control character, so no line break or tab.
+
+A route that breaks a limit fails config load, and a runtime route that
+breaks one is refused with a message that names the key. Details are shown
+to the model as trusted facts, not inside the block of untrusted data that
+holds the alert, so they must hold no secrets and no text copied from
+alerts or other outside sources. They are saved with the investigation's
+prompt, which anyone who can open the investigation can read, and they go
+to the model provider. The model does not write links, so a link in a
+detail is not passed on to reports. Because the text is trusted, only the
+config file, or an admin through the web UI or the API, can set details;
+Slack commands cannot, and `/sidekick routes` lists only the keys.
+
 Events from mentions of `@Sidekick` have the intake `slack-mention`, or
 `teams-mention` in Teams.
 

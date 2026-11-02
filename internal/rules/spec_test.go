@@ -28,6 +28,7 @@ func TestRouteSpecRoundTrip(t *testing.T) {
 	full.AllowUntrustedWrite = true
 	full.Actions = []string{"monitor-note"}
 	full.Outputs = []string{"slack-thread"}
+	full.Details = map[string]string{"owner": "payments team", "environment": "prod"}
 	full.Budgets = config.RouteBudgets{Limits: config.Limits{MaxTokens: 100_000, MaxToolCalls: 20, MaxWallTime: 5 * time.Minute, MaxCostUSD: 1.5}}
 	full.Grouping = config.Grouping{Window: time.Hour, FingerprintLabels: []string{"service"}, RelatedWindow: 15 * time.Minute}
 
