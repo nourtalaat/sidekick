@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -248,7 +249,7 @@ var _ action.ProposalChecker = (*slowNote)(nil)
 func (slowNote) CheckProposal(ctx context.Context, _ json.RawMessage) error {
 	<-ctx.Done()
 
-	return ctx.Err()
+	return fmt.Errorf("the check was cut off: %w", ctx.Err())
 }
 
 func TestPrepareProposalCheckerTimesOut(t *testing.T) {
