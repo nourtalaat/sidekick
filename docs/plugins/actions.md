@@ -103,7 +103,8 @@ limit without one.
   request with a tool, does not belong in `Validate`, which runs twice. Implement
   `action.ProposalChecker` for it: `CheckProposal(ctx, params)` runs once, when the
   model proposes, after `Validate`. Its error goes back to the model as a refusal
-  (cut at 2000 characters) and nothing is stored. It is not called again before
+  (cut at 2000 characters) and nothing is stored. It is cut off after 90
+  seconds, and the model is told to propose again. It is not called again before
   `Execute`, so `Execute` makes the check again if the result can change.
 - Call `Validate` at the start of `Execute` too. Sidekick already checked, but
   an action must not rely on its caller for its safety.

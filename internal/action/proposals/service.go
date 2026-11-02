@@ -37,6 +37,11 @@ const (
 // auditTargetKind is the target kind of the audit entries of a proposal.
 const auditTargetKind = "action_proposal"
 
+// CheckTimeout is how long an action's CheckProposal may take. The check runs
+// inside the model's tool call and can call other services, so it is cut
+// off, and the model is told to try again.
+const CheckTimeout = 90 * time.Second
+
 // Limits on the text of a proposal and its decision, in characters.
 const (
 	maxReasonChars  = 1000
@@ -95,6 +100,8 @@ type Service struct {
 	audit   *audit.Writer
 	log     *slog.Logger
 	now     func() time.Time
+	// checkTimeout is CheckTimeout; tests make it short.
+	checkTimeout time.Duration
 }
 
 // New returns a Service.
@@ -114,7 +121,7 @@ func New(opts Options) (*Service, error) {
 		schemas[name] = schema
 	}
 
-	s := &Service{opts: opts, schemas: schemas, audit: opts.Audit, log: opts.Logger, now: opts.Now}
+	s := &Service{opts: opts, schemas: schemas, audit: opts.Audit, log: opts.Logger, now: opts.Now, checkTimeout: CheckTimeout}
 
 	if s.audit == nil {
 		s.audit = audit.NewWriter()
