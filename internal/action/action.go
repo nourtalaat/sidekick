@@ -122,6 +122,11 @@ type Invocation struct {
 	// definition computed again from Params, so what runs is what the
 	// approver read.
 	Snapshot *Snapshot
+	// UndoOf is the ID of the proposal being undone when the action is
+	// asked to undo it, and empty otherwise. Invocation.ProposalID is then
+	// the ID of the undo, and the action needs this one to find what the
+	// proposal made, for example its branch.
+	UndoOf string
 }
 
 // Link points at what the action created or changed.
