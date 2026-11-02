@@ -22,6 +22,7 @@ export function proposal(over: Partial<Proposal> = {}): Proposal {
     status: "proposed",
     proposedAt: "2026-10-26T14:02:00Z",
     expiresAt: "2026-10-27T14:02:00Z",
+    undoable: false,
     ...over,
   };
 }

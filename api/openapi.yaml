@@ -1449,6 +1449,50 @@ paths:
                 $ref: "#/components/schemas/Proposal"
         default:
           $ref: "#/components/responses/Problem"
+  /proposals/{id}/undo:
+    post:
+      operationId: UndoProposal
+      summary: Undo a succeeded action proposal
+      description: |
+        Restores what a succeeded proposal changed, for an action that
+        changes a definition in place, such as a monitor. It records a new
+        proposal that points at the original (`undoOf`), approved by the
+        person who asked and run at once, and answers with that proposal.
+        The original becomes `undone`. Only a person who is signed in undoes:
+        an API token gets 403. Only proposals with `undoable` true qualify.
+
+        Only the fields the action changed are put back; every other field
+        stays as it is now. When someone changed one of those fields since,
+        and `force` is not true, nothing is restored and the answer is 409
+        with `code` conflict and `changes`: the difference between the
+        definition now (`before`) and the value a restore would write
+        (`after`). Send the same request with `force` true to restore it.
+
+        The other 409 answers have a `code`: `not_undoable` (the proposal
+        is not succeeded, was undone already, is an undo, or its action
+        cannot undo it), `not_allowed` (the config no longer allows the
+        action), `undo_running` (an undo of this proposal is running) and
+        `undo_failed` (the restore failed for good; the detail says why and
+        the original stays succeeded). A restore that failed for a reason
+        that may pass answers 200 with the new proposal still `executing`;
+        a job tries again.
+      x-sidekick-role: approver
+      parameters:
+        - $ref: "#/components/parameters/ProposalID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UndoProposalRequest"
+      responses:
+        "200":
+          description: The new proposal that restores the original.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Proposal"
+        default:
+          $ref: "#/components/responses/Problem"
   /investigations/{id}/fix-applied:
     put:
       operationId: MarkFixApplied
@@ -3042,7 +3086,7 @@ components:
         An action the model proposed. `params`, `paramsText` and `reason`
         are text the model wrote, so a screen shows them as plain text.
         What `params` holds never changes, and it is what runs.
-      required: [id, investigationId, route, action, params, paramsText, reason, mode, status, proposedAt, expiresAt]
+      required: [id, investigationId, route, action, params, paramsText, reason, mode, status, proposedAt, expiresAt, undoable]
       properties:
         id:
           type: string
@@ -3067,6 +3111,25 @@ components:
           description: The parameters as the approver reads them. Characters that could hide something are written as \u escapes, and nothing is cut.
         reason:
           type: string
+        target:
+          type: string
+          description: What an action that changes a definition in place changes, such as datadog:monitor/123. Absent for any other action.
+        changes:
+          type: array
+          description: |
+            The difference between the definition before and after the
+            change, field by field, sorted by path. Absent for an action
+            that changes no definition in place. A change with an empty
+            `path` and no `after` removes the whole definition.
+          items:
+            $ref: "#/components/schemas/ProposalChange"
+        undoable:
+          type: boolean
+          description: Whether the proposal can be undone now. True only for a succeeded proposal whose action can undo it, that is not an undo itself.
+        undoOf:
+          type: string
+          format: uuid
+          description: Set on a proposal that restores the proposal with this ID.
         mode:
           type: string
         status:
@@ -3091,6 +3154,31 @@ components:
         error:
           type: string
           description: Why it failed. While it is tried again, the last failed attempt.
+    ProposalChange:
+      type: object
+      description: |
+        One field that differs. `before` and `after` are the JSON values as
+        text, like `paramsText`: characters that could hide something are
+        written as \u escapes, and nothing is cut. They come from the
+        monitoring tool and from the model, so show them as plain text. A
+        missing `before` means the field did not exist; a missing `after`
+        means it is removed.
+      required: [path]
+      properties:
+        path:
+          type: string
+          description: The field, such as options.thresholds.critical or rules[0].expr.
+        before:
+          type: string
+        after:
+          type: string
+    UndoProposalRequest:
+      type: object
+      properties:
+        force:
+          type: boolean
+          default: false
+          description: Restore even though someone changed the fields since. Send it after a 409 with code conflict showed the difference.
     ProposalList:
       type: object
       required: [proposals]
@@ -4187,12 +4275,18 @@ components:
             it: validation (422), file_rule, exists, stale, conflict
             (409) and not_found (404) on listeners and routes; validation
             and unchanged (422), stale and conflict (409) and not_found
-            (404) on strategies.
+            (404) on strategies; not_undoable, not_allowed, undo_running,
+            undo_failed and conflict (409) on undoing a proposal.
         errors:
           type: array
           description: The fields of the request that were refused, when code is validation.
           items:
             $ref: "#/components/schemas/FieldError"
+        changes:
+          type: array
+          description: The difference an undo would overwrite, when code is conflict on an undo.
+          items:
+            $ref: "#/components/schemas/ProposalChange"
         instance:
           type: string
           description: The path of the request.

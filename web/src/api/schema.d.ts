@@ -999,6 +999,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/proposals/{id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Undo a succeeded action proposal
+         * @description Restores what a succeeded proposal changed, for an action that
+         *     changes a definition in place, such as a monitor. It records a new
+         *     proposal that points at the original (`undoOf`), approved by the
+         *     person who asked and run at once, and answers with that proposal.
+         *     The original becomes `undone`. Only a person who is signed in undoes:
+         *     an API token gets 403. Only proposals with `undoable` true qualify.
+         *
+         *     Only the fields the action changed are put back; every other field
+         *     stays as it is now. When someone changed one of those fields since,
+         *     and `force` is not true, nothing is restored and the answer is 409
+         *     with `code` conflict and `changes`: the difference between the
+         *     definition now (`before`) and the value a restore would write
+         *     (`after`). Send the same request with `force` true to restore it.
+         *
+         *     The other 409 answers have a `code`: `not_undoable` (the proposal
+         *     is not succeeded, was undone already, is an undo, or its action
+         *     cannot undo it), `not_allowed` (the config no longer allows the
+         *     action), `undo_running` (an undo of this proposal is running) and
+         *     `undo_failed` (the restore failed for good; the detail says why and
+         *     the original stays succeeded). A restore that failed for a reason
+         *     that may pass answers 200 with the new proposal still `executing`;
+         *     a job tries again.
+         */
+        post: operations["UndoProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/investigations/{id}/fix-applied": {
         parameters: {
             query?: never;
@@ -1985,6 +2026,22 @@ export interface components {
             /** @description The parameters as the approver reads them. Characters that could hide something are written as \u escapes, and nothing is cut. */
             paramsText: string;
             reason: string;
+            /** @description What an action that changes a definition in place changes, such as datadog:monitor/123. Absent for any other action. */
+            target?: string;
+            /**
+             * @description The difference between the definition before and after the
+             *     change, field by field, sorted by path. Absent for an action
+             *     that changes no definition in place. A change with an empty
+             *     `path` and no `after` removes the whole definition.
+             */
+            changes?: components["schemas"]["ProposalChange"][];
+            /** @description Whether the proposal can be undone now. True only for a succeeded proposal whose action can undo it, that is not an undo itself. */
+            undoable: boolean;
+            /**
+             * Format: uuid
+             * @description Set on a proposal that restores the proposal with this ID.
+             */
+            undoOf?: string;
             mode: string;
             status: components["schemas"]["ProposalStatus"];
             /** Format: date-time */
@@ -2000,6 +2057,27 @@ export interface components {
             result?: components["schemas"]["ActionResult"];
             /** @description Why it failed. While it is tried again, the last failed attempt. */
             error?: string;
+        };
+        /**
+         * @description One field that differs. `before` and `after` are the JSON values as
+         *     text, like `paramsText`: characters that could hide something are
+         *     written as \u escapes, and nothing is cut. They come from the
+         *     monitoring tool and from the model, so show them as plain text. A
+         *     missing `before` means the field did not exist; a missing `after`
+         *     means it is removed.
+         */
+        ProposalChange: {
+            /** @description The field, such as options.thresholds.critical or rules[0].expr. */
+            path: string;
+            before?: string;
+            after?: string;
+        };
+        UndoProposalRequest: {
+            /**
+             * @description Restore even though someone changed the fields since. Send it after a 409 with code conflict showed the difference.
+             * @default false
+             */
+            force: boolean;
         };
         ProposalList: {
             proposals: components["schemas"]["Proposal"][];
@@ -2649,11 +2727,14 @@ export interface components {
              *     it: validation (422), file_rule, exists, stale, conflict
              *     (409) and not_found (404) on listeners and routes; validation
              *     and unchanged (422), stale and conflict (409) and not_found
-             *     (404) on strategies.
+             *     (404) on strategies; not_undoable, not_allowed, undo_running,
+             *     undo_failed and conflict (409) on undoing a proposal.
              */
             code?: string;
             /** @description The fields of the request that were refused, when code is validation. */
             errors?: components["schemas"]["FieldError"][];
+            /** @description The difference an undo would overwrite, when code is conflict on an undo. */
+            changes?: components["schemas"]["ProposalChange"][];
             /** @description The path of the request. */
             instance?: string;
         };
@@ -4503,6 +4584,34 @@ export interface operations {
         };
         responses: {
             /** @description The proposal, rejected. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Proposal"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UndoProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The ID of an action proposal. */
+                id: components["parameters"]["ProposalID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["UndoProposalRequest"];
+            };
+        };
+        responses: {
+            /** @description The new proposal that restores the original. */
             200: {
                 headers: {
                     [name: string]: unknown;
