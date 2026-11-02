@@ -20,7 +20,7 @@ func proposeInput(t *testing.T) json.RawMessage {
 
 	input, err := json.Marshal(map[string]any{
 		"action": "monitor-pr",
-		"params": json.RawMessage(invocation(rulesParams()).Params),
+		"params": invocation(rulesParams()).Params,
 		"reason": "The alert fires on one-minute spikes.",
 	})
 	require.NoError(t, err)

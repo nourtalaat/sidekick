@@ -296,11 +296,12 @@ func TestExecuteErrors(t *testing.T) {
 			wantErr:       "already has this content",
 		},
 		{
-			name:        "the idempotency key is not a branch name",
-			invocation:  func(inv *action.Invocation) { inv.IdempotencyKey = "sidekick/../main" },
-			skipsGitHub: true,
-			wantErrIs:   action.ErrPermanent,
-			wantErr:     "no idempotency key",
+			name:          "the idempotency key is not a branch name",
+			invocation:    func(inv *action.Invocation) { inv.IdempotencyKey = "sidekick/../main" },
+			skipsGitHub:   true,
+			wantPermanent: true,
+			wantErrIs:     action.ErrPermanent,
+			wantErr:       "no idempotency key",
 		},
 		{
 			name:          "the repository is outside the limits",

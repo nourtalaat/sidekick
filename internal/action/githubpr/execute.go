@@ -146,10 +146,10 @@ func (p *PR) push(ctx context.Context, pre *prepared, branch string, inv action.
 	entries := make([]*gh.TreeEntry, 0, len(pre.changes))
 
 	for _, c := range pre.changes {
-		entry := &gh.TreeEntry{Path: gh.Ptr(c.path)}
+		entry := &gh.TreeEntry{Path: new(c.path)}
 
 		if !c.deleted() {
-			entry.Mode, entry.Type, entry.Content = gh.Ptr(fileMode), gh.Ptr(blobType), c.content
+			entry.Mode, entry.Type, entry.Content = new(fileMode), new(blobType), c.content
 		}
 
 		entries = append(entries, entry)
@@ -161,9 +161,9 @@ func (p *PR) push(ctx context.Context, pre *prepared, branch string, inv action.
 	}
 
 	commit, _, err := p.client.Git.CreateCommit(ctx, pre.owner, pre.name, gh.Commit{
-		Message: gh.Ptr(commitMessage(pre.params.Title, inv.ProposalID)),
+		Message: new(commitMessage(pre.params.Title, inv.ProposalID)),
 		Tree:    &gh.Tree{SHA: tree.SHA},
-		Parents: []*gh.Commit{{SHA: gh.Ptr(pre.base.commit)}},
+		Parents: []*gh.Commit{{SHA: new(pre.base.commit)}},
 	}, nil)
 	if err != nil {
 		return classify("make the commit", err)
@@ -181,11 +181,11 @@ func (p *PR) push(ctx context.Context, pre *prepared, branch string, inv action.
 // already, made by another attempt a moment ago, is returned instead.
 func (p *PR) open(ctx context.Context, params Params, owner, name, branch string, inv action.Invocation) (*gh.PullRequest, error) {
 	pr, _, err := p.client.PullRequests.Create(ctx, owner, name, gh.CreatePullRequest{
-		Title: gh.Ptr(oneLine(plainText(params.Title))),
+		Title: new(oneLine(plainText(params.Title))),
 		Head:  branch,
 		Base:  params.BaseBranch,
-		Body:  gh.Ptr(p.description(params.Body, inv)),
-		Draft: gh.Ptr(p.limits.draft()),
+		Body:  new(p.description(params.Body, inv)),
+		Draft: new(p.limits.draft()),
 	})
 	if alreadyExists(err) {
 		found, ferr := p.pullRequestFrom(ctx, owner, name, branch)

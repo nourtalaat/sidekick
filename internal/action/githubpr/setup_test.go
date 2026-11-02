@@ -4,6 +4,7 @@ package githubpr
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"testing"
 
@@ -93,7 +94,7 @@ func (s *stack) runJob(t *testing.T) error {
 	})
 	require.NoError(t, err)
 
-	return herr
+	return fmt.Errorf("run the execute_action job: %w", herr)
 }
 
 // proposals counts the stored proposals.

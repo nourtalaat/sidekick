@@ -41,5 +41,5 @@ func TestOneLine(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, "a b c", oneLine("a\n\tb \r\n c\x00"))
-	require.Equal(t, "", oneLine(" \n "))
+	require.Empty(t, oneLine(" \n "))
 }
