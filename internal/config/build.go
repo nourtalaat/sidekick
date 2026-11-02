@@ -57,6 +57,17 @@ func Build(ctx context.Context, cfg *Config, regs Registries, deps registry.Deps
 
 	deps.ValidatorURL = cfg.Validator.URL
 
+	var errs errorList
+
+	if deps.Validator == nil {
+		validatorClient, err := cfg.Validator.Validator(deps.HTTP, deps.Logger)
+		if err != nil {
+			errs.add("validator", "%v", err)
+		}
+
+		deps.Validator = validatorClient
+	}
+
 	if cfg.Slack != nil {
 		deps.SlackBotToken = cfg.Slack.BotTokenSecret
 	}
@@ -64,8 +75,6 @@ func Build(ctx context.Context, cfg *Config, regs Registries, deps registry.Deps
 	if t := cfg.Teams; t != nil {
 		deps.TeamsBot = t.Bot()
 	}
-
-	var errs errorList
 
 	if deps.DailyLocation == nil {
 		loc, err := cfg.Budgets.Daily.Location()
