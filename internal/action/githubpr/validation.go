@@ -87,6 +87,7 @@ func (p *PR) validateFiles(ctx context.Context, r *reader, changes []change) err
 
 		if !res.OK {
 			p.metrics.validated(string(req.Format), resultFailed)
+
 			problems = append(problems, res.Errors...)
 
 			continue
