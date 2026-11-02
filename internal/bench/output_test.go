@@ -50,6 +50,25 @@ func TestReportMatchesSchema(t *testing.T) {
 	}{
 		{name: "a scored run matches the schema"},
 		{
+			name: "a run with tool calls matches the schema",
+			edit: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+
+				scenarios, ok := doc["scenarios"].([]any)
+				require.True(t, ok)
+
+				sc, ok := scenarios[0].(map[string]any)
+				require.True(t, ok)
+
+				runs, ok := sc["runs"].([]any)
+				require.True(t, ok)
+
+				run, ok := runs[0].(map[string]any)
+				require.True(t, ok)
+				require.Contains(t, run, "tools")
+			},
+		},
+		{
 			name:    "a field the schema does not know is caught",
 			edit:    func(_ *testing.T, doc map[string]any) { doc["colour"] = "red" },
 			wantErr: "colour",
@@ -94,6 +113,47 @@ func TestReportMatchesSchema(t *testing.T) {
 			}
 
 			require.NoError(t, err)
+		})
+	}
+}
+
+func TestRunReportTools(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		results []ToolResult
+		want    []ToolCallReport
+	}{
+		{name: "no source call leaves tools out"},
+		{
+			name: "calls keep their order and show only name and status",
+			results: []ToolResult{
+				{Tool: "github__list_commits", Status: "ok", Content: "commit abc123 by a customer@example.com"},
+				{Tool: "prometheus__query", Status: "no_data", Content: "No data for this query"},
+				{Tool: "github__list_commits", Status: "ok"},
+			},
+			want: []ToolCallReport{
+				{Tool: "github__list_commits", Status: "ok"},
+				{Tool: "prometheus__query", Status: "no_data"},
+				{Tool: "github__list_commits", Status: "ok"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			run := usageRun(1000, time.Second)
+			run.ToolResults = tt.results
+
+			got := run.report()
+			require.Equal(t, tt.want, got.Tools)
+
+			raw, err := json.Marshal(got)
+			require.NoError(t, err)
+			require.NotContains(t, string(raw), "customer@example.com")
 		})
 	}
 }
