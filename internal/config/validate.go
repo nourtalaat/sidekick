@@ -396,12 +396,20 @@ func (v *validator) checkRoute(path string, r Route) {
 	}
 
 	v.checkRouteActions(path, r)
+	v.checkRouteDetails(path+".details", r.Details)
 
 	v.checkRouteBudgets(path+".budgets", r.Budgets.Limits)
 	v.checkRouteDaily(path+".budgets.daily", r.Budgets.Daily)
 	v.checkRouteConcurrency(path+".concurrency", r.Concurrency)
 	v.checkRouteRateLimit(path+".rateLimit", r.RateLimit)
 	v.checkGrouping(path+".grouping", r.Grouping)
+}
+
+// checkRouteDetails records the problems of a route's details.
+func (v *validator) checkRouteDetails(path string, details map[string]string) {
+	for _, msg := range CheckRouteDetails(details) {
+		v.errs.add(path, "%s", msg)
+	}
 }
 
 // checkRouteActions checks a route's action mode and its list of actions:

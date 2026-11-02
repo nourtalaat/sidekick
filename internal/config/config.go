@@ -272,6 +272,11 @@ type Route struct {
 	Actions []string `yaml:"actions"`
 	// Outputs lists where reports go (OUT-5).
 	Outputs []string `yaml:"outputs"`
+	// Details are fixed facts about the route, such as the owning team or
+	// the environment. The prompt shows them to the model as trusted text,
+	// so they hold no secrets and nothing copied from an alert. CheckRouteDetails
+	// has the limits.
+	Details map[string]string `yaml:"details"`
 	// Budgets limit one investigation and the route's daily spending.
 	// After Load, unset limits hold the global values from
 	// budgets.perInvestigation.
