@@ -67,14 +67,13 @@ func TestProposeAndRunThroughTheService(t *testing.T) {
 
 	view, err := proposals.Get(t.Context(), s.pool, stored.ID)
 	require.NoError(t, err)
-	require.True(t, view.Proposal.Undoable, "the action can undo what it opens")
-	require.NotNil(t, view.Proposal.Snapshot)
-	require.Equal(t, "github:acme/monitors", view.Proposal.Snapshot.Target)
-	require.Equal(t, testBaseSHA, view.Proposal.Snapshot.Version)
-	require.NotContains(t, string(view.Proposal.Snapshot.After), "groups:", "a snapshot holds no file contents")
+	require.NotNil(t, view.Snapshot)
+	require.Equal(t, "github:acme/monitors", view.Snapshot.Target)
+	require.Equal(t, testBaseSHA, view.Snapshot.Version)
+	require.NotContains(t, string(view.Snapshot.After), "groups:", "a snapshot holds no file contents")
 
-	paths := make([]string, 0, len(view.Proposal.Changes))
-	for _, c := range view.Proposal.Changes {
+	paths := make([]string, 0, len(view.Changes))
+	for _, c := range view.Changes {
 		paths = append(paths, c.Path)
 	}
 
@@ -96,6 +95,7 @@ func TestProposeAndRunThroughTheService(t *testing.T) {
 	row, err := db.New(s.pool).GetActionProposal(t.Context(), stored.ID)
 	require.NoError(t, err)
 	require.Equal(t, string(action.StatusSucceeded), row.Status)
+	require.True(t, row.Undoable, "the action can undo what it opens")
 
 	var result action.Result
 

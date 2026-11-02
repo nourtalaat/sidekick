@@ -8,8 +8,11 @@ import "strings"
 // the limit allows.
 func changedLines(old, updated string, limit int) (int, bool) {
 	added, removed, within := lineCounts(old, updated, limit)
+	if !within {
+		return limit + 1, false
+	}
 
-	return added + removed, within
+	return added + removed, true
 }
 
 // lineCounts returns how many lines updated adds to old and how many it
