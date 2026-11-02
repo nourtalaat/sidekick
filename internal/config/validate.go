@@ -44,6 +44,10 @@ const nameRule = `must start with a lower-case letter and hold only lower-case l
 // the slack section.
 const slackOutputType = "slack"
 
+// slackActionTypes are the action types that post with the bot token from
+// the slack section.
+var slackActionTypes = []string{"slack.reply", "slack.reaction"}
+
 // teamsOutputType is the output type that posts as the bot of the teams
 // section.
 const teamsOutputType = "teams"
@@ -329,6 +333,10 @@ func (v *validator) checkActions() {
 		s := a.Definitions[name]
 		v.checkName(s.Path(), name)
 		checkPlugin(v, v.regs.Actions, "action type", typeKey, name, s)
+
+		if slices.Contains(slackActionTypes, s.Type) && v.cfg.Slack == nil {
+			v.errs.add(s.Path(), "type %s needs slack.botTokenSecret", s.Type)
+		}
 	}
 }
 

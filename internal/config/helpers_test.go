@@ -164,6 +164,12 @@ func (fakeSink) Publish(context.Context, output.Update) (output.Ref, error) {
 }
 
 // fakeActionConfig is the config of the fake note.create action.
+type fakeSlackActionConfig struct {
+	Limits struct {
+		Channels []string `yaml:"channels"`
+	} `yaml:"limits"`
+}
+
 type fakeActionConfig struct {
 	TokenSecret registry.SecretRef `yaml:"tokenSecret"`
 	Limits      struct {
@@ -241,6 +247,12 @@ func testRegistries() Registries {
 	regs.Actions.Register("note.create", registry.Typed(func(_ context.Context, name string, _ fakeActionConfig, _ registry.Deps) (action.Action, error) {
 		return fakeAction{name: name}, nil
 	}))
+	for _, typeName := range slackActionTypes {
+		regs.Actions.Register(typeName, registry.Typed(func(_ context.Context, name string, _ fakeSlackActionConfig, _ registry.Deps) (action.Action, error) {
+			return fakeAction{name: name}, nil
+		}))
+	}
+
 	regs.Outputs.Register("webhook", registry.Typed(func(context.Context, string, fakeWebhookOutputConfig, registry.Deps) (output.Sink, error) {
 		return fakeSink{}, nil
 	}))

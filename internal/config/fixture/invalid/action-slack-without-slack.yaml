@@ -1,0 +1,16 @@
+# Slack actions without the slack section, which holds the bot token they use.
+database:
+  urlSecret: { name: sidekick-db, key: url }
+
+model:
+  connectors:
+    claude: { provider: anthropic, model: claude-opus-5-5 }
+  roles:
+    investigate: claude
+
+actions:
+  reply-in-thread: { type: slack.reply, limits: { channels: [C0123456789] } }
+  react: { type: slack.reaction, limits: { channels: [C0123456789] } }
+
+routes:
+  - name: default
