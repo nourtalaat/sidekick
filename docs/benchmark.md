@@ -642,9 +642,10 @@ Each run uploads the `bench-report` artifact, with `report.json`
 Markdown summary to the job summary. The run fails when a threshold in
 `bench/bench.yaml` is missed. When `bench/baseline.json` exists, the
 workflow also compares the run with it and fails when the overall score
-falls more than 0.015 below the baseline's, which puts the floor at an
-overall score of 0.90. The workflow sets `maxDrop` to the baseline's overall
-score minus 0.90, so change it whenever the baseline changes.
+falls more than 0.04 below the baseline's. For the committed baseline,
+which scored 0.992, that puts the floor at about 0.95: one wrong verdict
+in the 39 runs of the public set stays above it, and two do not. The
+workflow sets `maxDrop` to 0.04 whatever the baseline is.
 
 Every run calls a paid model for each scenario three times, so each
 run costs money; the `maxCostPerRunUSD` threshold and each scenario's
