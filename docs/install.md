@@ -49,7 +49,7 @@ kubectl -n sidekick rollout status deploy/sidekick
 ```
 
 The [quick-start values](../charts/sidekick/quickstart-values.yaml) run
-one replica with the bundled Postgres and the `claude-opus-5-5` model, and
+one replica with the bundled Postgres and the `claude-sonnet-5-5` model, and
 turn on:
 
 - a Kubernetes source that reads the cluster Sidekick runs in, with the

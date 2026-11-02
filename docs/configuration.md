@@ -74,7 +74,7 @@ model:
   connectors:
     claude:
       provider: anthropic
-      model: claude-opus-5-5
+      model: claude-sonnet-5-5
       maxTokens: 16000
       thinking: { mode: adaptive }
       effort: high
@@ -87,7 +87,7 @@ model:
     judge: claude            # grades benchmark runs; must call tools; default: the investigate connector
     summarize: claude        # shortens old tool results; drafts the rubric of exported scenarios (see benchmark.md)
   prices:
-    claude-opus-5-5: { inputPerMTok: 4, outputPerMTok: 20, cacheReadPerMTok: 0.2, cacheWritePerMTok: 5 }   # replaces the shipped price
+    claude-sonnet-5-5: { inputPerMTok: 2, outputPerMTok: 10, cacheReadPerMTok: 0.1, cacheWritePerMTok: 2.5 }   # replaces the shipped price
 ```
 
 Each provider accepts the shared settings above plus its own. A setting the
@@ -111,7 +111,7 @@ and stays as you set it.
 ```yaml
 claude:
   provider: anthropic
-  model: claude-opus-5-5                  # required
+  model: claude-sonnet-5-5                # required
   apiKeySecret: { name: sidekick-anthropic, key: apiKey }   # required
   baseURL: https://llm-proxy.internal     # optional, for a proxy
   maxTokens: 32000                        # default 64000, capped at the model's maximum
@@ -144,7 +144,7 @@ claude:
   lets the model decide how much to think. `enabled` with `budgetTokens`
   (at least 1024, and less than `maxTokens`) works only on the models that
   still take a fixed budget, such as Claude Haiku 4.5. Some models always
-  think, for example Claude Opus 5.5; for them `mode: off` is an error, and
+  think, for example Claude Sonnet 5.5 and Claude Opus 5.5; for them `mode: off` is an error, and
   `effort` is the way to make them think less.
 - **Temperature** is not accepted. The Anthropic API version Sidekick uses
   rejects `temperature`, `top_p` and `top_k` on every model.

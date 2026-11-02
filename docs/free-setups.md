@@ -193,8 +193,8 @@ of the keys.
 
 Each setup runs the [public benchmark](benchmark.md) (`bench/scenarios/public`)
 with the built-in strategies, so you can see how much quality you give up
-to save cost. The first row is the model that the project's benchmark
-workflow runs, Claude Sonnet 5.5. The free setups run on a machine with a
+to save cost. The first row is the default model of the quick start, Claude
+Sonnet 5.5, run by the project's benchmark workflow. The free setups run on a machine with a
 GPU, once for each release.
 
 Run the benchmark on your own setup with:
@@ -206,7 +206,7 @@ sidekick bench compare report.json other-report.json
 
 | Setup | Model | Served by | Verdict accuracy | False positive precision | Root cause match | Mean cost of a run | Sidekick version |
 |---|---|---|---|---|---|---|---|
-| Benchmark workflow | `claude-sonnet-5-5` | Anthropic API | not yet published | not yet published | not yet published | not yet published | |
+| Default | `claude-sonnet-5-5` | Anthropic API | not yet published | not yet published | not yet published | not yet published | |
 | 1, local | `Qwen/Qwen3.8-27B` | vLLM | not yet published | not yet published | not yet published | none | |
 | 1, local | `qwen3.8:27b` | Ollama | not yet published | not yet published | not yet published | none | |
 | 1, local | `google/gemma-4-31B-it` | vLLM | not yet published | not yet published | not yet published | none | |
