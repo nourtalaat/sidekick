@@ -88,6 +88,10 @@ type Deps struct {
 	// midnight starts a new day, for plugins that count things per day.
 	// Nil means UTC.
 	DailyLocation *time.Location
+	// ValidatorURL is validator.url, the address of the monitor validator
+	// that actions call to check the files they change. It is empty where a
+	// command builds plugins without a config.
+	ValidatorURL string
 }
 
 // TeamsBot is who the Teams bot is and how it gets tokens, as the teams

@@ -83,6 +83,44 @@ func (mr *MockActionMockRecorder) Validate(ctx, params any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*MockAction)(nil).Validate), ctx, params)
 }
 
+// MockProposalChecker is a mock of ProposalChecker interface.
+type MockProposalChecker struct {
+	ctrl     *gomock.Controller
+	recorder *MockProposalCheckerMockRecorder
+	isgomock struct{}
+}
+
+// MockProposalCheckerMockRecorder is the mock recorder for MockProposalChecker.
+type MockProposalCheckerMockRecorder struct {
+	mock *MockProposalChecker
+}
+
+// NewMockProposalChecker creates a new mock instance.
+func NewMockProposalChecker(ctrl *gomock.Controller) *MockProposalChecker {
+	mock := &MockProposalChecker{ctrl: ctrl}
+	mock.recorder = &MockProposalCheckerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockProposalChecker) EXPECT() *MockProposalCheckerMockRecorder {
+	return m.recorder
+}
+
+// CheckProposal mocks base method.
+func (m *MockProposalChecker) CheckProposal(ctx context.Context, params json.RawMessage) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CheckProposal", ctx, params)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CheckProposal indicates an expected call of CheckProposal.
+func (mr *MockProposalCheckerMockRecorder) CheckProposal(ctx, params any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckProposal", reflect.TypeOf((*MockProposalChecker)(nil).CheckProposal), ctx, params)
+}
+
 // MockSnapshotter is a mock of Snapshotter interface.
 type MockSnapshotter struct {
 	ctrl     *gomock.Controller

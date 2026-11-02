@@ -55,6 +55,8 @@ func Build(ctx context.Context, cfg *Config, regs Registries, deps registry.Deps
 		deps.Secrets = secrets.NewDir(cfg.Secrets.Dir)
 	}
 
+	deps.ValidatorURL = cfg.Validator.URL
+
 	if cfg.Slack != nil {
 		deps.SlackBotToken = cfg.Slack.BotTokenSecret
 	}

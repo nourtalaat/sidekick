@@ -85,6 +85,7 @@ type Config struct {
 	OIDC       *OIDC              `yaml:"oidc"`
 	Outputs    map[string]Section `yaml:"outputs"`
 	Actions    Actions            `yaml:"actions"`
+	Validator  MonitorValidator   `yaml:"validator"`
 	Strategies Strategies         `yaml:"strategies"`
 	Bench      Bench              `yaml:"bench"`
 	Routes     []Route            `yaml:"routes"`
@@ -722,6 +723,7 @@ func (c *Config) setDefaults() {
 	c.Budgets.setDefaults()
 	c.Telemetry.setDefaults()
 	c.Actions.setDefaults()
+	c.Validator.setDefaults()
 	c.Watch.setDefaults()
 	c.Memory.setDefaults()
 	c.Lessons.setDefaults()

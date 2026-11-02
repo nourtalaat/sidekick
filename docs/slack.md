@@ -123,6 +123,16 @@ the sources returned.
   longer allows, for example because its route is read-only now, can only
   be rejected.
 
+- **Undo** is on an action that changed a definition in place, such as a
+  monitor, after it worked. The message shows the proposal's changes field
+  by field, as the values before and after, and Approve is left out when
+  they are too long to show whole. A proposal that deletes something says
+  so, and cannot be undone in Sidekick. Undo asks to confirm, and only the
+  approver and admin roles may press it. It puts back only the fields
+  Sidekick changed. If someone changed one of them since, nothing is restored:
+  the person who pressed gets a private message with what a restore would
+  overwrite and a **Restore anyway** button.
+
 The feedback form asks which part it is about: the verdict, a finding, a
 fix, or, when `server.publicURL` is set, a tool call (enter its ID, which
 the investigation page in the web UI shows next to the call, and the form
