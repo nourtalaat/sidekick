@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -232,7 +233,7 @@ func (f *fakeLinear) createIssue(raw any) (data any, code, msg string) {
 
 	id := in.ID
 	if f.ignoreClientID {
-		id = "server-chosen-" + string(rune('a'+f.creates))
+		id = "server-chosen-" + strconv.Itoa(f.creates)
 	}
 
 	team := teamRef{}
@@ -243,7 +244,7 @@ func (f *fakeLinear) createIssue(raw any) (data any, code, msg string) {
 		}
 	}
 
-	issue := issueRef{ID: id, Identifier: team.Key + "-" + string(rune('0'+f.creates)), URL: "https://linear.app/acme/issue/new", Team: team}
+	issue := issueRef{ID: id, Identifier: team.Key + "-" + strconv.Itoa(f.creates), URL: "https://linear.app/acme/issue/new", Team: team}
 	f.issues[id] = issue
 	f.descriptions[id] = in.Description
 
