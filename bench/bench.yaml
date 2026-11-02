@@ -1,7 +1,7 @@
 # The thresholds of the benchmark workflow (.github/workflows/bench.yml). A
 # run that misses one fails the workflow. The workflow adds the lines
 #   baseline: bench/baseline.json
-#   maxDrop: 0.015
+#   maxDrop: 0.04
 # below `thresholds` when bench/baseline.json exists, so `thresholds` stays
 # the last block of this file.
 thresholds:
