@@ -155,5 +155,5 @@ func TestRedact(t *testing.T) {
 	require.EqualError(t, got, "failed with token [redacted] and token [redacted]")
 	require.ErrorIs(t, got, cause)
 
-	require.Same(t, cause, redact(cause, []string{"zzz"}), "an error with no secret is not wrapped")
+	require.EqualError(t, redact(cause, []string{"zzz"}), cause.Error(), "an error with no secret reads the same")
 }

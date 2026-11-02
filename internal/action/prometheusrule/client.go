@@ -228,7 +228,8 @@ func toResource(content map[string]any, version string) (resource, error) {
 	return resource{version: version, groups: list}, nil
 }
 
-// redact returns err with every secret cut out of its text. A client-go
+// redact returns err with every secret cut out of its text. It unwraps to
+// err, so callers can still tell what kind of error it is. A client-go
 // error does not carry the request headers, but a message from the server
 // or a proxy could echo one.
 func redact(err error, secrets []string) error {
@@ -239,10 +240,6 @@ func redact(err error, secrets []string) error {
 		if secret != "" {
 			cleaned = strings.ReplaceAll(cleaned, secret, redacted)
 		}
-	}
-
-	if cleaned == text {
-		return err
 	}
 
 	return &redactedError{text: cleaned, err: err}

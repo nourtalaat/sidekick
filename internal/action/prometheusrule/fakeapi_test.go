@@ -78,6 +78,8 @@ type fakeAPI struct {
 	beforeWrite func()
 	// failWrites is the status that every real patch answers, when set.
 	failWrites int
+	// gone makes the resource not exist.
+	gone bool
 }
 
 // newFakeAPI starts the fake API server for one test.
@@ -160,6 +162,29 @@ func (f *fakeAPI) edit(t *testing.T, change func(groups []any)) {
 	f.rv++
 }
 
+// stored returns the stored spec.groups as JSON.
+func (f *fakeAPI) stored(t *testing.T) string {
+	t.Helper()
+
+	raw, err := f.groups(t).marshal()
+	require.NoError(t, err)
+
+	return string(raw)
+}
+
+// order returns, for each patch received, whether it was a dry run.
+func (f *fakeAPI) order() []bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	flags := make([]bool, len(f.patches))
+	for i, p := range f.patches {
+		flags[i] = p.dryRun
+	}
+
+	return flags
+}
+
 // writes returns the patches that were not dry runs.
 func (f *fakeAPI) writes() []patchRecord {
 	f.mu.Lock()
@@ -229,6 +254,12 @@ func (f *fakeAPI) get(w http.ResponseWriter, r *http.Request) {
 	defer f.mu.Unlock()
 
 	if !f.authorised(w, r) {
+		return
+	}
+
+	if f.gone {
+		writeStatus(w, http.StatusNotFound, "NotFound", "prometheusrules.monitoring.coreos.com \""+testName+"\" not found")
+
 		return
 	}
 
@@ -543,4 +574,22 @@ func (f *fakeValidator) validate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = json.NewEncoder(w).Encode(res)
+}
+
+// findRule returns the rule of a group of decoded groups.
+func findRule(groups []any, group, alert string) map[string]any {
+	for _, g := range groups {
+		gm, _ := g.(map[string]any)
+		if gm["name"] != group {
+			continue
+		}
+
+		for _, r := range gm["rules"].([]any) {
+			if rm, _ := r.(map[string]any); rm["alert"] == alert {
+				return rm
+			}
+		}
+	}
+
+	return nil
 }
