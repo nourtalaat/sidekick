@@ -174,3 +174,9 @@ GROUP BY kind, status;
 UPDATE jobs
 SET unique_key = NULL
 WHERE id = @id AND claim_token = @claim_token::bigint AND status = 'running';
+
+-- name: LockJobSchedule :exec
+-- LockJobSchedule takes a transaction-level advisory lock with the given
+-- key. A daily scheduler holds it while it checks whether the job of the
+-- day exists and enqueues it, so the two are one step across replicas.
+SELECT pg_advisory_xact_lock(@lock_key::bigint);

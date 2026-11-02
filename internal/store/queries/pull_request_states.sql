@@ -37,12 +37,6 @@ WHERE pull_request_states.state = 'open';
 -- name: GetPullRequestState :one
 SELECT * FROM pull_request_states WHERE proposal_id = @proposal_id;
 
--- name: LockPullRequestSchedule :exec
--- LockPullRequestSchedule takes the transaction-level advisory lock that
--- makes the check of PullRequestJobExists and the enqueue that follows it
--- one step across replicas.
-SELECT pg_advisory_xact_lock(@lock_key::bigint);
-
 -- name: PullRequestJobExists :one
 -- PullRequestJobExists reports whether a check_pull_requests job with the
 -- unique key exists in any status: pending, running, done or dead.

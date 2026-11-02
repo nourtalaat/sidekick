@@ -87,18 +87,6 @@ func (q *Queries) ListPullRequestsToCheck(ctx context.Context, arg ListPullReque
 	return items, nil
 }
 
-const lockPullRequestSchedule = `-- name: LockPullRequestSchedule :exec
-SELECT pg_advisory_xact_lock($1::bigint)
-`
-
-// LockPullRequestSchedule takes the transaction-level advisory lock that
-// makes the check of PullRequestJobExists and the enqueue that follows it
-// one step across replicas.
-func (q *Queries) LockPullRequestSchedule(ctx context.Context, lockKey int64) error {
-	_, err := q.db.Exec(ctx, lockPullRequestSchedule, lockKey)
-	return err
-}
-
 const pullRequestJobExists = `-- name: PullRequestJobExists :one
 SELECT EXISTS (
   SELECT 1 FROM jobs WHERE kind = 'check_pull_requests' AND unique_key = $1::text
