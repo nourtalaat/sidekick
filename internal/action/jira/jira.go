@@ -29,6 +29,7 @@ import (
 // "type: jira.comment" or "type: jira.issue".
 const (
 	TypeComment = "jira.comment"
+	TypeIssue   = "jira.issue"
 )
 
 // Limits on the parameters the model may give.
@@ -72,6 +73,7 @@ var (
 // init registers the action types when the package is linked in.
 func init() {
 	registry.Actions.Register(TypeComment, registry.Typed(NewComment))
+	registry.Actions.Register(TypeIssue, registry.Typed(NewIssue))
 }
 
 // Connection is how an action reaches Jira.

@@ -87,10 +87,51 @@ func TestCommentConfigValidateProjects(t *testing.T) {
 	}
 }
 
+func TestIssueConfigValidate(t *testing.T) {
+	t.Parallel()
+
+	good := IssueConfig{Connection: goodConnection(), Limits: IssueLimits{Projects: []string{"OPS"}, IssueTypes: []string{"Task"}, Labels: []string{"incident"}, MaxPerDay: 5}}
+
+	tests := []struct {
+		name    string
+		mutate  func(c *IssueConfig)
+		wantErr string
+	}{
+		{name: "valid", mutate: func(*IssueConfig) {}},
+		{name: "no labels", mutate: func(c *IssueConfig) { c.Limits.Labels = nil }},
+		{name: "no issue types", mutate: func(c *IssueConfig) { c.Limits.IssueTypes = nil }, wantErr: "limits.issueTypes: list at least one issue type, such as Task"},
+		{name: "an empty issue type", mutate: func(c *IssueConfig) { c.Limits.IssueTypes = []string{" "} }, wantErr: "limits.issueTypes[0]: must not be empty or longer than 60 characters"},
+		{name: "no maxPerDay", mutate: func(c *IssueConfig) { c.Limits.MaxPerDay = 0 }, wantErr: "limits.maxPerDay: required, at least 1"},
+		{name: "a label with a space", mutate: func(c *IssueConfig) { c.Limits.Labels = []string{"in cident"} }, wantErr: `limits.labels[0]: "in cident" is not a label: it must have no spaces and at most 100 characters`},
+		{name: "no projects", mutate: func(c *IssueConfig) { c.Limits.Projects = nil }, wantErr: "limits.projects: list at least one project key, such as OPS"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			c := good
+			tt.mutate(&c)
+
+			err := c.Validate()
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+
+				return
+			}
+
+			require.EqualError(t, err, tt.wantErr)
+		})
+	}
+}
+
 func TestNewNeedsSecrets(t *testing.T) {
 	t.Parallel()
 
 	_, err := NewComment(t.Context(), "c", CommentConfig{Connection: goodConnection()}, registry.Deps{})
+	require.ErrorIs(t, err, errNoSecrets)
+
+	_, err = NewIssue(t.Context(), "i", IssueConfig{Connection: goodConnection()}, registry.Deps{})
 	require.ErrorIs(t, err, errNoSecrets)
 }
 

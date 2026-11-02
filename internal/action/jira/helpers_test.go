@@ -12,8 +12,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/daily"
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
 	"github.com/nourtalaat/sidekick/internal/registry"
 )
@@ -269,6 +271,29 @@ func newComment(t *testing.T, api *fakehttp.Server, projects ...string) action.A
 	require.NoError(t, err)
 
 	return a
+}
+
+// newIssue builds a jira.issue action that talks to api, with the daily
+// limit check given.
+func newIssue(t *testing.T, api *fakehttp.Server, limits IssueLimits, limiter daily.Limiter) action.Action {
+	t.Helper()
+
+	a, err := NewIssue(t.Context(), "ops-issue", IssueConfig{Connection: connection(api), Limits: limits}, testDeps(api))
+	require.NoError(t, err)
+
+	a.(*Issue).counter = limiter
+
+	return a
+}
+
+// allowDaily returns a limiter that lets everything through.
+func allowDaily(t *testing.T) daily.Limiter {
+	t.Helper()
+
+	l := daily.NewMockLimiter(gomock.NewController(t))
+	l.EXPECT().Check(gomock.Any(), "ops-issue", testProposalID, gomock.Any()).Return(nil).AnyTimes()
+
+	return l
 }
 
 // invocation is an approved request with the parameters given.
