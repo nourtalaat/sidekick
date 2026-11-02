@@ -84,15 +84,19 @@ func paragraph(text string) node {
 	return p
 }
 
-// clean drops carriage returns and control characters other than the line
-// feed, which Jira refuses in a text node.
+// clean turns tabs into spaces and drops carriage returns and the other
+// control characters, except the line feed, which Jira refuses in a text
+// node.
 func clean(s string) string {
 	return strings.Map(func(r rune) rune {
-		if r == '\n' || (r != '\r' && !unicode.IsControl(r)) {
+		switch {
+		case r == '\t':
+			return ' '
+		case r == '\n' || (r != '\r' && !unicode.IsControl(r)):
 			return r
+		default:
+			return -1
 		}
-
-		return -1
 	}, s)
 }
 
