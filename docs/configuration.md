@@ -1473,14 +1473,9 @@ actions:
 action names. Which keys an action takes, and what its `limits` mean,
 depend on its `type`. Credentials are `{ name, key }` references to
 mounted secrets like everywhere else, and an action should have a
-<<<<<<< HEAD
-credential of its own, with no more rights than its limits allow.
-[Writing an action](plugins/actions.md) describes how to add one.
-=======
 credential of its own, with no more rights than its limits allow. The
 action types are described below; [Writing an action](plugins/actions.md)
 describes how to add one.
->>>>>>> origin/main
 
 How a proposal is handled:
 
@@ -1502,7 +1497,6 @@ How a proposal is handled:
 - An approved proposal runs once, even if a worker crashes and the job is
   tried again: the action gets the same idempotency key each time.
 
-<<<<<<< HEAD
 #### `datadog.monitor`
 
 Changes a Datadog monitor in place through the Datadog API, or deletes it.
@@ -1564,7 +1558,7 @@ An approver can undo a change that worked. Undo puts back only the fields
 Sidekick changed and leaves every other field as it is. If someone changed one
 of those fields since, Undo shows what a restore would overwrite and asks
 before it restores it.
-=======
+
 #### `github.pull_request`
 
 Opens a pull request that changes monitor definitions kept in Git:
@@ -1665,7 +1659,6 @@ check refuses it with a message. The default `url` is the address of the
 chart's sidecar, so with `validator.enabled: true` in the chart values
 there is nothing to set here. An action that needs the validator reports
 an error when it cannot reach it; nothing else in Sidekick uses it.
->>>>>>> origin/main
 
 ### `strategies`
 
