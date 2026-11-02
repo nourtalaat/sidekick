@@ -73,7 +73,7 @@ func (p *PR) load(ctx context.Context, raw json.RawMessage) (*loaded, error) {
 func (p *PR) prepare(ctx context.Context, raw json.RawMessage, snap *action.Snapshot) (*prepared, error) {
 	l, err := p.load(ctx, raw)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read the proposal: %w", err)
 	}
 
 	if snap != nil {

@@ -121,7 +121,7 @@ func afterOf(c change, f readFile, added, removed int) afterEntry {
 func (l *loaded) applySnapshot(snap action.Snapshot) error {
 	sides, err := readSnapshot(snap)
 	if err != nil {
-		return err
+		return fmt.Errorf("read the snapshot: %w", err)
 	}
 
 	keep := make([]change, 0, len(l.changes))

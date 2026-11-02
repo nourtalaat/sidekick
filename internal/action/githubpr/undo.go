@@ -40,7 +40,7 @@ var errNoUndoOf = fmt.Errorf("%w: the call does not say which proposal it undoes
 func (p *PR) Undo(ctx context.Context, inv action.Invocation, snap action.Snapshot, force bool) (action.Result, error) {
 	branch, err := undoBranches(inv)
 	if err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("check the call to undo: %w", err)
 	}
 
 	params, err := decodeParams(inv.Params)
@@ -98,7 +98,7 @@ func (p *PR) closeOriginal(ctx context.Context, inv action.Invocation, params Pa
 	}
 
 	if err := p.deleteBranch(ctx, owner, name, branch); err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("remove the branch of the closed pull request: %w", err)
 	}
 
 	st := statusOf(closed)
@@ -107,7 +107,7 @@ func (p *PR) closeOriginal(ctx context.Context, inv action.Invocation, params Pa
 	}
 
 	if err := p.record(ctx, inv.UndoOf, params.Repo, st); err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("record the original as %s: %w", st.State, err)
 	}
 
 	p.metrics.pullRequest(resultClosed)
@@ -137,7 +137,7 @@ func (p *PR) revert(ctx context.Context, inv action.Invocation, params Params, o
 	branch := inv.IdempotencyKey
 
 	if err := p.record(ctx, inv.UndoOf, params.Repo, statusOf(orig)); err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("record the original as merged: %w", err)
 	}
 
 	pr, branchExists, err := p.existing(ctx, owner, name, branch)
@@ -164,7 +164,7 @@ func (p *PR) revert(ctx context.Context, inv action.Invocation, params Params, o
 	}
 
 	if err := p.record(ctx, inv.ProposalID, params.Repo, statusOf(pr)); err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("record the revert pull request: %w", err)
 	}
 
 	p.metrics.pullRequest(resultReverted)
@@ -195,7 +195,7 @@ func (p *PR) pushRevert(ctx context.Context, inv action.Invocation, params Param
 
 	plan, err := p.planRevert(ctx, newReader(p.client, owner, name, head.commit), sides)
 	if err != nil {
-		return action.Result{}, false, err
+		return action.Result{}, false, fmt.Errorf("plan the revert: %w", err)
 	}
 
 	if len(plan.conflicts) > 0 && !force {
