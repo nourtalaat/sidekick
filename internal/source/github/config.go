@@ -9,8 +9,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/nourtalaat/sidekick/internal/githubapp"
 	"github.com/nourtalaat/sidekick/internal/httpclient"
-	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
 
@@ -32,24 +32,13 @@ type Config struct {
 	// example https://github.example.com/api/v3/. Empty means github.com.
 	BaseURL string `yaml:"baseURL"`
 	// App is the GitHub App Sidekick authenticates as.
-	App App `yaml:"app"`
+	App githubapp.App `yaml:"app"`
 	// Repos are the repositories the tools may read, as owner/name globs
 	// such as acme/*. A call for any other repository fails.
 	Repos []string `yaml:"repos"`
 	// ServiceRepos maps a service name to its repository, so a tool can be
 	// called with the service an alert names.
 	ServiceRepos map[string]string `yaml:"serviceRepos"`
-}
-
-// App identifies one installation of a GitHub App.
-type App struct {
-	// AppID is the app's numeric ID, from its settings page.
-	AppID int64 `yaml:"appID"`
-	// InstallationID is the ID of the app's installation on the account
-	// that owns the repositories.
-	InstallationID int64 `yaml:"installationID"`
-	// PrivateKeySecret holds the app's private key, in PEM form.
-	PrivateKeySecret registry.SecretRef `yaml:"privateKeySecret"`
 }
 
 // Validate checks the section without secrets or network calls: the app
@@ -60,17 +49,7 @@ type App struct {
 func (c *Config) Validate() error {
 	var errs []error
 
-	if c.App.AppID <= 0 {
-		errs = append(errs, errors.New("app.appID: required"))
-	}
-
-	if c.App.InstallationID <= 0 {
-		errs = append(errs, errors.New("app.installationID: required"))
-	}
-
-	if c.App.PrivateKeySecret == (registry.SecretRef{}) {
-		errs = append(errs, errors.New("app.privateKeySecret: required"))
-	}
+	errs = append(errs, c.App.Check("app")...)
 
 	if err := c.checkBaseURL(); err != nil {
 		errs = append(errs, err)
