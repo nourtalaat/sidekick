@@ -449,6 +449,34 @@ func (s *Service) keepAttemptError(ctx context.Context, row db.ActionProposal, e
 	s.log.WarnContext(ctx, "action attempt failed; it is tried again", "proposal_id", row.ID.String(), "action", row.Action)
 }
 
+// lockOriginal locks the proposal that the proposal with id restores, when
+// it is an undo, and does nothing for any other. Ending an undo changes the
+// undo and then the original; a person asking to undo the same proposal
+// again holds the original and then reads the undo. Taking the original's
+// lock first in both keeps them from waiting on each other.
+func (s *Service) lockOriginal(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+	queries := db.New(tx)
+
+	row, err := queries.GetActionProposal(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("read proposal %s: %w", id, err)
+	}
+
+	if row.UndoOf == nil {
+		return nil
+	}
+
+	if _, err := queries.LockActionProposal(ctx, *row.UndoOf); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("lock proposal %s: %w", row.UndoOf, err)
+	}
+
+	return nil
+}
+
 // markUndone moves the proposal that the undo row restored to undone and
 // writes action.undone, in tx, the transaction that ends the undo as
 // succeeded. A proposal that is not succeeded any more stays as it is. It
