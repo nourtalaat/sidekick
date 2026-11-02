@@ -2,17 +2,15 @@ name: Benchmark
 
 # Runs the public benchmark scenarios against the Anthropic API with the
 # project's key. The key is a repository secret, so the workflow starts only
-# from events that no stranger controls: the nightly schedule, and a manual
-# run by someone with write access. It has no `push` or `pull_request`
-# trigger, and `pull_request_target` is never used. The only job holds the
-# key and can only read the repository.
+# from an event that no stranger controls: a manual run by someone with write
+# access. It has no `schedule`, `push` or `pull_request` trigger, and
+# `pull_request_target` is never used. The only job holds the key and can only
+# read the repository.
 #
 # docs/benchmark.md describes the workflow, and docs/free-setups.md the free
 # setups the project also benchmarks.
 
 on:
-  schedule:
-    - cron: "17 3 * * *"
   workflow_dispatch:
     inputs:
       repeat:
