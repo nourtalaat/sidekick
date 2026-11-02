@@ -1,7 +1,7 @@
 # The config that the benchmark workflow (.github/workflows/bench.yml) runs
-# the public scenarios with: the quick-start Anthropic model for the
-# investigation and for the judge, and the built-in strategies. The
-# workflow writes the API key to bench/.secrets/anthropic/apiKey, which git
+# the public scenarios with: Claude Sonnet 5.5, to keep the nightly run's
+# cost down, for the investigation and for the judge, and the built-in
+# strategies. The workflow writes the API key to bench/.secrets/anthropic/apiKey, which git
 # ignores. `sidekick bench run` starts its own Postgres, so the database
 # secret below is never read.
 #
@@ -17,7 +17,7 @@ model:
   connectors:
     claude:
       provider: anthropic
-      model: claude-opus-5-5
+      model: claude-sonnet-5-5
       apiKeySecret: { name: anthropic, key: apiKey }
   roles:
     investigate: claude
