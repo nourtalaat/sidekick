@@ -1497,6 +1497,75 @@ How a proposal is handled:
 - An approved proposal runs once, even if a worker crashes and the job is
   tried again: the action gets the same idempotency key each time.
 
+#### `datadog.monitor`
+
+Changes a Datadog monitor in place through the Datadog API, or deletes it.
+Use it on routes with `mode: approved`: the change goes live as soon as it
+is approved, and there is no review in Git.
+
+```yaml
+actions:
+  datadog-monitor:
+    type: datadog.monitor
+    site: datadoghq.com                # default; the API is at api.<site>
+    apiKeySecret: { name: sidekick-datadog-write, key: apiKey }
+    appKeySecret: { name: sidekick-datadog-write, key: appKey }
+    limits:
+      monitorIds: [12345]              # monitors it may change ...
+      monitorTags: ["team:payments"]   # ... and monitors that have one of these tags
+      fields: [options.thresholds, options.renotify_interval, message, tags, priority]
+      allowDelete: false               # default false
+```
+
+- `site` is the Datadog site, such as `datadoghq.eu` or `us3.datadoghq.com`.
+  `url` replaces it with the full address of the API, for a proxy; it must
+  be https, except for a loopback host. They cannot be set together.
+- `apiKeySecret` and `appKeySecret` are the API key and the application key
+  of a service account that has the Monitors Read and Monitors Write
+  permissions and no others. Use keys of their own, apart from the keys of
+  any Datadog source. Both are read on every call, so a rotated key needs no
+  restart.
+- `limits.monitorIds` and `limits.monitorTags` say which monitors it may
+  change: at least one of them is required. A monitor is allowed when its
+  ID is listed, or when it has one of the tags.
+- `limits.fields` lists the fields it may change, as paths into the monitor
+  such as `options.thresholds.critical`, `message` or `tags`. A path allows
+  the fields below it too, so `options.thresholds` allows
+  `options.thresholds.critical`, but `message` does not allow `messages`.
+  The first key must be `name`, `query`, `message`, `tags`, `priority` or
+  `options`. Positions in a list are written `[0]`, and `[*]` stands for any
+  position.
+  Allowing `message` lets the model change which handles are notified,
+  because the `@` handles in a Datadog message (such as `@pagerduty-team` or
+  `@slack-ops`) decide where notifications go. Approvers should read the
+  handles in the difference. Allowing `tags` lets the model change which
+  monitors the action reaches by tag; a change that would remove the tag
+  that allows a monitor is refused, so the action never moves a monitor out of
+  its own limits.
+- A `set` value of `null` removes an option: Datadog reads a null option
+  back as one that is not there. Datadog keeps `options.no_data_timeframe`
+  only while `options.notify_no_data` is true, so a change that turns
+  `notify_no_data` off must set `no_data_timeframe` to `null` in the same
+  change, and a change that sets the timeframe must set `notify_no_data` to
+  true in the same change. Sidekick refuses the others, with a message that
+  says so, so that Undo can put the timeframe back.
+- `allowDelete: true` lets the model propose to delete a monitor. A delete
+  cannot be undone in Sidekick, and Slack and the web UI say so before it is
+  approved.
+
+The model proposes `monitorId` and `set`, a map from field path to new value, or
+`delete: true`. When it proposes, Sidekick reads the monitor, computes the
+new definition, refuses any change outside the limits, and asks Datadog to
+check the new definition (`POST /api/v1/monitor/{id}/validate`) before the
+proposal is shown. Approvers see the change field by field. Right before it
+writes, Sidekick reads the monitor again and fails the proposal when the
+monitor was changed in Datadog since, so a new proposal is needed.
+
+An approver can undo a change that worked. Undo puts back only the fields
+Sidekick changed and leaves every other field as it is. If someone changed one
+of those fields since, Undo shows what a restore would overwrite and asks
+before it restores it.
+
 #### `github.pull_request`
 
 Opens a pull request that changes monitor definitions kept in Git:
