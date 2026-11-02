@@ -317,7 +317,7 @@ func (s *Service) notUndoable(orig db.ActionProposal) string {
 func restoreSnapshot(orig db.ActionProposal) (json.RawMessage, error) {
 	snap, err := snapshotOf(orig)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read the snapshot of proposal %s: %w", orig.ID, err)
 	}
 
 	if snap == nil {
@@ -418,8 +418,12 @@ func (s *Service) overwrites(ctx context.Context, undo db.ActionProposal, live j
 	}
 
 	snap, err := snapshotOf(orig)
-	if err != nil || snap == nil {
-		return nil, err
+	if err != nil {
+		return nil, fmt.Errorf("read the snapshot of proposal %s: %w", orig.ID, err)
+	}
+
+	if snap == nil {
+		return nil, nil
 	}
 
 	deltas, err := action.Diff(snap.Before, snap.After)
