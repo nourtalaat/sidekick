@@ -9,39 +9,29 @@
 
 Sidekick receives alerts from webhooks or Slack, investigates them with the LLM of your choice and your observability, cloud, code and ticketing tools, and tells you whether each alert is a real issue or a false positive. For real issues it finds the likely cause and proposes fixes; for false positives it proposes how to stop the alert from firing again.
 
-> **Status:** early. v0.1.0 is the first release: webhook alerts, investigations with Claude and MCP sources, and the verdict in a Slack thread. [Installing Sidekick](docs/install.md) has the quick start.
+## What it does
+
+- Takes alerts from Alertmanager, Grafana, Datadog, Sentry, SigNoz or any sender of JSON, and from Slack channels.
+- Investigates each alert with read-only tools for metrics, logs, traces, Kubernetes, cloud accounts, code, tickets and databases.
+- Shows the verdict, the evidence and the likely cause in a Slack thread, on a ticket or in a signed webhook callback.
+- When a route allows it, proposes changes such as a pull request or a ticket, and by default makes them only after a person approves.
+- Runs in your own Kubernetes cluster, with a model from Anthropic, Amazon Bedrock, OpenAI, Azure or Google, or one you host yourself.
+
+> **Status:** early. The latest release is v0.1.0; main has much more since then, and these docs describe main.
+
+## Quick start
+
+[Installing Sidekick](docs/install.md#quick-start) takes you from an empty cluster to a first investigation. To try it without paying for a model, see [Run it for free](docs/free-setups.md).
 
 ## Documentation
 
-- [Installing Sidekick](docs/install.md): the Helm chart, the quick start, verifying the image, production settings, upgrades.
-- [Configuration](docs/configuration.md): the `sidekick.yaml` sections, the checks Sidekick runs on them, and `sidekick config validate`.
-- [AWS source](docs/sources/aws.md): the read-only IAM policy the AWS source needs, and how to give Sidekick its AWS identity in each account.
-- [Azure source](docs/sources/azure.md): the read-only role the Azure source needs, and how to give Sidekick its Azure identity.
-- [Backstage source](docs/sources/backstage.md): the keys and tools of the Backstage service catalog source, and the token it needs.
-- [Datadog source](docs/sources/datadog.md): how to reach Datadog's managed MCP server, the access its token needs, and the config that allows only its read tools.
-- [Elasticsearch and OpenSearch source](docs/sources/elasticsearch.md): the keys and tools of the logs source for Elasticsearch and OpenSearch, the read-only role it needs, and links to Kibana or OpenSearch Dashboards.
-- [GitHub source](docs/sources/github.md): the GitHub App permissions the GitHub source needs, and how to set the app up.
-- [Google Cloud source](docs/sources/gcp.md): the permissions the Google Cloud source needs, and how to give Sidekick its Google Cloud identity.
-- [Kubernetes source](docs/sources/kubernetes.md): the keys and tools of the Kubernetes source, and the read-only RBAC it needs.
-- [LaunchDarkly source](docs/sources/launchdarkly.md): the keys and tools of the LaunchDarkly feature flag source, and the read-only access token it needs.
-- [Linear source](docs/sources/linear.md): how to reach Linear's read-only MCP endpoint, the API key it needs, and the config that allows only its read tools.
-- [Postgres source](docs/sources/postgres.md): the read-only role the Postgres source needs, the TLS rules for its URL, and how to turn on `pg_stat_statements`.
-- [Prometheus source](docs/sources/prometheus.md): the keys and tools of the source for Prometheus, Thanos, Mimir and other compatible servers, their credentials, and the API paths it reads.
-- [Sentry source](docs/sources/sentry.md): how to reach the Sentry MCP server, the token scopes it needs, and the config that allows only its read tools.
-- [SigNoz source](docs/sources/signoz.md): how to reach the SigNoz MCP server, the read-only service account it needs, and the config that allows only its read tools.
-- [Unleash source](docs/sources/unleash.md): the keys and tools of the Unleash feature flag source, and the read-only service account token it needs.
-- [Running Sidekick](docs/running.md): `sidekick serve`, `sidekick doctor`, start-up and shutdown, health and readiness probes, metrics, logs and traces.
-- [Sending alerts to Sidekick](docs/webhooks.md): webhook endpoints, the Alertmanager and generic adapters, how deliveries are authenticated, and `sidekick test-alert`.
-- [Setting up senders](docs/senders.md): pointing SigNoz, Datadog, Sentry and Grafana at Sidekick, and what each of their alerts becomes.
-- [Run it for free](docs/free-setups.md): ranks the three free ways to run Sidekick, a local model, OpenRouter free models and the Gemini free tier, and shows how to set each up.
-- [How investigations run](docs/investigations.md): the agent loop, the report checks, how an investigation ends, its limits, and what happens on a restart.
-- [Investigations in Slack](docs/slack.md): how to set up the Slack app from its manifest, how listeners, mentions and the `/sidekick` command start investigations, and what the Slack output posts while an investigation runs and when it finishes.
-- [Investigations in Microsoft Teams](docs/teams.md): how to set up the Teams bot, the Teams app manifest and the public messaging endpoint, how Teams listeners and mentions start investigations, and what is not known yet.
-- [Web UI and API](docs/web-ui.md): OIDC login, roles from groups, sessions and CSRF tokens, and the JSON API under `/api/v1`.
-- [Results on tickets](docs/tickets.md): the Linear and Jira comment outputs, how it finds the ticket an alert is about, and how to set it up.
-- [Webhook callbacks](docs/webhook-callbacks.md): the signed JSON callback with each final result and watcher event, and how a receiver checks it.
-- [The monitor validator](docs/validator.md): the image that checks monitor files before a pull request, its formats, sidecar and Job modes, and network isolation.
-- [Benchmarks](docs/benchmark.md): `sidekick bench run`, scenario files, mock sources and their matchers, and the Postgres a benchmark runs on.
+- [Integrations](docs/integrations.md): every alert sender, source, output, model provider and action, with its guide.
+- [Running and operating](docs/operating.md): install, configuration, running, the web UI and API, the validator, upgrades.
+- [Quality and cost](docs/quality-and-cost.md): how investigations run, the benchmark, free setups.
+- [Extending Sidekick](docs/plugins/README.md): write your own source, adapter, model connector, output or action.
+- [Configuration](docs/configuration.md): every section of `sidekick.yaml` and `sidekick config validate`.
+- [Sending alerts to Sidekick](docs/webhooks.md): webhook endpoints, authentication and test alerts.
+- [How investigations run](docs/investigations.md): the agent loop, the report, limits and restarts.
 
 ## License
 
