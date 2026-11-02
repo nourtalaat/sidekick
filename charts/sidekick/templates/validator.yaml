@@ -1,11 +1,24 @@
 {{- /*
 Job mode of the validator: Sidekick creates one Job per validation, with
-the request in a ConfigMap, and reads the result from the Job's pod. The
-Role allows that in the release's namespace only, and the NetworkPolicy
-keeps the Job pods off the network. The Sidekick pods mount their service
-account token in this mode (sidekick.automountToken).
+the request in a ConfigMap, and reads the result from the termination
+message of the Job's pod. The Role allows exactly the calls Sidekick makes,
+in the release's namespace only: create, read and delete Jobs; create and
+delete ConfigMaps; list pods (to find the Job's pod). It does not poll with
+watch, and reads no logs. The Job pods run as their own service account,
+which mounts no token, and the NetworkPolicy keeps them off the network.
+The Sidekick pods mount their service account token in this mode
+(sidekick.automountToken).
 */ -}}
 {{- if include "sidekick.validator.job" . }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "sidekick.validator.serviceAccountName" . }}
+  labels:
+    {{- include "sidekick.labels" . | nindent 4 }}
+    app.kubernetes.io/component: validator
+automountServiceAccountToken: false
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -16,16 +29,13 @@ metadata:
 rules:
   - apiGroups: [batch]
     resources: [jobs]
-    verbs: [create, get, list, watch, delete]
-  - apiGroups: [""]
-    resources: [configmaps]
     verbs: [create, get, delete]
   - apiGroups: [""]
-    resources: [pods]
-    verbs: [get, list, watch]
+    resources: [configmaps]
+    verbs: [create, delete]
   - apiGroups: [""]
-    resources: [pods/log]
-    verbs: [get]
+    resources: [pods]
+    verbs: [list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

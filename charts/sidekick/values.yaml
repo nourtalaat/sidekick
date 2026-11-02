@@ -263,9 +263,13 @@ validator:
   #   its own tools from downloading anything instead.
   # - job: Sidekick runs each validation as a Kubernetes Job in the
   #   release's namespace, a few seconds slower. The chart lets Sidekick's
-  #   service account create those Jobs, and a NetworkPolicy keeps their
-  #   pods off the network. Pick it when you need that kept at the network
-  #   level. The Sidekick pods then mount their service account token.
+  #   service account create those Jobs, gives the Job pods a service
+  #   account of their own that mounts no token, and a NetworkPolicy keeps
+  #   their pods off the network. Pick it when you need that kept at the
+  #   network level. The Sidekick pods then mount their service account
+  #   token. The chart writes the image, resources and labels of the Jobs
+  #   into the validator section of the Sidekick config, so config.validator
+  #   needs no job settings.
   mode: sidecar
   # allowDownloads lets OpenTofu download providers that are not in the
   # image's mirror, and remote modules, over HTTPS. In job mode the Job
@@ -278,11 +282,13 @@ validator:
     # digest, such as sha256:..., pins the image exactly and wins over tag.
     digest: ""
     pullPolicy: IfNotPresent
-  # resources fit 2 validations at a time, each with an OpenTofu provider
-  # loaded.
+  # resources are those of the validator sidecar, or of each Job pod in job
+  # mode. They fit 2 validations at a time in the sidecar, each with an
+  # OpenTofu provider loaded.
   resources:
     requests: { cpu: 100m, memory: 256Mi }
     limits: { memory: 1Gi }
   # workDirSizeLimit bounds the emptyDir at /tmp that holds the files of
-  # running validations and the providers OpenTofu unpacks for them.
+  # running validations and the providers OpenTofu unpacks for them, in the
+  # sidecar and in each Job pod.
   workDirSizeLimit: 2Gi
