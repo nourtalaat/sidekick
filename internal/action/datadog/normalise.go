@@ -69,13 +69,8 @@ func normalise(doc json.RawMessage) (json.RawMessage, error) {
 // mapText replaces the text at key in top with change of it. A field that is
 // missing or is not text is left as it is.
 func mapText(top map[string]json.RawMessage, key string, change func(string) string) error {
-	raw, ok := top[key]
+	text, ok := textOf(top[key])
 	if !ok {
-		return nil
-	}
-
-	var text string
-	if json.Unmarshal(raw, &text) != nil {
 		return nil
 	}
 
@@ -87,6 +82,17 @@ func mapText(top map[string]json.RawMessage, key string, change func(string) str
 	top[key] = changed
 
 	return nil
+}
+
+// textOf returns the text of a JSON string, and false for anything else,
+// including nothing.
+func textOf(raw json.RawMessage) (string, bool) {
+	var text string
+	if err := json.Unmarshal(raw, &text); err != nil {
+		return "", false
+	}
+
+	return text, true
 }
 
 // holdsAfter reports whether the live definition has the value the change
