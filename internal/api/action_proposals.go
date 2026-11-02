@@ -18,6 +18,7 @@ import (
 	actionproposals "github.com/nourtalaat/sidekick/internal/action/proposals"
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/auth"
+	"github.com/nourtalaat/sidekick/internal/problem"
 )
 
 // The page sizes of GET /proposals, and the longest note of a rejection,
@@ -34,6 +35,10 @@ const (
 	codeExpired    = "expired"
 	codeDecided    = "decided"
 	codeNotAllowed = "not_allowed"
+
+	codeNotUndoable = "not_undoable"
+	codeUndoRunning = "undo_running"
+	codeUndoFailed  = "undo_failed"
 )
 
 // What a refused decision says.
@@ -44,6 +49,9 @@ const (
 	detailLongNote  = "note must be at most 500 characters."
 
 	detailApproveByPerson = "An action is approved by a person who is signed in, not by an API token."
+	detailUndoByPerson    = "An action is undone by a person who is signed in, not by an API token."
+	detailUndoRunning     = "An undo of this proposal is running already."
+	detailUndoConflict    = "The definition changed after Sidekick changed it. Restoring it overwrites the fields below. Send the request again with force set to restore it anyway."
 )
 
 // proposalListed are the statuses GET /proposals lists when none is asked.
@@ -157,6 +165,73 @@ func (s *server) RejectProposal(ctx context.Context, req apigen.RejectProposalRe
 	return apigen.RejectProposal200JSONResponse(s.proposalOf(got, "")), nil
 }
 
+// UndoProposal restores what a succeeded proposal changed.
+func (s *server) UndoProposal(ctx context.Context, req apigen.UndoProposalRequestObject) (apigen.UndoProposalResponseObject, error) {
+	if s.actions == nil {
+		return nil, problemf(http.StatusServiceUnavailable, detailNoActions)
+	}
+
+	p, _ := auth.PrincipalFrom(ctx)
+	if p.Kind != auth.KindUser {
+		return nil, problemf(http.StatusForbidden, detailUndoByPerson)
+	}
+
+	force := req.Body != nil && valueOf(req.Body.Force)
+
+	got, err := s.actions.Undo(ctx, req.Id, deciderOf(p), force)
+	if err != nil {
+		return nil, fmt.Errorf("undo proposal %s: %w", req.Id, undoProblem(err))
+	}
+
+	return apigen.UndoProposal200JSONResponse(s.proposalOf(got, "")), nil
+}
+
+// undoProblem turns the error of an undo into the answer to give: 403 for
+// a token, 404 for a proposal that does not exist, 409 with a code for one
+// that cannot be undone or whose definition changed, and the error itself
+// otherwise.
+func undoProblem(err error) error {
+	var (
+		notUndoable *actionproposals.NotUndoableError
+		notAllowed  *actionproposals.NotAllowedError
+		conflict    *actionproposals.UndoConflictError
+		failed      *actionproposals.UndoFailedError
+	)
+
+	switch {
+	case errors.Is(err, actionproposals.ErrTokenCannotUndo):
+		return problemf(http.StatusForbidden, detailUndoByPerson)
+	case errors.Is(err, actionproposals.ErrNotFound):
+		return problemf(http.StatusNotFound, detailNoProp)
+	case errors.Is(err, actionproposals.ErrUndoRunning):
+		return withCode(problemf(http.StatusConflict, detailUndoRunning), codeUndoRunning)
+	case errors.As(err, &notUndoable):
+		return withCode(problemf(http.StatusConflict, "This proposal cannot be undone: %s.", notUndoable.Reason), codeNotUndoable)
+	case errors.As(err, &notAllowed):
+		return withCode(problemf(http.StatusConflict, "The config does not allow this any more: %s.", notAllowed.Reason), codeNotAllowed)
+	case errors.As(err, &conflict):
+		e := withCode(problemf(http.StatusConflict, detailUndoConflict), codeConflict)
+		e.Changes = problemChanges(conflict.Changes)
+
+		return e
+	case errors.As(err, &failed):
+		return withCode(problemf(http.StatusConflict, "The undo failed and nothing was restored: %s", failed.Proposal.Error), codeUndoFailed)
+	default:
+		return err
+	}
+}
+
+// problemChanges is the difference as the problem details carry it.
+func problemChanges(changes []action.Change) []problem.Change {
+	out := make([]problem.Change, 0, len(changes))
+
+	for _, c := range changes {
+		out = append(out, problem.Change{Path: c.Path, Before: c.Before, After: c.After})
+	}
+
+	return out
+}
+
 // deciderOf is the person or token that made the request.
 func deciderOf(p auth.Principal) actionproposals.Decider {
 	return actionproposals.Decider{UserID: p.ID, Token: p.Kind == auth.KindToken}
@@ -226,6 +301,7 @@ func (s *server) proposalOf(p action.Proposal, alertTitle string) apigen.Proposa
 		Params:             map[string]any{},
 		ParamsText:         p.ParamsText,
 		Reason:             s.mask(p.Reason),
+		Undoable:           p.Undoable,
 		Mode:               string(p.Mode),
 		Status:             apigen.ProposalStatus(p.Status),
 		ProposedAt:         p.ProposedAt,
@@ -242,6 +318,22 @@ func (s *server) proposalOf(p action.Proposal, alertTitle string) apigen.Proposa
 
 	if !p.DecidedAt.IsZero() {
 		out.DecidedAt = &p.DecidedAt
+	}
+
+	if p.UndoOf != "" {
+		undoOf := uuid.MustParse(p.UndoOf)
+		out.UndoOf = &undoOf
+	}
+
+	if p.Snapshot != nil {
+		out.Target = nonEmptyText(p.Snapshot.Target)
+
+		changes := make([]apigen.ProposalChange, 0, len(p.Changes))
+		for _, c := range p.Changes {
+			changes = append(changes, apigen.ProposalChange{Path: c.Path, Before: c.Before, After: c.After})
+		}
+
+		out.Changes = &changes
 	}
 
 	if p.Result != nil {

@@ -17,6 +17,9 @@ type Error struct {
 	Code string
 	// Fields lists the fields of the request that were refused.
 	Fields []problem.FieldError
+	// Changes is the difference an undo would overwrite, with the code
+	// conflict.
+	Changes []problem.Change
 }
 
 func (e *Error) Error() string {
@@ -43,7 +46,7 @@ func (h *handler) requestError(w http.ResponseWriter, r *http.Request, err error
 // an Error, or with 500.
 func (h *handler) responseError(w http.ResponseWriter, r *http.Request, err error) {
 	if e, ok := errors.AsType[*Error](err); ok {
-		problem.WriteCoded(w, r, e.Status, e.Detail, e.Code, e.Fields)
+		problem.WriteDetails(w, r, problem.Details{Status: e.Status, Detail: e.Detail, Code: e.Code, Errors: e.Fields, Changes: e.Changes})
 
 		return
 	}
