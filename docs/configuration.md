@@ -1567,6 +1567,11 @@ actions:
   and so is a file larger than 256 KiB at the base. A request to change
   something outside the limits is refused when the model proposes, and again
   when the proposal runs.
+- **Files that changed meanwhile.** The model sends the whole new content of
+  each file, and the pull request writes it on top of the base branch as it
+  is when the proposal runs. A file that someone changed on the base branch
+  after the proposal is overwritten in the pull request, so reviewers should
+  check the diff of every file.
 
 Sidekick counts the pull requests it opens in
 `sidekick_githubpr_pull_requests_total` (by `result`: `opened`, `existing`
