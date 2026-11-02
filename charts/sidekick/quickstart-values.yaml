@@ -26,6 +26,8 @@ config:
       claude:
         provider: anthropic
         model: claude-sonnet-5-5
+        # Retries of rate limits, overloads and timeouts: about 3.5 to 7 seconds in all, longer when the provider asks to wait.
+        retries: 3
         apiKeySecret: { name: sidekick-anthropic, key: apiKey }
     roles:
       investigate: claude
