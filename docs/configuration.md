@@ -1607,6 +1607,67 @@ reaction that is there already counts as done. If Slack does not return the
 metadata of the bot's own messages, a repeat after a lost answer could post
 the reply twice; nothing else is affected.
 
+##### `jira.comment` and `jira.issue`
+
+`jira.comment` adds a comment to a Jira issue, and `jira.issue` creates one,
+in a Jira Cloud site through the REST API with an email and an API token.
+Jira Data Center is not supported; a `bearerTokenSecret` key is refused with
+a message that says so. The text is written as plain text nodes, so it
+cannot add formatting, links or mentions. Each comment and description ends
+with a line that says Sidekick posted it and whether an approver or the
+read + write policy of the route approved it, with a link to the
+investigation when [`server.publicURL`](#server) is set.
+
+```yaml
+actions:
+  ops-comment:
+    type: jira.comment
+    url: https://acme.atlassian.net
+    email: sidekick-actions@acme.example.com
+    apiTokenSecret: { name: jira-actions, key: apiToken }
+    limits: { projects: [OPS] }
+  ops-issue:
+    type: jira.issue
+    url: https://acme.atlassian.net
+    email: sidekick-actions@acme.example.com
+    apiTokenSecret: { name: jira-actions, key: apiToken }
+    limits:
+      projects: [OPS]
+      issueTypes: [Task, Bug]
+      labels: [incident]        # the only labels an issue may get; none by default
+      maxPerDay: 5              # most issues created in a day of budgets.daily.timeZone
+```
+
+| Key | Meaning |
+|---|---|
+| `url` | The address of the Jira Cloud site. Required. It must be https, except on localhost. |
+| `email`, `apiTokenSecret` | The account and its API token. Required. Use an account and a token of their own, apart from any the `jira.comment` output uses. The account needs to browse and add comments in the projects below; for `jira.issue` it also needs to create issues in them. |
+| `limits.projects` | Required. The keys of the projects the action may touch. A comment on an issue of another project, and an issue in another project, fail with the limit as the reason. |
+| `limits.issueTypes` | `jira.issue` only. Required. The issue types it may create, by name. |
+| `limits.labels` | `jira.issue` only. The labels an issue may get, spelled as in Jira. Empty means none. |
+| `limits.maxPerDay` | `jira.issue` only. Required, at least 1. |
+
+What the model gives: for `jira.comment`, the issue (`OPS-123`) and the body
+(at most 4000 characters); for `jira.issue`, the project, the issue type, a
+one-line summary (at most 200 characters), a description (at most 4000) and
+up to 5 labels.
+
+- A comment on an issue given by its numeric ID, or whose key now belongs to
+  another project, is checked against the project Jira reports when it runs.
+- `maxPerDay` counts the issues this action created today, in the time zone
+  of `budgets.daily.timeZone`, plus the ones approved earlier and not
+  finished. It errs on the safe side: an issue that was approved earlier and
+  then failed keeps its place for the runs that started before it ended. At
+  the limit the proposal fails with the limit as the reason; the count
+  starts again at midnight.
+- A repeated run, after a crash, makes no second comment or issue. A comment
+  ends with a line `sidekick:<hash>`, which a repeat looks for among the
+  newest 50 comments. An issue gets a label `sidekick-<hash>`, which a repeat
+  looks for with a search of the project; Jira's search can lag by a few
+  seconds behind a new issue, so a repeat right after a lost answer may not
+  see it yet. The label shows on the issue.
+- Routes that use these actions should set `mode: approved`.
+
 ##### `datadog.monitor`
 
 Changes a Datadog monitor in place through the Datadog API, or deletes it.
