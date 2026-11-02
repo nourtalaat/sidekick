@@ -160,6 +160,10 @@ func describeRoute(r config.Route, enabled bool) string {
 		out += ", outputs " + codeList(r.Outputs)
 	}
 
+	if len(r.Details) > 0 {
+		out += ", details " + codeList(slices.Sorted(maps.Keys(r.Details)))
+	}
+
 	if !enabled {
 		out += "; turned off"
 	}
