@@ -39,7 +39,7 @@ func newTestClient(t *testing.T, api *fakehttp.Server) (*client, *bytes.Buffer) 
 	logs := &bytes.Buffer{}
 
 	return &client{
-		http: api.Client(), baseURL: api.URL(), header: DefaultAPIKeyHeader, apiKey: keyRef,
+		http: api.Client(), baseURL: api.URL(), header: DefaultKeyHeader, apiKey: keyRef,
 		secrets: fakeKeys{}, logger: slog.New(slog.NewTextHandler(logs, nil)),
 	}, logs
 }

@@ -36,7 +36,7 @@ func TestConfigValidate(t *testing.T) {
 		{name: "the smallest valid config", change: func(*Config) {}},
 		{name: "a url on a loopback host", change: func(c *Config) { c.URL = "http://127.0.0.1:8080" }},
 		{name: "a url with a path", change: func(c *Config) { c.URL = "https://example.com/signoz/" }},
-		{name: "a header of its own", change: func(c *Config) { c.APIKeyHeader = "X-Signoz-Key" }},
+		{name: "a header of its own", change: func(c *Config) { c.APIKeyHeader = "X-Key" }},
 		{name: "names instead of IDs", change: func(c *Config) { c.Limits.RuleIDs, c.Limits.RuleNames = nil, []string{"checkout *"} }},
 		{name: "an ID in capitals", change: func(c *Config) { c.Limits.RuleIDs = []string{"0196A1B2-7C3D-7E4F-8A5B-1C2D3E4F5A6B"} }},
 		{name: "delete without fields", change: func(c *Config) { c.Limits.Fields, c.Limits.AllowDelete = nil, true }},
@@ -84,7 +84,7 @@ func TestConfigReadsYAML(t *testing.T) {
 	const section = `
 url: https://example.signoz.cloud
 apiKeySecret: { name: signoz-write, key: apiKey }
-apiKeyHeader: X-Signoz-Key
+apiKeyHeader: X-Key
 limits:
   ruleIds: ["0196a1b2-7c3d-7e4f-8a5b-1c2d3e4f5a6b"]
   ruleNames: ["checkout *"]
@@ -97,7 +97,7 @@ limits:
 	require.NoError(t, yaml.Unmarshal([]byte(section), &c))
 	require.NoError(t, c.Validate())
 	require.Equal(t, Config{
-		URL: "https://example.signoz.cloud", APIKeySecret: keyRef, APIKeyHeader: "X-Signoz-Key",
+		URL: "https://example.signoz.cloud", APIKeySecret: keyRef, APIKeyHeader: "X-Key",
 		Limits: Limits{RuleIDs: []string{ruleOne}, RuleNames: []string{"checkout *"}, Fields: []string{"condition.thresholds", "labels"}, AllowDelete: true},
 	}, c)
 }

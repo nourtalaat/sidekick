@@ -12,9 +12,9 @@ import (
 	"github.com/nourtalaat/sidekick/internal/registry"
 )
 
-// DefaultAPIKeyHeader is the header SigNoz reads its API key from, unless
+// DefaultKeyHeader is the header SigNoz reads its API key from, unless
 // the operator changed it in the SigNoz config.
-const DefaultAPIKeyHeader = "SIGNOZ-API-KEY"
+const DefaultKeyHeader = "SIGNOZ-API-KEY"
 
 // ruleID is the shape of a rule ID: a UUID.
 var ruleID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -33,7 +33,7 @@ type Config struct {
 	// any source that reads SigNoz.
 	APIKeySecret registry.SecretRef `yaml:"apiKeySecret"`
 	// APIKeyHeader is the header SigNoz reads the key from. Empty means
-	// DefaultAPIKeyHeader.
+	// DefaultKeyHeader.
 	APIKeyHeader string `yaml:"apiKeyHeader"`
 	// Limits say which rules the action may change and which fields.
 	Limits Limits `yaml:"limits"`
@@ -153,7 +153,7 @@ func (c *Config) apiURL() string {
 // keyHeader returns the header the API key goes in.
 func (c *Config) keyHeader() string {
 	if c.APIKeyHeader == "" {
-		return DefaultAPIKeyHeader
+		return DefaultKeyHeader
 	}
 
 	return c.APIKeyHeader

@@ -226,7 +226,7 @@ func (f *fakeSigNoz) remove(w http.ResponseWriter, r *http.Request) {
 // refuses it. The caller holds the lock.
 func (f *fakeSigNoz) authorised(w http.ResponseWriter, r *http.Request, write bool) bool {
 	switch {
-	case r.Header.Get(DefaultAPIKeyHeader) != "fake-apiKey" && r.Header.Get("X-Key") != "fake-apiKey":
+	case r.Header.Get(DefaultKeyHeader) != "fake-apiKey" && r.Header.Get("X-Key") != "fake-apiKey":
 		fail(w, http.StatusUnauthorized, "invalid api key", nil)
 	case write && f.viewerOnly:
 		fail(w, http.StatusForbidden, "only editors can do this", nil)
