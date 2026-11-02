@@ -98,6 +98,47 @@ func TestReportMatchesSchema(t *testing.T) {
 	}
 }
 
+func TestRunReportTools(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		results []ToolResult
+		want    []ToolCallReport
+	}{
+		{name: "no source call leaves tools out"},
+		{
+			name: "calls keep their order and show only name and status",
+			results: []ToolResult{
+				{Tool: "github__list_commits", Status: "ok", Content: "commit abc123 by a customer@example.com"},
+				{Tool: "prometheus__query", Status: "no_data", Content: "No data for this query"},
+				{Tool: "github__list_commits", Status: "ok"},
+			},
+			want: []ToolCallReport{
+				{Tool: "github__list_commits", Status: "ok"},
+				{Tool: "prometheus__query", Status: "no_data"},
+				{Tool: "github__list_commits", Status: "ok"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			run := usageRun(1000, time.Second)
+			run.ToolResults = tt.results
+
+			got := run.report()
+			require.Equal(t, tt.want, got.Tools)
+
+			raw, err := json.Marshal(got)
+			require.NoError(t, err)
+			require.NotContains(t, string(raw), "customer@example.com")
+		})
+	}
+}
+
 func TestReadReport(t *testing.T) {
 	t.Parallel()
 

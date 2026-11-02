@@ -117,6 +117,19 @@ type RunReport struct {
 	// check its report failed.
 	Reason     string `json:"reason,omitempty"`
 	StopDetail string `json:"stopDetail,omitempty"`
+
+	// Tools are the source tools the run called, in call order. Each holds
+	// only the tool's name and how the call ended; never the arguments or
+	// the result text, which can carry customer data.
+	Tools []ToolCallReport `json:"tools,omitempty"`
+}
+
+// ToolCallReport is one source tool call of a run in report.json: the tool
+// as the model names it, for example github__list_commits, and the status
+// of the call, such as ok, no_data or unavailable.
+type ToolCallReport struct {
+	Tool   string `json:"tool"`
+	Status string `json:"status"`
 }
 
 // RootCauseReport is the graded root cause of a run in report.json.
@@ -239,6 +252,10 @@ func (r RunResult) report() RunReport {
 
 	for _, e := range r.Evidence {
 		out.Evidence = append(out.Evidence, EvidenceReport{CalledTool: e.Check.CalledTool, CitedURL: e.Check.CitedURL, Passed: e.Passed})
+	}
+
+	for _, t := range r.ToolResults {
+		out.Tools = append(out.Tools, ToolCallReport{Tool: t.Tool, Status: t.Status})
 	}
 
 	return out

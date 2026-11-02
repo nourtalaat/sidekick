@@ -303,7 +303,9 @@ Paths are read from the directory `sidekick bench run` runs in.
   judge prompt versions), the run totals with their intervals, the
   thresholds, and each scenario with its spread and runs. A run lists the
   reason it gave for its verdict and, when it ended without a verdict, the
-  detail of why (`reason`, `stopDetail`). Its schema is
+  detail of why (`reason`, `stopDetail`), and the source tools it called, in
+  order (`tools`). Each tool entry holds only the tool's name and the status
+  of the call, never its arguments or its result text. Its schema is
   [bench-report.schema.json](bench-report.schema.json); `schemaVersion`
   changes whenever the report changes in a way an older reader would
   misread.

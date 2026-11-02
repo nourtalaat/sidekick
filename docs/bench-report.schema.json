@@ -127,6 +127,7 @@
         "overall": {"$ref": "#/$defs/share"},
         "judgeErrors": {"$ref": "#/$defs/count"},
         "toolCalls": {"$ref": "#/$defs/count"},
+        "tools": {"type": "array", "items": {"$ref": "#/$defs/toolCall"}},
         "inputTokens": {"$ref": "#/$defs/count"},
         "outputTokens": {"$ref": "#/$defs/count"},
         "costMicros": {"$ref": "#/$defs/count"},
@@ -218,6 +219,15 @@
         "outputTokens": {"$ref": "#/$defs/count"},
         "costMicros": {"$ref": "#/$defs/count"},
         "durationMs": {"$ref": "#/$defs/count"}
+      }
+    },
+    "toolCall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool", "status"],
+      "properties": {
+        "tool": {"type": "string"},
+        "status": {"type": "string"}
       }
     },
     "scenario": {
