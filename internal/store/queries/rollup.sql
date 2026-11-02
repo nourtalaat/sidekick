@@ -38,7 +38,12 @@ WHERE day = ANY (ARRAY(SELECT (b AT TIME ZONE 'UTC')::date FROM unnest(@buckets:
 -- it later. Its watchers count once the group's last one has ended: it
 -- recovered when some watcher recovered and none is running or timed out,
 -- and the downtime runs from the group's first event to the last recovery.
--- The range on created_at uses the index on it.
+-- Its action proposals count in the same hour: all of them as proposed;
+-- as approved those a person or the policy approved, which are approved,
+-- executing, succeeded and undone ones, and failed ones that have a
+-- decision; as executed those that ran and succeeded, which includes the
+-- undone ones. The range on created_at uses the index on it, and
+-- action_proposals_investigation finds the proposals.
 WITH per AS (
   SELECT b.hour,
          i.route,
@@ -58,7 +63,10 @@ WITH per AS (
          (wt.recovered > 0 AND wt.running = 0 AND wt.timed_out = 0) AS recovered,
          CASE WHEN wt.recovered > 0 AND wt.running = 0 AND wt.timed_out = 0
               THEN greatest(0, (extract(epoch FROM wt.last_recovered_at - fe.first_event_at) * 1000)::bigint) END AS downtime_ms,
-         wt.timed_out
+         wt.timed_out,
+         coalesce(ap.proposed, 0) AS actions_proposed,
+         coalesce(ap.approved, 0) AS actions_approved,
+         coalesce(ap.executed, 0) AS actions_executed
   FROM unnest(@buckets::timestamptz[]) AS b(hour)
   JOIN investigations i ON i.created_at >= b.hour AND i.created_at < b.hour + interval '1 hour'
   LEFT JOIN LATERAL (
@@ -74,6 +82,16 @@ WITH per AS (
     FROM events e
     WHERE e.group_id = i.group_id
   ) fe ON true
+  LEFT JOIN LATERAL (
+    SELECT count(*) AS proposed,
+           count(*) FILTER (
+             WHERE p.status IN ('approved', 'executing', 'succeeded', 'undone')
+                OR (p.status = 'failed' AND p.decided_at IS NOT NULL)
+           ) AS approved,
+           count(*) FILTER (WHERE p.status IN ('succeeded', 'undone')) AS executed
+    FROM action_proposals p
+    WHERE p.investigation_id = i.id
+  ) ap ON true
 )
 INSERT INTO stats_hourly (
   hour, route, service, model, verdict,
@@ -82,6 +100,7 @@ INSERT INTO stats_hourly (
   first_finding_n, first_finding_ms_sum, first_finding_hist,
   tool_calls, cost_micros, input_tokens, output_tokens,
   noisy_fixed,
+  actions_proposed, actions_approved, actions_executed,
   recoveries, downtime_ms_sum, downtime_hist, watch_timeouts
 )
 SELECT hour, route, service, model, verdict,
@@ -97,6 +116,9 @@ SELECT hour, route, service, model, verdict,
        coalesce(sum(input_tokens), 0)::bigint,
        coalesce(sum(output_tokens), 0)::bigint,
        (count(*) FILTER (WHERE noisy_fixed))::int,
+       coalesce(sum(actions_proposed), 0)::int,
+       coalesce(sum(actions_approved), 0)::int,
+       coalesce(sum(actions_executed), 0)::int,
        (count(*) FILTER (WHERE recovered))::int,
        coalesce(sum(downtime_ms), 0)::bigint,
        rollup_hist((array_agg(rollup_hist_bucket(downtime_ms)) FILTER (WHERE downtime_ms IS NOT NULL))::int[]),

@@ -18,6 +18,7 @@ const (
 	rollupStatsBucket   = "stats_hourly 2026-10-26 14:00"
 	rollupQualityBucket = "quality_daily 2026-10-26 00:00"
 	watcherID           = "0192d3a4-0000-7000-8000-0000000000d1"
+	proposalID          = "0192d3a4-0000-7000-8000-0000000000a1"
 )
 
 const (
@@ -26,6 +27,8 @@ const (
 		passes_to_recover, check_timeout_s, status, started_at, deadline)
 		VALUES ('` + watcherID + `', '` + rollupGroup + `', '` + notifyInvestigation + `',
 		'health', 'model', 'alert', '{}', 30, 2, 10, 'running', now(), now() + interval '1 hour')`
+	insertProposalTemplate = `INSERT INTO action_proposals (id, investigation_id, action, params, mode, status, idempotency_key, proposed_at, expires_at)
+		VALUES ('` + proposalID + `', '` + notifyInvestigation + `', 'note', '{}', 'approved', '%s', 'key-1', now(), now() + interval '1 hour')`
 	insertFeedbackTemplate = `INSERT INTO feedback (id, investigation_id, target_kind, target_ref, rating, slack_user_id, channel, created_at, updated_at)
 		VALUES ('0192d3a4-0000-7000-8000-0000000000e1', '` + notifyInvestigation + `', '%s', '%s', 'correct', 'U1', 'slack', now(), now())`
 )
@@ -34,6 +37,8 @@ func TestRollupTriggersMarkBuckets(t *testing.T) {
 	t.Parallel()
 
 	insertVerdictFeedback := fmt.Sprintf(insertFeedbackTemplate, "verdict", "run:1/verdict")
+	insertProposed := fmt.Sprintf(insertProposalTemplate, "proposed")
+	insertExecuting := fmt.Sprintf(insertProposalTemplate, "executing")
 
 	tests := []struct {
 		name string
@@ -146,6 +151,33 @@ func TestRollupTriggersMarkBuckets(t *testing.T) {
 			setup:      []string{insertWatcher},
 			statements: []string{"UPDATE watchers SET status = 'recovered', recovered_at = now(), ended_at = now()"},
 			want:       []string{rollupStatsBucket},
+		},
+		{
+			name:       "a new action proposal",
+			statements: []string{insertProposed},
+			want:       []string{rollupStatsBucket},
+		},
+		{
+			name:       "a decision on an action proposal",
+			setup:      []string{insertProposed},
+			statements: []string{"UPDATE action_proposals SET status = 'approved', decided_at = now()"},
+			want:       []string{rollupStatsBucket},
+		},
+		{
+			name:       "an action that ends",
+			setup:      []string{insertExecuting},
+			statements: []string{"UPDATE action_proposals SET status = 'succeeded', executed_at = now()"},
+			want:       []string{rollupStatsBucket},
+		},
+		{
+			name:       "the error of a failed attempt",
+			setup:      []string{insertExecuting},
+			statements: []string{"UPDATE action_proposals SET error = 'the service answered 503'"},
+		},
+		{
+			name:       "deleted action proposals keep the history",
+			setup:      []string{insertProposed},
+			statements: []string{"DELETE FROM action_proposals", "DELETE FROM investigations"},
 		},
 		{
 			name:       "a deleted investigation keeps the history",
