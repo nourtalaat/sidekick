@@ -284,6 +284,10 @@ func (s *Service) finish(ctx context.Context, id uuid.UUID, status action.Propos
 	)
 
 	err := pgx.BeginFunc(ctx, s.opts.Pool, func(tx pgx.Tx) error {
+		if err := s.lockOriginal(ctx, tx, id); err != nil {
+			return fmt.Errorf("lock the proposal that is undone: %w", err)
+		}
+
 		var err error
 
 		row, err = db.New(tx).FinishActionExecution(ctx, db.FinishActionExecutionParams{
