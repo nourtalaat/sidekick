@@ -7,15 +7,22 @@
 -- a limit the other has taken, and a proposal never waits for a later one.
 -- A proposal that was approved before and fails later still counts for the
 -- runs that started before it ended; the count errs on the safe side.
-SELECT count(*)::bigint AS uses
-FROM action_proposals p
-WHERE p.action = @action
-  AND p.id <> @id
-  AND (
-    (p.status IN ('succeeded', 'undone')
-      AND p.executed_at >= @day_start::timestamptz
-      AND p.executed_at < @day_end::timestamptz)
-    OR (p.status IN ('approved', 'executing')
-      AND (coalesce(p.decided_at, p.proposed_at), p.id) <
-          ((SELECT coalesce(m.decided_at, m.proposed_at) FROM action_proposals m WHERE m.id = @id), @id::uuid))
-  );
+-- The first count reads the index on the action and the time of success;
+-- the second reads the few proposals that are approved or executing through
+-- the index on the status.
+SELECT (
+  (SELECT count(*)
+   FROM action_proposals p
+   WHERE p.action = @action
+     AND p.id <> @id
+     AND p.status IN ('succeeded', 'undone')
+     AND p.executed_at >= @day_start::timestamptz
+     AND p.executed_at < @day_end::timestamptz)
+  +
+  (SELECT count(*)
+   FROM action_proposals p
+   WHERE p.status IN ('approved', 'executing')
+     AND p.action = @action
+     AND (coalesce(p.decided_at, p.proposed_at), p.id) <
+         ((SELECT coalesce(m.decided_at, m.proposed_at) FROM action_proposals m WHERE m.id = @id), @id::uuid))
+)::bigint AS uses;

@@ -53,6 +53,6 @@ func TestQueryPlans(t *testing.T) {
 	})
 	require.ErrorIs(t, err, storetest.ErrExplained)
 	require.Contains(t, explain.Plan, "action_proposals_daily")
-	require.Contains(t, explain.Plan, "action_proposals_inflight")
+	require.Contains(t, explain.Plan, "action_proposals_status_proposed")
 	require.NotContains(t, explain.Plan, "Seq Scan on action_proposals")
 }
