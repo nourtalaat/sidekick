@@ -1990,16 +1990,47 @@ where Sidekick finds it.
 
 ```yaml
 validator:
-  mode: sidecar                  # sidecar is the only mode that works for now
+  mode: sidecar                  # sidecar (the default) or job
   url: http://127.0.0.1:8200     # where the sidecar listens; this is the default
-  allowDownloads: false          # the chart's setting of the same name; Sidekick does not read it
+  allowDownloads: false          # the chart's setting of the same name; job mode passes it to the Jobs
 ```
 
-`mode: job` is accepted by the chart but not yet by Sidekick: the config
-check refuses it with a message. The default `url` is the address of the
-chart's sidecar, so with `validator.enabled: true` in the chart values
-there is nothing to set here. An action that needs the validator reports
-an error when it cannot reach it; nothing else in Sidekick uses it.
+With `mode: sidecar`, the default `url` is the address of the chart's
+sidecar, so with `validator.enabled: true` in the chart values there is
+nothing to set here. An action that needs the validator reports an error
+when it cannot reach it; nothing else in Sidekick uses it.
+
+With `mode: job`, Sidekick runs each validation as a Kubernetes Job in its
+own namespace, and `url` is not used. In the Helm chart, set `validator.mode:
+job` in the chart values, not here: the chart then writes this section,
+including the `job` block below, from its own `validator` values, and
+its values win over anything in `config.validator`. Outside the chart, set
+the block yourself:
+
+```yaml
+validator:
+  mode: job
+  allowDownloads: false
+  job:
+    image: ghcr.io/nourtalaat/sidekick-validator:0.1.0   # required
+    imagePullPolicy: IfNotPresent    # Always, IfNotPresent or Never; empty is the cluster's default
+    imagePullSecrets: [registry-login]
+    serviceAccountName: sidekick-validator   # not Sidekick's own; the pod mounts no token
+    resources:
+      requests: {cpu: 100m, memory: 256Mi}
+      limits: {memory: 1Gi}
+    workDirSizeLimit: 2Gi            # size limit of the directory for the files; empty is none
+    podLabels:                       # on the Jobs, their pods and ConfigMaps
+      app.kubernetes.io/component: validator
+```
+
+Sidekick needs permission to create, get and delete Jobs, create and delete
+ConfigMaps, and list pods, in its own namespace. It starts without calling
+the cluster, and uses the API on the first validation, so `config validate`
+works outside a cluster. Job mode needs Sidekick to run in a cluster, with its
+service account token mounted. The image must be of the same release as
+Sidekick. How a validation runs, its time limits and the limits of job
+mode are in [The monitor validator](validator.md#job-mode).
 
 ### `strategies`
 
@@ -2863,6 +2894,7 @@ with access to the database, who can turn the guard off.
 | `actions.maxPerInvestigation` | `5` |
 | `validator.mode` | `sidecar` |
 | `validator.url` | `http://127.0.0.1:8200` |
+| `validator.job.*` | none: `validator.job.image` is required in job mode |
 | `routes[].budgets` | the values in `budgets.perInvestigation` |
 | `routes[].budgets.daily.maxCostUSD` | none: only `budgets.daily.maxCostUSD` applies |
 | `routes[].budgets.daily.onDailyCap` | `budgets.daily.onDailyCap` |

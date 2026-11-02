@@ -5,11 +5,9 @@ checks every changed file with the validator. A file that fails is not
 committed: the errors go back to the model, which can fix the change, and
 no pull request is opened.
 
-> **Status:** the [`github.pull_request` action](configuration.md#githubpull_request)
-> sends files to the validator in sidecar mode. Job mode, where Sidekick
-> creates a Kubernetes Job for each validation, is not available in Sidekick
-> yet; the chart renders it, but the `validator` section of the config
-> refuses `mode: job`.
+The [`github.pull_request` action](configuration.md#githubpull_request)
+sends files to the validator, in sidecar mode or in job mode, where
+Sidekick creates a Kubernetes Job for each validation.
 
 The validator is `sidekick-validate`, in its own image,
 `ghcr.io/nourtalaat/sidekick-validator`. It carries the tools the checks
@@ -120,16 +118,82 @@ pod.
 
 The chart then makes:
 
-- a Role and a RoleBinding that let Sidekick's service account create,
-  read and delete Jobs and ConfigMaps (the request goes in a ConfigMap)
-  and read pods and their logs, in the release's namespace only;
+- a Role and a RoleBinding that let Sidekick's service account do exactly
+  what job mode needs in the release's namespace, and nothing in any
+  other: create, get and delete Jobs; create and delete ConfigMaps; and
+  list pods, to find the Job's pod;
+- a service account for the Job pods, which mounts no token;
 - a NetworkPolicy that gives the Job pods no ingress and no egress, or DNS
-  and port 443 with `allowDownloads`, when `networkPolicy.enabled` is on.
+  and port 443 with `allowDownloads`, when `networkPolicy.enabled` is on;
+- the `validator` section of the Sidekick config, with the image,
+  resources, work directory size, pull secrets and labels of the Jobs, taken
+  from the chart's `validator` values. You set nothing in `config.validator`
+  for job mode, and the chart's values win over it. See the
+  [`validator` section](configuration.md#validator).
 
 Sidekick calls the Kubernetes API to create the Jobs, so in this mode
 the Sidekick pods mount their service account token, whatever
 `serviceAccount.automountToken` says. Creating Jobs lets Sidekick run pods
 in its namespace, so install it in a namespace of its own.
+
+Sidekick and the validator image must be the same release. The chart
+uses the image with the version of the chart's `appVersion` unless you set
+`validator.image.tag` or `digest`; if you do, use the validator image of the
+Sidekick release you run. An older image does not read the request Sidekick
+sends.
+
+#### What happens to one validation
+
+1. Sidekick compresses the request with gzip and creates a Job from the
+   validator image, then a ConfigMap with the compressed request, owned by
+   the Job. A ConfigMap holds at most 1 MiB, so a request that is larger
+   than 1,000,000 bytes after compression is refused as too large; text
+   compresses well, and a 4 MiB Terraform module is far below that.
+2. The pod runs `sidekick-validate job` on the request. It writes the result
+   to its termination message, which Kubernetes keeps to 4096 bytes: a
+   result with many errors is cut, the last errors are dropped, and the
+   result says `truncated`. A validation in the sidecar mode has no such
+   limit on the result.
+3. Sidekick reads the Job every half second until it finishes, then reads
+   the termination message from the Job's pod.
+4. Sidekick deletes the Job (and its pods with it) and the ConfigMap, also
+   when the validation failed, timed out or was cancelled.
+
+A Job is made to run once: it never retries, its pod runs as user 65532 with
+a read-only root filesystem, no capabilities and no service account token,
+and nothing in it is shared with other validations.
+
+If Sidekick stops in the middle of a validation, nothing piles up: the
+Job has a deadline of 90 seconds, so the cluster stops its pod, and it is
+deleted 5 minutes after it ends. The ConfigMap is owned by the Job and goes
+with it. Sidekick does not look for leftovers, and does not need to list
+Jobs or ConfigMaps.
+
+#### Time limits
+
+- The validator in the pod has 60 seconds for the validation, as in the
+  sidecar. Sidekick waits up to 90 seconds for the Job to finish, which
+  adds 30 seconds for the cluster to schedule the pod and pull the image. A
+  Job that is not done by then counts as a timeout.
+- At most 2 validations run at a time in one Sidekick process; a third waits
+  up to 60 seconds for a free slot, then gets a busy error. With several
+  Sidekick replicas, each has its own 2.
+- **Job mode is slower when the model proposes.** The first validation on
+  a node pulls the validator image, which holds the tools and the provider
+  mirror and is large. Checking a proposal has 90 seconds in all, and also
+  reads from GitHub, so a cold start can use it up. The proposal is then
+  refused with "could not finish checking these parameters within 90s;
+  propose it again", and proposing it again works once the image is on the
+  node. To avoid this, pull the image ahead of time on the nodes where Jobs
+  run (for example with a DaemonSet), or use sidecar mode. When the action
+  runs after approval, a timeout is retried.
+
+An error the validator reports (a bad request, a timeout inside the pod)
+becomes the same error as in sidecar mode. A pod that cannot start, such as
+one with an image that cannot be pulled, is reported as "the validator is
+not available" as soon as the cluster says so. An API error, for example
+a Role that does not allow creating Jobs, is also "not available", with the
+cluster's message.
 
 ### Keeping tokens away from the validator
 
@@ -157,11 +221,12 @@ adds `validator` to its list. The validator also replaces anything that
 looks like a JWT in the messages it returns with `<redacted>`, as a second
 line of defence.
 
-In job mode, the Job pods must likewise get no token: they must run with
+In job mode, the Job pods likewise get no token. They run with
 `automountServiceAccountToken: false`, without the
 `azure.workload.identity/use` label or any cloud identity annotation, and
-with a service account other than Sidekick's, since the EKS webhook adds
-the IRSA token to pods whose service account names an IAM role.
+with a service account of their own, `<release>-validator`, since the EKS
+webhook adds the IRSA token to pods whose service account names an IAM
+role. Do not add such an annotation to that service account.
 
 ## Limits
 
@@ -201,12 +266,13 @@ gives one, and a `message`. The answer is 400 for a request that is
 wrong, 503 when the validator stayed busy, and 504 when a validation took
 longer than 60 seconds.
 
-`sidekick-validate job --request <file>` runs one request from a file,
-prints the result, and writes it to `/dev/termination-log`, cut down to
+`sidekick-validate job --request <file>` runs one request from a file, in
+the same JSON form, plain or gzipped, prints the result, and writes it to `/dev/termination-log`, cut down to
 the 4096 bytes Kubernetes keeps there, with `"truncated": true` when
 anything was left out. It exits with 0 when the validation ran, whether
 the files passed or not, and with 1 when it could not run, after printing
-`{"error": "..."}`.
+`{"error": "...", "kind": "..."}`, where `kind` is `bad_request`, `timeout`,
+`busy` or `internal`.
 
 ## Verifying the image
 
