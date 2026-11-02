@@ -305,6 +305,17 @@ type PublishState struct {
 	UpdateSeq       *int64
 }
 
+type PullRequestState struct {
+	ProposalID uuid.UUID
+	Repo       string
+	Number     int64
+	Url        string
+	State      string
+	MergedAt   *time.Time
+	ClosedAt   *time.Time
+	CheckedAt  time.Time
+}
+
 type QualityDaily struct {
 	Day       pgtype.Date
 	Route     string
