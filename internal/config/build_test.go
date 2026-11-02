@@ -214,6 +214,47 @@ func TestBuildSlackBotToken(t *testing.T) {
 	}
 }
 
+func TestBuildDailyLocation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		yaml string
+		want string
+	}{
+		{name: "from budgets.daily.timeZone", yaml: "budgets: {daily: {timeZone: Europe/Berlin}}\n", want: "Europe/Berlin"},
+		{name: "UTC by default", want: "UTC"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			regs := testRegistries()
+			regs.Outputs = registry.New[output.Sink]("output")
+
+			var got *time.Location
+
+			regs.Outputs.Register("webhook", registry.Plugin[output.Sink]{
+				Build: func(_ context.Context, _ string, _ registry.Decoder, deps registry.Deps) (output.Sink, error) {
+					got = deps.DailyLocation
+
+					return fakeSink{}, nil
+				},
+			})
+
+			yaml := minimalYAML(t) + tt.yaml + "outputs: {callback: {type: webhook}}\n"
+			cfg, err := Parse(t.Context(), []byte(yaml), LoadOptions{Registries: regs})
+			require.NoError(t, err)
+
+			_, err = Build(t.Context(), cfg, regs, registry.Deps{})
+			require.NoError(t, err)
+			require.NotNil(t, got)
+			require.Equal(t, tt.want, got.String())
+		})
+	}
+}
+
 func TestBuildClosesSourcesOnFailure(t *testing.T) {
 	t.Parallel()
 
