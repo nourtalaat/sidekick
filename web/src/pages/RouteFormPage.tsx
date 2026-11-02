@@ -14,6 +14,7 @@ import { TextField } from "../components/TextField";
 import { hasRole } from "../roles";
 import { useCurrentUser } from "../session";
 import { formatLabels, joinList, orUndefined, parseDecimal, parseLabels, parseWhole, sortErrors, splitList, textOrUndefined } from "./rules/formHelpers";
+import { OverrideConfirm } from "./rules/OverrideConfirm";
 import { RuleFormFrame } from "./rules/RuleFormFrame";
 
 type RouteSpec = components["schemas"]["RouteSpec"];
@@ -42,11 +43,13 @@ const FIELDS = [
   "grouping.relatedWindow",
 ] as const;
 
-// TODO: [SK-48] Offer read-write here once Sidekick can run actions without approval.
 const MODES = [
   { value: "read-only", label: "Read-only" },
   { value: "approved", label: "Approved: the model proposes, a person approves" },
+  { value: "read-write", label: "Read + write: allowed actions run without approval, for trusted senders" },
 ];
+
+type RouteMode = NonNullable<RouteSpec["mode"]>;
 
 const LIST_PATH = "/routes";
 
@@ -66,6 +69,7 @@ interface RouteValues {
   sources: string;
   outputs: string;
   mode: string;
+  allowUntrustedWrite: boolean;
   actions: string;
   maxTokens: string;
   maxToolCalls: string;
@@ -89,6 +93,7 @@ const EMPTY: RouteValues = {
   sources: "",
   outputs: "",
   mode: "read-only",
+  allowUntrustedWrite: false,
   actions: "",
   maxTokens: "",
   maxToolCalls: "",
@@ -172,6 +177,7 @@ function RouteForm({ mode, initial, version }: RouteFormProps) {
   const [error, setError] = useState<SaveError | null>(null);
   const [local, setLocal] = useState<Record<string, string>>({});
   const [failures, setFailures] = useState(0);
+  const [confirming, setConfirming] = useState(false);
 
   const set = (patch: Partial<RouteValues>) => setValues((v) => ({ ...v, ...patch }));
 
@@ -183,13 +189,23 @@ function RouteForm({ mode, initial, version }: RouteFormProps) {
   };
   const invalid = Object.keys(byField).length > 0 || sorted.other.length > 0;
 
-  function save() {
+  const untrustedWrite = values.mode === "read-write" && values.allowUntrustedWrite;
+
+  /** Checks the form and, unless it needs the admin's confirmation first, sends it. */
+  function save(confirmed = false) {
     const built = specOf(values, mode);
     setLocal(built.problems);
+    setConfirming(false);
 
     if (!built.spec) {
       setError(null);
       setFailures((n) => n + 1);
+
+      return;
+    }
+
+    if (untrustedWrite && !confirmed) {
+      setConfirming(true);
 
       return;
     }
@@ -226,7 +242,7 @@ function RouteForm({ mode, initial, version }: RouteFormProps) {
       failures={failures}
       otherProblems={sorted.other}
       onReload={reload}
-      onSubmit={save}
+      onSubmit={() => save()}
     >
       <fieldset className="sk-rule-form__group">
         <legend className="sk-rule-form__legend">Route</legend>
@@ -333,14 +349,25 @@ function RouteForm({ mode, initial, version }: RouteFormProps) {
           onChange={(e) => set({ mode: e.target.value })}
           options={MODES}
           error={byField.mode}
-          help="In approved mode the model may propose the actions below, and a person approves each one."
+          help="In approved mode the model may propose the actions below, and a person approves each one. In read + write mode a proposal runs at once, but only for events from trusted senders: a route may select only intakes and listeners marked trusted in the config file."
         />
+        {values.mode === "read-write" && (
+          <Checkbox
+            label="Also allow senders that are not trusted"
+            checked={values.allowUntrustedWrite}
+            onChange={(e) => {
+              set({ allowUntrustedWrite: e.target.checked });
+              setConfirming(false);
+            }}
+            help="Lets this route select intakes and listeners that are not trusted, and keeps read + write mode for their events. Text from such a sender can steer the model. Sidekick asks you to confirm when you save, logs a warning at every start, and records the change in the audit log."
+          />
+        )}
         <TextField
           label="Actions"
           value={values.actions}
           onChange={(e) => set({ actions: e.target.value })}
           error={byField.actions}
-          help="Names of actions from the config file that the model may propose, separated by commas. Needed in approved mode, empty in read-only mode."
+          help="Names of actions from the config file that the model may propose, separated by commas. Needed in approved and read + write modes, empty in read-only mode."
         />
       </fieldset>
 
@@ -403,6 +430,7 @@ function RouteForm({ mode, initial, version }: RouteFormProps) {
           help="Lets an event join an open group of a related service, such as 15m. Empty turns it off."
         />
       </fieldset>
+      {confirming && <OverrideConfirm route={values.name.trim()} busy={create.isPending || update.isPending} onConfirm={() => save(true)} onCancel={() => setConfirming(false)} />}
     </RuleFormFrame>
   );
 }
@@ -463,7 +491,8 @@ function specOf(values: RouteValues, mode: "new" | "edit"): Built {
       strategy: textOrUndefined(values.strategy),
       sources: orUndefined(splitList(values.sources)),
       outputs: orUndefined(splitList(values.outputs)),
-      mode: values.mode === "approved" ? "approved" : "read-only",
+      mode: modeOf(values.mode),
+      allowUntrustedWrite: values.mode === "read-write" && values.allowUntrustedWrite ? true : undefined,
       actions: orUndefined(splitList(values.actions)),
       budgets: {
         maxTokens,
@@ -478,6 +507,11 @@ function specOf(values: RouteValues, mode: "new" | "edit"): Built {
       },
     },
   };
+}
+
+/** The mode the form sends: one the form offers, else read-only. */
+function modeOf(value: string): RouteMode {
+  return MODES.some((m) => m.value === value) ? (value as RouteMode) : "read-only";
 }
 
 /** The form's values from a route of the API. */
@@ -495,6 +529,7 @@ function valuesOf(r: Route): RouteValues {
     sources: joinList(r.sources),
     outputs: joinList(r.outputs),
     mode: r.mode ?? "read-only",
+    allowUntrustedWrite: r.allowUntrustedWrite ?? false,
     actions: joinList(r.actions),
     maxTokens: r.budgets?.maxTokens === undefined ? "" : String(r.budgets.maxTokens),
     maxToolCalls: r.budgets?.maxToolCalls === undefined ? "" : String(r.budgets.maxToolCalls),

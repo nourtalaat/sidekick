@@ -30,6 +30,8 @@ type ruleItem struct {
 	Channel      string         `json:"channel"`
 	Priority     int            `json:"priority"`
 	Mode         string         `json:"mode"`
+	Actions      []string       `json:"actions"`
+	AllowUntrust bool           `json:"allowUntrustedWrite"`
 	Match        map[string]any `json:"match"`
 	Budgets      map[string]any `json:"budgets"`
 	Sources      []string       `json:"sources"`
@@ -550,7 +552,7 @@ func TestCreateRoute(t *testing.T) {
 			wantStatus: http.StatusUnprocessableEntity, wantCode: "validation", wantField: "outputs[1]",
 		},
 		{
-			name: "a mode that does not exist yet", who: adminCaller, body: with("mode", "read-write"),
+			name: "a mode that does not exist", who: adminCaller, body: with("mode", "read-everything"),
 			wantStatus: http.StatusUnprocessableEntity, wantCode: "validation", wantField: "mode",
 		},
 		{
@@ -629,6 +631,134 @@ func TestCreateRoute(t *testing.T) {
 			require.InDelta(t, 10, audits[0].Details["new"].(map[string]any)["priority"], 0)
 		})
 	}
+}
+
+func TestReadWriteRoutes(t *testing.T) {
+	t.Parallel()
+
+	route := func(name string, change map[string]any) map[string]any {
+		body := map[string]any{
+			"name": name, "match": map[string]any{"intake": []string{"alertmanager"}}, "outputs": []string{"slack-thread"},
+			"mode": "read-write", "actions": []string{"monitor-note"},
+		}
+
+		for k, v := range change {
+			body[k] = v
+		}
+
+		return body
+	}
+
+	tests := []struct {
+		name       string
+		who        ruleCaller
+		body       map[string]any
+		wantStatus int
+		wantField  string
+		wantUntrus bool
+	}{
+		{name: "a trusted intake", who: adminCaller, body: route("write", nil), wantStatus: http.StatusCreated},
+		{name: "an admin token", who: adminTokenCaller, body: route("write", nil), wantStatus: http.StatusCreated},
+		{name: "a responder", who: responderCaller, body: route("write", nil), wantStatus: http.StatusForbidden},
+		{
+			name: "a runtime listener, which is never trusted", who: adminCaller,
+			body:       route("write", map[string]any{"match": map[string]any{"intake": []string{"ops"}}}),
+			wantStatus: http.StatusUnprocessableEntity, wantField: "mode",
+		},
+		{
+			name: "no intake, which selects them all", who: adminCaller,
+			body:       route("write", map[string]any{"match": map[string]any{"service": "checkout-*"}}),
+			wantStatus: http.StatusUnprocessableEntity, wantField: "mode",
+		},
+		{
+			name: "no action", who: adminCaller, body: route("write", map[string]any{"actions": []string{}}),
+			wantStatus: http.StatusUnprocessableEntity, wantField: "actions",
+		},
+		{
+			name: "the override", who: adminCaller,
+			body:       route("write", map[string]any{"match": map[string]any{"service": "checkout-*"}, "allowUntrustedWrite": true}),
+			wantStatus: http.StatusCreated, wantUntrus: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := setupRules(t)
+
+			rec := s.sendRule(t, tt.who, http.MethodPost, "/api/v1/routes", tt.body)
+			require.Equal(t, tt.wantStatus, rec.Code, rec.Body.String())
+
+			audits := s.ruleAudits(t)
+
+			if tt.wantStatus != http.StatusCreated {
+				require.Empty(t, audits)
+				require.Len(t, s.listRoutes(t, adminCaller), 5, "a refused change stores nothing")
+
+				if tt.wantField != "" {
+					require.Contains(t, ruleProblemOf(t, rec).fieldMessages(), tt.wantField)
+				}
+
+				return
+			}
+
+			var created ruleItem
+			decodeRule(t, rec, &created)
+			require.Equal(t, "read-write", created.Mode)
+			require.Equal(t, tt.wantUntrus, created.AllowUntrust)
+
+			stored := find(t, s.listRoutes(t, viewerCaller), "runtime", "write")
+			require.Equal(t, created, stored)
+
+			require.Len(t, audits, 1)
+			require.Equal(t, rules.ActionRouteCreated, audits[0].Action)
+
+			spec := audits[0].Details["new"].(map[string]any)["spec"].(map[string]any)
+			require.Equal(t, "read-write", spec["mode"])
+			require.Equal(t, tt.wantUntrus, spec["allowUntrustedWrite"] == true, "the audit row shows the override")
+		})
+	}
+}
+
+func TestUpdateRouteToReadWrite(t *testing.T) {
+	t.Parallel()
+
+	s := setupRules(t)
+
+	body := func(version int, change map[string]any) map[string]any {
+		b := map[string]any{
+			"enabled": true, "version": version, "match": map[string]any{"service": "checkout-*"}, "outputs": []string{"slack-thread"},
+			"mode": "read-write", "actions": []string{"monitor-note"}, "allowUntrustedWrite": true,
+		}
+
+		for k, v := range change {
+			b[k] = v
+		}
+
+		return b
+	}
+
+	rec := s.sendRule(t, adminCaller, http.MethodPut, "/api/v1/routes/checkout", body(1, nil))
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var saved ruleItem
+	decodeRule(t, rec, &saved)
+	require.True(t, saved.AllowUntrust)
+	require.Equal(t, 2, saved.Version)
+
+	rec = s.sendRule(t, adminCaller, http.MethodPut, "/api/v1/routes/checkout", body(2, map[string]any{"allowUntrustedWrite": false}))
+	require.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
+	require.Contains(t, ruleProblemOf(t, rec).fieldMessages(), "mode")
+
+	stored := find(t, s.listRoutes(t, viewerCaller), "runtime", "checkout")
+	require.Equal(t, saved, stored, "the refused change stored nothing")
+
+	audits := s.ruleAudits(t)
+	require.Len(t, audits, 1)
+	require.Equal(t, rules.ActionRouteUpdated, audits[0].Action)
+	require.NotContains(t, audits[0].Details["old"].(map[string]any)["spec"], "allowUntrustedWrite")
+	require.Equal(t, true, audits[0].Details["new"].(map[string]any)["spec"].(map[string]any)["allowUntrustedWrite"])
 }
 
 func TestUpdateRoute(t *testing.T) {

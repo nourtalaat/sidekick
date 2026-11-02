@@ -41,6 +41,10 @@ type routeSpec struct {
 	Outputs  []string     `json:"outputs,omitempty"`
 	Budgets  budgetSpec   `json:"budgets,omitzero"`
 	Grouping groupingSpec `json:"grouping,omitzero"`
+
+	// AllowUntrustedWrite is the override of the trusted-sender rule. It
+	// is part of the route's audit record.
+	AllowUntrustedWrite bool `json:"allowUntrustedWrite,omitempty"`
 }
 
 type matchSpec struct {
@@ -130,6 +134,7 @@ func routeOfRow(row db.Route) (Route, error) {
 	r.Priority = int(row.Priority)
 	r.Sources = s.Sources
 	r.Actions = s.Actions
+	r.AllowUntrustedWrite = s.AllowUntrustedWrite
 	r.Outputs = s.Outputs
 	r.Grouping.FingerprintLabels = s.Grouping.FingerprintLabels
 	r.Budgets.MaxTokens = s.Budgets.MaxTokens
@@ -206,6 +211,8 @@ func specOfRoute(r config.Route) routeSpec {
 			RelatedWindow:     durationText(r.Grouping.RelatedWindow),
 		},
 	}
+
+	s.AllowUntrustedWrite = r.AllowUntrustedWrite
 
 	if m := r.Match; m != nil {
 		severity := make([]string, len(m.Severity))

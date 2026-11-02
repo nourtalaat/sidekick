@@ -68,7 +68,7 @@ func (g *Grouper) Recover(ctx context.Context, tx pgx.Tx, ev db.Event) (res Resu
 		return Result{}, false, nil
 	}
 
-	res = Result{GroupID: grp.ID}
+	res = Result{GroupID: grp.ID, Route: grp.Route}
 
 	if grp.InvestigationID != nil {
 		res.InvestigationID = *grp.InvestigationID

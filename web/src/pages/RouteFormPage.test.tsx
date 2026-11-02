@@ -53,14 +53,115 @@ describe("the route form", () => {
     });
   });
 
-  it("offers read-only and approved as the modes", async () => {
+  it("offers read-only, approved and read + write as the modes", async () => {
     renderApp({ me: ADMIN, route: "/routes/new" });
 
     const mode = await screen.findByLabelText("Mode");
 
-    expect(within(mode).getAllByRole("option")).toHaveLength(2);
+    expect(within(mode).getAllByRole("option")).toHaveLength(3);
     expect(within(mode).getByRole("option", { name: "Read-only" })).toBeInTheDocument();
     expect(within(mode).getByRole("option", { name: /^Approved/ })).toBeInTheDocument();
+    expect(within(mode).getByRole("option", { name: /^Read \+ write/ })).toBeInTheDocument();
+  });
+
+  it("offers the override for senders that are not trusted only in read + write mode", async () => {
+    const user = userEvent.setup();
+    renderApp({ me: ADMIN, route: "/routes/new" });
+
+    await screen.findByLabelText("Mode");
+    expect(screen.queryByLabelText("Also allow senders that are not trusted")).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Mode"), "approved");
+    expect(screen.queryByLabelText("Also allow senders that are not trusted")).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Mode"), "read-write");
+    expect(screen.getByLabelText("Also allow senders that are not trusted")).not.toBeChecked();
+  });
+
+  it("saves a read + write route without the override at once", async () => {
+    const user = userEvent.setup();
+    const { handler, seen } = recording((request) => (request.method === "POST" ? json(201, route({ name: "search", version: 1 })) : json(200, { routes: sampleRoutes() })));
+    renderApp({ me: ADMIN, route: "/routes/new", handler });
+
+    await user.type(await screen.findByLabelText("Name"), "search");
+    await user.type(screen.getByLabelText("Intake"), "alertmanager");
+    await user.selectOptions(screen.getByLabelText("Mode"), "read-write");
+    await user.type(screen.getByLabelText("Actions"), "monitor-note");
+    await user.click(screen.getByRole("button", { name: "Add route" }));
+
+    expect(await screen.findByText("Route search saved. Every replica uses it within seconds.")).toBeInTheDocument();
+
+    const body = seen.find((r) => r.method === "POST")?.body;
+    expect(body).toMatchObject({ mode: "read-write", actions: ["monitor-note"] });
+    expect(body).not.toHaveProperty("allowUntrustedWrite");
+  });
+
+  it("asks the admin to confirm the override before it sends anything", async () => {
+    const user = userEvent.setup();
+    const { handler, seen } = recording((request) => (request.method === "POST" ? json(201, route({ name: "search", version: 1 })) : json(200, { routes: sampleRoutes() })));
+    renderApp({ me: ADMIN, route: "/routes/new", handler });
+
+    await user.type(await screen.findByLabelText("Name"), "search");
+    await user.type(screen.getByLabelText("Service"), "search-*");
+    await user.selectOptions(screen.getByLabelText("Mode"), "read-write");
+    await user.type(screen.getByLabelText("Actions"), "monitor-note");
+    await user.click(screen.getByLabelText("Also allow senders that are not trusted"));
+    await user.click(screen.getByRole("button", { name: "Add route" }));
+
+    const confirm = screen.getByRole("group", { name: "Confirm writes for senders that are not trusted" });
+    expect(within(confirm).getByText(/Route search will approve and run/)).toBeInTheDocument();
+    expect(within(confirm).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    expect(seen.filter((r) => r.method === "POST")).toHaveLength(0);
+
+    await user.click(within(confirm).getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("group", { name: "Confirm writes for senders that are not trusted" })).not.toBeInTheDocument();
+    expect(seen.filter((r) => r.method === "POST")).toHaveLength(0);
+
+    await user.click(screen.getByRole("button", { name: "Add route" }));
+    await user.click(screen.getByRole("button", { name: "Allow untrusted writes" }));
+
+    expect(await screen.findByText("Route search saved. Every replica uses it within seconds.")).toBeInTheDocument();
+
+    const posts = seen.filter((r) => r.method === "POST");
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.body).toMatchObject({ mode: "read-write", allowUntrustedWrite: true, actions: ["monitor-note"] });
+  });
+
+  it("does not ask while the form has problems of its own", async () => {
+    const user = userEvent.setup();
+    const { handler, seen } = recording(() => json(200, { routes: [] }));
+    renderApp({ me: ADMIN, route: "/routes/new", handler });
+
+    await user.type(await screen.findByLabelText("Name"), "search");
+    await user.selectOptions(screen.getByLabelText("Mode"), "read-write");
+    await user.click(screen.getByLabelText("Also allow senders that are not trusted"));
+    await user.type(screen.getByLabelText("Most tokens"), "lots");
+    await user.click(screen.getByRole("button", { name: "Add route" }));
+
+    expect(screen.queryByRole("group", { name: "Confirm writes for senders that are not trusted" })).not.toBeInTheDocument();
+    expect(seen.filter((r) => r.method === "POST")).toHaveLength(0);
+  });
+
+  it("shows the override of a saved route and keeps it on save after the confirmation", async () => {
+    const user = userEvent.setup();
+
+    const { handler, seen } = recording((request) =>
+      request.method === "PUT"
+        ? json(200, route({ version: 2, mode: "read-write", allowUntrustedWrite: true }))
+        : json(200, { routes: [route({ mode: "read-write", actions: ["monitor-note"], allowUntrustedWrite: true })] }),
+    );
+
+    renderApp({ me: ADMIN, route: "/routes/checkout", handler });
+
+    expect(await screen.findByLabelText("Mode")).toHaveValue("read-write");
+    expect(screen.getByLabelText("Also allow senders that are not trusted")).toBeChecked();
+
+    await user.click(screen.getByRole("button", { name: "Save route" }));
+    await user.click(screen.getByRole("button", { name: "Allow untrusted writes" }));
+
+    expect(await screen.findByText("Route checkout saved. Every replica uses it within seconds.")).toBeInTheDocument();
+    expect(seen.find((r) => r.method === "PUT")?.body).toMatchObject({ mode: "read-write", allowUntrustedWrite: true, actions: ["monitor-note"] });
   });
 
   it("sends the mode and the actions of an approved route", async () => {
