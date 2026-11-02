@@ -33,12 +33,14 @@ func (q *Queries) GetPullRequestState(ctx context.Context, proposalID uuid.UUID)
 }
 
 const listPullRequestsToCheck = `-- name: ListPullRequestsToCheck :many
-SELECT p.id, p.action, (p.params ->> 'repo')::text AS repo
+SELECT p.id, p.action, coalesce(p.params ->> 'repo', o.params ->> 'repo')::text AS repo
 FROM action_proposals p
+LEFT JOIN action_proposals o ON o.id = p.undo_of
 LEFT JOIN pull_request_states s ON s.proposal_id = p.id
 WHERE p.status = 'succeeded'
   AND p.action = ANY ($1::text[])
   AND p.executed_at >= $2::timestamptz
+  AND (p.undo_of IS NULL OR s.proposal_id IS NOT NULL)
   AND (s.proposal_id IS NULL OR (s.state = 'open' AND s.checked_at < $3::timestamptz))
 ORDER BY s.checked_at NULLS FIRST, p.executed_at, p.id
 LIMIT $4
@@ -61,7 +63,9 @@ type ListPullRequestsToCheckRow struct {
 // given actions, executed since the given time, whose pull request has no
 // state yet or was last checked as open before the given time. The ones
 // never checked come first, then those checked longest ago. The repository
-// is read from the proposal's parameters.
+// is read from the proposal's parameters, or for an undo from the
+// proposal it undoes. An undo is checked only when it has a state, which
+// the action records when the undo opened a revert pull request.
 func (q *Queries) ListPullRequestsToCheck(ctx context.Context, arg ListPullRequestsToCheckParams) ([]ListPullRequestsToCheckRow, error) {
 	rows, err := q.db.Query(ctx, listPullRequestsToCheck,
 		arg.Actions,
@@ -100,6 +104,48 @@ func (q *Queries) PullRequestJobExists(ctx context.Context, uniqueKey string) (b
 	var found bool
 	err := row.Scan(&found)
 	return found, err
+}
+
+const recordPullRequestState = `-- name: RecordPullRequestState :exec
+INSERT INTO pull_request_states (proposal_id, repo, number, url, state, merged_at, closed_at, checked_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (proposal_id) DO UPDATE
+SET number = EXCLUDED.number,
+    url = EXCLUDED.url,
+    state = EXCLUDED.state,
+    merged_at = EXCLUDED.merged_at,
+    closed_at = EXCLUDED.closed_at,
+    checked_at = EXCLUDED.checked_at
+WHERE pull_request_states.state = 'open'
+`
+
+type RecordPullRequestStateParams struct {
+	ProposalID uuid.UUID
+	Repo       string
+	Number     int64
+	Url        string
+	State      string
+	MergedAt   *time.Time
+	ClosedAt   *time.Time
+	Now        time.Time
+}
+
+// RecordPullRequestState records what the action knows about the pull
+// request of a proposal when it acts on it, for example when it closes the
+// pull request or opens a revert. Like UpsertPullRequestState it changes a
+// row only while the row says open, but it is not tied to a job.
+func (q *Queries) RecordPullRequestState(ctx context.Context, arg RecordPullRequestStateParams) error {
+	_, err := q.db.Exec(ctx, recordPullRequestState,
+		arg.ProposalID,
+		arg.Repo,
+		arg.Number,
+		arg.Url,
+		arg.State,
+		arg.MergedAt,
+		arg.ClosedAt,
+		arg.Now,
+	)
+	return err
 }
 
 const upsertPullRequestState = `-- name: UpsertPullRequestState :execrows

@@ -15,6 +15,21 @@ SELECT md5('proposal' || i)::uuid, md5('investigation')::uuid, 'monitor-pr', jso
        CASE WHEN i % 100 < 3 THEN now() - make_interval(secs => i * 500) END
 FROM generate_series(1, 60000) AS i;
 
+-- The undo of a quarter of the succeeded proposals that ended on 1 in 100, half
+-- of them with a revert pull request, which has a state.
+INSERT INTO action_proposals (id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, executed_at, undo_of)
+SELECT md5('undo' || i)::uuid, md5('investigation')::uuid, 'monitor-pr', jsonb_build_object('force', false, 'undoOf', md5('proposal' || i)::uuid), '', 'approved',
+       'succeeded', 'sidekick/' || md5('undo' || i),
+       now() - make_interval(secs => i * 400), now() - make_interval(secs => i * 400) + interval '1 day', now() - make_interval(secs => i * 400),
+       md5('proposal' || i)::uuid
+FROM generate_series(1, 60000) AS i
+WHERE i % 100 = 1 AND i % 4 = 1;
+
+INSERT INTO pull_request_states (proposal_id, repo, number, url, state, merged_at, closed_at, checked_at)
+SELECT md5('undo' || i)::uuid, 'acme/monitors', 100000 + i, 'https://github.com/acme/monitors/pull/' || (100000 + i), 'open', NULL, NULL, now() - interval '2 days'
+FROM generate_series(1, 60000) AS i
+WHERE i % 100 = 1 AND i % 4 = 1 AND i % 8 = 1;
+
 INSERT INTO pull_request_states (proposal_id, repo, number, url, state, merged_at, closed_at, checked_at)
 SELECT md5('proposal' || i)::uuid, 'acme/monitors', i, 'https://github.com/acme/monitors/pull/' || i,
        CASE WHEN i % 5 = 0 THEN 'open' ELSE 'merged' END,

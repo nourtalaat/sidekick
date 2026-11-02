@@ -48,10 +48,11 @@ type reader struct {
 	dirs  map[string][]dirEntry
 }
 
-// readFile is the result of reading one path: its text, or that it does
-// not exist.
+// readFile is the result of reading one path: its text and blob SHA, or
+// that it does not exist.
 type readFile struct {
 	text   string
+	sha    string
 	exists bool
 }
 
@@ -93,46 +94,47 @@ func baseOf(ctx context.Context, client *gh.Client, owner, repo, branch string) 
 	return base{commit: sha, tree: tree}, nil
 }
 
-// file returns the text of the file at path, or exists false when there is
-// no such path at the reader's commit. A path that is a directory, a link
-// or a submodule, a file that is too large, and a file that is not text
-// are errors.
-func (r *reader) file(ctx context.Context, path string) (string, bool, error) {
+// file reads the file at path at the reader's commit. A path that does not
+// exist at that commit is returned with exists false. A path that is a
+// directory, a link or a submodule, a file that is too large, and a file
+// that is not text are errors.
+func (r *reader) file(ctx context.Context, path string) (readFile, error) {
 	if f, ok := r.files[path]; ok {
-		return f.text, f.exists, nil
+		return *f, nil
 	}
 
 	content, dir, _, err := r.client.Repositories.GetContents(ctx, r.owner, r.repo, path, &gh.RepositoryContentGetOptions{Ref: r.ref})
 	if isStatus(err, http.StatusNotFound) {
 		r.files[path] = &readFile{}
 
-		return "", false, nil
+		return readFile{}, nil
 	}
 
 	if err != nil {
-		return "", false, classify("read "+path, err)
+		return readFile{}, classify("read "+path, err)
 	}
 
 	if content == nil || dir != nil || content.GetType() != typeFile {
-		return "", false, fmt.Errorf("%s %w", path, errNotFile)
+		return readFile{}, fmt.Errorf("%s %w", path, errNotFile)
 	}
 
 	if content.GetSize() > maxBaseFileBytes {
-		return "", false, fmt.Errorf("%s %w", path, errTooBig)
+		return readFile{}, fmt.Errorf("%s %w", path, errTooBig)
 	}
 
 	text, err := content.GetContent()
 	if err != nil {
-		return "", false, fmt.Errorf("decode %s: %w", path, err)
+		return readFile{}, fmt.Errorf("decode %s: %w", path, err)
 	}
 
 	if !validContent(text) {
-		return "", false, fmt.Errorf("%s %w", path, errNotText)
+		return readFile{}, fmt.Errorf("%s %w", path, errNotText)
 	}
 
-	r.files[path] = &readFile{text: text, exists: true}
+	f := &readFile{text: text, sha: content.GetSHA(), exists: true}
+	r.files[path] = f
 
-	return text, true, nil
+	return *f, nil
 }
 
 // dir lists the regular files directly inside the directory at path; "." is
@@ -197,7 +199,7 @@ func (r *reader) blob(ctx context.Context, e dirEntry) (string, error) {
 		return "", fmt.Errorf("%s %w", e.path, errNotText)
 	}
 
-	r.files[e.path] = &readFile{text: text, exists: true}
+	r.files[e.path] = &readFile{text: text, sha: e.sha, exists: true}
 
 	return text, nil
 }

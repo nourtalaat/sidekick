@@ -67,7 +67,7 @@ func (c change) deleted() bool {
 
 // paramsSchema is the JSON Schema of Params. Sidekick checks the parameters
 // against it before it calls Validate, and the model reads it.
-var paramsSchema = json.RawMessage(`{
+var paramsSchema = json.RawMessage(fmt.Sprintf(`{
   "type": "object",
   "additionalProperties": false,
   "required": ["repo", "baseBranch", "title", "body", "files"],
@@ -79,7 +79,7 @@ var paramsSchema = json.RawMessage(`{
     "files": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 100,
+      "maxItems": %d,
       "description": "The files to change. Give the whole new content of each, or delete it.",
       "items": {
         "oneOf": [
@@ -105,7 +105,7 @@ var paramsSchema = json.RawMessage(`{
       }
     }
   }
-}`)
+}`, maxFilesCeiling))
 
 // decodeParams decodes the parameters, refusing unknown fields.
 func decodeParams(raw json.RawMessage) (Params, error) {

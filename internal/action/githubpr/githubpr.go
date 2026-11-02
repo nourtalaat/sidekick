@@ -26,6 +26,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/buildinfo"
 	"github.com/nourtalaat/sidekick/internal/githubapp"
 	"github.com/nourtalaat/sidekick/internal/registry"
+	"github.com/nourtalaat/sidekick/internal/store/db"
 	"github.com/nourtalaat/sidekick/internal/validateclient"
 )
 
@@ -47,11 +48,17 @@ type PR struct {
 	metrics   *metrics
 	log       *slog.Logger
 	publicURL string
+	// db is Sidekick's database, where Undo records the state of the pull
+	// requests it closes or reverts. It is nil where plugins are built
+	// without one, and nothing is recorded then.
+	db db.DBTX
 }
 
 var (
 	_ action.Action          = (*PR)(nil)
 	_ action.ProposalChecker = (*PR)(nil)
+	_ action.Snapshotter     = (*PR)(nil)
+	_ action.Undoer          = (*PR)(nil)
 )
 
 // New builds the action from its validated config. It makes no network
@@ -94,6 +101,7 @@ func newPR(name string, cfg Config, deps registry.Deps) (*PR, error) {
 		metrics:   m,
 		log:       log,
 		publicURL: deps.PublicURL,
+		db:        deps.DB,
 	}, nil
 }
 
@@ -143,7 +151,7 @@ func (p *PR) Validate(_ context.Context, raw json.RawMessage) error {
 // the base branch, counts the changed lines and validates the files, so
 // the model gets the errors and can propose again.
 func (p *PR) CheckProposal(ctx context.Context, raw json.RawMessage) error {
-	if _, err := p.prepare(ctx, raw); err != nil {
+	if _, err := p.prepare(ctx, raw, nil); err != nil {
 		return fmt.Errorf("check the pull request: %w", err)
 	}
 

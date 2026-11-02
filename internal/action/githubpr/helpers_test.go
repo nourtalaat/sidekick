@@ -20,6 +20,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
 	"github.com/nourtalaat/sidekick/internal/registry"
+	"github.com/nourtalaat/sidekick/internal/store/db"
 	"github.com/nourtalaat/sidekick/internal/validateclient"
 )
 
@@ -28,6 +29,7 @@ const (
 	testKeyBits     = 2048
 	testRepo        = "acme/monitors"
 	testProposalID  = "0192d3a4-0000-7000-8000-0000000000a1"
+	testUndoID      = "0192d3a4-0000-7000-8000-0000000000a2"
 	testInvestID    = "0192d3a4-0000-7000-8000-0000000000c1"
 	testBaseSHA     = "aaaa000000000000000000000000000000000001"
 	testBaseTree    = "bbbb000000000000000000000000000000000002"
@@ -75,6 +77,14 @@ type bed struct {
 func newBed(t *testing.T, mutate func(l *Limits)) *bed {
 	t.Helper()
 
+	return newBedWithDB(t, mutate, nil)
+}
+
+// newBedWithDB is newBed for an action that records pull request states in
+// dbtx, which may be nil.
+func newBedWithDB(t *testing.T, mutate func(l *Limits), dbtx db.DBTX) *bed {
+	t.Helper()
+
 	github, validator := fakehttp.New(t), fakehttp.New(t)
 	github.Handle(http.MethodPost, fmt.Sprintf("/app/installations/%d/access_tokens", testApp.InstallationID), fakehttp.Response{
 		Status:  http.StatusCreated,
@@ -92,6 +102,7 @@ func newBed(t *testing.T, mutate func(l *Limits)) *bed {
 		HTTP:         github.Client(),
 		ValidatorURL: validator.URL(),
 		PublicURL:    "https://sidekick.example.com",
+		DB:           dbtx,
 	})
 	require.NoError(t, err)
 
@@ -128,6 +139,26 @@ func refBody(ref, sha string) string {
 func fileBody(path, text string) string {
 	return fmt.Sprintf(`{"type":"file","name":%q,"path":%q,"sha":"blob-%s","size":%d,"encoding":"base64","content":%q}`,
 		path[strings.LastIndex(path, "/")+1:], path, path, len(text), base64.StdEncoding.EncodeToString([]byte(text)))
+}
+
+// fileBodyWithSHA is fileBody for a file with a blob SHA of the test's choice.
+func fileBodyWithSHA(path, text, sha string) string {
+	return fmt.Sprintf(`{"type":"file","name":%q,"path":%q,"sha":%q,"size":%d,"encoding":"base64","content":%q}`,
+		path[strings.LastIndex(path, "/")+1:], path, sha, len(text), base64.StdEncoding.EncodeToString([]byte(text)))
+}
+
+// handlePulls makes the fake GitHub answer the list of pull requests by the
+// head it asks for; a head that is not in pulls has none.
+func (b *bed) handlePulls(pulls map[string]string) {
+	b.github.HandleFunc(http.MethodGet, repoPath("pulls"), func(w http.ResponseWriter, r *http.Request) {
+		body, ok := pulls[r.URL.Query().Get("head")]
+		if !ok {
+			body = "[]"
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	})
 }
 
 // listing is the answer to listing a directory; each entry is name and size.
