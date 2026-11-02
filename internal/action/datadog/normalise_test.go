@@ -26,6 +26,11 @@ func TestNormalise(t *testing.T) {
 		{name: "tags that are no list are left", in: `{"tags": "a"}`, want: `{"tags": "a"}`},
 		{name: "a message that is no text is left", in: `{"message": 3}`, want: `{"message": 3}`},
 		{name: "a missing field stays missing", in: `{}`, want: `{}`},
+		{name: "a null option is a missing one", in: `{"options": {"no_data_timeframe": null, "notify_no_data": true}}`, want: `{"options": {"notify_no_data": true}}`},
+		{name: "a null at the top is left as it is", in: `{"priority": null, "options": {}}`, want: `{"priority": null, "options": {}}`},
+		{name: "options that are no object are left", in: `{"options": 3}`, want: `{"options": 3}`},
+		{name: "options that are null are left", in: `{"options": null}`, want: `{"options": null}`},
+		{name: "a null deeper in the options is left", in: `{"options": {"thresholds": {"warning": null}}}`, want: `{"options": {"thresholds": {"warning": null}}}`},
 	}
 
 	for _, tt := range tests {
@@ -40,6 +45,28 @@ func TestNormalise(t *testing.T) {
 
 	_, err := normalise(json.RawMessage(`[`))
 	require.Error(t, err)
+}
+
+func TestANullOptionIsNotThereForTheChecks(t *testing.T) {
+	t.Parallel()
+
+	// A change that removes an option by setting it to null.
+	snap := action.Snapshot{
+		Before: json.RawMessage(`{"options": {"notify_no_data": true, "no_data_timeframe": 10}}`),
+		After:  json.RawMessage(`{"options": {"notify_no_data": false, "no_data_timeframe": null}}`),
+	}
+
+	after, err := holdsAfter(json.RawMessage(`{"options": {"notify_no_data": false, "notify_audit": false}}`), snap)
+	require.NoError(t, err)
+	require.True(t, after, "Datadog read the null back as no option")
+
+	before, err := holdsBefore(json.RawMessage(`{"options": {"notify_no_data": true, "no_data_timeframe": 10}}`), snap)
+	require.NoError(t, err)
+	require.True(t, before)
+
+	before, err = holdsBefore(json.RawMessage(`{"options": {"notify_no_data": true}}`), snap)
+	require.NoError(t, err)
+	require.False(t, before, "the timeframe is not back")
 }
 
 func TestHoldsAfterIgnoresWhatDatadogAdds(t *testing.T) {

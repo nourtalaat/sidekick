@@ -1542,6 +1542,13 @@ actions:
   monitors the action reaches by tag; a change that would remove the tag
   that allows a monitor is refused, so the action never moves a monitor out of
   its own limits.
+- A `set` value of `null` removes an option: Datadog reads a null option
+  back as one that is not there. Datadog keeps `options.no_data_timeframe`
+  only while `options.notify_no_data` is true, so a change that turns
+  `notify_no_data` off must set `no_data_timeframe` to `null` in the same
+  change, and a change that sets the timeframe must set `notify_no_data` to
+  true in the same change. Sidekick refuses the others, with a message that
+  says so, so that Undo can put the timeframe back.
 - `allowDelete: true` lets the model propose to delete a monitor. A delete
   cannot be undone in Sidekick, and Slack and the web UI say so before it is
   approved.

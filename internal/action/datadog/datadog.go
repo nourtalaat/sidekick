@@ -171,7 +171,9 @@ func (m *Monitor) Spec() action.Spec {
 	}
 
 	b.WriteString("Give set as field path to new value; an array such as tags is replaced whole. ")
-	b.WriteString("Datadog keeps options.no_data_timeframe only while options.notify_no_data is true, so set both together.")
+	b.WriteString("Datadog keeps options.no_data_timeframe only while options.notify_no_data is true: " +
+		"to set the timeframe, set notify_no_data to true in the same change; to turn notify_no_data off, " +
+		"set options.no_data_timeframe to null in the same change. A null option is removed.")
 
 	return action.Spec{Name: m.name, Description: b.String(), ParamsSchema: paramsSchema}
 }
@@ -527,40 +529,49 @@ func (m *Monitor) checkMonitor(id int64, live map[string]json.RawMessage) error 
 	return fmt.Errorf("monitor %d: %w: %w", id, action.ErrLimit, errNotAllowed)
 }
 
-// noDataTimeframe is the path of the option that Datadog keeps only while
-// notify_no_data is true.
-var noDataTimeframe = action.Path{"options", "no_data_timeframe"}
+// The paths of the two options that go together: Datadog keeps
+// no_data_timeframe only while notify_no_data is true.
+var (
+	noDataTimeframe = action.Path{"options", "no_data_timeframe"}
+	notifyNoData    = action.Path{"options", "notify_no_data"}
+)
 
-// checkNoData refuses a change that sets options.no_data_timeframe while the
-// monitor does not notify on missing data. Datadog drops that option then, so
-// the change would never read back as made, and neither a retry after a crash
-// nor an Undo could tell it was made. The error says what to do instead, for
-// the model.
+// checkNoData refuses a change that leaves options.no_data_timeframe with a
+// value while the monitor does not notify on missing data, when the change
+// touches either option. Datadog drops the timeframe then. A change that
+// sets it that way would never read back as made. A change that turns
+// notify_no_data off but keeps the timeframe would lose the timeframe for
+// good, because the change would not list it and Undo could not put it back.
+// The error says what to do instead, for the model: to remove the option,
+// set it to null in the same change.
 func checkNoData(after json.RawMessage, deltas []action.Delta) error {
-	sets := slices.ContainsFunc(deltas, func(d action.Delta) bool {
-		return slices.Equal(d.Path, noDataTimeframe) && d.After != nil
+	touched := slices.ContainsFunc(deltas, func(d action.Delta) bool {
+		return slices.Equal(d.Path, noDataTimeframe) || slices.Equal(d.Path, notifyNoData)
 	})
-	if !sets {
+	if !touched {
 		return nil
 	}
 
 	var parsed struct {
 		Options struct {
-			NotifyNoData bool `json:"notify_no_data"`
+			NotifyNoData bool            `json:"notify_no_data"`
+			Timeframe    json.RawMessage `json:"no_data_timeframe"`
 		} `json:"options"`
 	}
 
 	if err := json.Unmarshal(after, &parsed); err != nil {
-		return fmt.Errorf("read options.notify_no_data after the change: %w: %w", action.ErrLimit, err)
+		return fmt.Errorf("read the no data options after the change: %w: %w", action.ErrLimit, err)
 	}
 
-	if !parsed.Options.NotifyNoData {
-		return fmt.Errorf("options.no_data_timeframe is dropped by Datadog while options.notify_no_data is false, "+
-			"so the change could not be confirmed; set options.notify_no_data to true in the same change, "+
-			"or leave out options.no_data_timeframe: %w", action.ErrLimit)
+	hasTimeframe := len(parsed.Options.Timeframe) > 0 && string(parsed.Options.Timeframe) != "null"
+	if parsed.Options.NotifyNoData || !hasTimeframe {
+		return nil
 	}
 
-	return nil
+	return fmt.Errorf("options.no_data_timeframe is dropped by Datadog while options.notify_no_data is false, "+
+		"so the change could not be confirmed or undone in full; to set the timeframe, set options.notify_no_data "+
+		"to true in the same change; to turn notify_no_data off, set options.no_data_timeframe to null "+
+		"in the same change: %w", action.ErrLimit)
 }
 
 // checkAfter checks that the monitor is still one the limits allow once the

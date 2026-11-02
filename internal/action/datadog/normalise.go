@@ -58,12 +58,53 @@ func normalise(doc json.RawMessage) (json.RawMessage, error) {
 		return nil, fmt.Errorf("normalise the type: %w", err)
 	}
 
+	if err := dropNullOptions(top); err != nil {
+		return nil, fmt.Errorf("normalise the options: %w", err)
+	}
+
 	out, err := json.Marshal(top)
 	if err != nil {
 		return nil, fmt.Errorf("encode the definition: %w", err)
 	}
 
 	return out, nil
+}
+
+// dropNullOptions removes the options whose value is null. Datadog reads a
+// null option back as one that is not there, which is how a change removes
+// an option such as no_data_timeframe. Only options are treated this way: a
+// null at the top of the definition is left as it is.
+func dropNullOptions(top map[string]json.RawMessage) error {
+	options, ok := objectOf(top["options"])
+	if !ok {
+		return nil
+	}
+
+	for key, value := range options {
+		if strings.TrimSpace(string(value)) == "null" {
+			delete(options, key)
+		}
+	}
+
+	out, err := json.Marshal(options)
+	if err != nil {
+		return fmt.Errorf("encode the options: %w", err)
+	}
+
+	top["options"] = out
+
+	return nil
+}
+
+// objectOf returns the fields of a JSON object, and false for anything else,
+// including nothing.
+func objectOf(raw json.RawMessage) (map[string]json.RawMessage, bool) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil || fields == nil {
+		return nil, false
+	}
+
+	return fields, true
 }
 
 // mapText replaces the text at key in top with change of it. A field that is

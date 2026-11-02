@@ -522,6 +522,28 @@ func TestSnapshotRefusesANoDataTimeframeDatadogWouldDrop(t *testing.T) {
 			params:  `{"monitorId": 123, "set": {"options.no_data_timeframe": 20, "options.notify_no_data": false}}`,
 			wantErr: "set options.notify_no_data to true in the same change",
 		},
+		{
+			name:   "notify_no_data turned off on a monitor that has a timeframe",
+			params: `{"monitorId": 123, "set": {"options.notify_no_data": false}}`,
+			change: func(f *fakeDatadog) {
+				f.monitor["options"] = json.RawMessage(`{"thresholds": {"critical": 2}, "notify_no_data": true, "no_data_timeframe": 10}`)
+			},
+			wantErr: "to turn notify_no_data off, set options.no_data_timeframe to null in the same change",
+		},
+		{
+			name:   "notify_no_data turned off with the timeframe removed in the same change",
+			params: `{"monitorId": 123, "set": {"options.notify_no_data": false, "options.no_data_timeframe": null}}`,
+			change: func(f *fakeDatadog) {
+				f.monitor["options"] = json.RawMessage(`{"thresholds": {"critical": 2}, "notify_no_data": true, "no_data_timeframe": 10}`)
+			},
+		},
+		{
+			name:   "a timeframe removed while the monitor does not notify",
+			params: `{"monitorId": 123, "set": {"options.no_data_timeframe": null}}`,
+			change: func(f *fakeDatadog) {
+				f.monitor["options"] = json.RawMessage(`{"thresholds": {"critical": 2}, "notify_no_data": false, "no_data_timeframe": 10}`)
+			},
+		},
 		{name: "the timeframe with notify_no_data set to true", params: `{"monitorId": 123, "set": {"options.no_data_timeframe": 20, "options.notify_no_data": true}}`},
 		{
 			name:   "the timeframe when the monitor notifies already",
@@ -559,6 +581,58 @@ func TestSnapshotRefusesANoDataTimeframeDatadogWouldDrop(t *testing.T) {
 			require.ErrorIs(t, err, action.ErrLimit)
 		})
 	}
+}
+
+// TestUndoPutsTheTimeframeBackWhenNotifyNoDataWasTurnedOff is the allowed way
+// to turn notify_no_data off on a monitor that has a no_data_timeframe: the
+// change removes the timeframe in the same change, so it is in the snapshot
+// and an Undo puts it back, although Datadog drops it on the write.
+func TestUndoPutsTheTimeframeBackWhenNotifyNoDataWasTurnedOff(t *testing.T) {
+	t.Parallel()
+
+	api, dd := newFakeDatadog(t)
+	dd.configure(func(f *fakeDatadog) {
+		f.monitor["options"] = json.RawMessage(`{"thresholds": {"critical": 2}, "notify_no_data": true, "no_data_timeframe": 10}`)
+	})
+
+	limits := limitsOf()
+	limits.Fields = append(limits.Fields, "options.no_data_timeframe", "options.notify_no_data")
+	m := newTestAction(t, api, limits)
+
+	const params = `{"monitorId": 123, "set": {"options.notify_no_data": false, "options.no_data_timeframe": null}}`
+
+	snap := proposed(t, m, params)
+
+	_, err := m.Execute(t.Context(), invocationOf(params, &snap))
+	require.NoError(t, err)
+
+	options := func() (notify bool, timeframe json.RawMessage) {
+		var def struct {
+			Options struct {
+				NotifyNoData bool            `json:"notify_no_data"`
+				Timeframe    json.RawMessage `json:"no_data_timeframe"`
+			} `json:"options"`
+		}
+
+		require.NoError(t, json.Unmarshal(dd.definitionNow(t), &def))
+
+		return def.Options.NotifyNoData, def.Options.Timeframe
+	}
+
+	notify, timeframe := options()
+	require.False(t, notify)
+	require.Empty(t, timeframe, "Datadog dropped the timeframe")
+
+	_, err = m.Execute(t.Context(), invocationOf(params, &snap))
+	require.NoError(t, err, "the change is in place, although the timeframe is gone")
+	require.Equal(t, 1, dd.putCount())
+
+	_, err = m.Undo(t.Context(), invocationOf(params, &snap), snap, false)
+	require.NoError(t, err, "no force is needed")
+
+	notify, timeframe = options()
+	require.True(t, notify)
+	require.JSONEq(t, "10", string(timeframe), "the timeframe is back")
 }
 
 func TestSnapshotRefusals(t *testing.T) {
