@@ -78,6 +78,10 @@ type Scenario struct {
 type Route struct {
 	// Mode is the action mode. Only read-only exists until M4.
 	Mode action.Mode `yaml:"mode,omitempty"`
+	// Details are fixed facts about the route that the prompt shows, as
+	// the details of a route in the config file are. config.CheckRouteDetails
+	// has the limits.
+	Details map[string]string `yaml:"details,omitempty"`
 }
 
 // Event is a scenario's payload and the adapter that turns it into an
@@ -273,6 +277,10 @@ func (s Scenario) validate() []string {
 
 	if s.Route.Mode != "" && s.Route.Mode != action.ReadOnly {
 		add("route.mode: mode %q is not available yet: runs are read-only until action modes arrive in M4", s.Route.Mode)
+	}
+
+	for _, problem := range config.CheckRouteDetails(s.Route.Details) {
+		add("route.details: %s", problem)
 	}
 
 	if s.Event.Adapter == "" {
