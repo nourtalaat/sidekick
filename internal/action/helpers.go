@@ -9,15 +9,15 @@ import (
 )
 
 // DecodeParams decodes the parameters of an action into v and refuses keys
-// that v does not have. Actions use it in Validate and Execute, after
-// Sidekick has checked the parameters against the schema, because an
-// action must not rely on its caller for its safety.
+// that v does not have. The error wraps ErrParams. Actions use it in
+// Validate and Execute, after Sidekick has checked the parameters against
+// the schema, because an action must not rely on its caller for its safety.
 func DecodeParams(raw json.RawMessage, v any) error {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 
 	if err := dec.Decode(v); err != nil {
-		return fmt.Errorf("decode the parameters: %w", err)
+		return fmt.Errorf("%w: %w", ErrParams, err)
 	}
 
 	return nil

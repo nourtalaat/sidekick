@@ -22,8 +22,8 @@ func TestDecodeParams(t *testing.T) {
 		wantErr string
 	}{
 		{name: "known keys", raw: `{"name": "ops"}`, want: params{Name: "ops"}},
-		{name: "an unknown key", raw: `{"name": "ops", "other": 1}`, wantErr: `decode the parameters: json: unknown field "other"`},
-		{name: "not an object", raw: `[1]`, wantErr: "decode the parameters: json: cannot unmarshal array into Go value of type action.params"},
+		{name: "an unknown key", raw: `{"name": "ops", "other": 1}`, wantErr: `invalid parameters: json: unknown field "other"`},
+		{name: "not an object", raw: `[1]`, wantErr: "invalid parameters: json: cannot unmarshal array into Go value of type action.params"},
 	}
 
 	for _, tt := range tests {
@@ -35,6 +35,7 @@ func TestDecodeParams(t *testing.T) {
 			err := DecodeParams(json.RawMessage(tt.raw), &got)
 			if tt.wantErr != "" {
 				require.EqualError(t, err, tt.wantErr)
+				require.ErrorIs(t, err, ErrParams)
 
 				return
 			}
