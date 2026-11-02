@@ -128,12 +128,17 @@ The model sees the built-in tools and the tools of the route's sources:
   after the investigation ends.
 - **`propose_action`** proposes one change, from the actions the route
   lists, for a person to approve or reject. It is offered only when the
-  investigation's route is in `approved` mode (see
-  [`actions`](configuration.md#actions)). Proposing runs nothing. Sidekick
-  checks the parameters against the action's schema and limits, and a
-  proposal that fails comes back to the model as an error. The proposal
-  waits for an approver for `actions.proposalTTL` (24 hours by default) and
-  then expires.
+  investigation's route is in `approved` or `read-write` mode (see
+  [`actions`](configuration.md#actions)). Sidekick checks the parameters
+  against the action's schema and limits, and a proposal that fails comes
+  back to the model as an error. In `approved` mode proposing runs nothing:
+  the proposal waits for an approver for `actions.proposalTTL` (24 hours by
+  default) and then expires. In `read-write` mode the route's policy
+  approves a proposal that passes its checks and it runs at once. An
+  investigation is in `read-write` mode only when its first event came from
+  a trusted sender; when an event that is not trusted starts it or joins it
+  later, it is in `approved` mode and proposals wait for a person (see
+  [read + write mode](configuration.md#read--write-mode-and-trusted-senders)).
 - **Source tools** are named `<source>__<tool>`, for example
   `signoz__search_logs`. A route's `sources` list limits them to those
   sources; without one, every source's tools are offered. See
