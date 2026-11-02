@@ -16,7 +16,7 @@ outputs:
 
 routes:
   - name: default
-    mode: read-write
+    mode: read-writ
     outputs: [slak-thread]
 
 report:

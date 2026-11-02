@@ -35,6 +35,14 @@ describe("ProposalCard", () => {
     expect(screen.getByText("Waiting for a decision")).toBeInTheDocument();
   });
 
+  it("says that the route's policy approved a proposal, with no person named", () => {
+    renderWithProviders(<ProposalCard proposal={proposal({ status: "executing", mode: "read-write", approvedByPolicy: true, decidedAt: "2026-10-26T14:02:00Z" })} canDecide />);
+
+    expect(screen.getByText("Decided by")).toBeInTheDocument();
+    expect(screen.getByText("Approved by policy (read + write route)")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Approve/ })).not.toBeInTheDocument();
+  });
+
   it("shows text from the model as text, never as markup", () => {
     const { container } = renderWithProviders(
       <ProposalCard proposal={proposal({ reason: "<img src=x onerror=alert(1)> <b>bold</b>", paramsText: '{\n  "t": "<script>alert(1)</script>"\n}' })} canDecide />,
