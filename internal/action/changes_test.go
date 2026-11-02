@@ -43,7 +43,7 @@ func TestDiff(t *testing.T) {
 			want: []Change{{Path: "rules", Before: ptr(`[{"a":1}]`), After: ptr(`[{"a":1},{"a":2}]`)}},
 		},
 		{name: "type change", before: `{"a":"1"}`, after: `{"a":1}`, want: []Change{{Path: "a", Before: ptr(`"1"`), After: ptr("1")}}},
-		{name: "hidden characters are spelled out", before: `{"m":"a"}`, after: "{\"m\":\"a​b\"}", want: []Change{{Path: "m", Before: ptr(`"a"`), After: ptr(`"a​b"`)}}},
+		{name: "hidden characters are spelled out", before: `{"m":"a"}`, after: "{\"m\":\"a\u200bb\"}", want: []Change{{Path: "m", Before: ptr(`"a"`), After: ptr(`"a\u200bb"`)}}},
 		{name: "removed definition", before: `{"a":1}`, after: `null`, want: []Change{{Path: "", Before: ptr(`{"a":1}`)}}},
 		{name: "created definition", before: ``, after: `{"a":1}`, want: []Change{{Path: "", After: ptr(`{"a":1}`)}}},
 		{name: "nothing on either side", before: `null`, after: ``},
