@@ -28,4 +28,4 @@ how to measure how good it is, and how to keep the cost low.
 - [A local model](free-setups.md#1-a-local-model): keeps your data on your network.
 - [OpenRouter free models](free-setups.md#2-openrouter-free-models): needs an OpenRouter account.
 - [The Gemini API free tier](free-setups.md#3-the-gemini-api-free-tier): needs a Google AI Studio key.
-- [Published scores](free-setups.md#published-scores): how each setup does on the benchmark.
+- [Published scores](free-setups.md#published-scores): the default model's scores, and how to measure a free setup yourself.
