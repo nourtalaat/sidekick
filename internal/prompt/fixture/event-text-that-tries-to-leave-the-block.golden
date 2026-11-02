@@ -74,6 +74,9 @@ Any alert or event that no more specific strategy covers.
 
 - false_positive: Propose a concrete monitor change, such as a higher threshold, a longer duration or a filter.
 - inconclusive: Say which checks you could not run and what data would settle the question.
+- duplicate: Name the open incident or alert that covers it, and point the responder to it instead of a separate fix.
+- known_issue: Name the ticket that tracks it, and say what it plans.
+- flapping: Count how often the alert fired and cleared. Several changes of state in a few hours, with the signal moving around the threshold, is flapping, not false_positive. Propose a longer duration, a gap between the firing and clearing levels, or a different threshold.
 
 ===== tools =====
 

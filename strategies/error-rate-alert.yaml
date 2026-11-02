@@ -8,6 +8,7 @@ sources:
 first:
   - Find the service, the endpoints and the status codes or error types that rose, and when the rise started.
   - Check what changed in the 2 hours before the alert started, such as deploys, config changes and feature flags.
+  - Split the errors by status class and compare the 5xx share with a normal period. 4xx answers are the client's, 5xx answers are the service's.
   - Read the most common error messages in the logs, and find where they come from, the service itself or a dependency.
   - Compare the error count with the request rate. A rate over very few requests is not a real rise.
   - Check whether the errors are still rising now, or whether they already stopped.
@@ -23,4 +24,6 @@ falsePositiveSigns:
   - The errors come from one known noisy client or a health check, and users are not affected.
 verdictHints:
   truePositive: Name the error that rose and where it comes from, and put a rollback first when a change caused it.
-  falsePositive: Propose a minimum request count, counting only server errors, or leaving out the noisy client or endpoint.
+  falsePositive: Propose a minimum request count, counting only server errors, or leaving out the noisy client or endpoint. When 4xx answers to bots or scanners make up the rise and 5xx answers stay at their normal level, users are not affected; a small part you cannot explain does not make it inconclusive.
+  duplicate: Name the open incident or alert that covers it, and point the responder to it instead of a separate fix.
+  knownIssue: Name the ticket that tracks it, and say what it plans.
