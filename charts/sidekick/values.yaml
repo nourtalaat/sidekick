@@ -242,6 +242,14 @@ rbac:
   # kubernetesSource makes these roles and their bindings. Turn it off to
   # manage them yourself.
   kubernetesSource: true
+  # actions makes what the actions of type prometheus.rule in config.actions
+  # need: a service account (config's serviceAccount, sidekick-actions by
+  # default), a Role that lets Sidekick's own account create tokens for it
+  # and for no other account, and in each namespace the actions list a Role
+  # that allows get and patch on the PrometheusRules they list by name. Turn
+  # it off to manage them yourself. Sidekick mounts its service account
+  # token whatever this says. docs/configuration.md lists every rule.
+  actions: true
 
 pdb:
   # enabled keeps at least minAvailable pods running during voluntary
