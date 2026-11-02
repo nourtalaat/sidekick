@@ -7,13 +7,24 @@
 // only the fields the action changed. docs/plugins/actions.md explains the
 // steps.
 //
-// What is not confirmed against a real Datadog account, and is marked with
-// ASSUMPTION below: the answer of the validate endpoint, that a PUT with
-// options replaces options as a whole, and the form of the modified field.
-// The checks also assume that Datadog keeps the values written as sent (tag
-// order, numbers, and no defaults filled into options after a PUT). If it
-// does not, the retry check after a crash fails as a conflict, and Undo
-// always asks to force.
+// What the action relies on from Datadog, as its public API specification
+// (the datadog-api-client-go OpenAPI file) and recorded answers of its
+// Terraform provider show it:
+//
+//   - POST /api/v1/monitor/{id}/validate takes a monitor definition, answers
+//     200 with {} when it is valid, and 400 with {"errors": ["..."]} when it
+//     is not, for a bad option value as well as for a bad query.
+//   - The monitor has a read-only modified time, which changes on every PUT.
+//     Only its equality is used.
+//   - The specification does not say how a PUT treats the fields it is not
+//     sent, so the action always sends the whole writable definition.
+//   - Datadog does not keep every value as it was sent: whole numbers come
+//     back as 3.0, options gains notify_audit and silenced, the tags come
+//     back in another order, the query and the message come back trimmed,
+//     options.no_data_timeframe is dropped while options.notify_no_data is
+//     false, and a query alert and a metric alert can read back as each
+//     other. normalise.go compares values the way Datadog reads them back,
+//     and Snapshot refuses a no_data_timeframe that Datadog would drop.
 package datadog
 
 import (
@@ -627,10 +638,9 @@ func definition(live map[string]json.RawMessage) (json.RawMessage, error) {
 	return raw, nil
 }
 
-// version is the time Datadog says the monitor was last modified, or "".
-// ASSUMPTION: the monitor has a modified field, a string such as
-// 2026-10-29T10:15:30.123456+00:00. Only equality is used, so its form
-// does not matter.
+// version is the time Datadog says the monitor was last modified, or "". It
+// is a date-time such as 2025-12-11T15:09:18.602860+00:00 that changes on
+// every edit. Only its equality is used.
 func version(live map[string]json.RawMessage) string {
 	var modified string
 	if err := json.Unmarshal(live["modified"], &modified); err != nil {

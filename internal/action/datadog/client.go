@@ -81,9 +81,9 @@ func (c *client) get(ctx context.Context, id int64) (map[string]json.RawMessage,
 // A 400 answer is Datadog finding the definition invalid, and the error
 // says why, wrapping action.ErrLimit.
 //
-// ASSUMPTION: POST /api/v1/monitor/{id}/validate takes the monitor
-// definition as its body, answers 2xx when it is valid, and answers 400
-// with {"errors": ["..."]} when it is not.
+// POST /api/v1/monitor/{id}/validate takes the monitor definition as its
+// body, answers 200 with {} when it is valid, and answers 400 with
+// {"errors": ["..."]} when it is not, also for a bad option value.
 func (c *client) validate(ctx context.Context, id int64, definition json.RawMessage) error {
 	err := c.do(ctx, http.MethodPost, monitorPath(id)+"/validate", definition, nil)
 
