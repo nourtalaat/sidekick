@@ -27,6 +27,18 @@ JOIN event_groups ON event_groups.id = events.group_id
 JOIN investigations ON investigations.id = event_groups.investigation_id
 WHERE events.id = @event_id;
 
+-- name: GetInvestigationMode :one
+-- GetInvestigationMode returns the action mode an investigation has now. A
+-- read-write investigation becomes approved when an event that is not
+-- trusted joins it. It reads one row by its primary key.
+SELECT mode FROM investigations WHERE id = @id;
+
+-- name: DowngradeInvestigationToApproved :execrows
+-- DowngradeInvestigationToApproved moves a read-write investigation to
+-- approved mode, so its proposals wait for a person. It changes nothing in
+-- any other mode. It writes one row by its primary key.
+UPDATE investigations SET mode = 'approved' WHERE id = @id AND mode = 'read-write';
+
 -- name: GetInvestigation :one
 SELECT * FROM investigations WHERE id = @id;
 

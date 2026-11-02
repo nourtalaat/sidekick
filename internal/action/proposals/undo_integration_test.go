@@ -67,6 +67,8 @@ func TestUndo(t *testing.T) {
 	require.JSONEq(t, fmt.Sprintf(`{"force":false,"undoOf":%q}`, id), string(row.Params))
 	require.Equal(t, "sidekick/"+undoID.String(), row.IdempotencyKey)
 	require.False(t, row.Undoable)
+	require.False(t, approvedByPolicy(row), "an undo is approved by the person who asked, never by the route's policy")
+	require.False(t, undo.ApprovedByPolicy)
 
 	require.Equal(t, "undone", h.row(t, id).Status)
 	require.Equal(t, []string{AuditProposed, AuditApproved, AuditExecuting, AuditSucceeded, AuditUndone}, h.auditActions(t, id))

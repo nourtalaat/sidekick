@@ -112,7 +112,11 @@ the sources returned.
   own words and is not checked. Approve asks to confirm. A proposal whose
   parameters are too long for the message has no Approve button: open the
   investigation in the web UI, read them all there, and decide there.
-  After a decision the message shows who decided, then whether the action
+  On a route in `read-write` mode there is nothing to press: the route's
+  policy approves the proposal as soon as it passes its checks, and the
+  message says "approved by policy (read + write route)". Slack commands
+  cannot set a route to `read-write`. After a decision the message shows
+  who decided, then whether the action
   ran, with the links it made, or why it failed. Of two people who press
   at the same moment, one decides, and the other gets a note saying who
   did. A proposal that expired cannot be approved, and one the config no

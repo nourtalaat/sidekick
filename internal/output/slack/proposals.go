@@ -227,23 +227,22 @@ func expiryLine(p action.Proposal) string {
 // became of it, and who decided.
 func proposalLine(p action.Proposal) string {
 	name := "*" + escape(cut(p.Action, maxTitleChars)) + "*"
-	by := decider(p)
 
 	if p.UndoOf != "" {
-		return undoLine(p, name, by)
+		return undoLine(p, name, decider(p))
 	}
 
 	switch p.Status {
 	case action.StatusApproved:
-		return ":white_check_mark: " + name + " approved" + byPart(by) + ", waiting to run"
+		return ":white_check_mark: " + name + " " + approval(p) + ", " + waitingToRun(p)
 	case action.StatusRejected:
-		return ":x: " + name + " rejected" + byPart(by)
+		return ":x: " + name + " rejected" + byPart(decider(p))
 	case action.StatusExpired:
 		return ":hourglass: " + name + " expired: nobody decided in time"
 	case action.StatusExecuting:
-		return ":gear: " + name + " approved" + byPart(by) + ", running now"
+		return ":gear: " + name + " " + approval(p) + ", running now"
 	case action.StatusSucceeded:
-		return ":white_check_mark: " + name + " done" + byPart(by) + resultPart(p)
+		return ":white_check_mark: " + name + " done" + afterPart(p) + resultPart(p)
 	case action.StatusUndone:
 		return ":leftwards_arrow_with_hook: " + name + " undone"
 	case action.StatusFailed:
@@ -252,7 +251,7 @@ func proposalLine(p action.Proposal) string {
 			detail = ": " + escape(cut(p.Error, maxResultChars))
 		}
 
-		return ":warning: " + name + " failed" + byPart(by) + detail
+		return ":warning: " + name + " failed" + afterPart(p) + detail
 	default:
 		return name + " " + escape(string(p.Status))
 	}
@@ -275,6 +274,36 @@ func undoLine(p action.Proposal, name, by string) string {
 	default:
 		return "The undo of " + name + " " + escape(string(p.Status))
 	}
+}
+
+// approval says who approved the proposal: "approved by <who>", or
+// action.PolicyApprovalText for a proposal the route's policy approved.
+func approval(p action.Proposal) string {
+	if p.ApprovedByPolicy {
+		return action.PolicyApprovalText
+	}
+
+	return "approved" + byPart(decider(p))
+}
+
+// waitingToRun says what an approved proposal waits for. One the policy
+// approved has its job queued already.
+func waitingToRun(p action.Proposal) string {
+	if p.ApprovedByPolicy {
+		return "running now"
+	}
+
+	return "waiting to run"
+}
+
+// afterPart is " by <who>" after done or failed, or, for a proposal the
+// policy approved, a comma and why no person is named.
+func afterPart(p action.Proposal) string {
+	if p.ApprovedByPolicy {
+		return ", " + action.PolicyApprovalText
+	}
+
+	return byPart(decider(p))
 }
 
 // byPart is " by <who>", or nothing when nobody is known.

@@ -637,10 +637,16 @@ used by every replica within seconds.
   `grouping`. Durations are written as `5m`. A route needs a `match`, uses
   only the sources, outputs, strategies and actions of the config file,
   keeps its budgets at or below the global ones, and has the mode
-  `read-only` or `approved`; an `approved` route lists at least one action.
-  Only an admin can save a route, so only an admin can let the model
-  propose actions, and Slack commands cannot. A runtime listener is never
-  trusted.
+  `read-only`, `approved` or `read-write`; an `approved` or `read-write`
+  route lists at least one action. A `read-write` route runs the model's
+  proposals without a person, so it can select only trusted intakes, which
+  the runtime listeners and mentions never are, unless the body sets
+  `allowUntrustedWrite: true`; see [read + write
+  mode](configuration.md#read--write-mode-and-trusted-senders). Only an
+  admin can save a route, so only an admin can let the model propose
+  actions, and Slack commands cannot. A runtime listener is never trusted.
+  A proposal that a `read-write` route approved has `approvedByPolicy: true`
+  and no decider; its `decidedAt` is the time of the approval.
 - `PUT` takes the `version` of the rule that was read. If the rule has
   changed since, the answer is 409 with the code `stale`.
 - `DELETE /{name}` removes a runtime rule. It also removes a runtime rule
@@ -760,7 +766,10 @@ The navigation has a page for each:
   Delete asks first. A save runs the same checks as the config file and
   the `/sidekick` commands, and the form shows each problem under its
   field, with problems that belong to no field in a message at the top.
-  The mode of a route can only be read-only for now. If someone else
+  The route form offers the three modes. In `read-write` mode it also
+  shows the checkbox for senders that are not trusted, and saving with it
+  on first asks you to confirm, naming the route; Cancel sends nothing.
+  If someone else
   changed the rule while the form was open, the form says so and offers
   to load the new version.
 - **Audit log** (`/audit`, admins) shows the entries newest first, with

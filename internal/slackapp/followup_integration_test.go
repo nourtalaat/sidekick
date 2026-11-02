@@ -39,6 +39,10 @@ func TestFollowUpQuestions(t *testing.T) {
 		roles func(t *testing.T, refreshes *int) roles.Lookup
 		// triageOnly makes the investigation a triage-only result.
 		triageOnly bool
+		// readWrite makes the investigation read-write, and wantMode is its
+		// mode afterwards.
+		readWrite bool
+		wantMode  string
 		// wantNote is the note only the asker sees, when the question is
 		// not sent, and wantRefreshes how often the role was read again.
 		wantNote      string
@@ -46,6 +50,29 @@ func TestFollowUpQuestions(t *testing.T) {
 	}{
 		{
 			name: "a viewer's question is refused with a note only they see",
+			roles: func(t *testing.T, _ *int) roles.Lookup {
+				t.Helper()
+
+				lookup, err := slackroles.New(slackroles.Options{Slack: &config.Slack{RoleUsers: map[string]config.RoleName{"U03BOB": config.RoleViewer}}})
+				require.NoError(t, err)
+
+				return lookup
+			},
+			send:     []string{"follow-up-mention"},
+			wantNote: noteQuestionDenied,
+		},
+		{
+			name:       "a question moves a read-write investigation to approved mode",
+			readWrite:  true,
+			send:       []string{"follow-up-mention"},
+			want:       []string{"did the deploy cause it? The token was [REDACTED:seeded:"},
+			wantAuthor: "U03BOB",
+			wantMode:   "approved",
+		},
+		{
+			name:      "a question that is refused leaves a read-write investigation as it is",
+			readWrite: true,
+			wantMode:  "read-write",
 			roles: func(t *testing.T, _ *int) roles.Lookup {
 				t.Helper()
 
@@ -125,6 +152,11 @@ func TestFollowUpQuestions(t *testing.T) {
 				require.NoError(t, err)
 			}
 
+			if tt.readWrite {
+				_, err := h.pool.Exec(t.Context(), "UPDATE investigations SET mode = 'read-write' WHERE id = $1", followUpInvestigation)
+				require.NoError(t, err)
+			}
+
 			if tt.wantNote != "" {
 				h.slack.Handle(http.MethodGet, "/"+methodEphemeral, fakehttp.Response{Body: []byte(`{"ok":true}`)})
 				h.slack.ExpectAllCalled()
@@ -155,6 +187,13 @@ func TestFollowUpQuestions(t *testing.T) {
 			require.Zero(t, h.routeJobs(t))
 			require.Equal(t, min(len(tt.want), 1), followUpJobs(t, h), "an investigation that has ended gets one follow_up job")
 			require.Equal(t, tt.wantRefreshes, refreshes)
+
+			if tt.wantMode != "" {
+				var mode string
+
+				require.NoError(t, h.pool.QueryRow(t.Context(), "SELECT mode FROM investigations WHERE id = $1", followUpInvestigation).Scan(&mode))
+				require.Equal(t, tt.wantMode, mode)
+			}
 
 			if tt.wantNote == "" {
 				require.Empty(t, h.slack.Requests(), "the thread's first message is not fetched")

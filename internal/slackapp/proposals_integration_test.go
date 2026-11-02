@@ -244,7 +244,7 @@ func (b *buttonsHarness) succeededChange(t *testing.T, monitor *monitorAction) u
 	_, err = b.pool.Exec(t.Context(), `
 		INSERT INTO action_proposals (id, investigation_id, action, params, reason, mode, status, idempotency_key,
 		                              proposed_at, expires_at, decided_by_slack_user, decided_at, executed_at, result, snapshot, undoable)
-		VALUES ($1, $2, 'monitor', '{"threshold": 3}', 'Too noisy.', 'approved', 'succeeded', 'sidekick/' || $1::text,
+		VALUES ($1::uuid, $2, 'monitor', '{"threshold": 3}', 'Too noisy.', 'approved', 'succeeded', 'sidekick/' || $1::uuid::text,
 		        now() - interval '2 hours', now() + interval '22 hours', 'U01ANA', now() - interval '110 minutes', now() - interval '100 minutes',
 		        '{"summary": "Changed the monitor."}',
 		        '{"target": "fake:monitor/1", "before": {"options": {"critical": 2}}, "after": {"options": {"critical": 3}}}', true)`,
