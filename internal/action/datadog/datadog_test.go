@@ -337,6 +337,53 @@ func TestSnapshotAllowsAMonitorByItsTag(t *testing.T) {
 	require.ErrorIs(t, err, action.ErrLimit)
 }
 
+func TestAChangeCannotTakeAMonitorOutOfTheLimits(t *testing.T) {
+	t.Parallel()
+
+	byTag := limitsOf()
+	byTag.MonitorIDs, byTag.MonitorTags = nil, []string{"team:payments"}
+
+	tests := []struct {
+		name    string
+		limits  Limits
+		params  string
+		wantErr string
+	}{
+		{name: "the allowing tag is dropped", limits: byTag, params: `{"monitorId": 123, "set": {"tags": ["env:prod"]}}`, wantErr: "the change would take monitor 123 out of limits.monitorTags"},
+		{name: "the tags are no list", limits: byTag, params: `{"monitorId": 123, "set": {"tags": "team:payments"}}`, wantErr: "not a list of text"},
+		{name: "another tag is added", limits: byTag, params: `{"monitorId": 123, "set": {"tags": ["team:payments", "env:prod", "new"]}}`},
+		{name: "a monitor allowed by its ID can lose its tags", limits: limitsOf(), params: `{"monitorId": 123, "set": {"tags": []}}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			api, _ := newFakeDatadog(t)
+
+			_, err := newTestAction(t, api, tt.limits).Snapshot(t.Context(), json.RawMessage(tt.params))
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+
+				return
+			}
+
+			require.ErrorContains(t, err, tt.wantErr)
+			require.ErrorIs(t, err, action.ErrLimit)
+		})
+	}
+
+	// A snapshot made while the monitor was allowed by its ID is not written
+	// once only the tag allows it.
+	api, dd := newFakeDatadog(t)
+	params := `{"monitorId": 123, "set": {"tags": ["env:prod"]}}`
+	snap := proposed(t, newTestAction(t, api, limitsOf()), params)
+
+	_, err := newTestAction(t, api, byTag).Execute(t.Context(), invocationOf(params, &snap))
+	require.ErrorIs(t, err, action.ErrLimit)
+	require.Zero(t, dd.putCount())
+}
+
 func TestSnapshotRefusals(t *testing.T) {
 	t.Parallel()
 
@@ -456,7 +503,7 @@ func TestValidate(t *testing.T) {
 	require.NoError(t, both.Validate(t.Context(), json.RawMessage(`{"monitorId": 123, "delete": true}`)))
 }
 
-// manyKeys writes n keys of a JSON object, all in the message field's path.
+// manyKeys writes n keys of a JSON object, each a position of the tags.
 func manyKeys(n int) string {
 	parts := make([]string, n)
 	for i := range parts {

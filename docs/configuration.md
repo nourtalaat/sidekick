@@ -1534,6 +1534,13 @@ actions:
   The first key must be `name`, `query`, `message`, `tags`, `priority` or
   `options`. Positions in a list are written `[0]`, and `[*]` stands for any
   position.
+  Allowing `message` lets the model change which handles are notified,
+  because the `@` handles in a Datadog message (such as `@pagerduty-team` or
+  `@slack-ops`) decide where notifications go. Approvers should read the
+  handles in the difference. Allowing `tags` lets the model change which
+  monitors the action reaches by tag; a change that would remove the tag
+  that allows a monitor is refused, so the action never moves a monitor out of
+  its own limits.
 - `allowDelete: true` lets the model propose to delete a monitor. A delete
   cannot be undone in Sidekick, and Slack and the web UI say so before it is
   approved.

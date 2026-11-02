@@ -164,9 +164,11 @@ func (m *Monitor) Spec() action.Spec {
 // that is allowed by its tags is checked when the monitor is read. A limit
 // violation wraps action.ErrLimit.
 func (m *Monitor) Validate(_ context.Context, raw json.RawMessage) error {
-	_, _, err := m.parse(raw)
+	if _, _, err := m.parse(raw); err != nil {
+		return fmt.Errorf("check the parameters: %w", err)
+	}
 
-	return err
+	return nil
 }
 
 // parse decodes the parameters and checks them against the limits. It
@@ -198,7 +200,7 @@ func (m *Monitor) parse(raw json.RawMessage) (Params, []action.Edit, error) {
 
 	edits, err := m.edits(p.Set)
 	if err != nil {
-		return Params{}, nil, err
+		return Params{}, nil, fmt.Errorf("check the fields to set: %w", err)
 	}
 
 	return p, edits, nil
@@ -246,12 +248,12 @@ func (m *Monitor) Snapshot(ctx context.Context, raw json.RawMessage) (action.Sna
 	}
 
 	if err := m.checkMonitor(p.MonitorID, live); err != nil {
-		return action.Snapshot{}, err
+		return action.Snapshot{}, fmt.Errorf("check the monitor against the limits: %w", err)
 	}
 
 	before, err := definition(live)
 	if err != nil {
-		return action.Snapshot{}, err
+		return action.Snapshot{}, fmt.Errorf("keep the writable fields: %w", err)
 	}
 
 	snap := action.Snapshot{Target: target(p.MonitorID), Before: before, Version: version(live)}
@@ -274,8 +276,12 @@ func (m *Monitor) Snapshot(ctx context.Context, raw json.RawMessage) (action.Sna
 		return action.Snapshot{}, fmt.Errorf("check the fields: %w", err)
 	}
 
+	if err := m.checkAfter(p.MonitorID, snap.After); err != nil {
+		return action.Snapshot{}, fmt.Errorf("check the monitor after the change: %w", err)
+	}
+
 	if err := m.client.validate(ctx, p.MonitorID, snap.After); err != nil {
-		return action.Snapshot{}, err
+		return action.Snapshot{}, fmt.Errorf("ask Datadog to validate the new definition: %w", err)
 	}
 
 	return snap, nil
@@ -315,12 +321,12 @@ func (m *Monitor) executeUpdate(ctx context.Context, id int64, snap action.Snaps
 	}
 
 	if err := m.checkMonitor(id, live); err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("check the monitor against the limits: %w", err)
 	}
 
 	cur, err := definition(live)
 	if err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("keep the writable fields: %w", err)
 	}
 
 	deltas, err := action.Diff(snap.Before, snap.After)
@@ -330,6 +336,10 @@ func (m *Monitor) executeUpdate(ctx context.Context, id int64, snap action.Snaps
 
 	if err := action.CheckFields(m.allowed, deltas); err != nil {
 		return action.Result{}, fmt.Errorf("check the fields: %w", err)
+	}
+
+	if err := m.checkAfter(id, snap.After); err != nil {
+		return action.Result{}, fmt.Errorf("check the monitor after the change: %w", err)
 	}
 
 	done, err := action.AtAfter(cur, deltas)
@@ -343,7 +353,7 @@ func (m *Monitor) executeUpdate(ctx context.Context, id int64, snap action.Snaps
 
 	unchanged, err := sameDefinition(cur, snap.Before)
 	if err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("compare the monitor with the snapshot: %w", err)
 	}
 
 	if !unchanged || version(live) != snap.Version {
@@ -352,11 +362,11 @@ func (m *Monitor) executeUpdate(ctx context.Context, id int64, snap action.Snaps
 
 	body, err := fieldsOf(snap.After, deltas)
 	if err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("choose the fields to write: %w", err)
 	}
 
 	if err := m.client.update(ctx, id, body); err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("write the change: %w", err)
 	}
 
 	return m.changed(id, snap.After, len(deltas)), nil
@@ -376,17 +386,17 @@ func (m *Monitor) executeDelete(ctx context.Context, id int64, snap action.Snaps
 	}
 
 	if err := m.checkMonitor(id, live); err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("check the monitor against the limits: %w", err)
 	}
 
 	cur, err := definition(live)
 	if err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("keep the writable fields: %w", err)
 	}
 
 	unchanged, err := sameDefinition(cur, snap.Before)
 	if err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("compare the monitor with the snapshot: %w", err)
 	}
 
 	if !unchanged || version(live) != snap.Version {
@@ -394,7 +404,7 @@ func (m *Monitor) executeDelete(ctx context.Context, id int64, snap action.Snaps
 	}
 
 	if err := m.client.remove(ctx, id); err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("delete the monitor: %w", err)
 	}
 
 	return action.Result{Summary: fmt.Sprintf("Deleted monitor %d, %s.", id, nameOf(snap.Before))}, nil
@@ -422,12 +432,12 @@ func (m *Monitor) Undo(ctx context.Context, inv action.Invocation, snap action.S
 	}
 
 	if err := m.checkMonitor(p.MonitorID, live); err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("check the monitor against the limits: %w", err)
 	}
 
 	cur, err := definition(live)
 	if err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("keep the writable fields: %w", err)
 	}
 
 	deltas, err := action.Diff(snap.Before, snap.After)
@@ -464,18 +474,18 @@ func (m *Monitor) Undo(ctx context.Context, inv action.Invocation, snap action.S
 
 	body, err := fieldsOf(back, deltas)
 	if err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("choose the fields to write: %w", err)
 	}
 
 	if err := m.client.update(ctx, p.MonitorID, body); err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("write the restore: %w", err)
 	}
 
 	return m.restored(p.MonitorID, back, len(deltas)), nil
 }
 
 // checkMonitor checks that the monitor read from Datadog is one the limits
-// allow: its ID is in limits.monitorIds, or it has a tag of limits.monitorTags.
+// allow: its ID is in limits.monitorIDs, or it has a tag of limits.monitorTags.
 func (m *Monitor) checkMonitor(id int64, live map[string]json.RawMessage) error {
 	if slices.Contains(m.limits.MonitorIDs, id) {
 		return nil
@@ -488,11 +498,41 @@ func (m *Monitor) checkMonitor(id int64, live map[string]json.RawMessage) error 
 		}
 	}
 
-	if slices.ContainsFunc(tags, func(t string) bool { return slices.Contains(m.limits.MonitorTags, t) }) {
+	if m.hasAllowedTag(tags) {
 		return nil
 	}
 
 	return fmt.Errorf("monitor %d: %w: %w", id, action.ErrLimit, errNotAllowed)
+}
+
+// checkAfter checks that the monitor is still one the limits allow once the
+// change is made. A change must not take a monitor out of the action's
+// reach, for example by removing the tag that allows it: the model would
+// have moved it beyond the operator's limits, and Undo could never reach it
+// again. A monitor allowed by its ID is always in reach.
+func (m *Monitor) checkAfter(id int64, after json.RawMessage) error {
+	if slices.Contains(m.limits.MonitorIDs, id) {
+		return nil
+	}
+
+	var parsed struct {
+		Tags []string `json:"tags"`
+	}
+
+	if err := json.Unmarshal(after, &parsed); err != nil {
+		return fmt.Errorf("the tags after the change are not a list of text: %w: %w", action.ErrLimit, err)
+	}
+
+	if m.hasAllowedTag(parsed.Tags) {
+		return nil
+	}
+
+	return fmt.Errorf("the change would take monitor %d out of limits.monitorTags: %w", id, action.ErrLimit)
+}
+
+// hasAllowedTag reports whether one of tags is in limits.monitorTags.
+func (m *Monitor) hasAllowedTag(tags []string) bool {
+	return slices.ContainsFunc(tags, func(t string) bool { return slices.Contains(m.limits.MonitorTags, t) })
 }
 
 // changed is the result of a change that is in place.
