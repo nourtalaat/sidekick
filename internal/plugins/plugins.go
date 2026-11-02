@@ -11,6 +11,7 @@ import (
 	_ "github.com/nourtalaat/sidekick/internal/action/jira"           // Action types "jira.comment" and "jira.issue".
 	_ "github.com/nourtalaat/sidekick/internal/action/linear"         // Action types "linear.comment" and "linear.issue".
 	_ "github.com/nourtalaat/sidekick/internal/action/prometheusrule" // Action type "prometheus.rule".
+	_ "github.com/nourtalaat/sidekick/internal/action/signoz"         // Action type "signoz.alert_rule".
 	_ "github.com/nourtalaat/sidekick/internal/action/slack"          // Action types "slack.reply" and "slack.reaction".
 	_ "github.com/nourtalaat/sidekick/internal/intake/alertmanager"   // Intake adapter "alertmanager".
 	_ "github.com/nourtalaat/sidekick/internal/intake/datadog"        // Intake adapter "datadog".
