@@ -207,7 +207,7 @@ func AddFollowUpTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, q Question) (bo
 	}
 
 	if err := downgradeOnFollowUp(ctx, queries, inv); err != nil {
-		return false, err
+		return false, fmt.Errorf("lower the action mode: %w", err)
 	}
 
 	if answers(inv) {
