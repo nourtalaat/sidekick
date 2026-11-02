@@ -61,7 +61,7 @@ func TestReactionValidate(t *testing.T) {
 		{name: "an allowed emoji", params: `{"emoji": "eyes"}`},
 		{name: "an emoji that is not allowed", params: `{"emoji": "fire"}`, wantErr: `emoji "fire": outside configured limits: the emoji is not one of limits.emoji`, wantLimit: true},
 		{name: "colons", params: `{"emoji": ":eyes:"}`, wantErr: "emoji: expected the name of an emoji without colons, such as eyes"},
-		{name: "an unknown parameter", params: `{"emoji": "eyes", "channel": "C1"}`, wantErr: `decode the parameters: json: unknown field "channel"`},
+		{name: "an unknown parameter", params: `{"emoji": "eyes", "channel": "C1"}`, wantErr: `decode: invalid parameters: json: unknown field "channel"`},
 	}
 
 	for _, tt := range tests {
@@ -77,7 +77,7 @@ func TestReactionValidate(t *testing.T) {
 				return
 			}
 
-			require.EqualError(t, err, tt.wantErr)
+			require.EqualError(t, err, "validate react: "+tt.wantErr)
 			require.Equal(t, tt.wantLimit, errors.Is(err, action.ErrLimit))
 		})
 	}

@@ -67,7 +67,7 @@ var _ action.Action = (*Reaction)(nil)
 func NewReaction(_ context.Context, name string, cfg ReactionConfig, deps registry.Deps) (action.Action, error) {
 	svc, err := newService(name, cfg.Connection, cfg.Limits.Channels, deps)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("slack action %q: %w", name, err)
 	}
 
 	return &Reaction{service: svc, emoji: cfg.Limits.Emoji}, nil
@@ -86,9 +86,11 @@ func (r *Reaction) Spec() action.Spec {
 // Validate implements action.Action. The channel is not known until the
 // action runs, because it comes from the investigation.
 func (r *Reaction) Validate(_ context.Context, raw json.RawMessage) error {
-	_, err := r.check(raw)
+	if _, err := r.check(raw); err != nil {
+		return fmt.Errorf("validate %s: %w", r.name, err)
+	}
 
-	return err
+	return nil
 }
 
 // Execute implements action.Action. It finds the alert message, checks its
@@ -106,7 +108,7 @@ func (r *Reaction) Execute(ctx context.Context, inv action.Invocation) (action.R
 	}
 
 	if err := r.channelAllowed(alert.Channel); err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("check the channel: %w", err)
 	}
 
 	if err := r.client.addReaction(ctx, alert.Channel, alert.TS, p.Emoji); err != nil {
@@ -119,8 +121,8 @@ func (r *Reaction) Execute(ctx context.Context, inv action.Invocation) (action.R
 // check decodes the parameters and checks them against the limits.
 func (r *Reaction) check(raw json.RawMessage) (ReactionParams, error) {
 	var p ReactionParams
-	if err := decodeStrict(raw, &p); err != nil {
-		return ReactionParams{}, err
+	if err := action.DecodeParams(raw, &p); err != nil {
+		return ReactionParams{}, fmt.Errorf("decode: %w", err)
 	}
 
 	if !emojiPattern.MatchString(p.Emoji) {
@@ -128,7 +130,7 @@ func (r *Reaction) check(raw json.RawMessage) (ReactionParams, error) {
 	}
 
 	if !slices.Contains(r.emoji, p.Emoji) {
-		return ReactionParams{}, fmt.Errorf("emoji %q: %w: %w", p.Emoji, action.ErrLimit, errEmojiLimit)
+		return ReactionParams{}, action.LimitError(errEmojiLimit, "emoji %q", p.Emoji)
 	}
 
 	return p, nil

@@ -7,8 +7,6 @@
 package slack
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -98,11 +96,11 @@ type service struct {
 // newService builds the part both actions share.
 func newService(name string, conn Connection, channels []string, deps registry.Deps) (service, error) {
 	if deps.SlackBotToken == (registry.SecretRef{}) {
-		return service{}, fmt.Errorf("slack action %q: %w", name, errNoToken)
+		return service{}, errNoToken
 	}
 
 	if deps.Secrets == nil {
-		return service{}, fmt.Errorf("slack action %q: %w", name, errNoSecrets)
+		return service{}, errNoSecrets
 	}
 
 	hc := deps.HTTP
@@ -128,26 +126,13 @@ func newService(name string, conn Connection, channels []string, deps registry.D
 // not one of the allowed channels.
 func (s service) channelAllowed(channel string) error {
 	if !slices.Contains(s.channels, channel) {
-		return fmt.Errorf("channel %s: %w: %w", channel, action.ErrLimit, errChannelLimit)
+		return action.LimitError(errChannelLimit, "channel %s", channel)
 	}
 
 	return nil
 }
 
 var errChannelLimit = errors.New("the message is in a channel that is not one of limits.channels")
-
-// decodeStrict decodes the parameters of an action into v and refuses keys
-// that v does not have.
-func decodeStrict(raw json.RawMessage, v any) error {
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-
-	if err := dec.Decode(v); err != nil {
-		return fmt.Errorf("decode the parameters: %w", err)
-	}
-
-	return nil
-}
 
 // escape writes the three characters Slack treats as control characters of
 // its markup as entities, so text cannot add a mention such as <!channel>

@@ -63,7 +63,7 @@ var _ Targets = dbTargets{}
 func (t dbTargets) Thread(ctx context.Context, investigationID string) (Target, error) {
 	id, err := parseID(investigationID, t.db)
 	if err != nil {
-		return Target{}, err
+		return Target{}, fmt.Errorf("read the investigation ID: %w", err)
 	}
 
 	refs, err := db.New(t.db).ListInvestigationOutputRefs(ctx, id)
@@ -82,7 +82,7 @@ func (t dbTargets) Thread(ctx context.Context, investigationID string) (Target, 
 	case errors.Is(err, errNoAlert):
 		return Target{}, fmt.Errorf("%w: %w: %w", action.ErrPermanent, errNoThread, err)
 	case err != nil:
-		return Target{}, err
+		return Target{}, fmt.Errorf("find the alert message: %w", err)
 	}
 
 	if alert.thread != "" {
@@ -96,12 +96,12 @@ func (t dbTargets) Thread(ctx context.Context, investigationID string) (Target, 
 func (t dbTargets) Alert(ctx context.Context, investigationID string) (Target, error) {
 	id, err := parseID(investigationID, t.db)
 	if err != nil {
-		return Target{}, err
+		return Target{}, fmt.Errorf("read the investigation ID: %w", err)
 	}
 
 	alert, err := t.alert(ctx, id)
 	if err != nil {
-		return Target{}, err
+		return Target{}, fmt.Errorf("find the alert message: %w", err)
 	}
 
 	return Target{Channel: alert.channel, TS: alert.ts}, nil

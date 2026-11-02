@@ -30,8 +30,6 @@ const (
 	maxOwnMessages = 10
 	// fallbackChars is how much of the text goes in the notification text.
 	fallbackChars = 300
-	// footerText is the line under every reply.
-	footerText = "Sent by Sidekick after an approver approved it."
 )
 
 // urlEscaper keeps a URL inside Slack's <url|text> syntax.
@@ -86,7 +84,7 @@ var _ action.Action = (*Reply)(nil)
 func NewReply(_ context.Context, name string, cfg ReplyConfig, deps registry.Deps) (action.Action, error) {
 	svc, err := newService(name, cfg.Connection, cfg.Limits.Channels, deps)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("slack action %q: %w", name, err)
 	}
 
 	return &Reply{service: svc}, nil
@@ -105,9 +103,11 @@ func (r *Reply) Spec() action.Spec {
 // Validate implements action.Action. The channel is not known until the
 // action runs, because it comes from the investigation.
 func (r *Reply) Validate(_ context.Context, raw json.RawMessage) error {
-	_, err := r.check(raw)
+	if _, err := r.check(raw); err != nil {
+		return fmt.Errorf("validate %s: %w", r.name, err)
+	}
 
-	return err
+	return nil
 }
 
 // Execute implements action.Action. It finds the thread of the
@@ -126,7 +126,7 @@ func (r *Reply) Execute(ctx context.Context, inv action.Invocation) (action.Resu
 	}
 
 	if err := r.channelAllowed(thread.Channel); err != nil {
-		return action.Result{}, err
+		return action.Result{}, fmt.Errorf("check the channel: %w", err)
 	}
 
 	ts, err := r.earlierReply(ctx, thread, inv.IdempotencyKey)
@@ -147,15 +147,15 @@ func (r *Reply) Execute(ctx context.Context, inv action.Invocation) (action.Resu
 // check decodes the parameters and checks them.
 func (r *Reply) check(raw json.RawMessage) (ReplyParams, error) {
 	var p ReplyParams
-	if err := decodeStrict(raw, &p); err != nil {
-		return ReplyParams{}, err
+	if err := action.DecodeParams(raw, &p); err != nil {
+		return ReplyParams{}, fmt.Errorf("decode: %w", err)
 	}
 
 	switch n := utf8.RuneCountInString(p.Text); {
 	case strings.TrimSpace(p.Text) == "":
 		return ReplyParams{}, errEmptyText
 	case n > maxReplyChars:
-		return ReplyParams{}, fmt.Errorf("%d characters, at most %d: %w: %w", n, maxReplyChars, action.ErrLimit, errLongText)
+		return ReplyParams{}, action.LimitError(errLongText, "%d characters, at most %d", n, maxReplyChars)
 	}
 
 	return p, nil
@@ -165,7 +165,7 @@ func (r *Reply) check(raw json.RawMessage) (ReplyParams, error) {
 // block, which Slack never reads as markup; the notification text is
 // escaped and sent with markup reading off. The line under it is ours.
 func (r *Reply) message(thread Target, body string, inv action.Invocation) postedMessage {
-	footer := footerText
+	footer := inv.ApprovalNote("Sent")
 	if link := weblink.Investigation(r.publicURL, inv.InvestigationID); link != "" {
 		footer += " <" + urlEscaper.Replace(link) + "|Investigation>"
 	}
@@ -192,7 +192,7 @@ func (r *Reply) message(thread Target, body string, inv action.Invocation) poste
 func (r *Reply) earlierReply(ctx context.Context, thread Target, key string) (string, error) {
 	own, err := r.ownMessages(ctx, thread)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("find the bot's messages: %w", err)
 	}
 
 	for _, ts := range own {

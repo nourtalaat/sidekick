@@ -79,7 +79,7 @@ func TestReplyValidate(t *testing.T) {
 		{name: "a reply at the limit", params: `{"text": "` + strings.Repeat("x", maxReplyChars) + `"}`},
 		{name: "too long", params: `{"text": "` + strings.Repeat("x", maxReplyChars+1) + `"}`, wantErr: "1501 characters, at most 1500: outside configured limits: text: too long", wantLimit: true},
 		{name: "empty", params: `{"text": "  "}`, wantErr: "text: required"},
-		{name: "a channel the model chose", params: `{"text": "x", "channel": "C999"}`, wantErr: `decode the parameters: json: unknown field "channel"`},
+		{name: "a channel the model chose", params: `{"text": "x", "channel": "C999"}`, wantErr: `decode: invalid parameters: json: unknown field "channel"`},
 	}
 
 	for _, tt := range tests {
@@ -95,7 +95,7 @@ func TestReplyValidate(t *testing.T) {
 				return
 			}
 
-			require.EqualError(t, err, tt.wantErr)
+			require.EqualError(t, err, "validate reply-in-thread: "+tt.wantErr)
 			require.Equal(t, tt.wantLimit, errors.Is(err, action.ErrLimit))
 		})
 	}
@@ -176,7 +176,7 @@ func TestReplyExecuteLeavesOutTheLinkWithoutAPublicURL(t *testing.T) {
 
 	_, err = a.Execute(t.Context(), invocation(replyOK))
 	require.NoError(t, err)
-	require.Equal(t, footerText, f.posts[0].Blocks[1].Elements[0].Text)
+	require.Equal(t, "Sent by Sidekick after an approver approved it.", f.posts[0].Blocks[1].Elements[0].Text)
 }
 
 // TestReplyExecuteTwiceWithTheSameKey is the crash and retry case: the
@@ -311,4 +311,34 @@ func TestReplySpecNamesTheLimits(t *testing.T) {
 	require.Equal(t, "reply-in-thread", spec.Name)
 	require.Contains(t, spec.Description, "Allowed channels: C0123456789, C0000000002.")
 	require.True(t, json.Valid(spec.ParamsSchema))
+}
+
+func TestReplyExecuteSaysWhoApproved(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		approvedBy string
+		want       string
+	}{
+		{name: "an approver", approvedBy: "u1", want: "Sent by Sidekick after an approver approved it. <" + testPublicURL + "/investigations/" + testInvestigationID + "|Investigation>"},
+		{name: "a Slack approver", approvedBy: "U0123", want: "Sent by Sidekick after an approver approved it. <" + testPublicURL + "/investigations/" + testInvestigationID + "|Investigation>"},
+		{name: "the policy of a read-write route", approvedBy: "policy", want: "Sent by Sidekick, approved by the read + write policy of its route. <" + testPublicURL + "/investigations/" + testInvestigationID + "|Investigation>"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f, api := newServer(t)
+
+			inv := invocation(replyOK)
+			inv.ApprovedBy = tt.approvedBy
+
+			_, err := newReply(t, api, targetsAt(t, testChannel), testChannel).Execute(t.Context(), inv)
+			require.NoError(t, err)
+			require.Len(t, f.posts, 1)
+			require.Equal(t, tt.want, f.posts[0].Blocks[1].Elements[0].Text)
+		})
+	}
 }

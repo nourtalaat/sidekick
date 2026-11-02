@@ -17,6 +17,8 @@ const (
 	slackAlertInThread    = "0192d3a4-0000-7000-8000-0000000000c2"
 	webhookAlertWithPost  = "0192d3a4-0000-7000-8000-0000000000c3"
 	webhookAlertNoMessage = "0192d3a4-0000-7000-8000-0000000000c4"
+	webhookThenMention    = "0192d3a4-0000-7000-8000-0000000000c5"
+	personPostedAlert     = "0192d3a4-0000-7000-8000-0000000000c6"
 )
 
 // TestMain runs the tests, then lets storetest stop the Postgres container

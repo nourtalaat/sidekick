@@ -146,7 +146,7 @@ func (c *client) botUserID(ctx context.Context) (string, error) {
 	}
 
 	if err := c.post(ctx, methodAuthTest, struct{}{}, &out); err != nil {
-		return "", err
+		return "", fmt.Errorf("ask who the bot is: %w", err)
 	}
 
 	if out.UserID == "" {
@@ -175,7 +175,7 @@ func (c *client) replies(ctx context.Context, q repliesQuery) (repliesPage, erro
 
 	var out repliesPage
 	if err := c.get(ctx, methodReplies, query, &out); err != nil {
-		return repliesPage{}, err
+		return repliesPage{}, fmt.Errorf("read the replies: %w", err)
 	}
 
 	return out, nil
@@ -188,7 +188,7 @@ func (c *client) postMessage(ctx context.Context, m postedMessage) (string, erro
 	}
 
 	if err := c.post(ctx, methodPostMessage, m, &out); err != nil {
-		return "", err
+		return "", fmt.Errorf("post the message: %w", err)
 	}
 
 	if out.TS == "" {
@@ -206,7 +206,7 @@ func (c *client) permalink(ctx context.Context, channel, ts string) (string, err
 
 	query := url.Values{"channel": {channel}, "message_ts": {ts}}
 	if err := c.get(ctx, methodGetPermalink, query, &out); err != nil {
-		return "", err
+		return "", fmt.Errorf("get the permalink: %w", err)
 	}
 
 	return out.Permalink, nil
@@ -218,11 +218,15 @@ func (c *client) addReaction(ctx context.Context, channel, ts, name string) erro
 	body := map[string]string{"channel": channel, "timestamp": ts, "name": name}
 
 	err := c.post(ctx, methodReactionAdd, body, nil)
+	if err == nil {
+		return nil
+	}
+
 	if se, ok := errors.AsType[*slackError](err); ok && se.Code == codeAlreadyReact {
 		return nil
 	}
 
-	return err
+	return fmt.Errorf("add the reaction: %w", err)
 }
 
 // post sends a method with a JSON body.

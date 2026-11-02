@@ -22,10 +22,12 @@ func TestThread(t *testing.T) {
 		want          Target
 		wantErr       error
 	}{
-		{name: "the thread a Slack output published, not the Teams one", investigation: slackAlertWithThread, want: Target{Channel: "C0123456789", TS: "1700000000.000100"}},
+		{name: "the thread the first Slack output published, not a later one or the Teams one", investigation: slackAlertWithThread, want: Target{Channel: "C0123456789", TS: "1700000000.000100"}},
 		{name: "the thread of an alert that is a reply", investigation: slackAlertInThread, want: Target{Channel: "C0123456789", TS: "1700000400.000100"}},
 		{name: "a thread published for a webhook alert", investigation: webhookAlertWithPost, want: Target{Channel: "C0000000002", TS: "1700000900.000300"}},
 		{name: "no Slack message at all", investigation: webhookAlertNoMessage, wantErr: errNoThread},
+		{name: "a mention that joined a webhook alert's group is not its thread", investigation: webhookThenMention, wantErr: errNoThread},
+		{name: "a person's alert in a channel", investigation: personPostedAlert, want: Target{Channel: "C0123456789", TS: "1700000700.000300"}},
 		{name: "an investigation that does not exist", investigation: uuid.NewString(), wantErr: errNoThread},
 		{name: "an ID that is not a UUID", investigation: "nope", wantErr: errBadID},
 	}
@@ -62,6 +64,8 @@ func TestAlert(t *testing.T) {
 		{name: "an alert message", investigation: slackAlertWithThread, want: Target{Channel: "C0123456789", TS: "1700000000.000100"}},
 		{name: "an alert that is a reply is reacted to itself", investigation: slackAlertInThread, want: Target{Channel: "C0123456789", TS: "1700000500.000200"}},
 		{name: "a webhook alert", investigation: webhookAlertWithPost, wantErr: errNoAlert},
+		{name: "a mention that joined a webhook alert's group is not the alert", investigation: webhookThenMention, wantErr: errNoAlert},
+		{name: "a person's alert in a channel", investigation: personPostedAlert, want: Target{Channel: "C0123456789", TS: "1700000700.000300"}},
 		{name: "an ID that is not a UUID", investigation: "nope", wantErr: errBadID},
 	}
 

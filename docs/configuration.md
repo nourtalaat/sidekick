@@ -1535,13 +1535,17 @@ does not see them; Sidekick finds them:
   the thread of its first Slack output. When the investigation has none, it
   goes in the thread of the alert message. The proposal fails if the
   investigation has neither.
-- The reaction goes on the alert message. The proposal fails if the alert did
-  not come from Slack, for example because it came in through a webhook.
+- The reaction goes on the alert message: the first message of the
+  investigation's group that is an alert or a person's message in a listener's
+  channel. A later mention of Sidekick in the same group does not count. The
+  proposal fails if the alert did not come from Slack, for example because it
+  came in through a webhook.
 
 The text is posted as plain text. Slack never reads it as markup, so it
 cannot mention anyone or add a link; the line under it, which says Sidekick
-sent it and links to the investigation when [`server.publicURL`](#server) is
-set, is the only markup. Routes that use these actions should set
+sent it and whether an approver or the read + write policy of the route
+approved it, and links to the investigation when
+[`server.publicURL`](#server) is set, is the only markup. Routes that use these actions should set
 `mode: approved`.
 
 A repeated run, after a crash, makes one reply and one reaction. A reply
