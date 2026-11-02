@@ -83,7 +83,7 @@ Benchmarks always run on Postgres, with the same code as `serve`.
 | `0` | Every run finished and every threshold is met. |
 | `1` | A threshold failed, or something else failed. |
 | `2` | A bad flag, config file, `bench.yaml`, baseline or scenario file, or, with `--db`, a database secret that cannot be read, a role that may not create the schema, or a default schema that needs `sidekick migrate`. |
-| `3` | The model provider is unreachable after the connector's retries, for the runs or for the judge, or Docker or the database failed. |
+| `3` | The model provider is unreachable after the connector's retries for the runs, or Docker or the database failed. A judge call that fails this way is a judge error on its run, not exit status `3`. |
 
 When a run fails, the command prints the runs that finished before it,
 unscored, and writes no output files.
@@ -260,6 +260,20 @@ models, which reject one). Grades that miss an item or name an unknown
 one go back to it to fix, up to three times; a run the judge gives no
 grades for counts as a judge error and does not match. The judge's prompt
 has a version, which each `report.json` records.
+
+A judge call that fails because the provider is overloaded, rate limited or
+slow is repeated like an investigation's call: up to the connector's
+`retries` times, after the wait the provider asks for, or a growing wait
+(from 1 second, doubling, up to 1 minute, with some random spread). With
+the default of no retries, one such failure counts at once. When a grade
+still fails after its retries, `bench run` does not stop: that run is a
+judge error, with `rootCause.error` set in `report.json`, a score of 0 and
+no match, and it counts in the `judge errors` total. The command writes the
+report, the JUnit file and the summary as usual, and the thresholds decide
+the exit status. A judge that is down for many runs therefore fails the
+`rootCauseMatch` threshold; read the `judge errors` row before you trust a
+low root-cause score. A model call that is refused (for example a bad
+request) is a judge error as well.
 
 ## bench.yaml
 
@@ -594,7 +608,7 @@ between its root-cause scores and the hand-graded ones.
 `.github/workflows/bench.yml` runs the public scenarios in
 `bench/scenarios/public` with the project's Anthropic key, with the config
 `bench/sidekick.yaml` (Claude Sonnet 5.5 for the investigation and the
-judge, and the built-in strategies) and the thresholds of `bench/bench.yaml`.
+judge, with `retries: 5`, and the built-in strategies) and the thresholds of `bench/bench.yaml`.
 
 | When | What runs |
 |---|---|
