@@ -40,10 +40,12 @@ const Type = "datadog.monitor"
 // maxNameBytes is the longest monitor name written into a result.
 const maxNameBytes = 80
 
-// definitionKeys are the fields of a monitor that a snapshot keeps. Read-only
-// fields such as the id, the creator and the timestamps are left out, so the
-// definition holds only what the action can write.
-var definitionKeys = []string{"name", "type", "query", "message", "tags", "priority", "options"}
+// definitionKeys are the fields of a monitor that a snapshot keeps, and that
+// a change sends back to Datadog whole. Read-only fields such as the id, the
+// creator and the timestamps are left out, so the definition holds only what
+// the action can write. restricted_roles is kept so that it is sent back
+// unchanged, but it is not one of the fields limits.fields may name.
+var definitionKeys = []string{"name", "type", "query", "message", "tags", "priority", "options", "restricted_roles"}
 
 var (
 	errNoSecrets    = errors.New("no secrets resolver to read the keys with")
@@ -364,9 +366,9 @@ func (m *Monitor) executeUpdate(ctx context.Context, id int64, snap action.Snaps
 		return action.Result{}, fmt.Errorf("monitor %d: %w", id, action.ErrConflict)
 	}
 
-	body, err := fieldsOf(snap.After, deltas)
+	body, err := bodyOf(snap.After)
 	if err != nil {
-		return action.Result{}, fmt.Errorf("choose the fields to write: %w", err)
+		return action.Result{}, fmt.Errorf("make the body to write: %w", err)
 	}
 
 	if err := m.client.update(ctx, id, body); err != nil {
@@ -476,9 +478,9 @@ func (m *Monitor) Undo(ctx context.Context, inv action.Invocation, snap action.S
 		return action.Result{}, fmt.Errorf("put the fields back: %w", err)
 	}
 
-	body, err := fieldsOf(back, deltas)
+	body, err := bodyOf(back)
 	if err != nil {
-		return action.Result{}, fmt.Errorf("choose the fields to write: %w", err)
+		return action.Result{}, fmt.Errorf("make the body to write: %w", err)
 	}
 
 	if err := m.client.update(ctx, p.MonitorID, body); err != nil {
@@ -607,11 +609,12 @@ func sameDefinition(a, b json.RawMessage) (bool, error) {
 	return len(deltas) == 0, nil
 }
 
-// fieldsOf returns what to send to Datadog to write the fields of deltas:
-// for each top-level field they touch, its whole value in doc, or null when
-// doc has none. ASSUMPTION: a PUT sets each field it names as a whole, so
-// options is sent whole, and a field it does not name stays as it is.
-func fieldsOf(doc json.RawMessage, deltas []action.Delta) (map[string]json.RawMessage, error) {
+// bodyOf returns what to send to Datadog to write a definition: every field
+// of definitionKeys that doc has, with the value it has. The definition is
+// sent whole, so a PUT does not depend on how Datadog treats the fields it
+// is not sent. It is safe because Execute and Undo write a definition that
+// differs from the live one only in the fields the change touches.
+func bodyOf(doc json.RawMessage) (map[string]json.RawMessage, error) {
 	var top map[string]json.RawMessage
 	if err := json.Unmarshal(doc, &top); err != nil {
 		return nil, fmt.Errorf("decode the definition: %w", err)
@@ -619,16 +622,9 @@ func fieldsOf(doc json.RawMessage, deltas []action.Delta) (map[string]json.RawMe
 
 	body := map[string]json.RawMessage{}
 
-	for _, d := range deltas {
-		if len(d.Path) == 0 {
-			continue
-		}
-
-		root := d.Path[0]
-		if v, ok := top[root]; ok {
-			body[root] = v
-		} else {
-			body[root] = json.RawMessage("null")
+	for _, key := range definitionKeys {
+		if v, ok := top[key]; ok {
+			body[key] = v
 		}
 	}
 

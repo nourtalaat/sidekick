@@ -28,7 +28,7 @@ const startMonitor = `{
   "id": 123, "org_id": 7, "name": "Checkout latency", "type": "metric alert",
   "query": "avg(last_5m):avg:checkout.latency{env:prod} > 2",
   "message": "Latency is high @slack-ops",
-  "tags": ["team:payments", "env:prod"], "priority": 3,
+  "tags": ["team:payments", "env:prod"], "priority": 3, "restricted_roles": ["role-1"],
   "options": {"thresholds": {"critical": 2, "warning": 1.5}, "notify_no_data": false, "renotify_interval": 0},
   "creator": {"handle": "ana@example.com"}, "created": "2026-01-01T00:00:00+00:00",
   "modified": "2026-10-01T00:00:00+00:00", "overall_state": "OK", "multi": false
@@ -39,9 +39,12 @@ const startDefinition = `{
   "name": "Checkout latency", "type": "metric alert",
   "query": "avg(last_5m):avg:checkout.latency{env:prod} > 2",
   "message": "Latency is high @slack-ops",
-  "tags": ["team:payments", "env:prod"], "priority": 3,
+  "tags": ["team:payments", "env:prod"], "priority": 3, "restricted_roles": ["role-1"],
   "options": {"thresholds": {"critical": 2, "warning": 1.5}, "notify_no_data": false, "renotify_interval": 0}
 }`
+
+// definitionFields are the fields a change sends whole, in order.
+var definitionFields = []string{"message", "name", "options", "priority", "query", "restricted_roles", "tags", "type"}
 
 // fakeKeys resolves each key secret to its own fake key.
 type fakeKeys struct{}
@@ -548,8 +551,71 @@ func TestExecute(t *testing.T) {
 	require.Empty(t, res.Links, "a url replaces the site, so the address of the app is not known")
 
 	require.Equal(t, 1, dd.putCount())
-	require.Equal(t, []string{"message", "options"}, sortedKeys(dd.putBodies()[0]), "each field it touches is sent whole, and no other")
+	require.Equal(t, definitionFields, sortedKeys(dd.putBodies()[0]), "the whole definition is sent, so a PUT does not depend on what Datadog does with the fields it is not sent")
 	require.JSONEq(t, string(snap.After), string(dd.definitionNow(t)))
+}
+
+// TestExecuteSendsEveryFieldAsItIs checks that a field the change does not
+// touch goes back with the value it has, including restricted_roles.
+func TestExecuteSendsEveryFieldAsItIs(t *testing.T) {
+	t.Parallel()
+
+	api, dd := newFakeDatadog(t)
+	m := newTestAction(t, api, limitsOf())
+	snap := proposed(t, m, raiseCritical)
+
+	_, err := m.Execute(t.Context(), invocationOf(raiseCritical, &snap))
+	require.NoError(t, err)
+
+	var want map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal([]byte(startDefinition), &want))
+
+	body := dd.putBodies()[0]
+
+	for _, key := range definitionFields {
+		if key == "options" {
+			continue
+		}
+
+		require.JSONEq(t, string(want[key]), string(body[key]), key)
+	}
+
+	require.JSONEq(t, `["role-1"]`, string(body["restricted_roles"]))
+}
+
+// TestAMutedMonitorStaysMuted checks that options.silenced, which a monitor
+// keeps when it is muted, goes back as it was through a change and an Undo.
+func TestAMutedMonitorStaysMuted(t *testing.T) {
+	t.Parallel()
+
+	const muted = `{"thresholds": {"critical": 2, "warning": 1.5}, "notify_no_data": false, "renotify_interval": 0, "silenced": {"env:prod": 1893456000}}`
+
+	api, dd := newFakeDatadog(t)
+	dd.someoneEdits(t, `{"options": `+muted+`}`)
+
+	m := newTestAction(t, api, limitsOf())
+	snap := proposed(t, m, raiseCritical)
+
+	_, err := m.Execute(t.Context(), invocationOf(raiseCritical, &snap))
+	require.NoError(t, err)
+
+	silenced := func() string {
+		var def struct {
+			Options struct {
+				Silenced json.RawMessage `json:"silenced"`
+			} `json:"options"`
+		}
+
+		require.NoError(t, json.Unmarshal(dd.definitionNow(t), &def))
+
+		return string(def.Options.Silenced)
+	}
+
+	require.JSONEq(t, `{"env:prod": 1893456000}`, silenced(), "after the change")
+
+	_, err = m.Undo(t.Context(), invocationOf(raiseCritical, &snap), snap, false)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"env:prod": 1893456000}`, silenced(), "after the undo")
 }
 
 func TestExecuteWritesWhatTheApproverRead(t *testing.T) {
@@ -690,7 +756,7 @@ func TestUndo(t *testing.T) {
 
 	puts := dd.putBodies()
 	last := puts[len(puts)-1]
-	require.Equal(t, []string{"message", "options"}, sortedKeys(last), "only the fields the action changed are sent")
+	require.Equal(t, definitionFields, sortedKeys(last), "the whole definition is sent")
 }
 
 func TestUndoAfterSomeoneChangedAFieldTheActionChanged(t *testing.T) {
