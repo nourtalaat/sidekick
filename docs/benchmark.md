@@ -612,16 +612,16 @@ judge, with `retries: 5`, and the built-in strategies) and the thresholds of `be
 
 | When | What runs |
 |---|---|
-| Every night | The scenarios, on the default branch. |
 | By hand (**Run workflow**) | The scenarios, with `repeat` as the number of runs of each. |
 
 The workflow is built for a public repository:
 
-- **Nightly and by hand only.** The workflow has no `push` or
-  `pull_request` trigger, so a pull request, a push or a release tag never
-  starts it, and neither can a fork or a stranger. To benchmark a change,
-  a maintainer runs the workflow by hand on the branch, or runs the command
-  below with their own key. The workflow does not use `pull_request_target`.
+- **By hand only.** The workflow has no `schedule`, `push` or
+  `pull_request` trigger, so a pull request, a push, a release tag or the
+  clock never starts it, and neither can a fork or a stranger. A maintainer
+  starts it, for example before a release, or to benchmark a change on its
+  branch. You can also run the command below with your own key. The workflow
+  does not use `pull_request_target`.
 - **The key.** It is the repository secret `BENCH_ANTHROPIC_API_KEY`, and
   only the job that runs the benchmark sees it. When the secret is not set,
   the workflow skips the run with a notice in the log and the job summary
