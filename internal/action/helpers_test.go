@@ -55,3 +55,30 @@ func TestLimitError(t *testing.T) {
 	require.ErrorIs(t, err, ErrLimit)
 	require.ErrorIs(t, err, errCause)
 }
+
+func TestApprovalNote(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		approvedBy string
+		verb       string
+		want       string
+		wantPolicy bool
+	}{
+		{name: "a person", approvedBy: "0192d3a4-0000-7000-8000-0000000000d1", verb: "Posted", want: "Posted by Sidekick after an approver approved it."},
+		{name: "a Slack user", approvedBy: "U123", verb: "Sent", want: "Sent by Sidekick after an approver approved it."},
+		{name: "the policy", approvedBy: "policy", verb: "Posted", want: "Posted by Sidekick, approved by the read + write policy of its route.", wantPolicy: true},
+		{name: "the policy, sent", approvedBy: "policy", verb: "Sent", want: "Sent by Sidekick, approved by the read + write policy of its route.", wantPolicy: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			inv := Invocation{ApprovedBy: tt.approvedBy}
+			require.Equal(t, tt.want, inv.ApprovalNote(tt.verb))
+			require.Equal(t, tt.wantPolicy, inv.ApprovedByPolicy())
+		})
+	}
+}
