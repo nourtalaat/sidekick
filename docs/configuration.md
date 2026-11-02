@@ -1499,6 +1499,114 @@ How a proposal is handled:
 
 #### Action types
 
+##### `linear.comment` and `linear.issue`
+
+`linear.comment` adds a comment to a Linear issue, and `linear.issue`
+creates one. Both use the same connection keys. Their text is posted as
+plain text: Sidekick escapes it, so a comment or description cannot add
+formatting, links or mentions. Each ends with a line that says Sidekick
+posted it and who approved it, an approver or the read + write policy of the
+route, with a link to the investigation when [`server.publicURL`](#server)
+is set.
+
+```yaml
+actions:
+  ops-comment:
+    type: linear.comment
+    apiKeySecret: { name: linear-actions, key: apiKey }
+    limits: { teams: [OPS] }
+  ops-issue:
+    type: linear.issue
+    apiKeySecret: { name: linear-actions, key: apiKey }
+    limits:
+      teams: [OPS]              # team keys or IDs
+      labels: [incident]        # the only labels an issue may get; none by default
+      maxPerDay: 5              # most issues created in a day of budgets.daily.timeZone
+```
+
+| Key | Meaning |
+|---|---|
+| `apiKeySecret` | A Linear personal API key or an OAuth app token. Required. Use a key of its own, apart from any key an output or a source uses. A comment needs the right to read issues and create comments; an issue needs the right to create issues. |
+| `apiURL` | The GraphQL endpoint; `https://api.linear.app/graphql` when empty. It must be https, except on localhost. |
+| `limits.teams` | Required. The keys, such as `OPS`, or IDs of the teams the action may touch. A comment on an issue of another team, and an issue in another team, fail with the limit as the reason. |
+| `limits.labels` | `linear.issue` only. The labels an issue may get. Empty means none. |
+| `limits.maxPerDay` | `linear.issue` only. Required, at least 1. |
+
+What the model gives: for `linear.comment`, the issue (`OPS-123`) and the
+body (at most 4000 characters); for `linear.issue`, the team, a title (at
+most 200 characters), a description (at most 4000) and up to 5 labels.
+
+- A comment is checked against the team of the issue as Linear reports it
+  when it runs, so an issue that moved to another team is refused.
+- `maxPerDay` counts the issues this action created today, in the time
+  zone of `budgets.daily.timeZone`, plus the ones approved earlier and not
+  finished. It errs on the safe side: an issue that was approved earlier
+  and then failed keeps its place for the runs that started before it
+  ended. At the limit the proposal fails with the limit as the reason; the
+  count starts again at midnight.
+- A repeated run, after a crash, finds the comment or issue it made and
+  makes no second one. Linear has no idempotency header, so the comment or
+  issue gets an ID made from the proposal, and the description of an issue
+  holds the line `Sidekick key: sidekick/<proposal id>`, which is the
+  fallback way to find it.
+- Routes that use these actions should set `mode: approved`.
+
+##### `slack.reply` and `slack.reaction`
+
+`slack.reply` posts a reply in the Slack thread of the investigation, and
+`slack.reaction` adds an emoji to the Slack message that carried the alert.
+They post as the bot of the [`slack`](#slack) section, which is required, and
+need no credential of their own. The bot needs the scopes the
+[Slack app manifest](slack.md) already asks for: `chat:write`,
+`reactions:write`, and `channels:history` or `groups:history` to look for an
+earlier reply. It must be a member of the channel.
+
+```yaml
+actions:
+  thread-reply:
+    type: slack.reply
+    limits: { channels: [C0123456789] }
+  ack-alert:
+    type: slack.reaction
+    limits:
+      channels: [C0123456789]
+      emoji: [eyes, white_check_mark]
+```
+
+| Key | Meaning |
+|---|---|
+| `limits.channels` | Required. The IDs of the channels the action may post in. The channel of the message the action finds must be one of them, or the proposal fails with the limit as the reason. |
+| `limits.emoji` | `slack.reaction` only. Required. The names of the emoji it may add, without colons. |
+| `apiURL` | The Web API base URL; `https://slack.com/api/` when empty. It must be https, except on localhost. |
+
+The model gives only the text (`slack.reply`, at most 1500 characters) or the
+emoji (`slack.reaction`). It never gives a channel or a message, because it
+does not see them; Sidekick finds them:
+
+- The reply goes in the thread where the investigation's report is, which is
+  the thread of its first Slack output. When the investigation has none, it
+  goes in the thread of the alert message. The proposal fails if the
+  investigation has neither.
+- The reaction goes on the alert message: the first message of the
+  investigation's group that is an alert or a person's message in a listener's
+  channel. A later mention of Sidekick in the same group does not count. The
+  proposal fails if the alert did not come from Slack, for example because it
+  came in through a webhook.
+
+The text is posted as plain text. Slack never reads it as markup, so it
+cannot mention anyone or add a link; the line under it, which says Sidekick
+sent it and whether an approver or the read + write policy of the route
+approved it, and links to the investigation when
+[`server.publicURL`](#server) is set, is the only markup. Routes that use these actions should set
+`mode: approved`.
+
+A repeated run, after a crash, makes one reply and one reaction. A reply
+carries the idempotency key in its Slack message metadata, and a repeat looks
+for it among the bot's newest messages in the thread before it posts. A
+reaction that is there already counts as done. If Slack does not return the
+metadata of the bot's own messages, a repeat after a lost answer could post
+the reply twice; nothing else is affected.
+
 ##### `jira.comment` and `jira.issue`
 
 `jira.comment` adds a comment to a Jira issue, and `jira.issue` creates one,
@@ -1559,6 +1667,75 @@ up to 5 labels.
   seconds behind a new issue, so a repeat right after a lost answer may not
   see it yet. The label shows on the issue.
 - Routes that use these actions should set `mode: approved`.
+
+##### `datadog.monitor`
+
+Changes a Datadog monitor in place through the Datadog API, or deletes it.
+Use it on routes with `mode: approved`: the change goes live as soon as it
+is approved, and there is no review in Git.
+
+```yaml
+actions:
+  datadog-monitor:
+    type: datadog.monitor
+    site: datadoghq.com                # default; the API is at api.<site>
+    apiKeySecret: { name: sidekick-datadog-write, key: apiKey }
+    appKeySecret: { name: sidekick-datadog-write, key: appKey }
+    limits:
+      monitorIds: [12345]              # monitors it may change ...
+      monitorTags: ["team:payments"]   # ... and monitors that have one of these tags
+      fields: [options.thresholds, options.renotify_interval, message, tags, priority]
+      allowDelete: false               # default false
+```
+
+- `site` is the Datadog site, such as `datadoghq.eu` or `us3.datadoghq.com`.
+  `url` replaces it with the full address of the API, for a proxy; it must
+  be https, except for a loopback host. They cannot be set together.
+- `apiKeySecret` and `appKeySecret` are the API key and the application key
+  of a service account that has the Monitors Read and Monitors Write
+  permissions and no others. Use keys of their own, apart from the keys of
+  any Datadog source. Both are read on every call, so a rotated key needs no
+  restart.
+- `limits.monitorIds` and `limits.monitorTags` say which monitors it may
+  change: at least one of them is required. A monitor is allowed when its
+  ID is listed, or when it has one of the tags.
+- `limits.fields` lists the fields it may change, as paths into the monitor
+  such as `options.thresholds.critical`, `message` or `tags`. A path allows
+  the fields below it too, so `options.thresholds` allows
+  `options.thresholds.critical`, but `message` does not allow `messages`.
+  The first key must be `name`, `query`, `message`, `tags`, `priority` or
+  `options`. Positions in a list are written `[0]`, and `[*]` stands for any
+  position.
+  Allowing `message` lets the model change which handles are notified,
+  because the `@` handles in a Datadog message (such as `@pagerduty-team` or
+  `@slack-ops`) decide where notifications go. Approvers should read the
+  handles in the difference. Allowing `tags` lets the model change which
+  monitors the action reaches by tag; a change that would remove the tag
+  that allows a monitor is refused, so the action never moves a monitor out of
+  its own limits.
+- A `set` value of `null` removes an option: Datadog reads a null option
+  back as one that is not there. Datadog keeps `options.no_data_timeframe`
+  only while `options.notify_no_data` is true, so a change that turns
+  `notify_no_data` off must set `no_data_timeframe` to `null` in the same
+  change, and a change that sets the timeframe must set `notify_no_data` to
+  true in the same change. Sidekick refuses the others, with a message that
+  says so, so that Undo can put the timeframe back.
+- `allowDelete: true` lets the model propose to delete a monitor. A delete
+  cannot be undone in Sidekick, and Slack and the web UI say so before it is
+  approved.
+
+The model proposes `monitorId` and `set`, a map from field path to new value, or
+`delete: true`. When it proposes, Sidekick reads the monitor, computes the
+new definition, refuses any change outside the limits, and asks Datadog to
+check the new definition (`POST /api/v1/monitor/{id}/validate`) before the
+proposal is shown. Approvers see the change field by field. Right before it
+writes, Sidekick reads the monitor again and fails the proposal when the
+monitor was changed in Datadog since, so a new proposal is needed.
+
+An approver can undo a change that worked. Undo puts back only the fields
+Sidekick changed and leaves every other field as it is. If someone changed one
+of those fields since, Undo shows what a restore would overwrite and asks
+before it restores it.
 
 ##### `github.pull_request`
 
@@ -1636,10 +1813,23 @@ actions:
   after the proposal is overwritten in the pull request, so reviewers should
   check the diff of every file.
 
+Once a day, Sidekick reads from GitHub whether the pull requests it opened
+are still open, were merged or were closed, and records it in
+`pull_request_states`. Every replica checks once an hour, and at start-up,
+that the job of the day (in UTC) is queued; however many replicas there
+are, it runs once a day. It looks at the pull requests of proposals that
+succeeded in the last 90 days, until each is merged or closed, and reads at
+most 1,000 a day. The merged ones feed the count of noisy alerts fixed. A
+pull request that stays open for more than 90 days is no longer checked.
+A row is deleted with its proposal, so these records last as long as the
+[`retention.investigations`](#retention) period of their investigation.
+
 Sidekick counts the pull requests it opens in
 `sidekick_githubpr_pull_requests_total` (by `result`: `opened`, `existing`
-or `error`) and the validations in `sidekick_githubpr_validations_total`
-(by `format` and `result`).
+or `error`), the validations in `sidekick_githubpr_validations_total`
+(by `format` and `result`), and the daily checks in
+`sidekick_githubpr_status_checks_total` (by `state`: `open`, `merged`,
+`closed`, `missing` or `error`).
 
 ### `validator`
 
