@@ -11,8 +11,8 @@ A free model is slower and less reliable than a paid one. It misses
 evidence more often, ends its turns without a verdict more often, and
 needs more of the investigation's tool-call budget. The
 [benchmark](benchmark.md) measures that gap, and the
-[table at the end](#published-scores) shows it for each setup when
-scores have been published.
+[table at the end](#published-scores) shows the default model's scores and
+the command to measure a free setup yourself.
 
 | | Setup | Cost | Your alerts leave your network? | Needs |
 |---|---|---|---|---|
@@ -198,9 +198,9 @@ of the keys.
 Each row is the [public benchmark](benchmark.md) (`bench/scenarios/public`)
 run with the built-in strategies, so you can see how much quality you give up
 to save cost. The Default row, Claude Sonnet 5.5, the model of the quick
-start, comes from the project's benchmark workflow. The OpenRouter and
-Gemini rows will be published once the project runs them. The project does
-not run the local rows.
+start, comes from the project's benchmark workflow. The project does not run
+any of the free setups, because it has no GPU machine and no OpenRouter or
+Gemini account. Anyone can run them with the command below.
 
 Run the benchmark on your own setup with:
 
@@ -215,11 +215,12 @@ sidekick bench compare report.json other-report.json
 | 1, local | `Qwen/Qwen3.8-27B` | vLLM | not run by the project | not run by the project | not run by the project | none | | |
 | 1, local | `qwen3.8:27b` | Ollama | not run by the project | not run by the project | not run by the project | none | | |
 | 1, local | `google/gemma-4-31B-it` | vLLM | not run by the project | not run by the project | not run by the project | none | | |
-| 2, OpenRouter | a `:free` model | OpenRouter | not yet published | not yet published | not yet published | none | | |
-| 3, Gemini | `gemini-3.8-flash` | Gemini API, free tier | not yet published | not yet published | not yet published | none | | |
+| 2, OpenRouter | a `:free` model | OpenRouter | not run by the project | not run by the project | not run by the project | none | | |
+| 3, Gemini | `gemini-3.8-flash` | Gemini API, free tier | not run by the project | not run by the project | not run by the project | none | | |
 
-The project has no GPU machine, so it does not run the local setups; to get
-their scores, run the command above on your own machine.
+The project has no GPU machine and no OpenRouter or Gemini account, so it
+does not run any of the free setups; to get their scores, run the command
+above on your own setup.
 
 The scores come from `report.json` of each run, which also records the
 model settings and the prompt and strategy versions, so two rows can be
