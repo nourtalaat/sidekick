@@ -57,6 +57,11 @@ func (p *PR) status(ctx context.Context, owner, name, branch string) (*Status, e
 		return nil, nil
 	}
 
+	return statusOf(pr), nil
+}
+
+// statusOf describes a pull request as the status job records it.
+func statusOf(pr *gh.PullRequest) *Status {
 	s := &Status{Number: pr.GetNumber(), URL: pr.GetHTMLURL(), State: stateOf(pr)}
 
 	switch s.State {
@@ -66,7 +71,7 @@ func (p *PR) status(ctx context.Context, owner, name, branch string) (*Status, e
 		s.ClosedAt = timeOf(pr.ClosedAt)
 	}
 
-	return s, nil
+	return s
 }
 
 // timeOf returns the time of a GitHub timestamp, or nil.

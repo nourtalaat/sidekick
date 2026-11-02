@@ -53,7 +53,7 @@ func newStack(t *testing.T) *stack {
 	storetest.LoadFixture(t, pool, "fixture/investigations.sql")
 	require.NoError(t, publish.Open(t.Context(), pool, checkoutInvestigation, []string{"slack"}))
 
-	b := newBed(t, nil)
+	b := newBedWithDB(t, nil, pool)
 
 	svc, err := proposals.New(proposals.Options{
 		Pool:    pool,

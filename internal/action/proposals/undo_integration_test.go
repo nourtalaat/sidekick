@@ -71,6 +71,10 @@ func TestUndo(t *testing.T) {
 	require.False(t, approvedByPolicy(row), "an undo is approved by the person who asked, never by the route's policy")
 	require.False(t, undo.ApprovedByPolicy)
 
+	require.Len(t, h.monitor.undoInvocations, 1)
+	require.Equal(t, id.String(), h.monitor.undoInvocations[0].UndoOf, "the action is told which proposal it undoes")
+	require.Equal(t, undoID.String(), h.monitor.undoInvocations[0].ProposalID)
+
 	require.Equal(t, "undone", h.row(t, id).Status)
 	require.Equal(t, []string{AuditProposed, AuditApproved, AuditExecuting, AuditSucceeded, AuditUndone}, h.auditActions(t, id))
 	require.Equal(t, []string{AuditUndoRequested, AuditSucceeded}, h.auditActions(t, undoID))

@@ -46,7 +46,7 @@ func TestConfigValidate(t *testing.T) {
 			"app.privateKeySecret: required",
 			"limits.repos: list at least one repository, as owner/name",
 			`limits.paths: list at least one rule, such as {glob: "prometheus/rules/**", format: prometheus_rules}`,
-			"limits.maxFiles: must be from 1 to 100, got 0",
+			"limits.maxFiles: must be from 1 to 25, got 0",
 			"limits.maxChangedLines: must be from 1 to 1000, got 0",
 			"limits.baseBranch: required",
 		}},
@@ -68,12 +68,12 @@ func TestConfigValidate(t *testing.T) {
 			"limits.paths[1].format: required; use one of prometheus_rules, terraform, grafana_alert_file",
 			`limits.paths[2].format: unknown format "nagios"; use one of prometheus_rules, terraform, grafana_alert_file`,
 		}},
-		{name: "limits out of range", change: func(c *Config) { c.Limits.MaxFiles, c.Limits.MaxChangedLines = 101, 1001 }, want: []string{
-			"limits.maxFiles: must be from 1 to 100, got 101",
+		{name: "limits out of range", change: func(c *Config) { c.Limits.MaxFiles, c.Limits.MaxChangedLines = 26, 1001 }, want: []string{
+			"limits.maxFiles: must be from 1 to 25, got 26",
 			"limits.maxChangedLines: must be from 1 to 1000, got 1001",
 		}},
 		{name: "the smallest limits", change: func(c *Config) { c.Limits.MaxFiles, c.Limits.MaxChangedLines = 1, 1 }},
-		{name: "the largest limits", change: func(c *Config) { c.Limits.MaxFiles, c.Limits.MaxChangedLines = 100, 1000 }},
+		{name: "the largest limits", change: func(c *Config) { c.Limits.MaxFiles, c.Limits.MaxChangedLines = 25, 1000 }},
 		{name: "a base branch with a slash", change: func(c *Config) { c.Limits.BaseBranch = "release/2026.11" }},
 		{name: "base branches that are not names", change: func(c *Config) { c.Limits.BaseBranch = "main..x" }, want: []string{
 			`limits.baseBranch: "main..x" is not a branch name this action accepts`,

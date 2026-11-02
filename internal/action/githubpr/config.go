@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/githubapp"
 	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/validateclient"
@@ -19,7 +20,11 @@ const defaultBaseURL = "https://api.github.com/"
 // Ceilings for the limits an operator sets, so a config cannot ask for a
 // pull request that no person would review.
 const (
-	maxFilesCeiling        = 100
+	// fieldsPerFile is the most fields one file adds to the difference an
+	// approver reads: its blob, its status and its two line counts.
+	fieldsPerFile = 4
+	// maxFilesCeiling keeps the difference within action.MaxChanges.
+	maxFilesCeiling        = action.MaxChanges / fieldsPerFile
 	maxChangedLinesCeiling = 1000
 )
 

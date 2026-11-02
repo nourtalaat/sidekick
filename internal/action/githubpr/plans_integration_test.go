@@ -46,8 +46,18 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"action_proposals_daily"},
+			wantIndex: []string{"action_proposals_daily", "action_proposals_pkey"},
 			notWant:   []string{"Seq Scan on action_proposals"},
+		},
+		{
+			name: "RecordPullRequestState",
+			run: func(ctx context.Context, q *db.Queries) error {
+				return fmt.Errorf("run query: %w", q.RecordPullRequestState(ctx, db.RecordPullRequestStateParams{
+					ProposalID: proposal, Repo: "acme/monitors", Number: 7, Url: "https://github.com/acme/monitors/pull/7", State: StateOpen, Now: time.Now(),
+				}))
+			},
+			wantIndex: []string{"pull_request_states_pkey"},
+			notWant:   []string{"Seq Scan"},
 		},
 		{
 			name: "UpsertPullRequestState",

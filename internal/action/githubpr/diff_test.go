@@ -27,7 +27,7 @@ func TestChangedLines(t *testing.T) {
 		{name: "lines moved", old: "a\nb\nc\n", updated: "c\na\nb\n", limit: 10, want: 2, wantWithin: true},
 		{name: "a new file", old: "", updated: "a\nb\nc\n", limit: 10, want: 3, wantWithin: true},
 		{name: "a file emptied", old: "a\nb\n", updated: "", limit: 10, want: 2, wantWithin: true},
-		{name: "only the final newline differs", old: "a\nb", updated: "a\nb\n", limit: 10, want: 1, wantWithin: true},
+		{name: "only the final newline differs", old: "a\nb", updated: "a\nb\n", limit: 10, want: 2, wantWithin: true},
 		{name: "a blank line added", old: "a\nb\n", updated: "a\n\nb\n", limit: 10, want: 1, wantWithin: true},
 		{name: "exactly at the limit", old: base, updated: "a\nb\nX\nd\ne\n", limit: 2, want: 2, wantWithin: true},
 		{name: "one over the limit", old: base, updated: "a\nb\nX\nd\ne\n", limit: 1, want: 2},

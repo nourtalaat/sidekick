@@ -8,6 +8,7 @@ import (
 	_ "github.com/nourtalaat/sidekick/internal/action/datadog"       // Action type "datadog.monitor".
 	_ "github.com/nourtalaat/sidekick/internal/action/githubpr"      // Action type "github.pull_request".
 	_ "github.com/nourtalaat/sidekick/internal/action/grafana"       // Action type "grafana.alert_rule".
+	_ "github.com/nourtalaat/sidekick/internal/action/jira"          // Action types "jira.comment" and "jira.issue".
 	_ "github.com/nourtalaat/sidekick/internal/action/linear"        // Action types "linear.comment" and "linear.issue".
 	_ "github.com/nourtalaat/sidekick/internal/action/slack"         // Action types "slack.reply" and "slack.reaction".
 	_ "github.com/nourtalaat/sidekick/internal/intake/alertmanager"  // Intake adapter "alertmanager".

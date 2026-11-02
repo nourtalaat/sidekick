@@ -383,6 +383,7 @@ func (s *Service) performUndo(ctx context.Context, undo db.ActionProposal) (acti
 		IdempotencyKey:  undo.IdempotencyKey,
 		ApprovedBy:      approvedBy(undo),
 		Snapshot:        snap,
+		UndoOf:          p.UndoOf.String(),
 	}, origSnap, p.Force)
 	if err != nil {
 		return action.Result{}, fmt.Errorf("undo: %w", err)
