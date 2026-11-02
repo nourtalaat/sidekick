@@ -18,6 +18,9 @@ model:
     claude:
       provider: anthropic
       model: claude-sonnet-5-5
+      # Five retries wait about 15 to 31 seconds in all, for an overload that
+      # lasts a while. Both the investigation and the judge use them.
+      retries: 5
       apiKeySecret: { name: anthropic, key: apiKey }
   roles:
     investigate: claude
