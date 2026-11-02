@@ -1676,6 +1676,136 @@ Sidekick changed and leaves every other field as it is. If someone changed one
 of those fields since, Undo shows what a restore would overwrite and asks
 before it restores it.
 
+##### `grafana.alert_rule`
+
+Changes a Grafana-managed alert rule in place through Grafana's alerting
+provisioning API, or deletes it. Use it on routes with `mode: approved`: the
+change goes live as soon as it is approved, and there is no review in Git.
+It supports Grafana 11.6 and later.
+
+```yaml
+actions:
+  grafana-alert-rule:
+    type: grafana.alert_rule
+    url: https://acme.grafana.net      # the root of Grafana; https, or http on localhost
+    tokenSecret: { name: sidekick-grafana-write, key: token }
+    limits:
+      folderUids: [payments-alerts]    # required: the folders whose rules it may change
+      ruleUids: [a1b2c3d4]             # optional: only these rules ...
+      titlePatterns: ["Checkout *"]    # ... and rules whose title matches one of these
+      fields: [for, noDataState, "data[*].model.conditions[*].evaluator.params"]
+      allowDelete: false               # default false
+```
+
+- `url` is the root of Grafana, such as `https://acme.grafana.net`. If
+  Grafana is served from a sub-path, include it. It must be https, except
+  for a loopback host.
+- `tokenSecret` is a Grafana service account token. Use a token of its own,
+  apart from the token of any Grafana source. It is read on every call, so
+  a rotated token needs no restart. The permissions it needs are below.
+- `limits.folderUids` is required. The action only touches rules in these
+  folders. A folder's UID is in its address in Grafana, as in
+  `/dashboards/f/<uid>/`.
+- `limits.ruleUids` and `limits.titlePatterns` narrow the folders. With
+  neither, every rule in the folders is allowed. With either, a rule is
+  allowed when its UID is listed or its title matches a pattern. In a
+  pattern `*` stands for any text and every other character stands for
+  itself; a pattern matches the whole title, and case counts. A change that
+  would give a rule a title that no pattern matches is refused, unless the
+  rule's UID is listed, so the action never moves a rule out of its own
+  limits.
+- `limits.fields` lists the fields it may change, as paths into the rule,
+  such as `for`, `labels.severity` or `data[1].model.expr`. A path allows
+  the fields below it too. The first key must be `title`, `condition`,
+  `data`, `noDataState`, `execErrState`, `for`, `keep_firing_for`,
+  `annotations`, `labels` or `isPaused`. Positions in a list are written
+  `[0]`, and `[*]` stands for any position. The folder and the rule group
+  cannot be changed, so the action never moves a rule, and the notification
+  settings of a rule are not part of the action.
+- Name narrow paths. `data` is the list of queries and expressions of the
+  rule, and it includes each query's `datasourceUid`, so allowing `data`
+  lets the model point a query at another data source that the token can
+  query, and rewrite any query. Allow `data` as a whole only when you accept
+  that; otherwise name what you want changed, such as the threshold
+  (`data[*].model.conditions[*].evaluator.params`) or the expression
+  (`data[*].model.expr`). Allowing `annotations` or `labels` lets the model
+  change the text people read in a notification and the labels that
+  notification policies route on, which can change who is notified.
+- A `set` value of `null` removes a label or an annotation. To change a
+  label whose name has a dot, set `labels` as a whole object.
+- `allowDelete: true` lets the model propose to delete a rule. A delete
+  cannot be undone in Sidekick, and Slack and the web UI say so before it is
+  approved.
+
+The model proposes `ruleUid` and `set`, a map from field path to new value,
+or `delete: true`. When it proposes, Sidekick reads the rule, computes the
+new one, and refuses any change outside the limits. Grafana has no call that
+checks a rule without storing it, so Sidekick checks the common problems
+itself: the values of `noDataState` and `execErrState`, durations such as
+`5m`, the title, the shape of each query, and a condition that names a query.
+It also refuses a change that Grafana would silently replace, such as a
+`maxDataPoints` of 0. Grafana can still refuse a rule when it is approved;
+the proposal then fails with Grafana's message and nothing is stored. Right
+before it writes, Sidekick reads the rule again and fails the proposal when
+the rule was changed in Grafana since, so a new proposal is needed. Grafana
+offers no condition on the write itself, so a change made in the moments
+between that last read and the write is not noticed.
+
+An approver can undo a change that worked. Undo puts back only the fields
+Sidekick changed and leaves every other field as it is. If someone changed one
+of those fields since, Undo shows what a restore would overwrite and asks
+before it restores it.
+
+What the action relies on from Grafana, as its source code shows (checked at
+v13.2.5, v12.4.14 and v11.6.9 of
+[grafana/grafana](https://github.com/grafana/grafana)):
+
+- **Rules made in the UI stay editable in the UI.** Without the
+  `X-Disable-Provenance` header, a rule written through the provisioning API
+  is marked as provisioned and Grafana locks it in the UI. Every write and
+  delete of this action sends the header.
+- **Rules that something else manages are left alone.** A rule made from
+  files, by Terraform or by another API client has a provenance. With the
+  header Grafana refuses to update it, and without the header the action
+  would take the rule away from its owner, so the action refuses to change
+  or delete such a rule. Only the owner can allow Sidekick to change it, by
+  removing the provisioning in Grafana, for example by managing the rule in
+  the Grafana UI instead of in files or Terraform. Recording rules are not
+  supported either.
+- **The whole rule is written.** A write replaces the rule, so Sidekick
+  sends every field it read, except the ones Grafana sets itself (`id`,
+  `orgID`, `uid`, `updated` and `provenance`). The conflict check compares
+  the rule with the snapshot and uses the `updated` time that Grafana sets
+  on every write.
+- **Grafana does not keep a rule exactly as sent.** It writes durations in
+  their short form (`300s` reads back as `5m`), fills in `maxDataPoints`
+  and `intervalMs` in the model of each query, sets the model's `refId`,
+  and leaves empty `labels` and `annotations` out. Sidekick compares rules
+  the way Grafana reads them back, so a retry after a crash and Undo see a
+  change that is in place.
+- **The provisioning routes are deprecated from Grafana 13.0.** They still
+  work in 13.3.0 and answer with a deprecation warning. Grafana names the
+  alerting resource API (`rules.alerting.grafana.app`) as the replacement,
+  which this action does not use yet.
+
+Permissions of the token. Create a service account for Sidekick and give it
+only this:
+
+- On Grafana Enterprise and Grafana Cloud, with a custom role, scoped to the
+  folders in `limits.folderUids` (`folders:uid:<uid>`): `alert.rules:read`,
+  `alert.rules:write` and `folders:read`; and `alert.rules:delete` only if
+  `allowDelete` is true. Also `alert.provisioning.provenance:write`, which
+  Grafana asks for on every write through this API, and has no scope.
+  When the action may change `data`, also `datasources:query` on the data
+  sources that those rules query, because Grafana checks that for a change of
+  a query.
+- On open source Grafana there are no custom roles, and
+  `alert.provisioning.provenance:write` comes only with the Editor and Admin
+  roles. The service account needs the Editor role, which can edit alert
+  rules in every folder. Then `limits.folderUids` is the only thing that
+  keeps the action in its folders, and the token should be kept as secret as
+  any other credential that can edit all alert rules.
+
 ##### `github.pull_request`
 
 Opens a pull request that changes monitor definitions kept in Git:
