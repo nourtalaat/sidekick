@@ -1551,6 +1551,62 @@ most 200 characters), a description (at most 4000) and up to 5 labels.
   fallback way to find it.
 - Routes that use these actions should set `mode: approved`.
 
+##### `slack.reply` and `slack.reaction`
+
+`slack.reply` posts a reply in the Slack thread of the investigation, and
+`slack.reaction` adds an emoji to the Slack message that carried the alert.
+They post as the bot of the [`slack`](#slack) section, which is required, and
+need no credential of their own. The bot needs the scopes the
+[Slack app manifest](slack.md) already asks for: `chat:write`,
+`reactions:write`, and `channels:history` or `groups:history` to look for an
+earlier reply. It must be a member of the channel.
+
+```yaml
+actions:
+  thread-reply:
+    type: slack.reply
+    limits: { channels: [C0123456789] }
+  ack-alert:
+    type: slack.reaction
+    limits:
+      channels: [C0123456789]
+      emoji: [eyes, white_check_mark]
+```
+
+| Key | Meaning |
+|---|---|
+| `limits.channels` | Required. The IDs of the channels the action may post in. The channel of the message the action finds must be one of them, or the proposal fails with the limit as the reason. |
+| `limits.emoji` | `slack.reaction` only. Required. The names of the emoji it may add, without colons. |
+| `apiURL` | The Web API base URL; `https://slack.com/api/` when empty. It must be https, except on localhost. |
+
+The model gives only the text (`slack.reply`, at most 1500 characters) or the
+emoji (`slack.reaction`). It never gives a channel or a message, because it
+does not see them; Sidekick finds them:
+
+- The reply goes in the thread where the investigation's report is, which is
+  the thread of its first Slack output. When the investigation has none, it
+  goes in the thread of the alert message. The proposal fails if the
+  investigation has neither.
+- The reaction goes on the alert message: the first message of the
+  investigation's group that is an alert or a person's message in a listener's
+  channel. A later mention of Sidekick in the same group does not count. The
+  proposal fails if the alert did not come from Slack, for example because it
+  came in through a webhook.
+
+The text is posted as plain text. Slack never reads it as markup, so it
+cannot mention anyone or add a link; the line under it, which says Sidekick
+sent it and whether an approver or the read + write policy of the route
+approved it, and links to the investigation when
+[`server.publicURL`](#server) is set, is the only markup. Routes that use these actions should set
+`mode: approved`.
+
+A repeated run, after a crash, makes one reply and one reaction. A reply
+carries the idempotency key in its Slack message metadata, and a repeat looks
+for it among the bot's newest messages in the thread before it posts. A
+reaction that is there already counts as done. If Slack does not return the
+metadata of the bot's own messages, a repeat after a lost answer could post
+the reply twice; nothing else is affected.
+
 ##### `datadog.monitor`
 
 Changes a Datadog monitor in place through the Datadog API, or deletes it.
