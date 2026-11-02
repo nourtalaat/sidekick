@@ -1696,10 +1696,23 @@ actions:
   after the proposal is overwritten in the pull request, so reviewers should
   check the diff of every file.
 
+Once a day, Sidekick reads from GitHub whether the pull requests it opened
+are still open, were merged or were closed, and records it in
+`pull_request_states`. Every replica checks once an hour, and at start-up,
+that the job of the day (in UTC) is queued; however many replicas there
+are, it runs once a day. It looks at the pull requests of proposals that
+succeeded in the last 90 days, until each is merged or closed, and reads at
+most 1,000 a day. The merged ones feed the count of noisy alerts fixed. A
+pull request that stays open for more than 90 days is no longer checked.
+A row is deleted with its proposal, so these records last as long as the
+[`retention.investigations`](#retention) period of their investigation.
+
 Sidekick counts the pull requests it opens in
 `sidekick_githubpr_pull_requests_total` (by `result`: `opened`, `existing`
-or `error`) and the validations in `sidekick_githubpr_validations_total`
-(by `format` and `result`).
+or `error`), the validations in `sidekick_githubpr_validations_total`
+(by `format` and `result`), and the daily checks in
+`sidekick_githubpr_status_checks_total` (by `state`: `open`, `merged`,
+`closed`, `missing` or `error`).
 
 ### `validator`
 

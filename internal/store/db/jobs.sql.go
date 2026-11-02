@@ -424,6 +424,18 @@ func (q *Queries) ListenJobsReady(ctx context.Context) error {
 	return err
 }
 
+const lockJobSchedule = `-- name: LockJobSchedule :exec
+SELECT pg_advisory_xact_lock($1::bigint)
+`
+
+// LockJobSchedule takes a transaction-level advisory lock with the given
+// key. A daily scheduler holds it while it checks whether the job of the
+// day exists and enqueues it, so the two are one step across replicas.
+func (q *Queries) LockJobSchedule(ctx context.Context, lockKey int64) error {
+	_, err := q.db.Exec(ctx, lockJobSchedule, lockKey)
+	return err
+}
+
 const lockLimitedClaims = `-- name: LockLimitedClaims :exec
 SELECT pg_advisory_xact_lock($1::bigint)
 `
