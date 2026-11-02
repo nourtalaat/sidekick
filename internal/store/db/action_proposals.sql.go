@@ -13,6 +13,51 @@ import (
 	"github.com/google/uuid"
 )
 
+const approveActionProposalByPolicy = `-- name: ApproveActionProposalByPolicy :one
+UPDATE action_proposals
+SET status = 'approved', decided_at = $1::timestamptz
+WHERE id = $2 AND status = 'proposed'
+RETURNING id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, decided_by, decided_by_slack_user, decided_at, executed_at, result, error, snapshot, undo_of, undoable
+`
+
+type ApproveActionProposalByPolicyParams struct {
+	Now time.Time
+	ID  uuid.UUID
+}
+
+// ApproveActionProposalByPolicy approves a proposal that is still proposed
+// because its investigation runs in read-write mode. Nobody decides it, so
+// decided_by and decided_by_slack_user stay NULL, and decided_at is the
+// time of the approval, like a decision by a person. It returns no row
+// for a proposal in any other status. It reads and writes one row by its
+// primary key.
+func (q *Queries) ApproveActionProposalByPolicy(ctx context.Context, arg ApproveActionProposalByPolicyParams) (ActionProposal, error) {
+	row := q.db.QueryRow(ctx, approveActionProposalByPolicy, arg.Now, arg.ID)
+	var i ActionProposal
+	err := row.Scan(
+		&i.ID,
+		&i.InvestigationID,
+		&i.Action,
+		&i.Params,
+		&i.Reason,
+		&i.Mode,
+		&i.Status,
+		&i.IdempotencyKey,
+		&i.ProposedAt,
+		&i.ExpiresAt,
+		&i.DecidedBy,
+		&i.DecidedBySlackUser,
+		&i.DecidedAt,
+		&i.ExecutedAt,
+		&i.Result,
+		&i.Error,
+		&i.Snapshot,
+		&i.UndoOf,
+		&i.Undoable,
+	)
+	return i, err
+}
+
 const countInvestigationProposals = `-- name: CountInvestigationProposals :one
 SELECT count(*) FROM action_proposals WHERE investigation_id = $1 AND undo_of IS NULL
 `

@@ -70,6 +70,10 @@ type Proposal struct {
 	DecidedBy          string
 	DecidedByName      string
 	DecidedBySlackUser string
+	// ApprovedByPolicy is true when nobody decided it: the investigation
+	// ran in read-write mode, so the route's policy approved it when it
+	// was stored, and DecidedAt is the time of that approval.
+	ApprovedByPolicy bool
 	// DecidedAt is zero until it is decided.
 	DecidedAt time.Time
 	// Snapshot is set for actions that implement Snapshotter.
@@ -87,6 +91,10 @@ type Proposal struct {
 	// failed attempt.
 	Error string
 }
+
+// PolicyApprovalText is how a screen says that a route's policy approved a
+// proposal, in place of the name of a person.
+const PolicyApprovalText = "approved by policy (read + write route)"
 
 // IdempotencyKey returns the key that Execute gets as
 // Invocation.IdempotencyKey for the proposal with proposalID. It is the

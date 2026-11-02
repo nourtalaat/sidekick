@@ -105,8 +105,8 @@ func setupUndo(t *testing.T) (server, *apiMonitorAction) {
 	_, err := s.pool.Exec(t.Context(), `
 		INSERT INTO action_proposals (id, investigation_id, action, params, reason, mode, status, idempotency_key,
 		                              proposed_at, expires_at, decided_by, decided_at, executed_at, result, snapshot, undoable)
-		VALUES ($1, '0192d3a4-0000-7000-8000-0000000000e2', 'monitor', '{"threshold": 90}', 'Too noisy.', 'approved', 'succeeded',
-		        'sidekick/' || $1::text, now() - interval '2 hours', now() + interval '22 hours',
+		VALUES ($1::uuid, '0192d3a4-0000-7000-8000-0000000000e2', 'monitor', '{"threshold": 90}', 'Too noisy.', 'approved', 'succeeded',
+		        'sidekick/' || $1::uuid::text, now() - interval '2 hours', now() + interval '22 hours',
 		        '01920000-0000-7000-8000-000000000070', now() - interval '110 minutes', now() - interval '100 minutes',
 		        '{"summary": "Changed the monitor."}',
 		        '{"target": "fake:monitor/1", "before": {"options": {"critical": 80}}, "after": {"options": {"critical": 90}}}', true)`, propMonitor)

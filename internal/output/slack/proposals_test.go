@@ -188,6 +188,10 @@ func TestProposalLines(t *testing.T) {
 	}{
 		{name: "approved in Slack", change: func(p *action.Proposal) { p.Status, p.DecidedBySlackUser = action.StatusApproved, "U01ABCDEF" }, want: ":white_check_mark: *monitor-note* approved by <@U01ABCDEF>, waiting to run"},
 		{name: "approved in the web UI", change: func(p *action.Proposal) { p.Status, p.DecidedByName = action.StatusExecuting, "Ana <b>" }, want: ":gear: *monitor-note* approved by Ana &lt;b&gt;, running now"},
+		{name: "approved by policy", change: func(p *action.Proposal) { p.Status, p.ApprovedByPolicy = action.StatusApproved, true }, want: ":white_check_mark: *monitor-note* approved by policy (read + write route), running now"},
+		{name: "running after the policy approved it", change: func(p *action.Proposal) { p.Status, p.ApprovedByPolicy = action.StatusExecuting, true }, want: ":gear: *monitor-note* approved by policy (read + write route), running now"},
+		{name: "done after the policy approved it", change: func(p *action.Proposal) { p.Status, p.ApprovedByPolicy = action.StatusSucceeded, true }, want: ":white_check_mark: *monitor-note* done, approved by policy (read + write route)"},
+		{name: "failed after the policy approved it", change: func(p *action.Proposal) { p.Status, p.ApprovedByPolicy, p.Error = action.StatusFailed, true, "boom" }, want: ":warning: *monitor-note* failed, approved by policy (read + write route): boom"},
 		{name: "rejected", change: func(p *action.Proposal) { p.Status, p.DecidedByName = action.StatusRejected, "Ana" }, want: ":x: *monitor-note* rejected by Ana"},
 		{name: "expired", change: func(p *action.Proposal) { p.Status = action.StatusExpired }, want: ":hourglass: *monitor-note* expired: nobody decided in time"},
 		{name: "succeeded", change: func(p *action.Proposal) { *p = withResult }, want: ":white_check_mark: *monitor-note* done by <@U01ABCDEF>: Wrote a note. · <https://notes.example.com/n/1|Note>"},

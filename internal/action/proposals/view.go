@@ -157,6 +157,7 @@ func proposalOf(row db.ActionProposal, route, decidedByName string) (action.Prop
 		DecidedByName:      decidedByName,
 		DecidedBySlackUser: deref(row.DecidedBySlackUser),
 		DecidedAt:          deref(row.DecidedAt),
+		ApprovedByPolicy:   approvedByPolicy(row),
 		Error:              deref(row.Error),
 	}
 
@@ -209,6 +210,12 @@ func snapshotOf(row db.ActionProposal) (*action.Snapshot, error) {
 	}
 
 	return &snap, nil
+}
+
+// approvedByPolicy reports whether the route's policy approved the
+// proposal: it was approved, and no person or token decided it.
+func approvedByPolicy(row db.ActionProposal) bool {
+	return row.DecidedAt != nil && row.DecidedBy == nil && row.DecidedBySlackUser == nil
 }
 
 // deref returns *p, or the zero value for nil.

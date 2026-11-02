@@ -71,6 +71,10 @@ func routeView(r config.Route) apigen.Route {
 		},
 	}
 
+	if r.AllowUntrustedWrite {
+		out.AllowUntrustedWrite = new(true)
+	}
+
 	if m := r.Match; m != nil {
 		severity := make([]string, len(m.Severity))
 		for i, s := range m.Severity {

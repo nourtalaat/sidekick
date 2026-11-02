@@ -301,3 +301,36 @@ func TestCut(t *testing.T) {
 	require.Equal(t, "ab…", cut("abcd", 3))
 	require.Equal(t, "日本…", cut("日本語です", 3))
 }
+
+func TestSpecDescribesReadWriteMode(t *testing.T) {
+	t.Parallel()
+
+	policy := action.StaticPolicy{
+		"payments": {Mode: action.ReadWrite, Actions: []string{"monitor-note"}},
+		"approve":  {Mode: action.Approved, Actions: []string{"monitor-note"}},
+	}
+	s := offline(t, policy, newFakeNote("monitor-note"))
+
+	tests := []struct {
+		name         string
+		route        string
+		mode         action.Mode
+		wantContains string
+		wantMissing  string
+	}{
+		{name: "read-write", route: "payments", mode: action.ReadWrite, wantContains: "runs at once", wantMissing: "approver approves"},
+		{name: "approved", route: "approve", mode: action.Approved, wantContains: "approver approves", wantMissing: "runs at once"},
+		{name: "a read-write investigation on a route that is approved now", route: "approve", mode: action.ReadWrite, wantContains: "approver approves", wantMissing: "runs at once"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			spec, ok := s.Spec(tt.route, tt.mode)
+			require.True(t, ok)
+			require.Contains(t, spec.Description, tt.wantContains)
+			require.NotContains(t, spec.Description, tt.wantMissing)
+		})
+	}
+}
