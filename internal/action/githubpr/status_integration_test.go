@@ -86,7 +86,7 @@ func (s *statusBed) proposal(t *testing.T, name, repo string, executed time.Time
 
 	_, err := s.pool.Exec(t.Context(), `
 		INSERT INTO action_proposals (id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, executed_at, result)
-		VALUES ($1, $2, $3, jsonb_build_object('repo', $4::text), '', 'approved', 'succeeded', $5, $6, $6 + interval '1 day', $6, '{}')`,
+		VALUES ($1, $2, $3, jsonb_build_object('repo', $4::text), '', 'approved', 'succeeded', $5, $6::timestamptz, $6::timestamptz + interval '1 day', $6::timestamptz, '{}')`,
 		id, checkoutInvestigation, name, repo, action.IdempotencyKey(id.String()), executed)
 	require.NoError(t, err)
 
