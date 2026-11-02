@@ -23,8 +23,6 @@ CREATE TABLE IF NOT EXISTS pull_request_states (
 
 -- Counting the merged pull requests of a period.
 CREATE INDEX IF NOT EXISTS pull_request_states_merged ON pull_request_states (merged_at) WHERE state = 'merged';
--- Finding the open pull requests that were checked longest ago.
-CREATE INDEX IF NOT EXISTS pull_request_states_open ON pull_request_states (checked_at) WHERE state = 'open';
 
 -- The check_pull_requests jobs in any status, so a replica can tell whether
 -- today's job has run already.
