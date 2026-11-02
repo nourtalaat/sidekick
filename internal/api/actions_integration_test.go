@@ -105,7 +105,19 @@ func TestAskFollowUp(t *testing.T) {
 		wantJob bool
 		// wantDetail is a part of the problem's detail.
 		wantDetail string
+		// wantMode is the action mode of the investigation afterwards, when
+		// the test looks at it.
+		wantMode string
 	}{
+		{
+			name: "a question moves a read-write investigation to approved mode", id: inv1, who: asAdmin, body: `{"text": "Was it the cache?"}`,
+			prepare: "UPDATE investigations SET mode = 'read-write' WHERE id = '" + inv1 + "'", wantMode: "approved",
+			wantStatus: http.StatusAccepted, wantAudit: [][2]string{{"user", adminUserID}}, wantJob: true,
+		},
+		{
+			name: "a question that is refused leaves a read-write investigation as it is", id: inv1, who: asViewer, body: `{"text": "Hi"}`,
+			prepare: "UPDATE investigations SET mode = 'read-write' WHERE id = '" + inv1 + "'", wantMode: "read-write", wantStatus: http.StatusForbidden,
+		},
 		{
 			name: "a responder asks about a finished investigation", id: inv1, who: asAdmin, body: `{"text": "Was it the cache?"}`,
 			wantStatus: http.StatusAccepted, wantAudit: [][2]string{{"user", adminUserID}}, wantJob: true,
@@ -150,6 +162,13 @@ func TestAskFollowUp(t *testing.T) {
 			rec := s.post(t, "/api/v1/investigations/"+tt.id+"/follow-ups", tt.who, tt.body)
 			require.Equal(t, tt.wantStatus, rec.Code, rec.Body.String())
 			require.Equal(t, tt.wantAudit, s.auditRows(t, investigator.ActionFollowUpAsked))
+
+			if tt.wantMode != "" {
+				var mode string
+
+				require.NoError(t, s.pool.QueryRow(t.Context(), "SELECT mode FROM investigations WHERE id = $1", tt.id).Scan(&mode))
+				require.Equal(t, tt.wantMode, mode)
+			}
 
 			var questions, jobs int
 

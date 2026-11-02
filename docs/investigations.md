@@ -137,7 +137,8 @@ The model sees the built-in tools and the tools of the route's sources:
   approves a proposal that passes its checks and it runs at once. An
   investigation is in `read-write` mode only when its first event came from
   a trusted sender; when an event that is not trusted starts it or joins it
-  later, it is in `approved` mode and proposals wait for a person (see
+  later, or someone asks a follow-up question, it is in `approved` mode and
+  proposals wait for a person (see
   [read + write mode](configuration.md#read--write-mode-and-trusted-senders)).
 - **Source tools** are named `<source>__<tool>`, for example
   `signoz__search_logs`. A route's `sources` list limits them to those
@@ -236,7 +237,9 @@ questions that waited, in one message, with who asked each one. It has
 the same tools, and `answer_follow_up` to answer without changing the
 verdict; it calls `submit_verdict` with a full new report when the answer
 changes the verdict. Questions are what to look at: they cannot change the
-tools, the action mode or the verdict rules. Questions that arrive while a
+tools or the verdict rules, and they cannot raise the action mode. A
+question on a `read-write` investigation lowers it to `approved`, so what
+the run proposes waits for a person. Questions that arrive while a
 run is going on wait for the next run. A triage-only result takes no
 questions until **Investigate anyway** has started a full investigation.
 

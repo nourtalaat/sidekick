@@ -1830,7 +1830,11 @@ an alert comes from outside. So it is limited to senders you control:
   person. The same happens to a `read-write` investigation when an event
   that is not trusted joins it later, by the same fingerprint, through
   `grouping.relatedWindow`, or as a recovery event: it becomes `approved`
-  from then on, because the text of that event reaches the model.
+  from then on, because the text of that event reaches the model. A
+  follow-up question does the same, from Slack or the web UI, because it
+  comes from whoever is in the thread or signed in and its text steers the
+  model. `allowUntrustedWrite` does not change this: it is about the senders
+  the config names.
 - Only the config file and an admin in the web UI or the API can set
   `read-write`. Slack commands cannot.
 
@@ -1848,7 +1852,8 @@ routes:
 ```
 
 `allowUntrustedWrite: true` lifts both limits for one route: it may select
-senders that are not trusted, and their events keep `read-write` mode.
+senders that are not trusted, and their events keep `read-write` mode. It
+does not keep that mode after a follow-up question.
 Sidekick logs a warning for each such route, from the file or saved in the
 web UI, every time it starts. A runtime route saved with it is in the audit
 log like every route change, with the old and new values. In the web UI the
