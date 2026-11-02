@@ -500,6 +500,67 @@ func TestAChangeCannotTakeAMonitorOutOfTheLimits(t *testing.T) {
 	require.Zero(t, dd.putCount())
 }
 
+func TestSnapshotRefusesANoDataTimeframeDatadogWouldDrop(t *testing.T) {
+	t.Parallel()
+
+	limits := limitsOf()
+	limits.Fields = append(limits.Fields, "options.no_data_timeframe", "options.notify_no_data")
+
+	tests := []struct {
+		name    string
+		params  string
+		change  func(f *fakeDatadog)
+		wantErr string
+	}{
+		{
+			name:    "the timeframe alone, while the monitor does not notify on missing data",
+			params:  `{"monitorId": 123, "set": {"options.no_data_timeframe": 20}}`,
+			wantErr: "options.no_data_timeframe is dropped by Datadog while options.notify_no_data is false",
+		},
+		{
+			name:    "the timeframe with notify_no_data set to false",
+			params:  `{"monitorId": 123, "set": {"options.no_data_timeframe": 20, "options.notify_no_data": false}}`,
+			wantErr: "set options.notify_no_data to true in the same change",
+		},
+		{name: "the timeframe with notify_no_data set to true", params: `{"monitorId": 123, "set": {"options.no_data_timeframe": 20, "options.notify_no_data": true}}`},
+		{
+			name:   "the timeframe when the monitor notifies already",
+			params: `{"monitorId": 123, "set": {"options.no_data_timeframe": 20}}`,
+			change: func(f *fakeDatadog) {
+				f.monitor["options"] = json.RawMessage(`{"thresholds": {"critical": 2}, "notify_no_data": true, "no_data_timeframe": 10}`)
+			},
+		},
+		{
+			name:   "another change to a monitor that has both",
+			params: raiseCritical,
+			change: func(f *fakeDatadog) {
+				f.monitor["options"] = json.RawMessage(`{"thresholds": {"critical": 2}, "notify_no_data": false, "no_data_timeframe": 10}`)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			api, dd := newFakeDatadog(t)
+			if tt.change != nil {
+				dd.configure(tt.change)
+			}
+
+			_, err := newTestAction(t, api, limits).Snapshot(t.Context(), json.RawMessage(tt.params))
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+
+				return
+			}
+
+			require.ErrorContains(t, err, tt.wantErr)
+			require.ErrorIs(t, err, action.ErrLimit)
+		})
+	}
+}
+
 func TestSnapshotRefusals(t *testing.T) {
 	t.Parallel()
 

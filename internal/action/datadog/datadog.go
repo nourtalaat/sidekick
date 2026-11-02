@@ -159,7 +159,8 @@ func (m *Monitor) Spec() action.Spec {
 		b.WriteString("Fields that may change, with every field below them: " + strings.Join(m.limits.Fields, ", ") + ". ")
 	}
 
-	b.WriteString("Give set as field path to new value; an array such as tags is replaced whole.")
+	b.WriteString("Give set as field path to new value; an array such as tags is replaced whole. ")
+	b.WriteString("Datadog keeps options.no_data_timeframe only while options.notify_no_data is true, so set both together.")
 
 	return action.Spec{Name: m.name, Description: b.String(), ParamsSchema: paramsSchema}
 }
@@ -280,6 +281,10 @@ func (m *Monitor) Snapshot(ctx context.Context, raw json.RawMessage) (action.Sna
 
 	if err := action.CheckFields(m.allowed, deltas); err != nil {
 		return action.Snapshot{}, fmt.Errorf("check the fields: %w", err)
+	}
+
+	if err := checkNoData(snap.After, deltas); err != nil {
+		return action.Snapshot{}, fmt.Errorf("check the no data options: %w", err)
 	}
 
 	if err := m.checkAfter(p.MonitorID, snap.After); err != nil {
@@ -509,6 +514,42 @@ func (m *Monitor) checkMonitor(id int64, live map[string]json.RawMessage) error 
 	}
 
 	return fmt.Errorf("monitor %d: %w: %w", id, action.ErrLimit, errNotAllowed)
+}
+
+// noDataTimeframe is the path of the option that Datadog keeps only while
+// notify_no_data is true.
+var noDataTimeframe = action.Path{"options", "no_data_timeframe"}
+
+// checkNoData refuses a change that sets options.no_data_timeframe while the
+// monitor does not notify on missing data. Datadog drops that option then, so
+// the change would never read back as made, and neither a retry after a crash
+// nor an Undo could tell it was made. The error says what to do instead, for
+// the model.
+func checkNoData(after json.RawMessage, deltas []action.Delta) error {
+	sets := slices.ContainsFunc(deltas, func(d action.Delta) bool {
+		return slices.Equal(d.Path, noDataTimeframe) && d.After != nil
+	})
+	if !sets {
+		return nil
+	}
+
+	var parsed struct {
+		Options struct {
+			NotifyNoData bool `json:"notify_no_data"`
+		} `json:"options"`
+	}
+
+	if err := json.Unmarshal(after, &parsed); err != nil {
+		return fmt.Errorf("read options.notify_no_data after the change: %w: %w", action.ErrLimit, err)
+	}
+
+	if !parsed.Options.NotifyNoData {
+		return fmt.Errorf("options.no_data_timeframe is dropped by Datadog while options.notify_no_data is false, "+
+			"so the change could not be confirmed; set options.notify_no_data to true in the same change, "+
+			"or leave out options.no_data_timeframe: %w", action.ErrLimit)
+	}
+
+	return nil
 }
 
 // checkAfter checks that the monitor is still one the limits allow once the
