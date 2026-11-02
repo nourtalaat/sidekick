@@ -60,6 +60,7 @@ model:
       model: Qwen/Qwen3.8-27B
       baseURL: http://vllm.inference.svc:8000/v1
       server: vllm
+      retries: 3                # retries of rate limits, overloads and timeouts
   roles:
     investigate: local
 ```
@@ -84,6 +85,7 @@ model:
       model: qwen3.8:27b
       baseURL: http://ollama.inference.svc:11434/v1
       server: ollama
+      retries: 3
   roles:
     investigate: local
 ```
@@ -127,6 +129,7 @@ model:
       model: <a model ID ending in :free>
       baseURL: https://openrouter.ai/api/v1
       apiKeySecret: { name: sidekick-openrouter, key: apiKey }
+      retries: 3
       capabilities:
         toolCalling: true
         toolChoice: false
@@ -178,6 +181,7 @@ model:
       model: gemini-3.8-flash
       apiKeySecret: { name: sidekick-gemini, key: apiKey }
       effort: medium
+      retries: 3
   roles:
     investigate: gemini
 ```

@@ -29,7 +29,7 @@ spec:
     metadata:
       annotations:
         # A config change rolls the pods.
-        checksum/config: 1806263dd3fca4fa13f7dfd5fa1237dc3a513bbfc8c9847bd7c294bdf47b9168
+        checksum/config: 0aedcf39700653a38dcc53a723be7879d97fbee333fd504ec49ef85e32202da1
         azure.workload.identity/skip-containers: mcp-git;validator
         eks.amazonaws.com/skip-containers: mcp-git,validator
         example.com/team: payments

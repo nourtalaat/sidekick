@@ -29,7 +29,7 @@ spec:
     metadata:
       annotations:
         # A config change rolls the pods.
-        checksum/config: 582bbdc4f55ead56bddf5c26cc53bbcdc801406bd960186952bd697ac6bed581
+        checksum/config: 0d04981775231de2283d481010b0ee8ac430bc1cddefda780213bfa059c5ea5b
       labels:
         app.kubernetes.io/name: sidekick
         app.kubernetes.io/instance: sidekick
