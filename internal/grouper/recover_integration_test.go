@@ -116,7 +116,7 @@ func TestRecover(t *testing.T) {
 				return
 			}
 
-			require.Equal(t, Result{GroupID: diskGroup, InvestigationID: diskInvestigation}, res)
+			require.Equal(t, Result{GroupID: diskGroup, Route: "default", InvestigationID: diskInvestigation}, res)
 			require.Equal(t, 1, h.count(t, "SELECT count(*) FROM investigation_inbox WHERE kind = 'resolved' AND investigation_id = $1", diskInvestigation))
 			require.Equal(t, int32(1), h.groupByID(t, diskGroup).EventCount, "a recovery does not count as an event")
 		})

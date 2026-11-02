@@ -258,10 +258,14 @@ type Route struct {
 	Roles map[model.Role]string `yaml:"roles"`
 	// Sources lists the sources the investigation may use.
 	Sources []string `yaml:"sources"`
-	// Mode is the action mode: read-only, or approved, where the model may
-	// propose the route's actions and a person approves each one.
-	// TODO: [SK-48] Allow read-write.
+	// Mode is the action mode: read-only; approved, where the model may
+	// propose the route's actions and a person approves each one; or
+	// read-write, where a proposal of a trusted event runs without one.
 	Mode action.Mode `yaml:"mode"`
+	// AllowUntrustedWrite lets a read-write route select intakes and
+	// listeners that are not trusted, and keeps read-write mode for their
+	// events (ACT-6). Sidekick logs a warning for it on every start.
+	AllowUntrustedWrite bool `yaml:"allowUntrustedWrite"`
 	// Actions lists the actions the route may propose, by their names in
 	// the actions section. It is empty in read-only mode.
 	Actions []string `yaml:"actions"`

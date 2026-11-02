@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
+	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/app"
 	"github.com/nourtalaat/sidekick/internal/rules"
 )
@@ -22,9 +24,23 @@ func registerRules(ctx context.Context, a *app.App) (*rules.Cache, error) {
 		log.WarnContext(ctx, "loading the runtime rules failed; starting with the rules of the config file", "error", err)
 	}
 
+	warnUntrustedWrite(ctx, log, cache.Current())
+
 	if err := a.RegisterTask("rules-reload", cache.Run); err != nil {
 		return nil, fmt.Errorf("register the runtime rules reload: %w", err)
 	}
 
 	return cache, nil
+}
+
+// warnUntrustedWrite logs one warning for each read-write route in effect
+// that sets allowUntrustedWrite, since its events can come from senders
+// that are not trusted.
+func warnUntrustedWrite(ctx context.Context, log *slog.Logger, effective *rules.Effective) {
+	for _, r := range effective.Routes {
+		if r.Config.Mode == action.ReadWrite && r.Config.AllowUntrustedWrite {
+			log.WarnContext(ctx, "a read-write route runs actions for events from senders that are not trusted (allowUntrustedWrite)",
+				"route", r.Config.Name, "layer", string(r.Layer))
+		}
+	}
 }

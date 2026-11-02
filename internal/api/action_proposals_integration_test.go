@@ -62,6 +62,7 @@ type actionProposalBody struct {
 	DecidedByName      string         `json:"decidedByName"`
 	DecidedBySlackUser string         `json:"decidedBySlackUser"`
 	DecidedAt          string         `json:"decidedAt"`
+	ApprovedByPolicy   bool           `json:"approvedByPolicy"`
 	Error              string         `json:"error"`
 	Result             *struct {
 		Summary string `json:"summary"`
@@ -387,6 +388,37 @@ func TestDecideProposalRefusals(t *testing.T) {
 			require.Empty(t, actionProposalAudit(t, s.pool, tt.id), "a refused decision writes nothing")
 		})
 	}
+}
+
+// TestProposalApprovedByPolicy turns an approved proposal of the fixture
+// into one that the route's policy approved, with no decider.
+func TestProposalApprovedByPolicy(t *testing.T) {
+	t.Parallel()
+
+	s, _ := setupActionProposals(t)
+
+	_, err := s.pool.Exec(t.Context(), "UPDATE action_proposals SET decided_by = NULL WHERE id = $1", propApproved)
+	require.NoError(t, err)
+
+	listed := readActionProposals(t, s.doWithToken(t, http.MethodGet, actionProposalsRoute+"?status=approved&status=succeeded", approverToken, nil))
+	require.Len(t, listed.Proposals, 2)
+
+	for _, p := range listed.Proposals {
+		switch p.ID {
+		case propApproved:
+			require.True(t, p.ApprovedByPolicy)
+			require.Empty(t, p.DecidedByName)
+			require.NotEmpty(t, p.DecidedAt)
+		case propSucceeded:
+			require.False(t, p.ApprovedByPolicy, "a proposal a person approved is not")
+		default:
+			require.Failf(t, "unexpected proposal", "%s", p.ID)
+		}
+	}
+
+	rec := s.do(t, http.MethodPost, actionProposalsRoute+"/"+propApproved+"/reject", boSession, boCSRF, nil)
+	require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
+	require.Contains(t, rec.Body.String(), "This proposal is approved already; it was approved by policy (read + write route).")
 }
 
 // TestTwoApproversAtOnceThroughTheAPI sends an approval and a rejection of
