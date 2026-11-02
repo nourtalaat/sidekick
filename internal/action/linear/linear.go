@@ -5,8 +5,6 @@
 package linear
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -15,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/actionhttp"
 	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/registry"
@@ -111,7 +108,7 @@ type service struct {
 // newService builds the part both actions share.
 func newService(name string, conn Connection, deps registry.Deps) (service, error) {
 	if deps.Secrets == nil {
-		return service{}, fmt.Errorf("linear action %q: %w", name, errNoSecrets)
+		return service{}, errNoSecrets
 	}
 
 	hc := deps.HTTP
@@ -151,12 +148,6 @@ func teamMayBeAllowed(allowed []string, ref string) bool {
 	})
 }
 
-// limitError returns an error that says what is outside the limits, and
-// wraps action.ErrLimit and cause.
-func limitError(cause error, format string, args ...any) error {
-	return fmt.Errorf("%s: %w: %w", fmt.Sprintf(format, args...), action.ErrLimit, cause)
-}
-
 // isUUID reports whether s is a UUID in the usual 36 character form.
 func isUUID(s string) bool {
 	if len(s) != len(uuid.Nil.String()) {
@@ -166,17 +157,4 @@ func isUUID(s string) bool {
 	_, err := uuid.Parse(s)
 
 	return err == nil
-}
-
-// decodeStrict decodes the parameters of an action into v and refuses keys
-// that v does not have.
-func decodeStrict(raw json.RawMessage, v any) error {
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-
-	if err := dec.Decode(v); err != nil {
-		return fmt.Errorf("decode the parameters: %w", err)
-	}
-
-	return nil
 }

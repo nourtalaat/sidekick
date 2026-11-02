@@ -1505,8 +1505,9 @@ How a proposal is handled:
 creates one. Both use the same connection keys. Their text is posted as
 plain text: Sidekick escapes it, so a comment or description cannot add
 formatting, links or mentions. Each ends with a line that says Sidekick
-posted it, with a link to the investigation when
-[`server.publicURL`](#server) is set.
+posted it and who approved it, an approver or the read + write policy of the
+route, with a link to the investigation when [`server.publicURL`](#server)
+is set.
 
 ```yaml
 actions:

@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/registry"
 )
 
@@ -142,9 +143,25 @@ func TestEscape(t *testing.T) {
 func TestWithFooter(t *testing.T) {
 	t.Parallel()
 
-	got := withFooter("Hello *there*", testPublicURL, testInvestigationID)
-	require.Equal(t, "Hello \\*there\\*\n\n---\nPosted by Sidekick after an approver approved it. [Investigation]("+
-		testPublicURL+"/investigations/"+testInvestigationID+")", got)
+	link := " [Investigation](" + testPublicURL + "/investigations/" + testInvestigationID + ")"
 
-	require.Equal(t, "Hello\n\n---\nPosted by Sidekick after an approver approved it.", withFooter("Hello", "", testInvestigationID))
+	tests := []struct {
+		name       string
+		approvedBy string
+		publicURL  string
+		want       string
+	}{
+		{name: "an approver", approvedBy: "u1", publicURL: testPublicURL, want: "Hello \\*there\\*\n\n---\nPosted by Sidekick after an approver approved it." + link},
+		{name: "the policy of a read-write route", approvedBy: "policy", publicURL: testPublicURL, want: "Hello \\*there\\*\n\n---\nPosted by Sidekick, approved by the read + write policy of its route." + link},
+		{name: "no public URL", approvedBy: "u1", want: "Hello \\*there\\*\n\n---\nPosted by Sidekick after an approver approved it."},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			inv := action.Invocation{InvestigationID: testInvestigationID, ApprovedBy: tt.approvedBy}
+			require.Equal(t, tt.want, withFooter("Hello *there*", inv, tt.publicURL))
+		})
+	}
 }

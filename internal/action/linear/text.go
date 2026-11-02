@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/weblink"
 )
 
@@ -48,11 +49,11 @@ func escape(s string) string {
 }
 
 // withFooter returns the text of the model, escaped, followed by a rule and
-// a line that says Sidekick wrote it and links to the investigation when
+// a line that says Sidekick wrote it and who approved it and links to the investigation when
 // publicURL allows. The link is built here, never from the model's text.
-func withFooter(text, publicURL, investigationID string) string {
-	footer := "Posted by Sidekick after an approver approved it."
-	if link := weblink.Investigation(publicURL, investigationID); link != "" {
+func withFooter(text string, inv action.Invocation, publicURL string) string {
+	footer := inv.ApprovalNote("Posted")
+	if link := weblink.Investigation(publicURL, inv.InvestigationID); link != "" {
 		footer += " [Investigation](" + urlEscaper.Replace(link) + ")"
 	}
 

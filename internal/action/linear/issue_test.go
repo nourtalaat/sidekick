@@ -32,14 +32,14 @@ func TestIssueValidate(t *testing.T) {
 		{name: "no labels asked", limits: opsLimits, params: `{"team": "ops", "title": "T"}`},
 		{name: "another team", limits: opsLimits, params: `{"team": "ENG", "title": "T"}`, wantErr: `team "ENG": outside configured limits: the team is not one of limits.teams`, wantLimit: true},
 		{name: "a team ID might match a key", limits: IssueLimits{Teams: []string{opsTeamID}, MaxPerDay: 1}, params: `{"team": "OPS", "title": "T"}`},
-		{name: "a label that is not allowed", limits: opsLimits, params: `{"team": "OPS", "title": "T", "labels": ["urgent"]}`, wantErr: `label "urgent": outside configured limits: the label is not one of limits.labels`, wantLimit: true},
-		{name: "no labels allowed", limits: IssueLimits{Teams: []string{"OPS"}, MaxPerDay: 1}, params: `{"team": "OPS", "title": "T", "labels": ["incident"]}`, wantErr: `label "incident": outside configured limits: the label is not one of limits.labels`, wantLimit: true},
-		{name: "too many labels", limits: opsLimits, params: `{"team": "OPS", "title": "T", "labels": ["incident","incident","incident","incident","incident","incident"]}`, wantErr: "6 labels, at most 5: outside configured limits: labels: too many", wantLimit: true},
+		{name: "a label that is not allowed", limits: opsLimits, params: `{"team": "OPS", "title": "T", "labels": ["urgent"]}`, wantErr: `check the labels: label "urgent": outside configured limits: the label is not one of limits.labels`, wantLimit: true},
+		{name: "no labels allowed", limits: IssueLimits{Teams: []string{"OPS"}, MaxPerDay: 1}, params: `{"team": "OPS", "title": "T", "labels": ["incident"]}`, wantErr: `check the labels: label "incident": outside configured limits: the label is not one of limits.labels`, wantLimit: true},
+		{name: "too many labels", limits: opsLimits, params: `{"team": "OPS", "title": "T", "labels": ["incident","incident","incident","incident","incident","incident"]}`, wantErr: "check the labels: 6 labels, at most 5: outside configured limits: labels: too many", wantLimit: true},
 		{name: "an empty title", limits: opsLimits, params: `{"team": "OPS", "title": " "}`, wantErr: "title: required"},
 		{name: "a long title", limits: opsLimits, params: `{"team": "OPS", "title": "` + strings.Repeat("x", maxTitleChars+1) + `"}`, wantErr: "201 characters, at most 200: outside configured limits: title: too long", wantLimit: true},
 		{name: "a long description", limits: opsLimits, params: `{"team": "OPS", "title": "T", "description": "` + strings.Repeat("x", maxDescriptionChars+1) + `"}`, wantErr: "4001 characters, at most 4000: outside configured limits: description: too long", wantLimit: true},
 		{name: "no team", limits: opsLimits, params: `{"title": "T"}`, wantErr: "team: required"},
-		{name: "an unknown parameter", limits: opsLimits, params: `{"team": "OPS", "title": "T", "assignee": "me"}`, wantErr: `decode the parameters: json: unknown field "assignee"`},
+		{name: "an unknown parameter", limits: opsLimits, params: `{"team": "OPS", "title": "T", "assignee": "me"}`, wantErr: `decode: invalid parameters: json: unknown field "assignee"`},
 	}
 
 	for _, tt := range tests {
@@ -55,7 +55,7 @@ func TestIssueValidate(t *testing.T) {
 				return
 			}
 
-			require.EqualError(t, err, tt.wantErr)
+			require.EqualError(t, err, "validate ops-issue: "+tt.wantErr)
 			require.Equal(t, tt.wantLimit, isLimit(err))
 		})
 	}
@@ -232,4 +232,33 @@ func TestIssueSpecNamesTheLimits(t *testing.T) {
 	require.Equal(t, "ops-issue", spec.Name)
 	require.Contains(t, spec.Description, "Allowed teams: OPS. Allowed labels: incident, Bug. At most 3 issues a day.")
 	require.True(t, json.Valid(spec.ParamsSchema))
+}
+
+func TestIssueExecuteSaysWhoApproved(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		approvedBy string
+		want       string
+	}{
+		{name: "an approver", approvedBy: "u1", want: "Posted by Sidekick after an approver approved it."},
+		{name: "the policy of a read-write route", approvedBy: "policy", want: "Posted by Sidekick, approved by the read + write policy of its route."},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f, api := newServer(t)
+
+			inv := invocation(issueOps)
+			inv.ApprovedBy = tt.approvedBy
+
+			_, err := newIssue(t, api, opsLimits, allowDaily(t)).Execute(t.Context(), inv)
+			require.NoError(t, err)
+			require.Len(t, f.inputs, 1)
+			require.Contains(t, f.inputs[0].Description, "\n\n---\n"+tt.want)
+		})
+	}
 }

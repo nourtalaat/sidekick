@@ -83,7 +83,7 @@ var _ action.Action = (*Issue)(nil)
 func NewIssue(_ context.Context, name string, cfg IssueConfig, deps registry.Deps) (action.Action, error) {
 	svc, err := newService(name, cfg.Connection, deps)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("linear action %q: %w", name, err)
 	}
 
 	return &Issue{
@@ -114,9 +114,11 @@ func (i *Issue) Spec() action.Spec {
 // the team and the labels against the limits. The daily limit is checked
 // when the issue is created.
 func (i *Issue) Validate(_ context.Context, raw json.RawMessage) error {
-	_, err := i.check(raw)
+	if _, err := i.check(raw); err != nil {
+		return fmt.Errorf("validate %s: %w", i.name, err)
+	}
 
-	return err
+	return nil
 }
 
 // Execute implements action.Action. A repeat with the same idempotency key
@@ -146,7 +148,7 @@ func (i *Issue) Execute(ctx context.Context, inv action.Invocation) (action.Resu
 	}
 
 	if !teamAllowed(i.limits.Teams, team.Key, team.ID) {
-		return action.Result{}, limitError(errIssueTeam, "team %s", team.Key)
+		return action.Result{}, action.LimitError(errIssueTeam, "team %s", team.Key)
 	}
 
 	found, err = i.client.issueByMarker(ctx, team.ID, markerOf(inv.IdempotencyKey))
@@ -171,7 +173,7 @@ func (i *Issue) Execute(ctx context.Context, inv action.Invocation) (action.Resu
 		ID:          id,
 		TeamID:      team.ID,
 		Title:       p.Title,
-		Description: issueDescription(p.Description, inv.IdempotencyKey, i.publicURL, inv.InvestigationID),
+		Description: issueDescription(p.Description, inv, i.publicURL),
 		LabelIDs:    labelIDs,
 	})
 	if err != nil {
@@ -189,19 +191,19 @@ func (i *Issue) Execute(ctx context.Context, inv action.Invocation) (action.Resu
 // check decodes the parameters and checks them against the limits.
 func (i *Issue) check(raw json.RawMessage) (IssueParams, error) {
 	var p IssueParams
-	if err := decodeStrict(raw, &p); err != nil {
-		return IssueParams{}, err
+	if err := action.DecodeParams(raw, &p); err != nil {
+		return IssueParams{}, fmt.Errorf("decode: %w", err)
 	}
 
 	switch n := utf8.RuneCountInString(p.Title); {
 	case strings.TrimSpace(p.Title) == "":
 		return IssueParams{}, errNoTitle
 	case n > maxTitleChars:
-		return IssueParams{}, limitError(errLongTitle, "%d characters, at most %d", n, maxTitleChars)
+		return IssueParams{}, action.LimitError(errLongTitle, "%d characters, at most %d", n, maxTitleChars)
 	}
 
 	if n := utf8.RuneCountInString(p.Description); n > maxDescriptionChars {
-		return IssueParams{}, limitError(errLongText, "%d characters, at most %d", n, maxDescriptionChars)
+		return IssueParams{}, action.LimitError(errLongText, "%d characters, at most %d", n, maxDescriptionChars)
 	}
 
 	if p.Team == "" {
@@ -209,11 +211,11 @@ func (i *Issue) check(raw json.RawMessage) (IssueParams, error) {
 	}
 
 	if !teamMayBeAllowed(i.limits.Teams, p.Team) || (!isUUID(p.Team) && !teamPattern.MatchString(p.Team)) {
-		return IssueParams{}, limitError(errIssueTeam, "team %q", p.Team)
+		return IssueParams{}, action.LimitError(errIssueTeam, "team %q", p.Team)
 	}
 
 	if err := i.checkLabels(p.Labels); err != nil {
-		return IssueParams{}, err
+		return IssueParams{}, fmt.Errorf("check the labels: %w", err)
 	}
 
 	return p, nil
@@ -222,7 +224,7 @@ func (i *Issue) check(raw json.RawMessage) (IssueParams, error) {
 // checkLabels checks the labels against limits.labels.
 func (i *Issue) checkLabels(labels []string) error {
 	if len(labels) > maxLabels {
-		return limitError(errManyLabels, "%d labels, at most %d", len(labels), maxLabels)
+		return action.LimitError(errManyLabels, "%d labels, at most %d", len(labels), maxLabels)
 	}
 
 	for _, label := range labels {
@@ -241,7 +243,7 @@ func (i *Issue) checkLabels(labels []string) error {
 		}
 
 		if !allowed {
-			return limitError(errLabelLimit, "label %q", label)
+			return action.LimitError(errLabelLimit, "label %q", label)
 		}
 	}
 
@@ -285,6 +287,6 @@ func markerOf(key string) string {
 // issueDescription returns the description of an issue: the model's text,
 // escaped, then the footer and the line with the idempotency key. The key
 // is made from the proposal ID, never from the model's text.
-func issueDescription(text, key, publicURL, investigationID string) string {
-	return withFooter(text, publicURL, investigationID) + "\n\n" + markerOf(key)
+func issueDescription(text string, inv action.Invocation, publicURL string) string {
+	return withFooter(text, inv, publicURL) + "\n\n" + markerOf(inv.IdempotencyKey)
 }

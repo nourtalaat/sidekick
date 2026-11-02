@@ -78,7 +78,7 @@ var _ action.Action = (*Comment)(nil)
 func NewComment(_ context.Context, name string, cfg CommentConfig, deps registry.Deps) (action.Action, error) {
 	svc, err := newService(name, cfg.Connection, deps)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("linear action %q: %w", name, err)
 	}
 
 	return &Comment{service: svc, teams: cfg.Limits.Teams}, nil
@@ -98,9 +98,11 @@ func (c *Comment) Spec() action.Spec {
 // and, when the issue's identifier names a team, that the team is allowed;
 // Execute settles an issue given by ID with the team Linear returns.
 func (c *Comment) Validate(_ context.Context, raw json.RawMessage) error {
-	_, err := c.check(raw)
+	if _, err := c.check(raw); err != nil {
+		return fmt.Errorf("validate %s: %w", c.name, err)
+	}
 
-	return err
+	return nil
 }
 
 // Execute implements action.Action. A repeat with the same idempotency key
@@ -129,10 +131,10 @@ func (c *Comment) Execute(ctx context.Context, inv action.Invocation) (action.Re
 	}
 
 	if !teamAllowed(c.teams, issue.Team.Key, issue.Team.ID) {
-		return action.Result{}, limitError(errTeamLimit, "issue %s is in team %s", issue.Identifier, issue.Team.Key)
+		return action.Result{}, action.LimitError(errTeamLimit, "issue %s is in team %s", issue.Identifier, issue.Team.Key)
 	}
 
-	body := withFooter(p.Body, c.publicURL, inv.InvestigationID)
+	body := withFooter(p.Body, inv, c.publicURL)
 
 	made, err = c.client.createComment(ctx, id, issue.ID, body)
 	if err != nil {
@@ -150,8 +152,8 @@ func (c *Comment) Execute(ctx context.Context, inv action.Invocation) (action.Re
 // check decodes the parameters and checks them against the limits.
 func (c *Comment) check(raw json.RawMessage) (CommentParams, error) {
 	var p CommentParams
-	if err := decodeStrict(raw, &p); err != nil {
-		return CommentParams{}, err
+	if err := action.DecodeParams(raw, &p); err != nil {
+		return CommentParams{}, fmt.Errorf("decode: %w", err)
 	}
 
 	if !issueRefPattern.MatchString(p.Issue) {
@@ -159,14 +161,14 @@ func (c *Comment) check(raw json.RawMessage) (CommentParams, error) {
 	}
 
 	if team, _, ok := strings.Cut(p.Issue, "-"); ok && !isUUID(p.Issue) && !teamMayBeAllowed(c.teams, team) {
-		return CommentParams{}, limitError(errTeamLimit, "issue %s", p.Issue)
+		return CommentParams{}, action.LimitError(errTeamLimit, "issue %s", p.Issue)
 	}
 
 	switch n := utf8.RuneCountInString(p.Body); {
 	case strings.TrimSpace(p.Body) == "":
 		return CommentParams{}, errEmptyBody
 	case n > maxCommentChars:
-		return CommentParams{}, limitError(errLongBody, "%d characters, at most %d", n, maxCommentChars)
+		return CommentParams{}, action.LimitError(errLongBody, "%d characters, at most %d", n, maxCommentChars)
 	}
 
 	return p, nil

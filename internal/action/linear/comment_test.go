@@ -37,7 +37,7 @@ func TestCommentValidate(t *testing.T) {
 		{name: "a body that is too long", teams: []string{"OPS"}, params: `{"issue": "OPS-12", "body": "` + long + `"}`, wantErr: "4001 characters, at most 4000: outside configured limits: body: too long", wantLimit: true},
 		{name: "a body of spaces", teams: []string{"OPS"}, params: `{"issue": "OPS-12", "body": "  "}`, wantErr: "body: required"},
 		{name: "not an issue", teams: []string{"OPS"}, params: `{"issue": "fix it", "body": "x"}`, wantErr: "issue: expected an identifier such as OPS-123, or an issue ID"},
-		{name: "an unknown parameter", teams: []string{"OPS"}, params: `{"issue": "OPS-12", "body": "x", "assignee": "me"}`, wantErr: `decode the parameters: json: unknown field "assignee"`},
+		{name: "an unknown parameter", teams: []string{"OPS"}, params: `{"issue": "OPS-12", "body": "x", "assignee": "me"}`, wantErr: `decode: invalid parameters: json: unknown field "assignee"`},
 	}
 
 	for _, tt := range tests {
@@ -53,7 +53,7 @@ func TestCommentValidate(t *testing.T) {
 				return
 			}
 
-			require.EqualError(t, err, tt.wantErr)
+			require.EqualError(t, err, "validate ops-comment: "+tt.wantErr)
 			require.Equal(t, tt.wantLimit, isLimit(err))
 		})
 	}
@@ -241,4 +241,34 @@ func TestCommentSpecNamesTheLimits(t *testing.T) {
 	require.Equal(t, "ops-comment", spec.Name)
 	require.Contains(t, spec.Description, "Allowed teams: OPS, ENG.")
 	require.True(t, json.Valid(spec.ParamsSchema))
+}
+
+func TestCommentExecuteSaysWhoApproved(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		approvedBy string
+		want       string
+	}{
+		{name: "an approver", approvedBy: "u1", want: "Posted by Sidekick after an approver approved it."},
+		{name: "the policy of a read-write route", approvedBy: "policy", want: "Posted by Sidekick, approved by the read + write policy of its route."},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f, api := newServer(t)
+			f.addIssue(issueUUID, "OPS-12", "OPS")
+
+			inv := invocation(commentOps)
+			inv.ApprovedBy = tt.approvedBy
+
+			_, err := newComment(t, api, "OPS").Execute(t.Context(), inv)
+			require.NoError(t, err)
+			require.Len(t, f.commentBodys, 1)
+			require.Contains(t, f.commentBodys[0], "\n\n---\n"+tt.want)
+		})
+	}
 }
