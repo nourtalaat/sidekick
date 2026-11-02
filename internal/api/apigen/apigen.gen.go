@@ -459,8 +459,9 @@ func (e Role) Valid() bool {
 
 // Defines values for RouteMode.
 const (
-	RouteModeApproved RouteMode = "approved"
-	RouteModeReadOnly RouteMode = "read-only"
+	RouteModeApproved  RouteMode = "approved"
+	RouteModeReadOnly  RouteMode = "read-only"
+	RouteModeReadWrite RouteMode = "read-write"
 )
 
 // Valid indicates whether the value is a known member of the RouteMode enum.
@@ -469,6 +470,8 @@ func (e RouteMode) Valid() bool {
 	case RouteModeApproved:
 		return true
 	case RouteModeReadOnly:
+		return true
+	case RouteModeReadWrite:
 		return true
 	default:
 		return false
@@ -1842,6 +1845,12 @@ type NewRoute struct {
 	// Actions The actions the route may propose, by their names in the config file's actions section. Empty in read-only mode.
 	Actions *[]string `json:"actions,omitempty"`
 
+	// AllowUntrustedWrite Lets a read-write route select intakes and listeners that are
+	// not trusted, and keeps read-write mode for their events. Every
+	// start logs a warning for it, and the change is in the audit
+	// log. It has no effect in other modes.
+	AllowUntrustedWrite *bool `json:"allowUntrustedWrite,omitempty"`
+
 	// Budgets Limits of one investigation. Zero or empty uses the global value.
 	Budgets  *RouteBudgets  `json:"budgets,omitempty"`
 	Grouping *RouteGrouping `json:"grouping,omitempty"`
@@ -1849,8 +1858,13 @@ type NewRoute struct {
 
 	// Mode The action mode. In read-only mode, the default, the model cannot
 	// propose changes. In approved mode it may propose the route's
-	// actions, and a person approves each one. A route in approved mode
-	// lists at least one action.
+	// actions, and a person approves each one. In read-write mode a
+	// proposal of an event from a trusted sender runs without a person.
+	// A route in approved or read-write mode lists at least one action.
+	// A read-write route may select only trusted intakes and listeners,
+	// unless `allowUntrustedWrite` is set. An investigation of an event
+	// that is not trusted runs in approved mode instead. Only the config
+	// file and an admin here can set read-write; Slack commands cannot.
 	Mode    *RouteMode `json:"mode,omitempty"`
 	Name    string     `json:"name"`
 	Outputs *[]string  `json:"outputs,omitempty"`
@@ -2085,8 +2099,13 @@ type Proposal struct {
 	Action string `json:"action"`
 
 	// AlertTitle The title of the alert of the investigation. Set in the review queue only.
-	AlertTitle *string    `json:"alertTitle,omitempty"`
-	DecidedAt  *time.Time `json:"decidedAt,omitempty"`
+	AlertTitle *string `json:"alertTitle,omitempty"`
+
+	// ApprovedByPolicy True when nobody decided the proposal: its investigation ran in
+	// read-write mode, so the route's policy approved it as it was
+	// stored, and `decidedAt` is the time of that approval.
+	ApprovedByPolicy *bool      `json:"approvedByPolicy,omitempty"`
+	DecidedAt        *time.Time `json:"decidedAt,omitempty"`
 
 	// DecidedByName The name of the user or API token that approved or rejected it.
 	DecidedByName *string `json:"decidedByName,omitempty"`
@@ -2224,6 +2243,12 @@ type Route struct {
 	// Actions The actions the route may propose, by their names in the config file's actions section. Empty in read-only mode.
 	Actions *[]string `json:"actions,omitempty"`
 
+	// AllowUntrustedWrite Lets a read-write route select intakes and listeners that are
+	// not trusted, and keeps read-write mode for their events. Every
+	// start logs a warning for it, and the change is in the audit
+	// log. It has no effect in other modes.
+	AllowUntrustedWrite *bool `json:"allowUntrustedWrite,omitempty"`
+
 	// Budgets Limits of one investigation. Zero or empty uses the global value.
 	Budgets  *RouteBudgets  `json:"budgets,omitempty"`
 	Enabled  bool           `json:"enabled"`
@@ -2235,8 +2260,13 @@ type Route struct {
 
 	// Mode The action mode. In read-only mode, the default, the model cannot
 	// propose changes. In approved mode it may propose the route's
-	// actions, and a person approves each one. A route in approved mode
-	// lists at least one action.
+	// actions, and a person approves each one. In read-write mode a
+	// proposal of an event from a trusted sender runs without a person.
+	// A route in approved or read-write mode lists at least one action.
+	// A read-write route may select only trusted intakes and listeners,
+	// unless `allowUntrustedWrite` is set. An investigation of an event
+	// that is not trusted runs in approved mode instead. Only the config
+	// file and an admin here can set read-write; Slack commands cannot.
 	Mode    *RouteMode `json:"mode,omitempty"`
 	Name    string     `json:"name"`
 	Outputs *[]string  `json:"outputs,omitempty"`
@@ -2310,14 +2340,25 @@ type RouteMatch struct {
 
 // RouteMode The action mode. In read-only mode, the default, the model cannot
 // propose changes. In approved mode it may propose the route's
-// actions, and a person approves each one. A route in approved mode
-// lists at least one action.
+// actions, and a person approves each one. In read-write mode a
+// proposal of an event from a trusted sender runs without a person.
+// A route in approved or read-write mode lists at least one action.
+// A read-write route may select only trusted intakes and listeners,
+// unless `allowUntrustedWrite` is set. An investigation of an event
+// that is not trusted runs in approved mode instead. Only the config
+// file and an admin here can set read-write; Slack commands cannot.
 type RouteMode string
 
 // RouteSpec The parts of a route that a person sets, with the keys they have in sidekick.yaml.
 type RouteSpec struct {
 	// Actions The actions the route may propose, by their names in the config file's actions section. Empty in read-only mode.
 	Actions *[]string `json:"actions,omitempty"`
+
+	// AllowUntrustedWrite Lets a read-write route select intakes and listeners that are
+	// not trusted, and keeps read-write mode for their events. Every
+	// start logs a warning for it, and the change is in the audit
+	// log. It has no effect in other modes.
+	AllowUntrustedWrite *bool `json:"allowUntrustedWrite,omitempty"`
 
 	// Budgets Limits of one investigation. Zero or empty uses the global value.
 	Budgets  *RouteBudgets  `json:"budgets,omitempty"`
@@ -2326,8 +2367,13 @@ type RouteSpec struct {
 
 	// Mode The action mode. In read-only mode, the default, the model cannot
 	// propose changes. In approved mode it may propose the route's
-	// actions, and a person approves each one. A route in approved mode
-	// lists at least one action.
+	// actions, and a person approves each one. In read-write mode a
+	// proposal of an event from a trusted sender runs without a person.
+	// A route in approved or read-write mode lists at least one action.
+	// A read-write route may select only trusted intakes and listeners,
+	// unless `allowUntrustedWrite` is set. An investigation of an event
+	// that is not trusted runs in approved mode instead. Only the config
+	// file and an admin here can set read-write; Slack commands cannot.
 	Mode    *RouteMode `json:"mode,omitempty"`
 	Outputs *[]string  `json:"outputs,omitempty"`
 
@@ -2342,6 +2388,12 @@ type RouteUpdate struct {
 	// Actions The actions the route may propose, by their names in the config file's actions section. Empty in read-only mode.
 	Actions *[]string `json:"actions,omitempty"`
 
+	// AllowUntrustedWrite Lets a read-write route select intakes and listeners that are
+	// not trusted, and keeps read-write mode for their events. Every
+	// start logs a warning for it, and the change is in the audit
+	// log. It has no effect in other modes.
+	AllowUntrustedWrite *bool `json:"allowUntrustedWrite,omitempty"`
+
 	// Budgets Limits of one investigation. Zero or empty uses the global value.
 	Budgets  *RouteBudgets  `json:"budgets,omitempty"`
 	Enabled  bool           `json:"enabled"`
@@ -2350,8 +2402,13 @@ type RouteUpdate struct {
 
 	// Mode The action mode. In read-only mode, the default, the model cannot
 	// propose changes. In approved mode it may propose the route's
-	// actions, and a person approves each one. A route in approved mode
-	// lists at least one action.
+	// actions, and a person approves each one. In read-write mode a
+	// proposal of an event from a trusted sender runs without a person.
+	// A route in approved or read-write mode lists at least one action.
+	// A read-write route may select only trusted intakes and listeners,
+	// unless `allowUntrustedWrite` is set. An investigation of an event
+	// that is not trusted runs in approved mode instead. Only the config
+	// file and an admin here can set read-write; Slack commands cannot.
 	Mode    *RouteMode `json:"mode,omitempty"`
 	Outputs *[]string  `json:"outputs,omitempty"`
 

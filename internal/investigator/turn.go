@@ -171,6 +171,11 @@ func (r *run) builtin(ctx context.Context, call model.ToolCall) (newStep, error)
 		content = fmt.Sprintf("Proposed %s as proposal %s. Nothing has run: it waits for an approver, and expires at %s. "+
 			"Go on with the investigation, and do not propose the same change again.", res.Action, res.ID, res.ExpiresAt.UTC().Format(time.RFC3339))
 
+		if res.ApprovedByPolicy {
+			content = fmt.Sprintf("Proposed %s as proposal %s. The route's policy approved it and it runs now, without a person. "+
+				"Go on with the investigation, and do not propose the same change again.", res.Action, res.ID)
+		}
+
 		if res.Refusal != "" {
 			problems = []string{res.Refusal}
 			content = rejectedText("proposal", problems) + "\nNothing was proposed."

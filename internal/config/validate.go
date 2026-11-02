@@ -13,6 +13,7 @@ import (
 	"path"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -396,22 +397,24 @@ func (v *validator) checkRoute(path string, r Route) {
 }
 
 // checkRouteActions checks a route's action mode and its list of actions:
-// the mode is known, a read-only route lists none, an approved route lists
-// at least one, and each is defined once in the actions section.
+// the mode is known, a read-only route lists none, an approved or
+// read-write route lists at least one, a read-write route can select only
+// trusted senders unless it sets allowUntrustedWrite, and each action is
+// defined once in the actions section.
 func (v *validator) checkRouteActions(path string, r Route) {
-	switch {
-	case !slices.Contains(knownModes, r.Mode):
+	if !slices.Contains(knownModes, r.Mode) {
 		v.errs.add(path+".mode", "unknown mode %q%s", r.Mode, didYouMean(string(r.Mode), asStrings(knownModes)))
-	case r.Mode == action.ReadWrite:
-		// TODO: [SK-48] Allow read-write routes, with the trusted-sender rule.
-		v.errs.add(path+".mode", "mode %q is not available yet: use %q, where a person approves each action", r.Mode, action.Approved)
 	}
 
 	switch {
 	case r.Mode == action.ReadOnly && len(r.Actions) > 0:
 		v.errs.add(path+".actions", "must be empty while mode is %s", action.ReadOnly)
-	case r.Mode == action.Approved && len(r.Actions) == 0:
-		v.errs.add(path+".actions", "list at least one action: mode %s lets the model propose only these", action.Approved)
+	case (r.Mode == action.Approved || r.Mode == action.ReadWrite) && len(r.Actions) == 0:
+		v.errs.add(path+".actions", "list at least one action: mode %s lets the model propose only these", r.Mode)
+	}
+
+	if r.Mode == action.ReadWrite {
+		v.checkTrust(path, r)
 	}
 
 	v.references(path+".actions", "action", r.Actions, slices.Collect(maps.Keys(v.cfg.Actions.Definitions)))
@@ -425,6 +428,73 @@ func (v *validator) checkRouteActions(path string, r Route) {
 
 		seen[name] = true
 	}
+}
+
+// checkTrust applies the trusted-sender rule (ACT-6) to a read-write
+// route: it may select only intakes and listeners marked trusted, unless it
+// sets allowUntrustedWrite. A route with no intake in its match selects
+// every intake, so it fails the rule while any of them is untrusted.
+func (v *validator) checkTrust(path string, r Route) {
+	if r.AllowUntrustedWrite {
+		return
+	}
+
+	untrusted := v.untrustedSelected(r.Match)
+	if len(untrusted) == 0 {
+		return
+	}
+
+	v.errs.add(path+".mode", "mode %s needs senders that are trusted, but this route can select %s; list only trusted intakes in match.intake, mark them trusted: true, or set allowUntrustedWrite: true",
+		action.ReadWrite, quoteAll(untrusted))
+}
+
+// untrustedSelected returns, sorted, the intakes that a route with match m
+// can select and that are not trusted. Webhook endpoints and file listeners
+// are trusted when they set trusted: true. Runtime listeners and mentions
+// of Sidekick never are. Names that are not defined are left out, since
+// they are reported on their own.
+func (v *validator) untrustedSelected(m *Match) []string {
+	defined := v.intakeNames()
+	selected := defined
+
+	if m != nil && len(m.Intake) > 0 {
+		selected = m.Intake
+	}
+
+	var out []string
+
+	for _, name := range selected {
+		if slices.Contains(defined, name) && !v.trustedIntake(name) {
+			out = append(out, name)
+		}
+	}
+
+	slices.Sort(out)
+
+	return slices.Compact(out)
+}
+
+// trustedIntake reports whether the webhook endpoint or file listener
+// called name is marked trusted.
+func (v *validator) trustedIntake(name string) bool {
+	if w, ok := v.cfg.Intake.Webhooks[name]; ok {
+		return w.Trusted
+	}
+
+	if l, ok := v.cfg.Listeners[name]; ok {
+		return l.Trusted
+	}
+
+	return false
+}
+
+func quoteAll(names []string) string {
+	quoted := make([]string, len(names))
+	for i, n := range names {
+		quoted[i] = strconv.Quote(n)
+	}
+
+	return strings.Join(quoted, ", ")
 }
 
 func (v *validator) checkMatch(at string, m Match) {
