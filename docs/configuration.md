@@ -1472,8 +1472,8 @@ actions:
 action names. Which keys an action takes, and what its `limits` mean,
 depend on its `type`. Credentials are `{ name, key }` references to
 mounted secrets like everywhere else, and an action should have a
-credential of its own, with no more rights than its limits allow. No
-action type ships in this release; [Writing an action](plugins/actions.md)
+credential of its own, with no more rights than its limits allow. The
+action types are described below; [Writing an action](plugins/actions.md)
 describes how to add one.
 
 How a proposal is handled:
@@ -1495,6 +1495,82 @@ How a proposal is handled:
   propose again.
 - An approved proposal runs once, even if a worker crashes and the job is
   tried again: the action gets the same idempotency key each time.
+
+#### `github.pull_request`
+
+Opens a pull request that changes monitor definitions kept in Git:
+thresholds, durations, filters, exclusions, or the deletion of a monitor.
+The model reads the current files with the [GitHub source](sources/github.md)
+and proposes the whole new content of each file it changes. Use it on a
+route in `approved` mode: a person reads the files before anything is
+pushed.
+
+```yaml
+actions:
+  monitor-pr:
+    type: github.pull_request
+    app:                              # a GitHub App of its own, not the source's
+      appID: 123456
+      installationID: 7890123
+      privateKeySecret: { name: sidekick-github-actions, key: private-key.pem }
+    # baseURL: https://github.example.com/api/v3/   # GitHub Enterprise Server
+    limits:
+      repos: [acme/monitors]          # owner/name, no wildcards
+      paths:                          # the first glob that matches decides the format
+        - { glob: "prometheus/rules/**", format: prometheus_rules }
+        - { glob: "datadog/**",          format: terraform }
+        - { glob: "grafana/alerting/**", format: grafana_alert_file }
+      maxFiles: 3                     # 1 to 100
+      maxChangedLines: 40             # lines added plus lines removed, 1 to 1000
+      baseBranch: main                # the only branch a pull request may target
+      draft: true                     # default true
+```
+
+- **Credentials.** Give the app its own installation on the monitors
+  repositories only, with these repository permissions: Contents (read and
+  write), Pull requests (read and write) and Metadata (read). Sidekick asks
+  GitHub for installation tokens with just those permissions, and reads the
+  private key from its secret on each token exchange, so a rotated key needs
+  no restart. `baseURL` must be https, except for a loopback host.
+- **Paths and formats.** Every file the model changes must match a `glob`,
+  and the glob names its format. A path that matches none is refused. In a
+  glob, `*` and `?` do not match a slash, and a segment of `**` matches any
+  number of segments. The formats are:
+  - `prometheus_rules`: a Prometheus rules file, checked with `promtool`;
+  - `terraform`: a file of a Terraform or OpenTofu module (Datadog, SigNoz
+    and Grafana providers), checked with `tofu validate` over the whole
+    module directory;
+  - `grafana_alert_file`: a Grafana alert rule provisioning file.
+- **Validation.** Before the pull request is made, the files go to the
+  [validator](validator.md), set up with the [`validator`](#validator)
+  section and the chart. It runs when the model proposes, and again right
+  before the pull request opens, against the base branch as it is then. For
+  `terraform`, Sidekick reads the module directory of each changed file at
+  the base branch, and the local modules it uses (`source = "../modules/x"`,
+  up to 3 levels), applies the changes and validates the directory. If a
+  file fails, the errors go back to the model as an error and nothing is
+  stored; if they are found when the proposal runs, the proposal fails with
+  them. No pull request opens in either case. If the validator cannot be
+  reached, the proposal is refused when the model proposes, and the action
+  is tried again when it runs.
+- **What it does.** On approval it makes the branch `sidekick/<proposal id>`
+  from the head of the base branch with one commit, and opens the pull
+  request, as a draft unless `draft: false`. The description is what the
+  model wrote, with `@mentions` and issue references after words such as
+  "fixes" put in code spans so the pull request notifies nobody and closes
+  nothing, and a line that names the proposal. If a worker dies half way, the
+  retry finds the branch, and the pull request if it was made, and does not
+  make a second one.
+- **Limits.** `maxChangedLines` counts the lines that differ from the base
+  branch in all files together. A file the model sends unchanged is refused,
+  and so is a file larger than 256 KiB at the base. A request to change
+  something outside the limits is refused when the model proposes, and again
+  when the proposal runs.
+
+Sidekick counts the pull requests it opens in
+`sidekick_githubpr_pull_requests_total` (by `result`: `opened`, `existing`
+or `error`) and the validations in `sidekick_githubpr_validations_total`
+(by `format` and `result`).
 
 ### `validator`
 
