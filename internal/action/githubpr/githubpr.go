@@ -44,7 +44,7 @@ type PR struct {
 	name      string
 	limits    Limits
 	client    *gh.Client
-	validator *validateclient.Client
+	validator validateclient.Validator
 	metrics   *metrics
 	log       *slog.Logger
 	publicURL string
@@ -93,11 +93,16 @@ func newPR(name string, cfg Config, deps registry.Deps) (*PR, error) {
 		log = slog.New(slog.DiscardHandler)
 	}
 
+	validator := deps.Validator
+	if validator == nil {
+		validator = validateclient.New(deps.ValidatorURL, deps.HTTP)
+	}
+
 	return &PR{
 		name:      name,
 		limits:    cfg.Limits,
 		client:    client,
-		validator: validateclient.New(deps.ValidatorURL, deps.HTTP),
+		validator: validator,
 		metrics:   m,
 		log:       log,
 		publicURL: deps.PublicURL,

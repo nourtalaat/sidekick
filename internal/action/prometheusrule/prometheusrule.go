@@ -158,7 +158,7 @@ type Rule struct {
 	validator validator
 }
 
-// validator checks rule files. *validateclient.Client is one; the interface
+// validator checks rule files. validateclient.Validator is one; the interface
 // is small so that another way to reach the validator can replace it in one
 // line, in New.
 type validator interface {
@@ -196,7 +196,12 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (action
 		return nil, fmt.Errorf("prepare the Kubernetes client: %w", err)
 	}
 
-	r, err := newRule(name, cfg, cl, validateclient.New(deps.ValidatorURL, deps.HTTP))
+	checker := deps.Validator
+	if checker == nil {
+		checker = validateclient.New(deps.ValidatorURL, deps.HTTP)
+	}
+
+	r, err := newRule(name, cfg, cl, checker)
 	if err != nil {
 		return nil, fmt.Errorf("build the action: %w", err)
 	}

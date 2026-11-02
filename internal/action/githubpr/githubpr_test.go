@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"go.yaml.in/yaml/v3"
 
 	"github.com/nourtalaat/sidekick/internal/action"
@@ -203,4 +204,45 @@ limits:
 
 	_, err = registry.Actions.Check(t.Context(), TypeName, "monitor-pr", node.Content[0])
 	require.ErrorContains(t, err, "limits.paths[0].format")
+}
+
+func TestValidatorOfDeps(t *testing.T) {
+	t.Parallel()
+
+	changes := []change{{path: "prometheus/rules/a.yaml", format: validateclient.FormatPrometheusRules, content: text("groups: []\n")}}
+
+	t.Run("a validator in the deps is used instead of the URL", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		validator := validateclient.NewMockValidator(ctrl)
+		validator.EXPECT().Validate(gomock.Any(), validateclient.Request{
+			Format: validateclient.FormatPrometheusRules,
+			Files:  []validateclient.File{{Path: "prometheus/rules/a.yaml", Content: "groups: []\n"}},
+		}).Return(validateclient.Result{OK: true, Errors: []validateclient.Problem{}}, nil)
+
+		pr, err := newPR("monitor-pr", Config{App: testApp, Limits: validLimits()}, registry.Deps{
+			Secrets:      secretsWithKey(t),
+			ValidatorURL: "http://127.0.0.1:1",
+			Validator:    validator,
+		})
+		require.NoError(t, err)
+
+		require.NoError(t, pr.validateFiles(t.Context(), nil, changes))
+	})
+
+	t.Run("a job-mode error keeps its kind", func(t *testing.T) {
+		t.Parallel()
+
+		ctrl := gomock.NewController(t)
+		validator := validateclient.NewMockValidator(ctrl)
+		validator.EXPECT().Validate(gomock.Any(), gomock.Any()).Return(validateclient.Result{}, validateclient.ErrTimeout)
+
+		pr, err := newPR("monitor-pr", Config{App: testApp, Limits: validLimits()}, registry.Deps{Secrets: secretsWithKey(t), Validator: validator})
+		require.NoError(t, err)
+
+		err = pr.validateFiles(t.Context(), nil, changes)
+		require.ErrorIs(t, err, validateclient.ErrTimeout)
+		require.NotErrorIs(t, err, action.ErrPermanent)
+	})
 }

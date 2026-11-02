@@ -103,7 +103,10 @@ makes, and the bundled Postgres's. Each name appears once.
 sidekick.yaml: .Values.config with the settings the chart owns. The
 listeners match the container ports, secrets.dir matches the mounts, the
 migration mode follows migrations.mode, and with the bundled Postgres the
-database URL comes from its Secret unless config names another one.
+database URL comes from its Secret unless config names another one. With
+validator.mode job, the validator section follows the chart's validator
+values (sidekick.validator.config), so the Jobs use the same image,
+resources and labels as the chart's NetworkPolicy.
 */}}
 {{- define "sidekick.config" -}}
 {{- $cfg := deepCopy (default dict .Values.config) }}
@@ -118,6 +121,9 @@ database URL comes from its Secret unless config names another one.
 {{- $_ = set $database "urlSecret" (dict "name" (include "sidekick.postgres.fullname" .) "key" "url") }}
 {{- end }}
 {{- $_ = set $cfg "database" $database }}
+{{- if include "sidekick.validator.job" . }}
+{{- $_ = set $cfg "validator" (merge (include "sidekick.validator.config" . | fromYaml) (default dict (get $cfg "validator"))) }}
+{{- end }}
 {{- toYaml $cfg }}
 {{- end }}
 

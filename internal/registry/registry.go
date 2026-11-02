@@ -23,6 +23,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/output"
 	"github.com/nourtalaat/sidekick/internal/source"
 	"github.com/nourtalaat/sidekick/internal/store/db"
+	"github.com/nourtalaat/sidekick/internal/validateclient"
 )
 
 // The registries, one per plugin kind.
@@ -92,6 +93,11 @@ type Deps struct {
 	// that actions call to check the files they change. It is empty where a
 	// command builds plugins without a config.
 	ValidatorURL string
+	// Validator checks the files that actions change. It is built once at
+	// start-up from the validator section, as a sidecar or a job client. It
+	// is nil where a command builds plugins without a config; callers then
+	// use validateclient.New(deps.ValidatorURL, deps.HTTP).
+	Validator validateclient.Validator
 }
 
 // TeamsBot is who the Teams bot is and how it gets tokens, as the teams
