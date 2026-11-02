@@ -30,6 +30,17 @@ type Details struct {
 	Code string `json:"code,omitempty"`
 	// Errors lists the fields of the request that were refused and why.
 	Errors []FieldError `json:"errors,omitempty"`
+	// Changes is the difference an undo would overwrite, on the answer with
+	// the code conflict.
+	Changes []Change `json:"changes,omitempty"`
+}
+
+// Change is one field of a definition that differs, with its values as
+// text. A nil Before or After means the field is absent on that side.
+type Change struct {
+	Path   string  `json:"path"`
+	Before *string `json:"before,omitempty"`
+	After  *string `json:"after,omitempty"`
 }
 
 // FieldError is a field of a request body and what is wrong with it.
@@ -50,10 +61,16 @@ func Write(w http.ResponseWriter, r *http.Request, status int, detail string) {
 // WriteCoded is Write with the extension members: a code that names the
 // kind of problem, and the fields of the request that were refused.
 func WriteCoded(w http.ResponseWriter, r *http.Request, status int, detail, code string, errs []FieldError) {
-	body, err := json.Marshal(Details{
-		Type: typeBlank, Title: http.StatusText(status), Status: status, Detail: detail, Instance: r.URL.Path,
-		Code: code, Errors: errs,
-	})
+	WriteDetails(w, r, Details{Status: status, Detail: detail, Code: code, Errors: errs})
+}
+
+// WriteDetails answers r with d. It sets the type, the title and the
+// instance, so a caller sets the status, the detail and the extension
+// members.
+func WriteDetails(w http.ResponseWriter, r *http.Request, d Details) {
+	d.Type, d.Title, d.Instance = typeBlank, http.StatusText(d.Status), r.URL.Path
+
+	body, err := json.Marshal(d)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 
@@ -61,6 +78,6 @@ func WriteCoded(w http.ResponseWriter, r *http.Request, status int, detail, code
 	}
 
 	w.Header().Set("Content-Type", ContentType)
-	w.WriteHeader(status)
+	w.WriteHeader(d.Status)
 	_, _ = w.Write(body)
 }

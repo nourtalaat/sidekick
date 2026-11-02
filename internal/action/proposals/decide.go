@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -238,6 +239,12 @@ func (s *Service) decideIn(ctx context.Context, tx pgx.Tx, id uuid.UUID, by Deci
 // enqueueExecute queues the job that runs the proposal with id. A job for
 // it that waits or runs already is enough.
 func enqueueExecute(ctx context.Context, q db.DBTX, id uuid.UUID) error {
+	return enqueueExecuteAt(ctx, q, id, time.Time{})
+}
+
+// enqueueExecuteAt is enqueueExecute for a job that waits until runAt; the
+// zero time means now.
+func enqueueExecuteAt(ctx context.Context, q db.DBTX, id uuid.UUID, runAt time.Time) error {
 	payload, err := json.Marshal(ExecutePayload{ProposalID: id})
 	if err != nil {
 		return fmt.Errorf("encode the execute_action payload: %w", err)
@@ -247,6 +254,7 @@ func enqueueExecute(ctx context.Context, q db.DBTX, id uuid.UUID) error {
 		Kind:        queue.KindExecuteAction,
 		Payload:     payload,
 		UniqueKey:   UniqueKey(id),
+		RunAt:       runAt,
 		MaxAttempts: executeMaxAttempts,
 	})
 	if err != nil && !errors.Is(err, queue.ErrDuplicate) {

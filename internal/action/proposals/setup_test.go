@@ -30,6 +30,10 @@ var (
 	ciToken               = uuid.MustParse("0192d3a4-0000-7000-8000-0000000000d2")
 )
 
+// monitorInput is a valid propose_action call for the fake monitor, which
+// raises the threshold from 80 to 90.
+const monitorInput = `{"action": "monitor", "params": {"threshold": 90}, "reason": "The alert fires on normal load."}`
+
 // noteInput is a valid propose_action call.
 const noteInput = `{"action": "monitor-note", "params": {"board": "ops", "title": "Slow checkout"}, "reason": "p99 doubled after the deploy."}`
 
@@ -43,11 +47,13 @@ func TestMain(m *testing.M) {
 // fixture/investigations.sql, with a clock the test moves and the route
 // payments, which proposes the fake note action in approved mode.
 type harness struct {
-	pool   *pgxpool.Pool
-	svc    *Service
-	note   *fakeNote
-	policy *movablePolicy
-	clock  *clock
+	pool *pgxpool.Pool
+	svc  *Service
+	note *fakeNote
+	// monitor is the fake monitor action, a Snapshotter and Undoer.
+	monitor *fakeMonitor
+	policy  *movablePolicy
+	clock   *clock
 }
 
 // movablePolicy is a Policy whose routes a test changes while it runs.
@@ -101,11 +107,12 @@ func setup(t *testing.T) *harness {
 	}
 
 	h := &harness{
-		pool:  pool,
-		note:  newFakeNote("monitor-note"),
-		clock: &clock{now: time.Now().UTC().Truncate(time.Second)},
+		pool:    pool,
+		note:    newFakeNote("monitor-note"),
+		monitor: newFakeMonitor("monitor"),
+		clock:   &clock{now: time.Now().UTC().Truncate(time.Second)},
 		policy: &movablePolicy{routes: action.StaticPolicy{
-			"payments": {Mode: action.Approved, Actions: []string{"monitor-note"}},
+			"payments": {Mode: action.Approved, Actions: []string{"monitor-note", "monitor"}},
 			"default":  {Mode: action.ReadOnly},
 		}},
 	}
@@ -121,7 +128,7 @@ func (h *harness) service(t *testing.T, opts Options) *Service {
 	t.Helper()
 
 	opts.Pool, opts.Policy, opts.Now = h.pool, h.policy, h.clock.Now
-	opts.Actions = map[string]action.Action{"monitor-note": h.note}
+	opts.Actions = map[string]action.Action{"monitor-note": h.note, "monitor": h.monitor}
 
 	s, err := New(opts)
 	require.NoError(t, err)

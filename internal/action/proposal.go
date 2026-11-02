@@ -78,6 +78,12 @@ type Proposal struct {
 	DecidedAt time.Time
 	// Snapshot is set for actions that implement Snapshotter.
 	Snapshot *Snapshot
+	// Changes is the field-by-field difference of Snapshot, for people to
+	// read. Empty without a snapshot.
+	Changes []Change
+	// Undoable says an approver may undo it: it succeeded, the action can
+	// undo it, and it is not an undo itself.
+	Undoable bool
 	// UndoOf is set on a proposal that restores an earlier one.
 	UndoOf string
 	Result *Result

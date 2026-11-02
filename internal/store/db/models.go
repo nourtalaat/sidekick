@@ -29,6 +29,9 @@ type ActionProposal struct {
 	ExecutedAt         *time.Time
 	Result             []byte
 	Error              *string
+	Snapshot           []byte
+	UndoOf             *uuid.UUID
+	Undoable           bool
 }
 
 type ApiToken struct {

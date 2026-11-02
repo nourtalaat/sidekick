@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/nourtalaat/sidekick/internal/githubapp"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
@@ -14,7 +15,7 @@ import (
 func TestConfigValidate(t *testing.T) {
 	t.Parallel()
 
-	app := App{AppID: testAppID, InstallationID: testInstallationID, PrivateKeySecret: testKeyRef}
+	app := githubapp.App{AppID: testAppID, InstallationID: testInstallationID, PrivateKeySecret: testKeyRef}
 
 	tests := []struct {
 		name string
@@ -43,7 +44,7 @@ func TestConfigValidate(t *testing.T) {
 		},
 		{
 			name: "a negative app ID",
-			cfg:  Config{App: App{AppID: -1, InstallationID: 1, PrivateKeySecret: registry.SecretRef{Name: "a", Key: "b"}}, Repos: []string{"acme/x"}},
+			cfg:  Config{App: githubapp.App{AppID: -1, InstallationID: 1, PrivateKeySecret: registry.SecretRef{Name: "a", Key: "b"}}, Repos: []string{"acme/x"}},
 			want: []string{"app.appID: required"},
 		},
 		{
