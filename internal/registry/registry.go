@@ -83,6 +83,10 @@ type Deps struct {
 	// PublicURL is server.publicURL, for plugins that link to pages of the
 	// web UI. Empty means no links.
 	PublicURL string
+	// ValidatorURL is validator.url, the address of the monitor validator
+	// that actions call to check the files they change. It is empty where a
+	// command builds plugins without a config.
+	ValidatorURL string
 }
 
 // TeamsBot is who the Teams bot is and how it gets tokens, as the teams

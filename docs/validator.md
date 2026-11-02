@@ -5,8 +5,11 @@ checks every changed file with the validator. A file that fails is not
 committed: the errors go back to the model, which can fix the change, and
 no pull request is opened.
 
-> **Status:** the validator image and the chart settings are ready; the
-> pull request action that sends files to it comes next.
+> **Status:** the [`github.pull_request` action](configuration.md#githubpull_request)
+> sends files to the validator in sidecar mode. Job mode, where Sidekick
+> creates a Kubernetes Job for each validation, is not available in Sidekick
+> yet; the chart renders it, but the `validator` section of the config
+> refuses `mode: job`.
 
 The validator is `sidekick-validate`, in its own image,
 `ghcr.io/nourtalaat/sidekick-validator`. It carries the tools the checks
