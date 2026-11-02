@@ -191,11 +191,12 @@ of the keys.
 
 ## Published scores
 
-Each setup runs the [public benchmark](benchmark.md) (`bench/scenarios/public`)
-with the built-in strategies, so you can see how much quality you give up
-to save cost. The first row is the default model of the quick start, Claude
-Sonnet 5.5, run by the project's benchmark workflow. The free setups run on a machine with a
-GPU, once for each release.
+Each row is the [public benchmark](benchmark.md) (`bench/scenarios/public`)
+run with the built-in strategies, so you can see how much quality you give up
+to save cost. The Default row, Claude Sonnet 5.5, the model of the quick
+start, comes from the project's benchmark workflow. The OpenRouter and
+Gemini rows will be published once the project runs them. The project does
+not run the local rows.
 
 Run the benchmark on your own setup with:
 
@@ -204,14 +205,17 @@ sidekick bench run --scenarios bench/scenarios/public --config sidekick.yaml --r
 sidekick bench compare report.json other-report.json
 ```
 
-| Setup | Model | Served by | Verdict accuracy | False positive precision | Root cause match | Mean cost of a run | Sidekick version |
-|---|---|---|---|---|---|---|---|
-| Default | `claude-sonnet-5-5` | Anthropic API | not yet published | not yet published | not yet published | not yet published | |
-| 1, local | `Qwen/Qwen3.8-27B` | vLLM | not yet published | not yet published | not yet published | none | |
-| 1, local | `qwen3.8:27b` | Ollama | not yet published | not yet published | not yet published | none | |
-| 1, local | `google/gemma-4-31B-it` | vLLM | not yet published | not yet published | not yet published | none | |
-| 2, OpenRouter | a `:free` model | OpenRouter | not yet published | not yet published | not yet published | none | |
-| 3, Gemini | `gemini-3.8-flash` | Gemini API, free tier | not yet published | not yet published | not yet published | none | |
+| Setup | Model | Served by | Verdict accuracy | False positive precision | Root cause match | Mean cost of a run | Sidekick version | Run date |
+|---|---|---|---|---|---|---|---|---|
+| Default | `claude-sonnet-5-5` | Anthropic API | 0.95 | 1.00 | 0.92 | $0.044 | `9f80dc7`, no release yet | 2026-11-02 |
+| 1, local | `Qwen/Qwen3.8-27B` | vLLM | not run by the project | not run by the project | not run by the project | none | | |
+| 1, local | `qwen3.8:27b` | Ollama | not run by the project | not run by the project | not run by the project | none | | |
+| 1, local | `google/gemma-4-31B-it` | vLLM | not run by the project | not run by the project | not run by the project | none | | |
+| 2, OpenRouter | a `:free` model | OpenRouter | not yet published | not yet published | not yet published | none | | |
+| 3, Gemini | `gemini-3.8-flash` | Gemini API, free tier | not yet published | not yet published | not yet published | none | | |
+
+The project has no GPU machine, so it does not run the local setups; to get
+their scores, run the command above on your own machine.
 
 The scores come from `report.json` of each run, which also records the
 model settings and the prompt and strategy versions, so two rows can be
