@@ -4,15 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
-	"net/url"
 	"slices"
-	"time"
 
 	gh "github.com/google/go-github/v93/github"
 
 	"github.com/nourtalaat/sidekick/internal/buildinfo"
-	"github.com/nourtalaat/sidekick/internal/httpclient"
+	"github.com/nourtalaat/sidekick/internal/githubapp"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
@@ -106,46 +103,16 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (source
 		return nil, errNoSecrets
 	}
 
-	base := deps.HTTP
-	if base == nil {
-		base = httpclient.New()
-	}
-
-	next := base.Transport
-	if next == nil {
-		next = http.DefaultTransport
-	}
-
-	baseURL := cfg.baseURL()
-
-	origin, err := url.Parse(baseURL)
+	client, err := githubapp.NewClient(githubapp.Options{
+		App:         cfg.App,
+		BaseURL:     cfg.baseURL(),
+		Secrets:     deps.Secrets,
+		HTTP:        deps.HTTP,
+		UserAgent:   "sidekick/" + buildinfo.Version,
+		Permissions: githubapp.ReadOnly(),
+	})
 	if err != nil {
-		return nil, fmt.Errorf("parse the base URL: %w", err)
-	}
-
-	userAgent := "sidekick/" + buildinfo.Version
-	limited := limitTransport{next: next}
-
-	exchange := *base
-	exchange.Transport = limited
-
-	tokens := &installationTokens{
-		appID:          cfg.App.AppID,
-		installationID: cfg.App.InstallationID,
-		privateKey:     cfg.App.PrivateKeySecret,
-		secrets:        deps.Secrets,
-		client:         &exchange,
-		baseURL:        baseURL,
-		userAgent:      userAgent,
-		now:            time.Now,
-	}
-
-	api := *base
-	api.Transport = &authTransport{next: limited, origin: origin, tokens: tokens}
-
-	client, err := gh.NewClient(gh.WithHTTPClient(&api), gh.WithURLs(&baseURL, nil), gh.WithUserAgent(userAgent))
-	if err != nil {
-		return nil, fmt.Errorf("make the go-github client: %w", err)
+		return nil, fmt.Errorf("make the GitHub client: %w", err)
 	}
 
 	return &Source{cfg: cfg, client: client, pageSize: maxPageSize}, nil

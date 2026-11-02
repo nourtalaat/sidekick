@@ -1,4 +1,4 @@
-package github
+package githubapp
 
 import (
 	"errors"
@@ -21,7 +21,7 @@ import (
 // errSecretMissing stands for a secret file that cannot be read.
 var errSecretMissing = errors.New("secret file missing")
 
-func TestInstallationTokensExchange(t *testing.T) {
+func TestTokenSourceExchange(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -112,7 +112,7 @@ func TestInstallationTokensExchange(t *testing.T) {
 	}
 }
 
-func TestInstallationTokensRefresh(t *testing.T) {
+func TestTokenSourceRefresh(t *testing.T) {
 	t.Parallel()
 
 	expires := testStart.Add(time.Hour)
@@ -156,7 +156,7 @@ func TestInstallationTokensRefresh(t *testing.T) {
 	}
 }
 
-func TestInstallationTokensConcurrent(t *testing.T) {
+func TestTokenSourceConcurrent(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
