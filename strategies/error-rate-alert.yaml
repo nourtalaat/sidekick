@@ -7,7 +7,7 @@ sources:
   prefer: [signoz, k8s, github]
 first:
   - Find the service, the endpoints and the status codes or error types that rose, and when the rise started.
-  - Check what changed in the 2 hours before the alert started: deploys and commits, config changes, and feature flag changes. Look at each kind with the tool that shows it; a quiet deploy history does not rule out a flag or a config change.
+  - Check what changed in the 2 hours before the alert started, such as deploys and commits, config changes and feature flag changes. Look at each kind with the tool that shows it, because a quiet deploy history does not rule out a flag or a config change.
   - Split the errors by status class and compare the 5xx share with a normal period. 4xx answers are the client's, 5xx answers are the service's.
   - Read the most common error messages in the logs, and find where they come from, the service itself or a dependency.
   - Compare the error count with the request rate. A rate over very few requests is not a real rise.
