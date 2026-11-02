@@ -88,12 +88,52 @@ on pods/log for get_pod_logs, and "namespaced", which leaves out nodes.
 {{- end }}
 
 {{/*
+What the actions in config ask of the cluster Sidekick runs in, as JSON.
+Only actions of type prometheus.rule count. "any" says whether there is
+one. "accounts" maps each service account the actions use (serviceAccount,
+sidekick-actions when it is not set) to the namespaces its actions list, and
+each namespace to the sorted PrometheusRule names listed for it.
+*/}}
+{{- define "sidekick.actions.access" -}}
+{{- $access := dict "any" false "accounts" dict }}
+{{- range $name, $act := dig "actions" dict (default dict .Values.config) }}
+{{- if and (kindIs "map" $act) (eq (toString (get $act "type")) "prometheus.rule") }}
+{{- $_ := set $access "any" true }}
+{{- $account := default "sidekick-actions" (get $act "serviceAccount") }}
+{{- if not (hasKey $access.accounts $account) }}
+{{- $_ = set $access.accounts $account dict }}
+{{- end }}
+{{- $namespaces := get $access.accounts $account }}
+{{- $limits := default dict (get $act "limits") }}
+{{- $names := default list (get $limits "names") | compact }}
+{{- range (default list (get $limits "namespaces") | compact) }}
+{{- $known := default list (get $namespaces .) }}
+{{- $_ = set $namespaces . (concat $known $names | uniq | sortAlpha) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- toJson $access }}
+{{- end }}
+
+{{/*
+The name of a Role or binding of the actions, which starts with the
+release's namespace for the same reason as sidekick.kubernetesSource.rbacName.
+Takes a dict with "context" and "suffix": "tokens" for the Role that lets
+Sidekick ask for tokens, and "for-<account>" for the Role of one account.
+*/}}
+{{- define "sidekick.actions.rbacName" -}}
+{{- printf "%s-%s-actions-%s" .context.Release.Namespace (include "sidekick.fullname" .context) .suffix }}
+{{- end }}
+
+{{/*
 Whether the Sidekick pods mount a service account token: when
 serviceAccount.automountToken is set, when a Kubernetes source reads
-the cluster with the pod's service account, or when Sidekick creates the
+the cluster with the pod's service account, when an action asks the API
+server for tokens of its service account, or when Sidekick creates the
 validator's Jobs.
 */}}
 {{- define "sidekick.automountToken" -}}
 {{- $access := include "sidekick.kubernetesSource.access" . | fromJson }}
-{{- or .Values.serviceAccount.automountToken $access.any (eq (include "sidekick.validator.job" .) "true") }}
+{{- $actions := include "sidekick.actions.access" . | fromJson }}
+{{- or .Values.serviceAccount.automountToken $access.any $actions.any (eq (include "sidekick.validator.job" .) "true") }}
 {{- end }}
