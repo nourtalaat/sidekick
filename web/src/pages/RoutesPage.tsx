@@ -197,7 +197,7 @@ function Matches({ route }: { route: Route }) {
   );
 }
 
-/** How a route investigates: strategy, mode, and the sources and outputs it uses. */
+/** How a route investigates: strategy, mode, the sources and outputs it uses, and the details the model is told. */
 function Investigates({ route }: { route: Route }) {
   return (
     <>
@@ -206,6 +206,13 @@ function Investigates({ route }: { route: Route }) {
       </span>
       {route.sources?.length ? <span className="sk-table__secondary">Sources {route.sources.join(", ")}</span> : null}
       {route.outputs?.length ? <span className="sk-table__secondary">Outputs {route.outputs.join(", ")}</span> : null}
+      {Object.entries(route.details ?? {})
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, value]) => (
+          <span key={key} className="sk-table__secondary">
+            Detail {key}={value}
+          </span>
+        ))}
     </>
   );
 }

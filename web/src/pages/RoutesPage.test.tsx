@@ -25,6 +25,21 @@ describe("the routes page", () => {
     expect(within(rowAt(rows, 3)).getByText("Outputs slack-thread")).toBeInTheDocument();
   });
 
+  it("shows the details of a route, sorted by key", async () => {
+    const { handler } = recording(() =>
+      json(200, { routes: [route({ details: { owner: "payments team", environment: "prod" } }), route({ name: "search", details: undefined })] }),
+    );
+
+    renderApp({ me: ADMIN, route: "/routes", handler });
+
+    const table = await screen.findByRole("region", { name: "Routes" });
+    const rows = within(table).getAllByRole("row");
+    const lines = within(rowAt(rows, 1)).getAllByText(/^Detail /);
+
+    expect(lines.map((l) => l.textContent)).toEqual(["Detail environment=prod", "Detail owner=payments team"]);
+    expect(within(rowAt(rows, 2)).queryByText(/^Detail /)).not.toBeInTheDocument();
+  });
+
   it("gives the config file routes no controls and a runtime route a way to change and delete it", async () => {
     const { handler } = recording(() => json(200, { routes: sampleRoutes() }));
     renderApp({ me: ADMIN, route: "/routes", handler });

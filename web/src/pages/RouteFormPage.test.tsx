@@ -53,6 +53,104 @@ describe("the route form", () => {
     });
   });
 
+  it("sends the details, one key=value to a line, and keeps an equals sign in a value", async () => {
+    const user = userEvent.setup();
+
+    const { handler, seen } = recording((request) =>
+      request.method === "POST" ? json(201, route({ name: "search", version: 1 })) : json(200, { routes: sampleRoutes() }),
+    );
+
+    renderApp({ me: ADMIN, route: "/routes/new", handler });
+
+    await user.type(await screen.findByLabelText("Name"), "search");
+    await user.type(screen.getByLabelText("Service"), "search-*");
+    await user.click(screen.getByLabelText("Details"));
+    await user.paste("owner=payments team\nenvironment = prod\nnote=a=b");
+    await user.click(screen.getByRole("button", { name: "Add route" }));
+
+    expect(await screen.findByText("Route search saved. Every replica uses it within seconds.")).toBeInTheDocument();
+    expect(seen.find((r) => r.method === "POST")?.body).toMatchObject({ details: { owner: "payments team", environment: "prod", note: "a=b" } });
+  });
+
+  it("sends no details when the box is empty", async () => {
+    const user = userEvent.setup();
+    const { handler, seen } = recording((request) => (request.method === "POST" ? json(201, route({ name: "search", version: 1 })) : json(200, { routes: sampleRoutes() })));
+    renderApp({ me: ADMIN, route: "/routes/new", handler });
+
+    await user.type(await screen.findByLabelText("Name"), "search");
+    await user.type(screen.getByLabelText("Service"), "search-*");
+    await user.click(screen.getByRole("button", { name: "Add route" }));
+
+    expect(await screen.findByText("Route search saved. Every replica uses it within seconds.")).toBeInTheDocument();
+    expect(seen.find((r) => r.method === "POST")?.body).not.toHaveProperty("details");
+  });
+
+  it("shows the details of a saved route, sorted, and sends the edited ones", async () => {
+    const user = userEvent.setup();
+
+    const { handler, seen } = recording((request) =>
+      request.method === "PUT"
+        ? json(200, route({ version: 2 }))
+        : json(200, { routes: [route({ details: { owner: "payments team", environment: "prod" } })] }),
+    );
+
+    renderApp({ me: ADMIN, route: "/routes/checkout", handler });
+
+    const details = await screen.findByLabelText("Details");
+    expect(details).toHaveValue("environment=prod\nowner=payments team");
+
+    await user.clear(details);
+    await user.click(details);
+    await user.paste("owner=checkout team");
+    await user.click(screen.getByRole("button", { name: "Save route" }));
+
+    expect(await screen.findByText("Route checkout saved. Every replica uses it within seconds.")).toBeInTheDocument();
+    expect(seen.find((r) => r.method === "PUT")?.body).toMatchObject({ details: { owner: "checkout team" } });
+  });
+
+  it("removes the details of a saved route when the box is cleared", async () => {
+    const user = userEvent.setup();
+
+    const { handler, seen } = recording((request) =>
+      request.method === "PUT" ? json(200, route({ version: 2 })) : json(200, { routes: [route({ details: { owner: "payments team" } })] }),
+    );
+
+    renderApp({ me: ADMIN, route: "/routes/checkout", handler });
+
+    await user.clear(await screen.findByLabelText("Details"));
+    await user.click(screen.getByRole("button", { name: "Save route" }));
+
+    expect(await screen.findByText("Route checkout saved. Every replica uses it within seconds.")).toBeInTheDocument();
+    expect(seen.find((r) => r.method === "PUT")?.body).not.toHaveProperty("details");
+  });
+
+  it("asks for details written as key=value, and shows the problems the server finds under the field", async () => {
+    const user = userEvent.setup();
+
+    const { handler, seen } = recording((request) =>
+      request.method === "POST"
+        ? validationProblem([{ field: "details", message: 'key "on call" must be 1 to 64 characters from letters, digits, "-", "_" and "."' }])
+        : json(200, { routes: [] }),
+    );
+
+    renderApp({ me: ADMIN, route: "/routes/new", handler });
+
+    await user.type(await screen.findByLabelText("Name"), "search");
+    await user.click(screen.getByLabelText("Details"));
+    await user.paste("owner");
+    await user.click(screen.getByRole("button", { name: "Add route" }));
+
+    expect(screen.getByLabelText("Details")).toHaveAccessibleDescription(expect.stringContaining('"owner" is not written as name=value.'));
+    expect(seen.filter((r) => r.method === "POST")).toHaveLength(0);
+
+    await user.clear(screen.getByLabelText("Details"));
+    await user.paste("on call=x");
+    await user.click(screen.getByRole("button", { name: "Add route" }));
+
+    expect(await screen.findByLabelText("Details")).toHaveAccessibleDescription(expect.stringContaining('key "on call" must be 1 to 64 characters'));
+    expect(seen.filter((r) => r.method === "POST")).toHaveLength(1);
+  });
+
   it("offers read-only, approved and read + write as the modes", async () => {
     renderApp({ me: ADMIN, route: "/routes/new" });
 
