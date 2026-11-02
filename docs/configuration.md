@@ -1472,9 +1472,9 @@ actions:
 action names. Which keys an action takes, and what its `limits` mean,
 depend on its `type`. Credentials are `{ name, key }` references to
 mounted secrets like everywhere else, and an action should have a
-credential of its own, with no more rights than its limits allow. No
-action type ships in this release; [Writing an action](plugins/actions.md)
-describes how to add one.
+credential of its own, with no more rights than its limits allow. The
+[action types](#action-types) are listed below; [Writing an
+action](plugins/actions.md) describes how to add one.
 
 How a proposal is handled:
 
@@ -1495,6 +1495,59 @@ How a proposal is handled:
   propose again.
 - An approved proposal runs once, even if a worker crashes and the job is
   tried again: the action gets the same idempotency key each time.
+
+#### Action types
+
+##### `linear.comment` and `linear.issue`
+
+`linear.comment` adds a comment to a Linear issue, and `linear.issue`
+creates one. Both use the same connection keys. Their text is posted as
+plain text: Sidekick escapes it, so a comment or description cannot add
+formatting, links or mentions. Each ends with a line that says Sidekick
+posted it, with a link to the investigation when
+[`server.publicURL`](#server) is set.
+
+```yaml
+actions:
+  ops-comment:
+    type: linear.comment
+    apiKeySecret: { name: linear-actions, key: apiKey }
+    limits: { teams: [OPS] }
+  ops-issue:
+    type: linear.issue
+    apiKeySecret: { name: linear-actions, key: apiKey }
+    limits:
+      teams: [OPS]              # team keys or IDs
+      labels: [incident]        # the only labels an issue may get; none by default
+      maxPerDay: 5              # most issues created in a day of budgets.daily.timeZone
+```
+
+| Key | Meaning |
+|---|---|
+| `apiKeySecret` | A Linear personal API key or an OAuth app token. Required. Use a key of its own, apart from any key an output or a source uses. A comment needs the right to read issues and create comments; an issue needs the right to create issues. |
+| `apiURL` | The GraphQL endpoint; `https://api.linear.app/graphql` when empty. It must be https, except on localhost. |
+| `limits.teams` | Required. The keys, such as `OPS`, or IDs of the teams the action may touch. A comment on an issue of another team, and an issue in another team, fail with the limit as the reason. |
+| `limits.labels` | `linear.issue` only. The labels an issue may get. Empty means none. |
+| `limits.maxPerDay` | `linear.issue` only. Required, at least 1. |
+
+What the model gives: for `linear.comment`, the issue (`OPS-123`) and the
+body (at most 4000 characters); for `linear.issue`, the team, a title (at
+most 200 characters), a description (at most 4000) and up to 5 labels.
+
+- A comment is checked against the team of the issue as Linear reports it
+  when it runs, so an issue that moved to another team is refused.
+- `maxPerDay` counts the issues this action created today, in the time
+  zone of `budgets.daily.timeZone`, plus the ones approved earlier and not
+  finished. It errs on the safe side: an issue that was approved earlier
+  and then failed keeps its place for the runs that started before it
+  ended. At the limit the proposal fails with the limit as the reason; the
+  count starts again at midnight.
+- A repeated run, after a crash, finds the comment or issue it made and
+  makes no second one. Linear has no idempotency header, so the comment or
+  issue gets an ID made from the proposal, and the description of an issue
+  holds the line `Sidekick key: sidekick/<proposal id>`, which is the
+  fallback way to find it.
+- Routes that use these actions should set `mode: approved`.
 
 ### `strategies`
 
