@@ -40,6 +40,59 @@ func TestPropose(t *testing.T) {
 	require.Contains(t, proposals[0].ParamsText, `"title": "Slow checkout"`)
 }
 
+func TestProposeStoresTheSnapshot(t *testing.T) {
+	t.Parallel()
+
+	h := setup(t)
+
+	id := h.propose(t, "call-1", monitorInput)
+
+	row := h.row(t, id)
+	require.True(t, row.Undoable)
+	require.Nil(t, row.UndoOf)
+
+	var snap action.Snapshot
+
+	require.NoError(t, json.Unmarshal(row.Snapshot, &snap))
+	require.Equal(t, "fake:monitor/1", snap.Target)
+	require.JSONEq(t, startMonitor, string(snap.Before))
+
+	proposals, err := OfInvestigation(t.Context(), h.pool, checkoutInvestigation)
+	require.NoError(t, err)
+	require.Len(t, proposals, 1)
+	require.Equal(t, []action.Change{{Path: "options.critical", Before: new("80"), After: new("90")}}, proposals[0].Changes)
+	require.False(t, proposals[0].Undoable, "only a succeeded proposal can be undone")
+
+	var details struct {
+		New struct {
+			Snapshot action.Snapshot `json:"snapshot"`
+		} `json:"new"`
+	}
+
+	var raw string
+	require.NoError(t, h.pool.QueryRow(t.Context(), "SELECT details::text FROM audit_log WHERE action = $1 AND target_id = $2", AuditProposed, id.String()).Scan(&raw))
+	require.NoError(t, json.Unmarshal([]byte(raw), &details))
+	require.Equal(t, "fake:monitor/1", details.New.Snapshot.Target, "the audit entry keeps the before and after")
+
+	plain := h.row(t, h.propose(t, "call-2", noteInput))
+	require.Nil(t, plain.Snapshot)
+	require.False(t, plain.Undoable)
+}
+
+func TestProposeRefusesWhatTheActionRefuses(t *testing.T) {
+	t.Parallel()
+
+	h := setup(t)
+
+	res, err := h.svc.Propose(t.Context(), ProposeRequest{
+		InvestigationID: checkoutInvestigation, ToolCallID: "call-1", Route: "payments", Mode: action.Approved,
+		Input: json.RawMessage(`{"action": "monitor", "params": {"threshold": 90, "message": "x"}, "reason": "x"}`),
+	})
+	require.NoError(t, err)
+	require.Contains(t, res.Refusal, `the field "message" is not one of limits.fields`)
+	require.Zero(t, countRows(t, h, "SELECT count(*) FROM action_proposals"))
+}
+
 func TestProposeRefusals(t *testing.T) {
 	t.Parallel()
 
@@ -129,7 +182,10 @@ func TestStoredParamsCannotChange(t *testing.T) {
 	h := setup(t)
 	id := h.propose(t, "call-1", noteInput)
 
-	for _, column := range []string{"params = '{}'", "action = 'other'", "reason = 'x'", "idempotency_key = 'x'", "expires_at = now() + interval '1 year'"} {
+	for _, column := range []string{
+		"params = '{}'", "action = 'other'", "reason = 'x'", "idempotency_key = 'x'", "expires_at = now() + interval '1 year'",
+		"snapshot = '{}'", "undoable = true", "undo_of = id",
+	} {
 		_, err := h.pool.Exec(t.Context(), "UPDATE action_proposals SET "+column+" WHERE id = $1", id)
 		require.ErrorContains(t, err, "what an action proposal asks for cannot be changed", column)
 	}

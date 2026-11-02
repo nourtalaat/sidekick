@@ -38,7 +38,8 @@ WHERE day = ANY (ARRAY(SELECT (b AT TIME ZONE 'UTC')::date FROM unnest(@buckets:
 -- it later. Its watchers count once the group's last one has ended: it
 -- recovered when some watcher recovered and none is running or timed out,
 -- and the downtime runs from the group's first event to the last recovery.
--- Its action proposals count in the same hour: all of them as proposed;
+-- Its action proposals count in the same hour, except the undos, which are
+-- a person restoring a change and not a proposal: all of them as proposed;
 -- as approved those a person or the policy approved, which are approved,
 -- executing, succeeded and undone ones, and failed ones that have a
 -- decision; as executed those that ran and succeeded, which includes the
@@ -90,7 +91,7 @@ WITH per AS (
            ) AS approved,
            count(*) FILTER (WHERE p.status IN ('succeeded', 'undone')) AS executed
     FROM action_proposals p
-    WHERE p.investigation_id = i.id
+    WHERE p.investigation_id = i.id AND p.undo_of IS NULL
   ) ap ON true
 )
 INSERT INTO stats_hourly (

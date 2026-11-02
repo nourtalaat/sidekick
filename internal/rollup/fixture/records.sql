@@ -125,3 +125,12 @@ VALUES
    '2026-10-20 10:51:00+00', '2026-10-21 10:51:00+00', NULL, NULL),
   ('0192d3a4-0000-7000-8000-000000000110', '0192d3a4-0000-7000-8000-0000000000c7', 'note', '{}', 'approved', 'succeeded', 'k-10',
    '2026-10-20 11:41:00+00', '2026-10-21 11:41:00+00', '2026-10-20 11:45:00+00', '2026-10-20 11:46:00+00');
+
+-- The undo of the undone proposal 108: a person restoring a change, which no
+-- count includes.
+INSERT INTO action_proposals (id, investigation_id, action, params, mode, status, idempotency_key,
+                              proposed_at, expires_at, decided_at, executed_at, undo_of)
+VALUES
+  ('0192d3a4-0000-7000-8000-00000000010a', '0192d3a4-0000-7000-8000-0000000000c3', 'note', '{}', 'approved', 'succeeded', 'k-undo',
+   '2026-10-20 12:00:00+00', '2026-10-20 12:00:00+00', '2026-10-20 12:00:00+00', '2026-10-20 12:00:01+00',
+   '0192d3a4-0000-7000-8000-000000000108');

@@ -28,6 +28,10 @@ const proposeActionDescription = "Propose one change for a person to approve or 
 	"If the proposal fails its checks you get the errors back and can propose again. The actions this route " +
 	"may propose are:"
 
+// SnapshotTimeout is how long an action's Snapshot may take when the model
+// proposes.
+const SnapshotTimeout = 30 * time.Second
+
 // proposeActionNowDescription is proposeActionDescription for an
 // investigation in read-write mode, where a proposal that passes its checks
 // runs without a person approving it.
@@ -82,6 +86,11 @@ type prepared struct {
 	action string
 	params json.RawMessage
 	reason string
+	// snapshot is the definition before and after, for an action that
+	// implements action.Snapshotter. It is nil for any other.
+	snapshot json.RawMessage
+	// undoable says the action implements action.Undoer.
+	undoable bool
 }
 
 // Spec returns the propose_action tool for an investigation of route in
@@ -260,6 +269,10 @@ func (s *Service) prepare(ctx context.Context, req ProposeRequest) (prepared, st
 
 	p.params, p.reason = params, s.redactReason(reason)
 
+	if refusal := s.snapshot(ctx, in.Action, &p); refusal != "" {
+		return p, refusal
+	}
+
 	return p, ""
 }
 
@@ -279,6 +292,61 @@ func (s *Service) checkProposal(ctx context.Context, name string, checker action
 	default:
 		return fmt.Sprintf("action %s checked these parameters and refused them: %s", name, cut(err.Error(), maxCheckRefusalChars))
 	}
+}
+
+// snapshot reads the definition the action would change, for an action that
+// implements action.Snapshotter, and keeps it in p. It returns a refusal
+// when the action refuses the change, the definition cannot be read, or the
+// difference is empty or too large for a person to review. It runs after
+// every other check and before anything is stored.
+func (s *Service) snapshot(ctx context.Context, name string, p *prepared) string {
+	a := s.opts.Actions[name]
+
+	_, p.undoable = a.(action.Undoer)
+
+	snapper, ok := a.(action.Snapshotter)
+	if !ok {
+		return ""
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, SnapshotTimeout)
+	defer cancel()
+
+	snap, err := snapper.Snapshot(ctx, p.params)
+	if errors.Is(err, action.ErrLimit) {
+		return fmt.Sprintf("action %s refused this change: %s", name, s.refusalText(err))
+	}
+
+	if err != nil {
+		return fmt.Sprintf("action %s could not read the current definition of the target, so nothing was proposed; try again later: %s", name, s.refusalText(err))
+	}
+
+	if snap.Target == "" {
+		return fmt.Sprintf("action %s gave a snapshot with no target", name)
+	}
+
+	changes, err := action.Changes(snap)
+	if err != nil {
+		return fmt.Sprintf("action %s: the change cannot be shown to an approver: %s", name, s.refusalText(err))
+	}
+
+	if len(changes) == 0 {
+		return fmt.Sprintf("action %s: the change leaves the definition as it is", name)
+	}
+
+	raw, err := json.Marshal(snap)
+	if err != nil {
+		return fmt.Sprintf("action %s gave a snapshot that does not encode: %s", name, s.refusalText(err))
+	}
+
+	p.snapshot = raw
+
+	return ""
+}
+
+// refusalText is the text of err for the model: redacted and cut.
+func (s *Service) refusalText(err error) string {
+	return cut(s.redactReason(err.Error()), maxRefusalChars)
 }
 
 // redactReason redacts the reason when the Service has a redactor.
@@ -334,6 +402,8 @@ func (s *Service) store(ctx context.Context, tx pgx.Tx, req ProposeRequest, p pr
 		IdempotencyKey:  action.IdempotencyKey(id.String()),
 		ProposedAt:      now,
 		ExpiresAt:       now.Add(s.opts.TTL),
+		Snapshot:        p.snapshot,
+		Undoable:        p.undoable,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ProposeResult{ID: id, Action: p.action}, false, nil
@@ -343,9 +413,15 @@ func (s *Service) store(ctx context.Context, tx pgx.Tx, req ProposeRequest, p pr
 		return ProposeResult{}, false, fmt.Errorf("insert proposal %s: %w", id, err)
 	}
 
-	if err := s.writeAudit(ctx, tx, row, AuditProposed, audit.ActorSidekick, "", map[string]any{
+	details := map[string]any{
 		"status": row.Status, "action": row.Action, "mode": row.Mode, "params": row.Params, "reason": row.Reason, "expiresAt": row.ExpiresAt,
-	}); err != nil {
+	}
+
+	if len(row.Snapshot) > 0 {
+		details["snapshot"] = json.RawMessage(row.Snapshot)
+	}
+
+	if err := s.writeAudit(ctx, tx, row, AuditProposed, audit.ActorSidekick, "", details); err != nil {
 		return ProposeResult{}, false, fmt.Errorf("write the audit entry: %w", err)
 	}
 

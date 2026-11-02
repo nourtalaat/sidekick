@@ -197,3 +197,118 @@ is what links built-in plugins into the binary.
 Describe the action type, its keys, its limits and the permissions its
 credentials need in [`docs/configuration.md`](../configuration.md), next to
 the other action types, and say which routes should use `mode: approved`.
+
+## Changing a definition in place: snapshots and Undo
+
+An action that edits something that already exists, such as a monitor or an
+alert rule, should show the approver the change field by field, refuse
+changes outside the fields the operator allowed, notice when someone else
+edited the target, and be undoable. Sidekick does this for any action that
+implements two more interfaces, `action.Snapshotter` and `action.Undoer`.
+`internal/action/datadog` is the model to copy.
+
+### Snapshot: read the target and compute the new definition
+
+```go
+type Snapshotter interface {
+	Snapshot(ctx context.Context, params json.RawMessage) (action.Snapshot, error)
+}
+```
+
+Sidekick calls `Snapshot` when the model proposes, after `Validate`. Read
+the live definition and make the new one from the parameters, without
+changing anything:
+
+- `Target` names what changes, for example `datadog:monitor/123`.
+- `Before` is the live definition. Keep only the fields the action may
+  change or needs to write back, and leave out read-only fields such as IDs
+  and timestamps.
+- `After` is the new definition. It is JSON `null` when the action removes
+  the target.
+- `Version` is the provider's version or modification time of `Before`.
+
+Sidekick stores the snapshot with the proposal and shows the approver the
+difference, one line for each field. A snapshot that changes nothing is
+refused, and so is one that differs in more than `action.MaxChanges` (100)
+fields, because an approver must be able to read all of it.
+
+Use the helpers in `internal/action`:
+
+- `action.Apply(doc, edits)` sets fields by path, for example
+  `options.thresholds.critical` or `rules[0].expr`.
+- `action.Diff(before, after)` lists the fields that differ.
+  Objects are compared key by key; an array is one field, except an array
+  of objects of the same length, which is compared position by position.
+- `action.CheckFields(allowed, deltas)` refuses, with `action.ErrLimit`, a
+  change outside `limits.fields`. Parse the configured list once with
+  `action.ParsePaths`.
+
+Refuse a change the limits do not allow with an error that wraps
+`action.ErrLimit`. The model reads the error and may propose again.
+
+### limits.fields
+
+Give the action a `limits.fields` list of the paths it may change. A field
+is allowed when a listed path is the field itself or a path that the field
+goes on from at a dot or bracket, so `options.thresholds` allows
+`options.thresholds.critical`, but `options.thresholds.critical` does not
+allow `options.thresholds.warning`, and `messages` is not allowed by
+`message`. `[*]` stands for any position of an array. Check the keys of the
+parameters in `Validate` (no network), and check the real difference again in
+`Snapshot` and in `Execute`, because the limits may have been tightened
+since. Refuse fields that are read-only in the tool when the config loads.
+
+### Execute: write what the approver read
+
+`Execute` gets the stored snapshot in `Invocation.Snapshot`. Write
+`Snapshot.After`, never a definition computed again from the parameters.
+Right before writing, read the target again and decide in this order, which
+also makes a retry after a crash safe:
+
+1. The changed fields already have their `After` values
+   (`action.AtAfter(live, deltas)`): the change is made. Return success
+   without writing.
+2. The live definition equals `Before` and its version equals
+   `Snapshot.Version`: write `After`.
+3. Anything else: return an error that wraps `action.ErrConflict`. The
+   proposal fails, and a new one is needed.
+
+### Undo: restore only the fields the action changed
+
+```go
+type Undoer interface {
+	Undo(ctx context.Context, inv action.Invocation, snap action.Snapshot, force bool) (action.Result, error)
+}
+```
+
+Sidekick shows an Undo button on a succeeded proposal of an action that
+implements `Undoer`, and only an approver can use it: a signed-in person or
+a Slack approver, never an API token. `snap` is the snapshot the proposal
+stored when the action changed the target. The restore is field by field, so
+a later edit by someone else to another field stays:
+
+1. Read the live definition. If the changed fields already have their
+   `Before` values (`action.AtBefore`), return success: the target is
+   restored.
+2. If they do not have their `After` values (`action.AtAfter`) and `force`
+   is false, someone changed one of them since. Return
+   `&action.ConflictError{Live: live}` and write nothing. Sidekick shows the
+   approver what a forced restore would overwrite and asks again with
+   `force` true.
+3. Otherwise put the fields back with `action.Revert(live, deltas)` and
+   write the result.
+
+Compare only the changed fields, not the whole definition: the tool may
+fill in defaults and change the timestamps, and that is not a conflict.
+`Undo` must be safe to repeat, because a crash can run it twice. An action
+that removes its target (`After` is `null`) cannot be undone, and Sidekick
+does not offer Undo for it. An `Undoer` that has no snapshot gets the zero
+`Snapshot`.
+
+### Tests
+
+Add to the tests of step 8, with `internal/fakehttp`: propose a change
+inside and outside the allowed fields; execute; execute when the target
+changed after the snapshot; execute twice after a crash; undo; undo when
+another field was edited (it stays); undo when a changed field was edited
+(conflict, then forced).
