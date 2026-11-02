@@ -29,7 +29,7 @@ spec:
     metadata:
       annotations:
         # A config change rolls the pods.
-        checksum/config: f73c1f7b1f2466fbd409dfde99b2263529b63a3ab2de3531b8d9d9d75f546bfd
+        checksum/config: 1806263dd3fca4fa13f7dfd5fa1237dc3a513bbfc8c9847bd7c294bdf47b9168
         azure.workload.identity/skip-containers: validator
         eks.amazonaws.com/skip-containers: validator
       labels:

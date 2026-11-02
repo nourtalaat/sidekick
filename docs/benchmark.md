@@ -593,7 +593,7 @@ between its root-cause scores and the hand-graded ones.
 
 `.github/workflows/bench.yml` runs the public scenarios in
 `bench/scenarios/public` with the project's Anthropic key, with the config
-`bench/sidekick.yaml` (the quick-start model for the investigation and the
+`bench/sidekick.yaml` (Claude Sonnet 5.5 for the investigation and the
 judge, and the built-in strategies) and the thresholds of `bench/bench.yaml`.
 
 | When | What runs |
