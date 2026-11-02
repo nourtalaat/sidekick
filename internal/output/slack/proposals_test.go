@@ -1,6 +1,7 @@
 package slack
 
 import (
+	"encoding/json"
 	"strconv"
 	"strings"
 	"testing"
@@ -242,6 +243,8 @@ func TestIsProposalAction(t *testing.T) {
 
 	require.True(t, IsProposalAction(ActionApproveProposal))
 	require.True(t, IsProposalAction(ActionRejectProposal))
+	require.True(t, IsProposalAction(ActionUndoProposal))
+	require.True(t, IsProposalAction(ActionUndoProposalForce))
 	require.False(t, IsProposalAction(ActionStop))
 	require.False(t, IsProposalAction(""))
 }
@@ -327,4 +330,191 @@ func TestALongLineOfEscapesIsShownWholeInBlocks(t *testing.T) {
 	require.Greater(t, sections, 1)
 	require.Equal(t, escape(p.ParamsText), shown.String())
 	require.Contains(t, buttonsOf(proposalBlocks(u)), ActionApproveProposal)
+}
+
+// monitorChange is a waiting proposal that raises a threshold, with its
+// snapshot and changes.
+func monitorChange() action.Proposal {
+	p := waitingProposal()
+	p.Action = "datadog-monitor"
+	p.Snapshot = &action.Snapshot{
+		Target: "datadog:monitor/123",
+		Before: []byte(`{"options":{"critical":2}}`),
+		After:  []byte(`{"options":{"critical":3}}`),
+	}
+	p.Changes = []action.Change{{Path: "options.critical", Before: new("2"), After: new("3")}}
+
+	return p
+}
+
+func TestAProposalThatChangesADefinitionShowsEachField(t *testing.T) {
+	t.Parallel()
+
+	u := runningUpdate(1)
+	u.Proposals = []action.Proposal{monitorChange()}
+
+	got := goldenJSON(t, mainView(u))
+
+	require.Contains(t, got, "Changes, field by field")
+	require.Contains(t, got, `options.critical\n  before: 2\n  after:  3`)
+
+	buttons := buttonsOf(mainView(u).attachment.Blocks)
+	require.Contains(t, buttons[ActionApproveProposal].Confirm.Text.Text, "the changes shown above")
+}
+
+func TestAProposalWithChangesThatDoNotFitHasNoApproveButton(t *testing.T) {
+	t.Parallel()
+
+	p := monitorChange()
+	p.Changes = []action.Change{{Path: "message", Before: new(strings.Repeat("a", maxParamsChars)), After: new("b")}}
+
+	u := runningUpdate(1)
+	u.Proposals = []action.Proposal{p}
+
+	buttons := buttonsOf(mainView(u).attachment.Blocks)
+	require.NotContains(t, buttons, ActionApproveProposal, "an approver must not decide on a list that was cut")
+	require.Contains(t, buttons, ActionRejectProposal)
+}
+
+func TestAProposalThatDeletesSaysSoAndKeepsItsApproveButton(t *testing.T) {
+	t.Parallel()
+
+	p := monitorChange()
+	p.Snapshot = &action.Snapshot{Target: "datadog:monitor/123", Before: []byte(`{"name":"x"}`)}
+	p.Changes = []action.Change{{Path: "", Before: new(strings.Repeat("a", maxParamsChars))}}
+
+	u := runningUpdate(1)
+	u.Proposals = []action.Proposal{p}
+
+	got := goldenJSON(t, mainView(u))
+	require.Contains(t, got, "This deletes datadog:monitor/123. Sidekick cannot undo a delete.")
+
+	buttons := buttonsOf(mainView(u).attachment.Blocks)
+	require.Contains(t, buttons, ActionApproveProposal, "the target is what is decided on, and it is shown")
+	require.Contains(t, buttons[ActionApproveProposal].Confirm.Text.Text, "Sidekick cannot undo a delete")
+
+	p.Changes = []action.Change{{Path: "", Before: new(`{"name":"x"}`)}}
+	u.Proposals = []action.Proposal{p}
+	require.Contains(t, goldenJSON(t, mainView(u)), `(the whole definition)\n  before: {`)
+}
+
+func TestChangeValuesCannotAddMarkup(t *testing.T) {
+	t.Parallel()
+
+	p := monitorChange()
+	p.Changes = []action.Change{{Path: "message", Before: new(`"<!channel> <@UEVIL>"`), After: new(`"<https://evil.example.com|click>"`)}}
+
+	u := runningUpdate(1)
+	u.Proposals = []action.Proposal{p}
+
+	got := goldenJSON(t, mainView(u))
+
+	for _, markup := range []string{"<!channel>", "<@UEVIL>", "<https://evil.example.com|click>"} {
+		require.NotContains(t, got, markup)
+	}
+
+	require.Contains(t, got, "&lt;!channel&gt;")
+}
+
+// succeededChange is a monitor change that worked and can be undone.
+func succeededChange() action.Proposal {
+	p := monitorChange()
+	p.Status = action.StatusSucceeded
+	p.DecidedByName = "Ana"
+	p.Result = &action.Result{Summary: "Changed 1 field of monitor 123."}
+	p.Undoable = true
+
+	return p
+}
+
+func TestASucceededChangeThatCanBeUndoneHasAnUndoButton(t *testing.T) {
+	t.Parallel()
+
+	u := testUpdate(output.PhaseFinal, verdictReport(report.TruePositive))
+	u.Proposals = []action.Proposal{succeededChange()}
+
+	got := goldenJSON(t, mainView(u))
+	require.Contains(t, got, "What it changed")
+	require.Contains(t, got, `options.critical\n  before: 2\n  after:  3`)
+
+	buttons := buttonsOf(mainView(u).attachment.Blocks)
+	require.Equal(t, proposalID, buttons[ActionUndoProposal].Value)
+	require.NotNil(t, buttons[ActionUndoProposal].Confirm, "undoing asks again")
+	require.NotContains(t, buttons, ActionApproveProposal)
+
+	p := succeededChange()
+	p.Undoable = false
+	u.Proposals = []action.Proposal{p}
+	require.NotContains(t, buttonsOf(mainView(u).attachment.Blocks), ActionUndoProposal)
+}
+
+func TestAnUndoneChangeAndItsUndoAreShown(t *testing.T) {
+	t.Parallel()
+
+	undone := succeededChange()
+	undone.Status = action.StatusUndone
+	undone.Undoable = false
+
+	undo := succeededChange()
+	undo.ID = "0192d3a4-0000-7000-8000-0000000000f2"
+	undo.UndoOf = proposalID
+	undo.Undoable = false
+	undo.Result = &action.Result{Summary: "Restored 1 field of monitor 123."}
+
+	failed := undo
+	failed.Status = action.StatusFailed
+	failed.Error = "the monitor is gone"
+
+	running := undo
+	running.Status = action.StatusExecuting
+
+	tests := []struct {
+		name string
+		p    action.Proposal
+		want string
+	}{
+		{name: "undone", p: undone, want: "undone"},
+		{name: "the undo", p: undo, want: "Undid *datadog-monitor* by Ana: Restored 1 field of monitor 123."},
+		{name: "a failed undo", p: failed, want: "did not restore it: the monitor is gone"},
+		{name: "a running undo", p: running, want: "Undoing *datadog-monitor* by Ana, running now"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			u := testUpdate(output.PhaseFinal, verdictReport(report.TruePositive))
+			u.Proposals = []action.Proposal{tt.p}
+
+			require.Contains(t, goldenJSON(t, mainView(u)), tt.want)
+			require.NotContains(t, buttonsOf(mainView(u).attachment.Blocks), ActionUndoProposal)
+		})
+	}
+}
+
+func TestUndoConflictShowsWhatARestoreOverwrites(t *testing.T) {
+	t.Parallel()
+
+	changes := []action.Change{{Path: "options.critical", Before: new("95"), After: new("80")}}
+
+	text, raw, err := UndoConflict(proposalID, changes)
+	require.NoError(t, err)
+	require.Contains(t, text, "Nothing was restored")
+
+	var blocks []block
+
+	require.NoError(t, json.Unmarshal(raw, &blocks))
+
+	buttons := buttonsOf(blocks)
+	require.Equal(t, proposalID, buttons[ActionUndoProposalForce].Value)
+	require.Equal(t, styleDanger, buttons[ActionUndoProposalForce].Style)
+	require.NotNil(t, buttons[ActionUndoProposalForce].Confirm)
+	require.Contains(t, string(raw), `options.critical\n  now:         95\n  restored to: 80`)
+
+	long := []action.Change{{Path: "message", Before: new(strings.Repeat("a", maxParamsChars)), After: new("b")}}
+
+	_, raw, err = UndoConflict(proposalID, long)
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), ActionUndoProposalForce, "no button on a list nobody can read")
+	require.Contains(t, string(raw), "too long to show")
 }

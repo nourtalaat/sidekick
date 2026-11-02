@@ -14,11 +14,19 @@ import (
 const (
 	ActionApproveProposal = "approve_proposal"
 	ActionRejectProposal  = "reject_proposal"
+	// ActionUndoProposal is the Undo button of a proposal that changed a
+	// definition, and ActionUndoProposalForce the Restore anyway button of
+	// the private message that shows what a restore would overwrite.
+	ActionUndoProposal      = "undo_proposal"
+	ActionUndoProposalForce = "undo_proposal_force"
 )
 
 // blockIDProposal starts the block ID of each proposal's buttons, followed
 // by the proposal ID.
 const blockIDProposal = "proposal"
+
+// blockIDUndo starts the block ID of the Undo button of a proposal.
+const blockIDUndo = "undo"
 
 // What the message shows about proposals, at most. A proposal whose
 // parameters do not fit gets no Approve button: an approver must never
@@ -33,9 +41,14 @@ const (
 )
 
 // IsProposalAction reports whether actionID is the action ID of the
-// Approve or Reject button of a proposal.
+// Approve, Reject, Undo or Restore anyway button of a proposal.
 func IsProposalAction(actionID string) bool {
-	return actionID == ActionApproveProposal || actionID == ActionRejectProposal
+	switch actionID {
+	case ActionApproveProposal, ActionRejectProposal, ActionUndoProposal, ActionUndoProposalForce:
+		return true
+	default:
+		return false
+	}
 }
 
 // proposalBlocks renders the action proposals of u: the ones that wait for
@@ -60,13 +73,14 @@ func proposalBlocks(u output.Update) []block {
 	var blocks []block
 
 	for _, p := range shown {
-		if p.Status == action.StatusProposed {
+		switch {
+		case p.Status == action.StatusProposed:
 			blocks = append(blocks, pendingProposal(u, p)...)
-
-			continue
+		case p.Undoable:
+			blocks = append(blocks, undoableProposal(p)...)
+		default:
+			blocks = append(blocks, contextBlock(proposalLine(p)))
 		}
-
-		blocks = append(blocks, contextBlock(proposalLine(p)))
 	}
 
 	if more := len(ordered) - len(shown); more > 0 {
@@ -107,6 +121,19 @@ func pendingProposal(u output.Update, p action.Proposal) []block {
 			len([]rune(p.ParamsText)))))
 	}
 
+	if deletesTarget(p) {
+		blocks = append(blocks, section(":warning: *This deletes "+escape(cut(p.Snapshot.Target, maxTitleChars))+". Sidekick cannot undo a delete.*"))
+	}
+
+	if len(p.Changes) > 0 {
+		shown, all := changeBlocks("*Changes, field by field*", p.Changes, changedSides)
+		blocks = append(blocks, shown...)
+
+		// A delete is decided on its target; the definition it removes is
+		// shown when it fits. Any other change must be shown whole.
+		complete = complete && (all || deletesTarget(p))
+	}
+
 	if reason := strings.TrimSpace(p.Reason); reason != "" {
 		blocks = append(blocks, section("*Reason, written by the model and not checked*\n"+escape(strings.ReplaceAll(cut(reason, maxReasonChars), "`", "'"))))
 	}
@@ -125,7 +152,7 @@ func proposalButtons(_ output.Update, p action.Proposal, complete bool) block {
 			Type: elemButton, ActionID: ActionApproveProposal, Text: plain("Approve"), Value: p.ID, Style: stylePrimary,
 			Confirm: &confirmDialog{
 				Title:   plain("Approve this action?"),
-				Text:    plain("Sidekick runs " + cut(p.Action, maxTitleChars) + " with the parameters shown above."),
+				Text:    plain(approveText(p)),
 				Confirm: plain("Approve"),
 				Deny:    plain("Not yet"),
 			},
@@ -135,6 +162,59 @@ func proposalButtons(_ output.Update, p action.Proposal, complete bool) block {
 	buttons = append(buttons, button{Type: elemButton, ActionID: ActionRejectProposal, Text: plain("Reject"), Value: p.ID, Style: styleDanger})
 
 	return block{Type: blockActions, BlockID: blockIDProposal + ":" + p.ID, Buttons: buttons}
+}
+
+// approveText is what the Approve button asks before it approves.
+func approveText(p action.Proposal) string {
+	switch {
+	case deletesTarget(p):
+		return "Sidekick deletes " + cut(p.Snapshot.Target, maxTitleChars) + ". Sidekick cannot undo a delete."
+	case len(p.Changes) > 0:
+		return "Sidekick runs " + cut(p.Action, maxTitleChars) + " with the parameters and the changes shown above."
+	default:
+		return "Sidekick runs " + cut(p.Action, maxTitleChars) + " with the parameters shown above."
+	}
+}
+
+// undoableProposal renders a proposal that succeeded and can be undone: its
+// line, what it changed, and the Undo button, which asks again.
+func undoableProposal(p action.Proposal) []block {
+	blocks := []block{contextBlock(proposalLine(p))}
+
+	if len(p.Changes) > 0 {
+		shown, all := changeBlocks("*What it changed*", p.Changes, changedSides)
+		if all {
+			blocks = append(blocks, shown...)
+		} else {
+			blocks = append(blocks, contextBlock("The changes are too long to show here. Open the investigation in Sidekick to read them."))
+		}
+	}
+
+	undo := button{
+		Type: elemButton, ActionID: ActionUndoProposal, Text: plain("Undo"), Value: p.ID,
+		Confirm: &confirmDialog{
+			Title:   plain("Undo this change?"),
+			Text:    plain("Sidekick puts back the fields it changed in " + undoTarget(p) + ". If someone changed them since, you see the difference first."),
+			Confirm: plain("Undo"),
+			Deny:    plain("Not now"),
+		},
+	}
+
+	return append(blocks, block{Type: blockActions, BlockID: blockIDUndo + ":" + p.ID, Buttons: []button{undo}}, contextBlock("Needs the approver role"))
+}
+
+// undoTarget names what an undo restores, for the dialog.
+func undoTarget(p action.Proposal) string {
+	if p.Snapshot != nil && p.Snapshot.Target != "" {
+		return cut(p.Snapshot.Target, maxTitleChars)
+	}
+
+	return cut(p.Action, maxTitleChars)
+}
+
+// deletesTarget reports whether the proposal removes what it changes.
+func deletesTarget(p action.Proposal) bool {
+	return p.Snapshot != nil && p.Snapshot.Deletes()
 }
 
 // expiryLine says until when the proposal can be decided.
@@ -149,6 +229,10 @@ func proposalLine(p action.Proposal) string {
 	name := "*" + escape(cut(p.Action, maxTitleChars)) + "*"
 	by := decider(p)
 
+	if p.UndoOf != "" {
+		return undoLine(p, name, by)
+	}
+
 	switch p.Status {
 	case action.StatusApproved:
 		return ":white_check_mark: " + name + " approved" + byPart(by) + ", waiting to run"
@@ -160,6 +244,8 @@ func proposalLine(p action.Proposal) string {
 		return ":gear: " + name + " approved" + byPart(by) + ", running now"
 	case action.StatusSucceeded:
 		return ":white_check_mark: " + name + " done" + byPart(by) + resultPart(p)
+	case action.StatusUndone:
+		return ":leftwards_arrow_with_hook: " + name + " undone"
 	case action.StatusFailed:
 		detail := ""
 		if p.Error != "" {
@@ -169,6 +255,25 @@ func proposalLine(p action.Proposal) string {
 		return ":warning: " + name + " failed" + byPart(by) + detail
 	default:
 		return name + " " + escape(string(p.Status))
+	}
+}
+
+// undoLine is the context line of a proposal that restores another one.
+func undoLine(p action.Proposal, name, by string) string {
+	switch p.Status {
+	case action.StatusExecuting:
+		return ":gear: Undoing " + name + byPart(by) + ", running now"
+	case action.StatusSucceeded:
+		return ":leftwards_arrow_with_hook: Undid " + name + byPart(by) + resultPart(p)
+	case action.StatusFailed:
+		detail := ""
+		if p.Error != "" {
+			detail = ": " + escape(cut(p.Error, maxResultChars))
+		}
+
+		return ":warning: The undo of " + name + byPart(by) + " did not restore it" + detail
+	default:
+		return "The undo of " + name + " " + escape(string(p.Status))
 	}
 }
 
