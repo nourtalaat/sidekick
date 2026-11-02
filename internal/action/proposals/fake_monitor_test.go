@@ -51,6 +51,8 @@ type fakeMonitor struct {
 	undoErrs []error
 	// undoCalls count the calls to Undo.
 	undoCalls int
+	// undoInvocations are the invocations Undo got.
+	undoInvocations []action.Invocation
 	// executeCalls are the invocations Execute got.
 	executeCalls []action.Invocation
 }
@@ -167,11 +169,12 @@ func (m *fakeMonitor) Execute(_ context.Context, inv action.Invocation) (action.
 	return m.result("Changed the monitor."), nil
 }
 
-func (m *fakeMonitor) Undo(_ context.Context, _ action.Invocation, snap action.Snapshot, force bool) (action.Result, error) {
+func (m *fakeMonitor) Undo(_ context.Context, inv action.Invocation, snap action.Snapshot, force bool) (action.Result, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.undoCalls++
+	m.undoInvocations = append(m.undoInvocations, inv)
 
 	if len(m.undoErrs) > 0 {
 		var err error

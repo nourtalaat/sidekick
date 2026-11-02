@@ -1700,7 +1700,7 @@ actions:
         - { glob: "prometheus/rules/**", format: prometheus_rules }
         - { glob: "datadog/**",          format: terraform }
         - { glob: "grafana/alerting/**", format: grafana_alert_file }
-      maxFiles: 3                     # 1 to 100
+      maxFiles: 3                     # 1 to 25
       maxChangedLines: 40             # lines added plus lines removed, 1 to 1000
       baseBranch: main                # the only branch a pull request may target
       draft: true                     # default true
@@ -1745,12 +1745,31 @@ actions:
   branch in all files together. A file the model sends unchanged is refused,
   and so is a file larger than 256 KiB at the base. A request to change
   something outside the limits is refused when the model proposes, and again
-  when the proposal runs.
+  when the proposal runs. `maxFiles` is at most 25 because an approver reads
+  up to 4 fields for each file (its blob, its status and its two line
+  counts), and a change may differ in at most 100 fields in all.
+- **What the approver reads.** The proposal shows each file with what happens
+  to it (`changed`, `added` or `deleted`) and how many lines it adds and
+  removes, next to the parameters, which hold the whole new content. Sidekick
+  stores the blob SHAs of the files before and after, and the SHA of the base
+  commit, never the file contents. A unified diff of the content is not shown.
 - **Files that changed meanwhile.** The model sends the whole new content of
-  each file, and the pull request writes it on top of the base branch as it
-  is when the proposal runs. A file that someone changed on the base branch
-  after the proposal is overwritten in the pull request, so reviewers should
-  check the diff of every file.
+  each file. When the proposal runs, the action compares each file on the
+  base branch with the blob it had when the model proposed. A file that
+  someone changed meanwhile fails the proposal with a conflict that names the
+  file, so the pull request never overwrites their edit; propose again from
+  the new content. A file that already has the new content is left out, and
+  if every file does, the proposal succeeds without a pull request.
+- **Undo.** An approver can undo a succeeded proposal. If its pull request is
+  still open or was closed, Sidekick closes it and deletes its branch. If it
+  was merged, Sidekick opens a revert pull request from the branch
+  `sidekick/<undo proposal id>`, as a draft unless `draft: false`, that
+  restores the earlier content of the files (by blob, with no format
+  validation, because the files only go back to what they were). The revert
+  pull request still needs review and merging; the undo is done once it is
+  opened. If a file on the base branch is not as the merged pull request left
+  it, nothing is restored until the approver confirms, and then the earlier
+  content overwrites it. The revert pull request is tracked like any other.
 
 Once a day, Sidekick reads from GitHub whether the pull requests it opened
 are still open, were merged or were closed, and records it in
@@ -1764,8 +1783,9 @@ A row is deleted with its proposal, so these records last as long as the
 [`retention.investigations`](#retention) period of their investigation.
 
 Sidekick counts the pull requests it opens in
-`sidekick_githubpr_pull_requests_total` (by `result`: `opened`, `existing`
-or `error`), the validations in `sidekick_githubpr_validations_total`
+`sidekick_githubpr_pull_requests_total` (by `result`: `opened`, `existing`,
+`applied` for a change already on the base branch, `closed` or `reverted` for
+an undo, or `error`), the validations in `sidekick_githubpr_validations_total`
 (by `format` and `result`), and the daily checks in
 `sidekick_githubpr_status_checks_total` (by `state`: `open`, `merged`,
 `closed`, `missing` or `error`).

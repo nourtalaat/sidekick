@@ -43,7 +43,7 @@ func newStatusBed(t *testing.T) *statusBed {
 	pool := storetest.New(t)
 	storetest.LoadFixture(t, pool, "fixture/investigations.sql")
 
-	s := &statusBed{bed: newBed(t, nil), pool: pool, now: time.Now().UTC().Truncate(time.Second), pulls: map[string]fakehttp.Response{}, calls: map[string]int{}}
+	s := &statusBed{bed: newBedWithDB(t, nil, pool), pool: pool, now: time.Now().UTC().Truncate(time.Second), pulls: map[string]fakehttp.Response{}, calls: map[string]int{}}
 
 	s.github.HandleFunc(http.MethodGet, repoPath("pulls"), func(w http.ResponseWriter, r *http.Request) {
 		head := r.URL.Query().Get("head")

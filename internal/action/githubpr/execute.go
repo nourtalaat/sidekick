@@ -73,11 +73,17 @@ func (p *PR) Execute(ctx context.Context, inv action.Invocation) (action.Result,
 	}
 
 	if !branchExists {
-		pre, err := p.prepare(ctx, inv.Params)
+		pre, err := p.prepare(ctx, inv.Params, inv.Snapshot)
 		if err != nil {
 			p.metrics.pullRequest(resultError)
 
 			return action.Result{}, fmt.Errorf("check the pull request before it is made: %w", err)
+		}
+
+		if len(pre.changes) == 0 {
+			p.metrics.pullRequest(resultApplied)
+
+			return action.Result{Summary: "The change is on the base branch already, so no pull request was opened."}, nil
 		}
 
 		if err := p.push(ctx, pre, branch, inv); err != nil {
@@ -140,8 +146,7 @@ func (p *PR) pullRequestFrom(ctx context.Context, owner, name, branch string) (*
 }
 
 // push writes the changes as one commit on top of the base branch's head
-// and points the new branch at it. The commit exists before the branch, so
-// a crash in between leaves only objects nothing refers to.
+// and points the new branch at it.
 func (p *PR) push(ctx context.Context, pre *prepared, branch string, inv action.Invocation) error {
 	entries := make([]*gh.TreeEntry, 0, len(pre.changes))
 
@@ -155,21 +160,29 @@ func (p *PR) push(ctx context.Context, pre *prepared, branch string, inv action.
 		entries = append(entries, entry)
 	}
 
-	tree, _, err := p.client.Git.CreateTree(ctx, pre.owner, pre.name, pre.base.tree, entries)
+	return p.commitTo(ctx, pre.owner, pre.name, pre.base, entries, commitMessage(pre.params.Title, inv.ProposalID), branch)
+}
+
+// commitTo makes one commit with the tree entries on top of the base commit
+// and points the branch at it. The commit exists before the branch, so a
+// crash in between leaves only objects nothing refers to. A branch that
+// exists already, made by another attempt a moment ago, is left as it is.
+func (p *PR) commitTo(ctx context.Context, owner, name string, b base, entries []*gh.TreeEntry, message, branch string) error {
+	tree, _, err := p.client.Git.CreateTree(ctx, owner, name, b.tree, entries)
 	if err != nil {
 		return classify("make the tree", err)
 	}
 
-	commit, _, err := p.client.Git.CreateCommit(ctx, pre.owner, pre.name, gh.Commit{
-		Message: new(commitMessage(pre.params.Title, inv.ProposalID)),
+	commit, _, err := p.client.Git.CreateCommit(ctx, owner, name, gh.Commit{
+		Message: new(message),
 		Tree:    &gh.Tree{SHA: tree.SHA},
-		Parents: []*gh.Commit{{SHA: new(pre.base.commit)}},
+		Parents: []*gh.Commit{{SHA: new(b.commit)}},
 	}, nil)
 	if err != nil {
 		return classify("make the commit", err)
 	}
 
-	_, _, err = p.client.Git.CreateRef(ctx, pre.owner, pre.name, gh.CreateRef{Ref: "refs/" + branchRef + branch, SHA: commit.GetSHA()})
+	_, _, err = p.client.Git.CreateRef(ctx, owner, name, gh.CreateRef{Ref: "refs/" + branchRef + branch, SHA: commit.GetSHA()})
 	if err != nil && !alreadyExists(err) {
 		return classify("make the branch "+branch, err)
 	}
@@ -177,18 +190,23 @@ func (p *PR) push(ctx context.Context, pre *prepared, branch string, inv action.
 	return nil
 }
 
-// open makes the pull request from the branch. A pull request that exists
-// already, made by another attempt a moment ago, is returned instead.
+// open makes the pull request of a proposal from the branch.
 func (p *PR) open(ctx context.Context, params Params, owner, name, branch string, inv action.Invocation) (*gh.PullRequest, error) {
-	pr, _, err := p.client.PullRequests.Create(ctx, owner, name, gh.CreatePullRequest{
+	return p.openPullRequest(ctx, owner, name, gh.CreatePullRequest{
 		Title: new(oneLine(plainText(params.Title))),
 		Head:  branch,
 		Base:  params.BaseBranch,
 		Body:  new(p.description(params.Body, inv)),
 		Draft: new(p.limits.draft()),
 	})
+}
+
+// openPullRequest makes a pull request. A pull request that exists
+// already, made by another attempt a moment ago, is returned instead.
+func (p *PR) openPullRequest(ctx context.Context, owner, name string, req gh.CreatePullRequest) (*gh.PullRequest, error) {
+	pr, _, err := p.client.PullRequests.Create(ctx, owner, name, req)
 	if alreadyExists(err) {
-		found, ferr := p.pullRequestFrom(ctx, owner, name, branch)
+		found, ferr := p.pullRequestFrom(ctx, owner, name, req.Head)
 		if ferr != nil {
 			return nil, fmt.Errorf("find the pull request made meanwhile: %w", ferr)
 		}

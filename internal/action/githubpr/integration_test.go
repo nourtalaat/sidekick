@@ -52,9 +52,12 @@ func TestProposeAndRunThroughTheService(t *testing.T) {
 	require.Contains(t, refused.Refusal, "no pull request is opened")
 	require.Equal(t, 0, s.proposalCount(t))
 
-	// The model fixes the file: the proposal is stored, and approving it
-	// queues the job that opens the pull request.
+	// The model fixes the file: the check passes, the snapshot reads the
+	// files again, the proposal is stored, and approving it queues the job
+	// that opens the pull request.
 	s.expectBase()
+	s.expectBase()
+	s.expectFile(testRulesPath, testRulesBefore)
 	s.expectFile(testRulesPath, testRulesBefore)
 	s.validatorPasses(2)
 
@@ -62,7 +65,22 @@ func TestProposeAndRunThroughTheService(t *testing.T) {
 	require.Empty(t, stored.Refusal)
 	require.Equal(t, 1, s.proposalCount(t))
 
-	_, err := s.svc.Approve(t.Context(), stored.ID, proposals.Decider{UserID: anaUser})
+	view, err := proposals.Get(t.Context(), s.pool, stored.ID)
+	require.NoError(t, err)
+	require.NotNil(t, view.Snapshot)
+	require.Equal(t, "github:acme/monitors", view.Snapshot.Target)
+	require.Equal(t, testBaseSHA, view.Snapshot.Version)
+	require.NotContains(t, string(view.Snapshot.After), "groups:", "a snapshot holds no file contents")
+
+	paths := make([]string, 0, len(view.Changes))
+	for _, c := range view.Changes {
+		paths = append(paths, c.Path)
+	}
+
+	require.Contains(t, paths, testRulesPath+".status", "the approver reads what happens to each file")
+	require.Contains(t, paths, testRulesPath+".linesAdded")
+
+	_, err = s.svc.Approve(t.Context(), stored.ID, proposals.Decider{UserID: anaUser})
 	require.NoError(t, err)
 
 	branch := "sidekick/" + stored.ID.String()
@@ -77,6 +95,7 @@ func TestProposeAndRunThroughTheService(t *testing.T) {
 	row, err := db.New(s.pool).GetActionProposal(t.Context(), stored.ID)
 	require.NoError(t, err)
 	require.Equal(t, string(action.StatusSucceeded), row.Status)
+	require.True(t, row.Undoable, "the action can undo what it opens")
 
 	var result action.Result
 
