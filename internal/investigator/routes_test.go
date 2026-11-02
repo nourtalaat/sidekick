@@ -32,7 +32,7 @@ func TestConfigRoutes(t *testing.T) {
 	t.Parallel()
 
 	current := []config.Route{
-		{Name: "payments", Sources: []string{"signoz"}, Outputs: []string{"slack-thread"}, Budgets: config.RouteBudgets{
+		{Name: "payments", Sources: []string{"signoz"}, Outputs: []string{"slack-thread"}, Details: map[string]string{"owner": "payments team"}, Budgets: config.RouteBudgets{
 			Daily: config.RouteDaily{MaxCostUSD: 2.5, OnDailyCap: config.OnDailyCapSkip},
 		}},
 		{Name: "checkout"},
@@ -49,7 +49,7 @@ func TestConfigRoutes(t *testing.T) {
 		{
 			name:   "a route with a skipping cap",
 			route:  "payments",
-			want:   Route{Sources: []string{"signoz"}, Outputs: []string{"slack-thread"}, DailyMaxCostMicros: 2_500_000, DailySkip: true},
+			want:   Route{Sources: []string{"signoz"}, Outputs: []string{"slack-thread"}, Details: map[string]string{"owner": "payments team"}, DailyMaxCostMicros: 2_500_000, DailySkip: true},
 			wantOK: true,
 		},
 		{name: "a route without settings", route: "checkout", want: Route{}, wantOK: true},
@@ -67,6 +67,19 @@ func TestConfigRoutes(t *testing.T) {
 	}
 
 	require.Equal(t, []string{"checkout", "payments"}, routes.Names())
+}
+
+func TestConfigRoutesCopyTheDetails(t *testing.T) {
+	t.Parallel()
+
+	current := []config.Route{{Name: "payments", Details: map[string]string{"owner": "payments team"}}}
+	routes := ConfigRoutes(func() []config.Route { return current })
+
+	got, ok := routes.Route("payments")
+	require.True(t, ok)
+
+	got.Details["owner"] = "changed"
+	require.Equal(t, "payments team", current[0].Details["owner"], "a run cannot change the route in effect")
 }
 
 func TestConfigRoutesFollowTheRoutesInEffect(t *testing.T) {
@@ -96,9 +109,10 @@ func TestRunSettingsReadTheRoute(t *testing.T) {
 		name        string
 		route       string
 		wantSources []string
+		wantDetails map[string]string
 		wantErr     string
 	}{
-		{name: "a route in effect", route: "payments", wantSources: []string{"signoz"}},
+		{name: "a route in effect", route: "payments", wantSources: []string{"signoz"}, wantDetails: map[string]string{"owner": "payments team"}},
 		{name: "a route that is gone", route: "deleted", wantErr: `route "deleted" is no longer in effect`},
 	}
 
@@ -108,7 +122,7 @@ func TestRunSettingsReadTheRoute(t *testing.T) {
 
 			h := &Handler{opts: Options{
 				Connectors: map[string]Connector{"claude": {}},
-				Routes:     StaticRoutes{"payments": {Sources: []string{"signoz"}}},
+				Routes:     StaticRoutes{"payments": {Sources: []string{"signoz"}, Details: map[string]string{"owner": "payments team"}}},
 			}}
 			r := &run{h: h, inv: db.Investigation{Route: tt.route, Connectors: conns, Budget: []byte(`{}`)}, log: slog.New(slog.DiscardHandler)}
 
@@ -122,6 +136,7 @@ func TestRunSettingsReadTheRoute(t *testing.T) {
 
 			require.NoError(t, err)
 			require.Equal(t, tt.wantSources, r.route.Sources)
+			require.Equal(t, tt.wantDetails, r.route.Details)
 		})
 	}
 }

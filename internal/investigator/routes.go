@@ -78,5 +78,6 @@ func routeOf(r config.Route) Route {
 		Outputs:            r.Outputs,
 		DailyMaxCostMicros: r.Budgets.Daily.MaxCostMicros(),
 		DailySkip:          r.Budgets.Daily.OnDailyCap == config.OnDailyCapSkip,
+		Details:            maps.Clone(r.Details),
 	}
 }

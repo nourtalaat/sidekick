@@ -131,6 +131,9 @@ type Route struct {
 	// DailySkip ends the route's new investigations at its daily cap
 	// instead of holding them until the next day.
 	DailySkip bool
+	// Details are the route's fixed facts, which the prompt shows as
+	// trusted text.
+	Details map[string]string
 }
 
 // Handler runs investigate jobs. Make it with New, register it for
