@@ -5,6 +5,7 @@
 package plugins
 
 import (
+	_ "github.com/nourtalaat/sidekick/internal/action/datadog"       // Action type "datadog.monitor".
 	_ "github.com/nourtalaat/sidekick/internal/intake/alertmanager"  // Intake adapter "alertmanager".
 	_ "github.com/nourtalaat/sidekick/internal/intake/datadog"       // Intake adapter "datadog".
 	_ "github.com/nourtalaat/sidekick/internal/intake/generic"       // Intake adapter "generic".
