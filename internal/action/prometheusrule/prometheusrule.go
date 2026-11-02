@@ -155,7 +155,14 @@ type Rule struct {
 	limits    Limits
 	allowed   []action.Path
 	cluster   *cluster
-	validator *validateclient.Client
+	validator validator
+}
+
+// validator checks rule files. *validateclient.Client is one; the interface
+// is small so that another way to reach the validator can replace it in one
+// line, in New.
+type validator interface {
+	Validate(ctx context.Context, req validateclient.Request) (validateclient.Result, error)
 }
 
 var (
@@ -199,13 +206,13 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (action
 
 // newRule builds the action around a way to reach the cluster and the
 // validator.
-func newRule(name string, cfg Config, cl *cluster, validator *validateclient.Client) (*Rule, error) {
+func newRule(name string, cfg Config, cl *cluster, checker validator) (*Rule, error) {
 	allowed, err := action.ParsePaths(cfg.Limits.Fields)
 	if err != nil {
 		return nil, fmt.Errorf("limits.fields: %w", err)
 	}
 
-	return &Rule{name: name, limits: cfg.Limits, allowed: allowed, cluster: cl, validator: validator}, nil
+	return &Rule{name: name, limits: cfg.Limits, allowed: allowed, cluster: cl, validator: checker}, nil
 }
 
 // Spec implements action.Action. The description tells the model which
