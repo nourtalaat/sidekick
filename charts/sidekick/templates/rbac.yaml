@@ -70,3 +70,86 @@ subjects:
 {{- end }}
 {{- end }}
 {{- end }}
+{{- $actions := include "sidekick.actions.access" . | fromJson }}
+{{- if and .Values.rbac.actions $actions.any }}
+{{- $accounts := keys $actions.accounts | sortAlpha }}
+{{- range $account := $accounts }}
+---
+# The service account of the prometheus.rule actions. Nothing runs as it:
+# Sidekick asks the API server for short-lived tokens of it.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $account }}
+  labels:
+    {{- include "sidekick.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: actions
+automountServiceAccountToken: false
+{{- end }}
+---
+# Sidekick's own service account may ask for tokens of the actions' accounts
+# and of no other account.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "sidekick.actions.rbacName" (dict "context" . "suffix" "tokens") }}
+  labels:
+    {{- include "sidekick.labels" . | nindent 4 }}
+    app.kubernetes.io/component: actions
+rules:
+  - apiGroups: [""]
+    resources: [serviceaccounts/token]
+    resourceNames: {{ $accounts | toJson }}
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "sidekick.actions.rbacName" (dict "context" . "suffix" "tokens") }}
+  labels:
+    {{- include "sidekick.labels" . | nindent 4 }}
+    app.kubernetes.io/component: actions
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "sidekick.actions.rbacName" (dict "context" . "suffix" "tokens") }}
+subjects:
+  {{- include "sidekick.kubernetesSource.subjects" . | nindent 2 }}
+{{- range $account := $accounts }}
+{{- range $namespace, $names := get $actions.accounts $account }}
+---
+# The actions' service account may get and patch the PrometheusRules the
+# actions list for this namespace, and nothing else.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "sidekick.actions.rbacName" (dict "context" $ "suffix" (printf "for-%s" $account)) }}
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "sidekick.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: actions
+rules:
+  - apiGroups: [monitoring.coreos.com]
+    resources: [prometheusrules]
+    resourceNames: {{ $names | toJson }}
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "sidekick.actions.rbacName" (dict "context" $ "suffix" (printf "for-%s" $account)) }}
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "sidekick.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: actions
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "sidekick.actions.rbacName" (dict "context" $ "suffix" (printf "for-%s" $account)) }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $account }}
+    namespace: {{ $.Release.Namespace }}
+{{- end }}
+{{- end }}
+{{- end }}

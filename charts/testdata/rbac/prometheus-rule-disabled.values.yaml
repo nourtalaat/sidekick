@@ -1,0 +1,29 @@
+# rbac.actions off with a prometheus.rule action: no accounts and no roles.
+rbac:
+  actions: false
+validator:
+  enabled: true
+secrets:
+  - sidekick-anthropic
+  - sidekick-slack
+  - sidekick-webhook
+  - sidekick-staging-cluster
+config:
+  sources:
+    # The quick-start source, pointed at another cluster, so no source reads this one.
+    k8s:
+      kubeconfigSecret: { name: sidekick-staging-cluster, key: kubeconfig }
+  actions:
+    prom-checkout:
+      type: prometheus.rule
+      limits:
+        namespaces: [monitoring]
+        names: [checkout-alerts]
+        groups: [checkout.rules]
+        fields: [expr]
+  routes:
+    - name: default
+      sources: [k8s]
+      outputs: [slack]
+      mode: approved
+      actions: [prom-checkout]

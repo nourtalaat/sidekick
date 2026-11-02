@@ -1,0 +1,48 @@
+# Three prometheus.rule actions: two share the default service account,
+# sidekick-actions, and ask for the same namespace, so its Role there lists
+# the names of both; the third has an account of its own. The chart makes the
+# accounts, one Role that lets Sidekick ask for tokens of those two accounts
+# and no others, and a Role and binding for each account in each namespace.
+# Sidekick mounts its service account token, because an action asks for tokens.
+validator:
+  enabled: true
+secrets:
+  - sidekick-anthropic
+  - sidekick-slack
+  - sidekick-webhook
+  - sidekick-staging-cluster
+config:
+  sources:
+    # The quick-start source, pointed at another cluster, so no source reads this one.
+    k8s:
+      kubeconfigSecret: { name: sidekick-staging-cluster, key: kubeconfig }
+  actions:
+    proposalTTL: 24h
+    prom-checkout:
+      type: prometheus.rule
+      limits:
+        namespaces: [monitoring, staging]
+        names: [checkout-alerts, checkout-recording]
+        groups: [checkout.rules]
+        fields: [expr, for, labels]
+    prom-search:
+      type: prometheus.rule
+      limits:
+        namespaces: [monitoring]
+        names: [search-alerts, checkout-alerts]
+        groups: [search.rules]
+        fields: [for]
+    prom-platform:
+      type: prometheus.rule
+      serviceAccount: platform-actions
+      limits:
+        namespaces: [platform]
+        names: [node-alerts]
+        groups: [node.rules]
+        fields: [expr]
+  routes:
+    - name: default
+      sources: [k8s]
+      outputs: [slack]
+      mode: approved
+      actions: [prom-checkout, prom-search, prom-platform]

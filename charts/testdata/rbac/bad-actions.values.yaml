@@ -1,0 +1,3 @@
+# rbac.actions must be a boolean, which the values schema checks.
+rbac:
+  actions: "yes"
