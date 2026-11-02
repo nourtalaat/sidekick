@@ -34,9 +34,8 @@ in one of its teams (Linear) or projects (Jira):
 2. **A link in the alert** that points at a ticket, such as a Linear issue
    link of the output's workspace or a Jira `/browse/` link of the output's
    site.
-3. **A ticket Sidekick created** for the investigation. Ticket actions come
-   in a later release; once they exist, the ticket they create is used
-   here.
+3. **A ticket Sidekick created** for the investigation, by a succeeded
+   `linear.issue` or `jira.issue` [action](configuration.md#actions).
 
 With no such ticket, nothing is posted. A ticket outside the output's
 teams or projects is never used, even when the alert names it, so an alert

@@ -56,7 +56,7 @@ default `/etc/sidekick/sidekick.yaml`) and checks, in order:
 It prints one line per check, with a fix below each problem. The `tool choice`, `server` and `context` checks print a line only for the connectors they apply to. For example:
 
 ```text
-ok    database: connected; the schema has every migration this release needs (7)
+ok    database: connected; the schema has every migration this release needs (49)
 FAIL  slack: Slack rejected the bot token: invalid_auth
       fix: put the app's Bot User OAuth Token (xoxb-...), from the Slack app's OAuth & Permissions page, in the Secret sidekick-slack, key botToken, and reinstall the app if it was removed
 ok    model claude: the anthropic API accepted the key
