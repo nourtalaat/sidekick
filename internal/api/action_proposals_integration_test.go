@@ -400,13 +400,21 @@ func TestProposalApprovedByPolicy(t *testing.T) {
 	_, err := s.pool.Exec(t.Context(), "UPDATE action_proposals SET decided_by = NULL WHERE id = $1", propApproved)
 	require.NoError(t, err)
 
-	got := readActionProposal(t, s.do(t, http.MethodGet, actionProposalsRoute+"/"+propApproved, apSession, apCSRF, nil))
-	require.True(t, got.ApprovedByPolicy)
-	require.Empty(t, got.DecidedByName)
-	require.NotEmpty(t, got.DecidedAt)
+	listed := readActionProposals(t, s.doWithToken(t, http.MethodGet, actionProposalsRoute+"?status=approved&status=succeeded", approverToken, nil))
+	require.Len(t, listed.Proposals, 2)
 
-	other := readActionProposal(t, s.do(t, http.MethodGet, actionProposalsRoute+"/"+propSucceeded, apSession, apCSRF, nil))
-	require.False(t, other.ApprovedByPolicy, "a proposal a person approved is not")
+	for _, p := range listed.Proposals {
+		switch p.ID {
+		case propApproved:
+			require.True(t, p.ApprovedByPolicy)
+			require.Empty(t, p.DecidedByName)
+			require.NotEmpty(t, p.DecidedAt)
+		case propSucceeded:
+			require.False(t, p.ApprovedByPolicy, "a proposal a person approved is not")
+		default:
+			require.Failf(t, "unexpected proposal", "%s", p.ID)
+		}
+	}
 
 	rec := s.do(t, http.MethodPost, actionProposalsRoute+"/"+propApproved+"/reject", boSession, boCSRF, nil)
 	require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
