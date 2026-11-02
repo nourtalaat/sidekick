@@ -29,10 +29,10 @@ const (
 	maxMessageBytes = 400
 )
 
-// The headers Datadog reads the keys from.
+// The headers Datadog reads its two keys from.
 const (
-	headerAPIKey = "DD-API-KEY"
-	headerAppKey = "DD-APPLICATION-KEY"
+	apiHeader = "DD-API-KEY"
+	appHeader = "DD-APPLICATION-KEY"
 )
 
 var (
@@ -157,8 +157,8 @@ func (c *client) do(ctx context.Context, method, path string, body, out any) err
 	}
 
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set(headerAPIKey, apiKey)
-	req.Header.Set(headerAppKey, appKey)
+	req.Header.Set(apiHeader, apiKey)
+	req.Header.Set(appHeader, appKey)
 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
