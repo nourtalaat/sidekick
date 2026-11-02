@@ -305,7 +305,14 @@ func benchRun(ctx context.Context, cmd *cobra.Command, regs config.Registries, f
 	if runErr == nil {
 		log.InfoContext(ctx, "grading the root causes", "judge", judge.Name())
 
-		runErr = bench.Score(ctx, results, bench.ScoreOptions{Grader: judge, Weights: settings.ScoreWeights(), Seed: flags.seed})
+		runErr = bench.Score(ctx, results, bench.ScoreOptions{
+			Grader: judge, Weights: settings.ScoreWeights(), Seed: flags.seed,
+			// One grade that fails must not throw away the runs, which are paid for.
+			KeepInfrastructureErrors: true,
+		})
+		if runErr == nil {
+			logJudgeErrors(ctx, log, results)
+		}
 	}
 
 	if err := results.WriteTable(cmd.OutOrStdout()); err != nil {
@@ -343,6 +350,18 @@ func benchRun(ctx context.Context, cmd *cobra.Command, regs config.Registries, f
 	}
 
 	return nil
+}
+
+// logJudgeErrors warns about each run the judge gave no grades for, so the
+// log says which runs have a judge error and why.
+func logJudgeErrors(ctx context.Context, log *slog.Logger, results *bench.Results) {
+	for _, sc := range results.Scenarios {
+		for _, run := range sc.Runs {
+			if run.RootCause != nil && run.RootCause.Error != "" {
+				log.WarnContext(ctx, "the judge gave no grades for a run", "scenario", sc.ID, "run", run.Run, "error", run.RootCause.Error)
+			}
+		}
+	}
 }
 
 // benchValidate loads the scenarios and the config and runs the checks that

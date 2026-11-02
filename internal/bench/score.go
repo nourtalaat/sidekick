@@ -79,20 +79,26 @@ type ScoreOptions struct {
 	// Resamples is how many resamples the intervals are computed from.
 	// Zero means BootstrapResamples.
 	Resamples int
+	// KeepInfrastructureErrors keeps a grading that failed because the
+	// model provider could not be reached on its run, as a judge error, and
+	// scores on. Left false, such a failure stops Score, which is what a
+	// caller that can try again later wants.
+	KeepInfrastructureErrors bool
 }
 
 // Score scores each run of results, then the spread of each scenario and
 // the run totals. Root causes are graded by opts.Grader, one run at a
-// time. A grading that fails because of the model provider, because the
-// budget of a budget grader is spent, or because ctx ended, stops Score
-// with its error; any other grading failure is kept
-// on the run, which then scores 0 for its root cause.
+// time. A grading that fails because the budget of a budget grader is
+// spent, or because ctx ended, stops Score with its error. So does one that
+// fails because of the model provider, unless opts.KeepInfrastructureErrors
+// is set. Any other grading failure is kept on the run, which then scores 0
+// for its root cause and counts as a judge error.
 func Score(ctx context.Context, results *Results, opts ScoreOptions) error {
 	for i := range results.Scenarios {
 		sc := &results.Scenarios[i]
 
 		for j := range sc.Runs {
-			if err := scoreRun(ctx, sc.Expected, &sc.Runs[j], opts.Grader); err != nil {
+			if err := scoreRun(ctx, sc.Expected, &sc.Runs[j], opts); err != nil {
 				return fmt.Errorf("score scenario %s, run %d: %w", sc.ID, sc.Runs[j].Run, err)
 			}
 		}
@@ -108,14 +114,14 @@ func Score(ctx context.Context, results *Results, opts ScoreOptions) error {
 }
 
 // scoreRun sets the scores of one run.
-func scoreRun(ctx context.Context, expected Expected, run *RunResult, grader Grader) error {
+func scoreRun(ctx context.Context, expected Expected, run *RunResult, opts ScoreOptions) error {
 	run.Scored = true
 	run.VerdictCorrect = expected.accepts(run.Report.Verdict)
 	run.Evidence, run.EvidenceScore = checkEvidence(expected.Evidence, *run)
 	run.SourcesReported, run.MissingSources = reportedSources(expected.UnavailableReported, run.Report)
 
 	rubric := expected.RootCause.Rubric
-	if grader == nil || len(rubric) == 0 {
+	if opts.Grader == nil || len(rubric) == 0 {
 		return nil
 	}
 
@@ -126,9 +132,9 @@ func scoreRun(ctx context.Context, expected Expected, run *RunResult, grader Gra
 		return nil
 	}
 
-	grade, err := grader.Grade(ctx, expected.RootCause, run.Report)
+	grade, err := opts.Grader.Grade(ctx, expected.RootCause, run.Report)
 	if err != nil {
-		if errors.Is(err, ErrInfrastructure) || errors.Is(err, ErrOverBudget) || ctx.Err() != nil {
+		if stopsScoring(err, opts) || ctx.Err() != nil {
 			return fmt.Errorf("grade the root cause: %w", err)
 		}
 
@@ -141,6 +147,16 @@ func scoreRun(ctx context.Context, expected Expected, run *RunResult, grader Gra
 	run.RootCause = &rc
 
 	return nil
+}
+
+// stopsScoring reports whether a grading that failed with err stops Score
+// instead of being kept on its run.
+func stopsScoring(err error, opts ScoreOptions) bool {
+	if errors.Is(err, ErrOverBudget) {
+		return true
+	}
+
+	return errors.Is(err, ErrInfrastructure) && !opts.KeepInfrastructureErrors
 }
 
 // accepts reports whether verdict counts as correct: it is the expected
