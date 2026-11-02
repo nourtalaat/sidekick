@@ -2065,11 +2065,15 @@ type Prevention struct {
 
 // Problem Problem details, as RFC 9457 describes.
 type Problem struct {
+	// Changes The difference an undo would overwrite, when code is conflict on an undo.
+	Changes *[]ProposalChange `json:"changes,omitempty"`
+
 	// Code Names the kind of problem for a program. Only some answers have
 	// it: validation (422), file_rule, exists, stale, conflict
 	// (409) and not_found (404) on listeners and routes; validation
 	// and unchanged (422), stale and conflict (409) and not_found
-	// (404) on strategies.
+	// (404) on strategies; not_undoable, not_allowed, undo_running,
+	// undo_failed and conflict (409) on undoing a proposal.
 	Code *string `json:"code,omitempty"`
 
 	// Detail What went wrong with this request.
@@ -2104,8 +2108,14 @@ type Proposal struct {
 	// ApprovedByPolicy True when nobody decided the proposal: its investigation ran in
 	// read-write mode, so the route's policy approved it as it was
 	// stored, and `decidedAt` is the time of that approval.
-	ApprovedByPolicy *bool      `json:"approvedByPolicy,omitempty"`
-	DecidedAt        *time.Time `json:"decidedAt,omitempty"`
+	ApprovedByPolicy *bool `json:"approvedByPolicy,omitempty"`
+
+	// Changes The difference between the definition before and after the
+	// change, field by field, sorted by path. Absent for an action
+	// that changes no definition in place. A change with an empty
+	// `path` and no `after` removes the whole definition.
+	Changes   *[]ProposalChange `json:"changes,omitempty"`
+	DecidedAt *time.Time        `json:"decidedAt,omitempty"`
 
 	// DecidedByName The name of the user or API token that approved or rejected it.
 	DecidedByName *string `json:"decidedByName,omitempty"`
@@ -2130,6 +2140,29 @@ type Proposal struct {
 	Result     *ActionResult  `json:"result,omitempty"`
 	Route      string         `json:"route"`
 	Status     ProposalStatus `json:"status"`
+
+	// Target What an action that changes a definition in place changes, such as datadog:monitor/123. Absent for any other action.
+	Target *string `json:"target,omitempty"`
+
+	// UndoOf Set on a proposal that restores the proposal with this ID.
+	UndoOf *openapi_types.UUID `json:"undoOf,omitempty"`
+
+	// Undoable Whether the proposal can be undone now. True only for a succeeded proposal whose action can undo it, that is not an undo itself.
+	Undoable bool `json:"undoable"`
+}
+
+// ProposalChange One field that differs. `before` and `after` are the JSON values as
+// text, like `paramsText`: characters that could hide something are
+// written as \u escapes, and nothing is cut. They come from the
+// monitoring tool and from the model, so show them as plain text. A
+// missing `before` means the field did not exist; a missing `after`
+// means it is removed.
+type ProposalChange struct {
+	After  *string `json:"after,omitempty"`
+	Before *string `json:"before,omitempty"`
+
+	// Path The field, such as options.thresholds.critical or rules[0].expr.
+	Path string `json:"path"`
 }
 
 // ProposalList defines model for ProposalList.
@@ -3152,6 +3185,12 @@ type TokenList struct {
 	Tokens []Token `json:"tokens"`
 }
 
+// UndoProposalRequest defines model for UndoProposalRequest.
+type UndoProposalRequest struct {
+	// Force Restore even though someone changed the fields since. Send it after a 409 with code conflict showed the difference.
+	Force *bool `json:"force,omitempty"`
+}
+
 // UsedLesson A lesson that the prompt of an investigation used, as it is now.
 type UsedLesson struct {
 	Id openapi_types.UUID `json:"id"`
@@ -3572,6 +3611,9 @@ type UpdateMemoryEntryJSONRequestBody = MemoryEntryUpdate
 // RejectProposalJSONRequestBody defines body for RejectProposal for application/json ContentType.
 type RejectProposalJSONRequestBody = RejectProposalRequest
 
+// UndoProposalJSONRequestBody defines body for UndoProposal for application/json ContentType.
+type UndoProposalJSONRequestBody = UndoProposalRequest
+
 // CreateRouteJSONRequestBody defines body for CreateRoute for application/json ContentType.
 type CreateRouteJSONRequestBody = NewRoute
 
@@ -3712,6 +3754,9 @@ type ServerInterface interface {
 	// RejectProposal Reject an action proposal
 	// (POST /proposals/{id}/reject)
 	RejectProposal(w http.ResponseWriter, r *http.Request, id ProposalID)
+	// UndoProposal Undo a succeeded action proposal
+	// (POST /proposals/{id}/undo)
+	UndoProposal(w http.ResponseWriter, r *http.Request, id ProposalID)
 	// ListRoutes The routes, from the config file and from runtime, with their status
 	// (GET /routes)
 	ListRoutes(w http.ResponseWriter, r *http.Request)
@@ -5240,6 +5285,32 @@ func (siw *ServerInterfaceWrapper) RejectProposal(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// UndoProposal operation middleware
+func (siw *ServerInterfaceWrapper) UndoProposal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ProposalID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UndoProposal(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListRoutes operation middleware
 func (siw *ServerInterfaceWrapper) ListRoutes(w http.ResponseWriter, r *http.Request) {
 
@@ -6486,6 +6557,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/proposals", wrapper.ListProposals)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/proposals/{id}/approve", wrapper.ApproveProposal)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/proposals/{id}/reject", wrapper.RejectProposal)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/proposals/{id}/undo", wrapper.UndoProposal)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/investigations/{id}/fix-applied", wrapper.UnmarkFixApplied)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/investigations/{id}/fix-applied", wrapper.MarkFixApplied)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{id}/scenario-draft", wrapper.CreateScenarioDraft)
@@ -7975,6 +8047,46 @@ func (response RejectProposaldefaultApplicationProblemPlusJSONResponse) VisitRej
 	return err
 }
 
+type UndoProposalRequestObject struct {
+	Id   ProposalID `json:"id"`
+	Body *UndoProposalJSONRequestBody
+}
+
+type UndoProposalResponseObject interface {
+	VisitUndoProposalResponse(w http.ResponseWriter) error
+}
+
+type UndoProposal200JSONResponse Proposal
+
+func (response UndoProposal200JSONResponse) VisitUndoProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UndoProposaldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UndoProposaldefaultApplicationProblemPlusJSONResponse) VisitUndoProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListRoutesRequestObject struct {
 }
 
@@ -9257,6 +9369,9 @@ type StrictServerInterface interface {
 	// RejectProposal Reject an action proposal
 	// (POST /proposals/{id}/reject)
 	RejectProposal(ctx context.Context, request RejectProposalRequestObject) (RejectProposalResponseObject, error)
+	// UndoProposal Undo a succeeded action proposal
+	// (POST /proposals/{id}/undo)
+	UndoProposal(ctx context.Context, request UndoProposalRequestObject) (UndoProposalResponseObject, error)
 	// ListRoutes The routes, from the config file and from runtime, with their status
 	// (GET /routes)
 	ListRoutes(ctx context.Context, request ListRoutesRequestObject) (ListRoutesResponseObject, error)
@@ -10401,6 +10516,42 @@ func (sh *strictHandler) RejectProposal(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RejectProposalResponseObject); ok {
 		if err := validResponse.VisitRejectProposalResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UndoProposal operation middleware
+func (sh *strictHandler) UndoProposal(w http.ResponseWriter, r *http.Request, id ProposalID) {
+	var request UndoProposalRequestObject
+
+	request.Id = id
+
+	var body UndoProposalJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UndoProposal(ctx, request.(UndoProposalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UndoProposal")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UndoProposalResponseObject); ok {
+		if err := validResponse.VisitUndoProposalResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

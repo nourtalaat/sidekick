@@ -3,18 +3,21 @@
 -- and stores nothing, when a proposal with the ID exists: the ID is made
 -- from the tool call, so a repeated call finds its proposal.
 INSERT INTO action_proposals (
-  id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at
+  id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at,
+  snapshot, undoable
 )
 VALUES (
-  @id, @investigation_id, @action, @params, @reason, @mode, 'proposed', @idempotency_key, @proposed_at, @expires_at
+  @id, @investigation_id, @action, @params, @reason, @mode, 'proposed', @idempotency_key, @proposed_at, @expires_at,
+  sqlc.narg(snapshot), @undoable
 )
 ON CONFLICT (id) DO NOTHING
 RETURNING *;
 
 -- name: CountInvestigationProposals :one
--- CountInvestigationProposals counts every proposal an investigation has
--- made, decided or not.
-SELECT count(*) FROM action_proposals WHERE investigation_id = @investigation_id;
+-- CountInvestigationProposals counts every proposal the model made in an
+-- investigation, decided or not. The undo of a proposal is a person's
+-- doing, so it does not count.
+SELECT count(*) FROM action_proposals WHERE investigation_id = @investigation_id AND undo_of IS NULL;
 
 -- name: GetActionProposal :one
 SELECT * FROM action_proposals WHERE id = @id;
@@ -54,6 +57,27 @@ SET status = @status,
     decided_by_slack_user = sqlc.narg(decided_by_slack_user),
     decided_at = @now::timestamptz
 WHERE id = @id AND status = 'proposed' AND expires_at > @now::timestamptz
+RETURNING *;
+
+-- name: InsertUndoProposal :one
+-- InsertUndoProposal stores the proposal that restores another one. It is
+-- approved by the person who asked and already executing. The unique index
+-- on the active undos of one proposal fails it with a unique violation
+-- when an undo of that proposal is approved or running.
+INSERT INTO action_proposals (
+  id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at,
+  decided_by, decided_by_slack_user, decided_at, snapshot, undo_of
+)
+VALUES (
+  @id, @investigation_id, @action, @params, '', @mode, 'executing', @idempotency_key, @now::timestamptz, @now::timestamptz,
+  sqlc.narg(decided_by), sqlc.narg(decided_by_slack_user), @now::timestamptz, sqlc.narg(snapshot), @undo_of::uuid
+)
+RETURNING *;
+
+-- name: MarkActionUndone :one
+-- MarkActionUndone moves a succeeded proposal to undone. It returns no row
+-- for a proposal in any other status.
+UPDATE action_proposals SET status = 'undone' WHERE id = @id AND status = 'succeeded'
 RETURNING *;
 
 -- name: ApproveActionProposalByPolicy :one
