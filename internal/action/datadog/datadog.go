@@ -489,7 +489,7 @@ func (m *Monitor) Undo(ctx context.Context, inv action.Invocation, snap action.S
 }
 
 // checkMonitor checks that the monitor read from Datadog is one the limits
-// allow: its ID is in limits.monitorIDs, or it has a tag of limits.monitorTags.
+// allow: its ID is in limits.monitorIds, or it has a tag of limits.monitorTags.
 func (m *Monitor) checkMonitor(id int64, live map[string]json.RawMessage) error {
 	if slices.Contains(m.limits.MonitorIDs, id) {
 		return nil
