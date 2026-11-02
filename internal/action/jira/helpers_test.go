@@ -26,7 +26,7 @@ const (
 	testKey             = "sidekick/" + testProposalID
 	testPublicURL       = "https://sidekick.example.com"
 	testEmail           = "sidekick@example.com"
-	testToken           = "api-token-secret"
+	testToken           = "api-token-secret" //nolint:gosec // G101: a fake token for the tests.
 	apiBase             = "/rest/api/3"
 )
 
