@@ -168,6 +168,10 @@ func TestValidateFixtures(t *testing.T) {
 		}},
 		{file: "slack-without-token", want: []string{"slack.botTokenSecret: required"}},
 		{file: "slack-output-without-slack", want: []string{"outputs.slack-thread: type slack needs slack.botTokenSecret"}},
+		{file: "action-slack-without-slack", want: []string{
+			"actions.react: type slack.reaction needs slack.botTokenSecret",
+			"actions.reply-in-thread: type slack.reply needs slack.botTokenSecret",
+		}},
 		// Slack app and listeners
 		{file: "slack-bad-mode", want: []string{`slack.mode: expected socket or events, got "sockets" (did you mean "socket"?)`}},
 		{file: "slack-events-without-signing-secret", want: []string{"slack.signingSecret: required with mode events"}},
