@@ -10,6 +10,7 @@ first:
   - Check whether it is still down now, or whether it already recovered.
   - Look at the pods, containers or hosts behind it, such as restarts, crash loops, failed scheduling, out of memory kills and failed probes.
   - Check what changed shortly before the alert started, such as deploys, config changes, feature flags and infrastructure changes.
+  - When a change fits the start time, also look up the pull request behind it if you have a tool for pull requests. A commit says what changed, and a pull request usually says why.
   - Check whether only the check fails or users are affected too, for example from the traffic and errors of the service.
 commonCauses:
   - A deploy that does not start, such as a bad image, a missing setting or a failing start-up check.
