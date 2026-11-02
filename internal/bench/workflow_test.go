@@ -55,7 +55,7 @@ func TestBenchWorkflowIsSafeForAPublicRepository(t *testing.T) {
 	var wf workflowFile
 	require.NoError(t, yaml.Unmarshal(raw, &wf))
 
-	t.Run("it runs only on the nightly schedule and by hand", func(t *testing.T) {
+	t.Run("it runs only when someone with write access starts it by hand", func(t *testing.T) {
 		t.Parallel()
 
 		triggers := make([]string, 0, len(wf.On))
@@ -63,9 +63,9 @@ func TestBenchWorkflowIsSafeForAPublicRepository(t *testing.T) {
 			triggers = append(triggers, trigger)
 		}
 
-		require.ElementsMatch(t, []string{"schedule", "workflow_dispatch"}, triggers)
+		require.ElementsMatch(t, []string{"workflow_dispatch"}, triggers)
 
-		for _, trigger := range []string{"push", "pull_request", "pull_request_target"} {
+		for _, trigger := range []string{"schedule", "push", "pull_request", "pull_request_target"} {
 			require.NotContains(t, wf.On, trigger, "an event a stranger can cause must not start a run with the secret")
 		}
 	})
