@@ -13,18 +13,22 @@ import (
 )
 
 const countActionUses = `-- name: CountActionUses :one
-SELECT count(*)::bigint AS uses
-FROM action_proposals p
-WHERE p.action = $1
-  AND p.id <> $2
-  AND (
-    (p.status IN ('succeeded', 'undone')
-      AND p.executed_at >= $3::timestamptz
-      AND p.executed_at < $4::timestamptz)
-    OR (p.status IN ('approved', 'executing')
-      AND (coalesce(p.decided_at, p.proposed_at), p.id) <
-          ((SELECT coalesce(m.decided_at, m.proposed_at) FROM action_proposals m WHERE m.id = $2), $2::uuid))
-  )
+SELECT (
+  (SELECT count(*)
+   FROM action_proposals p
+   WHERE p.action = $1
+     AND p.id <> $2
+     AND p.status IN ('succeeded', 'undone')
+     AND p.executed_at >= $3::timestamptz
+     AND p.executed_at < $4::timestamptz)
+  +
+  (SELECT count(*)
+   FROM action_proposals p
+   WHERE p.status IN ('approved', 'executing')
+     AND p.action = $1
+     AND (coalesce(p.decided_at, p.proposed_at), p.id) <
+         ((SELECT coalesce(m.decided_at, m.proposed_at) FROM action_proposals m WHERE m.id = $2), $2::uuid))
+)::bigint AS uses
 `
 
 type CountActionUsesParams struct {
@@ -42,6 +46,9 @@ type CountActionUsesParams struct {
 // a limit the other has taken, and a proposal never waits for a later one.
 // A proposal that was approved before and fails later still counts for the
 // runs that started before it ended; the count errs on the safe side.
+// The first count reads the index on the action and the time of success;
+// the second reads the few proposals that are approved or executing through
+// the index on the status.
 func (q *Queries) CountActionUses(ctx context.Context, arg CountActionUsesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countActionUses,
 		arg.Action,
