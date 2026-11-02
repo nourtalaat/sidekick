@@ -9,7 +9,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS action_proposals_daily
   ON action_proposals (action, executed_at) WHERE status IN ('succeeded', 'undone');
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS action_proposals_inflight
-  ON action_proposals (action, decided_at, id) WHERE status IN ('approved', 'executing');
+  ON action_proposals (action, decided_at) WHERE status IN ('approved', 'executing');
 
 -- +goose Down
 DROP INDEX CONCURRENTLY IF EXISTS action_proposals_inflight;
