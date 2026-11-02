@@ -10,8 +10,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/daily"
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
 	"github.com/nourtalaat/sidekick/internal/registry"
 )
@@ -43,9 +45,11 @@ type fakeLinear struct {
 	teams    []teamRef
 	issues   map[string]issueRef // by ID
 	comments map[string]string   // comment ID to the body
+	labels   []labelRef
 
 	// descriptions and inputs record what was created.
 	descriptions map[string]string
+	inputs       []issueInput
 	commentBodys []string
 
 	// ignoreClientID makes issueCreate choose its own ID, as a Linear that
@@ -70,6 +74,11 @@ func newFakeLinear() *fakeLinear {
 		issues:       map[string]issueRef{},
 		comments:     map[string]string{},
 		descriptions: map[string]string{},
+		labels: []labelRef{
+			{ID: "l-incident", Name: "incident"},
+			{ID: "l-ops-bug", Name: "bug", Team: &labelTeam{ID: opsTeamID}},
+			{ID: "l-ws-bug", Name: "bug"},
+		},
 	}
 }
 
@@ -162,6 +171,8 @@ func (f *fakeLinear) answer(query string, vars map[string]any) (data any, code, 
 		}
 
 		return map[string]any{"teams": map[string]any{"nodes": nodes}}, "", ""
+	case strings.Contains(query, "query SidekickLabels"):
+		return map[string]any{"issueLabels": map[string]any{"nodes": f.labels}}, "", ""
 	case strings.Contains(query, "query SidekickIssueByMarker"):
 		nodes := []issueRef{}
 
@@ -172,6 +183,8 @@ func (f *fakeLinear) answer(query string, vars map[string]any) (data any, code, 
 		}
 
 		return map[string]any{"issues": map[string]any{"nodes": nodes}}, "", ""
+	case strings.Contains(query, "mutation SidekickIssueCreate"):
+		return f.createIssue(vars["input"])
 	default:
 		return nil, "INVALID_INPUT", "unknown document"
 	}
@@ -206,6 +219,41 @@ func (f *fakeLinear) createComment(input map[string]any) (data any, code, msg st
 	}
 
 	return map[string]any{"commentCreate": map[string]any{"success": true, "comment": commentRef{ID: id, URL: "https://linear.app/acme/comment/" + id}}}, "", ""
+}
+
+func (f *fakeLinear) createIssue(raw any) (data any, code, msg string) {
+	var in issueInput
+
+	b, _ := json.Marshal(raw)
+	_ = json.Unmarshal(b, &in)
+
+	f.creates++
+	f.inputs = append(f.inputs, in)
+
+	id := in.ID
+	if f.ignoreClientID {
+		id = "server-chosen-" + string(rune('a'+f.creates))
+	}
+
+	team := teamRef{}
+
+	for _, t := range f.teams {
+		if t.ID == in.TeamID {
+			team = t
+		}
+	}
+
+	issue := issueRef{ID: id, Identifier: team.Key + "-" + string(rune('0'+f.creates)), URL: "https://linear.app/acme/issue/new", Team: team}
+	f.issues[id] = issue
+	f.descriptions[id] = in.Description
+
+	if f.loseAnswer {
+		f.loseAnswer = false
+
+		return nil, codeInternal, "lost"
+	}
+
+	return map[string]any{"issueCreate": map[string]any{"success": true, "issue": issue}}, "", ""
 }
 
 // reply writes a GraphQL response.
@@ -250,6 +298,29 @@ func newComment(t *testing.T, api *fakehttp.Server, teams ...string) action.Acti
 	require.NoError(t, err)
 
 	return a
+}
+
+// newIssue builds a linear.issue action that talks to api, with the daily
+// limit check given.
+func newIssue(t *testing.T, api *fakehttp.Server, limits IssueLimits, limiter daily.Limiter) action.Action {
+	t.Helper()
+
+	a, err := NewIssue(t.Context(), "ops-issue", IssueConfig{Connection: connection(api), Limits: limits}, testDeps(api, testAPIKey))
+	require.NoError(t, err)
+
+	a.(*Issue).counter = limiter
+
+	return a
+}
+
+// allowDaily returns a limiter that lets everything through.
+func allowDaily(t *testing.T) daily.Limiter {
+	t.Helper()
+
+	l := daily.NewMockLimiter(gomock.NewController(t))
+	l.EXPECT().Check(gomock.Any(), "ops-issue", testProposalID, gomock.Any()).Return(nil).AnyTimes()
+
+	return l
 }
 
 // invocation is an approved request with the parameters given.

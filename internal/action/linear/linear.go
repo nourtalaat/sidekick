@@ -25,6 +25,7 @@ import (
 // "type: linear.comment" or "type: linear.issue".
 const (
 	TypeComment = "linear.comment"
+	TypeIssue   = "linear.issue"
 )
 
 // DefaultAPIURL is Linear's GraphQL endpoint.
@@ -53,6 +54,7 @@ var (
 // init registers the action types when the package is linked in.
 func init() {
 	registry.Actions.Register(TypeComment, registry.Typed(NewComment))
+	registry.Actions.Register(TypeIssue, registry.Typed(NewIssue))
 }
 
 // Connection is how an action reaches Linear.

@@ -47,10 +47,51 @@ func TestCommentConfigValidate(t *testing.T) {
 	}
 }
 
+func TestIssueConfigValidate(t *testing.T) {
+	t.Parallel()
+
+	good := IssueConfig{Connection: Connection{APIKeySecret: keyRef}, Limits: IssueLimits{Teams: []string{"OPS"}, Labels: []string{"incident"}, MaxPerDay: 5}}
+
+	tests := []struct {
+		name    string
+		mutate  func(c *IssueConfig)
+		wantErr string
+	}{
+		{name: "valid", mutate: func(*IssueConfig) {}},
+		{name: "no labels", mutate: func(c *IssueConfig) { c.Limits.Labels = nil }},
+		{name: "no maxPerDay", mutate: func(c *IssueConfig) { c.Limits.MaxPerDay = 0 }, wantErr: "limits.maxPerDay: required, at least 1"},
+		{name: "a negative maxPerDay", mutate: func(c *IssueConfig) { c.Limits.MaxPerDay = -1 }, wantErr: "limits.maxPerDay: required, at least 1"},
+		{name: "an empty label", mutate: func(c *IssueConfig) { c.Limits.Labels = []string{" "} }, wantErr: "limits.labels[0]: must not be empty or longer than 100 characters"},
+		{name: "no teams", mutate: func(c *IssueConfig) { c.Limits.Teams = nil }, wantErr: "limits.teams: list at least one team key or ID, such as OPS"},
+		{name: "no key", mutate: func(c *IssueConfig) { c.APIKeySecret = registry.SecretRef{} }, wantErr: "apiKeySecret: required"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			c := good
+			tt.mutate(&c)
+
+			err := c.Validate()
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+
+				return
+			}
+
+			require.EqualError(t, err, tt.wantErr)
+		})
+	}
+}
+
 func TestNewNeedsSecrets(t *testing.T) {
 	t.Parallel()
 
 	_, err := NewComment(t.Context(), "c", CommentConfig{}, registry.Deps{})
+	require.ErrorIs(t, err, errNoSecrets)
+
+	_, err = NewIssue(t.Context(), "i", IssueConfig{}, registry.Deps{})
 	require.ErrorIs(t, err, errNoSecrets)
 }
 
