@@ -1867,6 +1867,140 @@ only this:
   keeps the action in its folders, and the token should be kept as secret as
   any other credential that can edit all alert rules.
 
+##### `signoz.alert_rule`
+
+Changes an alert rule made in the SigNoz UI through the SigNoz API, or
+deletes it. Use it on routes with `mode: approved`: the change goes live as
+soon as it is approved, and there is no review in Git. A rule that
+Terraform or another tool manages is not marked as such in SigNoz, so keep
+those rules out of `limits`, or the next apply undoes the change.
+
+```yaml
+actions:
+  signoz-alert-rule:
+    type: signoz.alert_rule
+    url: https://example.signoz.cloud   # the address of SigNoz; https, or http on a loopback host
+    apiKeySecret: { name: sidekick-signoz-write, key: apiKey }
+    apiKeyHeader: SIGNOZ-API-KEY        # default; only if the SigNoz server renamed it
+    limits:
+      ruleIds: ["0196a1b2-7c3d-7e4f-8a5b-1c2d3e4f5a6b"]   # rules it may change ...
+      ruleNames: ["checkout *"]                           # ... and rules whose name matches
+      fields: [condition.target, condition.thresholds, evalWindow, evaluation, labels]
+      allowDelete: false                # default false
+
+routes:
+  - name: checkout-alerts
+    match: { service: "checkout-*" }
+    sources: [signoz]
+    mode: approved
+    actions: [signoz-alert-rule]
+```
+
+- `url` is the root of your SigNoz, such as `https://example.signoz.cloud`
+  or the address of a self-hosted install. A path is kept, for a SigNoz
+  behind a proxy.
+- `apiKeySecret` holds an API key. In SigNoz, create a service account for
+  Sidekick actions (**Settings**, **Service Accounts**), give it the managed
+  `signoz-editor` role, which is the least role that can edit alert rules,
+  and generate a key on its **Keys** tab. Use a key of its own, apart from the
+  read-only key of the [SigNoz source](sources/signoz.md), so that the
+  source cannot write. The key is read on every call, so a rotated key needs
+  no restart. It is sent in the `SIGNOZ-API-KEY` header, or in the header
+  `apiKeyHeader` names.
+- `limits.ruleIds` and `limits.ruleNames` say which rules it may change: at
+  least one of them is required. A rule is allowed when its ID is listed
+  (the ID is in the address of the rule's page, `ruleId=...`), or when its
+  name matches a pattern. In a pattern `*` is the only wildcard, the pattern
+  must match the whole name, and capitals count. A change that would rename
+  a rule so that it no longer matches is refused, unless the rule's ID is
+  listed.
+- `limits.fields` lists the fields it may change, as paths into the rule as
+  SigNoz reads it. A path allows the fields below it too. These are the
+  fields Sidekick can change; the others are refused when the config is
+  checked:
+  - `alert` (the name), `description`, `disabled`, `labels.<name>` and
+    `annotations.<name>`, in every rule. A label or annotation whose name
+    has a dot cannot be changed, because a dot in a path separates keys.
+  - `condition.alertOnAbsent`, `condition.absentFor`,
+    `condition.requireMinPoints` and `condition.requiredNumPoints`.
+  - The filter and the query text:
+    `condition.compositeQuery.queries[n].spec.filter.expression` and
+    `.spec.having.expression` for builder queries, and `.spec.query` for
+    PromQL and ClickHouse SQL queries.
+  - In a rule without `schemaVersion` (SigNoz's older shape):
+    `condition.target`, `condition.op`, `condition.matchType`,
+    `condition.targetUnit`, `evalWindow`, `frequency` and
+    `preferredChannels`.
+  - In a rule with `schemaVersion: v2alpha1`:
+    `condition.thresholds.spec[n]` with `name`, `target`, `targetUnit`,
+    `recoveryTarget`, `matchType`, `op` and `channels`;
+    `evaluation.spec.evalWindow` (rolling evaluations only) and
+    `evaluation.spec.frequency`; and `notificationSettings` with `groupBy`,
+    `usePolicy`, `newGroupEvalDelay`, `renotify.enabled`, `renotify.interval`
+    and `renotify.alertStates`.
+  A field of the other shape is refused, because SigNoz would keep the
+  value and ignore it. Adding or removing a threshold or a query is not
+  supported. Allowing `preferredChannels`, `channels` or
+  `notificationSettings` lets the model change where notifications go;
+  approvers should read those lines in the difference.
+- A `set` value of `null` removes a label, an annotation, a description, a
+  recovery target or another optional field. A duration is text such as
+  `5m`; a number would mean nanoseconds and is refused.
+- `allowDelete: true` lets the model propose to delete a rule. A delete
+  cannot be undone in Sidekick, and Slack and the web UI say so before it is
+  approved. SigNoz refuses to delete a rule that a planned maintenance still
+  uses.
+
+The model proposes `ruleId` and `set`, a map from field path to new value,
+or `delete: true`. When it proposes, Sidekick reads the rule, computes the
+new rule, and refuses any change outside the limits, any change SigNoz would
+drop or ignore, and any value of the wrong form (for example text for a
+threshold). SigNoz has no call that checks a rule without side effects: its
+test endpoint sends a real notification, so Sidekick never calls it. SigNoz
+checks the rule again when it is written, for the parts Sidekick cannot
+check (the syntax of a label or annotation template, of a filter or of a
+query, and whether a channel exists), and refuses a bad rule before it
+stores anything. Then the proposal fails with SigNoz's message and the rule
+is as it was. Approvers see the change field by field. Right before it
+writes, Sidekick reads the rule again and fails the proposal when the rule
+changed in SigNoz since, so a new proposal is needed. SigNoz does not offer a
+way to make the write conditional, so a change in the moments between that
+read and the write is not noticed.
+
+Sidekick writes the whole rule, because SigNoz replaces the stored rule with
+what it is sent. After the write it reads the rule again, and if SigNoz kept
+another value than the one written, the proposal fails with a message that
+says the rule was written, names the field, and links to the rule. An
+approver can undo a change that worked. Undo puts back only the fields
+Sidekick changed and leaves every other field as it is. If someone changed
+one of those fields since, Undo shows what a restore would overwrite and
+asks before it restores it.
+
+Sidekick relies on this about SigNoz, which it checked in the SigNoz source
+code at v0.134.0 and v0.148.1:
+
+- It uses `GET`, `PUT` and `DELETE` on `/api/v2/rules/{id}`, and
+  `GET /api/v1/version`. It supports SigNoz v0.134.0 and later and refuses an
+  older one with an error. A version text that is not a release number, such
+  as a custom build, is allowed with a warning in the log; the read after
+  each write then protects the rule.
+- The rule's `updatedAt` changes on every write, and Sidekick uses it, with
+  the rule's fields, to find a change made since the proposal.
+- SigNoz keeps the body of a write as it is, and reads it back through typed
+  values: it lower-cases `op` and `matchType`, drops empty optional values,
+  and drops keys it does not know. Sidekick compares values the way SigNoz
+  reads them back.
+- SigNoz shows a rule as disabled when the rule is not loaded in its rule
+  manager, for example right after a restart, whatever the stored value is,
+  and no read tells that from a rule a person disabled. Writing the whole rule
+  back would store `disabled: true` and keep the rule off after SigNoz
+  recovers. So Sidekick refuses to change a rule that reads as disabled, when
+  it proposes, when it writes and when it undoes, unless the change itself
+  sets `disabled` to `false`, which the approver then sees. A rule can be
+  deleted while it reads as disabled, and an enabled rule can be disabled.
+- Before v0.141.0 SigNoz checks channel names against the channel's name;
+  from v0.141.0 it checks the display name shown in the UI.
+
 ##### `github.pull_request`
 
 Opens a pull request that changes monitor definitions kept in Git:

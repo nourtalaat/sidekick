@@ -52,6 +52,14 @@ which the investigation reports as a failed call. Use a service account of
 its own for Sidekick, so the key can be rotated without touching anything
 else.
 
+## Changing alert rules
+
+A source only reads. To let the model propose a change to an alert rule,
+such as a new threshold, use the
+[`signoz.alert_rule` action](../configuration.md#signozalert_rule). It uses
+an API key of its own, for a service account with the `signoz-editor` role,
+so the read-only key above never writes.
+
 ## Config
 
 ```yaml
