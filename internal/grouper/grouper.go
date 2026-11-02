@@ -98,6 +98,8 @@ type Route struct {
 // Result is the group an event went to.
 type Result struct {
 	GroupID uuid.UUID
+	// Route is the route of the group.
+	Route string
 	// InvestigationID is the group's investigation. When Opened is set,
 	// the caller creates it, with this ID, in the same transaction.
 	InvestigationID uuid.UUID
@@ -280,7 +282,7 @@ func (g *Grouper) join(ctx context.Context, tx pgx.Tx, grp db.EventGroup, ev db.
 		return Result{}, fmt.Errorf("plan the end of the window: %w", err)
 	}
 
-	res := Result{GroupID: grp.ID}
+	res := Result{GroupID: grp.ID, Route: grp.Route}
 
 	if grp.InvestigationID != nil {
 		res.InvestigationID = *grp.InvestigationID
@@ -303,7 +305,7 @@ func (g *Grouper) join(ctx context.Context, tx pgx.Tx, grp db.EventGroup, ev db.
 // opens nothing, when a group with fp is open already.
 func (g *Grouper) open(ctx context.Context, tx pgx.Tx, ev db.Event, rt Route, fp string) (Result, bool, error) {
 	queries := db.New(tx)
-	res := Result{GroupID: ids.New(), InvestigationID: ids.New(), Opened: true}
+	res := Result{GroupID: ids.New(), Route: rt.Name, InvestigationID: ids.New(), Opened: true}
 
 	_, err := queries.OpenEventGroup(ctx, db.OpenEventGroupParams{
 		ID:              res.GroupID,

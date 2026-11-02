@@ -1476,11 +1476,16 @@ export interface components {
         /**
          * @description The action mode. In read-only mode, the default, the model cannot
          *     propose changes. In approved mode it may propose the route's
-         *     actions, and a person approves each one. A route in approved mode
-         *     lists at least one action.
+         *     actions, and a person approves each one. In read-write mode a
+         *     proposal of an event from a trusted sender runs without a person.
+         *     A route in approved or read-write mode lists at least one action.
+         *     A read-write route may select only trusted intakes and listeners,
+         *     unless `allowUntrustedWrite` is set. An investigation of an event
+         *     that is not trusted runs in approved mode instead. Only the config
+         *     file and an admin here can set read-write; Slack commands cannot.
          * @enum {string}
          */
-        RouteMode: "read-only" | "approved";
+        RouteMode: "read-only" | "approved" | "read-write";
         /** @description The parts of a route that a person sets, with the keys they have in sidekick.yaml. */
         RouteSpec: {
             /** @description Lower is tried first. Defaults to 100. */
@@ -1490,6 +1495,13 @@ export interface components {
             sources?: string[];
             outputs?: string[];
             mode?: components["schemas"]["RouteMode"];
+            /**
+             * @description Lets a read-write route select intakes and listeners that are
+             *     not trusted, and keeps read-write mode for their events. Every
+             *     start logs a warning for it, and the change is in the audit
+             *     log. It has no effect in other modes.
+             */
+            allowUntrustedWrite?: boolean;
             /** @description The actions the route may propose, by their names in the config file's actions section. Empty in read-only mode. */
             actions?: string[];
             budgets?: components["schemas"]["RouteBudgets"];
@@ -1995,6 +2007,12 @@ export interface components {
             decidedByName?: string;
             /** @description The Slack user ID of someone who decided in Slack. */
             decidedBySlackUser?: string;
+            /**
+             * @description True when nobody decided the proposal: its investigation ran in
+             *     read-write mode, so the route's policy approved it as it was
+             *     stored, and `decidedAt` is the time of that approval.
+             */
+            approvedByPolicy?: boolean;
             /** Format: date-time */
             decidedAt?: string;
             result?: components["schemas"]["ActionResult"];

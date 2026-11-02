@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/model"
@@ -204,6 +206,10 @@ func AddFollowUpTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, q Question) (bo
 		return false, nil
 	}
 
+	if err := downgradeOnFollowUp(ctx, queries, inv); err != nil {
+		return false, fmt.Errorf("lower the action mode: %w", err)
+	}
+
 	if answers(inv) {
 		if err := enqueueFollowUp(ctx, tx, inv); err != nil {
 			return false, fmt.Errorf("enqueue the follow-up job: %w", err)
@@ -215,6 +221,29 @@ func AddFollowUpTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, q Question) (bo
 	}
 
 	return true, nil
+}
+
+// downgradeOnFollowUp moves a read-write investigation to approved mode
+// because a follow-up question was added to it. The question comes from
+// whoever is in the thread or signed in, not from a sender the route
+// trusts, and its text reaches the model, so what the model proposes next
+// waits for a person. A route's allowUntrustedWrite does not change this:
+// it is about the senders the config names.
+func downgradeOnFollowUp(ctx context.Context, queries *db.Queries, inv db.Investigation) error {
+	if action.Mode(inv.Mode) != action.ReadWrite {
+		return nil
+	}
+
+	n, err := queries.DowngradeInvestigationToApproved(ctx, inv.ID)
+	if err != nil {
+		return fmt.Errorf("move investigation %s to approved mode: %w", inv.ID, err)
+	}
+
+	if n > 0 {
+		slog.InfoContext(ctx, "read-write investigation moved to approved mode: a follow-up question was added to it", "investigation_id", inv.ID.String(), "route", inv.Route)
+	}
+
+	return nil
 }
 
 // auditQuestion writes the audit entry of the question q added to the
