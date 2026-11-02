@@ -1,0 +1,31 @@
+# A prometheus.rule action and no Kubernetes source that reads this cluster:
+# the pods mount the service account token anyway, so Sidekick can ask for
+# tokens of the actions' service account. It is so with rbac.actions off too.
+rbac:
+  actions: false
+secrets:
+  - sidekick-anthropic
+  - sidekick-slack
+  - sidekick-webhook
+  - sidekick-staging-cluster
+validator:
+  enabled: true
+config:
+  sources:
+    # The quick-start source, pointed at the other cluster, so no source reads this one.
+    k8s:
+      kubeconfigSecret: { name: sidekick-staging-cluster, key: kubeconfig }
+  actions:
+    prom-checkout:
+      type: prometheus.rule
+      limits:
+        namespaces: [monitoring]
+        names: [checkout-alerts]
+        groups: [checkout.rules]
+        fields: [expr]
+  routes:
+    - name: default
+      sources: [k8s]
+      outputs: [slack]
+      mode: approved
+      actions: [prom-checkout]

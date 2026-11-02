@@ -2001,6 +2001,123 @@ code at v0.134.0 and v0.148.1:
 - Before v0.141.0 SigNoz checks channel names against the channel's name;
   from v0.141.0 it checks the display name shown in the UI.
 
+##### `prometheus.rule`
+
+Changes alerting and recording rules in a `PrometheusRule` (Prometheus
+Operator) through the Kubernetes API of the cluster Sidekick runs in. Use it
+on routes with `mode: approved`: the change goes live as soon as it is
+approved, and there is no review in Git. If Argo CD, Flux or Helm own the
+resource, they undo a live change at their next sync; use
+[`github.pull_request`](#githubpull_request) for those.
+
+```yaml
+actions:
+  prom-rule:
+    type: prometheus.rule
+    serviceAccount: sidekick-actions   # default; the account the tokens are for
+    limits:
+      namespaces: [monitoring]         # namespaces it may write in
+      names: [checkout-alerts]         # PrometheusRule names, exact
+      groups: [checkout.rules]         # rule groups, exact
+      fields: [expr, for, keep_firing_for, labels, annotations]
+
+routes:
+  - name: checkout
+    mode: approved
+    actions: [prom-rule]
+```
+
+- `limits.namespaces`, `limits.names` and `limits.groups` are exact names,
+  and each needs at least one. A PrometheusRule is allowed when its namespace
+  is in `namespaces` and its name is in `names`; a rule is allowed when its
+  group is in `groups`. There are no patterns, because the Roles that the
+  chart makes list the names as `resourceNames`.
+- `limits.fields` lists the fields of a rule it may change, as paths into the
+  rule such as `for`, `labels.severity` or `annotations.summary`. A path
+  allows the fields below it too. The first key must be `expr`, `for`,
+  `keep_firing_for`, `labels` or `annotations`. The name of the alert or of
+  the recording rule, and the group, cannot change.
+  Allowing `labels` lets the model change how alerts are routed, because
+  Alertmanager routes by label (`severity`, `team`). Allowing `expr` lets it
+  silence an alert by changing what it measures. Approvers should read the
+  difference.
+- `serviceAccount` is the name of a service account in Sidekick's own
+  namespace. The action asks the API server for a token for it
+  (`TokenRequest`) each time it proposes, runs or undoes a change, and the
+  token lives 10 minutes. Sidekick's own account can only ask for tokens of
+  this account, and this account can only `get` and `patch` the
+  PrometheusRules of the limits. Sidekick must mount its service account
+  token, which the chart does when it finds such an action.
+- The action works on the cluster Sidekick runs in only. Other clusters are
+  not supported.
+- Rules are named by group and by `alert` or `record`, never by position.
+  The model proposes `namespace`, `name` and `rules`, a list of
+  `{group, alert or record, set}`, where `set` maps a field of the rule to its
+  new value. A `null` value removes the field. Setting `labels` whole
+  replaces all labels, which is also how to set a label whose name has a dot.
+  Rules cannot be added, removed or renamed, and the whole resource cannot be
+  deleted: the Role has no `delete`. Two rules of a group with the same alert
+  name cannot be addressed, and the action refuses them.
+- A change of more than 100 fields is refused with a message to split it.
+
+**What the chart creates.** For each `prometheus.rule` action in `config`
+(turn this off with `rbac.actions: false` and make these yourself), the chart
+makes the service account, a Role in Sidekick's namespace that lets Sidekick's
+own account create tokens for it, and in each listed namespace a Role and a
+RoleBinding. The rules of the two kinds of Role are:
+
+```yaml
+# In each namespace of limits.namespaces:
+rules:
+  - apiGroups: [monitoring.coreos.com]
+    resources: [prometheusrules]
+    resourceNames: [checkout-alerts]
+    verbs: [get, patch]
+---
+# In Sidekick's namespace, for Sidekick's own account:
+rules:
+  - apiGroups: [""]
+    resources: [serviceaccounts/token]
+    resourceNames: [sidekick-actions]
+    verbs: [create]
+```
+
+**What it checks.** When the model proposes, Sidekick reads the resource,
+works out the new rules and refuses what is outside the limits, a field of the
+wrong type, or a rule that is not there (the error lists the rules of the
+allowed groups). It then has the [validator](validator.md), which needs
+`validator.enabled: true` in the chart, check the whole rule groups it changes
+with `promtool check rules`, and asks the API server for
+a dry run of the patch. The rules in the answer of the dry run must be the
+rules Sidekick meant, so a change the server would drop (for example
+`keep_firing_for` on an Operator version without that field) is refused
+before anyone approves it. Approvers see the change field by field. When the
+change is approved, Sidekick reads the resource again, and runs the validator and
+the dry run again before it writes.
+
+**Conflicts.** The patch holds `metadata.resourceVersion` from the read right
+before it, so the API server answers 409 if the resource changed between the
+read and the write, and the proposal fails as a conflict. The version at the
+time of the proposal is recorded but not compared: the Operator can write the
+status of a PrometheusRule, and other people edit other rules of the same
+resource, and neither is a reason to fail. If the rules the change names differ
+from what the approver read, the proposal fails and a new one is needed.
+
+**Undo.** Undo puts back only the fields Sidekick changed and leaves every
+other field as it is. If someone changed one of those fields since, Undo shows
+what a restore would overwrite and asks before it restores it. Undo checks the
+rules and dry-runs the patch the same way. An `expr` that was a number is
+written back as text, which the CRD allows.
+
+**What it relies on.** The patch is a JSON merge patch that sends all of
+`spec.groups` (a merge patch replaces a list whole), the API server drops
+fields the CRD does not know, and `promtool` reads only the group fields
+`name`, `interval`, `query_offset`, `limit`, `labels` and `rules`. These come
+from the public source of Kubernetes v1.37.1, Prometheus Operator v0.94.1 and
+Prometheus v3.15.0; the comments in `internal/action/prometheusrule` name the
+files. With `networkPolicy.restrictEgress` on, allow egress to the Kubernetes
+API server.
+
 ##### `github.pull_request`
 
 Opens a pull request that changes monitor definitions kept in Git:

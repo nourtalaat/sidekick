@@ -1,0 +1,222 @@
+---
+# Source: sidekick/templates/rbac.yaml
+# The service account of the prometheus.rule actions. Nothing runs as it:
+# Sidekick asks the API server for short-lived tokens of it.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: platform-actions
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: actions
+automountServiceAccountToken: false
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+# The service account of the prometheus.rule actions. Nothing runs as it:
+# Sidekick asks the API server for short-lived tokens of it.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sidekick-actions
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: actions
+automountServiceAccountToken: false
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+# Sidekick's own service account may ask for tokens of the actions' accounts
+# and of no other account.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sidekick-sidekick-actions-tokens
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: actions
+rules:
+  - apiGroups: [""]
+    resources: [serviceaccounts/token]
+    resourceNames: ["platform-actions","sidekick-actions"]
+    verbs: [create]
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+# The actions' service account may get and patch the PrometheusRules the
+# actions list for this namespace, and nothing else.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sidekick-sidekick-actions-for-platform-actions
+  namespace: platform
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: actions
+rules:
+  - apiGroups: [monitoring.coreos.com]
+    resources: [prometheusrules]
+    resourceNames: ["node-alerts"]
+    verbs: [get, patch]
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+# The actions' service account may get and patch the PrometheusRules the
+# actions list for this namespace, and nothing else.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sidekick-sidekick-actions-for-sidekick-actions
+  namespace: monitoring
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: actions
+rules:
+  - apiGroups: [monitoring.coreos.com]
+    resources: [prometheusrules]
+    resourceNames: ["checkout-alerts","checkout-recording","search-alerts"]
+    verbs: [get, patch]
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+# The actions' service account may get and patch the PrometheusRules the
+# actions list for this namespace, and nothing else.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sidekick-sidekick-actions-for-sidekick-actions
+  namespace: staging
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: actions
+rules:
+  - apiGroups: [monitoring.coreos.com]
+    resources: [prometheusrules]
+    resourceNames: ["checkout-alerts","checkout-recording"]
+    verbs: [get, patch]
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sidekick-sidekick-actions-tokens
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: actions
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sidekick-sidekick-actions-tokens
+subjects:
+  - kind: ServiceAccount
+    name: sidekick
+    namespace: sidekick
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sidekick-sidekick-actions-for-platform-actions
+  namespace: platform
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: actions
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sidekick-sidekick-actions-for-platform-actions
+subjects:
+  - kind: ServiceAccount
+    name: platform-actions
+    namespace: sidekick
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sidekick-sidekick-actions-for-sidekick-actions
+  namespace: monitoring
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: actions
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sidekick-sidekick-actions-for-sidekick-actions
+subjects:
+  - kind: ServiceAccount
+    name: sidekick-actions
+    namespace: sidekick
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sidekick-sidekick-actions-for-sidekick-actions
+  namespace: staging
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: actions
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sidekick-sidekick-actions-for-sidekick-actions
+subjects:
+  - kind: ServiceAccount
+    name: sidekick-actions
+    namespace: sidekick
+
+

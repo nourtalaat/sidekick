@@ -277,7 +277,8 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "kubernetesSource": { "type": "boolean" }
+        "kubernetesSource": { "type": "boolean" },
+        "actions": { "type": "boolean" }
       }
     },
     "pdb": {
