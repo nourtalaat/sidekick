@@ -46,7 +46,7 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"action_proposals_status_proposed", "action_proposals_pkey"},
+			wantIndex: []string{"action_proposals_daily", "action_proposals_pkey"},
 			notWant:   []string{"Seq Scan on action_proposals"},
 		},
 		{
