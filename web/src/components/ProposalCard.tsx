@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router";
-import { useDecideProposal, type Proposal, type ProposalStatus } from "../api/proposals";
+import { UndoConflictError, useDecideProposal, useUndoProposal, type Proposal, type ProposalChange, type ProposalStatus } from "../api/proposals";
 import { formatTime } from "../format";
 import { safeHttpUrl } from "../safeUrl";
 import { Button } from "./Button";
@@ -74,6 +74,12 @@ export function ProposalCard({ proposal, canDecide, inQueue = false }: { proposa
             <dd>{decider(proposal)}</dd>
           </div>
         )}
+        {proposal.undoOf && (
+          <div>
+            <dt>Undoes</dt>
+            <dd>The proposal {proposal.undoOf}</dd>
+          </div>
+        )}
       </dl>
       <p className="sk-proposal__label" id={paramsId}>
         Parameters, exactly as they will run
@@ -81,12 +87,71 @@ export function ProposalCard({ proposal, canDecide, inQueue = false }: { proposa
       <pre className="sk-proposal__params" role="region" aria-labelledby={paramsId} tabIndex={0}>
         {proposal.paramsText}
       </pre>
-      <p className="sk-proposal__label">Reason, written by the model and not checked</p>
-      <p className="sk-proposal__text">{proposal.reason}</p>
+      {deletes(proposal) && (
+        <p className="sk-proposal__warning" role="note">
+          This deletes {proposal.target ?? "the target"}. Sidekick cannot undo a delete.
+        </p>
+      )}
+      {proposal.changes && proposal.changes.length > 0 && <Changes changes={proposal.changes} heading="Changes, field by field" />}
+      {!proposal.undoOf && (
+        <>
+          <p className="sk-proposal__label">Reason, written by the model and not checked</p>
+          <p className="sk-proposal__text">{proposal.reason}</p>
+        </>
+      )}
       <Outcome proposal={proposal} />
+      {proposal.undoable && canDecide && <Undo proposal={proposal} />}
       {waiting && canDecide && <Decide proposal={proposal} />}
       {waiting && !canDecide && <p className="sk-proposal__note">Only approvers can approve or reject it.</p>}
     </article>
+  );
+}
+
+/** Whether the proposal removes what it changes: a change of the whole definition with no new value. */
+function deletes(p: Proposal): boolean {
+  return (p.changes ?? []).some((c) => c.path === "" && c.after === undefined);
+}
+
+/** What a side of a change shows when it has no value. */
+const NOT_SET = "(not set)";
+const REMOVED = "(removed)";
+
+/** The words that name the two values of a change. */
+interface Sides {
+  before: string;
+  after: string;
+}
+
+const CHANGED: Sides = { before: "Before", after: "After" };
+const RESTORE: Sides = { before: "Now", after: "Restored to" };
+
+/**
+ * The difference of a definition, field by field. The values are text that
+ * the server wrote with hidden characters spelled out, from the monitoring
+ * tool and the model, so they are shown as plain text.
+ */
+function Changes({ changes, heading, sides = CHANGED }: { changes: ProposalChange[]; heading: string; sides?: Sides }) {
+  return (
+    <section aria-label={heading} className="sk-changes">
+      <h4 className="sk-proposal__label">{heading}</h4>
+      <ul className="sk-changes__list">
+        {changes.map((c) => (
+          <li key={c.path} className="sk-changes__item">
+            <code className="sk-changes__path">{c.path === "" ? "(the whole definition)" : c.path}</code>
+            <dl className="sk-changes__values">
+              <div>
+                <dt>{sides.before}</dt>
+                <dd className="sk-changes__before">{c.before ?? NOT_SET}</dd>
+              </div>
+              <div>
+                <dt>{sides.after}</dt>
+                <dd className="sk-changes__after">{c.after ?? REMOVED}</dd>
+              </div>
+            </dl>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -152,7 +217,7 @@ function Decide({ proposal }: { proposal: Proposal }) {
       )}
       {step === "approve" && (
         <div role="group" aria-label={`Confirm approving ${proposal.action}`} className="sk-proposal__reject">
-          <p className="sk-proposal__text">{`Run ${proposal.action} with the parameters above?`}</p>
+          <p className="sk-proposal__text">{approveQuestion(proposal)}</p>
           <div className="sk-proposal__buttons">
             <Button ref={confirm} variant="primary" disabled={decide.isPending} onClick={() => decide.mutate({ kind: "approve" })}>
               Approve it
@@ -185,6 +250,85 @@ function Decide({ proposal }: { proposal: Proposal }) {
       {decide.isError && (
         <p role="alert" className="sk-field__error">
           {decide.error.message}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** What the confirm step of Approve asks, which says plainly when the action deletes. */
+function approveQuestion(p: Proposal): string {
+  if (deletes(p)) {
+    return `Delete ${p.target ?? "the target"}? Sidekick cannot undo a delete.`;
+  }
+
+  if (p.changes && p.changes.length > 0) {
+    return `Run ${p.action} with the parameters and the changes above?`;
+  }
+
+  return `Run ${p.action} with the parameters above?`;
+}
+
+/**
+ * Undo, for a change that worked and can be undone. It asks once before it
+ * sends anything. If someone changed one of the fields since, the answer
+ * shows what a restore would overwrite and asks again before it restores.
+ */
+function Undo({ proposal }: { proposal: Proposal }) {
+  const undo = useUndoProposal(proposal.id, proposal.investigationId);
+  const [asking, setAsking] = useState(false);
+  const conflict = undo.error instanceof UndoConflictError ? undo.error : undefined;
+
+  if (conflict) {
+    return (
+      <div role="group" aria-label={`Restore ${proposal.action} anyway`} className="sk-proposal__reject">
+        <p className="sk-proposal__warning" role="alert">
+          {conflict.message}
+        </p>
+        <Changes changes={conflict.changes} heading="What a restore would overwrite" sides={RESTORE} />
+        <div className="sk-proposal__buttons">
+          <Button variant="destructive" disabled={undo.isPending} onClick={() => undo.mutate(true)}>
+            Restore anyway
+          </Button>
+          <Button
+            disabled={undo.isPending}
+            onClick={() => {
+              setAsking(false);
+              undo.reset();
+            }}
+          >
+            Leave it
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="sk-proposal__reject">
+      {!asking && (
+        <div className="sk-proposal__buttons">
+          <Button aria-label={`Undo ${proposal.action}`} onClick={() => setAsking(true)}>
+            Undo
+          </Button>
+        </div>
+      )}
+      {asking && (
+        <div role="group" aria-label={`Confirm undoing ${proposal.action}`} className="sk-proposal__reject">
+          <p className="sk-proposal__text">{`Put back the fields this change set in ${proposal.target ?? proposal.action}? If someone changed them since, you see the difference first.`}</p>
+          <div className="sk-proposal__buttons">
+            <Button variant="primary" disabled={undo.isPending} onClick={() => undo.mutate(false)}>
+              Undo it
+            </Button>
+            <Button disabled={undo.isPending} onClick={() => setAsking(false)}>
+              Not now
+            </Button>
+          </div>
+        </div>
+      )}
+      {undo.isError && !conflict && (
+        <p role="alert" className="sk-field__error">
+          {undo.error.message}
         </p>
       )}
     </div>

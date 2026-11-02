@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/slack-go/slack"
 
+	"github.com/nourtalaat/sidekick/internal/action"
 	actionproposals "github.com/nourtalaat/sidekick/internal/action/proposals"
 	"github.com/nourtalaat/sidekick/internal/feedback"
 	"github.com/nourtalaat/sidekick/internal/httpclient"
@@ -38,6 +39,11 @@ import (
 // InteractivityPattern is the route interactions are served at in events
 // mode, for http.ServeMux.
 const InteractivityPattern = "POST /slack/interactivity"
+
+// undoAckWait is how long a click on Undo waits for the restore before it is
+// acknowledged, so Slack gets its answer within three seconds. The note is
+// posted when the restore ends.
+const undoAckWait = 2 * time.Second
 
 // noteTimeout bounds posting a note back to the user who clicked, so the
 // click is still acknowledged within Slack's 3 seconds.
@@ -60,7 +66,7 @@ const (
 	noteFailed         = "Sidekick could not record that click. Try again in a moment."
 	noteFormFailed     = "Sidekick could not open the feedback form. Press Details to try again."
 
-	noteNotApprover  = "Only approvers can approve or reject an action. Ask an admin for the approver role."
+	noteNotApprover  = "Only approvers can approve, reject or undo an action. Ask an admin for the approver role."
 	noteApproved     = "Approved. The action runs now, and the message shows the result."
 	noteRejected     = "Rejected. Nothing runs."
 	noteNoProposal   = "This action proposal does not exist any more."
@@ -68,6 +74,14 @@ const (
 	noteNotAllowed   = "The config does not allow this any more: %s. Reject it instead."
 	noteAlreadyDone  = "This proposal is %s already%s."
 	noteNoActionsSvc = "Action proposals are not set up on this server."
+
+	noteUndone         = "Undone. The fields are put back, and the message shows the result."
+	noteUndoRetrying   = "The restore did not finish yet. Sidekick tries again, and the message shows the result."
+	noteUndoRunning    = "An undo of this proposal is running already."
+	noteNotUndoable    = "This cannot be undone: %s."
+	noteUndoNotAllowed = "The config does not allow this any more: %s."
+	noteUndoFailed     = "The undo failed and nothing was restored. Open the investigation in Sidekick to read why."
+	noteUndoConflict   = "The definition changed after Sidekick changed it. Nothing was restored."
 )
 
 // viewOpenTimeout bounds opening a form, which Slack only allows within 3
@@ -378,6 +392,12 @@ func (b *Buttons) handleProposalClick(ctx context.Context, log *slog.Logger, cb 
 
 	by := actionproposals.Decider{SlackUserID: cb.User.ID}
 
+	if click.ActionID == slackout.ActionUndoProposal || click.ActionID == slackout.ActionUndoProposalForce {
+		b.undo(ctx, log, cb, id, click.ActionID == slackout.ActionUndoProposalForce)
+
+		return nil, nil
+	}
+
 	var decided error
 
 	switch click.ActionID {
@@ -398,6 +418,86 @@ func (b *Buttons) handleProposalClick(ctx context.Context, log *slog.Logger, cb 
 	b.note(ctx, log, cb, note)
 
 	return nil, nil
+}
+
+// undo undoes the proposal for the user who clicked, who is an approver, and
+// posts what became of it to them alone. The restore calls the monitoring
+// tool, and Slack wants the click acknowledged within three seconds, so it
+// runs on its own; undo waits for it only up to undoAckWait, and the note is
+// posted when it ends. The proposal service finishes a restore that is cut
+// off, and a job tries one that failed for a reason that may pass.
+func (b *Buttons) undo(ctx context.Context, log *slog.Logger, cb slack.InteractionCallback, id uuid.UUID, force bool) {
+	finished := make(chan struct{})
+	bg := context.WithoutCancel(ctx)
+
+	go func() {
+		defer close(finished)
+
+		got, err := b.actions.Undo(bg, id, actionproposals.Decider{SlackUserID: cb.User.ID}, force)
+		b.undoNote(bg, log, cb, id, got, err)
+	}()
+
+	select {
+	case <-finished:
+	case <-time.After(undoAckWait):
+	case <-ctx.Done():
+	}
+}
+
+// undoNote posts what became of an undo to the user who clicked. A conflict
+// is posted as a message with the difference and a Restore anyway button.
+func (b *Buttons) undoNote(ctx context.Context, log *slog.Logger, cb slack.InteractionCallback, id uuid.UUID, got action.Proposal, err error) {
+	var (
+		conflict    *actionproposals.UndoConflictError
+		failed      *actionproposals.UndoFailedError
+		notUndoable *actionproposals.NotUndoableError
+		notAllowed  *actionproposals.NotAllowedError
+	)
+
+	switch {
+	case err == nil && got.Status == action.StatusExecuting:
+		b.note(ctx, log, cb, noteUndoRetrying)
+	case err == nil:
+		b.note(ctx, log, cb, noteUndone)
+	case errors.As(err, &conflict):
+		b.noteConflict(ctx, log, cb, id, conflict)
+	case errors.Is(err, actionproposals.ErrNotFound):
+		b.note(ctx, log, cb, noteNoProposal)
+	case errors.Is(err, actionproposals.ErrUndoRunning):
+		b.note(ctx, log, cb, noteUndoRunning)
+	case errors.As(err, &notUndoable):
+		b.note(ctx, log, cb, fmt.Sprintf(noteNotUndoable, notUndoable.Reason))
+	case errors.As(err, &notAllowed):
+		b.note(ctx, log, cb, fmt.Sprintf(noteUndoNotAllowed, notAllowed.Reason))
+	case errors.As(err, &failed):
+		b.note(ctx, log, cb, noteUndoFailed)
+	default:
+		log.ErrorContext(ctx, "an undo failed", "error", err.Error())
+		b.note(ctx, log, cb, noteFailed)
+
+		return
+	}
+
+	log.InfoContext(ctx, "undo click handled", "restored", err == nil)
+}
+
+// noteConflict posts the difference a restore would overwrite, with the
+// button that restores anyway.
+func (b *Buttons) noteConflict(ctx context.Context, log *slog.Logger, cb slack.InteractionCallback, id uuid.UUID, conflict *actionproposals.UndoConflictError) {
+	text, blocks, err := slackout.UndoConflict(id.String(), conflict.Changes)
+	if err != nil {
+		log.ErrorContext(ctx, "could not write the undo conflict", "error", err.Error())
+		b.note(ctx, log, cb, noteUndoConflict)
+
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), noteTimeout)
+	defer cancel()
+
+	if err := b.postMessage(ctx, cb.ResponseURL, text, blocks); err != nil {
+		log.WarnContext(ctx, "could not post the undo conflict to the user who clicked", "error", err.Error())
+	}
 }
 
 // proposalNote returns the note for the user who clicked, from the result
@@ -730,11 +830,22 @@ func (b *Buttons) note(ctx context.Context, log *slog.Logger, cb slack.Interacti
 // be a Slack URL: https on a slack.com or slack-gov.com host, or a loopback
 // host as in tests.
 func (b *Buttons) postNote(ctx context.Context, responseURL, text string) error {
+	return b.postMessage(ctx, responseURL, text, nil)
+}
+
+// postMessage is postNote with blocks, when there are any, shown under the
+// text.
+func (b *Buttons) postMessage(ctx context.Context, responseURL, text string, blocks json.RawMessage) error {
 	if !slackURL(responseURL) {
 		return errBadResponseURL
 	}
 
-	body, err := json.Marshal(map[string]any{"response_type": "ephemeral", "replace_original": false, "text": text})
+	message := map[string]any{"response_type": "ephemeral", "replace_original": false, "text": text}
+	if len(blocks) > 0 {
+		message["blocks"] = blocks
+	}
+
+	body, err := json.Marshal(message)
 	if err != nil {
 		return fmt.Errorf("encode the note: %w", err)
 	}

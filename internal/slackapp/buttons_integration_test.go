@@ -478,8 +478,10 @@ type buttonsHarness struct {
 	url       string
 
 	mu sync.Mutex
-	// posted are the notes posted to the user who clicked, in order.
+	// posted are the notes posted to the user who clicked, in order, and
+	// blocks the blocks that came with them, as JSON, in the same order.
 	posted []string
+	blocks []string
 	// views are the bodies of the views.open calls, in order, and
 	// openError is the Slack error code they are answered with, empty for
 	// none.
@@ -634,9 +636,10 @@ func (b *buttonsHarness) record(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var note struct {
-		ResponseType    string `json:"response_type"`
-		ReplaceOriginal bool   `json:"replace_original"`
-		Text            string `json:"text"`
+		ResponseType    string          `json:"response_type"`
+		ReplaceOriginal bool            `json:"replace_original"`
+		Text            string          `json:"text"`
+		Blocks          json.RawMessage `json:"blocks"`
 	}
 
 	if err := json.Unmarshal(raw, &note); err != nil || note.ResponseType != "ephemeral" || note.ReplaceOriginal {
@@ -647,6 +650,7 @@ func (b *buttonsHarness) record(w http.ResponseWriter, r *http.Request) {
 
 	b.mu.Lock()
 	b.posted = append(b.posted, note.Text)
+	b.blocks = append(b.blocks, string(note.Blocks))
 	b.mu.Unlock()
 }
 
@@ -662,6 +666,15 @@ func (b *buttonsHarness) notes(t *testing.T) []string {
 	}
 
 	return slices.Clone(b.posted)
+}
+
+// noteBlocks returns the blocks posted with the notes so far, as JSON, one
+// for each note; the text is empty for a note with none.
+func (b *buttonsHarness) noteBlocks() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return slices.Clone(b.blocks)
 }
 
 // investigation returns the investigation with id.

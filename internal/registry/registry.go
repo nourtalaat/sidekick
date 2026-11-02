@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -83,6 +84,10 @@ type Deps struct {
 	// PublicURL is server.publicURL, for plugins that link to pages of the
 	// web UI. Empty means no links.
 	PublicURL string
+	// DailyLocation is the time zone of budgets.daily.timeZone, whose
+	// midnight starts a new day, for plugins that count things per day.
+	// Nil means UTC.
+	DailyLocation *time.Location
 	// ValidatorURL is validator.url, the address of the monitor validator
 	// that actions call to check the files they change. It is empty where a
 	// command builds plugins without a config.

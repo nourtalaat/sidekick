@@ -142,6 +142,21 @@ linters:
             - pkg: github.com/nourtalaat/sidekick/internal/model
               desc: intake may import only event
 
+    wrapcheck:
+      # The default list, plus action.LimitError, which builds an error that
+      # wraps action.ErrLimit and the cause; it is the wrapping itself.
+      ignore-sigs:
+        - .Errorf(
+        - errors.New(
+        - errors.Unwrap(
+        - errors.Join(
+        - .Wrap(
+        - .Wrapf(
+        - .WithMessage(
+        - .WithMessagef(
+        - .WithStack(
+        - action.LimitError(
+
     # Only the "blank line after a block" rule, not the rest of wsl.
     wsl_v5:
       default: none

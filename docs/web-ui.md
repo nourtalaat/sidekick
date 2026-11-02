@@ -575,6 +575,18 @@ route is read-only now or no longer lists the action, answers 409 and can
 only be rejected. The investigation page lists its proposals too, with the
 same buttons for approvers.
 
+A proposal that changes a definition in place, such as a monitor, also
+shows **Changes, field by field**: each field with its value before and
+after, as plain text with hidden characters written as `\u` escapes. A
+proposal that deletes something says so, and Approve repeats that Sidekick
+cannot undo a delete. When the change worked and the action can undo it, an
+approver sees **Undo**, which asks once. Undo puts back only the fields
+Sidekick changed and leaves every other field as it is. If someone changed
+one of those fields since, nothing is restored: the card shows what a
+restore would overwrite, and **Restore anyway** restores it. The undo is a
+proposal of its own, approved by the person who asked, and the original
+becomes undone.
+
 - `GET /api/v1/proposals` (approver) lists proposals a page at a time, with
   `status` (repeat it for several, default `proposed`), `cursor` and
   `limit`.
@@ -584,12 +596,20 @@ same buttons for approvers.
   approve every proposal. A token with the approver role can list the queue
   and reject. The 409 answers have a `code`: `expired`, `decided` (the detail
   says who decided) or `not_allowed`.
+- `POST /api/v1/proposals/{id}/undo` (approver) undoes a succeeded
+  proposal whose `undoable` is true. Like approving, it is for a person who
+  is signed in; an API token answers 403. The body is optional:
+  `{"force": true}` restores although a field changed since. Without it, a
+  changed field answers 409 with `code` `conflict` and `changes`, the
+  difference a restore would overwrite. The other 409 codes are
+  `not_undoable`, `not_allowed`, `undo_running` and `undo_failed`. A proposal
+  has `changes` (field, before and after), `target`, `undoable` and `undoOf`.
 - `GET /api/v1/investigations/{id}` has a `proposals` list.
 
 Every proposal, approval, rejection, expiry and result is in the audit log
 as `action.proposed`, `action.approved`, `action.rejected`,
-`action.expired`, `action.executing`, `action.succeeded` or
-`action.failed`. Operators write [the actions](configuration.md#actions) and
+`action.expired`, `action.executing`, `action.succeeded`,
+`action.failed`, `action.undo_requested` or `action.undone`. Operators write [the actions](configuration.md#actions) and
 developers add types with [Writing an action](plugins/actions.md).
 
 ## Listeners and routes
