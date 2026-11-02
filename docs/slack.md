@@ -7,7 +7,9 @@ follow-up questions in the thread of an investigation. The `slack` output
 shows each investigation as one Slack message that is edited in place
 while the investigation runs, with buttons to stop the run, to rate its
 verdict and to stop its watchers, and answers the questions in its
-thread. Slash commands and a link to the web UI come in later releases.
+thread. The `/sidekick` slash command lets people add listeners and routes
+and start investigations from Slack, and each message has an Open in
+Sidekick link to the investigation in the web UI.
 
 ## What it posts
 

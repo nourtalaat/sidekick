@@ -78,7 +78,7 @@ checks the database, the Slack token, the API key and every source, and
 prints a fix for anything wrong:
 
 ```text
-ok    database: connected; the schema has every migration this release needs (33)
+ok    database: connected; the schema has every migration this release needs (49)
 ok    slack: the bot token works: it is the bot user sidekick in the workspace Acme
 ok    model claude: the anthropic API accepted the key
 ok    prices: every configured model has a price

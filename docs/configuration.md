@@ -51,8 +51,9 @@ database:
   replica gets no traffic. Use this where production migrations are run by
   hand.
 
-The Helm chart will also offer a `job` mode, which migrates in a Job before
-each upgrade and runs Sidekick in `manual` mode.
+The Helm chart also offers a `job` mode (`migrations.mode: job`), which
+migrates in a Job before each install and upgrade and runs Sidekick in
+`manual` mode.
 
 ### `secrets`
 
