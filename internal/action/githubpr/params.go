@@ -134,7 +134,7 @@ func (l *Limits) plan(p Params) ([]change, error) {
 	}
 
 	if err := checkText(p); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("check the title and body: %w", err)
 	}
 
 	if len(p.Files) == 0 {
@@ -151,7 +151,7 @@ func (l *Limits) plan(p Params) ([]change, error) {
 	for _, f := range p.Files {
 		c, err := l.planFile(f)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("check the files: %w", err)
 		}
 
 		key := strings.ToLower(c.path)

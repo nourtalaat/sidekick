@@ -253,14 +253,32 @@ func (s *Service) prepare(ctx context.Context, req ProposeRequest) (prepared, st
 	}
 
 	if checker, ok := a.(action.ProposalChecker); ok {
-		if err := checker.CheckProposal(ctx, params); err != nil {
-			return p, fmt.Sprintf("action %s checked these parameters and refused them: %s", in.Action, cut(err.Error(), maxCheckRefusalChars))
+		if refusal := s.checkProposal(ctx, in.Action, checker, params); refusal != "" {
+			return p, refusal
 		}
 	}
 
 	p.params, p.reason = params, s.redactReason(reason)
 
 	return p, ""
+}
+
+// checkProposal runs the action's CheckProposal for at most checkTimeout. It
+// returns the refusal for the model, or "" when the check passed.
+func (s *Service) checkProposal(ctx context.Context, name string, checker action.ProposalChecker, params json.RawMessage) string {
+	ctx, cancel := context.WithTimeout(ctx, s.checkTimeout)
+	defer cancel()
+
+	err := checker.CheckProposal(ctx, params)
+
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return fmt.Sprintf("action %s could not finish checking these parameters within %s; propose it again", name, s.checkTimeout)
+	default:
+		return fmt.Sprintf("action %s checked these parameters and refused them: %s", name, cut(err.Error(), maxCheckRefusalChars))
+	}
 }
 
 // redactReason redacts the reason when the Service has a redactor.

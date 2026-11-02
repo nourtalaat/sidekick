@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -235,6 +236,36 @@ func (c *checkedNote) CheckProposal(context.Context, json.RawMessage) error {
 	c.checks.Add(1)
 
 	return c.checkErr
+}
+
+// slowNote is a fake note whose check waits for its context to end.
+type slowNote struct {
+	*fakeNote
+}
+
+var _ action.ProposalChecker = (*slowNote)(nil)
+
+func (slowNote) CheckProposal(ctx context.Context, _ json.RawMessage) error {
+	<-ctx.Done()
+
+	return ctx.Err()
+}
+
+func TestPrepareProposalCheckerTimesOut(t *testing.T) {
+	t.Parallel()
+
+	policy := action.StaticPolicy{"payments": {Mode: action.Approved, Actions: []string{"monitor-note"}}}
+
+	s, err := New(Options{Pool: new(pgxpool.Pool), Actions: map[string]action.Action{"monitor-note": slowNote{newFakeNote("monitor-note")}}, Policy: policy})
+	require.NoError(t, err)
+	require.Equal(t, CheckTimeout, s.checkTimeout)
+
+	s.checkTimeout = 20 * time.Millisecond
+
+	input := json.RawMessage(`{"action": "monitor-note", "params": {"board": "ops", "title": "t"}, "reason": "x"}`)
+
+	_, refusal := s.prepare(t.Context(), ProposeRequest{InvestigationID: uuid.New(), ToolCallID: "call-1", Route: "payments", Mode: action.Approved, Input: input})
+	require.Equal(t, "action monitor-note could not finish checking these parameters within 20ms; propose it again", refusal)
 }
 
 func TestPrepareProposalChecker(t *testing.T) {

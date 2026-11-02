@@ -126,7 +126,7 @@ func (m *moduleLoad) follow(ctx context.Context, r *reader, dirs []string, depth
 
 	for _, d := range dirs {
 		if err := m.dir(ctx, r, d, depth+1); err != nil {
-			return err
+			return fmt.Errorf("read the local module in %s: %w", d, err)
 		}
 	}
 

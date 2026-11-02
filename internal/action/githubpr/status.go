@@ -21,13 +21,6 @@ import (
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
-// The states of a pull request, as pull_request_states.state holds them.
-const (
-	StateOpen   = "open"
-	StateMerged = "merged"
-	StateClosed = "closed"
-)
-
 // Limits of one run of the status job.
 const (
 	// trackedFor is how long after its proposal succeeded a pull request is
@@ -56,17 +49,21 @@ type Status struct {
 // nil when there is none.
 func (p *PR) status(ctx context.Context, owner, name, branch string) (*Status, error) {
 	pr, err := p.pullRequestFrom(ctx, owner, name, branch)
-	if err != nil || pr == nil {
-		return nil, err
+	if err != nil {
+		return nil, fmt.Errorf("read the pull request: %w", err)
 	}
 
-	s := &Status{Number: pr.GetNumber(), URL: pr.GetHTMLURL(), State: StateOpen}
+	if pr == nil {
+		return nil, nil
+	}
 
-	switch {
-	case pr.MergedAt != nil:
-		s.State, s.MergedAt = StateMerged, timeOf(pr.MergedAt)
-	case pr.GetState() == "closed":
-		s.State, s.ClosedAt = StateClosed, timeOf(pr.ClosedAt)
+	s := &Status{Number: pr.GetNumber(), URL: pr.GetHTMLURL(), State: stateOf(pr)}
+
+	switch s.State {
+	case StateMerged:
+		s.MergedAt = timeOf(pr.MergedAt)
+	case StateClosed:
+		s.ClosedAt = timeOf(pr.ClosedAt)
 	}
 
 	return s, nil
@@ -227,7 +224,7 @@ func (c *StatusChecker) check(ctx context.Context, job db.Job, row db.ListPullRe
 
 	st, err := c.prs[row.Action].status(ctx, owner, name, action.IdempotencyKey(row.ID.String()))
 	if err != nil {
-		return err
+		return fmt.Errorf("read the state of proposal %s: %w", row.ID, err)
 	}
 
 	if st == nil {

@@ -129,7 +129,7 @@ func (p *PR) Spec() action.Spec {
 func (p *PR) Validate(_ context.Context, raw json.RawMessage) error {
 	params, err := decodeParams(raw)
 	if err != nil {
-		return err
+		return fmt.Errorf("read the parameters: %w", err)
 	}
 
 	if _, err := p.limits.plan(params); err != nil {

