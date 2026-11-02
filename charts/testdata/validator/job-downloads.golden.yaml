@@ -36,6 +36,22 @@ spec:
 
 ---
 # Source: sidekick/templates/validator.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sidekick-validator
+  labels:
+    helm.sh/chart: sidekick-0.1.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: validator
+automountServiceAccountToken: false
+
+
+---
+# Source: sidekick/templates/validator.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -50,16 +66,13 @@ metadata:
 rules:
   - apiGroups: [batch]
     resources: [jobs]
-    verbs: [create, get, list, watch, delete]
-  - apiGroups: [""]
-    resources: [configmaps]
     verbs: [create, get, delete]
   - apiGroups: [""]
-    resources: [pods]
-    verbs: [get, list, watch]
+    resources: [configmaps]
+    verbs: [create, delete]
   - apiGroups: [""]
-    resources: [pods/log]
-    verbs: [get]
+    resources: [pods]
+    verbs: [list]
 
 
 ---

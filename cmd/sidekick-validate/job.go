@@ -17,11 +17,6 @@ import (
 // termination message from.
 const defaultTerminationLog = "/dev/termination-log"
 
-// jobError is what job mode prints when the validation could not run.
-type jobError struct {
-	Error string `json:"error"`
-}
-
 // newJobCmd builds `sidekick-validate job`, the Kubernetes Job mode.
 func newJobCmd() *cobra.Command {
 	var (
@@ -34,9 +29,10 @@ func newJobCmd() *cobra.Command {
 		Use:   "job",
 		Short: "Run one validation from a request file and print the result",
 		Long: `Run one validation. The request is read from --request, in the same
-JSON form POST /validate takes. The result is printed on standard output
-and written to the termination log, cut down to the 4096 bytes Kubernetes
-keeps there, with "truncated": true when anything was left out.
+JSON form POST /validate takes, plain or gzipped. The result is printed on
+standard output and written to the termination log, cut down to the 4096
+bytes Kubernetes keeps there, with "truncated": true when anything was
+left out.
 
 The exit status is 0 when the validation ran, whether the files passed or
 not, and 1 when it could not run; then {"error": "..."} is printed and
@@ -68,10 +64,10 @@ func runJob(ctx context.Context, tools *toolFlags, requestPath string, out io.Wr
 	if runErr != nil {
 		// The error can quote tool output, so only its redacted text
 		// leaves the validator, and the original error is not kept.
-		message := validate.RedactTokens(runErr.Error())
-		writeJobOutput(log, out, terminationLog, jobError{Error: message}, nil)
+		failure := validate.NewJobError(runErr)
+		writeJobOutput(log, out, terminationLog, failure, nil)
 
-		return fmt.Errorf("job: %s", message)
+		return fmt.Errorf("job: %s", failure.Error)
 	}
 
 	message, err := validate.TerminationMessage(res)
@@ -101,7 +97,12 @@ func validateFile(ctx context.Context, tools *toolFlags, log *slog.Logger, reque
 		_ = f.Close()
 	}()
 
-	req, err := validate.DecodeRequest(io.LimitReader(f, validate.MaxRequestBytes))
+	body, err := validate.RequestReader(f)
+	if err != nil {
+		return validate.Result{}, fmt.Errorf("read %s: %w", requestPath, err)
+	}
+
+	req, err := validate.DecodeRequest(body)
 	if err != nil {
 		return validate.Result{}, fmt.Errorf("read %s: %w", requestPath, err)
 	}

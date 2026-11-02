@@ -43,6 +43,51 @@ app.kubernetes.io/component: validator
 {{- end }}
 
 {{/*
+The validator section of the Sidekick config in job mode: how Sidekick
+makes the Job of each validation. The chart's values win over the same
+keys in config.validator (merge keeps the first value it sees).
+*/}}
+{{- define "sidekick.validator.config" -}}
+{{- $v := .Values.validator }}
+{{- $resources := dict }}
+{{- range $kind := list "requests" "limits" }}
+{{- $quantities := dict }}
+{{- range $name, $quantity := get (default dict $v.resources) $kind }}
+{{- $_ := set $quantities $name (toString $quantity) }}
+{{- end }}
+{{- if $quantities }}
+{{- $_ := set $resources $kind $quantities }}
+{{- end }}
+{{- end }}
+{{- $pullSecrets := list }}
+{{- range .Values.imagePullSecrets }}
+{{- $pullSecrets = append $pullSecrets .name }}
+{{- end }}
+mode: job
+allowDownloads: {{ $v.allowDownloads }}
+job:
+  image: {{ include "sidekick.validator.image" . | quote }}
+  imagePullPolicy: {{ $v.image.pullPolicy }}
+  {{- with $pullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  serviceAccountName: {{ include "sidekick.validator.serviceAccountName" . }}
+  {{- with $resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  workDirSizeLimit: {{ $v.workDirSizeLimit | toString | quote }}
+  podLabels:
+    {{- include "sidekick.validator.selectorLabels" . | nindent 4 }}
+{{- end }}
+
+{{/* The service account of the Job pods, which mounts no token. */}}
+{{- define "sidekick.validator.serviceAccountName" -}}
+{{ include "sidekick.fullname" . }}-validator
+{{- end }}
+
+{{/*
 The validator sidecar container. It listens on loopback only, which the
 kubelet's HTTP probes cannot reach, so the probes run
 `sidekick-validate health` in the container. There is no readiness probe:
