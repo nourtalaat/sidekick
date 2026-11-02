@@ -30,6 +30,12 @@ const (
 // the job that runs it.
 const UndoTimeout = time.Minute
 
+// undoRetryMargin is how long after UndoTimeout the job that backs up an
+// undo first runs. The job runs only if the request did not finish the undo;
+// waiting until the request has surely ended keeps the two from restoring at
+// the same time.
+const undoRetryMargin = 30 * time.Second
+
 // uniqueViolation is the code Postgres gives a row that breaks a unique
 // index.
 const uniqueViolation = "23505"
@@ -105,7 +111,8 @@ type undoParams struct {
 // *UndoConflictError that shows what a forced restore would overwrite. A
 // restore that fails for good ends the new proposal as failed and returns a
 // *UndoFailedError. A restore that fails for a reason that may pass leaves
-// the new proposal executing, and a job tries again; the call returns it.
+// the new proposal executing, and the job queued with it tries again once
+// UndoTimeout and a margin have passed; the call returns it.
 //
 // It returns ErrTokenCannotUndo for an API token, ErrNotFound,
 // ErrNotUndoable, ErrUndoRunning, or an ErrNotAllowed when the config no
@@ -275,8 +282,8 @@ func (s *Service) requestUndoIn(ctx context.Context, tx pgx.Tx, id uuid.UUID, by
 		return db.ActionProposal{}, fmt.Errorf("write the audit entry: %w", err)
 	}
 
-	if err := enqueueExecute(ctx, tx, undo.ID); err != nil {
-		return db.ActionProposal{}, fmt.Errorf("queue the job that runs it: %w", err)
+	if err := enqueueExecuteAt(ctx, tx, undo.ID, s.now().Add(UndoTimeout+undoRetryMargin)); err != nil {
+		return db.ActionProposal{}, fmt.Errorf("queue the job that backs it up: %w", err)
 	}
 
 	if err := publish.Refresh(ctx, tx, undo.InvestigationID); err != nil {
