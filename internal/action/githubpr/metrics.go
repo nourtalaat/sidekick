@@ -35,6 +35,9 @@ const (
 	resultOpened   = "opened"
 	resultExisting = "existing"
 	resultError    = "error"
+	resultApplied  = "applied"
+	resultClosed   = "closed"
+	resultReverted = "reverted"
 )
 
 // metrics are the action's Prometheus metrics, shared by every instance.
@@ -56,7 +59,7 @@ func newMetrics(reg prometheus.Registerer) (*metrics, error) {
 
 	pullRequests, err := registry.RegisterOrExisting(reg, prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "sidekick_githubpr_pull_requests_total",
-		Help: "Pull requests the action opened or found already open, and attempts that failed, by result.",
+		Help: "Pull requests the action opened (opened), found already open (existing), closed or reverted when undone (closed, reverted), found on the base branch already (applied), and attempts that failed (error), by result.",
 	}, []string{labelResult}))
 	if err != nil {
 		return nil, fmt.Errorf("register the pull request metric: %w", err)
