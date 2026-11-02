@@ -8,6 +8,7 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -69,6 +70,9 @@ type fakeDatadog struct {
 	validateBody   string
 	// getStatus, when set, is the status every read answers.
 	getStatus int
+	// flipType makes a write turn the alert type into the other one that
+	// Datadog reads back as the same.
+	flipType bool
 }
 
 // newFakeDatadog starts the fake API for one test.
@@ -124,10 +128,86 @@ func (f *fakeDatadog) put(w http.ResponseWriter, r *http.Request) {
 		f.monitor[k] = v
 	}
 
+	f.readBack()
+
 	f.edits++
 	f.monitor["modified"] = json.RawMessage(fmt.Sprintf(`"2026-10-02T00:00:%02d+00:00"`, f.edits))
 
 	_ = json.NewEncoder(w).Encode(f.monitor)
+}
+
+// readBack changes the monitor the way the real API does when it keeps a
+// write: whole numbers of the thresholds read back as 3.0, options gains
+// notify_audit and silenced, options.no_data_timeframe is dropped while
+// notify_no_data is false, the tags come back in another order, and the
+// query and the message come back trimmed. The type is turned into the other
+// alert type when flipType is set. It is called with the lock held.
+func (f *fakeDatadog) readBack() {
+	if raw, ok := f.monitor["options"]; ok {
+		f.monitor["options"] = optionsReadBack(raw)
+	}
+
+	if raw, ok := f.monitor["tags"]; ok {
+		var tags []string
+		if json.Unmarshal(raw, &tags) == nil {
+			slices.Reverse(tags)
+
+			f.monitor["tags"], _ = json.Marshal(tags)
+		}
+	}
+
+	for _, key := range []string{"query", "message"} {
+		var text string
+		if json.Unmarshal(f.monitor[key], &text) == nil {
+			f.monitor[key], _ = json.Marshal(strings.TrimSpace(text))
+		}
+	}
+
+	if f.flipType {
+		var kind string
+		if json.Unmarshal(f.monitor["type"], &kind) == nil {
+			f.monitor["type"], _ = json.Marshal(map[string]string{typeQuery: typeMetric, typeMetric: typeQuery}[kind])
+		}
+	}
+}
+
+// optionsReadBack is the options of a monitor as the real API reads them
+// back after a write.
+func optionsReadBack(raw json.RawMessage) json.RawMessage {
+	var options map[string]json.RawMessage
+	if json.Unmarshal(raw, &options) != nil {
+		return raw
+	}
+
+	var thresholds map[string]json.RawMessage
+	if json.Unmarshal(options["thresholds"], &thresholds) == nil {
+		for k, v := range thresholds {
+			if n, err := strconv.ParseInt(string(v), 10, 64); err == nil {
+				thresholds[k] = json.RawMessage(fmt.Sprintf("%d.0", n))
+			}
+		}
+
+		options["thresholds"], _ = json.Marshal(thresholds)
+	}
+
+	if _, ok := options["notify_audit"]; !ok {
+		options["notify_audit"] = json.RawMessage("false")
+	}
+
+	if _, ok := options["silenced"]; !ok {
+		options["silenced"] = json.RawMessage("{}")
+	}
+
+	if string(options["notify_no_data"]) != "true" {
+		delete(options, "no_data_timeframe")
+	}
+
+	out, err := json.Marshal(options)
+	if err != nil {
+		return raw
+	}
+
+	return out
 }
 
 func (f *fakeDatadog) remove(w http.ResponseWriter, _ *http.Request) {
@@ -235,6 +315,39 @@ func (f *fakeDatadog) configure(change func(f *fakeDatadog)) {
 // failReads makes every read of the monitor answer with status.
 func (f *fakeDatadog) failReads(status int) {
 	f.configure(func(f *fakeDatadog) { f.getStatus = status })
+}
+
+// tagsNow returns the tags of the monitor.
+func (f *fakeDatadog) tagsNow(t *testing.T) []string {
+	t.Helper()
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	var tags []string
+	require.NoError(t, json.Unmarshal(f.monitor["tags"], &tags))
+
+	return tags
+}
+
+// requireHoldsAfter requires the monitor to have the values the snapshot
+// writes, as Datadog reads them back.
+func requireHoldsAfter(t *testing.T, dd *fakeDatadog, snap action.Snapshot) {
+	t.Helper()
+
+	ok, err := holdsAfter(dd.definitionNow(t), snap)
+	require.NoError(t, err)
+	require.True(t, ok, "the monitor has the new values")
+}
+
+// requireHoldsBefore requires the monitor to have the values from before the
+// snapshot's change.
+func requireHoldsBefore(t *testing.T, dd *fakeDatadog, snap action.Snapshot) {
+	t.Helper()
+
+	ok, err := holdsBefore(dd.definitionNow(t), snap)
+	require.NoError(t, err)
+	require.True(t, ok, "the monitor has the old values")
 }
 
 // limitsOf are the limits the tests use unless a test changes them.
@@ -424,6 +537,14 @@ func TestSnapshotRefusals(t *testing.T) {
 			wantLimit: true, wantErr: "The value provided for parameter 'query' is invalid",
 		},
 		{
+			name: "an option value Datadog does not accept", params: `{"monitorId": 123, "set": {"options.renotify_interval": 7}}`,
+			change: func(dd *fakeDatadog) {
+				dd.validateStatus, dd.validateBody = http.StatusBadRequest, `{"errors": ["Invalid on_missing_data value: resolve; valid value is: default"]}`
+			},
+			limits:    func(l *Limits) { l.Fields = append(l.Fields, "options.renotify_interval") },
+			wantLimit: true, wantErr: "Invalid on_missing_data value: resolve; valid value is: default",
+		},
+		{
 			name: "a monitor that does not exist", params: raiseCritical,
 			change:   func(dd *fakeDatadog) { dd.getStatus = http.StatusNotFound },
 			wantPerm: true, wantErr: "Datadog answered 404",
@@ -552,7 +673,7 @@ func TestExecute(t *testing.T) {
 
 	require.Equal(t, 1, dd.putCount())
 	require.Equal(t, definitionFields, sortedKeys(dd.putBodies()[0]), "the whole definition is sent, so a PUT does not depend on what Datadog does with the fields it is not sent")
-	require.JSONEq(t, string(snap.After), string(dd.definitionNow(t)))
+	requireHoldsAfter(t, dd, snap)
 }
 
 // TestExecuteSendsEveryFieldAsItIs checks that a field the change does not
@@ -732,6 +853,89 @@ func TestExecuteTwiceHasTheEffectOfOne(t *testing.T) {
 	require.Equal(t, 1, dd.putCount())
 }
 
+// normalisedChange is a change that Datadog keeps in another form than it
+// was sent in: the tags come back reversed, the message trimmed, and the
+// threshold as 3.0.
+const normalisedChange = `{"monitorId": 123, "set": {"options.thresholds.critical": 3, "message": "New text  ", "tags": ["b", "a", "team:payments"]}}`
+
+// TestExecuteTwiceAfterDatadogNormalisedTheWrite is a worker that died after
+// the write and before the result was saved, when Datadog had changed the
+// form of what it kept: the job runs again, finds the change in place, and
+// writes nothing more instead of reporting a conflict.
+func TestExecuteTwiceAfterDatadogNormalisedTheWrite(t *testing.T) {
+	t.Parallel()
+
+	api, dd := newFakeDatadog(t)
+	m := newTestAction(t, api, limitsOf())
+	snap := proposed(t, m, normalisedChange)
+
+	_, err := m.Execute(t.Context(), invocationOf(normalisedChange, &snap))
+	require.NoError(t, err)
+
+	now := string(dd.definitionNow(t))
+	require.Contains(t, now, `"critical":3.0`, "Datadog reads the whole number back as 3.0")
+	require.Contains(t, now, `"notify_audit":false`, "and adds what it was not sent")
+	require.Equal(t, []string{"team:payments", "a", "b"}, dd.tagsNow(t), "in another order")
+	require.Contains(t, now, `"message":"New text"`, "trimmed")
+
+	_, err = m.Execute(t.Context(), invocationOf(normalisedChange, &snap))
+	require.NoError(t, err, "the change is in place")
+	require.Equal(t, 1, dd.putCount())
+}
+
+func TestExecuteStillFindsAnEditAfterANormalisedWrite(t *testing.T) {
+	t.Parallel()
+
+	api, dd := newFakeDatadog(t)
+	m := newTestAction(t, api, limitsOf())
+	snap := proposed(t, m, normalisedChange)
+
+	_, err := m.Execute(t.Context(), invocationOf(normalisedChange, &snap))
+	require.NoError(t, err)
+
+	dd.someoneEdits(t, `{"message": "Edited by a person"}`)
+
+	_, err = m.Execute(t.Context(), invocationOf(normalisedChange, &snap))
+	require.ErrorIs(t, err, action.ErrConflict)
+	require.Equal(t, 1, dd.putCount())
+}
+
+func TestUndoAfterANormalisedWriteNeedsNoForce(t *testing.T) {
+	t.Parallel()
+
+	api, dd := newFakeDatadog(t)
+	m := newTestAction(t, api, limitsOf())
+	snap := proposed(t, m, normalisedChange)
+
+	_, err := m.Execute(t.Context(), invocationOf(normalisedChange, &snap))
+	require.NoError(t, err)
+
+	_, err = m.Undo(t.Context(), invocationOf(normalisedChange, &snap), snap, false)
+	require.NoError(t, err, "what Datadog kept is the change, in another form")
+	requireHoldsBefore(t, dd, snap)
+	require.ElementsMatch(t, []string{"team:payments", "env:prod"}, dd.tagsNow(t))
+}
+
+func TestDatadogTurningTheAlertTypeIntoTheOtherIsNoConflict(t *testing.T) {
+	t.Parallel()
+
+	api, dd := newFakeDatadog(t)
+	dd.configure(func(f *fakeDatadog) { f.flipType = true })
+
+	m := newTestAction(t, api, limitsOf())
+	snap := proposed(t, m, raiseCritical)
+
+	_, err := m.Execute(t.Context(), invocationOf(raiseCritical, &snap))
+	require.NoError(t, err)
+
+	_, err = m.Execute(t.Context(), invocationOf(raiseCritical, &snap))
+	require.NoError(t, err, "the type is not a field the change touches")
+
+	_, err = m.Undo(t.Context(), invocationOf(raiseCritical, &snap), snap, false)
+	require.NoError(t, err)
+	requireHoldsBefore(t, dd, snap)
+}
+
 func TestUndo(t *testing.T) {
 	t.Parallel()
 
@@ -751,8 +955,8 @@ func TestUndo(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, `Restored 2 fields of monitor 123, "Checkout latency".`, res.Summary)
 
-	want := strings.Replace(startDefinition, `"tags": ["team:payments", "env:prod"]`, `"tags": ["team:payments", "team:sre"]`, 1)
-	require.JSONEq(t, want, string(dd.definitionNow(t)), "the changed fields are back, the other edit stays")
+	requireHoldsBefore(t, dd, snap)
+	require.ElementsMatch(t, []string{"team:payments", "team:sre"}, dd.tagsNow(t), "the changed fields are back, the other edit stays")
 
 	puts := dd.putBodies()
 	last := puts[len(puts)-1]
@@ -783,7 +987,7 @@ func TestUndoAfterSomeoneChangedAFieldTheActionChanged(t *testing.T) {
 
 	_, err = m.Undo(t.Context(), invocationOf(raiseCritical, &snap), snap, true)
 	require.NoError(t, err)
-	require.JSONEq(t, startDefinition, string(dd.definitionNow(t)))
+	requireHoldsBefore(t, dd, snap)
 }
 
 func TestUndoTwiceHasTheEffectOfOne(t *testing.T) {

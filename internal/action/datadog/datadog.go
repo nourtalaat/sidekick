@@ -348,7 +348,7 @@ func (m *Monitor) executeUpdate(ctx context.Context, id int64, snap action.Snaps
 		return action.Result{}, fmt.Errorf("check the monitor after the change: %w", err)
 	}
 
-	done, err := action.AtAfter(cur, deltas)
+	done, err := holdsAfter(cur, snap)
 	if err != nil {
 		return action.Result{}, fmt.Errorf("compare the monitor: %w", err)
 	}
@@ -455,7 +455,7 @@ func (m *Monitor) Undo(ctx context.Context, inv action.Invocation, snap action.S
 		return action.Result{}, fmt.Errorf("check the fields: %w", err)
 	}
 
-	restored, err := action.AtBefore(cur, deltas)
+	restored, err := holdsBefore(cur, snap)
 	if err != nil {
 		return action.Result{}, fmt.Errorf("compare the monitor: %w", err)
 	}
@@ -464,7 +464,7 @@ func (m *Monitor) Undo(ctx context.Context, inv action.Invocation, snap action.S
 		return m.restored(p.MonitorID, cur, len(deltas)), nil
 	}
 
-	asWritten, err := action.AtAfter(cur, deltas)
+	asWritten, err := holdsAfter(cur, snap)
 	if err != nil {
 		return action.Result{}, fmt.Errorf("compare the monitor: %w", err)
 	}
@@ -599,8 +599,19 @@ func version(live map[string]json.RawMessage) string {
 	return modified
 }
 
-// sameDefinition reports whether two definitions are the same.
+// sameDefinition reports whether two definitions are the same, as Datadog
+// reads them back.
 func sameDefinition(a, b json.RawMessage) (bool, error) {
+	a, err := normalise(a)
+	if err != nil {
+		return false, fmt.Errorf("normalise the first definition: %w", err)
+	}
+
+	b, err = normalise(b)
+	if err != nil {
+		return false, fmt.Errorf("normalise the second definition: %w", err)
+	}
+
 	deltas, err := action.Diff(a, b)
 	if err != nil {
 		return false, fmt.Errorf("compare the definitions: %w", err)
