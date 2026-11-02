@@ -26,6 +26,9 @@ type route struct {
 	name    string
 	matcher matcher
 	mode    action.Mode
+	// allowUntrustedWrite keeps a read-write route's mode for events that
+	// are not trusted.
+	allowUntrustedWrite bool
 	// strategy and strategyVersion name the exact strategy text.
 	strategy        string
 	strategyVersion string
@@ -127,15 +130,16 @@ func newRoute(rc config.Route, globalRoles map[model.Role]string, strategies *st
 	}
 
 	return route{
-		name:            rc.Name,
-		matcher:         m,
-		mode:            rc.Mode,
-		strategy:        st.Name,
-		strategyVersion: st.Version,
-		connectors:      connectorsJSON,
-		budget:          budgetJSON,
-		outputs:         rc.Outputs,
-		rateLimit:       rc.RateLimit,
+		name:                rc.Name,
+		matcher:             m,
+		mode:                rc.Mode,
+		allowUntrustedWrite: rc.AllowUntrustedWrite,
+		strategy:            st.Name,
+		strategyVersion:     st.Version,
+		connectors:          connectorsJSON,
+		budget:              budgetJSON,
+		outputs:             rc.Outputs,
+		rateLimit:           rc.RateLimit,
 		grouping: grouper.Route{
 			Name:              rc.Name,
 			Window:            rc.Grouping.Window,

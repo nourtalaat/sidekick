@@ -24,7 +24,8 @@ func TestRouteSpecRoundTrip(t *testing.T) {
 	}
 	full.Strategy = "latency-alert"
 	full.Sources = []string{"signoz"}
-	full.Mode = action.Approved
+	full.Mode = action.ReadWrite
+	full.AllowUntrustedWrite = true
 	full.Actions = []string{"monitor-note"}
 	full.Outputs = []string{"slack-thread"}
 	full.Budgets = config.RouteBudgets{Limits: config.Limits{MaxTokens: 100_000, MaxToolCalls: 20, MaxWallTime: 5 * time.Minute, MaxCostUSD: 1.5}}

@@ -175,3 +175,33 @@ func TestProposeActionTool(t *testing.T) {
 		})
 	}
 }
+
+// TestFollowUpMovesAReadWriteInvestigationToApprovedMode asks a follow-up
+// question about an investigation that ran in read-write mode. The question
+// comes from whoever is in the thread, so what the follow-up run proposes
+// waits for a person.
+func TestFollowUpMovesAReadWriteInvestigationToApprovedMode(t *testing.T) {
+	t.Parallel()
+
+	h := setup(t, options{turns: append(firstRun(),
+		turn(modeltest.Call("p1", proposals.ProposeActionTool, `{"action": "monitor-note", "params": {"title": "Slow checkout"}, "reason": "p99 doubled after the deploy."}`)),
+		turn(modeltest.Call("a1", report.AnswerFollowUpTool, answerC1)),
+	)})
+	h.setMode(t, action.ReadWrite)
+	h.handler.opts.Actions = newActions(t, h, action.RoutePolicy{Mode: action.ReadWrite, Actions: []string{"monitor-note"}})
+
+	require.NoError(t, h.run(t))
+	require.Equal(t, string(action.ReadWrite), h.investigation(t).Mode, "the first run is read-write")
+
+	require.True(t, h.ask(t, "Ev1", askDeploy))
+	require.Equal(t, string(action.Approved), h.investigation(t).Mode, "the question moved it to approved mode")
+
+	require.NoError(t, h.runFollowUp(t))
+
+	stored, err := proposals.OfInvestigation(t.Context(), h.pool, testInvestigation)
+	require.NoError(t, err)
+	require.Len(t, stored, 1)
+	require.Equal(t, action.StatusProposed, stored[0].Status, "the proposal waits for a person")
+	require.False(t, stored[0].ApprovedByPolicy)
+	require.Equal(t, action.Approved, stored[0].Mode)
+}
