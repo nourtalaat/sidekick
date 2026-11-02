@@ -10,6 +10,10 @@
 // What is not confirmed against a real Datadog account, and is marked with
 // ASSUMPTION below: the answer of the validate endpoint, that a PUT with
 // options replaces options as a whole, and the form of the modified field.
+// The checks also assume that Datadog keeps the values written as sent (tag
+// order, numbers, and no defaults filled into options after a PUT). If it
+// does not, the retry check after a crash fails as a conflict, and Undo
+// always asks to force.
 package datadog
 
 import (
