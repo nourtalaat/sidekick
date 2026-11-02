@@ -5,6 +5,7 @@
 package plugins
 
 import (
+	_ "github.com/nourtalaat/sidekick/internal/action/githubpr"      // Action type "github.pull_request".
 	_ "github.com/nourtalaat/sidekick/internal/action/jira"          // Action types "jira.comment" and "jira.issue".
 	_ "github.com/nourtalaat/sidekick/internal/intake/alertmanager"  // Intake adapter "alertmanager".
 	_ "github.com/nourtalaat/sidekick/internal/intake/datadog"       // Intake adapter "datadog".
