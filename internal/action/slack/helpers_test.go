@@ -22,7 +22,7 @@ const (
 	testInvestigationID = "0192d3a4-0000-7000-8000-0000000000e2"
 	testKey             = "sidekick/" + testProposalID
 	testPublicURL       = "https://sidekick.example.com"
-	testToken           = "xoxb-secret-token"
+	testToken           = "xoxb-secret-token" //nolint:gosec // G101: a fake token for the tests.
 	testChannel         = "C0123456789"
 	testThread          = "1700000000.000100"
 	botUser             = "UBOT"
