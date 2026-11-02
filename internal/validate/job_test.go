@@ -88,10 +88,8 @@ func TestNewJobError(t *testing.T) {
 	t.Run("tokens are redacted", func(t *testing.T) {
 		t.Parallel()
 
-		token := "eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJrdWJlcm5ldGVzIn0.c2lnbmF0dXJlLXZhbHVl"
-
-		got := NewJobError(errors.New("bad value " + token))
-		require.NotContains(t, got.Error, token)
+		got := NewJobError(errors.New("bad value " + fakeJWT))
+		require.NotContains(t, got.Error, fakeJWT)
 	})
 }
 
