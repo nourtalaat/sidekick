@@ -466,10 +466,19 @@ func (r *Rule) checkRule(uid string, live map[string]json.RawMessage) error {
 	return nil
 }
 
-// checkNew checks the new definition of a snapshot: it must differ from the
-// old one, Grafana must store it as written, and the rule must stay one the
-// limits allow.
+// checkNew checks the new definition of a snapshot: Grafana must store it as
+// written, the rule must stay one the limits allow, and it must differ from
+// the old one. The last check comes after the others, because a value that
+// Grafana replaces would otherwise look like no change.
 func (r *Rule) checkNew(uid string, snap action.Snapshot, deltas []action.Delta) error {
+	if err := checkChange(snap.Before, snap.After, deltas); err != nil {
+		return fmt.Errorf("check that Grafana stores the change: %w", err)
+	}
+
+	if err := r.checkAfter(uid, snap.After); err != nil {
+		return fmt.Errorf("check the rule after the change: %w", err)
+	}
+
 	same, err := sameDefinition(snap.Before, snap.After)
 	if err != nil {
 		return fmt.Errorf("compare the definitions: %w", err)
@@ -477,14 +486,6 @@ func (r *Rule) checkNew(uid string, snap action.Snapshot, deltas []action.Delta)
 
 	if same {
 		return refuse("the rule has these values already")
-	}
-
-	if err := checkChange(snap.Before, snap.After, deltas); err != nil {
-		return fmt.Errorf("check that Grafana stores the change: %w", err)
-	}
-
-	if err := r.checkAfter(uid, snap.After); err != nil {
-		return fmt.Errorf("check the rule after the change: %w", err)
 	}
 
 	return nil
