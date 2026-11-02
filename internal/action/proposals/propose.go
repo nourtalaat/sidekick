@@ -364,7 +364,7 @@ func (s *Service) store(ctx context.Context, tx pgx.Tx, req ProposeRequest, p pr
 	}
 
 	if len(row.Snapshot) > 0 {
-		details["snapshot"] = row.Snapshot
+		details["snapshot"] = json.RawMessage(row.Snapshot)
 	}
 
 	if err := s.writeAudit(ctx, tx, row, AuditProposed, audit.ActorSidekick, "", details); err != nil {
