@@ -277,6 +277,10 @@ func decidedDetail(p action.Proposal) string {
 		by = "the Slack user " + p.DecidedBySlackUser
 	}
 
+	if p.ApprovedByPolicy {
+		return fmt.Sprintf("This proposal is %s already; it was %s.", p.Status, action.PolicyApprovalText)
+	}
+
 	if by == "" {
 		return fmt.Sprintf("This proposal is %s already.", p.Status)
 	}
@@ -304,6 +308,7 @@ func (s *server) proposalOf(p action.Proposal, alertTitle string) apigen.Proposa
 		ExpiresAt:          p.ExpiresAt,
 		DecidedByName:      nonEmptyText(p.DecidedByName),
 		DecidedBySlackUser: nonEmptyText(p.DecidedBySlackUser),
+		ApprovedByPolicy:   nonFalse(p.ApprovedByPolicy),
 		Error:              nonEmptyText(s.mask(p.Error)),
 	}
 
@@ -393,4 +398,14 @@ func joinStatuses() string {
 	}
 
 	return strings.Join(names, ", ")
+}
+
+// nonFalse returns a pointer to true, or nil for false, so a false flag is
+// left out of the answer.
+func nonFalse(b bool) *bool {
+	if !b {
+		return nil
+	}
+
+	return &b
 }

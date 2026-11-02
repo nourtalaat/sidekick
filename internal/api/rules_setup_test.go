@@ -73,6 +73,8 @@ func withRuleConfig(cfg *config.Config) {
 	}
 	cfg.Outputs = map[string]config.Section{"slack-thread": {Type: "slack"}}
 	cfg.Listeners = map[string]config.Listener{"alerts": {Channel: "#alerts"}}
+	cfg.Intake.Webhooks = map[string]config.Webhook{"alertmanager": {Trusted: true}}
+	cfg.Actions.Definitions = map[string]config.Section{"monitor-note": {Type: "note.create"}}
 	cfg.Routes = []config.Route{def, payments}
 	cfg.Budgets = config.Budgets{
 		PerInvestigation: config.Limits{MaxToolCalls: ruleCeilingToolCalls, MaxWallTime: 10 * time.Minute},

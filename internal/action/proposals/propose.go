@@ -32,6 +32,16 @@ const proposeActionDescription = "Propose one change for a person to approve or 
 // proposes.
 const SnapshotTimeout = 30 * time.Second
 
+// proposeActionNowDescription is proposeActionDescription for an
+// investigation in read-write mode, where a proposal that passes its checks
+// runs without a person approving it.
+const proposeActionNowDescription = "Propose one change. In this investigation a proposal that passes its checks is approved " +
+	"by the route's policy and runs at once; no person looks at it first, so propose only a change you are sure about. " +
+	"Give the action, its parameters exactly as the action's schema asks, and a short reason. " +
+	"The parameters are recorded as you write them, so write them in full. " +
+	"If the proposal fails its checks you get the errors back and can propose again. The actions this route " +
+	"may propose are:"
+
 // proposalNamespace makes the IDs of proposals from the IDs of tool calls.
 var proposalNamespace = uuid.MustParse("6f0f6a2e-3c1b-4d3a-9a7e-2b0e0c4f9d11")
 
@@ -65,6 +75,10 @@ type ProposeResult struct {
 	// Refusal says why nothing was stored, naming the rule, for the model
 	// to fix. It is empty when the proposal is stored.
 	Refusal string
+	// ApprovedByPolicy is true when the proposal belongs to a read-write
+	// investigation, so it was approved as it was stored and its job is
+	// queued.
+	ApprovedByPolicy bool
 }
 
 // prepared is a checked proposal, ready to store.
@@ -99,7 +113,11 @@ func (s *Service) Spec(route string, mode action.Mode) (model.ToolSpec, bool) {
 		desc  strings.Builder
 	)
 
-	desc.WriteString(proposeActionDescription)
+	if mode == action.ReadWrite && rp.Mode == action.ReadWrite {
+		desc.WriteString(proposeActionNowDescription)
+	} else {
+		desc.WriteString(proposeActionDescription)
+	}
 
 	for _, name := range rp.Actions {
 		a, ok := s.opts.Actions[name]
@@ -181,6 +199,11 @@ func (s *Service) Propose(ctx context.Context, req ProposeRequest) (ProposeResul
 
 	if created {
 		s.opts.Metrics.reached(p.action, action.StatusProposed)
+
+		if res.ApprovedByPolicy {
+			s.opts.Metrics.reached(p.action, action.StatusApproved)
+		}
+
 		s.log.InfoContext(ctx, "action proposed", "proposal_id", res.ID.String(), "investigation_id", req.InvestigationID.String(), "action", p.action)
 	}
 
@@ -320,7 +343,7 @@ func (s *Service) store(ctx context.Context, tx pgx.Tx, req ProposeRequest, p pr
 
 	existing, err := queries.GetActionProposal(ctx, id)
 	if err == nil {
-		return ProposeResult{ID: id, Action: existing.Action, ExpiresAt: existing.ExpiresAt}, false, nil
+		return ProposeResult{ID: id, Action: existing.Action, ExpiresAt: existing.ExpiresAt, ApprovedByPolicy: approvedByPolicy(existing)}, false, nil
 	}
 
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -336,6 +359,11 @@ func (s *Service) store(ctx context.Context, tx pgx.Tx, req ProposeRequest, p pr
 		return ProposeResult{Action: p.action, Refusal: fmt.Sprintf("this investigation has made %d proposals, the most it may make", count)}, false, nil
 	}
 
+	mode, err := s.currentMode(ctx, queries, req)
+	if err != nil {
+		return ProposeResult{}, false, fmt.Errorf("read the mode of the investigation: %w", err)
+	}
+
 	now := s.now()
 
 	row, err := queries.InsertActionProposal(ctx, db.InsertActionProposalParams{
@@ -344,7 +372,7 @@ func (s *Service) store(ctx context.Context, tx pgx.Tx, req ProposeRequest, p pr
 		Action:          p.action,
 		Params:          p.params,
 		Reason:          p.reason,
-		Mode:            string(req.Mode),
+		Mode:            string(mode),
 		IdempotencyKey:  action.IdempotencyKey(id.String()),
 		ProposedAt:      now,
 		ExpiresAt:       now.Add(s.opts.TTL),
@@ -371,11 +399,71 @@ func (s *Service) store(ctx context.Context, tx pgx.Tx, req ProposeRequest, p pr
 		return ProposeResult{}, false, fmt.Errorf("write the audit entry: %w", err)
 	}
 
+	row, byPolicy, err := s.approveByPolicy(ctx, tx, req.Route, row)
+	if err != nil {
+		return ProposeResult{}, false, fmt.Errorf("approve proposal %s by policy: %w", id, err)
+	}
+
 	if err := publish.Refresh(ctx, tx, row.InvestigationID); err != nil {
 		return ProposeResult{}, false, fmt.Errorf("show proposal %s: %w", id, err)
 	}
 
-	return ProposeResult{ID: id, Action: row.Action, ExpiresAt: row.ExpiresAt}, true, nil
+	return ProposeResult{ID: id, Action: row.Action, ExpiresAt: row.ExpiresAt, ApprovedByPolicy: byPolicy}, true, nil
+}
+
+// currentMode returns the mode a new proposal of the call is stored with:
+// the call's, except that a read-write call is approved-mode when the
+// investigation is not read-write any more. An event that is not trusted
+// that joined the investigation after the model started made it so.
+func (s *Service) currentMode(ctx context.Context, queries *db.Queries, req ProposeRequest) (action.Mode, error) {
+	if req.Mode != action.ReadWrite {
+		return req.Mode, nil
+	}
+
+	current, err := queries.GetInvestigationMode(ctx, req.InvestigationID)
+	if err != nil {
+		return "", fmt.Errorf("get the mode of investigation %s: %w", req.InvestigationID, err)
+	}
+
+	if action.Mode(current) != action.ReadWrite {
+		return action.Approved, nil
+	}
+
+	return action.ReadWrite, nil
+}
+
+// approveByPolicy approves the proposal row, which was just stored as
+// proposed, when it was made in read-write mode and the route still is
+// read-write and lists its action: the same check an approver's click
+// gets, plus the mode. It writes the action.approved audit entry with the
+// actor policy and queues the job that runs it, in tx. It returns the row
+// as it is now, and whether it approved it.
+func (s *Service) approveByPolicy(ctx context.Context, tx pgx.Tx, route string, row db.ActionProposal) (db.ActionProposal, bool, error) {
+	if action.Mode(row.Mode) != action.ReadWrite {
+		return row, false, nil
+	}
+
+	rp, ok := s.opts.Policy.Route(route)
+	if !ok || rp.Mode != action.ReadWrite || s.notAllowed(route, row.Action) != "" {
+		return row, false, nil
+	}
+
+	approved, err := db.New(tx).ApproveActionProposalByPolicy(ctx, db.ApproveActionProposalByPolicyParams{ID: row.ID, Now: s.now()})
+	if err != nil {
+		return db.ActionProposal{}, false, fmt.Errorf("approve: %w", err)
+	}
+
+	if err := s.writeAudit(ctx, tx, approved, AuditApproved, audit.ActorPolicy, "", map[string]any{
+		"status": approved.Status, "action": approved.Action, "params": approved.Params,
+	}); err != nil {
+		return db.ActionProposal{}, false, fmt.Errorf("write the audit entry: %w", err)
+	}
+
+	if err := enqueueExecute(ctx, tx, approved.ID); err != nil {
+		return db.ActionProposal{}, false, fmt.Errorf("queue the job that runs it: %w", err)
+	}
+
+	return approved, true, nil
 }
 
 // proposalID returns the ID of the proposal that a tool call makes. It

@@ -101,7 +101,7 @@ func TestGroupRelated(t *testing.T) {
 			inbox := "SELECT count(*) FROM investigation_inbox WHERE investigation_id = $1 AND kind = 'new_event' AND body->>'event_id' = $2"
 
 			if tt.wantJoin {
-				require.Equal(t, Result{GroupID: dbGroup, InvestigationID: dbInvestigation}, res)
+				require.Equal(t, Result{GroupID: dbGroup, Route: "default", InvestigationID: dbInvestigation}, res)
 				require.Equal(t, int32(2), seeded.EventCount)
 				require.Equal(t, "fp-db-latency", seeded.Fingerprint, "the group keeps the fingerprint of the alert that opened it")
 				require.True(t, received.Equal(seeded.LastEventAt))
