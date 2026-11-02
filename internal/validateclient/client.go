@@ -27,6 +27,9 @@ const (
 	FormatGrafanaAlertFile Format = "grafana_alert_file"
 )
 
+// DefaultURL is where the chart's validator sidecar listens.
+const DefaultURL = "http://127.0.0.1:8200"
+
 // Limits of the validator that the client keeps to, so a request that the
 // validator would refuse is not sent.
 const (
@@ -98,10 +101,15 @@ type Client struct {
 }
 
 // New returns a Client for the validator at baseURL, such as
-// http://127.0.0.1:8200. A nil hc means httpclient.New().
+// http://127.0.0.1:8200; an empty baseURL means DefaultURL. A nil hc means
+// httpclient.New().
 func New(baseURL string, hc *http.Client) *Client {
 	if hc == nil {
 		hc = httpclient.New()
+	}
+
+	if baseURL == "" {
+		baseURL = DefaultURL
 	}
 
 	return &Client{baseURL: strings.TrimRight(baseURL, "/"), http: hc}

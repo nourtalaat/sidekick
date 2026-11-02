@@ -1,11 +1,15 @@
 package config
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/nourtalaat/sidekick/internal/validateclient"
+)
 
 // Defaults of the validator section.
 const (
 	// DefaultValidatorURL is where the chart's validator sidecar listens.
-	DefaultValidatorURL = "http://127.0.0.1:8200"
+	DefaultValidatorURL = validateclient.DefaultURL
 	// ValidatorModeSidecar is the default mode: a validator in each
 	// Sidekick pod that Sidekick calls over HTTP.
 	ValidatorModeSidecar ValidatorMode = "sidecar"
