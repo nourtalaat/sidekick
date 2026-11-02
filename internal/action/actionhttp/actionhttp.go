@@ -48,7 +48,7 @@ func (e *StatusError) Error() string {
 // transport failure or an answer longer than maxBytes is an error that
 // does not wrap action.ErrPermanent, so the proposal is tried again.
 func Do(client *http.Client, req *http.Request, maxBytes int64) (Response, error) {
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) //nolint:gosec // G704: the caller builds req from the URL in the action's config, which CheckURL checked.
 	if err != nil {
 		return Response{}, fmt.Errorf("send the request: %w", err)
 	}
