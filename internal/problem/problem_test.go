@@ -41,6 +41,25 @@ func TestWrite(t *testing.T) {
 				"errors": []any{map[string]any{"field": "budgets.maxTokens", "message": "above the ceiling"}},
 			},
 		},
+		{
+			name: "an answer lists the changes an undo would overwrite",
+			write: func(w http.ResponseWriter, r *http.Request) {
+				before, after := "95", "80"
+
+				problem.WriteDetails(w, r, problem.Details{
+					Status: http.StatusConflict, Detail: "The definition changed.", Code: "conflict",
+					Changes: []problem.Change{{Path: "options.critical", Before: &before, After: &after}, {Path: "message", After: &after}},
+				})
+			},
+			want: map[string]any{
+				"type": "about:blank", "title": "Conflict", "status": float64(http.StatusConflict),
+				"detail": "The definition changed.", "instance": "/api/v1/routes/x", "code": "conflict",
+				"changes": []any{
+					map[string]any{"path": "options.critical", "before": "95", "after": "80"},
+					map[string]any{"path": "message", "after": "80"},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {

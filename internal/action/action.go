@@ -32,13 +32,27 @@ type Action interface {
 // Snapshotter is implemented by actions that change a definition in place,
 // such as a monitor or an alert rule (ACT-7, ACT-9). Snapshot reads the
 // current definition and computes the new one without changing anything.
+//
+// Sidekick calls it when the model proposes, after Validate, and stores the
+// result with the proposal, so an approver reads the difference between
+// Before and After. Snapshot refuses a change it must not make, such as a
+// field outside limits.fields, with an error wrapping ErrLimit; the model
+// reads the error and may propose again. After is JSON null for a change
+// that removes the definition.
 type Snapshotter interface {
 	Snapshot(ctx context.Context, params json.RawMessage) (Snapshot, error)
 }
 
-// Undoer is implemented by actions that can restore a stored definition (ACT-9).
-// Undo fails with ErrConflict when the target no longer matches snap.After,
-// unless force is set by an approver who has seen the difference.
+// Undoer is implemented by actions that can undo what Execute did. Undo
+// fails with an error wrapping ErrConflict when the target no longer matches
+// what the action wrote, unless force is set by an approver who has seen the
+// difference. An action that changes a definition in place restores only the
+// fields it changed, taken from snap.Before, and leaves every other field as
+// it is now. An Undoer without a snapshot gets the zero Snapshot. Undo must
+// be safe to repeat: when the target is restored already it succeeds.
+//
+// An action that returns a *ConflictError gives the approver the live
+// definition to compare with.
 type Undoer interface {
 	Undo(ctx context.Context, inv Invocation, snap Snapshot, force bool) (Result, error)
 }
@@ -64,6 +78,23 @@ var ErrPermanent = errors.New("permanent failure")
 // ErrConflict is returned when a definition changed since its snapshot was taken.
 var ErrConflict = errors.New("definition changed since the snapshot")
 
+// ConflictError is an ErrConflict that also carries the live definition, in
+// the form of Snapshot.Before and After, for Undo to show what a forced
+// restore would overwrite.
+type ConflictError struct {
+	Live json.RawMessage
+}
+
+// Error implements error.
+func (e *ConflictError) Error() string {
+	return ErrConflict.Error()
+}
+
+// Unwrap makes the error match ErrConflict.
+func (e *ConflictError) Unwrap() error {
+	return ErrConflict
+}
+
 // Spec is what the model sees when it may propose this action.
 type Spec struct {
 	Name        string
@@ -80,6 +111,11 @@ type Invocation struct {
 	IdempotencyKey  string
 	// ApprovedBy is a user ID, or "policy" in read + write mode.
 	ApprovedBy string
+	// Snapshot is the snapshot stored with the proposal. Nil for an action
+	// that is not a Snapshotter. Execute writes Snapshot.After, never a
+	// definition computed again from Params, so what runs is what the
+	// approver read.
+	Snapshot *Snapshot
 }
 
 // Link points at what the action created or changed.
