@@ -57,7 +57,16 @@ func TestThresholdsCheck(t *testing.T) {
 			baseline: baseline(0.71, Interval{Lower: 0.6, Upper: 0.8}),
 			want: []ThresholdResult{{
 				Name: thresholdBaseline, Limit: 0.71 - DefaultMaxDrop, Value: new(0.7), Passed: true,
-				Detail: "baseline 0.71, at most 0.02 lower; no clear difference",
+				Detail: "baseline 0.710, at most 0.020 lower; no clear difference",
+			}},
+		},
+		{
+			name:       "a maxDrop of 0.015 shows three decimals",
+			thresholds: Thresholds{MaxDrop: new(0.015)},
+			baseline:   baseline(0.7149, Interval{Lower: 0.6, Upper: 0.8}),
+			want: []ThresholdResult{{
+				Name: thresholdBaseline, Limit: 0.7149 - 0.015, Value: new(0.7), Passed: true,
+				Detail: "baseline 0.715, at most 0.015 lower; no clear difference",
 			}},
 		},
 		{
@@ -66,7 +75,7 @@ func TestThresholdsCheck(t *testing.T) {
 			baseline:   baseline(0.9, Interval{Lower: 0.85, Upper: 0.95}),
 			want: []ThresholdResult{{
 				Name: thresholdBaseline, Limit: 0.9 - 0.05, Value: new(0.7),
-				Detail: "baseline 0.90, at most 0.05 lower; clear difference",
+				Detail: "baseline 0.900, at most 0.050 lower; clear difference",
 			}},
 		},
 	}

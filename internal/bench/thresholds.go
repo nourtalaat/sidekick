@@ -110,7 +110,7 @@ func (t Thresholds) checkBaseline(summary Summary, baseline *JSONReport) Thresho
 		return r
 	}
 
-	r.Detail = fmt.Sprintf("baseline %.2f, at most %.2f lower", *baseline.Metrics.Overall, maxDrop)
+	r.Detail = fmt.Sprintf("baseline %.3f, at most %.3f lower", *baseline.Metrics.Overall, maxDrop)
 
 	if flag := differenceFlag(summary.Intervals, baseline.Intervals, "overall"); flag != noValue {
 		r.Detail += "; " + flag

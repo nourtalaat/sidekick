@@ -89,11 +89,13 @@ jobs:
           printf '%s' "$BENCH_ANTHROPIC_API_KEY" > bench/.secrets/anthropic/apiKey
           chmod 600 bench/.secrets/anthropic/apiKey
 
-          # With a committed baseline, a run may not fall far below it.
+          # With a committed baseline, a run may not fall far below it. The
+          # floor is an overall score of 0.90, so maxDrop is the baseline's
+          # overall score minus 0.90. Change it whenever the baseline changes.
           settings="$RUNNER_TEMP/bench.yaml"
           cp bench/bench.yaml "$settings"
           if [ -f bench/baseline.json ]; then
-            printf '  baseline: bench/baseline.json\n  maxDrop: 0.02\n' >> "$settings"
+            printf '  baseline: bench/baseline.json\n  maxDrop: 0.015\n' >> "$settings"
             echo "Comparing with bench/baseline.json."
           else
             echo "bench/baseline.json does not exist yet, so the run is checked against the absolute thresholds only."
