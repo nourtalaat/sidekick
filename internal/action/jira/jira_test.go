@@ -165,7 +165,7 @@ func TestDocument(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			doc := document(tt.body, tt.link, tt.marker)
+			doc := document(tt.body, footerText, tt.link, tt.marker)
 			require.Equal(t, "doc", doc.Type)
 			require.Equal(t, adfVersion, doc.Version)
 

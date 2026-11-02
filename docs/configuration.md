@@ -1506,8 +1506,9 @@ in a Jira Cloud site through the REST API with an email and an API token.
 Jira Data Center is not supported; a `bearerTokenSecret` key is refused with
 a message that says so. The text is written as plain text nodes, so it
 cannot add formatting, links or mentions. Each comment and description ends
-with a line that says Sidekick posted it, with a link to the investigation
-when [`server.publicURL`](#server) is set.
+with a line that says Sidekick posted it and whether an approver or the
+read + write policy of the route approved it, with a link to the
+investigation when [`server.publicURL`](#server) is set.
 
 ```yaml
 actions:

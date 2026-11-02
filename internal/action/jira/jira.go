@@ -6,10 +6,8 @@
 package jira
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/mail"
@@ -18,7 +16,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/actionhttp"
 	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/registry"
@@ -161,12 +158,12 @@ type service struct {
 // newService builds the part both actions share.
 func newService(name string, conn Connection, projects []string, deps registry.Deps) (service, error) {
 	if deps.Secrets == nil {
-		return service{}, fmt.Errorf("jira action %q: %w", name, errNoSecrets)
+		return service{}, errNoSecrets
 	}
 
 	site, err := url.Parse(conn.URL)
 	if err != nil || site.Host == "" {
-		return service{}, fmt.Errorf("jira action %q: %w", name, errNoURL)
+		return service{}, errNoURL
 	}
 
 	hc := deps.HTTP
@@ -185,25 +182,6 @@ func newService(name string, conn Connection, projects []string, deps registry.D
 // projectAllowed reports whether key is one of the allowed projects.
 func projectAllowed(allowed []string, key string) bool {
 	return slices.ContainsFunc(allowed, func(a string) bool { return strings.EqualFold(a, key) })
-}
-
-// limitError returns an error that says what is outside the limits, and
-// wraps action.ErrLimit and cause.
-func limitError(cause error, format string, args ...any) error {
-	return fmt.Errorf("%s: %w: %w", fmt.Sprintf(format, args...), action.ErrLimit, cause)
-}
-
-// decodeStrict decodes the parameters of an action into v and refuses keys
-// that v does not have.
-func decodeStrict(raw json.RawMessage, v any) error {
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-
-	if err := dec.Decode(v); err != nil {
-		return fmt.Errorf("decode the parameters: %w", err)
-	}
-
-	return nil
 }
 
 // keyHash returns the short hash of an idempotency key that names its

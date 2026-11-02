@@ -73,7 +73,7 @@ var _ action.Action = (*Comment)(nil)
 func NewComment(_ context.Context, name string, cfg CommentConfig, deps registry.Deps) (action.Action, error) {
 	svc, err := newService(name, cfg.Connection, cfg.Limits.Projects, deps)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("jira action %q: %w", name, err)
 	}
 
 	return &Comment{service: svc}, nil
@@ -93,9 +93,11 @@ func (c *Comment) Spec() action.Spec {
 // and, when the issue is given by key, that its project is allowed; Execute
 // settles an issue given by ID with the project Jira returns.
 func (c *Comment) Validate(_ context.Context, raw json.RawMessage) error {
-	_, err := c.check(raw)
+	if _, err := c.check(raw); err != nil {
+		return fmt.Errorf("validate %s: %w", c.name, err)
+	}
 
-	return err
+	return nil
 }
 
 // Execute implements action.Action. It reads the issue, checks its project,
@@ -113,7 +115,7 @@ func (c *Comment) Execute(ctx context.Context, inv action.Invocation) (action.Re
 	}
 
 	if !projectAllowed(c.projects, issue.Project) {
-		return action.Result{}, limitError(errProject, "issue %s is in project %s", issue.Key, issue.Project)
+		return action.Result{}, action.LimitError(errProject, "issue %s is in project %s", issue.Key, issue.Project)
 	}
 
 	marker := markerPrefix + keyHash(inv.IdempotencyKey)
@@ -124,7 +126,7 @@ func (c *Comment) Execute(ctx context.Context, inv action.Invocation) (action.Re
 	}
 
 	if id == "" {
-		id, err = c.client.createComment(ctx, issue.ID, document(p.Body, c.investigationLink(inv.InvestigationID), marker))
+		id, err = c.client.createComment(ctx, issue.ID, document(p.Body, inv.ApprovalNote("Posted"), c.investigationLink(inv.InvestigationID), marker))
 		if err != nil {
 			return action.Result{}, fmt.Errorf("comment on %s: %w", issue.Key, err)
 		}
@@ -139,13 +141,13 @@ func (c *Comment) Execute(ctx context.Context, inv action.Invocation) (action.Re
 // check decodes the parameters and checks them against the limits.
 func (c *Comment) check(raw json.RawMessage) (CommentParams, error) {
 	var p CommentParams
-	if err := decodeStrict(raw, &p); err != nil {
-		return CommentParams{}, err
+	if err := action.DecodeParams(raw, &p); err != nil {
+		return CommentParams{}, fmt.Errorf("decode: %w", err)
 	}
 
 	if m := issueKeyPattern.FindStringSubmatch(p.Issue); m != nil {
 		if !projectAllowed(c.projects, m[1]) {
-			return CommentParams{}, limitError(errProject, "issue %s", p.Issue)
+			return CommentParams{}, action.LimitError(errProject, "issue %s", p.Issue)
 		}
 	} else if !issueIDPattern.MatchString(p.Issue) {
 		return CommentParams{}, errBadIssue
@@ -155,7 +157,7 @@ func (c *Comment) check(raw json.RawMessage) (CommentParams, error) {
 	case strings.TrimSpace(p.Body) == "":
 		return CommentParams{}, errEmptyBody
 	case n > maxCommentChars:
-		return CommentParams{}, limitError(errLongBody, "%d characters, at most %d", n, maxCommentChars)
+		return CommentParams{}, action.LimitError(errLongBody, "%d characters, at most %d", n, maxCommentChars)
 	}
 
 	return p, nil

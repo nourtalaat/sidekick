@@ -94,7 +94,7 @@ var _ action.Action = (*Issue)(nil)
 func NewIssue(_ context.Context, name string, cfg IssueConfig, deps registry.Deps) (action.Action, error) {
 	svc, err := newService(name, cfg.Connection, cfg.Limits.Projects, deps)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("jira action %q: %w", name, err)
 	}
 
 	return &Issue{service: svc, limits: cfg.Limits, counter: daily.Counter{DB: deps.DB, Location: deps.DailyLocation}}, nil
@@ -119,9 +119,11 @@ func (i *Issue) Spec() action.Spec {
 // Validate implements action.Action. The daily limit is checked when the
 // issue is created.
 func (i *Issue) Validate(_ context.Context, raw json.RawMessage) error {
-	_, err := i.check(raw)
+	if _, err := i.check(raw); err != nil {
+		return fmt.Errorf("validate %s: %w", i.name, err)
+	}
 
-	return err
+	return nil
 }
 
 // Execute implements action.Action. A repeat with the same idempotency key
@@ -154,7 +156,7 @@ func (i *Issue) Execute(ctx context.Context, inv action.Invocation) (action.Resu
 		Project:     keyed{Key: p.Project},
 		IssueType:   named{Name: p.IssueType},
 		Summary:     oneLine(p.Summary),
-		Description: document(p.Description, i.investigationLink(inv.InvestigationID), ""),
+		Description: document(p.Description, inv.ApprovalNote("Posted"), i.investigationLink(inv.InvestigationID), ""),
 		Labels:      append(slices.Clone(p.Labels), label),
 	})
 	if err != nil {
@@ -176,8 +178,8 @@ func (i *Issue) result(issue issueRef) action.Result {
 // issue type it returns is spelled as the config spells it.
 func (i *Issue) check(raw json.RawMessage) (IssueParams, error) {
 	var p IssueParams
-	if err := decodeStrict(raw, &p); err != nil {
-		return IssueParams{}, err
+	if err := action.DecodeParams(raw, &p); err != nil {
+		return IssueParams{}, fmt.Errorf("decode: %w", err)
 	}
 
 	if !projectPattern.MatchString(p.Project) {
@@ -185,12 +187,12 @@ func (i *Issue) check(raw json.RawMessage) (IssueParams, error) {
 	}
 
 	if !projectAllowed(i.limits.Projects, p.Project) {
-		return IssueParams{}, limitError(errProjectLim, "project %q", p.Project)
+		return IssueParams{}, action.LimitError(errProjectLim, "project %q", p.Project)
 	}
 
 	idx := slices.IndexFunc(i.limits.IssueTypes, func(t string) bool { return strings.EqualFold(t, p.IssueType) })
 	if idx < 0 {
-		return IssueParams{}, limitError(errTypeLimit, "issue type %q", p.IssueType)
+		return IssueParams{}, action.LimitError(errTypeLimit, "issue type %q", p.IssueType)
 	}
 
 	p.IssueType = i.limits.IssueTypes[idx]
@@ -201,15 +203,15 @@ func (i *Issue) check(raw json.RawMessage) (IssueParams, error) {
 	case summary == "":
 		return IssueParams{}, errNoSummary
 	case n > maxSummaryChars:
-		return IssueParams{}, limitError(errLongSummary, "%d characters, at most %d", n, maxSummaryChars)
+		return IssueParams{}, action.LimitError(errLongSummary, "%d characters, at most %d", n, maxSummaryChars)
 	}
 
 	if n := utf8.RuneCountInString(p.Description); n > maxDescriptionChars {
-		return IssueParams{}, limitError(errLongText, "%d characters, at most %d", n, maxDescriptionChars)
+		return IssueParams{}, action.LimitError(errLongText, "%d characters, at most %d", n, maxDescriptionChars)
 	}
 
 	if err := i.checkLabels(p.Labels); err != nil {
-		return IssueParams{}, err
+		return IssueParams{}, fmt.Errorf("check the labels: %w", err)
 	}
 
 	return p, nil
@@ -219,7 +221,7 @@ func (i *Issue) check(raw json.RawMessage) (IssueParams, error) {
 // sensitive, so the match is exact.
 func (i *Issue) checkLabels(labels []string) error {
 	if len(labels) > maxLabels {
-		return limitError(errManyLabels, "%d labels, at most %d", len(labels), maxLabels)
+		return action.LimitError(errManyLabels, "%d labels, at most %d", len(labels), maxLabels)
 	}
 
 	for _, l := range labels {
@@ -228,7 +230,7 @@ func (i *Issue) checkLabels(labels []string) error {
 		}
 
 		if !slices.Contains(i.limits.Labels, l) {
-			return limitError(errLabelLimit, "label %q", l)
+			return action.LimitError(errLabelLimit, "label %q", l)
 		}
 	}
 

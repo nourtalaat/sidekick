@@ -32,14 +32,14 @@ func TestIssueValidate(t *testing.T) {
 		{name: "another project", params: `{"project": "ENG", "issueType": "Task", "summary": "S"}`, wantErr: `project "ENG": outside configured limits: the project is not one of limits.projects`, wantLimit: true},
 		{name: "not a project key", params: `{"project": "ops project", "issueType": "Task", "summary": "S"}`, wantErr: "project: expected a project key such as OPS"},
 		{name: "another issue type", params: `{"project": "OPS", "issueType": "Epic", "summary": "S"}`, wantErr: `issue type "Epic": outside configured limits: the issue type is not one of limits.issueTypes`, wantLimit: true},
-		{name: "a label that is not allowed", params: `{"project": "OPS", "issueType": "Task", "summary": "S", "labels": ["urgent"]}`, wantErr: `label "urgent": outside configured limits: the label is not one of limits.labels`, wantLimit: true},
-		{name: "labels are case sensitive", params: `{"project": "OPS", "issueType": "Task", "summary": "S", "labels": ["INCIDENT"]}`, wantErr: `label "INCIDENT": outside configured limits: the label is not one of limits.labels`, wantLimit: true},
-		{name: "a label with a space", params: `{"project": "OPS", "issueType": "Task", "summary": "S", "labels": ["in cident"]}`, wantErr: "labels: a label must have no spaces"},
-		{name: "too many labels", params: `{"project": "OPS", "issueType": "Task", "summary": "S", "labels": ["incident","incident","incident","incident","incident","incident"]}`, wantErr: "6 labels, at most 5: outside configured limits: labels: too many", wantLimit: true},
+		{name: "a label that is not allowed", params: `{"project": "OPS", "issueType": "Task", "summary": "S", "labels": ["urgent"]}`, wantErr: `check the labels: label "urgent": outside configured limits: the label is not one of limits.labels`, wantLimit: true},
+		{name: "labels are case sensitive", params: `{"project": "OPS", "issueType": "Task", "summary": "S", "labels": ["INCIDENT"]}`, wantErr: `check the labels: label "INCIDENT": outside configured limits: the label is not one of limits.labels`, wantLimit: true},
+		{name: "a label with a space", params: `{"project": "OPS", "issueType": "Task", "summary": "S", "labels": ["in cident"]}`, wantErr: "check the labels: labels: a label must have no spaces"},
+		{name: "too many labels", params: `{"project": "OPS", "issueType": "Task", "summary": "S", "labels": ["incident","incident","incident","incident","incident","incident"]}`, wantErr: "check the labels: 6 labels, at most 5: outside configured limits: labels: too many", wantLimit: true},
 		{name: "an empty summary", params: `{"project": "OPS", "issueType": "Task", "summary": " \n "}`, wantErr: "summary: required"},
 		{name: "a long summary", params: `{"project": "OPS", "issueType": "Task", "summary": "` + strings.Repeat("x", maxSummaryChars+1) + `"}`, wantErr: "201 characters, at most 200: outside configured limits: summary: too long", wantLimit: true},
 		{name: "a long description", params: `{"project": "OPS", "issueType": "Task", "summary": "S", "description": "` + strings.Repeat("x", maxDescriptionChars+1) + `"}`, wantErr: "4001 characters, at most 4000: outside configured limits: description: too long", wantLimit: true},
-		{name: "an unknown parameter", params: `{"project": "OPS", "issueType": "Task", "summary": "S", "assignee": "me"}`, wantErr: `decode the parameters: json: unknown field "assignee"`},
+		{name: "an unknown parameter", params: `{"project": "OPS", "issueType": "Task", "summary": "S", "assignee": "me"}`, wantErr: `decode: invalid parameters: json: unknown field "assignee"`},
 	}
 
 	for _, tt := range tests {
@@ -55,7 +55,7 @@ func TestIssueValidate(t *testing.T) {
 				return
 			}
 
-			require.EqualError(t, err, tt.wantErr)
+			require.EqualError(t, err, "validate ops-issue: "+tt.wantErr)
 			require.Equal(t, tt.wantLimit, errors.Is(err, action.ErrLimit))
 		})
 	}
@@ -229,4 +229,38 @@ func mustField(t *testing.T, schema json.RawMessage, property, field string) jso
 	require.NoError(t, json.Unmarshal(schema, &s))
 
 	return s.Properties[property][field]
+}
+
+func TestIssueExecuteSaysWhoApproved(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		approvedBy string
+		want       string
+	}{
+		{name: "an approver", approvedBy: "u1", want: "Posted by Sidekick after an approver approved it."},
+		{name: "the policy of a read-write route", approvedBy: "policy", want: "Posted by Sidekick, approved by the read + write policy of its route."},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f, api := newServer(t)
+
+			inv := invocation(issueOps)
+			inv.ApprovedBy = tt.approvedBy
+
+			_, err := newIssue(t, api, opsLimits, allowDaily(t)).Execute(t.Context(), inv)
+			require.NoError(t, err)
+
+			var fields struct {
+				Description json.RawMessage `json:"description"`
+			}
+
+			require.NoError(t, json.Unmarshal(f.issues[0].Fields, &fields))
+			require.Equal(t, "After the 14:02 deploy.|"+tt.want+"| |Investigation", bodyText(t, fields.Description))
+		})
+	}
 }

@@ -28,6 +28,7 @@ const (
 	testEmail           = "sidekick@example.com"
 	testToken           = "api-token-secret" //nolint:gosec // G101: a fake token for the tests.
 	apiBase             = "/rest/api/3"
+	footerText          = "Posted by Sidekick after an approver approved it."
 )
 
 var tokenRef = registry.SecretRef{Name: "jira", Key: "apiToken"}

@@ -32,7 +32,7 @@ func TestCommentValidate(t *testing.T) {
 		{name: "a body that is too long", projects: []string{"OPS"}, params: `{"issue": "OPS-12", "body": "` + strings.Repeat("x", maxCommentChars+1) + `"}`, wantErr: "4001 characters, at most 4000: outside configured limits: body: too long", wantLimit: true},
 		{name: "an empty body", projects: []string{"OPS"}, params: `{"issue": "OPS-12", "body": " "}`, wantErr: "body: required"},
 		{name: "not an issue", projects: []string{"OPS"}, params: `{"issue": "fix it", "body": "x"}`, wantErr: "issue: expected a key such as OPS-123, or an issue ID"},
-		{name: "an unknown parameter", projects: []string{"OPS"}, params: `{"issue": "OPS-12", "body": "x", "assignee": "me"}`, wantErr: `decode the parameters: json: unknown field "assignee"`},
+		{name: "an unknown parameter", projects: []string{"OPS"}, params: `{"issue": "OPS-12", "body": "x", "assignee": "me"}`, wantErr: `decode: invalid parameters: json: unknown field "assignee"`},
 	}
 
 	for _, tt := range tests {
@@ -48,7 +48,7 @@ func TestCommentValidate(t *testing.T) {
 				return
 			}
 
-			require.EqualError(t, err, tt.wantErr)
+			require.EqualError(t, err, "validate ops-comment: "+tt.wantErr)
 			require.Equal(t, tt.wantLimit, errors.Is(err, action.ErrLimit))
 		})
 	}
@@ -244,4 +244,32 @@ func TestCommentSpecNamesTheLimits(t *testing.T) {
 	require.Equal(t, "ops-comment", spec.Name)
 	require.Contains(t, spec.Description, "Allowed projects: OPS, ENG.")
 	require.True(t, json.Valid(spec.ParamsSchema))
+}
+
+func TestCommentExecuteSaysWhoApproved(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		approvedBy string
+		want       string
+	}{
+		{name: "an approver", approvedBy: "u1", want: "Posted by Sidekick after an approver approved it."},
+		{name: "the policy of a read-write route", approvedBy: "policy", want: "Posted by Sidekick, approved by the read + write policy of its route."},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f, api := newServer(t, [2]string{"OPS-12", "OPS"})
+
+			inv := invocation(commentOps)
+			inv.ApprovedBy = tt.approvedBy
+
+			_, err := newComment(t, api, "OPS").Execute(t.Context(), inv)
+			require.NoError(t, err)
+			require.Equal(t, "p99 doubled after the deploy.|"+tt.want+"| |Investigation|"+markerPrefix+keyHash(testKey), bodyText(t, f.issues[0].Comments[0].Body))
+		})
+	}
 }

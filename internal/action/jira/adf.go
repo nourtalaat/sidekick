@@ -28,16 +28,13 @@ type linkAttrs struct {
 	Href string `json:"href"`
 }
 
-// footerText is the line under every comment and description.
-const footerText = "Posted by Sidekick after an approver approved it."
-
 // document writes the text of the model as an Atlassian Document Format
-// document, followed by a line that says Sidekick posted it, with a link to
-// the investigation when link is set, and the marker line when marker is
+// document, followed by the line note, which says Sidekick posted it and who
+// approved it, with a link to the investigation when link is set, and the marker line when marker is
 // set. The model's text only ever goes into text nodes, which Jira shows as
 // plain text: a blank line starts a paragraph and a line break becomes a
 // hard break. Only the footer's link is a link.
-func document(body, link, marker string) node {
+func document(body, note, link, marker string) node {
 	doc := node{Type: "doc", Version: adfVersion, Content: []node{}}
 
 	for _, para := range strings.Split(clean(body), "\n\n") {
@@ -48,7 +45,7 @@ func document(body, link, marker string) node {
 		doc.Content = append(doc.Content, paragraph(para))
 	}
 
-	footer := node{Type: "paragraph", Content: []node{{Type: "text", Text: footerText}}}
+	footer := node{Type: "paragraph", Content: []node{{Type: "text", Text: note}}}
 	if link != "" {
 		footer.Content = append(footer.Content,
 			node{Type: "text", Text: " "},
