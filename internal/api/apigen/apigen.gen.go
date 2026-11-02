@@ -1852,9 +1852,18 @@ type NewRoute struct {
 	AllowUntrustedWrite *bool `json:"allowUntrustedWrite,omitempty"`
 
 	// Budgets Limits of one investigation. Zero or empty uses the global value.
-	Budgets  *RouteBudgets  `json:"budgets,omitempty"`
-	Grouping *RouteGrouping `json:"grouping,omitempty"`
-	Match    *RouteMatch    `json:"match,omitempty"`
+	Budgets *RouteBudgets `json:"budgets,omitempty"`
+
+	// Details Fixed facts about the route, such as the owning team or the
+	// environment, that the investigation prompt shows to the model
+	// as trusted text. They must hold no secrets and no text copied
+	// from alerts or other outside sources. At most 20 keys; a key is
+	// 1 to 64 letters, digits, `-`, `_` or `.`; a value is one line of
+	// at most 500 characters with no control characters, and is not
+	// empty. A body without `details` removes them.
+	Details  *map[string]string `json:"details,omitempty"`
+	Grouping *RouteGrouping     `json:"grouping,omitempty"`
+	Match    *RouteMatch        `json:"match,omitempty"`
 
 	// Mode The action mode. In read-only mode, the default, the model cannot
 	// propose changes. In approved mode it may propose the route's
@@ -2283,9 +2292,18 @@ type Route struct {
 	AllowUntrustedWrite *bool `json:"allowUntrustedWrite,omitempty"`
 
 	// Budgets Limits of one investigation. Zero or empty uses the global value.
-	Budgets  *RouteBudgets  `json:"budgets,omitempty"`
-	Enabled  bool           `json:"enabled"`
-	Grouping *RouteGrouping `json:"grouping,omitempty"`
+	Budgets *RouteBudgets `json:"budgets,omitempty"`
+
+	// Details Fixed facts about the route, such as the owning team or the
+	// environment, that the investigation prompt shows to the model
+	// as trusted text. They must hold no secrets and no text copied
+	// from alerts or other outside sources. At most 20 keys; a key is
+	// 1 to 64 letters, digits, `-`, `_` or `.`; a value is one line of
+	// at most 500 characters with no control characters, and is not
+	// empty. A body without `details` removes them.
+	Details  *map[string]string `json:"details,omitempty"`
+	Enabled  bool               `json:"enabled"`
+	Grouping *RouteGrouping     `json:"grouping,omitempty"`
 
 	// Layer Where the rule is defined. A rule of the file layer is read-only.
 	Layer RuleLayer   `json:"layer"`
@@ -2394,9 +2412,18 @@ type RouteSpec struct {
 	AllowUntrustedWrite *bool `json:"allowUntrustedWrite,omitempty"`
 
 	// Budgets Limits of one investigation. Zero or empty uses the global value.
-	Budgets  *RouteBudgets  `json:"budgets,omitempty"`
-	Grouping *RouteGrouping `json:"grouping,omitempty"`
-	Match    *RouteMatch    `json:"match,omitempty"`
+	Budgets *RouteBudgets `json:"budgets,omitempty"`
+
+	// Details Fixed facts about the route, such as the owning team or the
+	// environment, that the investigation prompt shows to the model
+	// as trusted text. They must hold no secrets and no text copied
+	// from alerts or other outside sources. At most 20 keys; a key is
+	// 1 to 64 letters, digits, `-`, `_` or `.`; a value is one line of
+	// at most 500 characters with no control characters, and is not
+	// empty. A body without `details` removes them.
+	Details  *map[string]string `json:"details,omitempty"`
+	Grouping *RouteGrouping     `json:"grouping,omitempty"`
+	Match    *RouteMatch        `json:"match,omitempty"`
 
 	// Mode The action mode. In read-only mode, the default, the model cannot
 	// propose changes. In approved mode it may propose the route's
@@ -2428,10 +2455,19 @@ type RouteUpdate struct {
 	AllowUntrustedWrite *bool `json:"allowUntrustedWrite,omitempty"`
 
 	// Budgets Limits of one investigation. Zero or empty uses the global value.
-	Budgets  *RouteBudgets  `json:"budgets,omitempty"`
-	Enabled  bool           `json:"enabled"`
-	Grouping *RouteGrouping `json:"grouping,omitempty"`
-	Match    *RouteMatch    `json:"match,omitempty"`
+	Budgets *RouteBudgets `json:"budgets,omitempty"`
+
+	// Details Fixed facts about the route, such as the owning team or the
+	// environment, that the investigation prompt shows to the model
+	// as trusted text. They must hold no secrets and no text copied
+	// from alerts or other outside sources. At most 20 keys; a key is
+	// 1 to 64 letters, digits, `-`, `_` or `.`; a value is one line of
+	// at most 500 characters with no control characters, and is not
+	// empty. A body without `details` removes them.
+	Details  *map[string]string `json:"details,omitempty"`
+	Enabled  bool               `json:"enabled"`
+	Grouping *RouteGrouping     `json:"grouping,omitempty"`
+	Match    *RouteMatch        `json:"match,omitempty"`
 
 	// Mode The action mode. In read-only mode, the default, the model cannot
 	// propose changes. In approved mode it may propose the route's

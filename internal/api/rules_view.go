@@ -1,6 +1,7 @@
 package api
 
 import (
+	"maps"
 	"slices"
 	"time"
 
@@ -73,6 +74,10 @@ func routeView(r config.Route) apigen.Route {
 
 	if r.AllowUntrustedWrite {
 		out.AllowUntrustedWrite = new(true)
+	}
+
+	if len(r.Details) > 0 {
+		out.Details = new(maps.Clone(r.Details))
 	}
 
 	if m := r.Match; m != nil {

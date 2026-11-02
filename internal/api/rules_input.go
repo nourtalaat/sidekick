@@ -59,6 +59,7 @@ func routeOf(name string, spec apigen.RouteSpec) (config.Route, error) {
 	r.AllowUntrustedWrite = valueOf(spec.AllowUntrustedWrite)
 	r.Actions = valueOf(spec.Actions)
 	r.Outputs = valueOf(spec.Outputs)
+	r.Details = valueOf(spec.Details)
 	r.Match = matchOf(spec.Match)
 
 	var parse durationParser
