@@ -190,7 +190,12 @@ func Revert(live json.RawMessage, deltas []Delta) (json.RawMessage, error) {
 		edits = append(edits, Edit{Path: d.Path, Value: d.Before})
 	}
 
-	return Apply(live, edits)
+	out, err := Apply(live, edits)
+	if err != nil {
+		return nil, fmt.Errorf("put the fields back: %w", err)
+	}
+
+	return out, nil
 }
 
 // decode reads a JSON value, keeping numbers as written.
@@ -215,7 +220,12 @@ func set(node any, p Path, value json.RawMessage) (any, error) {
 			return nil, fmt.Errorf("%w: the whole definition cannot be removed", ErrPath)
 		}
 
-		return decode(value)
+		v, err := decode(value)
+		if err != nil {
+			return nil, fmt.Errorf("decode the new value: %w", err)
+		}
+
+		return v, nil
 	}
 
 	seg := p[0]
@@ -285,12 +295,22 @@ func setIndex(node any, seg string, rest Path, value json.RawMessage) (any, erro
 // action uses it to find out that its change is in place already, or that
 // someone changed one of its fields since.
 func AtAfter(doc json.RawMessage, deltas []Delta) (bool, error) {
-	return holds(doc, deltas, func(d Delta) json.RawMessage { return d.After })
+	ok, err := holds(doc, deltas, func(d Delta) json.RawMessage { return d.After })
+	if err != nil {
+		return false, fmt.Errorf("compare with the after values: %w", err)
+	}
+
+	return ok, nil
 }
 
 // AtBefore is AtAfter for the value before the change.
 func AtBefore(doc json.RawMessage, deltas []Delta) (bool, error) {
-	return holds(doc, deltas, func(d Delta) json.RawMessage { return d.Before })
+	ok, err := holds(doc, deltas, func(d Delta) json.RawMessage { return d.Before })
+	if err != nil {
+		return false, fmt.Errorf("compare with the before values: %w", err)
+	}
+
+	return ok, nil
 }
 
 // holds reports whether doc has the picked value at every path.

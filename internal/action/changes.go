@@ -95,11 +95,11 @@ func Diff(before, after json.RawMessage) ([]Delta, error) {
 		return nil, nil
 	case !aok || !bok:
 		if err := w.leaf(nil, a, aok, b, bok); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("record the difference: %w", err)
 		}
 	default:
 		if err := w.walk(nil, a, b, 0); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("compare the definitions: %w", err)
 		}
 	}
 
@@ -113,8 +113,11 @@ func decodeSide(raw json.RawMessage) (any, bool, error) {
 	}
 
 	v, err := decode(raw)
+	if err != nil {
+		return nil, true, fmt.Errorf("decode the definition: %w", err)
+	}
 
-	return v, true, err
+	return v, true, nil
 }
 
 // isAbsent reports whether raw says nothing, or JSON null.
@@ -144,7 +147,7 @@ func (w *walker) walk(path Path, a, b any, depth int) error {
 		if bv, ok := b.([]any); ok && objectPairs(av, bv) {
 			for i := range av {
 				if err := w.walk(append(slices.Clone(path), "["+strconv.Itoa(i)+"]"), av[i], bv[i], depth+1); err != nil {
-					return err
+					return fmt.Errorf("position %d: %w", i, err)
 				}
 			}
 
@@ -177,14 +180,14 @@ func (w *walker) walkObjects(path Path, a, b map[string]any, depth int) error {
 
 		if aok && bok {
 			if err := w.walk(child, av, bv, depth+1); err != nil {
-				return err
+				return fmt.Errorf("field %q: %w", k, err)
 			}
 
 			continue
 		}
 
 		if err := w.leaf(child, av, aok, bv, bok); err != nil {
-			return err
+			return fmt.Errorf("field %q: %w", k, err)
 		}
 	}
 

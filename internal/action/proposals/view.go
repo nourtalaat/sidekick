@@ -171,7 +171,7 @@ func proposalOf(row db.ActionProposal, route, decidedByName string) (action.Prop
 
 	snap, err := snapshotOf(row)
 	if err != nil {
-		return action.Proposal{}, err
+		return action.Proposal{}, fmt.Errorf("read the snapshot: %w", err)
 	}
 
 	if snap != nil {

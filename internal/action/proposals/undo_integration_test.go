@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/queue"
 )
 
 // raised is the monitor after the fake action raised its threshold to 90.
@@ -79,8 +80,13 @@ func TestUndo(t *testing.T) {
 	require.Equal(t, "user", actor)
 	require.Equal(t, anaUser.String(), actorID)
 
-	ran, err := h.runJob(t)
-	require.True(t, ran, "the safety-net job is claimed")
+	ran, _ := h.runJob(t)
+	require.False(t, ran, "the backup job waits, so it does not restore while the request does")
+
+	h.moveBackupJobsToNow(t)
+
+	ran, err = h.runJob(t)
+	require.True(t, ran, "the backup job is claimed once its time has come")
 	require.NoError(t, err)
 	require.Equal(t, 1, h.monitor.undoCalls, "and finds the undo done")
 	require.Equal(t, 2, h.monitor.writeCount())
@@ -282,7 +288,12 @@ func TestUndoThatFailsForNowIsRetriedByTheJob(t *testing.T) {
 	require.Contains(t, undo.Error, "the notes service is down")
 	require.Equal(t, "succeeded", h.row(t, id).Status)
 
-	ran, err := h.runJob(t)
+	ran, _ := h.runJob(t)
+	require.False(t, ran, "the job waits until the request has surely ended")
+
+	h.moveBackupJobsToNow(t)
+
+	ran, err = h.runJob(t)
 	require.True(t, ran)
 	require.NoError(t, err, "the second attempt works")
 
@@ -325,6 +336,15 @@ func TestUndoByTwoPeopleAtOnceRestoresOnce(t *testing.T) {
 	require.Equal(t, 1, succeeded)
 	require.Equal(t, 2, h.monitor.writeCount(), "the change and one restore")
 	require.Equal(t, "undone", h.row(t, id).Status)
+}
+
+// moveBackupJobsToNow makes the execute_action jobs that wait ready now, as
+// if UndoTimeout and the margin had passed.
+func (h *harness) moveBackupJobsToNow(t *testing.T) {
+	t.Helper()
+
+	_, err := h.pool.Exec(t.Context(), "UPDATE jobs SET run_at = now() WHERE kind = $1 AND status = 'pending'", queue.KindExecuteAction)
+	require.NoError(t, err)
 }
 
 // undoAttempts returns the undo proposals of the proposal with id, oldest first.
