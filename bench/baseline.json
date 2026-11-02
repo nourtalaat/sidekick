@@ -1,0 +1,2290 @@
+{
+  "schemaVersion": 1,
+  "label": "workflow_dispatch main",
+  "sidekickVersion": "dev",
+  "gitSHA": "unknown",
+  "configHash": "79abc4e26c11",
+  "scenarioSet": "bench/scenarios/public",
+  "triggeredBy": "ci",
+  "connectors": {
+    "investigate": {
+      "connector": "claude",
+      "provider": "anthropic",
+      "model": "claude-sonnet-5-5"
+    },
+    "judge": {
+      "connector": "claude",
+      "provider": "anthropic",
+      "model": "claude-sonnet-5-5"
+    }
+  },
+  "strategies": {
+    "error-rate-alert": "c24a4ef24789a2ce",
+    "generic-alert": "6b34e81f5c34601d",
+    "latency-alert": "dfc16bc701b97767",
+    "service-down": "ed5f69e4629f0c82"
+  },
+  "promptVersion": "6",
+  "judgePromptVersion": "1",
+  "startedAt": "2026-11-02T14:25:40.968606986Z",
+  "finishedAt": "2026-11-02T14:37:51.943306875Z",
+  "repeat": 3,
+  "seed": 1,
+  "resamples": 1000,
+  "confidenceLevel": 0.95,
+  "weights": {
+    "verdict": 0.5,
+    "rootCause": 0.3,
+    "evidence": 0.2
+  },
+  "metrics": {
+    "runs": 39,
+    "verdictAccuracy": 0.9487179487179487,
+    "falsePositive": {
+      "precision": 1,
+      "recall": 1,
+      "predicted": 9,
+      "expected": 9,
+      "hits": 9
+    },
+    "truePositive": {
+      "precision": 1,
+      "recall": 0.8666666666666667,
+      "predicted": 13,
+      "expected": 15,
+      "hits": 13
+    },
+    "rootCauseMatch": 0.9230769230769231,
+    "rootCauseScore": 0.9235042735042734,
+    "evidence": 0.8194444444444444,
+    "sourceFailuresReported": 1,
+    "overall": 0.9151709401709401,
+    "judgeErrors": 0,
+    "toolCalls": 254,
+    "inputTokens": 232319,
+    "outputTokens": 81519,
+    "costMicros": 1696627,
+    "judgeCostMicros": 179230,
+    "meanCostPerRunUSD": 0.043503256410256416,
+    "meanDurationMs": 18738.5168744359
+  },
+  "intervals": {
+    "evidence": {
+      "lower": 0.6111111111111112,
+      "upper": 1
+    },
+    "fpPrecision": {
+      "lower": 1,
+      "upper": 1
+    },
+    "fpRecall": {
+      "lower": 1,
+      "upper": 1
+    },
+    "overall": {
+      "lower": 0.8025641025641025,
+      "upper": 0.9923076923076923
+    },
+    "rootCauseMatch": {
+      "lower": 0.7948717948717948,
+      "upper": 1
+    },
+    "rootCauseScore": {
+      "lower": 0.8162179487179487,
+      "upper": 0.9914529914529914
+    },
+    "sourceFailuresReported": {
+      "lower": 1,
+      "upper": 1
+    },
+    "tpPrecision": {
+      "lower": 1,
+      "upper": 1
+    },
+    "tpRecall": {
+      "lower": 0.5555555555555556,
+      "upper": 1
+    },
+    "verdictAccuracy": {
+      "lower": 0.8461538461538461,
+      "upper": 1
+    }
+  },
+  "thresholds": [
+    {
+      "name": "verdictAccuracy",
+      "limit": 0.8,
+      "value": 0.9487179487179487,
+      "passed": true
+    },
+    {
+      "name": "fpPrecision",
+      "limit": 0.95,
+      "value": 1,
+      "passed": true
+    },
+    {
+      "name": "rootCauseMatch",
+      "limit": 0.7,
+      "value": 0.9230769230769231,
+      "passed": true
+    },
+    {
+      "name": "maxCostPerRunUSD",
+      "limit": 0.5,
+      "value": 0.043503256410256416,
+      "passed": true
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "error-rate-datadog-duplicate-of-incident",
+      "title": "Cart service error rate caused by an auth gateway outage that has an open incident",
+      "path": "bench/scenarios/public/error-rate-datadog-duplicate-of-incident.yaml",
+      "expectedVerdict": "duplicate",
+      "acceptable": [
+        "duplicate",
+        "known_issue"
+      ],
+      "spread": {
+        "runs": 3,
+        "correct": 3,
+        "rootCauseMean": 1,
+        "rootCauseSD": 0,
+        "costUSD": {
+          "min": 0.018394,
+          "median": 0.031279,
+          "max": 0.049723
+        },
+        "durationMs": {
+          "min": 10207.928606,
+          "median": 14808.8848,
+          "max": 17805.309715
+        }
+      },
+      "runs": [
+        {
+          "run": 1,
+          "investigationId": "01a19ca6-d280-73c1-a859-fe6b316e1655",
+          "status": "final",
+          "verdict": "duplicate",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "incident",
+                "met": true,
+                "reason": "Report names INC-2417 as the open incident already covering this."
+              },
+              {
+                "id": "upstream",
+                "met": true,
+                "reason": "Findings state cart-service errors trace to auth-gateway returning 503 on token validation, not cart-service itself."
+              },
+              {
+                "id": "nochange",
+                "met": true,
+                "reason": "Directs responders to work in INC-2417 and proposes no separate cart-service fix; verdict is duplicate."
+              }
+            ],
+            "costMicros": 5640
+          },
+          "evidence": [
+            {
+              "calledTool": "datadog__search_datadog_incidents",
+              "passed": true
+            },
+            {
+              "citedURL": "https://app.datadoghq.example/incidents/2417",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 8,
+          "inputTokens": 4211,
+          "outputTokens": 1611,
+          "costMicros": 49723,
+          "durationMs": 14808,
+          "reason": "All cart-service errors (861 spans from 11:04) come from auth-gateway returning 503 on token validation. Active incident INC-2417 (SEV-2, started 11:02) covers auth-gateway and lists cart-service as affected. No recent commits to cart-service or auth-gateway, and no deploy events."
+        },
+        {
+          "run": 2,
+          "investigationId": "01a19ca7-0c59-7113-91f0-709fae57e87b",
+          "status": "final",
+          "verdict": "duplicate",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "incident",
+                "met": true,
+                "reason": "Report names INC-2417 as the open incident already covering the problem."
+              },
+              {
+                "id": "upstream",
+                "met": true,
+                "reason": "Report finds all 861 error spans come from auth-gateway and logs show upstream 503s, so the source is the dependency, not cart-service."
+              },
+              {
+                "id": "nochange",
+                "met": true,
+                "reason": "Report says responders should follow INC-2417, notes no cart-service changes explain the errors, and proposes no separate cart-service fix."
+              }
+            ],
+            "costMicros": 3998
+          },
+          "evidence": [
+            {
+              "calledTool": "datadog__search_datadog_incidents",
+              "passed": true
+            },
+            {
+              "citedURL": "https://app.datadoghq.example/incidents/2417",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 5,
+          "inputTokens": 2119,
+          "outputTokens": 1229,
+          "costMicros": 18394,
+          "durationMs": 10207,
+          "reason": "cart-service errors began at 11:04 and all 861 error spans come from the auth-gateway dependency. Logs show auth-gateway returning 503 on token validation. Active incident INC-2417 (SEV-2, started 11:02) covers auth-gateway token validation failures and lists cart-service as affected. cart-service had no commits and no deploy since 2026-09-16T15:41Z."
+        },
+        {
+          "run": 3,
+          "investigationId": "01a19ca7-343d-7e5e-ae2a-48637ac883be",
+          "status": "final",
+          "verdict": "duplicate",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "incident",
+                "met": true,
+                "reason": "Report names INC-2417 as the open incident already covering this problem."
+              },
+              {
+                "id": "upstream",
+                "met": true,
+                "reason": "Report finds all 861 error spans come from the auth-gateway dependency, with auth-gateway returning 503, and cart-service itself did not change."
+              },
+              {
+                "id": "nochange",
+                "met": true,
+                "reason": "Report says responders should follow INC-2417, and it proposes no separate cart-service fix. It verdicts 'duplicate'."
+              }
+            ],
+            "costMicros": 3842
+          },
+          "evidence": [
+            {
+              "calledTool": "datadog__search_datadog_incidents",
+              "passed": true
+            },
+            {
+              "citedURL": "https://app.datadoghq.example/incidents/2417",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 5,
+          "inputTokens": 4370,
+          "outputTokens": 1974,
+          "costMicros": 31279,
+          "durationMs": 17805,
+          "reason": "cart-service errors began at 11:04, with none before. All 861 error spans come from the auth-gateway child service, and the logs show auth-gateway returning 503 on token validation. Active incident INC-2417 (SEV-2, started 11:02) covers auth-gateway token validation failures and lists cart-service as affected. No cart-service commits in the last hours and no events, so cart-service itself did not change."
+        }
+      ]
+    },
+    {
+      "id": "error-rate-scanner-traffic-false-positive",
+      "title": "Gateway error ratio caused by 404 answers to a vulnerability scanner",
+      "path": "bench/scenarios/public/error-rate-scanner-traffic-false-positive.yaml",
+      "expectedVerdict": "false_positive",
+      "spread": {
+        "runs": 3,
+        "correct": 3,
+        "rootCauseMean": 1,
+        "rootCauseSD": 0,
+        "costUSD": {
+          "min": 0.043629,
+          "median": 0.052598,
+          "max": 0.05768
+        },
+        "durationMs": {
+          "min": 14004.63401,
+          "median": 18205.82369,
+          "max": 24805.418491
+        }
+      },
+      "runs": [
+        {
+          "run": 1,
+          "investigationId": "01a19ca7-79d8-722d-8734-c12c6aec48cb",
+          "status": "final",
+          "verdict": "false_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "scanner",
+                "met": true,
+                "reason": "Report identifies 404s and 400s from two scanner IPs probing /wp-login.php and /.env, not server errors."
+              },
+              {
+                "id": "users",
+                "met": true,
+                "reason": "Says 5xx stayed at 1–3 per 5 minutes, 200s steady, so users are not affected."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Proposes counting only 5xx in the numerator and excluding scanner IPs."
+              }
+            ],
+            "costMicros": 4604
+          },
+          "evidence": [
+            {
+              "calledTool": "elasticsearch__count_logs",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 7,
+          "inputTokens": 5232,
+          "outputTokens": 1639,
+          "costMicros": 52598,
+          "durationMs": 14004,
+          "reason": "The rise from 19:31 is almost all 404s (and some 400s) from two scanner clients probing paths like /wp-login.php and /.env. 5xx stayed at 1–3 per 5 minutes, and 200s held steady at about 5,000 per 5 minutes. The alert counts every status of 400 or more, so scanner traffic pushed it over 10%. No deploy since 2026-09-15. The alert rule could not be fetched from Prometheus."
+        },
+        {
+          "run": 2,
+          "investigationId": "01a19ca7-b08a-727a-822f-89d8aa807053",
+          "status": "final",
+          "verdict": "false_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "scanner",
+                "met": true,
+                "reason": "Report says the rise is 404/400 responses, with 1,241 of 1,267 from two IPs scanning /wp-login.php, /.env, /.git/config."
+              },
+              {
+                "id": "users",
+                "met": true,
+                "reason": "States 5xx stayed flat at 1–3 per 5 min and 200s held steady, so users are not affected."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Proposes counting only 5xx in the error ratio and excluding scanner IPs or user agents."
+              }
+            ],
+            "costMicros": 4868
+          },
+          "evidence": [
+            {
+              "calledTool": "elasticsearch__count_logs",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 10,
+          "inputTokens": 13133,
+          "outputTokens": 2590,
+          "costMicros": 57680,
+          "durationMs": 24805,
+          "reason": "The rise from 19:35 is almost all 404 and 400 responses. 1,241 of 1,267 come from two IPs running a vulnerability scan (/wp-login.php, /.env, /.git/config). 5xx stayed at 1–3 per 5 minutes and 200s held at about 5,000 per 5 minutes. No deploy or commit happened (last deploy was 2026-09-15). The alert rule could not be fetched, so I could not read its expression."
+        },
+        {
+          "run": 3,
+          "investigationId": "01a19ca8-1172-78d0-9344-7ebfbb85d84d",
+          "status": "final",
+          "verdict": "false_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "scanner",
+                "met": true,
+                "reason": "Report identifies 404s (and 400s) from two scanner IPs probing /wp-login.php and /.env, not server errors."
+              },
+              {
+                "id": "users",
+                "met": true,
+                "reason": "States 5xx stayed at 1-3 per 5 minutes and 200s normal, so users are not affected."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Proposes counting only 5xx in the numerator and excluding scanner IPs/user agents."
+              }
+            ],
+            "costMicros": 4834
+          },
+          "evidence": [
+            {
+              "calledTool": "elasticsearch__count_logs",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 10,
+          "inputTokens": 8922,
+          "outputTokens": 2119,
+          "costMicros": 43629,
+          "durationMs": 18205,
+          "reason": "The rise in edge-gateway's ratio of responses with status 400 or more is almost all 404s. Scanner traffic from two IPs probing paths like /wp-login.php and /.env caused them. 5xx stayed at 1-3 per 5 minutes, and 200s held at about 5,000 per 5 minutes. No deploy or commit happened in the preceding hours. The alert counts every status of 400 or more as an error."
+        }
+      ]
+    },
+    {
+      "id": "error-rate-signoz-bad-secret-reference",
+      "title": "Notify worker error rate after a rollout that moved its SMTP settings to another secret",
+      "path": "bench/scenarios/public/error-rate-signoz-bad-secret-reference.yaml",
+      "expectedVerdict": "true_positive",
+      "spread": {
+        "runs": 3,
+        "correct": 3,
+        "rootCauseMean": 1,
+        "rootCauseSD": 0,
+        "costUSD": {
+          "min": 0.040678,
+          "median": 0.041908,
+          "max": 0.078245
+        },
+        "durationMs": {
+          "min": 20003.700237,
+          "median": 21611.162082,
+          "max": 22804.042256
+        }
+      },
+      "runs": [
+        {
+          "run": 1,
+          "investigationId": "01a19ca8-5893-7be7-b872-8af5ea4d9823",
+          "status": "final",
+          "verdict": "true_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "config",
+                "met": true,
+                "reason": "Cause states SMTP_PASSWORD points at secret notify-mail key password, which doesn't exist, so the password is empty and SMTP auth fails."
+              },
+              {
+                "id": "rollout",
+                "met": true,
+                "reason": "Cause explicitly ties it to the 08:29:40Z deploy, revision 42, commit 5a8d3b0."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Proposes rolling back to revision 41 and fixing the secret key or reference."
+              }
+            ],
+            "costMicros": 4768
+          },
+          "evidence": [
+            {
+              "calledTool": "signoz__signoz_search_logs",
+              "passed": true
+            },
+            {
+              "citedURL": "https://github.example.com/quillcart/notify-worker/commit/5a8d3b0",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 5,
+          "inputTokens": 5877,
+          "outputTokens": 2550,
+          "costMicros": 78245,
+          "durationMs": 22804,
+          "reason": "Errors began at 08:31:09, shortly after the 08:29:40Z deploy. They read 'SMTP_PASSWORD is empty (secret notify-mail has no key password)'. They were still occurring at 08:49:58. No other alert or incident covers this."
+        },
+        {
+          "run": 2,
+          "investigationId": "01a19ca8-b1af-773a-a462-fa29d4fa0fda",
+          "status": "final",
+          "verdict": "true_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "config",
+                "met": true,
+                "reason": "Report says secret notify-mail has no password key, causing 'SMTP_PASSWORD is empty' on every send_email."
+              },
+              {
+                "id": "rollout",
+                "met": true,
+                "reason": "Cause explicitly ties to deploy revision 42 at 08:29:40 and commit 5a8d3b0."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Proposes rolling back to revision 41 and adding the password key or fixing the secret reference."
+              }
+            ],
+            "costMicros": 4580
+          },
+          "evidence": [
+            {
+              "calledTool": "signoz__signoz_search_logs",
+              "passed": true
+            },
+            {
+              "citedURL": "https://github.example.com/quillcart/notify-worker/commit/5a8d3b0",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 5,
+          "inputTokens": 5832,
+          "outputTokens": 2446,
+          "costMicros": 40678,
+          "durationMs": 20003,
+          "reason": "Errors begin right after the deploy and match its config change. About 1,900 errors in 25 minutes, still ongoing at 08:49:58. No other alert or incident covers it."
+        },
+        {
+          "run": 3,
+          "investigationId": "01a19ca8-ffd6-79c2-b8d2-7d19a4dd310a",
+          "status": "final",
+          "verdict": "true_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "config",
+                "met": true,
+                "reason": "Report says SMTP_PASSWORD is empty because secret notify-mail has no password key, causing SMTP auth/send failures."
+              },
+              {
+                "id": "rollout",
+                "met": true,
+                "reason": "Report ties the cause to revision 42 deployed at 08:29:40Z and commit 5a8d3b0."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Proposes rolling back to revision 41 and adding the password key or fixing the reference."
+              }
+            ],
+            "costMicros": 4720
+          },
+          "evidence": [
+            {
+              "calledTool": "signoz__signoz_search_logs",
+              "passed": true
+            },
+            {
+              "citedURL": "https://github.example.com/quillcart/notify-worker/commit/5a8d3b0",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 5,
+          "inputTokens": 5897,
+          "outputTokens": 2556,
+          "costMicros": 41908,
+          "durationMs": 21611,
+          "reason": "A deploy at 08:29:40Z pointed SMTP_PASSWORD at secret notify-mail, which has no \"password\" key. All send_email calls have failed with \"SMTP_PASSWORD is empty\" since 08:31:09. The errors were still occurring at 08:49:58. No other alert or incident covers this."
+        }
+      ]
+    },
+    {
+      "id": "flapping-disk-usage-threshold",
+      "title": "Node disk alert that fires and clears around its 85% threshold",
+      "path": "bench/scenarios/public/flapping-disk-usage-threshold.yaml",
+      "expectedVerdict": "flapping",
+      "spread": {
+        "runs": 3,
+        "correct": 3,
+        "rootCauseMean": 1,
+        "rootCauseSD": 0,
+        "costUSD": {
+          "min": 0.024794,
+          "median": 0.024808,
+          "max": 0.04152
+        },
+        "durationMs": {
+          "min": 13403.419612,
+          "median": 14605.993797,
+          "max": 16003.729449
+        }
+      },
+      "runs": [
+        {
+          "run": 1,
+          "investigationId": "01a19ca9-5444-7e79-8b33-fb31c931697d",
+          "status": "final",
+          "verdict": "flapping",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "hover",
+                "met": true,
+                "reason": "Reports usage oscillating 0.83–0.87 every ~20 min around the 0.85 threshold, firing and clearing 22 times in 4h."
+              },
+              {
+                "id": "pressure",
+                "met": true,
+                "reason": "States no DiskPressure, no evictions, node Ready, and no upward trend."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Proposes for: 30m, and raising the threshold to 90%."
+              }
+            ],
+            "costMicros": 4966
+          },
+          "evidence": [
+            {
+              "calledTool": "prometheus__query_range",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 5,
+          "inputTokens": 3530,
+          "outputTokens": 1624,
+          "costMicros": 41520,
+          "durationMs": 14605,
+          "reason": "/var/lib/containerd on worker-17 oscillates between 0.83 and 0.87 every ~20 minutes, around the 0.85 threshold. Image garbage collection frees about 2 GiB each cycle. The rule has for: 0m and no hysteresis, so it fired and cleared 22 times in 4 hours. There is no upward trend, no DiskPressure and no evictions. I did not check for recent deploys or config changes, because no tool here shows them."
+        },
+        {
+          "run": 2,
+          "investigationId": "01a19ca9-8d58-7a2c-ab8a-8f8ee5e7d5be",
+          "status": "final",
+          "verdict": "flapping",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "hover",
+                "met": true,
+                "reason": "Report states usage oscillates between 0.83 and 0.87 every 20 minutes around the 0.85 threshold, with the alert changing state 22 times."
+              },
+              {
+                "id": "pressure",
+                "met": true,
+                "reason": "Report states the node has no DiskPressure, no cordon and no evictions."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Proposes `for: 30m` or longer and raising the threshold to about 90%."
+              }
+            ],
+            "costMicros": 4892
+          },
+          "evidence": [
+            {
+              "calledTool": "prometheus__query_range",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 5,
+          "inputTokens": 3548,
+          "outputTokens": 1569,
+          "costMicros": 24808,
+          "durationMs": 16003,
+          "reason": "Usage of /var/lib/containerd on worker-17 oscillates between 0.83 and 0.87 every 20 minutes. It is a steady sawtooth with no upward trend. The rule has `for: 0m` and a threshold of 0.85, which sits inside that range. The alert changed state 22 times in 4 hours. Kubelet image garbage collection frees about 2 GiB every 20 minutes. The node has no DiskPressure, and no evictions were reported. I found no sign of impact. I could not check recent deploys, because no tool here shows them."
+        },
+        {
+          "run": 3,
+          "investigationId": "01a19ca9-cbe1-7d8e-868b-a02b0b2a0e1a",
+          "status": "final",
+          "verdict": "flapping",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "hover",
+                "met": true,
+                "reason": "Report states usage oscillates between 0.83 and 0.87 on a ~20-minute cycle around the 0.85 threshold, firing and clearing 22 times."
+              },
+              {
+                "id": "pressure",
+                "met": true,
+                "reason": "Report states the node is Ready with DiskPressure False and no sustained growth."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Proposes for: 30m, raising the threshold to 0.90, and hysteresis with different firing and clearing levels."
+              }
+            ],
+            "costMicros": 5244
+          },
+          "evidence": [
+            {
+              "calledTool": "prometheus__query_range",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 4,
+          "inputTokens": 3211,
+          "outputTokens": 1635,
+          "costMicros": 24794,
+          "durationMs": 13403,
+          "reason": "Usage on /var/lib/containerd on worker-17 oscillates between 0.83 and 0.87 on a roughly 20-minute cycle, with no upward trend. The rule uses a fixed 0.85 threshold with for: 0m, so every swing across 0.85 fires and clears the alert. It changed state 22 times in 4 hours. The node is Ready with no DiskPressure. I did not check for recent changes: no tool available shows deploys or config changes for this node, and the 4-hour cycle looks steady."
+        }
+      ]
+    },
+    {
+      "id": "inconclusive-metrics-gap",
+      "title": "Queue lag alert whose metrics have a gap and whose pods look healthy",
+      "path": "bench/scenarios/public/inconclusive-metrics-gap.yaml",
+      "expectedVerdict": "inconclusive",
+      "spread": {
+        "runs": 3,
+        "correct": 3,
+        "rootCauseMean": 0.8666666666666667,
+        "rootCauseSD": 0.11547005383792512,
+        "costUSD": {
+          "min": 0.042228,
+          "median": 0.059534,
+          "max": 0.078211
+        },
+        "durationMs": {
+          "min": 20804.66615,
+          "median": 24403.343344,
+          "max": 27604.936762
+        }
+      },
+      "runs": [
+        {
+          "run": 1,
+          "investigationId": "01a19caa-003f-7d8d-a539-fa9e022c69ed",
+          "status": "final",
+          "verdict": "inconclusive",
+          "confidence": "low",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 0.8,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "gap",
+                "met": true,
+                "reason": "Report says Prometheus returned no series/data and queue and webhook series are stale, so the 7-minute lag could not be confirmed."
+              },
+              {
+                "id": "nocause",
+                "met": true,
+                "reason": "Verdict is inconclusive; a consumer stall or slow downstream is explicitly said to be neither ruled out nor confirmed, so no cause is stated as fact."
+              },
+              {
+                "id": "next",
+                "met": false,
+                "reason": "The report does not say what would settle it, such as restoring the scrape or reading the queue directly. It only lists what could not be checked."
+              }
+            ],
+            "costMicros": 4328
+          },
+          "evidence": [
+            {
+              "calledTool": "prometheus__query_range",
+              "passed": false
+            }
+          ],
+          "evidenceScore": 0,
+          "sourcesReported": null,
+          "toolCalls": 13,
+          "inputTokens": 11767,
+          "outputTokens": 2646,
+          "costMicros": 78211,
+          "durationMs": 24403,
+          "reason": "Queue lag, traffic and error metrics were not available: Prometheus returned no series for the service, no rule for WebhookQueueLagHigh, and no alerts. I could not confirm the 7-minute lag or whether it is still bad. What I did see: the dispatch/webhook-dispatcher deployment has 6 of 6 pods ready, no pod problems, and no change since 2026-09-10. GitHub shows no commits since 15:00Z. No other open alert or incident covers this. A real consumer stall or a slow downstream endpoint could not be ruled out or confirmed."
+        },
+        {
+          "run": 2,
+          "investigationId": "01a19caa-5f97-7b74-b926-11b710ec0e78",
+          "status": "final",
+          "verdict": "inconclusive",
+          "confidence": "low",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "gap",
+                "met": true,
+                "reason": "Report says Prometheus returned no data for webhook-dispatcher, with stale `up`, so queue lag could not be confirmed."
+              },
+              {
+                "id": "nocause",
+                "met": true,
+                "reason": "Verdict is inconclusive. It states no specific cause as fact and says no recent change explains the lag."
+              },
+              {
+                "id": "next",
+                "met": true,
+                "reason": "The fix says to find out why Prometheus has no series, then check the current queue lag and throughput. That means restoring the scrape."
+              }
+            ],
+            "costMicros": 4172
+          },
+          "evidence": [
+            {
+              "calledTool": "prometheus__query_range",
+              "passed": false
+            }
+          ],
+          "evidenceScore": 0,
+          "sourcesReported": null,
+          "toolCalls": 13,
+          "inputTokens": 11582,
+          "outputTokens": 3073,
+          "costMicros": 59534,
+          "durationMs": 27604,
+          "reason": "I could not see the queue lag metric, so I can't tell whether the lag is still high or whether it hurt users. Prometheus returned no data for webhook-dispatcher: no alert, no rule, no series, and stale `up`. The cluster looks healthy. All 6 pods in dispatch are ready, with no restarts or events. The image has not changed since 2026-09-10, and there are no commits or PRs in the window, so no recent change explains the lag."
+        },
+        {
+          "run": 3,
+          "investigationId": "01a19caa-cb72-743c-baed-07cde1d233fc",
+          "status": "final",
+          "verdict": "inconclusive",
+          "confidence": "low",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 0.8,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "gap",
+                "met": true,
+                "reason": "Report says Prometheus returned no data for the alert rule and any queue/webhook series, so lag could not be confirmed."
+              },
+              {
+                "id": "nocause",
+                "met": true,
+                "reason": "Verdict inconclusive; possible causes are listed only as hypotheticals ('could come from'), no specific cause stated as fact."
+              },
+              {
+                "id": "next",
+                "met": false,
+                "reason": "Report does not say what would settle it, such as restoring the scrape or reading the queue directly; it only notes a possibly wrong pod name."
+              }
+            ],
+            "costMicros": 4432
+          },
+          "evidence": [
+            {
+              "calledTool": "prometheus__query_range",
+              "passed": false
+            }
+          ],
+          "evidenceScore": 0,
+          "sourcesReported": null,
+          "toolCalls": 13,
+          "inputTokens": 8309,
+          "outputTokens": 2091,
+          "costMicros": 42228,
+          "durationMs": 20804,
+          "reason": "I could not see the queue lag, throughput or error data, so I cannot say whether the lag is still high or whether webhooks are being delayed. Prometheus returned no data for the alert rule, active alerts, and any webhook or queue series. Pod logs and namespace events also returned nothing. I may have used the wrong pod name for the logs. What I did see: nothing changed recently, and the workload looks healthy. The deployment has been on the same image since the 2026-09-10 deploy, with no commits or deploys since. All 6 of 6 pods in the dispatch namespace are ready, with no restarts or crash loops. The lag is therefore not explained by a deploy or by pod health. It could come from a slow downstream webhook receiver, a traffic burst, or a stalled consumer."
+        }
+      ]
+    },
+    {
+      "id": "known-issue-linear-export-timeout",
+      "title": "Report export timeouts that a Linear issue already tracks",
+      "path": "bench/scenarios/public/known-issue-linear-export-timeout.yaml",
+      "expectedVerdict": "known_issue",
+      "spread": {
+        "runs": 3,
+        "correct": 3,
+        "rootCauseMean": 0.9166666666666666,
+        "rootCauseSD": 0.14433756729740646,
+        "costUSD": {
+          "min": 0.029494,
+          "median": 0.031602,
+          "max": 0.042712
+        },
+        "durationMs": {
+          "min": 12408.833703,
+          "median": 15805.354421,
+          "max": 17202.625553
+        }
+      },
+      "runs": [
+        {
+          "run": 1,
+          "investigationId": "01a19cab-1cc4-737e-ad30-9665230b9137",
+          "status": "final",
+          "verdict": "known_issue",
+          "confidence": "medium",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "ticket",
+                "met": true,
+                "reason": "Report names QC-1182 as the open issue tracking this failure."
+              },
+              {
+                "id": "size",
+                "met": true,
+                "reason": "States QC-1182 covers exports over ~50k rows hitting the 10 minute limit and that the timeouts match it, though it says it couldn't confirm the failing jobs were large."
+              },
+              {
+                "id": "nochange",
+                "met": true,
+                "reason": "Says there were no commits since 2026-09-20, so no recent change explains the alert, and the summary says nothing recent changed."
+              }
+            ],
+            "costMicros": 4120
+          },
+          "evidence": [
+            {
+              "citedURL": "https://linear.example.com/quillcart/issue/QC-1182",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 6,
+          "inputTokens": 3070,
+          "outputTokens": 1158,
+          "costMicros": 42712,
+          "durationMs": 12408,
+          "reason": "The alert says 6 report-exporter jobs hit the 10 minute limit. QC-1182 is open and describes this failure: exports over about 50k rows are built in memory and hit the 10 minute limit. A streaming-export fix is planned for Q4. There were no commits to the repository since 2026-09-20, so no recent change explains why it fired now. Prometheus returned no data for the rule, active alerts or service series, so I could not confirm that the failing jobs were large exports."
+        },
+        {
+          "run": 2,
+          "investigationId": "01a19cab-4d30-7839-b3d0-6899cfe46c3f",
+          "status": "final",
+          "verdict": "known_issue",
+          "confidence": "medium",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "ticket",
+                "met": true,
+                "reason": "Report names QC-1182 as the known ticket describing the same failure."
+              },
+              {
+                "id": "size",
+                "met": true,
+                "reason": "Report states QC-1182 covers exports over about 50k rows hitting the 10 minute limit, though it admits it could not confirm the failing jobs were large. It still ties the failure to large exports."
+              },
+              {
+                "id": "nochange",
+                "met": true,
+                "reason": "Report says no commits since 2026-09-20, so no recent change explains the alert."
+              }
+            ],
+            "costMicros": 3972
+          },
+          "evidence": [
+            {
+              "citedURL": "https://linear.example.com/quillcart/issue/QC-1182",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 6,
+          "inputTokens": 5516,
+          "outputTokens": 1687,
+          "costMicros": 31602,
+          "durationMs": 15805,
+          "reason": "The alert reports 6 report-exporter jobs hitting the 10 minute limit in the last hour. QC-1182 (Backlog, P3, known-issue) describes the same failure: exports over about 50k rows build the file in memory and hit the 10 minute limit. The fix is a streaming export planned for Q4. No commits to report-exporter since 2026-09-20 explain why it fired now. Prometheus returned no data for the alert rule, the service's series or current alerts, so I could not confirm that the failing jobs were large exports. I could not check traffic either."
+        },
+        {
+          "run": 3,
+          "investigationId": "01a19cab-8afa-7298-8ae1-a52221710599",
+          "status": "final",
+          "verdict": "known_issue",
+          "confidence": "medium",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 0.75,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "ticket",
+                "met": true,
+                "reason": "Report names QC-1182 as the open known issue matching the timeouts."
+              },
+              {
+                "id": "size",
+                "met": false,
+                "reason": "Report describes QC-1182 as covering exports over ~50k rows but explicitly says it could not confirm the timed-out jobs were the large exports."
+              },
+              {
+                "id": "nochange",
+                "met": true,
+                "reason": "Report states no commits to report-exporter in the day before the alert, so no recent change explains it."
+              }
+            ],
+            "costMicros": 3658
+          },
+          "evidence": [
+            {
+              "citedURL": "https://linear.example.com/quillcart/issue/QC-1182",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 6,
+          "inputTokens": 5372,
+          "outputTokens": 1505,
+          "costMicros": 29494,
+          "durationMs": 17202,
+          "reason": "The alert says 6 report-exporter jobs hit the 10 minute limit in the last hour. QC-1182 is open (Backlog, P3) and describes exports over about 50k rows hitting that same limit. Its fix is a streaming export planned for Q4. No commits were made to report-exporter in the day before the alert, so nothing recent explains why it fired now. No Prometheus data was available, so I could not confirm that the timed-out jobs were the large exports."
+        }
+      ]
+    },
+    {
+      "id": "latency-ledger-index-dropped",
+      "title": "Ledger API p99 latency after a migration replaced an index with a partial one",
+      "path": "bench/scenarios/public/latency-ledger-index-dropped.yaml",
+      "expectedVerdict": "true_positive",
+      "spread": {
+        "runs": 3,
+        "correct": 3,
+        "rootCauseMean": 1,
+        "rootCauseSD": 0,
+        "costUSD": {
+          "min": 0.028237,
+          "median": 0.045612,
+          "max": 0.06849
+        },
+        "durationMs": {
+          "min": 15803.88038,
+          "median": 20404.025258,
+          "max": 24204.627067
+        }
+      },
+      "runs": [
+        {
+          "run": 1,
+          "investigationId": "01a19cab-ce27-7ecc-ab8f-d51c703434ce",
+          "status": "final",
+          "verdict": "true_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "index",
+                "met": true,
+                "reason": "Report states migration 0087 dropped the full account_id index on ledger_entries, leaving only a partial open index, so the settled-entries query scans the table."
+              },
+              {
+                "id": "change",
+                "met": true,
+                "reason": "Cause explicitly cites migration 0087, commit 9c41e7d, deploy run 5521 at 14:18Z."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Proposes recreating the full account_id index or reverting migration 0087/commit 9c41e7d."
+              }
+            ],
+            "costMicros": 5304
+          },
+          "evidence": [
+            {
+              "calledTool": "github__list_commits",
+              "passed": true
+            },
+            {
+              "citedURL": "https://github.example.com/quillcart/ledger-api/commit/9c41e7d",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 7,
+          "inputTokens": 6910,
+          "outputTokens": 2931,
+          "costMicros": 68490,
+          "durationMs": 24204,
+          "reason": "Deploy run 5521 ran migration 0087 at 14:18Z. The alert began at 14:21Z. pg_stat_statements shows the settled-entries query at mean 1480 ms with about 98k block reads. I did not check request rate. Prometheus returned no data for the alert rule, so I could not read its definition."
+        },
+        {
+          "run": 2,
+          "investigationId": "01a19cac-2cb8-7d22-9184-b25cc79e86ce",
+          "status": "final",
+          "verdict": "true_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "index",
+                "met": true,
+                "reason": "Report says migration 0087 replaced the full account_id index on ledger_entries with a partial open-only index, so the settled query can't use it and scans heavily."
+              },
+              {
+                "id": "change",
+                "met": true,
+                "reason": "Report names commit 9c41e7d, deploy 5521 at 14:18:40Z, and migration 0087."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Proposes recreating the original full account_id index and reverting migration 0087."
+              }
+            ],
+            "costMicros": 5378
+          },
+          "evidence": [
+            {
+              "calledTool": "github__list_commits",
+              "passed": true
+            },
+            {
+              "citedURL": "https://github.example.com/quillcart/ledger-api/commit/9c41e7d",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 7,
+          "inputTokens": 3606,
+          "outputTokens": 1831,
+          "costMicros": 28237,
+          "durationMs": 15803,
+          "reason": "Deploy 5521 (commit 9c41e7d, 14:18:40Z) ran migration 0087 before rollout. It dropped the full account_id index on ledger_entries and replaced it with a partial index WHERE status='open'. The entries query filters status='settled', so it can't use the new index. Since the stats reset at 14:19:02Z, that query has averaged 1480 ms (max 5.1 s) over 81k calls, with about 98k shared reads. The alert started at 14:21Z. I couldn't read the alert rule or the current alert list (no data). No open incident or ticket was found."
+        },
+        {
+          "run": 3,
+          "investigationId": "01a19cac-6a80-7dc7-bf13-b47e26c8b714",
+          "status": "final",
+          "verdict": "true_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "index",
+                "met": true,
+                "reason": "Report says migration 0087 dropped the full account_id index on ledger_entries, replaced by a partial open-only index, so settled-entries queries lack a usable index and scan heavily."
+              },
+              {
+                "id": "change",
+                "met": true,
+                "reason": "Cites migration 0087, commit 9c41e7d, deploy run 5521 at 14:18Z."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Proposes recreating the full account_id index concurrently and reverting or amending migration 0087."
+              }
+            ],
+            "costMicros": 5158
+          },
+          "evidence": [
+            {
+              "calledTool": "github__list_commits",
+              "passed": true
+            },
+            {
+              "citedURL": "https://github.example.com/quillcart/ledger-api/commit/9c41e7d",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 7,
+          "inputTokens": 6891,
+          "outputTokens": 2821,
+          "costMicros": 45612,
+          "durationMs": 20404,
+          "reason": "Deploy run 5521 (14:18Z) ran migration 0087 from commit 9c41e7d. It dropped the full account_id index on ledger_entries and replaced it with a partial index WHERE status='open'. The entries query filters status='settled', so it can't use the new index. Slow-query stats (reset 14:19Z) show that query at 81k calls, mean 1480 ms, max 5.1 s, with about 98k block reads. This matches the p99 breach starting at 14:21Z. I found no other open alert or incident covering it. Prometheus rule and alert lookups returned no data, and I did not check request rate or traces."
+        }
+      ]
+    },
+    {
+      "id": "latency-low-traffic-false-positive",
+      "title": "Catalog search p95 latency at night on almost no traffic",
+      "path": "bench/scenarios/public/latency-low-traffic-false-positive.yaml",
+      "expectedVerdict": "false_positive",
+      "spread": {
+        "runs": 3,
+        "correct": 3,
+        "rootCauseMean": 1,
+        "rootCauseSD": 0,
+        "costUSD": {
+          "min": 0.026758,
+          "median": 0.026854,
+          "max": 0.045695
+        },
+        "durationMs": {
+          "min": 14404.63743,
+          "median": 17404.252438,
+          "max": 17404.810308
+        }
+      },
+      "runs": [
+        {
+          "run": 1,
+          "investigationId": "01a19cac-ba39-7b9e-a05d-6f7878fb8932",
+          "status": "final",
+          "verdict": "false_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "volume",
+                "met": true,
+                "reason": "Report states overnight traffic is about 6 requests a minute (0.1 req/s) and that a few slow requests move the p95."
+              },
+              {
+                "id": "pattern",
+                "met": true,
+                "reason": "Report notes the same rise occurred every night for 7 nights and that no deploy or commit changed anything."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Proposes a minimum request rate condition and a longer for duration or rate window."
+              }
+            ],
+            "costMicros": 4884
+          },
+          "evidence": [
+            {
+              "calledTool": "prometheus__query_range",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 6,
+          "inputTokens": 3553,
+          "outputTokens": 1746,
+          "costMicros": 45695,
+          "durationMs": 17404,
+          "reason": "The p95 rise happens only in the overnight low-traffic window (about 0.1 req/s, roughly 6 requests a minute at 03:20). The same rise (0.9 to 2.1s for 10 to 25 minutes) occurred every night between 02:30 and 04:00 for 7 nights. No deploy or commit explains it, and daytime p95 is 0.18 to 0.31s at 60 to 95 req/s."
+        },
+        {
+          "run": 2,
+          "investigationId": "01a19cac-fe2e-7093-80a7-b50adab5ffcc",
+          "status": "final",
+          "verdict": "false_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "volume",
+                "met": true,
+                "reason": "Report states traffic is about 6 req/min at night, so a handful of slow requests push p95 above 1s."
+              },
+              {
+                "id": "pattern",
+                "met": true,
+                "reason": "Report notes the same rise occurred every night for the last 7 nights with no deploy or commit change."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Proposes a minimum request rate condition and raising the for duration or using a longer rate window."
+              }
+            ],
+            "costMicros": 4850
+          },
+          "evidence": [
+            {
+              "calledTool": "prometheus__query_range",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 6,
+          "inputTokens": 3541,
+          "outputTokens": 1733,
+          "costMicros": 26758,
+          "durationMs": 14404,
+          "reason": "The p95 rise at 03:14 happens in a nightly window when traffic is about 0.1 req/s (6 per minute). The same rise (0.9 to 2.1s, 10 to 25 minutes) occurred every night between 02:30 and 04:00 for the last 7 nights. There was no commit and no deploy since 2026-09-12. Daytime p95 is 0.18 to 0.31s at 60 to 95 req/s, so users are not affected."
+        },
+        {
+          "run": 3,
+          "investigationId": "01a19cad-3680-7438-a8c4-0e61dabd2eb6",
+          "status": "final",
+          "verdict": "false_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "volume",
+                "met": true,
+                "reason": "Report states traffic is about 6 req/min at night versus 60–95 req/s by day, and that a few slow requests move the p95."
+              },
+              {
+                "id": "pattern",
+                "met": true,
+                "reason": "Report notes the same rise on each of the last 7 nights and that there were no deploys or commits."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Proposes a minimum request rate condition in the expression and a longer for duration or evaluation window."
+              }
+            ],
+            "costMicros": 5030
+          },
+          "evidence": [
+            {
+              "calledTool": "prometheus__query_range",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 6,
+          "inputTokens": 3499,
+          "outputTokens": 1751,
+          "costMicros": 26854,
+          "durationMs": 17404,
+          "reason": "The p95 for catalog-search GET /v1/search reached 1.8s at 03:20. Traffic then was about 0.1 req/s (6 req/min), against 60–95 req/s by day. The same rise (0.9–2.1s for 10–25 min) happened every night between 02:30 and 04:00 for the last 7 nights. There were no commits and no deploys since 2026-09-12. Daytime p95 is 0.18–0.31s, so users are not affected. I did not check traces, so the cause of the slowness at low volume is unconfirmed. It could be cold caches or a nightly batch job."
+        }
+      ]
+    },
+    {
+      "id": "sentry-regression-after-release",
+      "title": "Invoice API exception that first appeared in a release that made billing addresses optional",
+      "path": "bench/scenarios/public/sentry-regression-after-release.yaml",
+      "expectedVerdict": "true_positive",
+      "spread": {
+        "runs": 3,
+        "correct": 3,
+        "rootCauseMean": 1,
+        "rootCauseSD": 0,
+        "costUSD": {
+          "min": 0.045016,
+          "median": 0.046726,
+          "max": 0.093765
+        },
+        "durationMs": {
+          "min": 22202.889296,
+          "median": 24603.672926,
+          "max": 26605.268288
+        }
+      },
+      "runs": [
+        {
+          "run": 1,
+          "investigationId": "01a19cad-7a81-742a-be21-03a76d03e086",
+          "status": "final",
+          "verdict": "true_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "cause",
+                "met": true,
+                "reason": "Report says renderInvoice (render.ts:88) dereferences customer.billing.taxId, throwing TypeErrors for customers without a billing address."
+              },
+              {
+                "id": "release",
+                "met": true,
+                "reason": "Ties the failure to release 2026.9.18+3c7d9b2, which made Customer.billing optional."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Proposes rolling back to the previous release and using customer.billing?.taxId in render.ts."
+              }
+            ],
+            "costMicros": 4798
+          },
+          "evidence": [
+            {
+              "citedURL": "https://sentry.example.com/organizations/quillcart/issues/4821937/",
+              "passed": true
+            },
+            {
+              "citedURL": "https://github.example.com/quillcart/invoice-api/commit/3c7d9b2",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 5,
+          "inputTokens": 10170,
+          "outputTokens": 3320,
+          "costMicros": 93765,
+          "durationMs": 26605,
+          "reason": "Release 2026.9.18+3c7d9b2 was deployed at 09:38Z. It made Customer.billing optional, but renderInvoice (render.ts:88) still reads customer.billing.taxId without a guard. The error first appeared at 09:41Z and has 1,284 events, almost all on free-plan customers. The earlier release has no such error. I found no other open incident or ticket covering it; INVOICE-API-4F is the alert's own source issue. I had no incident or ticket tool, so I only checked Sentry and GitHub."
+        },
+        {
+          "run": 2,
+          "investigationId": "01a19cad-e273-705d-b601-1d052caa8f4e",
+          "status": "final",
+          "verdict": "true_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "cause",
+                "met": true,
+                "reason": "Report says renderInvoice at render.ts:88 reads customer.billing.taxId unguarded and throws TypeErrors for customers with no billing address."
+              },
+              {
+                "id": "release",
+                "met": true,
+                "reason": "Ties the regression to release 2026.9.18+3c7d9b2, which made Customer.billing optional."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Proposes rolling back and guarding with customer.billing?.taxId in renderInvoice."
+              }
+            ],
+            "costMicros": 4644
+          },
+          "evidence": [
+            {
+              "citedURL": "https://sentry.example.com/organizations/quillcart/issues/4821937/",
+              "passed": true
+            },
+            {
+              "citedURL": "https://github.example.com/quillcart/invoice-api/commit/3c7d9b2",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 5,
+          "inputTokens": 7014,
+          "outputTokens": 2544,
+          "costMicros": 45016,
+          "durationMs": 22202,
+          "reason": "Regression from release invoice-api@2026.9.18+3c7d9b2, deployed 09:38Z. The error began at 09:41Z, appears in no earlier release, and has 1,284 events, mostly on free plans. I found no other open incident or ticket covering it (only the alert's own Sentry issue). I did not check whether errors are still occurring now."
+        },
+        {
+          "run": 3,
+          "investigationId": "01a19cae-3932-788b-bc29-2dc03ba3d39e",
+          "status": "final",
+          "verdict": "true_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "cause",
+                "met": true,
+                "reason": "Report names the TypeError on 'taxId' in renderInvoice (render.ts:88) reading customer.billing.taxId for customers with no billing address."
+              },
+              {
+                "id": "release",
+                "met": true,
+                "reason": "Report ties the regression to release 2026.9.18 and commit 3c7d9b2, which made Customer.billing optional."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Proposes customer.billing?.taxId in renderInvoice and rolling back to the previous release."
+              }
+            ],
+            "costMicros": 4916
+          },
+          "evidence": [
+            {
+              "citedURL": "https://sentry.example.com/organizations/quillcart/issues/4821937/",
+              "passed": true
+            },
+            {
+              "citedURL": "https://github.example.com/quillcart/invoice-api/commit/3c7d9b2",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 5,
+          "inputTokens": 7079,
+          "outputTokens": 2702,
+          "costMicros": 46726,
+          "durationMs": 24603,
+          "reason": "Regression from release 2026.9.18+3c7d9b2 (deployed 09:38Z). 1,284 errors began at 09:41Z, with none in earlier releases. I found no open incident or ticket covering it; the only matching issue is the alert's own source issue."
+        }
+      ]
+    },
+    {
+      "id": "service-down-oom-after-limit-change",
+      "title": "Media resizer down after a deploy cut its memory limit to 256Mi",
+      "path": "bench/scenarios/public/service-down-oom-after-limit-change.yaml",
+      "expectedVerdict": "true_positive",
+      "spread": {
+        "runs": 3,
+        "correct": 3,
+        "rootCauseMean": 1,
+        "rootCauseSD": 0,
+        "costUSD": {
+          "min": 0.039866,
+          "median": 0.044885,
+          "max": 0.053096
+        },
+        "durationMs": {
+          "min": 19206.198242,
+          "median": 19405.744089,
+          "max": 28406.592308
+        }
+      },
+      "runs": [
+        {
+          "run": 1,
+          "investigationId": "01a19cae-9953-7d59-8dd4-0d8a6621145d",
+          "status": "final",
+          "verdict": "true_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "oom",
+                "met": true,
+                "reason": "Report states all 4 pods are OOMKilled (exit 137) and in CrashLoopBackOff, causing the outage."
+              },
+              {
+                "id": "limit",
+                "met": true,
+                "reason": "Report ties the OOMs to revision 9 / commit f3b8a21 cutting the memory limit from 1Gi to 256Mi."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "First fix is rolling back to revision 8 (kubectl rollout undo) or reverting f3b8a21, restoring the 1Gi limit."
+              }
+            ],
+            "costMicros": 4964
+          },
+          "evidence": [
+            {
+              "calledTool": "k8s__list_pod_problems",
+              "passed": true
+            },
+            {
+              "citedURL": "https://github.example.com/quillcart/media-resizer/commit/f3b8a21",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 5,
+          "inputTokens": 5976,
+          "outputTokens": 2416,
+          "costMicros": 44885,
+          "durationMs": 19405,
+          "reason": "All 4 media-resizer pods are OOMKilled (exit 137) and in CrashLoopBackOff. Revision 9 (07:58Z, from commit f3b8a21) cut the memory limit from 1Gi to 256Mi. The sizing was based on average use, and large images were not counted. The alert started at 08:09Z. No other open alert covers this."
+        },
+        {
+          "run": 2,
+          "investigationId": "01a19cae-e51d-7e3e-84a7-19e4b49b49d2",
+          "status": "final",
+          "verdict": "true_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "oom",
+                "met": true,
+                "reason": "Report states all 4 pods are OOMKilled (exit 137) and in CrashLoopBackOff, causing the service to be down."
+              },
+              {
+                "id": "limit",
+                "met": true,
+                "reason": "Report ties it to commit f3b8a21 and revision 9 lowering the memory limit from 1Gi to 256Mi."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "First fix is rollout undo to revision 8 or reverting f3b8a21, restoring the 1Gi limit."
+              }
+            ],
+            "costMicros": 4758
+          },
+          "evidence": [
+            {
+              "calledTool": "k8s__list_pod_problems",
+              "passed": true
+            },
+            {
+              "citedURL": "https://github.example.com/quillcart/media-resizer/commit/f3b8a21",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 5,
+          "inputTokens": 6028,
+          "outputTokens": 2401,
+          "costMicros": 39866,
+          "durationMs": 19206,
+          "reason": "All 4 media-resizer pods are OOMKilled and in CrashLoopBackOff. Revision 9 (07:58Z) lowered the memory limit from 1Gi to 256Mi, and the alert started at 08:09Z. The alert list returned no data, so no other open alert covers this."
+        },
+        {
+          "run": 3,
+          "investigationId": "01a19caf-302e-79b5-8360-aada9a03773a",
+          "status": "final",
+          "verdict": "true_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "oom",
+                "met": true,
+                "reason": "Report states all 4 pods are OOMKilled (exit 137) and in CrashLoopBackOff, making the service down."
+              },
+              {
+                "id": "limit",
+                "met": true,
+                "reason": "Report links the OOM kills to the memory limit cut from 1Gi to 256Mi in revision 9 and commit f3b8a21."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "First fix is to roll back to revision 8 (kubectl rollout undo) or revert f3b8a21 to restore the 1Gi limit."
+              }
+            ],
+            "costMicros": 4998
+          },
+          "evidence": [
+            {
+              "calledTool": "k8s__list_pod_problems",
+              "passed": true
+            },
+            {
+              "citedURL": "https://github.example.com/quillcart/media-resizer/commit/f3b8a21",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": null,
+          "toolCalls": 7,
+          "inputTokens": 10223,
+          "outputTokens": 2695,
+          "costMicros": 53096,
+          "durationMs": 28406,
+          "reason": "media-resizer is fully down: 0 of 4 replicas ready, all pods OOMKilled and in CrashLoopBackOff. Revision 9 (07:58Z) lowered the memory limit from 1Gi to 256Mi, and the crashes began right after. No other open alert covers this."
+        }
+      ]
+    },
+    {
+      "id": "service-down-planned-maintenance",
+      "title": "Search indexer down because it was scaled to zero for a planned reindex",
+      "path": "bench/scenarios/public/service-down-planned-maintenance.yaml",
+      "expectedVerdict": "false_positive",
+      "spread": {
+        "runs": 3,
+        "correct": 3,
+        "rootCauseMean": 1,
+        "rootCauseSD": 0,
+        "costUSD": {
+          "min": 0.033504,
+          "median": 0.041542,
+          "max": 0.047149
+        },
+        "durationMs": {
+          "min": 16804.205406,
+          "median": 17003.704328,
+          "max": 23006.311085
+        }
+      },
+      "runs": [
+        {
+          "run": 1,
+          "investigationId": "01a19caf-9f2a-766e-8ae0-f5ab59bcef01",
+          "status": "final",
+          "verdict": "false_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "intent",
+                "met": true,
+                "reason": "Report concludes false positive: deployment deliberately scaled to 0 for the planned reindex maintenance window, not a crash."
+              },
+              {
+                "id": "source",
+                "met": true,
+                "reason": "Cites the 01:58 scale-down and the maintenance window. It names commit d8e41b7 rather than PR 318, but the 01:58 scale change is accepted as the source."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Proposes muting or silencing the alert for the maintenance window and automatic downtime creation by maintenance-bot."
+              }
+            ],
+            "costMicros": 5308
+          },
+          "evidence": [
+            {
+              "calledTool": "k8s__get_workload",
+              "passed": true
+            },
+            {
+              "citedURL": "https://github.example.com/quillcart/search-indexer/pull/318",
+              "passed": false
+            }
+          ],
+          "evidenceScore": 0.5,
+          "sourcesReported": null,
+          "toolCalls": 7,
+          "inputTokens": 3571,
+          "outputTokens": 1959,
+          "costMicros": 47149,
+          "durationMs": 16804,
+          "reason": "search-indexer was scaled to 0 on purpose at 01:58:03Z by maintenance-bot. The Deployment carries a maintenance annotation for 02:00Z–04:00Z (full reindex of catalog-v3). Commit d8e41b7, \"Scale search-indexer to zero during the reindex window\", was made the day before. No pod problems or crash events exist, and the last rollout revision (17, 2026-09-12) is unchanged. I did not check traffic or error data. The indexer is a background service, and the zero count is a planned scale-down, not a failure."
+        },
+        {
+          "run": 2,
+          "investigationId": "01a19caf-e0d2-7629-99e3-5c08f11c7f7c",
+          "status": "final",
+          "verdict": "false_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "intent",
+                "met": true,
+                "reason": "Report concludes the indexer was intentionally scaled to zero for a planned reindex maintenance window, a false positive and not a crash."
+              },
+              {
+                "id": "source",
+                "met": true,
+                "reason": "Cites the 01:58:03Z scale from 3 to 0 by maintenance-bot as the cause, plus commit d8e41b7 and the annotation. It does not name PR 318, but the rubric accepts the 01:58 scale change."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Proposes muting or suppressing the alert during the maintenance window, and creating a downtime when the maintenance process scales the deployment."
+              }
+            ],
+            "costMicros": 5168
+          },
+          "evidence": [
+            {
+              "calledTool": "k8s__get_workload",
+              "passed": true
+            },
+            {
+              "citedURL": "https://github.example.com/quillcart/search-indexer/pull/318",
+              "passed": false
+            }
+          ],
+          "evidenceScore": 0.5,
+          "sourcesReported": null,
+          "toolCalls": 5,
+          "inputTokens": 5794,
+          "outputTokens": 2693,
+          "costMicros": 41542,
+          "durationMs": 23006,
+          "reason": "search-indexer has 0 desired replicas because maintenance-bot scaled it from 3 to 0 at 01:58:03Z. Three sources agree on the plan: the deployment's maintenance annotation (02:00-04:00Z, full reindex of catalog-v3), commit d8e41b7 \"Scale search-indexer to zero during the reindex window\", and the rollout history. There are no crashing pods and no image or rollout change since 09-12. The indexer is a background component and was taken down on purpose. I had no traffic or error data, so \"no user impact\" rests on the planned scale-down. The monitor was not silenced for the window."
+        },
+        {
+          "run": 3,
+          "investigationId": "01a19cb0-3aaa-7f11-839b-0fb8e44c2e59",
+          "status": "final",
+          "verdict": "false_positive",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "intent",
+                "met": true,
+                "reason": "Report concludes the service was deliberately scaled to zero for the planned 02:00–04:00Z reindex, a false positive and not an outage."
+              },
+              {
+                "id": "source",
+                "met": true,
+                "reason": "Cites the 01:58 scale from 3 to 0 by maintenance-bot, a maintenance annotation and the prior-day commit. It doesn't name PR 318, but the 01:58 scale change is accepted as the source."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "Prevention proposes muting the alert during maintenance windows, keyed on the annotation or a scheduled downtime. It also proposes that maintenance-bot create a silence."
+              }
+            ],
+            "costMicros": 5246
+          },
+          "evidence": [
+            {
+              "calledTool": "k8s__get_workload",
+              "passed": true
+            },
+            {
+              "citedURL": "https://github.example.com/quillcart/search-indexer/pull/318",
+              "passed": false
+            }
+          ],
+          "evidenceScore": 0.5,
+          "sourcesReported": null,
+          "toolCalls": 7,
+          "inputTokens": 5565,
+          "outputTokens": 1935,
+          "costMicros": 33504,
+          "durationMs": 17003,
+          "reason": "search-indexer was scaled from 3 to 0 at 01:58 by maintenance-bot. This matches a maintenance annotation on the Deployment (02:00–04:00Z, full reindex of catalog-v3) and a commit from the day before, \"Scale search-indexer to zero during the reindex window\". There are no pod problems and no crash events. The monitor has no maintenance exclusion. I did not check user traffic, but the service is intentionally offline."
+        }
+      ]
+    },
+    {
+      "id": "source-failure-logs-unavailable",
+      "title": "Payments webhook errors after a feature flag change, with the logs source down",
+      "path": "bench/scenarios/public/source-failure-logs-unavailable.yaml",
+      "expectedVerdict": "true_positive",
+      "spread": {
+        "runs": 3,
+        "correct": 1,
+        "rootCauseMean": 0.3333333333333333,
+        "rootCauseSD": 0.5773502691896258,
+        "costUSD": {
+          "min": 0.046207,
+          "median": 0.053343,
+          "max": 0.06201
+        },
+        "durationMs": {
+          "min": 16005.612559,
+          "median": 25002.974829,
+          "max": 32204.748276
+        }
+      },
+      "runs": [
+        {
+          "run": 1,
+          "investigationId": "01a19cb0-7d1b-7c3d-ab51-976e9ca5b1a2",
+          "status": "final",
+          "verdict": "inconclusive",
+          "confidence": "low",
+          "stopReason": "submitted",
+          "verdictCorrect": false,
+          "rootCause": {
+            "score": 0,
+            "requiredMet": false,
+            "match": false,
+            "items": [
+              {
+                "id": "flag",
+                "met": false,
+                "reason": "The report never names the payments-new-retry-policy flag; it says it could not check feature flags and the cause is inconclusive."
+              },
+              {
+                "id": "timing",
+                "met": false,
+                "reason": "It notes the alert started at 11:12Z but ties it to no change. It says no change explains the start."
+              },
+              {
+                "id": "fix",
+                "met": false,
+                "reason": "It proposes no remediation, and it does not suggest turning the flag off."
+              }
+            ],
+            "costMicros": 3688
+          },
+          "evidence": [
+            {
+              "calledTool": "launchdarkly__list_flag_changes",
+              "passed": false
+            }
+          ],
+          "evidenceScore": 0,
+          "sourcesReported": true,
+          "toolCalls": 6,
+          "inputTokens": 5458,
+          "outputTokens": 1819,
+          "costMicros": 53343,
+          "durationMs": 16005,
+          "reason": "I could not confirm or explain the alert. Prometheus returned no data for the rule, active alerts, targets or any payments-webhooks metric, so I had no error counts, status codes, request rate or logs. GitHub shows no commits since 09:00Z on 2026-09-25, and the last deploy (run 8804) succeeded on 2026-09-24 at 14:25Z, about 21 hours before the alert. No change explains the start at 11:12Z. I could not check feature flags or config, and I found no incident or ticket that covers this."
+        },
+        {
+          "run": 2,
+          "investigationId": "01a19cb0-bbae-77dc-bf4a-e64545f612a5",
+          "status": "final",
+          "verdict": "true_positive",
+          "confidence": "medium",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "flag",
+                "met": true,
+                "reason": "Names payments-new-retry-policy enabled for all merchants at 11:08:21 as the probable cause."
+              },
+              {
+                "id": "timing",
+                "met": true,
+                "reason": "Links the failures starting shortly after the 11:08 flag change (alert at 11:12) and says the timing makes the flag the likely cause. It gives no exact 11:10 onset, but the link is clear."
+              },
+              {
+                "id": "fix",
+                "met": true,
+                "reason": "The summary says to turn the flag off first, and fix x1 is to turn off the flag."
+              }
+            ],
+            "costMicros": 4930
+          },
+          "evidence": [
+            {
+              "calledTool": "launchdarkly__list_flag_changes",
+              "passed": true
+            }
+          ],
+          "evidenceScore": 1,
+          "sourcesReported": true,
+          "toolCalls": 10,
+          "inputTokens": 11835,
+          "outputTokens": 3315,
+          "costMicros": 62010,
+          "durationMs": 32204,
+          "reason": "The alert reports 31% of webhook deliveries failing, and the flag payments-new-retry-policy was enabled for 100% of merchants at 11:08:21, four minutes before the alert started at 11:12. No deploy or commit explains it. Prometheus returned no series, rules or targets for the service, so I could not confirm the error split, the request volume or whether errors are still rising. No other open alert or incident covers it. The timing and the absence of other changes make the flag the likely cause."
+        },
+        {
+          "run": 3,
+          "investigationId": "01a19cb1-3984-7742-bf4a-3f3e865e3ec5",
+          "status": "final",
+          "verdict": "inconclusive",
+          "confidence": "low",
+          "stopReason": "submitted",
+          "verdictCorrect": false,
+          "rootCause": {
+            "score": 0,
+            "requiredMet": false,
+            "match": false,
+            "items": [
+              {
+                "id": "flag",
+                "met": false,
+                "reason": "The report never names the payments-new-retry-policy flag or its 11:08 change. It says no flag tool was available and the verdict is inconclusive."
+              },
+              {
+                "id": "timing",
+                "met": false,
+                "reason": "It does not link the rise in failures at about 11:10 to any flag change. It finds no recent change at all."
+              },
+              {
+                "id": "fix",
+                "met": false,
+                "reason": "It proposes manual checks of logs and dashboards, not turning the flag off."
+              }
+            ],
+            "costMicros": 4166
+          },
+          "evidence": [
+            {
+              "calledTool": "launchdarkly__list_flag_changes",
+              "passed": false
+            }
+          ],
+          "evidenceScore": 0,
+          "sourcesReported": true,
+          "toolCalls": 8,
+          "inputTokens": 7966,
+          "outputTokens": 2595,
+          "costMicros": 46207,
+          "durationMs": 25002,
+          "reason": "Prometheus returned no data for the alert rule, the active alerts, the service's series, metric names or the service label, so I could not see the error ratio, request volume, status codes or whether the errors continue. GitHub shows no change before the alert: no commits since 08:00Z on 2026-09-25, and the last deploy (run 8804) succeeded on 2026-09-24 at 14:25Z, about 21 hours earlier. No feature flag or incident tool was available, and no logs. A deploy or code change does not explain the alert. I can neither confirm real user impact nor rule out a false positive."
+        }
+      ]
+    },
+    {
+      "id": "triage-duplicate-second-monitor",
+      "title": "Second checkout monitor that an open incident already covers",
+      "path": "bench/scenarios/public/triage-duplicate-second-monitor.yaml",
+      "expectedVerdict": "duplicate",
+      "spread": {
+        "runs": 3,
+        "correct": 3,
+        "rootCauseMean": 0.8888888888888888,
+        "rootCauseSD": 0.1924500897298753,
+        "costUSD": {
+          "min": 0.011438,
+          "median": 0.019357,
+          "max": 0.02804
+        },
+        "durationMs": {
+          "min": 7004.029475,
+          "median": 8205.565016,
+          "max": 9008.602421
+        }
+      },
+      "runs": [
+        {
+          "run": 1,
+          "investigationId": "01a19cb1-9b33-7b5b-9d7c-fd59a1c4c183",
+          "status": "final",
+          "verdict": "duplicate",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 0.6666666666666666,
+            "requiredMet": true,
+            "match": false,
+            "items": [
+              {
+                "id": "incident",
+                "met": true,
+                "reason": "Report explicitly names INC-3318 as the open incident already covering these errors."
+              },
+              {
+                "id": "same",
+                "met": false,
+                "reason": "Report says it's a second monitor on the same checkout-api errors, but never names CheckoutApiErrorRateHigh as the other monitor; it only says INC-3318 lists this alert."
+              }
+            ],
+            "costMicros": 3212
+          },
+          "evidenceScore": null,
+          "sourcesReported": null,
+          "toolCalls": 3,
+          "inputTokens": 1457,
+          "outputTokens": 797,
+          "costMicros": 28040,
+          "durationMs": 7004,
+          "reason": "INC-3318 (In Progress, assigned to Rhea, opened 09:48) already covers these checkout payment errors. Its description names CheckoutErrorRatioHigh as a linked alert, and says the payment provider is returning 5xx for card payments. Prometheus returned no data for the alert list or the rule, so I could not check the metrics myself or look for recent deploys."
+        },
+        {
+          "run": 2,
+          "investigationId": "01a19cb1-b693-744d-9ee0-7c0c537e3bac",
+          "status": "final",
+          "verdict": "duplicate",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "incident",
+                "met": true,
+                "reason": "Report names INC-3318 as the open incident already tracking these checkout errors."
+              },
+              {
+                "id": "same",
+                "met": true,
+                "reason": "Says it is a second monitor on the same checkout errors, and findings note INC-3318 links both CheckoutErrorRatioHigh and CheckoutApiErrorRateHigh."
+              }
+            ],
+            "costMicros": 3188
+          },
+          "evidenceScore": null,
+          "sourcesReported": null,
+          "toolCalls": 3,
+          "inputTokens": 1455,
+          "outputTokens": 721,
+          "costMicros": 11438,
+          "durationMs": 8205,
+          "reason": "INC-3318 (checkout payment errors) is In Progress and assigned to Rhea. It lists CheckoutErrorRatioHigh as a linked alert. The cause it names is that the payment provider returns 5xx for card payments. Prometheus returned no active alerts and no rule for this alert, so I could not check the live signal or recent deploys."
+        },
+        {
+          "run": 3,
+          "investigationId": "01a19cb1-d6a3-7f04-8c02-f0697e6e93cb",
+          "status": "final",
+          "verdict": "duplicate",
+          "confidence": "high",
+          "stopReason": "submitted",
+          "verdictCorrect": true,
+          "rootCause": {
+            "score": 1,
+            "requiredMet": true,
+            "match": true,
+            "items": [
+              {
+                "id": "incident",
+                "met": true,
+                "reason": "Report explicitly names INC-3318 as the open incident already covering this alert."
+              },
+              {
+                "id": "same",
+                "met": true,
+                "reason": "Summary says it is a second monitor on the same checkout errors, and findings note INC-3318 links both CheckoutApiErrorRateHigh and CheckoutErrorRatioHigh."
+              }
+            ],
+            "costMicros": 3004
+          },
+          "evidenceScore": null,
+          "sourcesReported": null,
+          "toolCalls": 3,
+          "inputTokens": 3230,
+          "outputTokens": 1092,
+          "costMicros": 19357,
+          "durationMs": 9008,
+          "reason": "INC-3318 (In Progress, assigned to Rhea, opened 09:48) covers the same checkout payment errors. It lists CheckoutErrorRatioHigh (09:52) as a linked alert. The cause given there is the payment provider returning 5xx for card payments. Prometheus returned no alerts or rule data, so I could not check live metrics or recent deploys."
+        }
+      ]
+    }
+  ]
+}
