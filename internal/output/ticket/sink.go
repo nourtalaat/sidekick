@@ -16,8 +16,9 @@
 //     key such as OPS-123 or a link to the ticket;
 //  2. a link of the event that points at a ticket of the workspace or site;
 //  3. a ticket Sidekick created: a link in the result of a succeeded action
-//     proposal in Update.Proposals. The publish job does not fill
-//     Proposals yet; ticket actions arrive in a later release.
+//     proposal in Update.Proposals. The publish job fills Proposals from
+//     proposals.OfInvestigation, so a ticket made by a succeeded
+//     linear.issue or jira.issue action is a candidate.
 //
 // There is no search. Only tickets in the output's teams or projects are
 // used, checked both on the key and on the ticket the tracker returns, so
