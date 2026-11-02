@@ -563,6 +563,7 @@ func cloneRoute(r config.Route) config.Route {
 	out.Outputs = slices.Clone(r.Outputs)
 	out.Actions = slices.Clone(r.Actions)
 	out.Roles = maps.Clone(r.Roles)
+	out.Details = maps.Clone(r.Details)
 	out.Grouping.FingerprintLabels = slices.Clone(r.Grouping.FingerprintLabels)
 
 	if r.Match != nil {

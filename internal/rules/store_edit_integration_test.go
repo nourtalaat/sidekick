@@ -3,6 +3,7 @@
 package rules_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -254,4 +255,59 @@ func TestChangesRecordTheKindOfActor(t *testing.T) {
 	require.NoError(t, pool.QueryRow(t.Context(), "SELECT actor_kind, actor_id FROM audit_log").Scan(&kind, &id))
 	require.Equal(t, audit.ActorToken, kind)
 	require.Equal(t, token.ID, id)
+}
+
+func TestRouteDetailsAreStored(t *testing.T) {
+	t.Parallel()
+
+	details := map[string]string{"owner": "payments team", "environment": "prod"}
+
+	tests := []struct {
+		name        string
+		details     map[string]string
+		change      func(r *rules.Route) error
+		wantDetails map[string]string
+		wantErr     error
+	}{
+		{name: "details are saved and read back", details: details, wantDetails: details},
+		{
+			name: "a change of another field keeps them", details: details,
+			change:      func(r *rules.Route) error { r.Config.Priority = 7; return nil },
+			wantDetails: details,
+		},
+		{
+			name: "a change can remove them", details: details,
+			change: func(r *rules.Route) error { r.Config.Details = nil; return nil },
+		},
+		{name: "details that fail the checks", details: map[string]string{"bad key": "x"}, wantErr: config.Errors{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, store := setup(t)
+
+			route := runtimeRoute("search", 10, func(r *config.Route) { r.Details = tt.details }).Config
+
+			_, err := store.CreateRoute(t.Context(), actor, route)
+			requireErr(t, err, tt.wantErr)
+
+			if tt.wantErr != nil {
+				return
+			}
+
+			if tt.change != nil {
+				_, err = store.SetRoute(t.Context(), actor, "search", tt.change)
+				require.NoError(t, err)
+			}
+
+			rt, err := store.Load(t.Context())
+			require.NoError(t, err)
+
+			i := slices.IndexFunc(rt.Routes, func(r rules.Route) bool { return r.Config.Name == "search" })
+			require.GreaterOrEqual(t, i, 0)
+			require.Equal(t, tt.wantDetails, rt.Routes[i].Config.Details)
+		})
+	}
 }
