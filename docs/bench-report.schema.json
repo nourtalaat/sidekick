@@ -205,6 +205,8 @@
         "verdict": {"type": "string"},
         "confidence": {"type": "string"},
         "stopReason": {"type": "string"},
+        "reason": {"type": "string"},
+        "stopDetail": {"type": "string"},
         "verdictCorrect": {"type": "boolean"},
         "rootCause": {"$ref": "#/$defs/rootCause"},
         "evidence": {"type": "array", "items": {"$ref": "#/$defs/evidenceCheck"}},

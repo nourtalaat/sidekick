@@ -301,7 +301,9 @@ Paths are read from the directory `sidekick bench run` runs in.
   commit, a hash of the config file, the scenario set, the connector and
   model settings of each role, the strategy versions, and the prompt and
   judge prompt versions), the run totals with their intervals, the
-  thresholds, and each scenario with its spread and runs. Its schema is
+  thresholds, and each scenario with its spread and runs. A run lists the
+  reason it gave for its verdict and, when it ended without a verdict, the
+  detail of why (`reason`, `stopDetail`). Its schema is
   [bench-report.schema.json](bench-report.schema.json); `schemaVersion`
   changes whenever the report changes in a way an older reader would
   misread.

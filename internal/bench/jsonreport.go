@@ -111,6 +111,12 @@ type RunReport struct {
 	OutputTokens    int64             `json:"outputTokens"`
 	CostMicros      int64             `json:"costMicros"`
 	DurationMs      int64             `json:"durationMs"`
+
+	// Reason is the reason the run gave for its verdict. StopDetail says
+	// why a run that ended without a verdict stopped, such as the last
+	// check its report failed.
+	Reason     string `json:"reason,omitempty"`
+	StopDetail string `json:"stopDetail,omitempty"`
 }
 
 // RootCauseReport is the graded root cause of a run in report.json.
@@ -220,6 +226,8 @@ func (r RunResult) report() RunReport {
 		OutputTokens:    r.OutputTokens,
 		CostMicros:      r.CostMicros,
 		DurationMs:      r.Duration.Milliseconds(),
+		Reason:          r.Report.Reason,
+		StopDetail:      r.Report.StopDetail,
 	}
 
 	if rc := r.RootCause; rc != nil {
