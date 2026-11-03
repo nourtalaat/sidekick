@@ -135,6 +135,7 @@ proposals](web-ui.md#action-proposals) for how people approve them.
 - `gitlab.code_change`: opens a draft merge request that changes application code, on gitlab.com or a self-managed GitLab, which Sidekick never merges. See [its keys](configuration.md#gitlabcode_change).
 - `unleash.flag`: turns an Unleash feature flag off in one environment, or undoes its newest change. See [its keys](configuration.md#unleashflag).
 - `aws.ecs_rollback`: puts an Amazon ECS service back on an earlier task definition revision, with an IAM role of its own. See [its keys](configuration.md#awsecs_rollback).
+- `aws.lambda_rollback`: points an AWS Lambda alias back at the published version it served before, with an IAM role of its own. See [its keys](configuration.md#awslambda_rollback).
 - `helm.rollback`: puts a Helm release back on an earlier revision, with Helm's Go library. See [its keys](configuration.md#helmrollback).
 - `azure.container_app_rollback`: moves all the traffic of an Azure Container App back to an earlier revision, and puts the traffic back on Undo. See [its keys](configuration.md#azurecontainer_app_rollback).
 - `argocd.rollback`: puts an Argo CD application back on an earlier deployed revision, and can undo it. It refuses an application with auto-sync on. See [its keys](configuration.md#argocdrollback).
