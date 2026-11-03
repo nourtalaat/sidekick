@@ -634,6 +634,27 @@ person who asked, and the original becomes undone. The undo shows **Undoes**
 with a link to the proposal it restores, which opens its investigation and
 moves focus to that proposal.
 
+A proposal that opens a pull request also lists its **Files**: each file
+with its path, what happens to it (added, changed or deleted) and how many
+lines it adds and removes. The list comes from what Sidekick recorded when
+the model proposed, so it needs no call to the host. Each file is a
+disclosure, open when the proposal has up to three files and closed when it
+has more. When a person opens a file, Sidekick reads the file as it is on the
+base branch from the host, with the credential of the action, and compares it
+with the content in the proposal's parameters. The file is read when it is
+opened and is never stored. The diff has a line number for each side, a
+`+` or `-` sign and the words "Added" and "Removed" for a screen reader, as
+well as a tint, so color is never the only signal. It shows the changed lines
+with three unchanged lines around each change, and says where lines were left
+out. A diff longer than 400 lines is cut there, and **Show the whole file**
+asks for every line of the file. The lines are plain text with hidden
+characters written as `\u` escapes, as in the parameters; this includes a
+carriage return at the end of a line from a file with Windows line ends. When
+the host cannot give the file, for example because the host no longer has it
+or it is not text, the card says so and offers to try again. The diff
+answers also for an expired or rejected proposal. Slack keeps the field-by-field
+changes and links to the investigation, where the diff is.
+
 - `GET /api/v1/proposals` (approver) lists proposals a page at a time, with
   `status` (repeat it for several, default `proposed`), `action` (one name
   from the config; a name that is not there answers 400 and lists the names),
@@ -654,6 +675,16 @@ moves focus to that proposal.
   difference a restore would overwrite. The other 409 codes are
   `not_undoable`, `not_allowed`, `undo_running` and `undo_failed`. A proposal
   has `changes` (field, before and after), `target`, `undoable` and `undoOf`.
+- `GET /api/v1/proposals/{id}/files/diff?path=...` (approver) returns the
+  line diff of one file of a pull request proposal, as a list of lines, each
+  `context`, `added` or `removed`, with its line number in the old and the
+  new file. It answers for a proposal of any status, so a person can read what
+  was proposed after it expired or was rejected. It answers 400 without
+  `path`, 404 for a proposal or a path the proposal does not change, 409 with
+  `code` `diff_unavailable` when the action cannot read files from its host,
+  and 502 when the host did not give the base of the file. A proposal has
+  `files`, each with `path`, `status`, `linesAdded`, `linesRemoved` and
+  `diffAvailable`.
 - `GET /api/v1/investigations/{id}` has a `proposals` list.
 
 Every proposal, approval, rejection, expiry and result is in the audit log

@@ -12,37 +12,8 @@ import (
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 )
 
-// The statuses of a file in the snapshot, as an approver reads them.
-const (
-	fileChanged = "changed"
-	fileAdded   = "added"
-	fileDeleted = "deleted"
-)
-
 // snapshotTarget starts the target of a snapshot, followed by owner/name.
 const snapshotTarget = "github:"
-
-// blobRef names the content of a file by its Git blob SHA.
-type blobRef struct {
-	Blob string `json:"blob"`
-}
-
-// afterEntry is a file as the pull request leaves it. A deleted file has no
-// blob.
-type afterEntry struct {
-	Blob         string `json:"blob,omitempty"`
-	Status       string `json:"status"`
-	LinesAdded   *int   `json:"linesAdded,omitempty"`
-	LinesRemoved *int   `json:"linesRemoved,omitempty"`
-}
-
-// snapshotFiles are the two sides of a snapshot, by path.
-type snapshotFiles struct {
-	// before maps a path to the blob it had, or nil for a file that is new.
-	before map[string]*blobRef
-	// after maps a path to what the pull request leaves.
-	after map[string]afterEntry
-}
 
 // Snapshot implements action.Snapshotter. It reads the changed files at the
 // head of the base branch and describes the change by blob SHAs, never by
@@ -76,7 +47,7 @@ func (p *PR) Snapshot(ctx context.Context, raw json.RawMessage) (action.Snapshot
 		left -= added + removed
 
 		if f.exists {
-			before[c.Path] = blobRef{Blob: f.sha}
+			before[c.Path] = gitchange.BlobRef{Blob: f.sha}
 		} else {
 			before[c.Path] = nil
 		}
@@ -103,14 +74,14 @@ func (p *PR) Snapshot(ctx context.Context, raw json.RawMessage) (action.Snapshot
 }
 
 // afterOf describes the file as the change leaves it.
-func afterOf(c gitchange.PlannedFile, f readFile, added, removed int) afterEntry {
+func afterOf(c gitchange.PlannedFile, f readFile, added, removed int) gitchange.AfterEntry {
 	switch {
 	case c.Deleted():
-		return afterEntry{Status: fileDeleted, LinesRemoved: &removed}
+		return gitchange.AfterEntry{Status: gitchange.FileDeleted, LinesRemoved: &removed}
 	case !f.exists:
-		return afterEntry{Blob: blobSHA(*c.Content), Status: fileAdded, LinesAdded: &added, LinesRemoved: &removed}
+		return gitchange.AfterEntry{Blob: blobSHA(*c.Content), Status: gitchange.FileAdded, LinesAdded: &added, LinesRemoved: &removed}
 	default:
-		return afterEntry{Blob: blobSHA(*c.Content), Status: fileChanged, LinesAdded: &added, LinesRemoved: &removed}
+		return gitchange.AfterEntry{Blob: blobSHA(*c.Content), Status: gitchange.FileChanged, LinesAdded: &added, LinesRemoved: &removed}
 	}
 }
 
@@ -120,7 +91,7 @@ func afterOf(c gitchange.PlannedFile, f readFile, added, removed int) afterEntry
 // other file was changed by someone since, and the pull request would
 // overwrite it, so the plan fails with action.ErrConflict naming the file.
 func (l *loaded) applySnapshot(snap action.Snapshot) error {
-	sides, err := readSnapshot(snap)
+	sides, err := gitchange.ReadSnapshot(snap)
 	if err != nil {
 		return fmt.Errorf("read the snapshot: %w", err)
 	}
@@ -128,7 +99,7 @@ func (l *loaded) applySnapshot(snap action.Snapshot) error {
 	keep := make([]gitchange.PlannedFile, 0, len(l.changes))
 
 	for _, c := range l.changes {
-		after, ok := sides.after[c.Path]
+		after, ok := sides.After[c.Path]
 		if !ok {
 			return fmt.Errorf("%w: the snapshot has no entry for %q", action.ErrPermanent, c.Path)
 		}
@@ -140,7 +111,7 @@ func (l *loaded) applySnapshot(snap action.Snapshot) error {
 		live := l.files[c.Path].sha
 
 		switch {
-		case live == blobOf(sides.before[c.Path]):
+		case live == gitchange.BlobOf(sides.Before[c.Path]):
 			keep = append(keep, c)
 		case live == after.Blob:
 		default:
@@ -151,31 +122,6 @@ func (l *loaded) applySnapshot(snap action.Snapshot) error {
 	l.changes = keep
 
 	return nil
-}
-
-// readSnapshot decodes the two sides of a snapshot made by Snapshot.
-func readSnapshot(snap action.Snapshot) (snapshotFiles, error) {
-	var sides snapshotFiles
-
-	if err := json.Unmarshal(snap.Before, &sides.before); err != nil {
-		return snapshotFiles{}, fmt.Errorf("%w: decode the before side of the snapshot: %w", action.ErrPermanent, err)
-	}
-
-	if err := json.Unmarshal(snap.After, &sides.after); err != nil {
-		return snapshotFiles{}, fmt.Errorf("%w: decode the after side of the snapshot: %w", action.ErrPermanent, err)
-	}
-
-	return sides, nil
-}
-
-// blobOf returns the blob of a reference, or "" for a file that is not
-// there.
-func blobOf(ref *blobRef) string {
-	if ref == nil {
-		return ""
-	}
-
-	return ref.Blob
 }
 
 // blobSHA returns the SHA Git gives a blob with this content: the SHA-1 of
