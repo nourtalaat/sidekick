@@ -2704,6 +2704,128 @@ an undo, or `error`), the validations in `sidekick_githubpr_validations_total`
 `sidekick_githubpr_status_checks_total` (by `state`: `open`, `merged`,
 `closed`, `missing` or `error`).
 
+##### `unleash.flag`
+
+Changes a feature flag in one environment of an Unleash project through the
+Unleash Admin API: it turns the flag off, or undoes the newest change of the
+flag in that environment. It is approval-only, so a `read-write` route may
+list it only when the action sets `allowReadWrite: true`. Use it on routes
+with `mode: approved`: the change is live as soon as it is approved. The
+flag's other environments are never touched.
+
+```yaml
+actions:
+  unleash-flag:
+    type: unleash.flag
+    baseURL: https://unleash.example.com
+    tokenSecret: { name: sidekick-unleash-write, key: token }
+    limits:
+      projects:
+        - key: default
+          environments: [production]
+          flags: ["checkout-*", "new-search"]
+      allow: [turn_off]                # default; add restore_previous to allow it
+
+routes:
+  - name: checkout
+    mode: approved
+    actions: [unleash-flag]
+```
+
+- `baseURL` is the root of your Unleash instance. It may hold a path, for an
+  instance served under one. It must use `https`; plain `http` is accepted
+  only for `localhost` and loopback addresses, because the token is sent
+  with each request. Required.
+- `tokenSecret` is the `{ name, key }` of the Secret that holds the token of
+  a service account. Give the action a service account of its own, apart
+  from the one of any Unleash source, and give it only the permissions
+  listed below. The token is read on every call, so a rotated token needs no
+  restart.
+- `allowReadWrite` is false unless you set it. See [Action
+  modes](#action-modes).
+- `limits.projects` lists the projects the action may change, each with its
+  `key`, the `environments` in it, and the `flags`: flag names, or patterns
+  in which `*` stands for any run of characters, such as `checkout-*`. All
+  three are required for every project, so nothing is allowed by default.
+  Keys may hold letters, digits, `.`, `_` and `-`.
+- `limits.allow` lists the changes the model may propose: `turn_off` and
+  `restore_previous`. The default is `turn_off` only, because restoring
+  writes more. Listing a change here is how you allow it.
+
+The model proposes a `project`, an `environment`, a `flag` and a `change`.
+When it proposes, Sidekick checks them against the limits before anything is
+sent, then reads the flag, its strategies and its newest event from Unleash,
+and shows the approver the field that changes. It refuses, with a message
+the model can act on, a flag that is outside the limits, does not exist in
+the project or is archived, or has no such environment.
+
+**`turn_off`** turns the flag off in the environment and leaves its
+strategies as they are. It is refused when the flag is already off.
+
+**`restore_previous`** undoes the newest change of the flag in that
+environment, and only that one. Unleash records each change as an event that
+holds that one change, not the whole environment, so Sidekick can restore
+exactly these:
+
+- turning the flag on (the restore turns it off) or off (the restore turns
+  it on);
+- changing a strategy (it gets the values it had before, all of them:
+  constraints, parameters, variants, segments, title, sort order and
+  whether it is disabled);
+- adding a strategy (it is removed);
+- removing a strategy (it is added again, with a new ID).
+
+It is one call to Unleash. It is refused, with the reason, when the newest
+change is anything else, such as reordering the strategies or a change that
+is part of a group of changes made together (a change request); when the
+flag has a strategy that belongs to a release plan; when the strategy it
+would change is gone, or already has its earlier values; and when the result
+would leave the flag on with no enabled strategy, because Unleash then turns
+the flag off, or adds a default strategy, by itself. Use `turn_off`, or
+change it in Unleash, for those.
+
+**What the token needs.** In the Unleash UI, create a service account for
+Sidekick and give it a custom project role with only these permissions, on
+the allowed projects and, where Unleash lets you, only the allowed
+environments:
+
+- `UPDATE_FEATURE_ENVIRONMENT`, for `turn_off`, for the turn on and off of
+  `restore_previous`, and for undoing either;
+- `CREATE_FEATURE_STRATEGY`, `UPDATE_FEATURE_STRATEGY` and
+  `DELETE_FEATURE_STRATEGY`, only when `restore_previous` is allowed.
+
+The action also reads the flag, its strategies and its events, which any
+signed-in service account may do, so a root role with no write permissions,
+such as Viewer, is enough besides the project role. Do not give the account
+`SKIP_CHANGE_REQUEST` or an admin role. Do not use an `ADMIN` API token or
+a client token.
+
+**Change requests.** An environment that uses change requests refuses a
+direct change from an account that cannot skip them, and Sidekick never
+opens a change request. Unleash does not say which environments use them
+through the public API, so Sidekick finds out only when the approved change
+runs: the proposal then fails, with a message that says so, and nothing is
+changed. Make the change in Unleash with a change request instead.
+
+**When it runs.** Right before it writes, Sidekick reads the flag again.
+The version of a flag is the ID of its newest event in the environment, so
+the proposal fails with a conflict when someone changed the flag since, or
+when its strategies are not as they were when it was proposed. Unleash has
+no precondition on writes, so a change made in the moment between that read
+and the write is not noticed. When the flag already has the new state, which
+happens when a worker died after the write, it writes nothing and succeeds.
+
+**Undo.** An approver can undo a change that worked. Undo makes the one call
+that reverses it: it turns the flag back on or off, puts a strategy back,
+removes the strategy that was added, or adds the one that was removed. It
+looks only at the part the action changed. If that part is not as the action
+left it, Undo writes nothing and shows the flag as it is, and asks again
+with `force`. A strategy that the action added has no ID in the proposal, so
+Undo takes the strategy that is new since the change; if there are several
+new ones and Sidekick cannot tell which is it, Undo fails and says so.
+
+The calls were checked against the source of Unleash 8.2.1.
+
 ### `validator`
 
 How Sidekick reaches the [monitor validator](validator.md), which checks

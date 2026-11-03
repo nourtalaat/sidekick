@@ -1,4 +1,4 @@
-import type { Proposal } from "../api/proposals";
+import type { Proposal, ProposalDiffLine, ProposalFile, ProposalFileDiff } from "../api/proposals";
 import type { Me } from "../session";
 import { VIEWER } from "./helpers";
 
@@ -25,4 +25,21 @@ export function proposal(over: Partial<Proposal> = {}): Proposal {
     undoable: false,
     ...over,
   };
+}
+
+/** A file of a pull request proposal, whose diff can be asked for. */
+export function proposalFile(over: Partial<ProposalFile> = {}): ProposalFile {
+  return { path: "prometheus/rules/checkout.yaml", status: "changed", linesAdded: 1, linesRemoved: 1, diffAvailable: true, ...over };
+}
+
+/** The diff of a file: one line changed, with a line before and after it. */
+export function fileDiff(over: Partial<ProposalFileDiff> = {}): ProposalFileDiff {
+  const lines: ProposalDiffLine[] = [
+    { kind: "context", oldLine: 4, newLine: 4, text: "  - alert: Slow" },
+    { kind: "removed", oldLine: 5, text: "    for: 1m" },
+    { kind: "added", newLine: 5, text: "    for: 10m" },
+    { kind: "context", oldLine: 6, newLine: 6, text: "  - alert: Errors" },
+  ];
+
+  return { path: "prometheus/rules/checkout.yaml", status: "changed", lines, truncated: false, ...over };
 }
