@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	argo "github.com/nourtalaat/sidekick/internal/argocd"
@@ -22,6 +24,16 @@ const (
 	// maxParameterLen bounds a Helm parameter, as name=value.
 	maxParameterLen = 160
 )
+
+// hiddenValue replaces the value of a Helm parameter whose name looks like a
+// secret. Argo CD keeps parameters in plain text, and the guard redacts only
+// the secrets it recognizes, so a random password would reach the model.
+const hiddenValue = "[hidden]"
+
+// secretNameWords are the words that make a Helm parameter name look like a
+// secret when the last dotted segment of the name, in any case, holds one of
+// them, such as db.password, apiKey, tls.key or auth.existingSecret.
+var secretNameWords = []string{"password", "passwd", "secret", "token", "key", "credential", "auth", "cert"}
 
 // notRecordedText says why a result has no per-resource health.
 const notRecordedText = "Argo CD did not give the health of each resource, so only resources that are not synced are listed."
@@ -299,7 +311,7 @@ func sourceOf(src *argo.Source) sourceView {
 		hv := &helmView{ReleaseName: cut(h.ReleaseName, maxNameLen), ValueFiles: cutAll(h.ValueFiles, maxListItems, maxNameLen)}
 
 		for _, p := range h.Parameters[:min(len(h.Parameters), maxListItems)] {
-			hv.Parameters = append(hv.Parameters, cut(p.Name+"="+p.Value, maxParameterLen))
+			hv.Parameters = append(hv.Parameters, parameterText(p))
 		}
 
 		view.Helm = hv
@@ -315,6 +327,25 @@ func sourceOf(src *argo.Source) sourceView {
 	}
 
 	return view
+}
+
+// parameterText returns a Helm parameter as name=value, with the value
+// replaced by hiddenValue when the name looks like a secret.
+func parameterText(p argo.HelmParameter) string {
+	value := p.Value
+	if looksSecret(p.Name) {
+		value = hiddenValue
+	}
+
+	return cut(p.Name+"="+value, maxParameterLen)
+}
+
+// looksSecret reports whether the last dotted segment of a Helm parameter
+// name, in any case, holds one of secretNameWords.
+func looksSecret(name string) bool {
+	last := strings.ToLower(name[strings.LastIndex(name, ".")+1:])
+
+	return slices.ContainsFunc(secretNameWords, func(word string) bool { return strings.Contains(last, word) })
 }
 
 // hydratorOf returns the source hydrator settings of an application.

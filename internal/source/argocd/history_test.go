@@ -364,3 +364,33 @@ func TestSourceGetHistoryContextEnds(t *testing.T) {
 	_, isToolErr := errors.AsType[*source.ToolError](err)
 	require.False(t, isToolErr)
 }
+
+func TestSourceGetHistoryHidesSecretParameters(t *testing.T) {
+	t.Parallel()
+
+	const source1 = `{"repoURL":"https://git.example.com/a.git","helm":{"parameters":[{"name":"db.password","value":"hunter2"},{"name":"image.tag","value":"v1"}]}}`
+
+	api := fakehttp.New(t)
+	api.Handle(http.MethodGet, checkoutPath, appBody(``, `"history":[
+		{"id":1,"revision":"aaaa","deployedAt":"2026-11-02T09:00:00Z","source":`+source1+`},
+		{"id":2,"revisions":["bbbb","cccc"],"deployedAt":"2026-11-03T09:00:00Z","sources":[
+			{"repoURL":"https://git.example.com/a.git","helm":{"parameters":[{"name":"redis.auth.token","value":"hunter3"}]}},
+			{"repoURL":"https://git.example.com/b.git","helm":{"parameters":[{"name":"TLS_KEY","value":"hunter4"},{"name":"keycloak.url","value":"https://sso"}]}}]}]`))
+	api.Handle(http.MethodGet, "/api/v1/applications/checkout/revisions/aaaa/metadata", body(`{}`))
+
+	s := newTestSource(t, api, tokenSecrets(t))
+
+	res, err := s.Call(t.Context(), source.Call{Tool: toolGetHistory, Input: json.RawMessage(`{"application":"shop/checkout"}`)})
+	require.NoError(t, err)
+
+	for _, secret := range []string{"hunter2", "hunter3", "hunter4"} {
+		require.NotContains(t, string(res.Structured), secret)
+	}
+
+	var got historyResult
+	require.NoError(t, json.Unmarshal(res.Structured, &got))
+	require.Len(t, got.Entries, 2)
+	require.Equal(t, []string{"redis.auth.token=[hidden]"}, got.Entries[0].Sources[0].Helm.Parameters)
+	require.Equal(t, []string{"TLS_KEY=[hidden]", "keycloak.url=https://sso"}, got.Entries[0].Sources[1].Helm.Parameters)
+	require.Equal(t, []string{"db.password=[hidden]", "image.tag=v1"}, got.Entries[1].Source.Helm.Parameters)
+}

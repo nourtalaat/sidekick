@@ -392,3 +392,46 @@ func TestSourceGetApplicationFailures(t *testing.T) {
 		})
 	}
 }
+
+func TestHelmParameterText(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		param string
+		want  string
+	}{
+		{name: "a password", param: "db.password", want: "db.password=[hidden]"},
+		{name: "a bare token", param: "token", want: "token=[hidden]"},
+		{name: "a key in camel case", param: "apiKey", want: "apiKey=[hidden]"},
+		{name: "a key in upper case with an underscore", param: "TLS_KEY", want: "TLS_KEY=[hidden]"},
+		{name: "a name of a secret", param: "auth.existingSecret", want: "auth.existingSecret=[hidden]"},
+		{name: "a token deep in the name", param: "redis.auth.token", want: "redis.auth.token=[hidden]"},
+		{name: "a certificate", param: "ingress.tls.cert", want: "ingress.tls.cert=[hidden]"},
+		{name: "a credential", param: "smtp.credentials", want: "smtp.credentials=[hidden]"},
+		{name: "passwd", param: "ftp.Passwd", want: "ftp.Passwd=[hidden]"},
+		{name: "an image tag", param: "image.tag", want: "image.tag=v1.4.2"},
+		{name: "a replica count", param: "replicaCount", want: "replicaCount=v1.4.2"},
+		{name: "a url of an auth service, kept because only the last segment counts", param: "keycloak.url", want: "keycloak.url=v1.4.2"},
+		{name: "a secret in an earlier segment only", param: "secret.name", want: "secret.name=v1.4.2"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			api := fakehttp.New(t)
+			api.Handle(http.MethodGet, checkoutPath, appBody(
+				`"source":{"repoURL":"https://git.example.com/shop/deploy.git","helm":{"parameters":[{"name":"`+tt.param+`","value":"v1.4.2"}]}}`, ``))
+
+			s := newTestSource(t, api, tokenSecrets(t))
+
+			res, err := s.Call(t.Context(), source.Call{Tool: toolGetApplication, Input: json.RawMessage(`{"application":"shop/checkout"}`)})
+			require.NoError(t, err)
+
+			var got applicationDetail
+			require.NoError(t, json.Unmarshal(res.Structured, &got))
+			require.Equal(t, []string{tt.want}, got.Source.Helm.Parameters)
+		})
+	}
+}

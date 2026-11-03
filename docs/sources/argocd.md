@@ -112,6 +112,14 @@ How it behaves:
 - `get_application` lists up to 20 resources that are not in order and says
   how many there are, and up to 10 conditions. It shows Helm parameters as
   `name=value`, up to 20, and never the inline Helm values.
+- Argo CD keeps Helm parameters in plain text, and teams do put passwords in
+  them. Helm parameters whose names look like secrets are shown without their
+  values, as `name=[hidden]`: the value is hidden when the last dotted
+  segment of the name, in any case, contains `password`, `passwd`, `secret`,
+  `token`, `key`, `credential`, `auth` or `cert`. So `db.password`, `apiKey`,
+  `tls.key` and `auth.existingSecret` are hidden, while `image.tag` and
+  `keycloak.url` are shown. This holds for the source of an application and
+  for every source in its history.
 - Messages, commit messages and names from Argo CD are cut at 2 KiB or 256
   bytes. They are written by people and systems, so they are passed to the
   model as untrusted text, like every source result.

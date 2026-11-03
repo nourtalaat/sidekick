@@ -36,7 +36,7 @@
     },
     {
       "name": "get_application",
-      "description": "Get one Argo CD application: where its manifests come from (repository, path, target revision, chart or Kustomize settings), where it deploys to, its project, its sync policy and so whether auto-sync is on, its sync status and health, the revision deployed now and the one it was last compared with, the last operation (phase, message, times, who started it), its conditions, the images it runs, and up to 20 resources that are not synced or not healthy.",
+      "description": "Get one Argo CD application: where its manifests come from (repository, path, target revision, chart or Kustomize settings), where it deploys to, its project, its sync policy and so whether auto-sync is on, its sync status and health, the revision deployed now and the one it was last compared with, the last operation (phase, message, times, who started it), its conditions, the images it runs, and up to 20 resources that are not synced or not healthy. Helm parameters whose names look like secrets are shown without their values.",
       "inputSchema": {
         "type": "object",
         "properties": {

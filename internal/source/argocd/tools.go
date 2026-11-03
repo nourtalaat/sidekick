@@ -67,7 +67,8 @@ var toolList = []source.Tool{
 			"revision, chart or Kustomize settings), where it deploys to, its project, its sync policy and so whether "+
 			"auto-sync is on, its sync status and health, the revision deployed now and the one it was last compared "+
 			"with, the last operation (phase, message, times, who started it), its conditions, the images it runs, and "+
-			"up to %d resources that are not synced or not healthy.", maxResources),
+			"up to %d resources that are not synced or not healthy. Helm parameters whose names look like secrets are "+
+			"shown without their values.", maxResources),
 		InputSchema: schema(map[string]*jsonschema.Schema{
 			"application": applicationProperty(),
 		}, "application"),
