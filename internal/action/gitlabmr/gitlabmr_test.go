@@ -52,6 +52,7 @@ func TestCheckProposal(t *testing.T) {
 
 		err := b.mr.CheckProposal(t.Context(), invocation(rulesParams()).Params)
 		require.ErrorIs(t, err, action.ErrPermanent)
+		require.ErrorIs(t, err, action.ErrLimit)
 		require.ErrorContains(t, err, "until they are fixed:\n- "+testRulesPath+":6: bad duration\n- "+testRulesPath+": line one line two")
 	})
 
