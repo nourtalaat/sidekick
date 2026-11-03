@@ -2,7 +2,7 @@ import { deletes } from "./deletes";
 import { ChangeList } from "./ChangeList";
 import type { SectionProps } from "./section";
 
-/** The warning of a delete, and the difference of a definition field by field. */
+/** The warning of a delete, and the difference of a definition field by field, which a rollback shows as revisions instead. */
 export function Changes({ proposal }: SectionProps) {
   const changes = proposal.changes ?? [];
 
@@ -13,7 +13,7 @@ export function Changes({ proposal }: SectionProps) {
           This deletes {proposal.target ?? "the target"}. Sidekick cannot undo a delete.
         </p>
       )}
-      {changes.length > 0 && <ChangeList changes={changes} heading="Changes, field by field" />}
+      {changes.length > 0 && proposal.revisions === undefined && <ChangeList changes={changes} heading="Changes, field by field" />}
     </>
   );
 }

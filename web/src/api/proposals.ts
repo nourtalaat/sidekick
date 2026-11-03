@@ -7,6 +7,7 @@ import type { components } from "./schema";
 export type Proposal = components["schemas"]["Proposal"];
 export type ProposalStatus = components["schemas"]["ProposalStatus"];
 export type ProposalChange = components["schemas"]["ProposalChange"];
+export type ProposalRevision = components["schemas"]["ProposalRevision"];
 
 /** The statuses of a proposal that waits for a decision. */
 export const WAITING: readonly ProposalStatus[] = ["proposed"];
