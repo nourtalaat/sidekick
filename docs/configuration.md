@@ -2264,7 +2264,7 @@ validator:
   mode: job
   allowDownloads: false
   job:
-    image: ghcr.io/nourtalaat/sidekick-validator:0.1.0   # required
+    image: ghcr.io/nourtalaat/sidekick-validator:0.2.0   # required
     imagePullPolicy: IfNotPresent    # Always, IfNotPresent or Never; empty is the cluster's default
     imagePullSecrets: [registry-login]
     serviceAccountName: sidekick-validator   # not Sidekick's own; the pod mounts no token

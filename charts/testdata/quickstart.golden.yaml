@@ -5,10 +5,10 @@ kind: NetworkPolicy
 metadata:
   name: sidekick
   labels:
-    helm.sh/chart: sidekick-0.1.0
+    helm.sh/chart: sidekick-0.2.0
     app.kubernetes.io/name: sidekick
     app.kubernetes.io/instance: sidekick
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.2.0"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: server
 spec:
@@ -35,10 +35,10 @@ kind: NetworkPolicy
 metadata:
   name: sidekick-postgres
   labels:
-    helm.sh/chart: sidekick-0.1.0
+    helm.sh/chart: sidekick-0.2.0
     app.kubernetes.io/name: sidekick
     app.kubernetes.io/instance: sidekick
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.2.0"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: postgres
 spec:
@@ -66,10 +66,10 @@ kind: ServiceAccount
 metadata:
   name: sidekick
   labels:
-    helm.sh/chart: sidekick-0.1.0
+    helm.sh/chart: sidekick-0.2.0
     app.kubernetes.io/name: sidekick
     app.kubernetes.io/instance: sidekick
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.2.0"
     app.kubernetes.io/managed-by: Helm
 automountServiceAccountToken: false
 
@@ -80,10 +80,10 @@ kind: Secret
 metadata:
   name: sidekick-postgres
   labels:
-    helm.sh/chart: sidekick-0.1.0
+    helm.sh/chart: sidekick-0.2.0
     app.kubernetes.io/name: sidekick
     app.kubernetes.io/instance: sidekick
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.2.0"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: postgres
   annotations:
@@ -101,10 +101,10 @@ kind: ConfigMap
 metadata:
   name: sidekick
   labels:
-    helm.sh/chart: sidekick-0.1.0
+    helm.sh/chart: sidekick-0.2.0
     app.kubernetes.io/name: sidekick
     app.kubernetes.io/instance: sidekick
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.2.0"
     app.kubernetes.io/managed-by: Helm
 data:
   sidekick.yaml: |
@@ -164,10 +164,10 @@ kind: ClusterRole
 metadata:
   name: sidekick-sidekick-kubernetes-source
   labels:
-    helm.sh/chart: sidekick-0.1.0
+    helm.sh/chart: sidekick-0.2.0
     app.kubernetes.io/name: sidekick
     app.kubernetes.io/instance: sidekick
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.2.0"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: kubernetes-source
 rules:
@@ -199,10 +199,10 @@ kind: ClusterRoleBinding
 metadata:
   name: sidekick-sidekick-kubernetes-source
   labels:
-    helm.sh/chart: sidekick-0.1.0
+    helm.sh/chart: sidekick-0.2.0
     app.kubernetes.io/name: sidekick
     app.kubernetes.io/instance: sidekick
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.2.0"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: kubernetes-source
 roleRef:
@@ -221,10 +221,10 @@ kind: Service
 metadata:
   name: sidekick-postgres
   labels:
-    helm.sh/chart: sidekick-0.1.0
+    helm.sh/chart: sidekick-0.2.0
     app.kubernetes.io/name: sidekick
     app.kubernetes.io/instance: sidekick
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.2.0"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: postgres
 spec:
@@ -246,10 +246,10 @@ kind: Service
 metadata:
   name: sidekick
   labels:
-    helm.sh/chart: sidekick-0.1.0
+    helm.sh/chart: sidekick-0.2.0
     app.kubernetes.io/name: sidekick
     app.kubernetes.io/instance: sidekick
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.2.0"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: server
 spec:
@@ -275,10 +275,10 @@ kind: Deployment
 metadata:
   name: sidekick
   labels:
-    helm.sh/chart: sidekick-0.1.0
+    helm.sh/chart: sidekick-0.2.0
     app.kubernetes.io/name: sidekick
     app.kubernetes.io/instance: sidekick
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.2.0"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: server
 spec:
@@ -336,7 +336,7 @@ spec:
             limits: { memory: 64Mi }
       containers:
         - name: sidekick
-          image: ghcr.io/nourtalaat/sidekick:0.1.0
+          image: ghcr.io/nourtalaat/sidekick:0.2.0
           imagePullPolicy: IfNotPresent
           args: [serve, --config, /etc/sidekick/sidekick.yaml]
           ports:
@@ -423,10 +423,10 @@ kind: StatefulSet
 metadata:
   name: sidekick-postgres
   labels:
-    helm.sh/chart: sidekick-0.1.0
+    helm.sh/chart: sidekick-0.2.0
     app.kubernetes.io/name: sidekick
     app.kubernetes.io/instance: sidekick
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.2.0"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: postgres
 spec:

@@ -7,10 +7,10 @@ kind: ClusterRole
 metadata:
   name: sidekick-sidekick-kubernetes-source-nodes
   labels:
-    helm.sh/chart: sidekick-0.1.0
+    helm.sh/chart: sidekick-0.2.0
     app.kubernetes.io/name: sidekick
     app.kubernetes.io/instance: sidekick
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.2.0"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: kubernetes-source
 rules:
@@ -27,10 +27,10 @@ kind: ClusterRoleBinding
 metadata:
   name: sidekick-sidekick-kubernetes-source-nodes
   labels:
-    helm.sh/chart: sidekick-0.1.0
+    helm.sh/chart: sidekick-0.2.0
     app.kubernetes.io/name: sidekick
     app.kubernetes.io/instance: sidekick
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.2.0"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: kubernetes-source
 roleRef:
@@ -51,10 +51,10 @@ metadata:
   name: sidekick-sidekick-kubernetes-source
   namespace: batch
   labels:
-    helm.sh/chart: sidekick-0.1.0
+    helm.sh/chart: sidekick-0.2.0
     app.kubernetes.io/name: sidekick
     app.kubernetes.io/instance: sidekick
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.2.0"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: kubernetes-source
 rules:
@@ -84,10 +84,10 @@ metadata:
   name: sidekick-sidekick-kubernetes-source
   namespace: prod
   labels:
-    helm.sh/chart: sidekick-0.1.0
+    helm.sh/chart: sidekick-0.2.0
     app.kubernetes.io/name: sidekick
     app.kubernetes.io/instance: sidekick
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.2.0"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: kubernetes-source
 rules:
@@ -121,10 +121,10 @@ metadata:
   name: sidekick-sidekick-kubernetes-source
   namespace: staging
   labels:
-    helm.sh/chart: sidekick-0.1.0
+    helm.sh/chart: sidekick-0.2.0
     app.kubernetes.io/name: sidekick
     app.kubernetes.io/instance: sidekick
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.2.0"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: kubernetes-source
 rules:
@@ -158,10 +158,10 @@ metadata:
   name: sidekick-sidekick-kubernetes-source
   namespace: batch
   labels:
-    helm.sh/chart: sidekick-0.1.0
+    helm.sh/chart: sidekick-0.2.0
     app.kubernetes.io/name: sidekick
     app.kubernetes.io/instance: sidekick
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.2.0"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: kubernetes-source
 roleRef:
@@ -182,10 +182,10 @@ metadata:
   name: sidekick-sidekick-kubernetes-source
   namespace: prod
   labels:
-    helm.sh/chart: sidekick-0.1.0
+    helm.sh/chart: sidekick-0.2.0
     app.kubernetes.io/name: sidekick
     app.kubernetes.io/instance: sidekick
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.2.0"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: kubernetes-source
 roleRef:
@@ -206,10 +206,10 @@ metadata:
   name: sidekick-sidekick-kubernetes-source
   namespace: staging
   labels:
-    helm.sh/chart: sidekick-0.1.0
+    helm.sh/chart: sidekick-0.2.0
     app.kubernetes.io/name: sidekick
     app.kubernetes.io/instance: sidekick
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.2.0"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: kubernetes-source
 roleRef:
