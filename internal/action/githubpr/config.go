@@ -2,22 +2,11 @@ package githubpr
 
 import (
 	"errors"
-	"fmt"
-	"net/url"
-	"regexp"
-	"slices"
-	"strings"
 
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
+	"github.com/nourtalaat/sidekick/internal/action/githubgit"
 	"github.com/nourtalaat/sidekick/internal/githubapp"
-	"github.com/nourtalaat/sidekick/internal/httpclient"
 )
-
-// defaultBaseURL is the REST API root of github.com.
-const defaultBaseURL = "https://api.github.com/"
-
-// repoPattern is the shape of a repository name, owner/name.
-var repoPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 
 // Config is the section of one github.pull_request action.
 type Config struct {
@@ -52,7 +41,7 @@ func (c *Config) Validate() error {
 
 	errs = append(errs, c.App.Check("app")...)
 
-	if err := c.checkBaseURL(); err != nil {
+	if err := githubgit.CheckBaseURL(c.BaseURL); err != nil {
 		errs = append(errs, err)
 	}
 
@@ -61,63 +50,18 @@ func (c *Config) Validate() error {
 	return errors.Join(errs...)
 }
 
-// checkBaseURL checks that the base URL, when set, is an absolute https
-// URL, so the installation token never crosses the network unencrypted.
-// Plain http is allowed only for a loopback host.
-func (c *Config) checkBaseURL() error {
-	if c.BaseURL == "" {
-		return nil
-	}
-
-	u, err := url.Parse(c.BaseURL)
-
-	switch {
-	case err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http"):
-		return fmt.Errorf("baseURL: %q must be an absolute https URL", c.BaseURL)
-	case u.Scheme == "http" && !httpclient.IsLoopbackHost(u.Hostname()):
-		return fmt.Errorf("baseURL: %q must use https; plain http is only allowed for localhost", c.BaseURL)
-	default:
-		return nil
-	}
-}
-
 // baseURL returns the REST API root, ending in a slash.
 func (c *Config) baseURL() string {
-	switch {
-	case c.BaseURL == "":
-		return defaultBaseURL
-	case strings.HasSuffix(c.BaseURL, "/"):
-		return c.BaseURL
-	default:
-		return c.BaseURL + "/"
-	}
+	return githubgit.BaseURL(c.BaseURL)
 }
 
 // check returns an error for each limit that is missing or out of range.
 func (l *Limits) check() []error {
 	var errs []error
 
-	errs = append(errs, l.checkRepos()...)
+	errs = append(errs, githubgit.CheckRepos(l.Repos)...)
 	errs = append(errs, l.Paths.Check()...)
 	errs = append(errs, l.Check()...)
-
-	return errs
-}
-
-// checkRepos checks that there is at least one repository and that each is
-// a plain owner/name.
-func (l *Limits) checkRepos() []error {
-	if len(l.Repos) == 0 {
-		return []error{errors.New("limits.repos: list at least one repository, as owner/name")}
-	}
-
-	var errs []error
-
-	for i, repo := range l.Repos {
-		if !validRepo(repo) {
-			errs = append(errs, fmt.Errorf("limits.repos[%d]: %q must have the form owner/name, with no wildcards", i, repo))
-		}
-	}
 
 	return errs
 }
@@ -125,24 +69,4 @@ func (l *Limits) checkRepos() []error {
 // draft reports whether pull requests open as drafts.
 func (l *Limits) draft() bool {
 	return l.Draft == nil || *l.Draft
-}
-
-// allowsRepo reports whether repo is one of the configured repositories.
-// GitHub names are not case-sensitive, so neither is the match.
-func (l *Limits) allowsRepo(repo string) bool {
-	return slices.ContainsFunc(l.Repos, func(r string) bool { return strings.EqualFold(r, repo) })
-}
-
-// validRepo reports whether s is a repository name, owner/name. Neither
-// part may be "." or "..", which GitHub does not allow and which would
-// change the meaning of an API path.
-func validRepo(s string) bool {
-	owner, name, _ := strings.Cut(s, "/")
-
-	return repoPattern.MatchString(s) && !dots(owner) && !dots(name)
-}
-
-// dots reports whether s is "." or "..".
-func dots(s string) bool {
-	return s == "." || s == ".."
 }

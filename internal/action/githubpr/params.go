@@ -7,6 +7,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
+	"github.com/nourtalaat/sidekick/internal/action/githubgit"
 )
 
 // Params are what the model fills in when it proposes the action: the
@@ -35,7 +36,7 @@ func decodeParams(raw json.RawMessage) (Params, error) {
 // returns the changes with the format of each. A limit it breaks wraps
 // action.ErrLimit.
 func (l *Limits) plan(p Params) ([]gitchange.PlannedFile, error) {
-	if !l.allowsRepo(p.Repo) {
+	if !githubgit.AllowsRepo(l.Repos, p.Repo) {
 		return nil, fmt.Errorf("repo %q is not one of limits.repos (%s): %w", p.Repo, strings.Join(l.Repos, ", "), action.ErrLimit)
 	}
 

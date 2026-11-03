@@ -100,7 +100,7 @@ neither Postgres nor Docker.
 sidekick bench validate --scenarios bench/scenarios/public --config sidekick.yaml
 ```
 
-When every scenario is valid it prints `scenarios checked: 13, problems: 0`.
+When every scenario is valid it prints `scenarios checked: 14, problems: 0`.
 It takes `--scenarios` and `--config`, as `bench run` does. The config is read
 for its strategies and model connectors, so the secrets of the connectors
 must be readable; nothing is sent to a provider. It exits with `0` when every
@@ -109,10 +109,11 @@ scenario is valid and `2` for a bad flag, config file or scenario file.
 ## The public scenarios
 
 `bench/scenarios/public` is the set that the project's own benchmark runs:
-13 scenarios about invented companies, services and data, so nothing in them
+14 scenarios about invented companies, services and data, so nothing in them
 comes from a real system. Together they cover every verdict, each of the four
-built-in strategies, triage skipping a duplicate, a source that is down, and
-the first MCP sources (SigNoz, Datadog, Sentry and Linear). Each has a
+built-in strategies, triage skipping a duplicate, a source that is down, the
+first MCP sources (SigNoz, Datadog, Sentry and Linear), and a proposal of an
+action. Each has a
 rubric for the judge and, except the triage one, checks of the run made in
 code.
 
@@ -120,6 +121,7 @@ code.
 |---|---|---|---|
 | `latency-ledger-index-dropped` | `true_positive` | `latency-alert` | `prometheus`, `github`, `postgres` |
 | `latency-low-traffic-false-positive` | `false_positive` | `latency-alert` | `prometheus`, `github` |
+| `latency-low-traffic-rule-fix-pull-request` | `false_positive` | `latency-alert` | `prometheus`, `github`, and the mock action `monitor-pr` |
 | `error-rate-signoz-bad-secret-reference` | `true_positive` | `error-rate-alert` | `signoz` (MCP), `k8s`, `github` |
 | `error-rate-scanner-traffic-false-positive` | `false_positive` | `error-rate-alert` | `elasticsearch`, `prometheus`, `github` |
 | `error-rate-datadog-duplicate-of-incident` | `duplicate` | `error-rate-alert` | `datadog` (MCP), `github` |
@@ -142,6 +144,13 @@ code.
 - `source-failure-logs-unavailable` marks its `elasticsearch` source as
   unavailable, and the report must still name the cause and list that source
   under checked as unavailable.
+- `latency-low-traffic-rule-fix-pull-request` runs in approved mode with one
+  mock action, `monitor-pr`, from the snapshot of the `github.pull_request`
+  action. The alert fires on almost no traffic at night, and its rule is kept
+  in the repository `acme/monitors`. The right answer is a false positive and
+  a pull request that changes that rule, so the scenario expects one
+  `monitor-pr` proposal for that repository, branch and file. Proposing
+  nothing, or a change somewhere else, scores wrong.
 - Each MCP source's scenario uses the tool snapshot that
   [its docs page](sources/signoz.md) describes: `bench/tools/signoz.json`,
   `datadog.json`, `sentry.json` and `linear.json`.
@@ -227,10 +236,12 @@ Each run gets these scores:
 | Root cause | The judge grades each rubric item as met or not met, with a one-line reason. The score is the weight of the items met over the weight of all items. The root cause matches when the score is at least 0.7 and every `required` item is met. A run that ended without a report is not sent to the judge, and scores 0. |
 | Evidence | The share of `expected.evidence` checks that pass, checked in code: a `calledTool` check passes when the run called the tool, a `citedURL` check when a finding of the report cites the URL. |
 | Source failures reported | Whether every source in `expected.unavailableReported` is listed as unavailable under checked. |
+| Proposals correct | Whether the run's proposals are the expected ones, checked in code; see [Scoring proposals](#scoring-proposals). A scenario without `expected.proposals` or `expected.noProposal` has none. |
 | Cost, time, tokens, tool calls | From the investigation's steps. The judge's own cost is counted apart. |
 
 Each scenario shows its spread over its runs: how many of them got the
-verdict right (k of N), the mean and standard deviation of the root-cause
+verdict right (k of N), how many got their proposals right (k of N, when the
+scenario scores proposals), the mean and standard deviation of the root-cause
 score, and the smallest, median and largest cost and time.
 
 The run totals are:
@@ -241,7 +252,8 @@ The run totals are:
 | Precision and recall | For the false positive and the true positive class, by expected verdict, over all runs. False positive precision comes first, because a wrong false positive hides a real incident. A class no run gave, or no scenario expects, has no value (`-`). |
 | Root cause match | The share of graded runs whose root cause matches, and the mean root-cause score. |
 | Evidence | The mean evidence score of the runs with evidence checks. |
-| Overall score | `0.5 × verdict accuracy + 0.3 × root cause match + 0.2 × evidence`, with the weights of `bench.yaml`. A part with nothing to score is left out and the other weights count for its share. |
+| Proposals correct | The share of runs with scored proposals whose proposals are correct. |
+| Overall score | `0.5 × verdict accuracy + 0.3 × root cause match + 0.2 × evidence`, with the weights of `bench.yaml`. A part with nothing to score, or with a weight of 0, is left out and the other weights count for its share. Proposals correct has a weight of 0 until `bench.yaml` sets one, so scoring proposals does not change the overall score of a benchmark that does not ask for it. |
 
 Each share has a 95% interval, from resampling the scenarios with
 replacement 1,000 times. When two runs' intervals of a metric overlap,
@@ -278,11 +290,12 @@ request) is a judge error as well.
 ## bench.yaml
 
 ```yaml
-weights: { verdict: 0.5, rootCause: 0.3, evidence: 0.2 }   # the defaults
+weights: { verdict: 0.5, rootCause: 0.3, evidence: 0.2, proposals: 0 }   # the defaults
 thresholds:
   verdictAccuracy: 0.8      # the lowest share allowed
   fpPrecision: 0.95
   rootCauseMatch: 0.7
+  proposalCorrect: 0.9      # the lowest share of runs with correct proposals
   maxCostPerRunUSD: 0.5     # the highest mean cost of a run, in US dollars
   baseline: bench/baseline.json   # a report.json to compare with
   maxDrop: 0.02             # how far the overall score may fall below the baseline's
@@ -305,13 +318,18 @@ Paths are read from the directory `sidekick bench run` runs in.
   reason it gave for its verdict and, when it ended without a verdict, the
   detail of why (`reason`, `stopDetail`), and the source tools it called, in
   order (`tools`). Each tool entry holds only the tool's name and the status
-  of the call, never its arguments or its result text. Its schema is
+  of the call, never its arguments or its result text. A run of a scenario
+  that scores proposals also has `proposalCorrect`, the proposals it made with
+  how each counted (`expected`, `acceptable` or `unexpected`), and the actions
+  of the expected proposals that nothing matched (`missingProposals`); never
+  their parameters or reasons. Its schema is
   [bench-report.schema.json](bench-report.schema.json); `schemaVersion`
   changes whenever the report changes in a way an older reader would
   misread.
 - `--junit junit.xml` has one test suite per scenario, with one test case
   per run, and a suite of the thresholds. A run fails when its verdict is
-  wrong or its root cause does not match.
+  wrong, its root cause does not match, or its proposals are scored and not
+  correct.
 - `--markdown summary.md` is a summary for a pull request comment: the
   thresholds, the run totals and one row per scenario.
 
@@ -386,8 +404,10 @@ limits: { maxToolCalls: 30, maxCostUSD: 0.50 }
   `budgets.perInvestigation` value, and the strategy's own limits still
   apply.
 - `expected` is what the runs will be scored against. `verdict` is
-  required; `evidence` checks each name a `calledTool` or a `citedURL`, and
-  `unavailableReported` names sources of the scenario.
+  required; `evidence` checks each name a `calledTool` or a `citedURL`,
+  `unavailableReported` names sources of the scenario, and `proposals`,
+  `noProposal` and `acceptableProposals` say which actions a good run
+  proposes; see [Scoring proposals](#scoring-proposals).
 - Unknown keys are errors, so a misspelled key does not silently do
   nothing.
 
@@ -469,8 +489,73 @@ actions:                               # by name, like sources
   checks that real actions make against a live system are not part of a
   scenario.
 - A run records the proposals the model made in `RunResult.Proposals`: the
-  action name, the parameters and the reason, oldest first. The report does
-  not score them yet.
+  action name, the parameters and the reason, oldest first. A scenario can
+  score them; see [Scoring proposals](#scoring-proposals).
+
+### Scoring proposals
+
+`expected.proposals` lists the proposals a good run makes, and
+`expected.noProposal: true` says that proposing anything is wrong, for example
+when the alert is a real incident with no recent change. Set one of them, not
+both. With neither, the run's proposals are not scored. Both need
+`route.mode: approved`.
+
+```yaml
+expected:
+  verdict: false_positive
+  proposals:                       # every one must be proposed
+    - action: monitor-pr           # a name under actions
+      params:                      # optional checks on the parameters, by path
+        repo: { equals: acme/monitors }
+        baseBranch: { equals: main }
+        files[*].path: { regex: '^prometheus/rules/' }
+  acceptableProposals:             # extra proposals that are not wrong
+    - action: monitor-pr
+```
+
+A check under `params` has a path and a matcher:
+
+- A path names a value inside the proposal's parameters. Keys are joined
+  with `.`; `[n]` picks the element n of a list, counting from 0; `[*]`
+  means any element, and the check holds when at least one element passes.
+  `repo`, `files[0].path` and `files[*].path` are paths. A key that holds
+  `.`, `[` or `]` cannot be named.
+- The matcher has the same operators as the matchers of a fixture
+  ([Mock sources](#mock-sources)): `equals`, `regex`, `contains`, `oneOf`,
+  `exists`, `gte` and `lte`. The regular expression operator is called
+  `regex`; there is no `matches`. `within` is not available here. `exists:
+  false` cannot be used on a path with `[*]`.
+- Every check of a proposal must hold. A path that reaches nothing fails its
+  check, unless the matcher is `exists: false`.
+- A path is not checked against the action's schema when the scenario is
+  read, so a mistyped key never matches and the run scores wrong.
+
+How a run is scored:
+
+- A proposal of the run matches an expected one when it has the same action
+  and every check holds. Each expected proposal is matched by at most one
+  proposal, and each proposal matches at most one expected one. The pairing
+  is chosen so that as many expected proposals as possible are matched, so
+  the order of the list does not decide the result.
+- A proposal left over is an extra. It is wrong unless an entry of
+  `acceptableProposals`, which has the same form as `proposals`, fits it. An
+  acceptable entry may cover any number of extras. Write checks that tell
+  proposals apart, so that no proposal fits both an expected and an
+  acceptable entry.
+- The run's proposals are correct when every expected proposal is matched
+  and no extra is wrong. With `noProposal`, they are correct when the run
+  proposed nothing. `acceptableProposals` needs `proposals`.
+- A run that ended without a verdict is never correct, whatever it proposed,
+  as its root cause scores 0. A proposal that breaks the action's schema was
+  refused and never recorded, so it does not count.
+- The check is plain code, with no judge. It does not score whether the
+  proposed change would work, or the reason the model gave.
+
+The result of a run says whether its proposals are correct, and `report.json`
+lists how each proposal counted. Proposals correct is a share in the run
+totals, with an interval, and `thresholds.proposalCorrect` and
+`weights.proposals` in [bench.yaml](#benchyaml) can use it. Both are off by
+default.
 
 ### Writing a spec snapshot
 
@@ -620,7 +705,7 @@ lists the places the cleaner kept but could not classify.
 `sidekick bench run --out` side by side: what each run used (Sidekick
 version and commit, the scenario set, the connector and model of each
 role, the prompt and judge prompt versions and the strategy versions),
-each metric with the change from the first run to the second, and each
+each metric (proposals correct among them) with the change from the first run to the second, and each
 scenario's runs.
 
 ```

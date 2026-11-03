@@ -160,7 +160,7 @@ func (f Fixture) validate() error {
 	}
 
 	for _, name := range slices.Sorted(maps.Keys(f.Match.Args)) {
-		if err := f.Match.Args[name].validate(); err != nil {
+		if err := f.Match.Args[name].Validate(); err != nil {
 			errs = append(errs, prefixLines("match.args."+name+": ", err))
 		}
 	}
@@ -185,9 +185,9 @@ func (f Fixture) validate() error {
 	return errors.Join(errs...)
 }
 
-// validate checks that at least one operator is set and that each one can
+// Validate checks that at least one operator is set and that each one can
 // be used.
-func (m Matcher) validate() error {
+func (m Matcher) Validate() error {
 	if m.Equals == nil && m.Regex == "" && m.Contains == nil && m.OneOf == nil &&
 		m.Exists == nil && m.GTE == nil && m.LTE == nil && m.Within == 0 {
 		return errors.New("set at least one of equals, regex, contains, oneOf, exists, gte, lte and within")

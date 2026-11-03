@@ -28,6 +28,21 @@ func TestLoadSettings(t *testing.T) {
 			wantWeights: Weights{Verdict: 0.6, RootCause: 0.4},
 		},
 		{
+			name:        "a weight for proposals",
+			file:        "weights: { verdict: 0.5, proposals: 0.5 }\n",
+			wantWeights: Weights{Verdict: 0.5, Proposals: 0.5},
+		},
+		{
+			name:        "only proposals weigh",
+			file:        "weights: { proposals: 1 }\n",
+			wantWeights: Weights{Proposals: 1},
+		},
+		{
+			name:    "a negative weight for proposals",
+			file:    "weights: { verdict: 1, proposals: -1 }\n",
+			wantErr: "weights.proposals: must not be negative",
+		},
+		{
 			name:        "a file without weights keeps the default ones",
 			file:        "{}\n",
 			wantWeights: DefaultWeights,

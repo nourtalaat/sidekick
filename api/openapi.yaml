@@ -103,6 +103,27 @@ paths:
           description: The job is pending again.
         default:
           $ref: "#/components/responses/Problem"
+  /jobs/{id}/discard:
+    post:
+      operationId: DiscardJob
+      summary: Discard a dead job
+      description: |
+        Deletes the dead job, so it cannot run again, and writes the discard
+        to the audit log with the job's kind, attempts and masked last error.
+        A job that is not dead answers 409.
+      x-sidekick-role: admin
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "204":
+          description: The job is deleted.
+        default:
+          $ref: "#/components/responses/Problem"
   /tokens:
     get:
       operationId: ListTokens
@@ -5105,6 +5126,10 @@ components:
         evidence:
           type: number
           format: double
+        proposalCorrect:
+          type: number
+          format: double
+          description: The share of the runs with scored proposals whose proposals are correct; left out when no scenario scores proposals.
         sourceFailuresReported:
           type: number
           format: double
@@ -5206,6 +5231,9 @@ components:
         evidenceScore:
           type: number
           format: double
+        proposalCorrect:
+          type: boolean
+          description: Whether the proposals of the run are correct; left out when the scenario does not score proposals.
         costMicros:
           type: integer
           format: int64

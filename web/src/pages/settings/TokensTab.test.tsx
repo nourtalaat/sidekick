@@ -121,7 +121,7 @@ describe("the API tokens tab: the list", () => {
 
     expect(screen.getByRole("tab", { name: "API tokens" })).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByRole("region", { name: "API tokens" })).toBeInTheDocument();
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Config", "API tokens"]);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Config", "API tokens", "Failed jobs"]);
   });
 
   it("lists active tokens first, then expired and revoked ones, each group newest first", async () => {

@@ -269,7 +269,7 @@ func benchMetricsOf(m bench.Metrics) apigen.BenchMetrics {
 		Runs: m.Runs, Overall: m.Overall, VerdictAccuracy: m.VerdictAccuracy,
 		FpPrecision: m.FalsePositive.Precision, FpRecall: m.FalsePositive.Recall,
 		TpPrecision: m.TruePositive.Precision, TpRecall: m.TruePositive.Recall,
-		RootCauseMatch: m.RootCauseMatch, RootCauseScore: m.RootCauseScore, Evidence: m.Evidence,
+		RootCauseMatch: m.RootCauseMatch, RootCauseScore: m.RootCauseScore, Evidence: m.Evidence, ProposalCorrect: m.ProposalCorrect,
 		SourceFailuresReported: m.SourceFailuresReported, MeanCostPerRunUsd: m.MeanCostPerRunUSD, MeanDurationMs: m.MeanDurationMs,
 		ToolCalls: m.ToolCalls, InputTokens: m.InputTokens, OutputTokens: m.OutputTokens,
 		CostMicros: m.CostMicros, JudgeCostMicros: m.JudgeCostMicros, JudgeErrors: m.JudgeErrors,
@@ -281,7 +281,7 @@ func benchResultOf(r db.ListBenchResultsRow) apigen.BenchResult {
 	return apigen.BenchResult{
 		ScenarioId: r.ScenarioID, Repeat: int(r.Repeat), Verdict: r.Verdict, ExpectedVerdict: r.ExpectedVerdict,
 		VerdictCorrect: r.VerdictCorrect, RootCauseScore: float64Of(r.RootCauseScore), RequiredMet: r.RequiredMet,
-		EvidenceScore: float64Of(r.EvidenceScore), CostMicros: r.CostMicros, DurationMs: int64(r.DurationMs),
+		EvidenceScore: float64Of(r.EvidenceScore), ProposalCorrect: r.ProposalCorrect, CostMicros: r.CostMicros, DurationMs: int64(r.DurationMs),
 		InputTokens: r.InputTokens, OutputTokens: r.OutputTokens, ToolCalls: int(r.ToolCalls),
 	}
 }

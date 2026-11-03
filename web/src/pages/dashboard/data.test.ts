@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { cost, operations, quality } from "../../test/stats";
-import { accuracyRows, comparisonRows, costPerInvestigationRows, dayLabel, eachDay, falseAlarmRows, firstFindingRows, hourLabel, MODEL_SERIES_LIMIT, spendByModel, toolCallRows, verdictRows } from "./data";
+import { cost, emptyQuality, operations, quality } from "../../test/stats";
+import { accuracyRows, comparisonRows, costPerInvestigationRows, dayLabel, eachDay, falseAlarmRows, firstFindingRows, hourLabel, MODEL_SERIES_LIMIT, scoreRows, spendByModel, toolCallRows, verdictRows } from "./data";
 import { hasData } from "./chart";
 
 describe("eachDay", () => {
@@ -28,6 +28,62 @@ describe("accuracyRows", () => {
     expect(rows[0]).toMatchObject({ accuracy: undefined, rated: 0 });
     expect(rows[1]?.accuracy).toBeCloseTo((11 / 13) * 100, 6);
     expect(rows[2]?.accuracy).toBeCloseTo(50, 6);
+  });
+});
+
+describe("scoreRows", () => {
+  const days = eachDay("2026-10-19", "2026-10-22");
+
+  it("gives precision and recall in percent with the counts of the day", () => {
+    const rows = scoreRows(quality(), days, "false_positive");
+
+    expect(rows.map((r) => r.x)).toEqual(["Oct 19", "Oct 20", "Oct 21", "Oct 22"]);
+    expect(rows[1]).toEqual({ x: "Oct 20", precision: 80, recall: 100, given: 10, confirmed: 8, agreed: 8 });
+  });
+
+  it("leaves a gap for the number a day does not define and keeps a real zero", () => {
+    const rows = scoreRows(quality(), days, "false_positive");
+
+    expect(rows[2]).toEqual({ x: "Oct 21", precision: undefined, recall: 0, given: 0, confirmed: 1, agreed: 0 });
+    expect(rows[2]).toHaveProperty("precision", undefined);
+  });
+
+  it("leaves a gap with zero counts for a day that is not in the stats", () => {
+    const rows = scoreRows(quality(), days, "false_positive");
+
+    expect(rows[0]).toEqual({ x: "Oct 19", precision: undefined, recall: undefined, given: 0, confirmed: 0, agreed: 0 });
+    expect(rows[3]).toEqual({ x: "Oct 22", precision: undefined, recall: undefined, given: 0, confirmed: 0, agreed: 0 });
+  });
+
+  it("leaves a gap for a day with no scores or only the scores of other verdicts", () => {
+    const stats = quality({
+      days: [
+        { day: "2026-10-20", rated: 1, correct: 0, scores: [] },
+        { day: "2026-10-21", rated: 1, correct: 1, scores: [{ verdict: "flapping", predicted: 1, actual: 1, hits: 1, precision: 1, recall: 1 }] },
+      ],
+    });
+
+    expect(scoreRows(stats, days, "false_positive").map((r) => [r.precision, r.recall, r.given])).toEqual([
+      [undefined, undefined, 0],
+      [undefined, undefined, 0],
+      [undefined, undefined, 0],
+      [undefined, undefined, 0],
+    ]);
+  });
+
+  it("scores the verdict it is given", () => {
+    const rows = scoreRows(quality(), days, "true_positive");
+
+    expect(rows[1]).toMatchObject({ precision: 100, recall: 60, given: 3, confirmed: 5, agreed: 3 });
+    expect(rows[2]?.precision).toBeCloseTo((2 / 3) * 100, 6);
+    expect(rows[2]).toMatchObject({ recall: 100 });
+  });
+
+  it("has a row for every day even when no day has the verdict", () => {
+    const rows = scoreRows(emptyQuality(), days, "false_positive");
+
+    expect(rows).toHaveLength(4);
+    expect(rows.every((r) => r.precision === undefined && r.recall === undefined)).toBe(true);
   });
 });
 

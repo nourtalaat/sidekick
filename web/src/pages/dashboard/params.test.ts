@@ -38,6 +38,14 @@ describe("filtersFromParams", () => {
     expect(filtersFromParams(new URLSearchParams(query))).toEqual({ range: "30d" });
   });
 
+  it("reads the verdict that the score chart uses, apart from the verdict filter", () => {
+    expect(filtersFromParams(new URLSearchParams("verdict=flapping&scoreVerdict=true_positive"))).toEqual({ range: "30d", verdict: "flapping", scoreVerdict: "true_positive" });
+  });
+
+  it("ignores a score verdict that is not a verdict", () => {
+    expect(filtersFromParams(new URLSearchParams("scoreVerdict=maybe"))).toEqual({ range: "30d" });
+  });
+
   it("leaves out a verdict, text and run ID the API would refuse", () => {
     const params = new URLSearchParams("verdict=maybe&route=%20%20&a=not-an-id");
 
@@ -52,6 +60,17 @@ describe("paramsFromFilters", () => {
 
   it("round-trips every filter", () => {
     const filters = { range: "custom", from: "2026-10-01", to: "2026-10-07", route: "payments", verdict: "flapping", compareA: RUN_ID, compareB: RUN_ID } as const;
+
+    expect(filtersFromParams(paramsFromFilters(filters))).toEqual(filters);
+  });
+
+  it("writes a score verdict that is not the default and leaves out the default", () => {
+    expect(paramsFromFilters({ range: "30d", scoreVerdict: "flapping" }).toString()).toBe("scoreVerdict=flapping");
+    expect(paramsFromFilters({ range: "30d", scoreVerdict: "false_positive" }).toString()).toBe("");
+  });
+
+  it("round-trips the score verdict", () => {
+    const filters = { range: "30d", verdict: "false_positive", scoreVerdict: "true_positive" } as const;
 
     expect(filtersFromParams(paramsFromFilters(filters))).toEqual(filters);
   });
