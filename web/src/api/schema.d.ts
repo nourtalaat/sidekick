@@ -938,9 +938,33 @@ export interface paths {
          *     cursor names. `params`, `paramsText` and `reason` are text the
          *     model wrote: show them as plain text, and show `paramsText`, which
          *     spells out characters that could hide something, to the person who
-         *     decides.
+         *     decides. `action` narrows the list to one action name.
          */
         get: operations["ListProposals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/proposals/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The names of the actions the config defines
+         * @description The names in the `actions` section of the config, sorted. They are
+         *     the values the `action` parameter of `GET /proposals` takes. They
+         *     are read from the config in memory, not from the proposals, so an
+         *     action that was removed from the config is not listed even when
+         *     proposals of it exist.
+         */
+        get: operations["ListProposalActions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2020,6 +2044,10 @@ export interface components {
         };
         /** @enum {string} */
         ProposalStatus: "proposed" | "approved" | "rejected" | "expired" | "executing" | "succeeded" | "failed" | "undone";
+        ProposalActionList: {
+            /** @description The configured action names, sorted. */
+            actions: string[];
+        };
         ActionLink: {
             title: string;
             url: string;
@@ -4551,6 +4579,14 @@ export interface operations {
             query?: {
                 /** @description Only proposals with one of these statuses. The default is proposed. */
                 status?: components["schemas"]["ProposalStatus"][];
+                /**
+                 * @description Only proposals of this action. It is a name from the `actions`
+                 *     section of the config, as `Proposal.action` holds it;
+                 *     `GET /proposals/actions` lists them. It combines with `status`
+                 *     and `cursor`. A name that is not configured answers 400, and the
+                 *     detail lists the names.
+                 */
+                action?: string;
                 /** @description The nextCursor of the page before. */
                 cursor?: string;
                 limit?: number;
@@ -4568,6 +4604,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProposalList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListProposalActions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The action names. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalActionList"];
                 };
             };
             default: components["responses"]["Problem"];

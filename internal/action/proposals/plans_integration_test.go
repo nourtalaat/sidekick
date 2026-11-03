@@ -16,14 +16,16 @@ import (
 	"github.com/nourtalaat/sidekick/internal/store/storetest"
 )
 
-// TestQueryPlans runs EXPLAIN ANALYZE on each proposal query over 50,000
-// proposals and checks that it uses the index it is meant to. Run with -v
-// to see the plans.
+// TestQueryPlans runs EXPLAIN ANALYZE on each proposal query over 100,000
+// proposals and checks that it uses the index it is meant to. The queries
+// that filter by action run twice, as a pgx pool may run them: planned for
+// the values given, and with a generic plan. Run with -v to see the plans.
 func TestQueryPlans(t *testing.T) {
 	t.Parallel()
 
 	pool := storetest.New(t)
 	storetest.LoadFixture(t, pool, "fixture/busy.sql")
+	storetest.LoadFixture(t, pool, "fixture/busy_actions.sql")
 
 	// busyInvestigation is an investigation in the middle of the table,
 	// busy its ten proposals' first, and proposed a proposal that is still
@@ -38,6 +40,8 @@ func TestQueryPlans(t *testing.T) {
 		name      string
 		run       func(ctx context.Context, q *db.Queries) error
 		wantIndex []string
+		// generic plans the query as a prepared statement with a generic plan.
+		generic bool
 	}{
 		{
 			name: "InsertActionProposal",
@@ -180,6 +184,77 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey"},
 		},
 		{
+			name: "ListActionProposalsByAction",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListActionProposals(ctx, db.ListActionProposalsParams{
+					Status: "failed", Action: new("slack-react"), BeforeAt: farFuture, BeforeID: uuid.Max, PageSize: 51,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey"},
+		},
+		{
+			name: "ListActionProposalsByRareAction",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListActionProposals(ctx, db.ListActionProposalsParams{
+					Status: "failed", Action: new("monitor-rollback"), BeforeAt: farFuture, BeforeID: uuid.Max, PageSize: 51,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey"},
+		},
+		{
+			name: "ListActionProposalsByRareActionAfterCursor",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListActionProposals(ctx, db.ListActionProposalsParams{
+					Status: "succeeded", Action: new("monitor-rollback"), BeforeAt: now.Add(-100 * time.Hour), BeforeID: uuid.Max, PageSize: 51,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			// A rare action is found through the index on the action, which the
+			// daily count made; the planner may take either index.
+			wantIndex: []string{"Index Scan using action_proposals_", "investigations_pkey"},
+		},
+		{
+			name: "ListActionProposalsGeneric",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListActionProposals(ctx, db.ListActionProposalsParams{
+					Status: "succeeded", BeforeAt: farFuture, BeforeID: uuid.Max, PageSize: 51,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey"},
+			generic:   true,
+		},
+		{
+			name: "ListActionProposalsByActionGeneric",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListActionProposals(ctx, db.ListActionProposalsParams{
+					Status: "failed", Action: new("slack-react"), BeforeAt: farFuture, BeforeID: uuid.Max, PageSize: 51,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey"},
+			generic:   true,
+		},
+		{
+			name: "ListActionProposalsByRareActionGeneric",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListActionProposals(ctx, db.ListActionProposalsParams{
+					Status: "failed", Action: new("monitor-rollback"), BeforeAt: farFuture, BeforeID: uuid.Max, PageSize: 51,
+				})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey"},
+			generic:   true,
+		},
+		{
 			name: "ListInvestigationActionProposals",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.ListInvestigationActionProposals(ctx, busyInvestigation)
@@ -200,6 +275,9 @@ func TestQueryPlans(t *testing.T) {
 			defer func() { _ = tx.Rollback(t.Context()) }()
 
 			explain := storetest.NewExplainer(t, tx)
+			if tt.generic {
+				explain = storetest.NewGenericExplainer(t, tx)
+			}
 
 			require.ErrorIs(t, tt.run(t.Context(), db.New(explain)), storetest.ErrExplained)
 
