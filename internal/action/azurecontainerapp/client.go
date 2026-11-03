@@ -21,6 +21,12 @@ import (
 // update, when Azure gives no Retry-After.
 const pollInterval = 5 * time.Second
 
+// pollTimeout is the longest the action waits for one update. The SDK keeps
+// polling while Azure answers 408, 429 or a 5xx, so without this limit an
+// Azure that keeps failing would hold the job for ever. When it passes, the
+// job tries again, and finds the app still updating or done.
+const pollTimeout = 10 * time.Minute
+
 // maxRevisions is the most revisions of one app that the action reads.
 const maxRevisions = 1000
 
@@ -58,6 +64,8 @@ type arms struct {
 	opts *arm.ClientOptions
 	// pollEvery is how long to wait between two looks at a running update.
 	pollEvery time.Duration
+	// pollTimeout is the longest to wait for one update.
+	pollTimeout time.Duration
 
 	mu    sync.Mutex
 	pairs map[string]*pair
@@ -128,6 +136,9 @@ func (a *arms) setTraffic(ctx context.Context, s scope, location *string, list [
 	if err != nil {
 		return asStatusError("change the traffic", err)
 	}
+
+	ctx, cancel := context.WithTimeout(ctx, a.pollTimeout)
+	defer cancel()
 
 	if _, err := poller.PollUntilDone(ctx, &runtime.PollUntilDoneOptions{Frequency: a.pollEvery}); err != nil {
 		return asStatusError("wait for the traffic change", err)

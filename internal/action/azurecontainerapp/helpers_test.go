@@ -325,6 +325,7 @@ func newTestAction(t *testing.T, f *fakeARM, maxBack int) *Rollback {
 		DisableRPRegistration: true,
 	})
 	r.arms.pollEvery = time.Millisecond
+	r.arms.pollTimeout = 2 * time.Second
 
 	return r
 }

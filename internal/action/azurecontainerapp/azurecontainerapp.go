@@ -151,7 +151,7 @@ func newRollback(name string, cfg Config, cred azcore.TokenCredential, opts *arm
 		RevisionLimit: cfg.RevisionLimit,
 		name:          name,
 		limits:        cfg.Limits,
-		arms:          &arms{cred: cred, opts: opts, pollEvery: pollInterval},
+		arms:          &arms{cred: cred, opts: opts, pollEvery: pollInterval, pollTimeout: pollTimeout},
 	}
 }
 
