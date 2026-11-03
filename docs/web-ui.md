@@ -297,6 +297,18 @@ The web UI shows the investigations in two pages, which every role from
   lessons applied but were left out, with the reason; see
   [Lessons](#lessons).
 
+Under the watchers, each watcher has a **Checks** list that opens to show
+how the watcher started, how it ended and when, and its last checks, newest
+first: the time with seconds, whether the check passed, failed or had an
+error, what the checked service answered, and how long the check took. The
+list is open for a watcher that is still running and closed for one that
+ended, and it shows up to 50 checks; when more ran, it says "Showing the last
+50 of N checks." A long answer is cut after a few lines until **Show all**
+is pressed. The answer comes from the checked service, so it is shown as
+plain text. The list sits outside the watcher box, so a screen reader does
+not read out every new check; it is read again every 60 seconds and when the
+stream reports that a watcher changed.
+
 Under the verdict, each finding, each fix and each tool result, the page
 says how many people rated that part correct and how many wrong, from
 Slack and the web UI together. A `responder` or higher also sees
