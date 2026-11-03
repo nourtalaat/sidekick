@@ -3,13 +3,14 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import type { QualityStats, Verdict } from "../../api/stats";
 import { VerdictBadge } from "../../components/Badge";
 import { Card } from "../../components/Card";
+import { Select } from "../../components/Select";
 import { Table } from "../../components/Table";
 import { BenchRuns } from "./BenchRuns";
 import { ChartCard, FILTERS_ID } from "./ChartCard";
 import { categoryColor, type ChartSpec } from "./chart";
-import { accuracyRows, comparisonRows } from "./data";
+import { accuracyRows, comparisonRows, scoreRows } from "./data";
 import { Loaded } from "./Loaded";
-import { VERDICT_OPTIONS, type DashboardFilters } from "./params";
+import { DEFAULT_SCORE_VERDICT, VERDICT_OPTIONS, type DashboardFilters } from "./params";
 import { formatCount, formatShare } from "./words";
 import "./Dashboard.css";
 
@@ -24,9 +25,10 @@ interface QualitySectionProps {
   onChange(filters: DashboardFilters): void;
 }
 
-/** Quality: verdict accuracy over time, the confusion matrix, precision and recall, model comparisons and benchmark runs. */
+/** Quality: verdict accuracy over time, precision and recall over time, the confusion matrix, precision and recall by verdict, model comparisons and benchmark runs. */
 export function QualitySection({ quality, days, filters, onChange }: QualitySectionProps) {
   const headingId = useId();
+  const scoreVerdict = filters.scoreVerdict ?? DEFAULT_SCORE_VERDICT;
 
   return (
     <section aria-labelledby={headingId} className="sk-dashboard__section">
@@ -37,6 +39,12 @@ export function QualitySection({ quality, days, filters, onChange }: QualitySect
         {(stats) => (
           <div className="sk-dashboard__grid">
             <ChartCard title="Verdict accuracy over time" summary={accuracySummary(stats)} spec={accuracySpec(stats, days)} />
+            <ChartCard
+              title="Precision and recall over time"
+              summary={scoresSummary(stats, scoreVerdict)}
+              spec={scoresSpec(stats, days, scoreVerdict)}
+              aside={<ScoreVerdictMenu verdict={scoreVerdict} filters={filters} onChange={onChange} />}
+            />
             <ConfusionMatrix stats={stats} />
             <VerdictScores stats={stats} />
             <ChartCard title="Accuracy by model and strategy" summary={comparisonSummary(stats)} spec={comparisonSpec(stats)} />
@@ -72,6 +80,59 @@ function accuracySummary(stats: QualityStats): string {
   const { rated, correct, accuracy } = stats.totals;
 
   return `From ${stats.from} to ${stats.to}, people rated ${formatCount(rated)} investigations and confirmed the verdict of ${formatCount(correct)} of them: an accuracy of ${formatShare(accuracy)}.`;
+}
+
+function scoresSpec(stats: QualityStats, days: string[], verdict: Verdict): ChartSpec {
+  return {
+    kind: "line",
+    data: scoreRows(stats, days, verdict),
+    series: [
+      { key: "precision", label: "Precision", color: categoryColor(0) },
+      { key: "recall", label: "Recall", color: categoryColor(1) },
+    ],
+    xLabel: "Day (UTC)",
+    format: percent,
+    domain: [0, PERCENT],
+    tableColumns: [
+      { key: "precision", label: "Precision" },
+      { key: "recall", label: "Recall" },
+      { key: "given", label: "Given", format: formatCount },
+      { key: "confirmed", label: "Confirmed", format: formatCount },
+      { key: "agreed", label: "Agreed", format: formatCount },
+    ],
+  };
+}
+
+function scoresSummary(stats: QualityStats, verdict: Verdict): string {
+  const label = labelOf(verdict);
+  const score = stats.perVerdict.find((s) => s.verdict === verdict);
+
+  if (!score) {
+    return `${label}: no verdicts given or confirmed in this range.`;
+  }
+
+  const precision = score.precision === undefined ? "no precision yet" : `precision ${formatShare(score.precision)}`;
+  const recall = score.recall === undefined ? "no recall yet" : `recall ${formatShare(score.recall)}`;
+
+  return `${label}: ${precision} and ${recall} over the range, from ${verdictCount(score.predicted)} given and ${formatCount(score.actual)} confirmed.`;
+}
+
+function verdictCount(n: number): string {
+  return `${formatCount(n)} ${n === 1 ? "verdict" : "verdicts"}`;
+}
+
+/** The menu on the card that chooses the verdict to score; the page's Verdict filter is another choice. */
+function ScoreVerdictMenu({ verdict, filters, onChange }: { verdict: Verdict; filters: DashboardFilters; onChange(filters: DashboardFilters): void }) {
+  const choose = (value: string) => {
+    const chosen = VERDICT_OPTIONS.find((o) => o.value === value)?.value;
+    onChange({ ...filters, scoreVerdict: chosen === DEFAULT_SCORE_VERDICT ? undefined : chosen });
+  };
+
+  return (
+    <div className="sk-chart__controls">
+      <Select label="Verdict" value={verdict} options={VERDICT_OPTIONS} onChange={(event) => choose(event.target.value)} />
+    </div>
+  );
 }
 
 function comparisonSpec(stats: QualityStats): ChartSpec {
