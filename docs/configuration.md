@@ -2614,6 +2614,129 @@ environment.
 and documentation, as the comments in `internal/action/launchdarklyflag` say.
 Nothing was tried against a LaunchDarkly account.
 
+##### `gcp.cloud_run_rollback`
+
+Sends the traffic of a Cloud Run service back to an earlier ready revision,
+through the Cloud Run Admin API (v2). The approver sees the revision that
+serves now and the one it goes back to, and can undo it. The action is
+approval-only (see [action modes](#action-modes)): a `read-write` route may
+list it only when the action sets `allowReadWrite: true`. Use it on routes
+with `mode: approved`. It changes only the traffic of the service: it never
+deploys, splits traffic or waits for the service to be healthy. The watcher
+reports when the service recovers.
+
+**A rollback pins the service.** After a rollback, all the traffic goes to
+one revision by name. The service no longer follows the latest revision, so
+later deploys get no traffic until traffic is set back. The proposal says
+this, and so does the result. Undo puts the traffic list back as it was,
+for example 100 percent to the latest revision, so deploys flow again. If you
+do not undo the rollback, send the traffic back yourself when the fix is
+deployed, for example with `gcloud run services update-traffic <service>
+--to-latest`.
+
+```yaml
+actions:
+  checkout-rollback:
+    type: gcp.cloud_run_rollback
+    credentialsSecret: { name: sidekick-gcp-run, key: credentials.json }
+    allowReadWrite: false                 # default
+    maxRevisionsBack: 2                   # default 1; from 1 to 10
+    limits:
+      projects: [shop-prod]
+      locations: [europe-west1]
+      services: [checkout, "payments-*"]  # names, or patterns where * is any text
+
+routes:
+  - name: checkout-errors
+    match: { intake: [alertmanager] }
+    mode: approved
+    actions: [checkout-rollback]
+```
+
+| Key | Meaning |
+|---|---|
+| `credentialsSecret` | A credential file in a Secret: a workload identity federation file, or a service account key. Empty means Application Default Credentials, which on GKE come from Workload Identity. Read again for each new token, so a rotated file needs no restart. Use a credential of its own with the custom role below, apart from the one of any [Google Cloud source](sources/gcp.md). With it empty, the action and the source use the same Google identity of the pod, which then needs the rights of both. |
+| `allowReadWrite` | See [action modes](#action-modes). Default: false. |
+| `maxRevisionsBack` | How many revisions back the model may ask to go. Default 1; a value you write must be from 1 to 10. |
+| `limits.projects` | Required. The project IDs whose services may be rolled back. |
+| `limits.locations` | Required. The regions of those services, such as `europe-west1`. |
+| `limits.services` | Required. Service names, or patterns in which `*` stands for any text and is the only wildcard. |
+
+The model proposes `service` and, when the config lists more than one, `project`
+and `location`. It may add `revisionsBack`, which is 1 when left out. A value
+outside the limits is refused before anything is sent.
+
+**Which revision.** Sidekick reads the service and its revisions, which Google
+Cloud lists newest first. The revision that serves now is the latest ready
+revision when the traffic follows the latest revision (or has no list), and the
+named revision when the traffic is pinned. "N back" is the Nth ready revision
+older than that one: a revision that is not ready is skipped and not counted.
+The proposal is refused, and the model reads why, when:
+
+- the traffic is split between several revisions, or the traffic list has any
+  entry besides one with 100 percent and no tag, because setting the traffic
+  would drop it;
+- the service is still applying an earlier change;
+- the service has no ready revision, or too few earlier ready revisions;
+- the list has more than 1000 revisions.
+
+**What it checks.** Right before it writes, Sidekick reads the service again. If
+its etag (the version tag Google Cloud gives each version of a service), the
+way its traffic is set, or the revision that serves differ from the proposal,
+a deploy or an edit happened since, and the proposal fails as a conflict. A
+new proposal is needed. If all the traffic goes to the revision of the
+proposal already, which is what a repeat after a crash finds, nothing is
+written and it counts as done. The update sends the service as it was read,
+with only `traffic` replaced and its live etag, and `updateMask=traffic`, and
+waits for the operation within the 5 minute run. Google Cloud's public API
+definitions say the etag "may be used to detect modification conflict", but
+not that an update refuses a stale one, so Sidekick compares the etag itself
+and also reads an answer of 409 as a conflict. A short moment between its own
+read and the write is not covered.
+
+**Undo.** Undo puts the traffic back: 100 percent to the latest revision when the
+traffic followed it before, otherwise 100 percent to the revision that was
+named. If the traffic is not what the rollback wrote, someone changed it, and
+Undo changes nothing and shows the revision that serves now, unless the
+approver confirms to restore it anyway (`force`). Undo does nothing when the
+traffic is back already.
+
+**The custom role.** Give the credential a custom role with only what the
+action calls:
+
+```sh
+gcloud iam roles create sidekickCloudRunRollback --project <project> \
+  --title "Sidekick Cloud Run rollback" \
+  --permissions run.services.get,run.services.update,run.revisions.list,run.operations.get
+```
+
+| Permission | Used for |
+|---|---|
+| `run.services.get` | Reading the service and its traffic. |
+| `run.services.update` | Changing the traffic. |
+| `run.revisions.list` | Listing the revisions of the service. |
+| `run.operations.get` | Waiting for the update to finish. |
+
+Grant it on each project, or on each service, that `limits` lists. The role
+gives no right to deploy, to delete revisions or services, or to change who may
+call a service. Google's IAM reference lists these permissions in the Cloud
+Run Developer and Viewer roles, and `run.services.update` only in Developer.
+Google's pages do not say whether an update of only the traffic also needs
+`iam.serviceAccounts.actAs` on the service's runtime service account, which
+deploying a revision does need. Start without it. If an update answers 403 and
+names that permission, grant Service Account User on that one service account
+to the action's credential and nothing wider.
+
+With `networkPolicy.restrictEgress`, allow `run.googleapis.com` and Google's
+token endpoint on port 443 (`*.googleapis.com` covers both), and, on GKE with
+Application Default Credentials, the metadata server at `169.254.169.254/32`.
+
+**What it relies on.** The facts come from Google's public API definitions
+(`googleapis/googleapis`, `google/cloud/run/v2`, and the discovery document
+in `googleapis/google-api-go-client` v0.297.0), as the comments in
+`internal/action/gcprun` say. Nothing was tried against a Google Cloud
+project.
+
 ##### `github.pull_request`
 
 Opens a pull request that changes monitor definitions kept in Git:
