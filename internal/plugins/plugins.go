@@ -18,6 +18,7 @@ import (
 	_ "github.com/nourtalaat/sidekick/internal/action/githubrevert"        // Action type "github.revert".
 	_ "github.com/nourtalaat/sidekick/internal/action/gitlabcode"          // Action type "gitlab.code_change".
 	_ "github.com/nourtalaat/sidekick/internal/action/gitlabmr"            // Action type "gitlab.merge_request".
+	_ "github.com/nourtalaat/sidekick/internal/action/gitlabrevert"        // Action type "gitlab.revert".
 	_ "github.com/nourtalaat/sidekick/internal/action/grafana"             // Action type "grafana.alert_rule".
 	_ "github.com/nourtalaat/sidekick/internal/action/grafanasilence"      // Action type "grafana.silence".
 	_ "github.com/nourtalaat/sidekick/internal/action/helmrollback"        // Action type "helm.rollback".
