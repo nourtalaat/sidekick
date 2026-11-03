@@ -38,6 +38,7 @@ type benchSummaryBody struct {
 		TpPrecision     *float64 `json:"tpPrecision"`
 		TpRecall        *float64 `json:"tpRecall"`
 		RootCauseMatch  *float64 `json:"rootCauseMatch"`
+		ProposalCorrect *float64 `json:"proposalCorrect"`
 		MeanCost        *float64 `json:"meanCostPerRunUsd"`
 		MeanDurationMs  *float64 `json:"meanDurationMs"`
 		CostMicros      int64    `json:"costMicros"`
@@ -79,6 +80,7 @@ func TestListBenchRuns(t *testing.T) {
 		require.Empty(t, b.Strategies)
 		require.InDelta(t, 0.4, *b.Metrics.Overall, 1e-9)
 		require.Nil(t, b.Metrics.FpPrecision, "a share with nothing to count is left out")
+		require.Nil(t, b.Metrics.ProposalCorrect)
 		require.Equal(t, 1, b.Metrics.JudgeErrors)
 
 		require.Equal(t, benchA, a.ID)
@@ -97,6 +99,7 @@ func TestListBenchRuns(t *testing.T) {
 		require.InDelta(t, 0.5, *a.Metrics.TpRecall, 1e-9)
 		require.Nil(t, a.Metrics.TpPrecision)
 		require.Nil(t, a.Metrics.RootCauseMatch)
+		require.InDelta(t, 0.5, *a.Metrics.ProposalCorrect, 1e-9)
 		require.InDelta(t, 0.002, *a.Metrics.MeanCost, 1e-9)
 		require.InDelta(t, 1500, *a.Metrics.MeanDurationMs, 1e-9)
 		require.Equal(t, int64(8000), a.Metrics.CostMicros)
@@ -188,6 +191,7 @@ func TestGetBenchRun(t *testing.T) {
 				RootCauseScore  *float64 `json:"rootCauseScore"`
 				RequiredMet     *bool    `json:"requiredMet"`
 				EvidenceScore   *float64 `json:"evidenceScore"`
+				ProposalCorrect *bool    `json:"proposalCorrect"`
 				CostMicros      int64    `json:"costMicros"`
 				DurationMs      int64    `json:"durationMs"`
 				ToolCalls       int      `json:"toolCalls"`
@@ -224,6 +228,8 @@ func TestGetBenchRun(t *testing.T) {
 		require.InDelta(t, 0.9, *r.RootCauseScore, 1e-6)
 		require.True(t, *r.RequiredMet)
 		require.InDelta(t, 1.0, *r.EvidenceScore, 1e-6)
+		require.True(t, *r.ProposalCorrect)
+		require.False(t, *got.Results[1].ProposalCorrect)
 		require.Equal(t, int64(2000), r.CostMicros)
 		require.Equal(t, int64(1200), r.DurationMs)
 		require.Equal(t, 3, r.ToolCalls)
@@ -235,6 +241,7 @@ func TestGetBenchRun(t *testing.T) {
 		require.False(t, last.VerdictCorrect)
 		require.Nil(t, last.RootCauseScore)
 		require.Nil(t, last.RequiredMet)
+		require.Nil(t, last.ProposalCorrect, "a scenario that does not score proposals has none")
 	})
 
 	t.Run("a failed threshold", func(t *testing.T) {
@@ -332,6 +339,12 @@ func TestCompareBenchRuns(t *testing.T) {
 		require.Nil(t, recall.B)
 		require.Nil(t, recall.Change)
 		require.Equal(t, "unknown", recall.Difference)
+
+		proposals := got.Metrics[rows["proposalCorrect"]]
+		require.Equal(t, "proposal correct", proposals.Label)
+		require.InDelta(t, 0.5, *proposals.A, 1e-9)
+		require.Nil(t, proposals.B)
+		require.Equal(t, "unknown", proposals.Difference)
 
 		cost := got.Metrics[rows["meanCostPerRunUSD"]]
 		require.InDelta(t, 0.002, *cost.Change, 1e-9)

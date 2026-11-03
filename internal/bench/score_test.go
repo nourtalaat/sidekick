@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -521,4 +522,107 @@ func requireRange(t *testing.T, want, got Range) {
 	require.InDelta(t, want.Min, got.Min, shareDelta)
 	require.InDelta(t, want.Median, got.Median, shareDelta)
 	require.InDelta(t, want.Max, got.Max, shareDelta)
+}
+
+// proposalResults returns scored-ready results of two scenarios: "proposals",
+// which expects a monitor-pr proposal and has three runs, two that make it
+// and one that proposes nothing, and "plain", which expects none. Every
+// verdict is correct. With scored false, "proposals" expects none either.
+func proposalResults(scored bool) *Results {
+	expected := Expected{Verdict: report.FalsePositive}
+	if scored {
+		expected.Proposals = []ExpectedProposal{want(nil)}
+	}
+
+	return &Results{Scenarios: []ScenarioResult{
+		{ID: "proposals", Expected: expected, Runs: numbered(proposed(made("monitor-pr", prHead)), proposed(made("monitor-pr", prHead)), proposed())},
+		{ID: "plain", Expected: Expected{Verdict: report.FalsePositive}, Runs: numbered(proposed())},
+	}}
+}
+
+func TestScoreProposalTotals(t *testing.T) {
+	t.Parallel()
+
+	results := proposalResults(true)
+	require.NoError(t, Score(t.Context(), results, ScoreOptions{Seed: DefaultSeed}))
+
+	sum := results.Summary
+	requireShare(t, new(2.0/3), sum.Metrics.ProposalCorrect)
+	require.Contains(t, sum.Intervals, "proposalCorrect")
+
+	require.NotNil(t, results.Scenarios[0].Spread.ProposalCorrect)
+	require.Equal(t, 2, *results.Scenarios[0].Spread.ProposalCorrect)
+	require.Nil(t, results.Scenarios[1].Spread.ProposalCorrect, "a scenario that does not score proposals has none")
+
+	none := proposalResults(false)
+	require.NoError(t, Score(t.Context(), none, ScoreOptions{Seed: DefaultSeed}))
+	require.Nil(t, none.Summary.Metrics.ProposalCorrect, "nothing to count")
+	require.NotContains(t, none.Summary.Intervals, "proposalCorrect")
+}
+
+func TestProposalWeightZeroKeepsOverall(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		weights Weights
+		// wantSame is true when the overall score equals that of the same
+		// runs with no proposal expectations.
+		wantSame bool
+		want     float64
+	}{
+		{name: "the default weights", wantSame: true, want: 1},
+		{name: "weights that leave proposals out", weights: Weights{Verdict: 0.6, RootCause: 0.4}, wantSame: true, want: 1},
+		{name: "a weight for proposals", weights: Weights{Verdict: 1, Proposals: 1}, want: (1 + 2.0/3) / 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			with, without := proposalResults(true), proposalResults(false)
+			opts := ScoreOptions{Weights: tt.weights, Seed: DefaultSeed}
+
+			require.NoError(t, Score(t.Context(), with, opts))
+			require.NoError(t, Score(t.Context(), without, opts))
+
+			requireShare(t, new(tt.want), with.Summary.Metrics.Overall)
+
+			if tt.wantSame {
+				require.InDelta(t, *without.Summary.Metrics.Overall, *with.Summary.Metrics.Overall, shareDelta)
+			}
+		})
+	}
+}
+
+func TestDefaultWeightsKeepTheBaselineOverall(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		file string
+	}{
+		{name: "bench/baseline.json", file: filepath.Join(repoRoot, "bench", "baseline.json")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			baseline, err := ReadReport(tt.file)
+			require.NoError(t, err)
+			require.Equal(t, DefaultWeights, baseline.Weights, "the baseline was scored with the default weights, and proposals read as 0")
+			require.NotNil(t, baseline.Metrics.Overall)
+			require.InDelta(t, *baseline.Metrics.Overall, *overall(DefaultWeights, baseline.Metrics), shareDelta)
+		})
+	}
+}
+
+// numbered counts the runs from 1, as a benchmark does.
+func numbered(runs ...RunResult) []RunResult {
+	for i := range runs {
+		runs[i].Run = i + 1
+	}
+
+	return runs
 }

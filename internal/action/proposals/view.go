@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"time"
 
@@ -67,7 +68,7 @@ func OfInvestigation(ctx context.Context, q db.DBTX, investigationID uuid.UUID) 
 	out := make([]action.Proposal, 0, len(rows))
 
 	for _, r := range rows {
-		p, err := proposalOf(r.ActionProposal, r.Route, r.DecidedByName)
+		p, err := proposalOf(ctx, r.ActionProposal, r.Route, r.DecidedByName)
 		if err != nil {
 			return nil, fmt.Errorf("proposal %s: %w", r.ActionProposal.ID, err)
 		}
@@ -89,7 +90,7 @@ func Get(ctx context.Context, q db.DBTX, id uuid.UUID) (View, error) {
 		return View{}, fmt.Errorf("read proposal %s: %w", id, err)
 	}
 
-	p, err := proposalOf(r.ActionProposal, r.Route, r.DecidedByName)
+	p, err := proposalOf(ctx, r.ActionProposal, r.Route, r.DecidedByName)
 	if err != nil {
 		return View{}, fmt.Errorf("proposal %s: %w", id, err)
 	}
@@ -137,7 +138,7 @@ func List(ctx context.Context, q db.DBTX, opts ListOptions) ([]View, error) {
 	out := make([]View, 0, len(rows))
 
 	for _, r := range rows {
-		p, err := proposalOf(r.ActionProposal, r.Route, r.DecidedByName)
+		p, err := proposalOf(ctx, r.ActionProposal, r.Route, r.DecidedByName)
 		if err != nil {
 			return nil, fmt.Errorf("proposal %s: %w", r.ActionProposal.ID, err)
 		}
@@ -150,7 +151,7 @@ func List(ctx context.Context, q db.DBTX, opts ListOptions) ([]View, error) {
 
 // proposalOf converts a stored proposal, with the route of its
 // investigation and the name of who decided it.
-func proposalOf(row db.ActionProposal, route, decidedByName string) (action.Proposal, error) {
+func proposalOf(ctx context.Context, row db.ActionProposal, route, decidedByName string) (action.Proposal, error) {
 	p := action.Proposal{
 		ID:                 row.ID.String(),
 		InvestigationID:    row.InvestigationID.String(),
@@ -192,6 +193,8 @@ func proposalOf(row db.ActionProposal, route, decidedByName string) (action.Prop
 
 		p.Snapshot, p.Changes = snap, changes
 
+		p.Revisions = revisionsOf(ctx, row.ID, snap)
+
 		if p.UndoOf == "" {
 			p.Files = gitchange.FilesOf(*snap)
 		}
@@ -209,6 +212,27 @@ func proposalOf(row db.ActionProposal, route, decidedByName string) (action.Prop
 	}
 
 	return p, nil
+}
+
+// revisionsOf returns the revisions of a rollback's snapshot as a person
+// reads them, or nil for any other snapshot. A rollback snapshot that cannot
+// be read is logged and shown as nil, so the proposal shows its changes
+// instead and one bad row cannot break a page.
+func revisionsOf(ctx context.Context, id uuid.UUID, snap *action.Snapshot) *action.Revisions {
+	revisions, err := snap.Revisions()
+	if err != nil {
+		slog.WarnContext(ctx, "the revisions of a proposal cannot be read, so its changes are shown instead", "proposal_id", id.String(), "error", err.Error())
+
+		return nil
+	}
+
+	if revisions == nil {
+		return nil
+	}
+
+	shown := revisions.Display()
+
+	return &shown
 }
 
 // snapshotOf returns the snapshot stored with the proposal, or nil when it

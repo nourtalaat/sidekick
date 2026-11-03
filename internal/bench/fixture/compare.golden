@@ -18,6 +18,7 @@ true positive recall      0.67     1.00     +0.33     -
 root cause match          0.50     0.83     +0.33     no clear difference
 root cause score          0.70     0.90     +0.20     -
 evidence                  0.75     1.00     +0.25     no clear difference
+proposal correct          -        -        -         -
 source failures reported  1.00     -        -         -
 mean cost per run         $0.0200  $0.0180  -$0.0020  -
 mean time per run         4s       3.8s     -200ms    -

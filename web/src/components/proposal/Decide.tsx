@@ -3,6 +3,7 @@ import { useDecideProposal, type Proposal } from "../../api/proposals";
 import { Button } from "../Button";
 import { TextArea } from "../TextArea";
 import { deletes } from "./deletes";
+import { revisionName } from "./revisionText";
 
 /** The longest note a rejection takes, as the API limits it. */
 const MAX_NOTE = 500;
@@ -82,6 +83,10 @@ export function Decide({ proposal }: { proposal: Proposal }) {
 function approveQuestion(p: Proposal): string {
   if (deletes(p)) {
     return `Delete ${p.target ?? "the target"}? Sidekick cannot undo a delete.`;
+  }
+
+  if (p.revisions) {
+    return `Roll back ${p.action} from ${revisionName(p.revisions.running)} to ${revisionName(p.revisions.goesBackTo)}, as shown above?`;
   }
 
   if (p.changes && p.changes.length > 0) {

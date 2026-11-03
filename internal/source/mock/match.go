@@ -34,6 +34,25 @@ func (m Matcher) holds(value any, present bool, re *regexp.Regexp, now time.Time
 	return !slices.Contains(checks, false)
 }
 
+// Matches reports whether every operator of m holds for a value, as a fixture
+// checks a call's argument. value is the value decoded from JSON and present
+// says whether it is there. now is the clock within counts from. A regex
+// that does not compile never matches; Validate reports it.
+func (m Matcher) Matches(value any, present bool, now time.Time) bool {
+	var re *regexp.Regexp
+
+	if m.Regex != "" {
+		compiled, err := regexp.Compile(m.Regex)
+		if err != nil {
+			return false
+		}
+
+		re = compiled
+	}
+
+	return m.holds(value, present, re, now)
+}
+
 // onlyExists reports whether exists is the only operator set, so a missing
 // argument can satisfy the matcher.
 func (m Matcher) onlyExists() bool {

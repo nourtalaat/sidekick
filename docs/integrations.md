@@ -54,6 +54,7 @@ Kubernetes and cloud:
 
 Code and deploys:
 
+- `argocd`: Argo CD applications, their sync status, health, auto-sync and deployment history. See [the Argo CD source](sources/argocd.md).
 - `github`: commits, pull requests, releases and GitHub Actions runs. See [the GitHub source](sources/github.md).
 - `gitlab`: commits, merge requests, releases, pipelines, deployments and files of GitLab projects, on gitlab.com or self-managed. See [the GitLab source](sources/gitlab.md).
 
@@ -118,6 +119,7 @@ proposals](web-ui.md#action-proposals) for how people approve them.
 - `linear.comment` and `linear.issue`: a comment on a Linear issue, or a new one. See [their keys](configuration.md#linearcomment-and-linearissue).
 - `jira.comment` and `jira.issue`: a comment on a Jira issue, or a new one. See [their keys](configuration.md#jiracomment-and-jiraissue).
 - `datadog.monitor`: changes or deletes a Datadog monitor. See [its keys](configuration.md#datadogmonitor).
+- `datadog.downtime`: mutes a Datadog monitor for a limited time with a downtime, and cancels the downtime early on Undo. See [its keys](configuration.md#datadogdowntime).
 - `grafana.alert_rule`: changes or deletes a Grafana alert rule. See [its keys](configuration.md#grafanaalert_rule).
 - `signoz.alert_rule`: changes or deletes a SigNoz alert rule. See [its keys](configuration.md#signozalert_rule).
 - `launchdarkly.flag`: turns a LaunchDarkly feature flag off in one environment. See [its keys](configuration.md#launchdarklyflag).

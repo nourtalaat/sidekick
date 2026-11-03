@@ -1,0 +1,8 @@
+{
+  "metadata": {"resourceVersion": "123"},
+  "items": [
+    {"metadata": {"name": "checkout", "namespace": "argocd"}, "spec": {"project": "shop"}, "status": {"sync": {"status": "Synced"}, "health": {"status": "Healthy"}}},
+    {"metadata": {"name": "checkout", "namespace": "team-a"}, "spec": {"project": "shop"}, "status": {"sync": {"status": "Synced"}, "health": {"status": "Healthy"}}},
+    {"metadata": {"name": "ingress", "namespace": "argocd"}, "spec": {}, "status": {"sync": {"status": "OutOfSync"}, "health": {"status": "Healthy"}}}
+  ]
+}

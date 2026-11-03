@@ -84,6 +84,11 @@ type Proposal struct {
 	// Files lists the files of a pull request or merge request, from the
 	// snapshot. Empty for any other proposal and for an undo.
 	Files []ProposalFile
+	// Revisions is set when Snapshot is the snapshot of a rollback: the
+	// revision running now and the one it goes back to, in the form
+	// Revisions.Display writes. The view shows it in place of Changes,
+	// which is still computed.
+	Revisions *Revisions
 	// Undoable says an approver may undo it: it succeeded, the action can
 	// undo it, and it is not an undo itself.
 	Undoable bool

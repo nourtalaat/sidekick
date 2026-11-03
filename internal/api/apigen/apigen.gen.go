@@ -1049,17 +1049,20 @@ type BenchMetricRow struct {
 // BenchMetrics The scores of a run. A share, from 0 to 1, is left out when the run
 // had nothing to count.
 type BenchMetrics struct {
-	CostMicros             int64    `json:"costMicros"`
-	Evidence               *float64 `json:"evidence,omitempty"`
-	FpPrecision            *float64 `json:"fpPrecision,omitempty"`
-	FpRecall               *float64 `json:"fpRecall,omitempty"`
-	InputTokens            int64    `json:"inputTokens"`
-	JudgeCostMicros        int64    `json:"judgeCostMicros"`
-	JudgeErrors            int      `json:"judgeErrors"`
-	MeanCostPerRunUsd      *float64 `json:"meanCostPerRunUsd,omitempty"`
-	MeanDurationMs         *float64 `json:"meanDurationMs,omitempty"`
-	OutputTokens           int64    `json:"outputTokens"`
-	Overall                *float64 `json:"overall,omitempty"`
+	CostMicros        int64    `json:"costMicros"`
+	Evidence          *float64 `json:"evidence,omitempty"`
+	FpPrecision       *float64 `json:"fpPrecision,omitempty"`
+	FpRecall          *float64 `json:"fpRecall,omitempty"`
+	InputTokens       int64    `json:"inputTokens"`
+	JudgeCostMicros   int64    `json:"judgeCostMicros"`
+	JudgeErrors       int      `json:"judgeErrors"`
+	MeanCostPerRunUsd *float64 `json:"meanCostPerRunUsd,omitempty"`
+	MeanDurationMs    *float64 `json:"meanDurationMs,omitempty"`
+	OutputTokens      int64    `json:"outputTokens"`
+	Overall           *float64 `json:"overall,omitempty"`
+
+	// ProposalCorrect The share of the runs with scored proposals whose proposals are correct; left out when no scenario scores proposals.
+	ProposalCorrect        *float64 `json:"proposalCorrect,omitempty"`
 	RootCauseMatch         *float64 `json:"rootCauseMatch,omitempty"`
 	RootCauseScore         *float64 `json:"rootCauseScore,omitempty"`
 	Runs                   int      `json:"runs"`
@@ -1078,6 +1081,9 @@ type BenchResult struct {
 	ExpectedVerdict string   `json:"expectedVerdict"`
 	InputTokens     int64    `json:"inputTokens"`
 	OutputTokens    int64    `json:"outputTokens"`
+
+	// ProposalCorrect Whether the proposals of the run are correct; left out when the scenario does not score proposals.
+	ProposalCorrect *bool `json:"proposalCorrect,omitempty"`
 
 	// Repeat 1 for the first run of the scenario, counting up.
 	Repeat         int      `json:"repeat"`
@@ -2229,12 +2235,18 @@ type Proposal struct {
 	Params map[string]interface{} `json:"params"`
 
 	// ParamsText The parameters as the approver reads them. Characters that could hide something are written as \u escapes, and nothing is cut.
-	ParamsText string         `json:"paramsText"`
-	ProposedAt time.Time      `json:"proposedAt"`
-	Reason     string         `json:"reason"`
-	Result     *ActionResult  `json:"result,omitempty"`
-	Route      string         `json:"route"`
-	Status     ProposalStatus `json:"status"`
+	ParamsText string        `json:"paramsText"`
+	ProposedAt time.Time     `json:"proposedAt"`
+	Reason     string        `json:"reason"`
+	Result     *ActionResult `json:"result,omitempty"`
+
+	// Revisions The two revisions of a rollback. Present when the action is a
+	// rollback: it replaces the field-by-field `changes` on a screen, and
+	// `changes` is still sent for a client that does not know it. On the
+	// undo of a rollback the two are the other way round.
+	Revisions *ProposalRevisions `json:"revisions,omitempty"`
+	Route     string             `json:"route"`
+	Status    ProposalStatus     `json:"status"`
 
 	// Target What an action that changes a definition in place changes, such as datadog:monitor/123. Absent for any other action.
 	Target *string `json:"target,omitempty"`
@@ -2324,6 +2336,51 @@ type ProposalList struct {
 	// NextCursor Pass it as cursor to get the next page. Absent on the last page.
 	NextCursor *string    `json:"nextCursor,omitempty"`
 	Proposals  []Proposal `json:"proposals"`
+}
+
+// ProposalRevision One revision of a workload on its platform. The text fields come
+// from the platform, like an image tag or the name of who deployed,
+// and are written like `paramsText`: characters that could hide
+// something are written as \u escapes, and nothing is cut. Show them
+// as plain text. A missing field means the platform does not say, and a
+// screen shows "unknown".
+type ProposalRevision struct {
+	DeployedAt *time.Time `json:"deployedAt,omitempty"`
+	DeployedBy *string    `json:"deployedBy,omitempty"`
+
+	// Id The platform's identifier, such as 7 or checkout:42.
+	Id string `json:"id"`
+
+	// Kind What the platform calls it, such as ReplicaSet revision or Helm release revision.
+	Kind string `json:"kind"`
+
+	// Notes Short text, such as the images of several containers.
+	Notes *string `json:"notes,omitempty"`
+
+	// Version What a person recognises, such as an image tag, a chart and app version or a git revision.
+	Version *string `json:"version,omitempty"`
+}
+
+// ProposalRevisions The two revisions of a rollback. Present when the action is a
+// rollback: it replaces the field-by-field `changes` on a screen, and
+// `changes` is still sent for a client that does not know it. On the
+// undo of a rollback the two are the other way round.
+type ProposalRevisions struct {
+	// GoesBackTo One revision of a workload on its platform. The text fields come
+	// from the platform, like an image tag or the name of who deployed,
+	// and are written like `paramsText`: characters that could hide
+	// something are written as \u escapes, and nothing is cut. Show them
+	// as plain text. A missing field means the platform does not say, and a
+	// screen shows "unknown".
+	GoesBackTo ProposalRevision `json:"goesBackTo"`
+
+	// Running One revision of a workload on its platform. The text fields come
+	// from the platform, like an image tag or the name of who deployed,
+	// and are written like `paramsText`: characters that could hide
+	// something are written as \u escapes, and nothing is cut. Show them
+	// as plain text. A missing field means the platform does not say, and a
+	// screen shows "unknown".
+	Running ProposalRevision `json:"running"`
 }
 
 // ProposalStatus defines model for ProposalStatus.

@@ -75,6 +75,7 @@ type BenchResult struct {
 	InputTokens     int64
 	OutputTokens    int64
 	ToolCalls       int32
+	ProposalCorrect *bool
 }
 
 type BenchRun struct {

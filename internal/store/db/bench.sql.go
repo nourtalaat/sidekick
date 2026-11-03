@@ -43,13 +43,13 @@ func (q *Queries) GetBenchRun(ctx context.Context, id uuid.UUID) (BenchRun, erro
 const insertBenchResult = `-- name: InsertBenchResult :exec
 INSERT INTO bench_results (
   run_id, scenario_id, repeat, verdict, expected_verdict, verdict_correct,
-  root_cause_score, required_met, judge_reason, evidence_score,
+  root_cause_score, required_met, judge_reason, evidence_score, proposal_correct,
   cost_micros, duration_ms, input_tokens, output_tokens, tool_calls
 )
 VALUES (
   $1, $2, $3, $4, $5, $6,
-  $7, $8, $9, $10,
-  $11, $12, $13, $14, $15
+  $7, $8, $9, $10, $11,
+  $12, $13, $14, $15, $16
 )
 `
 
@@ -64,6 +64,7 @@ type InsertBenchResultParams struct {
 	RequiredMet     *bool
 	JudgeReason     *string
 	EvidenceScore   *float32
+	ProposalCorrect *bool
 	CostMicros      int64
 	DurationMs      int32
 	InputTokens     int64
@@ -84,6 +85,7 @@ func (q *Queries) InsertBenchResult(ctx context.Context, arg InsertBenchResultPa
 		arg.RequiredMet,
 		arg.JudgeReason,
 		arg.EvidenceScore,
+		arg.ProposalCorrect,
 		arg.CostMicros,
 		arg.DurationMs,
 		arg.InputTokens,
@@ -144,7 +146,7 @@ func (q *Queries) InsertBenchRun(ctx context.Context, arg InsertBenchRunParams) 
 
 const listBenchResults = `-- name: ListBenchResults :many
 SELECT scenario_id, repeat, verdict, expected_verdict, verdict_correct, root_cause_score, required_met,
-       evidence_score, cost_micros, duration_ms, input_tokens, output_tokens, tool_calls
+       evidence_score, proposal_correct, cost_micros, duration_ms, input_tokens, output_tokens, tool_calls
 FROM bench_results
 WHERE run_id = $1
 ORDER BY scenario_id, repeat
@@ -159,6 +161,7 @@ type ListBenchResultsRow struct {
 	RootCauseScore  *float32
 	RequiredMet     *bool
 	EvidenceScore   *float32
+	ProposalCorrect *bool
 	CostMicros      int64
 	DurationMs      int32
 	InputTokens     int64
@@ -186,6 +189,7 @@ func (q *Queries) ListBenchResults(ctx context.Context, runID uuid.UUID) ([]List
 			&i.RootCauseScore,
 			&i.RequiredMet,
 			&i.EvidenceScore,
+			&i.ProposalCorrect,
 			&i.CostMicros,
 			&i.DurationMs,
 			&i.InputTokens,

@@ -655,6 +655,17 @@ or it is not text, the card says so and offers to try again. The diff
 answers also for an expired or rejected proposal. Slack keeps the field-by-field
 changes and links to the investigation, where the diff is.
 
+A proposal that rolls a workload back to an earlier revision shows
+**Revisions** instead of the field-by-field list: two labelled blocks,
+**Running now** and **Goes back to**, each with the platform's name for the
+revision and its ID, the version a person recognises (an image tag, a chart
+and app version or a git revision), when it was deployed, who deployed it and
+short notes. The platform does not always say, for example Helm and Lambda do
+not record who deployed, and the card then shows "unknown". The texts come
+from the platform, so they are plain text with hidden characters written as
+`\u` escapes, and nothing is cut. Approve repeats the two versions when it
+asks. The undo of a rollback shows the same two revisions the other way round.
+
 - `GET /api/v1/proposals` (approver) lists proposals a page at a time, with
   `status` (repeat it for several, default `proposed`), `action` (one name
   from the config; a name that is not there answers 400 and lists the names),
@@ -675,6 +686,9 @@ changes and links to the investigation, where the diff is.
   difference a restore would overwrite. The other 409 codes are
   `not_undoable`, `not_allowed`, `undo_running` and `undo_failed`. A proposal
   has `changes` (field, before and after), `target`, `undoable` and `undoOf`.
+  A rollback also has `revisions`, with `running` and `goesBackTo`; each has
+  `kind` and `id`, and `version`, `deployedAt`, `deployedBy` and `notes` when
+  the platform says them. `changes` is still sent for it.
 - `GET /api/v1/proposals/{id}/files/diff?path=...` (approver) returns the
   line diff of one file of a pull request proposal, as a list of lines, each
   `context`, `added` or `removed`, with its line number in the old and the
