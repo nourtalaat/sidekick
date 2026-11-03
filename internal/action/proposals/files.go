@@ -178,6 +178,10 @@ func proposedContent(ctx context.Context, reader action.FileReader, v View, file
 // afterBlob reads the text of the file as the snapshot says the proposal
 // leaves it.
 func afterBlob(ctx context.Context, reader action.FileReader, v View, file action.ProposalFile) (string, error) {
+	if v.Snapshot == nil {
+		return "", errors.New("the proposal has no snapshot to read the new blob from")
+	}
+
 	sides, err := gitchange.ReadSnapshot(*v.Snapshot)
 	if err != nil {
 		return "", fmt.Errorf("read the snapshot: %w", err)

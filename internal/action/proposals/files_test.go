@@ -88,6 +88,10 @@ func TestProposedContent(t *testing.T) {
 			wantErr: "read the base of the file: no such blob",
 		},
 		{
+			name: "a proposal with no snapshot", params: noFiles, status: gitchange.FileChanged,
+			wantErr: "has no snapshot",
+		},
+		{
 			name: "a snapshot without a new blob", params: noFiles, status: gitchange.FileChanged,
 			snapshot: &action.Snapshot{Before: json.RawMessage(`{}`), After: json.RawMessage(`{"svc/config.yaml": {"status": "changed"}}`)},
 			wantErr:  "names no new blob",
