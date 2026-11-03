@@ -3178,7 +3178,7 @@ export interface components {
             toolCalls: number;
             /**
              * Format: int64
-             * @description False positives whose fix a responder marked as applied.
+             * @description False positives that count as fixed. A responder marked the fix as applied, or the monitor pull request that Sidekick opened was merged, or the monitor change that Sidekick made through the tool's API succeeded and was not undone. An investigation counts once.
              */
             noisyFixed: number;
             /** Format: int64 */
