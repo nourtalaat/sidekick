@@ -303,6 +303,7 @@ func TestExecuteErrors(t *testing.T) {
 			name:          "the file already has the content",
 			change:        func(p *Params) { p.Files[0].Content = text(testRulesBefore) },
 			wantPermanent: true,
+			wantLimit:     true,
 			wantErr:       "already has this content",
 		},
 		{
