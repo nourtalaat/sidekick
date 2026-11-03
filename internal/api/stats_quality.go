@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/report"
@@ -92,9 +93,41 @@ func qualityDays(ctx context.Context, q *db.Queries, w statsWindow, f statsFilte
 		return nil, fmt.Errorf("read days: %w", err)
 	}
 
+	cells, err := qualityCellsByDay(ctx, q, w, f)
+	if err != nil {
+		return nil, fmt.Errorf("read the cells of each day: %w", err)
+	}
+
 	out := make([]apigen.QualityDay, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, apigen.QualityDay{Day: dateOf(r.Day.Time), Rated: r.Rated, Correct: r.Correct})
+		out = append(out, apigen.QualityDay{
+			Day:     dateOf(r.Day.Time),
+			Rated:   r.Rated,
+			Correct: r.Correct,
+			Scores:  verdictScores(cells[r.Day.Time.Format(time.DateOnly)]),
+		})
+	}
+
+	return out, nil
+}
+
+// qualityCellsByDay returns the confusion matrix of each day of the range,
+// keyed by the date.
+func qualityCellsByDay(ctx context.Context, q *db.Queries, w statsWindow, f statsFilters) (map[string][]apigen.ConfusionCell, error) {
+	from, to := w.pgDays()
+
+	rows, err := q.QualityMatrixByDay(ctx, db.QualityMatrixByDayParams{
+		FromDay: from, ToDay: to, Route: f.route, Service: f.service, Model: f.model, Verdict: f.verdict,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read cells: %w", err)
+	}
+
+	out := map[string][]apigen.ConfusionCell{}
+
+	for _, r := range rows {
+		day := r.Day.Time.Format(time.DateOnly)
+		out[day] = append(out[day], apigen.ConfusionCell{Predicted: apigen.Verdict(r.Predicted), Confirmed: r.Confirmed, N: r.N})
 	}
 
 	return out, nil

@@ -4387,7 +4387,7 @@ components:
           description: correct over rated, from 0 to 1; left out when nothing was rated.
     QualityDay:
       type: object
-      required: [day, rated, correct]
+      required: [day, rated, correct, scores]
       properties:
         day:
           type: string
@@ -4398,6 +4398,11 @@ components:
         correct:
           type: integer
           format: int64
+        scores:
+          type: array
+          description: Precision and recall of each verdict that was given or confirmed on the day, worked out from that day's confusion matrix in the same way as `perVerdict` for the range, with the same filters. Verdicts come in the order of a report. Empty when every rating of the day was wrong without a real verdict. A single day has few ratings, so the numbers move a lot.
+          items:
+            $ref: "#/components/schemas/VerdictScore"
     ConfusionCell:
       type: object
       required: [predicted, confirmed, n]

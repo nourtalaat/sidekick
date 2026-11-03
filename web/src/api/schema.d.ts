@@ -2819,6 +2819,8 @@ export interface components {
             rated: number;
             /** Format: int64 */
             correct: number;
+            /** @description Precision and recall of each verdict that was given or confirmed on the day, worked out from that day's confusion matrix in the same way as `perVerdict` for the range, with the same filters. Verdicts come in the order of a report. Empty when every rating of the day was wrong without a real verdict. A single day has few ratings, so the numbers move a lot. */
+            scores: components["schemas"]["VerdictScore"][];
         };
         ConfusionCell: {
             predicted: components["schemas"]["Verdict"];
