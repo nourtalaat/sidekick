@@ -144,9 +144,11 @@ func (c *Client) Send(ctx context.Context, method, path string, body, out any) e
 		payload = raw
 	}
 
-	_, err := c.do(ctx, method, c.apiURL+path, payload, out, maxResponseSize)
+	if _, err := c.do(ctx, method, c.apiURL+path, payload, out, maxResponseSize); err != nil {
+		return fmt.Errorf("%s %s: %w", method, path, err)
+	}
 
-	return err
+	return nil
 }
 
 // do sends one request and decodes the answer.
