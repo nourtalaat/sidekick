@@ -4321,6 +4321,153 @@ The calls were checked against the source of the AWS SDK for Go v2 at the tag
 `service/ecs/v1.102.0`, and the permissions against the model of the ECS API
 in the same tag and AWS's published list of ECS permissions.
 
+##### `argocd.rollback`
+
+Puts an Argo CD application back on an earlier deployed revision through
+Argo CD's rollback API, and can undo its own rollback. It is approval-only, so
+a `read-write` route may list it only when the action sets
+`allowReadWrite: true`. Use it on routes with `mode: approved`: the rollback
+starts as soon as it is approved. Sidekick never turns auto-sync on or off,
+never syncs to the newest commit, and never prunes.
+
+```yaml
+actions:
+  argocd-rollback:
+    type: argocd.rollback
+    baseURL: https://argocd.example.com
+    tokenSecret: { name: sidekick-argocd-rollback, key: token }
+    maxRevisionsBack: 1                # default; at most 10
+    limits:
+      applications: [shop/*, platform/ingress]
+
+routes:
+  - name: checkout
+    mode: approved
+    actions: [argocd-rollback]
+```
+
+- `baseURL` is the root of your Argo CD server, with its sub-path when it is
+  served from one. It must use `https`; plain `http` is accepted only for
+  `localhost` and loopback addresses, because the token is sent with each
+  request. Required.
+- `tokenSecret` is the `{ name, key }` of the Secret that holds an Argo CD API
+  token. Give the action a token of its own, apart from the token of the
+  [Argo CD source](sources/argocd.md), with only the permissions listed below.
+  The token is read on every call, so a rotated token needs no restart.
+  Required.
+- `namespace` is the namespace Argo CD runs in, and so the namespace of the
+  applications. Default: `argocd`. Applications of other namespaces are not
+  rolled back.
+- `allowReadWrite` is false unless you set it. See [Action
+  modes](#action-modes).
+- `maxRevisionsBack` is how many revisions back the model may ask to go. Unset
+  means 1. A value you write must be from 1 to 10.
+- `limits.applications` lists the applications the action may roll back, as
+  `project/name` globs, which is how Argo CD RBAC names them, such as `shop/*`.
+  Required, so nothing is allowed by default. An application of the default
+  project is `default/<name>`.
+
+The model proposes an `application` as `project/name`, and `revisionsBack`
+(default 1). When it proposes, Sidekick checks them against the limits, reads
+the application, and shows the approver the two revisions: the one that runs
+now and the one it goes back to, each with its history ID, version, deploy
+time and who started it. The running side also lists the images in the
+cluster now. Argo CD keeps no images for an older deployment, so the other
+side shows none.
+
+**Which revision.** Argo CD records every successful sync of the whole
+application as an entry of its history. The newest entry is what runs. Going
+back counts revisions that differ: going back 2 is the second most recently
+deployed revision that is not the one running, so a revision that was deployed
+twice in a row counts once. Argo CD keeps as many entries as the application's
+`revisionHistoryLimit` (10 by default), so an older revision is not there to go
+back to, and the refusal says so.
+
+**Auto-sync.** Argo CD refuses a rollback while auto-sync is on, and its next
+sync would undo the rollback anyway. Auto-sync is on when the application's
+automated sync policy is set and not switched off with `enabled: false`. The
+action refuses then, with a message the model reads: "Argo CD would sync the
+application back, and refuses a rollback while auto-sync is on. Propose a
+revert pull request with `github.revert` or `gitlab.revert` instead." It also
+refuses, with the reason, an application that has an operation running, one that
+lists its sources under `sources` (several, or one), one that uses the source
+hydrator, one that has no history, and one with fewer different earlier
+revisions than asked for.
+
+**When to use which.**
+
+- Auto-sync is on: propose a revert pull request. A rollback would be synced
+  away.
+- Auto-sync is off: use this action.
+- A workload that Argo CD manages: use this action, not `kubernetes.rollback`,
+  because Argo CD would put the change back and show the application as out of
+  sync.
+
+**What it does.** Right before it asks, Sidekick reads the application again.
+It fails with a conflict when someone deployed since the proposal. When the
+rollback was made already, which happens when a worker died after the call, it
+asks for nothing and succeeds. It then calls Argo CD's rollback with the history
+ID, without pruning, and waits for the operation to end, for up to 3 minutes in
+one attempt. Argo CD's rollback deploys the history entry's own source (the
+repository, path and Helm parameters of that deployment) and skips hooks, so
+no PreSync or PostSync job runs. If the operation ends as failed, the proposal
+fails with Argo CD's message. If it has not ended in time, the attempt fails and
+the next attempt, up to 3 in all, waits for the same operation instead of
+asking again. An operation can still end in Argo CD after the proposal shows
+failed: a sync window that does not allow syncs holds an operation until the
+window opens, because Argo CD's rollback call does not check the windows, and
+a slow rollout can take longer than the attempts wait. Check the application in
+Argo CD, which the result links to. Sidekick does not wait for the application
+to become healthy; the [watcher](#watchers) reports recovery.
+
+After a rollback the application shows as out of sync with the target revision
+of its spec, as it does when a person rolls back, until someone syncs it or
+changes the target revision.
+
+Argo CD has no precondition on its rollback call, so a deploy made in the
+moment between Sidekick's last read and the call is not noticed.
+
+**Undo.** An approver can undo a rollback that worked. Undo is a second
+rollback, to the history entry that ran before the first one. Like any
+rollback it deploys that entry's own source and skips hooks, so no job of the
+older revision runs again, and it does not prune. It refuses while auto-sync is
+on. When the application's newest deployment is not the one the rollback made,
+Undo changes nothing, shows the revision that runs now, and asks again with
+`force`. When the application runs the earlier revision again already, Undo
+succeeds without a call. When Argo CD has dropped the entry that ran before,
+because of `revisionHistoryLimit`, Undo fails and says so.
+
+**What the token needs.** Create a local account that can only have API tokens
+(or a project role for one project), and give it two Argo CD RBAC permissions
+(RBAC is role based access control) for each glob in `limits.applications`:
+
+```yaml
+# argocd-cm
+data:
+  accounts.sidekick-rollback: apiKey
+```
+
+```yaml
+# argocd-rbac-cm
+data:
+  policy.csv: |
+    p, role:sidekick-rollback, applications, get, shop/*, allow
+    p, role:sidekick-rollback, applications, sync, shop/*, allow
+    g, sidekick-rollback, role:sidekick-rollback
+```
+
+- `get` on `applications`, to read the application and its history.
+- `sync` on `applications`, which is the permission Argo CD's rollback call
+  checks.
+
+Nothing else: no `override`, `update`, `create`, `delete`, `action` or `logs`.
+Argo CD gives every signed-in account the role in `policy.default`, so check
+that it is empty or a role without rights. [The Argo CD
+source](sources/argocd.md#access-token) shows how to make the account and its
+token. Sidekick runs no `argocd` program: it calls the REST API.
+
+The calls were checked against the source of Argo CD 3.5.5.
+
 ### `validator`
 
 How Sidekick reaches the [monitor validator](validator.md), which checks

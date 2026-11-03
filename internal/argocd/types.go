@@ -20,6 +20,14 @@ const (
 	phaseTerminating = "Terminating"
 )
 
+// Operation phases of an operation that has ended, as gitops-engine names
+// them.
+const (
+	phaseSucceeded = "Succeeded"
+	phaseFailed    = "Failed"
+	phaseError     = "Error"
+)
+
 // Application is the part of an Argo CD application that Sidekick reads.
 type Application struct {
 	Metadata Metadata `json:"metadata"`
@@ -213,10 +221,20 @@ type SyncResult struct {
 	Revision string `json:"revision"`
 }
 
-// Operation is an operation of an application: its initiator is all
-// Sidekick reads.
+// Operation is an operation of an application: who started it and, for a
+// sync or rollback, the revision it deploys.
 type Operation struct {
 	InitiatedBy Initiator `json:"initiatedBy"`
+	// Sync is set for a sync or a rollback, which is a sync of an older
+	// history entry.
+	Sync *SyncOperation `json:"sync,omitempty"`
+}
+
+// SyncOperation is the part of a sync operation that Sidekick reads.
+type SyncOperation struct {
+	// Revision is the revision the operation syncs to. Argo CD sets it to
+	// the revision of the history entry for a rollback.
+	Revision string `json:"revision,omitempty"`
 }
 
 // Summary lists what an application runs.
@@ -278,6 +296,31 @@ func (a *Application) OperationRunning() bool {
 	return s != nil && (s.Phase == phaseRunning || s.Phase == phaseTerminating)
 }
 
+// Completed reports whether the operation has ended, in any way.
+func (s *OperationState) Completed() bool {
+	return s.Phase == phaseSucceeded || s.Phase == phaseFailed || s.Phase == phaseError
+}
+
+// Succeeded reports whether the operation ended well.
+func (s *OperationState) Succeeded() bool {
+	return s.Phase == phaseSucceeded
+}
+
+// PendingRevision returns the revision of the sync or rollback that is
+// requested or running, or "" when there is none, or when it names no
+// revision.
+func (a *Application) PendingRevision() string {
+	if a.Operation != nil && a.Operation.Sync != nil {
+		return a.Operation.Sync.Revision
+	}
+
+	if s := a.Status.OperationState; s != nil && !s.Completed() && s.Operation.Sync != nil {
+		return s.Operation.Sync.Revision
+	}
+
+	return ""
+}
+
 // MultiSource reports whether the application lists its sources under
 // sources, which is how Argo CD decides that history entries hold sources
 // and revisions instead of one source and one revision.
@@ -309,7 +352,7 @@ func (a *Application) HistoryNewestFirst() []HistoryEntry {
 // history. It is empty for an application that never synced.
 func (a *Application) DeployedRevision() string {
 	if h := a.HistoryNewestFirst(); len(h) > 0 {
-		return h[0].revisionText()
+		return h[0].RevisionText()
 	}
 
 	if s := a.Status.OperationState; s != nil && s.SyncResult != nil {
@@ -325,9 +368,9 @@ func (h HistoryEntry) MultiSource() bool {
 	return len(h.Sources) > 0
 }
 
-// revisionText returns the entry's revision, or its revisions joined by
+// RevisionText returns the entry's revision, or its revisions joined by
 // commas when it has several.
-func (h HistoryEntry) revisionText() string {
+func (h HistoryEntry) RevisionText() string {
 	if h.Revision != "" {
 		return h.Revision
 	}
