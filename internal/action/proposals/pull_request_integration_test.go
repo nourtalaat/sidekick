@@ -110,8 +110,31 @@ func TestPullRequestState(t *testing.T) {
 			t.Parallel()
 
 			for name, pr := range want {
-				require.Equal(t, pr, tt.read(t, name), "the pull request of the %s proposal", name)
+				require.Equal(t, pr, inUTC(tt.read(t, name)), "the pull request of the %s proposal", name)
 			}
 		})
 	}
+}
+
+// inUTC returns a copy of pr with its times in UTC, which is how the test
+// writes them; the database driver returns them in the local zone.
+func inUTC(pr *action.PullRequest) *action.PullRequest {
+	if pr == nil {
+		return nil
+	}
+
+	out := *pr
+	out.CheckedAt = pr.CheckedAt.UTC()
+
+	if pr.MergedAt != nil {
+		merged := pr.MergedAt.UTC()
+		out.MergedAt = &merged
+	}
+
+	if pr.ClosedAt != nil {
+		closed := pr.ClosedAt.UTC()
+		out.ClosedAt = &closed
+	}
+
+	return &out
 }
