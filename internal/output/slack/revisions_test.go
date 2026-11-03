@@ -87,8 +87,20 @@ func TestRevisionValuesCannotAddMarkup(t *testing.T) {
 
 	got := goldenJSON(t, mainView(u))
 
+	var markdown strings.Builder
+
+	for _, b := range mainView(u).attachment.Blocks {
+		if b.Text != nil {
+			markdown.WriteString(b.Text.Text)
+		}
+
+		for _, e := range b.Elements {
+			markdown.WriteString(e.Text)
+		}
+	}
+
 	for _, markup := range []string{"<!channel>", "<https://evil.example.com|click>"} {
-		require.NotContains(t, got, markup)
+		require.NotContains(t, markdown.String(), markup, "text that Slack reads as markup")
 	}
 
 	require.Contains(t, got, "&lt;!channel&gt;")
