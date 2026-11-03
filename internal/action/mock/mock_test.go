@@ -2,6 +2,8 @@ package mock
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -174,6 +176,55 @@ func TestRegistered(t *testing.T) {
 
 			_, isSnapshotter := built.(action.Snapshotter)
 			require.False(t, isSnapshotter, "a benchmark proposal has no snapshot")
+		})
+	}
+}
+
+func TestSnapshotOf(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		spec action.Spec
+		want string
+	}{
+		{
+			name: "indented, with the schema as it is and no HTML escaping",
+			spec: action.Spec{
+				Name:         "restart-service",
+				Description:  "Restarts <a service> & waits.",
+				ParamsSchema: json.RawMessage(`{"type":"object","properties":{"service":{"type":"string"}}}`),
+			},
+			want: `{
+  "name": "restart-service",
+  "description": "Restarts <a service> & waits.",
+  "paramsSchema": {
+    "type": "object",
+    "properties": {
+      "service": {
+        "type": "string"
+      }
+    }
+  }
+}
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := SnapshotOf(tt.spec)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, string(got))
+
+			path := filepath.Join(t.TempDir(), "spec.json")
+			require.NoError(t, os.WriteFile(path, got, 0o600))
+
+			back := newAction(t, tt.spec.Name, path).Spec()
+			require.Equal(t, tt.spec.Description, back.Description)
+			require.JSONEq(t, string(tt.spec.ParamsSchema), string(back.ParamsSchema))
 		})
 	}
 }
