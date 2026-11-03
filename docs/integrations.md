@@ -126,6 +126,7 @@ proposals](web-ui.md#action-proposals) for how people approve them.
 - `prometheus.rule`: changes the rules of a `PrometheusRule` resource. See [its keys](configuration.md#prometheusrule).
 - `kubernetes.rollback`: puts a Deployment, StatefulSet or DaemonSet back on an earlier revision. See [its keys](configuration.md#kubernetesrollback).
 - `alertmanager.silence`: silences alerts in Alertmanager for a limited time, and ends the silence early on Undo. See [its keys](configuration.md#alertmanagersilence).
+- `gcp.cloud_run_rollback`: sends the traffic of a Cloud Run service back to an earlier ready revision, and puts it back on Undo. See [its keys](configuration.md#gcpcloud_run_rollback).
 - `grafana.silence`: silences alerts in Grafana for a limited time, and ends the silence early on Undo. See [its keys](configuration.md#grafanasilence).
 - `github.pull_request`: opens a pull request that changes monitor definitions kept in Git. See [its keys](configuration.md#githubpull_request).
 - `github.revert`: opens a draft pull request that reverts one commit or one merged pull request. See [its keys](configuration.md#githubrevert).
@@ -135,3 +136,4 @@ proposals](web-ui.md#action-proposals) for how people approve them.
 - `aws.ecs_rollback`: puts an Amazon ECS service back on an earlier task definition revision, with an IAM role of its own. See [its keys](configuration.md#awsecs_rollback).
 - `aws.lambda_rollback`: points an AWS Lambda alias back at the published version it served before, with an IAM role of its own. See [its keys](configuration.md#awslambda_rollback).
 - `helm.rollback`: puts a Helm release back on an earlier revision, with Helm's Go library. See [its keys](configuration.md#helmrollback).
+- `azure.container_app_rollback`: moves all the traffic of an Azure Container App back to an earlier revision, and puts the traffic back on Undo. See [its keys](configuration.md#azurecontainer_app_rollback).

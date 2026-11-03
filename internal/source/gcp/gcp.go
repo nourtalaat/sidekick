@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/nourtalaat/sidekick/internal/buildinfo"
+	"github.com/nourtalaat/sidekick/internal/gcpauth"
 	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/source"
@@ -135,7 +136,7 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (source
 
 	c := &client{
 		http:      &limited,
-		tokens:    newTokens(cfg.CredentialsSecret, deps.Secrets, &limited),
+		tokens:    gcpauth.NewTokens(cfg.CredentialsSecret, deps.Secrets, &limited),
 		userAgent: "sidekick/" + buildinfo.Version,
 	}
 

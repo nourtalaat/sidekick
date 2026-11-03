@@ -15,6 +15,11 @@ Google also runs remote MCP servers for Cloud Logging, Cloud Monitoring and
 GKE, a known alternative once Sidekick's MCP sources can send the OAuth
 tokens they need, which expire every hour.
 
+The source only reads. The [`gcp.cloud_run_rollback`
+action](../configuration.md#gcpcloud_run_rollback) changes a Cloud Run service,
+so give it a credential of its own with its own role, not the one on this
+page.
+
 ## Permissions
 
 The identity needs these permissions on each project in `projects`, and

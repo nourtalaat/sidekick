@@ -11,9 +11,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/api"
+	"github.com/nourtalaat/sidekick/internal/memory"
+	"github.com/nourtalaat/sidekick/internal/prompt"
 )
 
 // The investigations of fixture/investigations.sql, by the last
@@ -344,6 +347,66 @@ func TestGetInvestigation(t *testing.T) {
 			require.Equal(t, "application/problem+json", rec.Header().Get("Content-Type"))
 		})
 	}
+}
+
+func TestGetInvestigationMemoryExamples(t *testing.T) {
+	t.Parallel()
+
+	s := setupWith(t, nil, "fixture/investigations.sql", "fixture/memory.sql")
+
+	// c3 is an investigation with a title; give it an entry too.
+	_, err := s.pool.Exec(t.Context(), `INSERT INTO memory_entries (investigation_id, fingerprint, verdict, summary, confirmed_at)
+		VALUES ($1, 'fp-c3', 'false_positive', 'Only the export was slow.', now())`, inv3)
+	require.NoError(t, err)
+
+	examples := []prompt.Example{
+		{InvestigationID: memE1, Match: prompt.MatchFingerprint},
+		{InvestigationID: memE2, Match: prompt.MatchServiceAlert},
+		{InvestigationID: memE3, Match: prompt.MatchText},
+		{InvestigationID: inv3, Match: prompt.MatchSimilar},
+	}
+
+	require.NoError(t, memory.Record(t.Context(), s.pool, uuid.MustParse(inv1), 2, examples))
+	require.NoError(t, memory.Record(t.Context(), s.pool, uuid.MustParse(inv1), 1, examples[:1]))
+
+	_, err = s.pool.Exec(t.Context(), `DELETE FROM memory_entries WHERE investigation_id = $1`, memE2)
+	require.NoError(t, err)
+
+	t.Run("the examples of the current run, one whose entry was deleted", func(t *testing.T) {
+		t.Parallel()
+
+		got, ok := getJSON(t, s, "/api/v1/investigations/"+inv1)["memoryExamples"].([]any)
+		require.True(t, ok)
+		require.Len(t, got, 4)
+
+		want := []map[string]any{
+			{
+				"investigationId": memE1, "match": "fingerprint", "rank": 1.0, "present": true, "disabled": false,
+				"verdict": "true_positive", "summary": "p99 latency rose after a deploy.", "cause": "Deploy 4f2c1a added a slow query.",
+			},
+			{"investigationId": memE2, "match": "service_alert", "rank": 2.0, "present": false, "disabled": false},
+			{
+				"investigationId": memE3, "match": "text", "rank": 3.0, "present": true, "disabled": true,
+				"verdict": "false_positive", "summary": "Only the batch export endpoint was slow.",
+			},
+			{
+				"investigationId": inv3, "match": "similar", "rank": 4.0, "present": true, "disabled": false,
+				"verdict": "false_positive", "summary": "Only the export was slow.", "title": "Checkout error rate high",
+			},
+		}
+
+		for i, w := range want {
+			require.Equal(t, w, got[i], "example %d", i+1)
+		}
+	})
+
+	t.Run("none", func(t *testing.T) {
+		t.Parallel()
+
+		got, ok := getJSON(t, s, "/api/v1/investigations/"+inv2)["memoryExamples"].([]any)
+		require.True(t, ok, "an empty list, not null")
+		require.Empty(t, got)
+	})
 }
 
 func TestListInvestigationSteps(t *testing.T) {

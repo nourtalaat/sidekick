@@ -6,14 +6,11 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/nourtalaat/sidekick/internal/azureauth"
 	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
-
-// guidPattern is the shape of a subscription, tenant, client or workspace
-// ID.
-var guidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // workspacePattern is the shape of a Log Analytics workspace resource ID.
 var workspacePattern = regexp.MustCompile(
@@ -61,15 +58,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, checkGUIDs("subscriptions", c.Subscriptions)...)
 	errs = append(errs, c.checkWorkspaces()...)
 
-	for _, f := range []struct{ key, value string }{{"tenantID", c.TenantID}, {"clientID", c.ClientID}} {
-		if f.value != "" && !guidPattern.MatchString(f.value) {
-			errs = append(errs, fmt.Errorf("%s: %q is not a GUID", f.key, f.value))
-		}
-	}
-
-	if c.ClientSecret != nil && (c.TenantID == "" || c.ClientID == "") {
-		errs = append(errs, errors.New("clientSecret: needs tenantID and clientID"))
-	}
+	errs = append(errs, azureauth.Identity{TenantID: c.TenantID, ClientID: c.ClientID, ClientSecret: c.ClientSecret}.Check()...)
 
 	if c.Timeout > httpclient.ResponseHeaderTimeout {
 		errs = append(errs, fmt.Errorf("timeout: %s is above %s, the longest the HTTP client waits for response headers",
@@ -90,7 +79,7 @@ func (c *Config) checkWorkspaces() []error {
 	for i, w := range c.Workspaces {
 		key := fmt.Sprintf("workspaces[%d]", i)
 
-		if !guidPattern.MatchString(w.ID) {
+		if !azureauth.IsGUID(w.ID) {
 			errs = append(errs, fmt.Errorf("%s.id: %q is not a workspace ID (a GUID)", key, w.ID))
 		} else if ids[strings.ToLower(w.ID)] {
 			errs = append(errs, fmt.Errorf("%s.id: %q is listed twice", key, w.ID))
@@ -121,7 +110,7 @@ func checkGUIDs(key string, values []string) []error {
 
 	for i, v := range values {
 		switch {
-		case !guidPattern.MatchString(v):
+		case !azureauth.IsGUID(v):
 			errs = append(errs, fmt.Errorf("%s[%d]: %q is not a GUID", key, i, v))
 		case seen[strings.ToLower(v)]:
 			errs = append(errs, fmt.Errorf("%s[%d]: %q is listed twice", key, i, v))

@@ -20,6 +20,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/investigator"
 	"github.com/nourtalaat/sidekick/internal/lessons"
+	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/source"
 	"github.com/nourtalaat/sidekick/internal/store"
@@ -155,7 +156,40 @@ func (s *server) GetInvestigation(ctx context.Context, req apigen.GetInvestigati
 
 	inv.Lessons = usedLessonsOf(used)
 
+	examples, err := memory.UsedBy(ctx, s.pool, req.Id, row.Investigation.Run, maxUsedExamples)
+	if err != nil {
+		return nil, fmt.Errorf("investigation %s: %w", req.Id, err)
+	}
+
+	inv.MemoryExamples = usedMemoryOf(examples)
+
 	return apigen.GetInvestigation200JSONResponse(inv), nil
+}
+
+// usedMemoryOf is the API's view of the memory examples a run used. The
+// text fields of an example whose entry or investigation is gone are left
+// out.
+func usedMemoryOf(used []memory.Use) *[]apigen.UsedMemory {
+	out := make([]apigen.UsedMemory, len(used))
+
+	for i, u := range used {
+		out[i] = apigen.UsedMemory{
+			InvestigationId: u.ExampleID,
+			Title:           nonEmptyPtr(u.Title),
+			Summary:         nonEmptyPtr(u.Summary),
+			Cause:           nonEmptyPtr(u.Cause),
+			Match:           apigen.UsedMemoryMatch(u.Match),
+			Rank:            u.Rank,
+			Present:         u.Present,
+			Disabled:        u.Disabled,
+		}
+
+		if u.Verdict != "" {
+			out[i].Verdict = new(apigen.Verdict(u.Verdict))
+		}
+	}
+
+	return &out
 }
 
 // listParams checks the filters of GET /investigations and returns the

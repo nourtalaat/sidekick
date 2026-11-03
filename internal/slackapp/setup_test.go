@@ -58,6 +58,9 @@ type harness struct {
 	spans   *tracetest.SpanRecorder
 	// url serves the handler at EventsPattern.
 	url string
+	// client sends to url. It is the test server's own client, so another
+	// test's server closing its idle connections cannot break its requests.
+	client *http.Client
 }
 
 // setup loads the fixture config and builds a Handler on a new database,
@@ -107,7 +110,7 @@ func setup(t *testing.T) *harness {
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
-	return &harness{cfg: cfg, pool: pool, handler: h, slack: slack, reg: reg, spans: spans, url: server.URL + "/slack/events"}
+	return &harness{cfg: cfg, pool: pool, handler: h, slack: slack, reg: reg, spans: spans, url: server.URL + "/slack/events", client: server.Client()}
 }
 
 // post sends body to the Events API with the given headers and returns the
@@ -122,7 +125,7 @@ func (h *harness) post(t *testing.T, header http.Header, body []byte) (int, stri
 		req.Header[name] = values
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := h.client.Do(req)
 	require.NoError(t, err)
 
 	defer func() { require.NoError(t, resp.Body.Close()) }()

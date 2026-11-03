@@ -1,14 +1,10 @@
 package azure
 
 import (
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-
-	"github.com/nourtalaat/sidekick/internal/registry"
 )
 
 func TestTokens(t *testing.T) {
@@ -47,37 +43,6 @@ func TestTokens(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, first, again)
 			require.Equal(t, tt.wantCalls, cred.calls)
-		})
-	}
-}
-
-func TestSecretCredential(t *testing.T) {
-	t.Parallel()
-
-	ref := registry.SecretRef{Name: "sidekick-azure", Key: "client-secret"}
-
-	tests := []struct {
-		name    string
-		secret  []byte
-		err     error
-		wantErr string
-	}{
-		{name: "an empty secret", secret: []byte(" \n"), wantErr: errEmptySecret.Error()},
-		{name: "a secret that cannot be read", err: errors.New("no such file"), wantErr: "resolve secret sidekick-azure/client-secret: no such file"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			secrets := registry.NewMockSecrets(gomock.NewController(t))
-			secrets.EXPECT().Resolve(gomock.Any(), ref).Return(tt.secret, tt.err)
-
-			cfg := Config{TenantID: "22222222-3333-4444-5555-666666666666", ClientID: testWorkspaceID, ClientSecret: &ref}
-			tokens := newTokens(newCredential(cfg, secrets, nil))
-
-			_, err := tokens.token(t.Context(), armScope)
-			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 }
