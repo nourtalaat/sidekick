@@ -71,6 +71,8 @@ const (
 	PhaseCancelled Phase = "cancelled"
 	// PhaseWatcher reports a watcher state change; Update.Watcher says which one.
 	PhaseWatcher Phase = "watcher"
+	// PhaseCI reports the CI result of a pull request; Update.CI says which.
+	PhaseCI Phase = "ci_report"
 )
 
 // Progress is one line of live progress, such as "Checked recent deploys".
@@ -96,6 +98,8 @@ type Update struct {
 	Watchers []WatcherState
 	// Watcher is the watcher whose state changed, set only with PhaseWatcher.
 	Watcher *WatcherState
+	// CI is the CI result to report, set only with PhaseCI.
+	CI *CIReport
 	// Feedback is each responder's rating of the verdict, oldest first.
 	Feedback []Feedback
 	// StoppedBy is the responder who stopped the run, when one did.
@@ -181,4 +185,50 @@ func (w WatcherState) EventName() string {
 	}
 
 	return "watcher." + string(w.Status)
+}
+
+// CI states of a CIReport. Only these are reported: a read that is not
+// final is not shown to an output.
+const (
+	CIPassed   = "passed"
+	CIFailed   = "failed"
+	CINone     = "none"
+	CIUnknown  = "unknown"
+	CITimedOut = "timed_out"
+)
+
+// CIReport is the final CI result of a pull request or merge request that a
+// proposal opened, as an output shows it. Every text in it that comes from
+// the Git host, such as the name of a check, is text from outside: a sink
+// shows it as plain text and escapes it.
+type CIReport struct {
+	// State is CIPassed, CIFailed, CINone, CIUnknown or CITimedOut.
+	State string `json:"state"`
+	// Passed and Total count the checks that passed and all that were read.
+	Passed int `json:"passed"`
+	Total  int `json:"total"`
+	// FailedCount is how many checks failed, and Failed names the first of
+	// them.
+	FailedCount int       `json:"failedCount,omitempty"`
+	Failed      []CICheck `json:"failed,omitempty"`
+	// Message is Sidekick's own sentence for CIUnknown: that it could not
+	// read the CI and what it needs to.
+	Message string `json:"message,omitempty"`
+	// Repo and Number name the pull request or merge request, and URL is its
+	// page.
+	Repo   string `json:"repo,omitempty"`
+	Number int64  `json:"number,omitempty"`
+	URL    string `json:"url,omitempty"`
+	// WaitedSeconds is how long Sidekick waited: for something to start with
+	// CINone, and for the checks to finish with CITimedOut.
+	WaitedSeconds int `json:"waitedSeconds,omitempty"`
+}
+
+// CICheck is one check or pipeline job that failed.
+type CICheck struct {
+	// Name is the plain text name the host gave it, already cut.
+	Name string `json:"name"`
+	// URL is its page on the host. It is shown as a link only when it is an
+	// http or https address.
+	URL string `json:"url,omitempty"`
 }

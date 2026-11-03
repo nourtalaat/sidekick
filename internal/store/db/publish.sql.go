@@ -234,7 +234,8 @@ type ReserveWatcherChangeSeqRow struct {
 
 // ReserveWatcherChangeSeq raises the seq of an investigation's state by two
 // without changing what it holds: a watcher's change takes the first of
-// the two, and the state, shown again with the change, the second. It
+// the two, and the state, shown again with the change, the second. A CI
+// report takes the first in the same way. It
 // returns the change's seq and the sinks, or no row when the investigation
 // has no state.
 func (q *Queries) ReserveWatcherChangeSeq(ctx context.Context, investigationID uuid.UUID) (ReserveWatcherChangeSeqRow, error) {
