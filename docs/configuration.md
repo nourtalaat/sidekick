@@ -2999,6 +2999,155 @@ new ones and Sidekick cannot tell which is it, Undo fails and says so.
 
 The calls were checked against the source of Unleash 8.2.1.
 
+##### `helm.rollback`
+
+Puts a Helm release back on an earlier revision, with Helm's own Go library
+(the code that `helm rollback` runs, not the `helm` program), in the cluster
+Sidekick runs in. Helm makes a new revision that holds the chart, values and
+manifests of the earlier one. Use it for a release that Helm manages and that
+no GitOps controller owns: Argo CD or Flux would undo the change at their next
+sync. It is approval-only: a route in `read-write` mode may list it only when
+the action sets `allowReadWrite: true`. Use it on routes with `mode: approved`.
+It does not wait for the alert to recover: the watcher reports that.
+
+```yaml
+actions:
+  helm-checkout:
+    type: helm.rollback
+    serviceAccount: sidekick-helm-rollback   # default; the account the tokens are for
+    maxRevisionsBack: 1                      # default 1; from 1 to 10
+    wait: true                               # default; wait until the objects are ready
+    waitTimeout: 3m                          # default; above 0 and at most 4m
+    driver: secret                           # default; or configmap
+    limits:
+      namespaces: [shop]                     # namespaces it may roll back in
+      releases: [checkout, "web-*"]          # release names; * stands for any run of characters
+
+routes:
+  - name: checkout
+    mode: approved
+    actions: [helm-checkout]
+```
+
+- `limits.namespaces` and `limits.releases` are required. A release is
+  allowed when its namespace is in `namespaces` and its name matches an entry
+  of `releases`. An entry is an exact name or a pattern in which `*` is the
+  only wildcard.
+- `maxRevisionsBack` is how far back the model may ask to go, and the
+  parameter `revisionsBack` (default 1) may not be larger. It sits next to
+  `allowReadWrite` and not under `limits`, as in the other rollback actions.
+- `wait` and `waitTimeout`: with `wait: true` Helm waits until the objects are
+  ready, for at most `waitTimeout`. Helm uses the timeout for the hooks and for
+  the wait one after the other, and Sidekick cuts a run off after 5 minutes,
+  so `waitTimeout` is at most 4 minutes. If the wait fails or times out, Helm
+  records the new revision as `failed` and the proposal fails. With
+  `wait: false` only the hooks are waited for. An Undo never waits for the
+  objects, because the person who asked for it waits for the answer for at
+  most a minute.
+- `driver` is where Helm keeps the release records of your releases: `secret`
+  (Helm's default) or `configmap`. It must match how the releases were made.
+- There are no keys for `force`, `recreate` or the control of hooks. They keep
+  Helm's defaults, so the hooks of the chart run (`pre-rollback` and
+  `post-rollback`), and a rollback never replaces objects by force.
+- Sidekick removes no revision. Helm's own history limit applies when you
+  upgrade.
+- The action works on the cluster Sidekick runs in only.
+
+**Which revision.** Sidekick reads the history of the release.
+
+- The revision that runs is the newest one, when its status is `deployed` or
+  `failed`. A failed upgrade leaves the revision before it as `deployed` in
+  Helm's records, although the objects in the cluster are the failed
+  revision's, so Sidekick counts from the newest revision, as `helm rollback`
+  does.
+- "N back" counts the earlier revisions with status `superseded` or
+  `deployed`. Revisions that are `failed` or `pending-*` are skipped.
+- It is refused, with a message the model can read, when the release is not
+  found, when its newest revision is `pending-*` (another operation runs on it
+  or was interrupted), when its newest revision has another status such as
+  `uninstalled`, and when fewer earlier revisions than `revisionsBack` can be
+  rolled back to.
+
+**What the approver sees.** Both revisions: the Helm revision number, the
+chart name and version and the app version, the time Helm last deployed it, and
+the description Helm kept. Helm does not record who deployed a revision, so that
+shows as "unknown" and the notes say so.
+
+**The credential is broad, and Sidekick does not grant it.** A Helm rollback
+re-applies the manifests of the target revision, so the account needs rights
+on every kind of object in the chart, in the namespace of the release, and
+on the release records. Kubernetes RBAC cannot narrow that to one release. The
+chart makes the service account (with `serviceAccount` of the action, and
+`sidekick-helm-rollback` when it is not set), and a Role in Sidekick's namespace
+that lets Sidekick's own account ask for tokens of it and of no other account.
+It makes no Role or binding for the account in the namespaces of the releases.
+You bind one yourself, in each namespace of `limits.namespaces`. The simplest is
+the built-in `edit` ClusterRole:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sidekick-helm-rollback
+  namespace: shop
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edit
+subjects:
+  - kind: ServiceAccount
+    name: sidekick-helm-rollback
+    namespace: sidekick   # the namespace Sidekick runs in
+```
+
+Read what this allows before you apply it. `edit` lets the account create,
+change and delete most objects in that namespace (workloads, Services,
+ConfigMaps, Secrets, Ingresses and more) and read every Secret in it. The
+`limits` of the action are a second layer that stops the model; they do not
+change what the account may do, so anyone who can get a token for it can do all
+of that. The `edit` role does not cover Roles and RoleBindings (that is
+`admin`), custom resources, or objects that are not in a namespace. A chart
+that has any of those needs a Role of your own.
+If you write your own Role, a rollback needs, in the namespace of the release:
+
+- `get`, `create`, `patch` and `delete` on every kind of object that the old or
+  the new revision has, because Helm reads each object, creates the missing
+  ones, patches the others and deletes those the target revision does not have;
+- `list`, `get`, `create` and `update` on `secrets` (with `driver: configmap`,
+  on `configmaps`), for the release records, which are named
+  `sh.helm.release.v1.<release>.v<revision>`; the list is by label, so it
+  cannot be limited by name;
+- `list` and `watch` on every kind of object in the chart, when `wait` is on;
+- `create` and `delete` on the objects of the hooks of the chart.
+
+**Conflicts and retries.** The snapshot holds the revision that runs. When the
+proposal runs, Sidekick reads the history again. If the newest revision is not
+the one of the proposal (someone deployed, rolled back, or an upgrade failed),
+it fails as a conflict and a new proposal is needed. Helm stores each revision
+under its own key and refuses to write one that exists, so two operations that
+start at the same revision cannot both make the next one. If the rollback is in
+place already (a worker died after Helm made it), the proposal succeeds and
+changes nothing, so running it twice makes one new revision. A rollback that
+Helm started and that did not end as `deployed` is not repeated, because that
+would make more revisions: the proposal fails and the message says what the
+newest revision is. If Helm was interrupted, for example by a restart, the new
+revision stays `pending-rollback` and Helm refuses other operations on the
+release until a person checks it. Look at the release with Helm's tools, and when
+no operation runs, delete the `Secret` (or `ConfigMap`) named in the message,
+`sh.helm.release.v1.<release>.v<revision>`, then propose again if it is still
+needed.
+
+**Undo.** Undo rolls back to the revision that ran before the rollback, which
+Helm makes a new revision again. The proposal shows the two revisions the other
+way round. If someone deployed or rolled back since, Undo shows the revision that
+runs now and asks before it rolls back anyway. Undo that is repeated changes
+nothing once the release is restored.
+
+**What it relies on.** Helm v4.3.1 (the `pkg/action` functions `History` and
+`Rollback`) and the built-in `edit` role of Kubernetes v1.37.1. The comments in
+`internal/action/helmrollback` name the files. With `networkPolicy.restrictEgress`
+on, allow egress to the Kubernetes API server.
+
 ### `validator`
 
 How Sidekick reaches the [monitor validator](validator.md), which checks
