@@ -1,3 +1,4 @@
+import { GitMerge, GitPullRequest, GitPullRequestClosed, type LucideIcon } from "lucide-react";
 import type { Proposal } from "../../api/proposals";
 import { formatTime } from "../../format";
 import { safeHttpUrl } from "../../safeUrl";
@@ -7,10 +8,10 @@ import type { SectionProps } from "./section";
 
 type PullRequestState = NonNullable<Proposal["pullRequest"]>;
 
-const STATE: Record<PullRequestState["state"], { label: string; status: Status }> = {
-  open: { label: "Open", status: "info" },
-  merged: { label: "Merged", status: "success" },
-  closed: { label: "Closed", status: "neutral" },
+const STATE: Record<PullRequestState["state"], { label: string; status: Status; icon: LucideIcon }> = {
+  open: { label: "Open", status: "info", icon: GitPullRequest },
+  merged: { label: "Merged", status: "success", icon: GitMerge },
+  closed: { label: "Closed", status: "neutral", icon: GitPullRequestClosed },
 };
 
 /**
@@ -42,14 +43,16 @@ export function PullRequest({ proposal }: SectionProps) {
 
 /** The state line: the link, the state as an icon and a word, and the times. */
 function StateLine({ pullRequest }: { pullRequest: PullRequestState }) {
-  const { label, status } = STATE[pullRequest.state];
+  const { label, status, icon } = STATE[pullRequest.state];
   const name = `${pullRequest.repo} #${pullRequest.number}`;
   const href = safeHttpUrl(pullRequest.url);
 
   return (
     <span className="sk-proposal__pr-state">
       {href ? <a href={href}>{name}</a> : <span className="sk-proposal__pr-name">{name}</span>}
-      <StatusBadge status={status}>{label}</StatusBadge>
+      <StatusBadge status={status} icon={icon}>
+        {label}
+      </StatusBadge>
       {pullRequest.state === "merged" && <Moment label="Merged" at={pullRequest.mergedAt} />}
       {pullRequest.state === "closed" && <Moment label="Closed" at={pullRequest.closedAt} />}
       <Moment label="Checked" at={pullRequest.checkedAt} />

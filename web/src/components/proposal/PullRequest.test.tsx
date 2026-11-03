@@ -16,17 +16,18 @@ function section() {
 
 describe("the pull request section", () => {
   it.each([
-    { state: "open", word: "Open", tone: "info", over: {}, moments: [] },
-    { state: "merged", word: "Merged", tone: "success", over: { mergedAt: MERGED_AT }, moments: [`Merged ${formatTime(MERGED_AT)}`] },
-    { state: "closed", word: "Closed", tone: "neutral", over: { closedAt: CLOSED_AT }, moments: [`Closed ${formatTime(CLOSED_AT)}`] },
-  ] as const)("shows a $state pull request with its word, an icon and when it was checked", ({ state, word, tone, over, moments }) => {
+    { state: "open", word: "Open", tone: "info", icon: "lucide-git-pull-request", over: {}, moments: [] },
+    { state: "merged", word: "Merged", tone: "success", icon: "lucide-git-merge", over: { mergedAt: MERGED_AT }, moments: [`Merged ${formatTime(MERGED_AT)}`] },
+    { state: "closed", word: "Closed", tone: "neutral", icon: "lucide-git-pull-request-closed", over: { closedAt: CLOSED_AT }, moments: [`Closed ${formatTime(CLOSED_AT)}`] },
+  ] as const)("shows a $state pull request with its word, an icon and when it was checked", ({ state, word, tone, icon, over, moments }) => {
     renderWithProviders(<ProposalCard proposal={proposal({ status: "succeeded", pullRequest: pullRequest({ state, number: 12, ...over }) })} canDecide />);
 
     const region = section() as HTMLElement;
     const badge = within(region).getByText(word, { selector: ".sk-badge" });
 
     expect(badge).toHaveClass(`sk-badge--status-${tone}`);
-    expect(badge.querySelector("svg")).not.toBeNull();
+    expect(badge.querySelector("svg")).toHaveClass(icon);
+    expect(badge.querySelector(".lucide-clock")).toBeNull();
     expect(within(region).getByRole("link", { name: "acme/monitors #12" })).toHaveAttribute("href", "https://github.com/acme/monitors/pull/12");
 
     const times = Array.from(region.querySelectorAll(".sk-proposal__pr-moment"), (el) => el.textContent);
