@@ -1,0 +1,126 @@
+.sk-files {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-2);
+}
+
+.sk-files__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sk-file {
+  min-width: 0;
+}
+
+.sk-file__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sk-space-1) var(--sk-space-3);
+  cursor: pointer;
+}
+
+.sk-file__path {
+  font: var(--sk-type-mono);
+  overflow-wrap: anywhere;
+}
+
+.sk-file__status {
+  color: var(--sk-text-secondary);
+  font: var(--sk-type-caption);
+}
+
+.sk-file__counts {
+  font: var(--sk-type-mono);
+  white-space: nowrap;
+}
+
+.sk-file__body,
+.sk-file__error,
+.sk-file__more {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-2);
+  align-items: flex-start;
+  margin-block-start: var(--sk-space-2);
+}
+
+.sk-file__error-text {
+  display: flex;
+  gap: var(--sk-space-2);
+  align-items: flex-start;
+  margin: 0;
+  color: var(--sk-status-danger-fg);
+}
+
+.sk-file__more {
+  margin-block-start: 0;
+}
+
+.sk-file__diff {
+  align-self: stretch;
+  max-height: 32rem;
+  overflow: auto;
+  background: var(--sk-bg-sunken);
+  border: 1px solid var(--sk-border-subtle);
+  border-radius: var(--sk-radius-md);
+}
+
+.sk-file__table {
+  width: 100%;
+  border-collapse: collapse;
+  font: var(--sk-type-mono);
+  font-variant-ligatures: none;
+}
+
+.sk-file__number {
+  width: 1%;
+  padding: 0 var(--sk-space-3);
+  color: var(--sk-text-secondary);
+  text-align: right;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.sk-file__text {
+  padding: 0 var(--sk-space-3);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.sk-file__sign {
+  display: inline-block;
+  width: 2ch;
+  font-weight: 700;
+}
+
+.sk-file__line--added {
+  background: var(--sk-status-success-bg);
+  box-shadow: inset 3px 0 0 var(--sk-status-success-border);
+}
+
+.sk-file__line--removed {
+  background: var(--sk-status-danger-bg);
+  box-shadow: inset 3px 0 0 var(--sk-status-danger-border);
+}
+
+.sk-file__line--added .sk-file__text {
+  color: var(--sk-status-success-fg);
+}
+
+.sk-file__line--removed .sk-file__text {
+  color: var(--sk-status-danger-fg);
+}
+
+.sk-file__gap td {
+  padding: var(--sk-space-1) var(--sk-space-3);
+  color: var(--sk-text-secondary);
+  font: var(--sk-type-caption);
+  text-align: center;
+  border-block: 1px dashed var(--sk-border-subtle);
+}
