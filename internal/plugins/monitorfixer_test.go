@@ -10,6 +10,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/action/githubpr"
 	"github.com/nourtalaat/sidekick/internal/action/grafana"
 	"github.com/nourtalaat/sidekick/internal/action/jira"
+	"github.com/nourtalaat/sidekick/internal/action/kubernetesrollback"
 	"github.com/nourtalaat/sidekick/internal/action/prometheusrule"
 	"github.com/nourtalaat/sidekick/internal/action/signoz"
 	"github.com/nourtalaat/sidekick/internal/action/slack"
@@ -32,6 +33,7 @@ func TestMonitorFixers(t *testing.T) {
 		{name: "jira.issue fixes nothing", action: &jira.Issue{}},
 		{name: "slack.reply fixes nothing", action: &slack.Reply{}},
 		{name: "unleash.flag fixes nothing", action: &unleashflag.Flag{}},
+		{name: "kubernetes.rollback fixes nothing", action: &kubernetesrollback.Rollback{}},
 	}
 
 	for _, tt := range tests {
