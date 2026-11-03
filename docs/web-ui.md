@@ -13,6 +13,40 @@ no inline scripts or styles), `X-Content-Type-Options: nosniff` and
 `Referrer-Policy: same-origin`. A reverse proxy in front of Sidekick must
 not replace those headers.
 
+## The pages of the web UI
+
+The menu on the left shows the pages below. The role is the lowest role that
+can use the page. For a page that a lower role can read, the role to change
+things is named too. The server checks the role of every request.
+
+| Page | Address | Lowest role |
+|---|---|---|
+| [Investigations](#investigation-pages) | `/investigations` | `viewer` |
+| [One investigation](#investigation-pages) | `/investigations/<id>` | `viewer`; **Stop**, **Resolve**, **Stop watching**, the fix mark and follow-up questions need `responder` |
+| [Dashboard](#the-dashboard) | `/dashboard` | `viewer` |
+| [Review queue](#the-review-queue), tab **Lessons** | `/review?tab=lessons` | `viewer` reads; `admin` decides |
+| Review queue, tab **Strategies** | `/review?tab=strategies` | `admin` |
+| Review queue, tab **Scenarios** | `/review?tab=scenarios` | `admin` |
+| Review queue, tab **Actions** | `/review?tab=actions` | `approver` |
+| [Lessons](#the-lessons-and-memory-page), tab **Lessons** | `/lessons?tab=lessons` | `viewer` reads; `admin` changes |
+| Lessons, tab **Memory** | `/lessons?tab=memory` | `viewer` reads; `admin` changes |
+| Lessons, tab **Service notes** | `/lessons?tab=notes` | `viewer` reads; `admin` changes |
+| [Routes](#listeners-routes-and-the-audit-log-in-the-ui) | `/routes` | `viewer` reads; `admin` changes |
+| [Strategies](#strategies) | `/strategies` | `viewer` reads; `admin` changes |
+| [Listeners](#listeners-routes-and-the-audit-log-in-the-ui) | `/listeners` | `viewer` reads; `responder` changes |
+| [Benchmarks](#the-benchmarks-page) | `/benchmarks` | `viewer` |
+| [One benchmark run](#the-page-of-one-benchmark-run) | `/benchmarks/<id>` | `viewer` |
+| [Comparing two runs](#comparing-two-benchmark-runs) | `/benchmarks/compare` | `viewer` |
+| [Audit log](#listeners-routes-and-the-audit-log-in-the-ui) | `/audit` | `admin` |
+| [Settings](#settings), tab **Config** | `/settings?tab=config` | `admin` |
+| Settings, tab **API tokens** ([details](#api-tokens)) | `/settings?tab=tokens` | `admin` |
+| Settings, tab **Failed jobs** | `/settings?tab=failed-jobs` | `admin` |
+
+A viewer, a responder and an approver see the first eight items in the menu
+(Investigations, Dashboard, Review queue, Lessons, Routes, Strategies,
+Listeners and Benchmarks); an admin also sees Audit log and Settings. [The
+menu](#the-menu) says what a role below the page sees.
+
 ## Register Sidekick at your provider
 
 1. Create a web application (a confidential client that uses the
@@ -340,8 +374,8 @@ Under the watchers, each watcher has a **Checks** list that opens to show
 how the watcher started, how it ended and when, and its last checks, newest
 first: the time with seconds, whether the check passed, failed or had an
 error, what the checked service answered, and how long the check took. The
-list is open for a watcher that is still running and closed for one that
-ended, and it shows up to 50 checks; when more ran, it says "Showing the last
+list starts open for a watcher that is still running and closed for one that
+ended; after that the page keeps your choice. It shows up to 50 checks; when more ran, it says "Showing the last
 50 of N checks." A long answer is cut after a few lines until **Show all**
 is pressed. The answer comes from the checked service, so it is shown as
 plain text. The list sits outside the watcher box, so a screen reader does
@@ -360,9 +394,14 @@ page was read, for example because a follow-up run replaced it, the form
 shows the reason the server gave and keeps what you typed. The counts are
 read again every 30 seconds and when a run changes the investigation.
 
-A `responder` or higher also sees **Stop**, **Resolve**, **Stop watching**
-and the follow-up box at the bottom of the page. A `viewer` does not see
-these buttons. The server checks the role of every request again, and
+Every role has a **Copy link** button. A `responder` or higher also sees **Ask a
+follow-up**, which moves to the follow-up box at the bottom of the page, **Stop**
+while a run goes, **Resolve** while the group is open, and **Stop watching**.
+An `admin` sees **Export as scenario** on an investigation whose verdict
+someone confirmed. An investigation that ended as a false positive has a
+**Fix** section that says "Fix applied" or "Fix not applied yet"; a `responder`
+or higher can **Mark fix as applied** or **Take back the mark**. A `viewer`
+does not see these buttons. The server checks the role of every request again, and
 the page shows its reason when it refuses one.
 
 While a run goes, the page follows the investigation's stream and adds
@@ -535,7 +574,10 @@ Every change from this page is written to the audit log.
 The **Review queue** (`/review`) is one page with a tab for each kind of
 thing that waits for a person. The tab is in the address
 (`/review?tab=lessons`), so a link opens the queue on it, and the arrow keys
-move between the tabs.
+move between the tabs. The tabs are **Lessons**, **Strategies**, **Scenarios**
+and **Actions**. Lessons can be read by every role and decided by an `admin`;
+Strategies and Scenarios are for an `admin`; Actions is for an `approver`, and
+a lower role sees a note that says so.
 
 The **Lessons** tab lists the lessons drafted from feedback that wait for
 review, newest first, each with its text, where it applies and links to the
@@ -558,7 +600,9 @@ plain text, never as HTML.
 
 The **Strategies** tab lists the changes Sidekick drafted to strategies after
 repeated wrong feedback. See [`strategies.proposals`](configuration.md#proposed-changes)
-for what turns them on and what they cost. Only an `admin` sees them.
+for what turns them on and what they cost. The server lets only an `admin`
+read them; the tab does not check the role first, so a lower role sees the
+server's refusal in place of the list.
 
 Each proposal shows its status: being drafted, draft failed, waiting for the
 gate, gate running, passed the gate, did not pass, applied, approved (for a
@@ -924,9 +968,11 @@ An investigation's page links its `runtime:N` version to that version.
 ## Settings
 
 The **Settings** item of the navigation (`/settings`) is a page for the
-`admin` role, with tabs: **Config**, **API tokens**, which is described under
-[API tokens](#api-tokens), and **Failed jobs**, described below. The tab is in the address (`/settings?tab=config`), so
-a link opens the page on it. A role below `admin` that opens the address sees a
+`admin` role, with tabs: **Config** (`tab=config`), **API tokens** (`tab=tokens`),
+which is described under [API tokens](#api-tokens), and **Failed jobs**
+(`tab=failed-jobs`), described below. The first tab opens when the address names
+none. The tab is in the address (`/settings?tab=config`), so a link opens the
+page on it. A role below `admin` that opens the address sees a
 message that names the role, and the page sends no request.
 
 The **Config** tab shows the config Sidekick runs with, from
@@ -981,7 +1027,8 @@ that is not dead is not listed.
 
 ## The menu
 
-The left menu shows only the items the signed-in role can use. A viewer, a
+The left menu shows only the items the signed-in role can use; the
+[table of pages](#the-pages-of-the-web-ui) names the role of each. A viewer, a
 responder and an approver see Investigations, Dashboard, Review queue,
 Lessons, Routes, Strategies, Listeners and Benchmarks; an admin also sees
 Audit log and Settings. Someone who opens the address of a page their role
@@ -1034,8 +1081,8 @@ would refuse is ignored, so every link opens. Days are UTC days.
 - **Quality.** Verdict accuracy over time, precision and recall over
   time, the verdict Sidekick gave against the verdict people confirmed,
   precision and recall of each verdict, accuracy by model and strategy,
-  and the newest benchmark runs. Choose two runs to compare them; the two
-  runs are in the address too (`a` and `b`). The link **Open this
+  and the newest benchmark runs. Choose two runs in the menus **Compare run**
+  and **With run** to compare them; the two runs are in the address too (`a` and `b`). The link **Open this
   comparison in Benchmarks** shows once two runs are chosen and opens the
   same two runs on the [compare page](#comparing-two-benchmark-runs). The
   link **All benchmark runs** opens the
