@@ -1,0 +1,68 @@
+.sk-config__note {
+  margin: 0;
+  color: var(--sk-text-secondary);
+}
+
+.sk-config__muted {
+  margin: 0;
+  color: var(--sk-text-secondary);
+}
+
+.sk-config__filter {
+  max-width: 32rem;
+}
+
+.sk-config__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-3);
+}
+
+.sk-config__heading {
+  font: var(--sk-type-h2);
+}
+
+.sk-config__card {
+  padding: var(--sk-space-4) var(--sk-space-6);
+}
+
+.sk-config__summary {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.sk-config__card-title {
+  font: var(--sk-type-h3);
+}
+
+.sk-config__summary-text {
+  color: var(--sk-text-secondary);
+}
+
+.sk-config__card-body {
+  margin-top: var(--sk-space-4);
+}
+
+.sk-config__rules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-3);
+}
+
+.sk-config__rules > p {
+  margin: 0;
+}
+
+.sk-config__rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sk-config__rule-name {
+  margin: 0 0 var(--sk-space-2);
+  font: var(--sk-type-label);
+}

@@ -41,10 +41,11 @@ describe("the pages that need no more than the viewer role", () => {
 
 describe("the pages of an admin", () => {
   it("opens Settings", async () => {
-    renderApp({ me: ADMIN, route: "/settings" });
+    const { seen } = renderApp({ me: ADMIN, route: "/settings", handler: () => json(200, { file: {}, runtime: { listeners: [], routes: [] } }) });
 
     expect(await screen.findByRole("heading", { name: "Settings", level: 1 })).toBeInTheDocument();
-    expect(screen.getByText("Comes in a later release.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Added at runtime" })).toBeInTheDocument();
+    expect(seen.some((request) => request.path === "/api/v1/config")).toBe(true);
   });
 
   it("opens the audit log and asks for its entries", async () => {

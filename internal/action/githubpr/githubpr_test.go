@@ -11,6 +11,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/actiontest"
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
 	"github.com/nourtalaat/sidekick/internal/registry"
@@ -157,6 +158,12 @@ func TestSpec(t *testing.T) {
 
 	_, err := tools.ParseInputSchema(spec.ParamsSchema)
 	require.NoError(t, err)
+}
+
+func TestSpecSnapshot(t *testing.T) {
+	t.Parallel()
+
+	actiontest.CheckSpecSnapshot(t, TypeName, newBed(t, nil).pr)
 }
 
 func TestRegistered(t *testing.T) {

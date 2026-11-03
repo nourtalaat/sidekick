@@ -1,6 +1,7 @@
 package bench
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"text/tabwriter"
@@ -75,6 +76,10 @@ type RunResult struct {
 	// ToolResults are the results of the run's source calls, in order.
 	// Built-in tools such as submit_verdict are left out.
 	ToolResults []ToolResult
+	// Proposals are the actions the model proposed in the run, oldest
+	// first. A scenario without actions has none. Nothing decides or runs
+	// a proposal in a benchmark.
+	Proposals []Proposal
 
 	// Scored is true once Score has set the fields below.
 	Scored bool
@@ -93,6 +98,16 @@ type RunResult struct {
 	// MissingSources are the ones that are not.
 	SourcesReported *bool
 	MissingSources  []string
+}
+
+// Proposal is one action the model proposed in a run.
+type Proposal struct {
+	// Action is the name of the mock action, as the scenario names it.
+	Action string
+	// Params are the parameters, as JSON, as the proposal stored them.
+	Params json.RawMessage
+	// Reason is the reason the model gave, redacted as a real run redacts it.
+	Reason string
 }
 
 // ToolResult is the result of one source call, as the model read it.
