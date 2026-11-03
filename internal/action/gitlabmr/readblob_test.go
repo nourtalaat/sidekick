@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitlabgit"
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
 )
 
@@ -30,16 +31,16 @@ func TestReadBlob(t *testing.T) {
 	}{
 		{name: "the text of the blob", params: validParams(), blob: testBlobSHA, answer: ptr(reply(blobBody(testBlobSHA, "hello\n"))), want: "hello\n"},
 		{name: "a project the config does not allow", params: otherProject, blob: testBlobSHA, wantErr: action.ErrLimit},
-		{name: "a blob that is not a SHA", params: validParams(), blob: "../../files/x", wantErr: errBadBlob},
+		{name: "a blob that is not a SHA", params: validParams(), blob: "../../files/x", wantErr: gitlabgit.ErrBadBlob},
 		{name: "a blob the host does not have", params: validParams(), blob: testBlobSHA, answer: &notFound, wantErr: action.ErrPermanent},
-		{name: "a binary file", params: validParams(), blob: testBlobSHA, answer: ptr(reply(blobBody(testBlobSHA, "a\x00b"))), wantErr: errNotText},
-		{name: "a file that is too large", params: validParams(), blob: testBlobSHA, answer: ptr(reply(blobBody(testBlobSHA, strings.Repeat("x", maxBaseFileBytes+1)))), wantErr: errTooBig},
+		{name: "a binary file", params: validParams(), blob: testBlobSHA, answer: ptr(reply(blobBody(testBlobSHA, "a\x00b"))), wantErr: gitlabgit.ErrNotText},
+		{name: "a file that is too large", params: validParams(), blob: testBlobSHA, answer: ptr(reply(blobBody(testBlobSHA, strings.Repeat("x", gitlabgit.MaxFileBytes+1)))), wantErr: gitlabgit.ErrTooBig},
 		{
-			name: "text that GitLab converted, so its size differs", params: validParams(), blob: testBlobSHA, wantErr: errNotText,
+			name: "text that GitLab converted, so its size differs", params: validParams(), blob: testBlobSHA, wantErr: gitlabgit.ErrNotText,
 			answer: ptr(reply(`{"size":99,"encoding":"base64","content":"aGVsbG8K","sha":"` + testBlobSHA + `"}`)),
 		},
 		{
-			name: "content that is not base64", params: validParams(), blob: testBlobSHA, wantErr: errNotBase64,
+			name: "content that is not base64", params: validParams(), blob: testBlobSHA, wantErr: gitlabgit.ErrNotBase64,
 			answer: ptr(reply(`{"size":6,"encoding":"text","content":"hello\n","sha":"` + testBlobSHA + `"}`)),
 		},
 	}

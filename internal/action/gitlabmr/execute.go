@@ -2,75 +2,15 @@ package gitlabmr
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net/http"
-	"net/url"
-	"regexp"
-	"slices"
-	"strconv"
-	"strings"
 
 	"github.com/nourtalaat/sidekick/internal/action"
-	"github.com/nourtalaat/sidekick/internal/action/gitchange"
-	"github.com/nourtalaat/sidekick/internal/gitlabapi"
-	"github.com/nourtalaat/sidekick/internal/weblink"
+	"github.com/nourtalaat/sidekick/internal/action/gitlabgit"
 )
 
-// The actions of a commit, as the Commits API names them.
-const (
-	commitCreate = "create"
-	commitUpdate = "update"
-	commitDelete = "delete"
-)
-
-// listPageSize is how many merge requests the lookup by source branch asks
-// for. A branch has one merge request, or a few when its earlier ones were
-// closed.
-const listPageSize = 20
-
-var (
-	// errNoBranch is returned when the idempotency key is not the branch
-	// name sidekick/<proposal id> that the action makes merge requests from.
-	errNoBranch = errors.New("the invocation has no idempotency key to name the branch with")
-	// errNoIID is returned when GitLab does not say which merge request it
-	// made.
-	errNoIID = errors.New("GitLab did not return the merge request")
-)
-
-// branchOfProposal is the shape of the branch the action makes: sidekick/
-// and the proposal ID.
-var branchOfProposal = regexp.MustCompile(`^sidekick/[0-9a-fA-F-]{36}$`)
-
-// commitRequest is the body of the call that makes a commit.
-type commitRequest struct {
-	Branch        string         `json:"branch"`
-	StartSHA      string         `json:"start_sha"`
-	CommitMessage string         `json:"commit_message"`
-	Actions       []commitAction `json:"actions"`
-}
-
-// commitAction is one file of a commit. Content is nil for a delete.
-type commitAction struct {
-	Action   string  `json:"action"`
-	FilePath string  `json:"file_path"`
-	Content  *string `json:"content,omitempty"`
-}
-
-// createRequest is the body of the call that opens a merge request. It has
-// only what the action sets: it never assigns, asks for a review, approves,
-// sets auto-merge or squash.
-type createRequest struct {
-	SourceBranch string `json:"source_branch"`
-	TargetBranch string `json:"target_branch"`
-	Title        string `json:"title"`
-	Description  string `json:"description"`
-}
-
-// updateRequest is the body of the call that closes a merge request.
-type updateRequest struct {
-	StateEvent string `json:"state_event"`
-}
+// fallbackTitle is the title of a merge request whose given title is nothing
+// but a draft prefix.
+const fallbackTitle = "Update monitor definitions"
 
 // Execute implements action.Action. The branch is named by the idempotency
 // key, sidekick/<proposal id>, so a repeat after a crash finds what the first
@@ -84,8 +24,8 @@ func (m *MR) Execute(ctx context.Context, inv action.Invocation) (action.Result,
 		return action.Result{}, fmt.Errorf("validate before execute: %w", err)
 	}
 
-	if !branchOfProposal.MatchString(inv.IdempotencyKey) {
-		return action.Result{}, fmt.Errorf("%w: %w", action.ErrPermanent, errNoBranch)
+	if !gitlabgit.BranchOfProposal.MatchString(inv.IdempotencyKey) {
+		return action.Result{}, fmt.Errorf("%w: %w", action.ErrPermanent, gitlabgit.ErrNoBranch)
 	}
 
 	branch := inv.IdempotencyKey
@@ -95,41 +35,36 @@ func (m *MR) Execute(ctx context.Context, inv action.Invocation) (action.Result,
 		return action.Result{}, fmt.Errorf("decode the parameters: %w", err)
 	}
 
-	mr, err := m.mergeRequestFrom(ctx, params.Project, branch)
+	mr, branchExists, err := gitlabgit.Existing(ctx, m.client, params.Project, branch)
 	if err != nil {
 		return action.Result{}, fmt.Errorf("look for an earlier attempt: %w", err)
 	}
 
 	if mr != nil {
-		m.metrics.mergeRequest(resultExisting)
+		m.metrics.MergeRequest(gitlabgit.ResultExisting)
 
-		return m.result(params.Project, mr, resultExisting, ""), nil
+		return gitlabgit.Result(params.Project, mr, gitlabgit.ResultExisting, ""), nil
 	}
 
 	var pushed string
 
-	branchExists, err := m.branchExists(ctx, params.Project, branch)
-	if err != nil {
-		return action.Result{}, fmt.Errorf("look for the branch of an earlier attempt: %w", err)
-	}
-
 	if !branchExists {
 		pre, err := m.prepare(ctx, inv.Params, inv.Snapshot)
 		if err != nil {
-			m.metrics.mergeRequest(resultError)
+			m.metrics.MergeRequest(gitlabgit.ResultError)
 
 			return action.Result{}, fmt.Errorf("check the merge request before it is made: %w", err)
 		}
 
 		if len(pre.changes) == 0 {
-			m.metrics.mergeRequest(resultApplied)
+			m.metrics.MergeRequest(gitlabgit.ResultApplied)
 
 			return action.Result{Summary: "The change is on the base branch already, so no merge request was opened."}, nil
 		}
 
 		pushed, err = m.push(ctx, pre, branch, inv)
 		if err != nil {
-			m.metrics.mergeRequest(resultError)
+			m.metrics.MergeRequest(gitlabgit.ResultError)
 
 			return action.Result{}, fmt.Errorf("push the branch: %w", err)
 		}
@@ -137,72 +72,15 @@ func (m *MR) Execute(ctx context.Context, inv action.Invocation) (action.Result,
 
 	mr, err = m.open(ctx, params, branch, inv)
 	if err != nil {
-		m.metrics.mergeRequest(resultError)
+		m.metrics.MergeRequest(gitlabgit.ResultError)
 
 		return action.Result{}, fmt.Errorf("make the merge request from %s: %w", branch, err)
 	}
 
-	m.metrics.mergeRequest(resultOpened)
+	m.metrics.MergeRequest(gitlabgit.ResultOpened)
 	m.log.InfoContext(ctx, "merge request opened", "proposal_id", inv.ProposalID, "project", params.Project, "iid", mr.IID)
 
-	return m.result(params.Project, mr, resultOpened, pushed), nil
-}
-
-// mergeRequestFrom returns the merge request whose source branch is branch,
-// in any state, or nil when there is none. When there are several, it prefers
-// one that is open, then one that was merged, then the newest.
-func (m *MR) mergeRequestFrom(ctx context.Context, project, branch string) (*apiMergeRequest, error) {
-	query := url.Values{
-		"source_branch": {branch},
-		"state":         {"all"},
-		"scope":         {"all"},
-		"order_by":      {"created_at"},
-		"sort":          {"desc"},
-		"per_page":      {strconv.Itoa(listPageSize)},
-	}
-
-	var found []apiMergeRequest
-
-	if _, err := m.client.Get(ctx, gitlabapi.ProjectPath(project, "merge_requests"), query, &found); err != nil {
-		return nil, classify("look for the merge request from "+branch, err)
-	}
-
-	if len(found) == 0 {
-		return nil, nil
-	}
-
-	best := slices.MaxFunc(found, func(a, b apiMergeRequest) int { return rankOf(a.State) - rankOf(b.State) })
-
-	return &best, nil
-}
-
-// rankOf orders the states of merge requests from the same branch: open
-// before merged before closed.
-func rankOf(state string) int {
-	switch state {
-	case gitlabOpened, gitlabLocked:
-		return 2
-	case gitlabMerged:
-		return 1
-	default:
-		return 0
-	}
-}
-
-// branchExists reports whether the branch is in the project.
-func (m *MR) branchExists(ctx context.Context, project, branch string) (bool, error) {
-	var b apiBranch
-
-	_, err := m.client.Get(ctx, branchPath(project, branch), nil, &b)
-
-	switch {
-	case gitlabapi.IsStatus(err, http.StatusNotFound):
-		return false, nil
-	case err != nil:
-		return false, classify("look for the branch "+branch, err)
-	default:
-		return true, nil
-	}
+	return gitlabgit.Result(params.Project, mr, gitlabgit.ResultOpened, pushed), nil
 }
 
 // push writes the changes as one commit that makes the branch from the head
@@ -212,140 +90,43 @@ func (m *MR) branchExists(ctx context.Context, project, branch string) (bool, er
 // is built on. It returns the SHA of the commit. A branch that exists already,
 // made by another attempt a moment ago, is left as it is, and the SHA is empty.
 func (m *MR) push(ctx context.Context, pre *prepared, branch string, inv action.Invocation) (string, error) {
-	actions := make([]commitAction, 0, len(pre.changes))
+	actions := make([]gitlabgit.CommitAction, 0, len(pre.changes))
 
 	for _, c := range pre.changes {
 		switch {
 		case c.Deleted():
-			actions = append(actions, commitAction{Action: commitDelete, FilePath: c.Path})
-		case pre.files[c.Path].exists:
-			actions = append(actions, commitAction{Action: commitUpdate, FilePath: c.Path, Content: c.Content})
+			actions = append(actions, gitlabgit.CommitAction{Action: gitlabgit.CommitDelete, FilePath: c.Path})
+		case pre.files[c.Path].Exists:
+			actions = append(actions, gitlabgit.CommitAction{Action: gitlabgit.CommitUpdate, FilePath: c.Path, Content: c.Content})
 		default:
-			actions = append(actions, commitAction{Action: commitCreate, FilePath: c.Path, Content: c.Content})
+			actions = append(actions, gitlabgit.CommitAction{Action: gitlabgit.CommitCreate, FilePath: c.Path, Content: c.Content})
 		}
 	}
 
-	return m.commitTo(ctx, pre.params.Project, commitRequest{
+	sha, err := gitlabgit.CommitTo(ctx, m.client, pre.params.Project, gitlabgit.CommitRequest{
 		Branch:        branch,
-		StartSHA:      pre.base.commit,
-		CommitMessage: commitMessage(pre.params.Title, inv.ProposalID),
+		StartSHA:      pre.base.Commit,
+		CommitMessage: gitlabgit.CommitMessage(pre.params.Title, inv.ProposalID),
 		Actions:       actions,
 	})
-}
-
-// commitTo makes the commit and returns its SHA. GitLab answers every failure of the call with
-// 400, so when it fails, the branch is read again: a branch that is there now
-// was made by another attempt, and its commit is the one wanted.
-func (m *MR) commitTo(ctx context.Context, project string, req commitRequest) (string, error) {
-	var made struct {
-		ID string `json:"id"`
+	if err != nil {
+		return "", fmt.Errorf("make the commit: %w", err)
 	}
 
-	err := m.client.Send(ctx, http.MethodPost, gitlabapi.ProjectPath(project, "repository", "commits"), req, &made)
-	if err == nil {
-		return made.ID, nil
-	}
-
-	if exists, lookErr := m.branchExists(ctx, project, req.Branch); lookErr == nil && exists {
-		return "", nil
-	}
-
-	return "", classify("make the commit on "+req.Branch, err)
+	return sha, nil
 }
 
 // open makes the merge request of a proposal from the branch.
-func (m *MR) open(ctx context.Context, params Params, branch string, inv action.Invocation) (*apiMergeRequest, error) {
-	return m.openMergeRequest(ctx, params.Project, createRequest{
+func (m *MR) open(ctx context.Context, params Params, branch string, inv action.Invocation) (*gitlabgit.MergeRequest, error) {
+	mr, err := gitlabgit.OpenMergeRequest(ctx, m.client, params.Project, gitlabgit.CreateRequest{
 		SourceBranch: branch,
 		TargetBranch: params.BaseBranch,
-		Title:        mergeRequestTitle(params.Title, m.limits.draft()),
-		Description:  m.description(params.Body, inv),
+		Title:        gitlabgit.MergeRequestTitle(params.Title, m.limits.draft(), fallbackTitle),
+		Description:  gitlabgit.Description(params.Body, inv.ProposalID, inv.InvestigationID, m.publicURL),
 	})
-}
-
-// openMergeRequest makes a merge request. One that exists already, made by
-// another attempt a moment ago, is returned instead: GitLab answers 409 when
-// another open merge request has the same source branch.
-func (m *MR) openMergeRequest(ctx context.Context, project string, req createRequest) (*apiMergeRequest, error) {
-	var mr apiMergeRequest
-
-	err := m.client.Send(ctx, http.MethodPost, gitlabapi.ProjectPath(project, "merge_requests"), req, &mr)
-	if gitlabapi.IsStatus(err, http.StatusConflict) {
-		found, lookErr := m.mergeRequestFrom(ctx, project, req.SourceBranch)
-		if lookErr != nil {
-			return nil, fmt.Errorf("find the merge request made meanwhile: %w", lookErr)
-		}
-
-		if found != nil {
-			return found, nil
-		}
-	}
-
 	if err != nil {
-		return nil, classify("open the merge request", err)
+		return nil, fmt.Errorf("open the merge request: %w", err)
 	}
 
-	if mr.IID == 0 {
-		return nil, errNoIID
-	}
-
-	return &mr, nil
-}
-
-// description returns the description of the merge request: the model's text,
-// made safe, and a line that says where it came from.
-func (m *MR) description(body string, inv action.Invocation) string {
-	var b strings.Builder
-
-	b.WriteString(descriptionText(body))
-	b.WriteString("\n\n---\n")
-	fmt.Fprintf(&b, "Opened by Sidekick for proposal `%s`.", inv.ProposalID)
-
-	if link := weblink.Investigation(m.publicURL, inv.InvestigationID); link != "" {
-		fmt.Fprintf(&b, " [The investigation](%s).", link)
-	}
-
-	return b.String()
-}
-
-// result describes the merge request for people and for the proposal. Its
-// head is the head of the source branch as GitLab says it, or the commit the
-// action made when GitLab does not say.
-func (m *MR) result(project string, mr *apiMergeRequest, how, pushed string) action.Result {
-	title := project + "!" + strconv.Itoa(mr.IID)
-
-	draft := ""
-	if mr.Draft {
-		draft = "draft "
-	}
-
-	var summary string
-
-	switch state := stateOf(mr); {
-	case how == resultOpened:
-		summary = "Opened " + draft + "merge request " + title
-	case state == gitchange.StateMerged:
-		summary = "Found merge request " + title + ", which has been merged since it was opened"
-	case state == gitchange.StateClosed:
-		summary = "Found merge request " + title + ", which has been closed since it was opened"
-	default:
-		summary = "Found the already opened " + draft + "merge request " + title
-	}
-
-	head := mr.SHA
-	if head == "" {
-		head = pushed
-	}
-
-	return action.Result{
-		Summary:     summary,
-		Links:       []action.Link{{Title: title, URL: mr.WebURL}},
-		PullRequest: &action.PullRequestRef{Number: int64(mr.IID), HeadSHA: head},
-	}
-}
-
-// commitMessage returns the message of the commit: the title on one line,
-// and the proposal it is for.
-func commitMessage(title, proposalID string) string {
-	return commitTitle(title) + "\n\nSidekick proposal " + proposalID + "\n"
+	return mr, nil
 }

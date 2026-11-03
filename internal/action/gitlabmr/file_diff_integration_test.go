@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
+	"github.com/nourtalaat/sidekick/internal/action/gitlabgit"
 	"github.com/nourtalaat/sidekick/internal/action/proposals"
 )
 
@@ -104,7 +105,7 @@ func TestFileDiffReadsTheBaseFromTheHost(t *testing.T) {
 		},
 		{name: "a new file needs no read", path: newRulesPath, wantStatus: "added", want: []string{"+./1 x: 1", "+./2 y: 2"}},
 		{name: "a deleted file", path: oldRulesPath, wantStatus: "deleted", want: []string{"-1/. old: 1", "-2/. old: 2"}},
-		{name: "a binary file", path: binaryPath, unreadable: true, wantErr: errNotText},
+		{name: "a binary file", path: binaryPath, unreadable: true, wantErr: gitlabgit.ErrNotText},
 		{name: "a blob the host does not have", path: missingPath, unreadable: true},
 		{name: "a path that is not in the snapshot", path: "prometheus/rules/other.yaml", wantErr: proposals.ErrNoSuchFile},
 	}

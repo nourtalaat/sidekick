@@ -60,6 +60,59 @@ func TestApplicationOperationRunning(t *testing.T) {
 	}
 }
 
+func TestApplicationPendingRevision(t *testing.T) {
+	t.Parallel()
+
+	sync := func(revision string) Operation { return Operation{Sync: &SyncOperation{Revision: revision}} }
+	op := sync("abc")
+
+	tests := []struct {
+		name string
+		app  Application
+		want string
+	}{
+		{name: "no operation"},
+		{name: "an operation that was asked for", app: Application{Operation: &op}, want: "abc"},
+		{name: "an operation that is not a sync", app: Application{Operation: &Operation{}}},
+		{name: "a running operation", app: Application{Status: Status{OperationState: &OperationState{Phase: "Running", Operation: op}}}, want: "abc"},
+		{name: "a finished operation", app: Application{Status: Status{OperationState: &OperationState{Phase: "Succeeded", Operation: op}}}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tt.want, tt.app.PendingRevision())
+		})
+	}
+}
+
+func TestOperationStateEnded(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		phase         string
+		wantCompleted bool
+		wantSucceeded bool
+	}{
+		{phase: "Running"},
+		{phase: "Terminating"},
+		{phase: "Succeeded", wantCompleted: true, wantSucceeded: true},
+		{phase: "Failed", wantCompleted: true},
+		{phase: "Error", wantCompleted: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.phase, func(t *testing.T) {
+			t.Parallel()
+
+			s := OperationState{Phase: tt.phase}
+			require.Equal(t, tt.wantCompleted, s.Completed())
+			require.Equal(t, tt.wantSucceeded, s.Succeeded())
+		})
+	}
+}
+
 func TestApplicationFromFixture(t *testing.T) {
 	t.Parallel()
 

@@ -2,11 +2,9 @@ package gitlabmr
 
 import (
 	"errors"
-	"fmt"
-	"slices"
-	"strings"
 
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
+	"github.com/nourtalaat/sidekick/internal/action/gitlabgit"
 	"github.com/nourtalaat/sidekick/internal/gitlabapi"
 	"github.com/nourtalaat/sidekick/internal/registry"
 )
@@ -60,27 +58,9 @@ func (c *Config) Validate() error {
 func (l *Limits) check() []error {
 	var errs []error
 
-	errs = append(errs, l.checkProjects()...)
+	errs = append(errs, gitlabgit.CheckProjects(l.Projects)...)
 	errs = append(errs, l.Paths.Check()...)
 	errs = append(errs, l.Check()...)
-
-	return errs
-}
-
-// checkProjects checks that there is at least one project and that each is
-// a full path.
-func (l *Limits) checkProjects() []error {
-	if len(l.Projects) == 0 {
-		return []error{errors.New("limits.projects: list at least one project, as its full path such as acme/platform/monitors")}
-	}
-
-	var errs []error
-
-	for i, project := range l.Projects {
-		if !gitlabapi.ValidProject(project) {
-			errs = append(errs, fmt.Errorf("limits.projects[%d]: %q must be a full project path such as group/project, with no wildcards", i, project))
-		}
-	}
 
 	return errs
 }
@@ -93,5 +73,5 @@ func (l *Limits) draft() bool {
 // allowsProject reports whether project is one of the configured projects.
 // GitLab paths are not case-sensitive, so neither is the match.
 func (l *Limits) allowsProject(project string) bool {
-	return slices.ContainsFunc(l.Projects, func(p string) bool { return strings.EqualFold(p, project) })
+	return gitlabgit.AllowsProject(l.Projects, project)
 }
