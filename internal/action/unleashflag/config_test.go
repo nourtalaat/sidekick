@@ -38,6 +38,8 @@ func TestConfigValidate(t *testing.T) {
 		{name: "a base url with a path", change: func(c *Config) { c.BaseURL = "https://example.com/unleash" }},
 		{name: "a base url on a loopback host", change: func(c *Config) { c.BaseURL = "http://127.0.0.1:4242" }},
 		{name: "turn_off listed", change: func(c *Config) { c.Limits.Allow = []string{"turn_off"} }},
+		{name: "restore_previous listed", change: func(c *Config) { c.Limits.Allow = []string{"restore_previous"} }},
+		{name: "both changes listed", change: func(c *Config) { c.Limits.Allow = []string{"turn_off", "restore_previous"} }},
 		{name: "a key of the longest length", change: func(c *Config) { c.Limits.Projects[0].Key = longKey }},
 		{name: "a flag pattern of only a star", change: func(c *Config) { c.Limits.Projects[0].Flags = []string{"*"} }},
 		{name: "two projects", change: func(c *Config) {
@@ -65,7 +67,7 @@ func TestConfigValidate(t *testing.T) {
 		{name: "a flag pattern with a bracket", change: func(c *Config) { c.Limits.Projects[0].Flags = []string{"a[b]"} }, wantErr: "limits.projects[0].flags[0]"},
 		{name: "a flag pattern with a slash", change: func(c *Config) { c.Limits.Projects[0].Flags = []string{"a/b"} }, wantErr: "limits.projects[0].flags[0]"},
 		{name: "a flag listed twice", change: func(c *Config) { c.Limits.Projects[0].Flags = []string{"a", "a"} }, wantErr: `limits.projects[0].flags[1]: "a" is listed twice`},
-		{name: "a change that does not exist", change: func(c *Config) { c.Limits.Allow = []string{"turn_on"} }, wantErr: `limits.allow[0]: "turn_on" is not a change`},
+		{name: "a change that does not exist", change: func(c *Config) { c.Limits.Allow = []string{"turn_on"} }, wantErr: `limits.allow[0]: "turn_on" is not a change; use turn_off or restore_previous`},
 		{name: "a change listed twice", change: func(c *Config) { c.Limits.Allow = []string{"turn_off", "turn_off"} }, wantErr: `limits.allow[1]: "turn_off" is listed twice`},
 	}
 
@@ -100,7 +102,7 @@ limits:
     - key: default
       environments: [production, staging]
       flags: ["checkout-*"]
-  allow: [turn_off]
+  allow: [turn_off, restore_previous]
 `
 
 	var c Config
@@ -113,7 +115,7 @@ limits:
 		TokenSecret:   tokenRef,
 		Limits: Limits{
 			Projects: []Project{{Key: "default", Environments: []string{"production", "staging"}, Flags: []string{"checkout-*"}}},
-			Allow:    []string{"turn_off"},
+			Allow:    []string{"turn_off", "restore_previous"},
 		},
 	}, c)
 }

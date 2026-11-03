@@ -91,9 +91,15 @@ type featureEnvironment struct {
 	Enabled bool   `json:"enabled"`
 }
 
-// event is the part of an Unleash event the action reads.
+// event is the part of an Unleash event the action reads. Data and PreData
+// are the strategy an event of a strategy holds after and before the
+// change.
 type event struct {
-	ID int64 `json:"id"`
+	ID      int64           `json:"id"`
+	Type    string          `json:"type"`
+	GroupID string          `json:"groupId"`
+	Data    json.RawMessage `json:"data"`
+	PreData json.RawMessage `json:"preData"`
 }
 
 // feature reads the flag. A flag that does not exist in the project, or is
@@ -158,6 +164,34 @@ func (c *client) toggle(ctx context.Context, project, flag, environment string, 
 	return nil
 }
 
+// createStrategy adds a strategy to the flag in one environment. Unleash
+// gives it a new ID.
+func (c *client) createStrategy(ctx context.Context, project, flag, environment string, s strategy) error {
+	if err := c.do(ctx, http.MethodPost, environmentPath(project, flag, environment)+"/strategies", nil, s, nil); err != nil {
+		return fmt.Errorf("add a strategy to flag %s in %s: %w", flag, environment, err)
+	}
+
+	return nil
+}
+
+// updateStrategy writes the whole strategy with id.
+func (c *client) updateStrategy(ctx context.Context, project, flag, environment, id string, s strategy) error {
+	if err := c.do(ctx, http.MethodPut, strategyPath(project, flag, environment, id), nil, s, nil); err != nil {
+		return fmt.Errorf("update strategy %s of flag %s in %s: %w", id, flag, environment, err)
+	}
+
+	return nil
+}
+
+// deleteStrategy removes the strategy with id.
+func (c *client) deleteStrategy(ctx context.Context, project, flag, environment, id string) error {
+	if err := c.do(ctx, http.MethodDelete, strategyPath(project, flag, environment, id), nil, nil, nil); err != nil {
+		return fmt.Errorf("delete strategy %s of flag %s in %s: %w", id, flag, environment, err)
+	}
+
+	return nil
+}
+
 // featurePath is the path of a flag. Every key has been checked against
 // keyPattern, and is escaped as well.
 func featurePath(project, flag string) string {
@@ -167,6 +201,11 @@ func featurePath(project, flag string) string {
 // environmentPath is the path of a flag in one environment.
 func environmentPath(project, flag, environment string) string {
 	return featurePath(project, flag) + "/environments/" + url.PathEscape(environment)
+}
+
+// strategyPath is the path of one strategy of a flag in one environment.
+func strategyPath(project, flag, environment, id string) string {
+	return environmentPath(project, flag, environment) + "/strategies/" + url.PathEscape(id)
 }
 
 // do sends one request and decodes the JSON answer into out, if out is set.

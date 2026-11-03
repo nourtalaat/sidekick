@@ -92,6 +92,20 @@ func TestSpec(t *testing.T) {
 	require.Equal(t, []any{"turn_off"}, schema.Properties["change"]["enum"])
 }
 
+func TestRestorePreviousIsOnlyAllowedWhenListed(t *testing.T) {
+	t.Parallel()
+
+	a := newTestAction(t, fakehttp.New(t), allowRestore)
+
+	require.NoError(t, a.Validate(t.Context(), json.RawMessage(restoreParams)))
+	require.NoError(t, a.Validate(t.Context(), json.RawMessage(turnOffParams)))
+
+	spec := a.Spec()
+	require.Contains(t, spec.Description, "Changes: turn_off, restore_previous.")
+	require.Contains(t, spec.Description, "restore_previous undoes the newest change of the flag in the environment, and only that one")
+	require.Contains(t, string(spec.ParamsSchema), `"enum": ["turn_off", "restore_previous"]`)
+}
+
 func TestNewIsApprovalOnly(t *testing.T) {
 	t.Parallel()
 
@@ -322,10 +336,7 @@ func TestExecuteWhenTheFlagWasTurnedOffByAnotherPerson(t *testing.T) {
 	a := newTestAction(t, api, nil)
 	snap := proposed(t, a, turnOffParams)
 
-	f.mu.Lock()
-	f.enabled = false
-	f.addEvent()
-	f.mu.Unlock()
+	f.externalToggle(false)
 
 	_, err := a.Execute(t.Context(), invocationOf(turnOffParams, &snap))
 	require.NoError(t, err, "the flag has what the snapshot writes")
@@ -341,16 +352,12 @@ func TestExecuteConflicts(t *testing.T) {
 	}{
 		{name: "someone changed the flag after the proposal", after: func(f *fakeUnleash) { f.changedElsewhere() }},
 		{name: "a strategy changed without an event", after: func(f *fakeUnleash) {
-			f.mu.Lock()
-			defer f.mu.Unlock()
-
-			f.strategies[0]["parameters"] = map[string]any{"rollout": "50", "stickiness": "default", "groupId": "checkout-v2"}
+			f.edit(func(f *fakeUnleash) {
+				f.strategies[0]["parameters"] = map[string]any{"rollout": "50", "stickiness": "default", "groupId": "checkout-v2"}
+			})
 		}},
 		{name: "a strategy was removed without an event", after: func(f *fakeUnleash) {
-			f.mu.Lock()
-			defer f.mu.Unlock()
-
-			f.strategies = f.strategies[:2]
+			f.edit(func(f *fakeUnleash) { f.strategies = f.strategies[:2] })
 		}},
 	}
 
@@ -485,9 +492,7 @@ func TestExecuteWhenTheFlagIsGone(t *testing.T) {
 	a := newTestAction(t, api, nil)
 	snap := proposed(t, a, turnOffParams)
 
-	f.mu.Lock()
-	f.archived = true
-	f.mu.Unlock()
+	f.edit(func(f *fakeUnleash) { f.archived = true })
 
 	_, err := a.Execute(t.Context(), invocationOf(turnOffParams, &snap))
 	require.ErrorIs(t, err, action.ErrLimit)

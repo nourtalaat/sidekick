@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 
 	"github.com/nourtalaat/sidekick/internal/action"
 )
@@ -13,13 +15,19 @@ import (
 const (
 	stepOff stepKind = iota + 1
 	stepOn
+	stepCreate
+	stepUpdate
+	stepDelete
 )
 
-var errManySteps = errors.New("the snapshot changes more than one thing, which Sidekick never writes")
+// newStrategyKey is the key of a strategy that does not exist yet in the
+// strategies of a state. Unleash gives the strategy its ID when it is made.
+const newStrategyKey = "new"
+
+var errNotOneStep = errors.New("the snapshot does not hold exactly one change, which is all Sidekick writes")
 
 // state is what the action reads and writes of a flag in one environment:
-// whether it is on, and its strategies by ID. A strategy that does not
-// exist yet has no ID.
+// whether it is on, and its strategies by ID.
 type state struct {
 	Enabled    bool                `json:"enabled"`
 	Strategies map[string]strategy `json:"strategies"`
@@ -40,18 +48,25 @@ type strategy struct {
 	Segments    json.RawMessage `json:"segments"`
 }
 
-// liveStrategy is a strategy as Unleash lists it.
+// liveStrategy is a strategy as Unleash lists it. A strategy of a release
+// plan has a milestone.
 type liveStrategy struct {
-	ID string `json:"id"`
+	ID          string  `json:"id"`
+	MilestoneID *string `json:"milestoneId"`
 	strategy
 }
 
 // stepKind says which call a step makes.
 type stepKind int
 
-// step is the one call a change makes.
+// step is the one call a change makes. A step that updates or deletes a
+// strategy holds its ID and the strategy as it is before. A step that
+// creates or updates one holds the strategy as it is after.
 type step struct {
 	kind stepKind
+	id   string
+	from strategy
+	to   strategy
 }
 
 // newState makes the state of a flag from what Unleash lists.
@@ -73,7 +88,11 @@ func newState(enabled bool, live []liveStrategy) (state, error) {
 // diffStep returns the one call that turns before into after. A snapshot
 // of Sidekick holds exactly one change.
 func diffStep(before, after state) (step, error) {
-	if before.Enabled != after.Enabled && before.sameStrategies(after) {
+	if before.Enabled != after.Enabled {
+		if !before.sameStrategies(after) {
+			return step{}, errNotOneStep
+		}
+
 		if after.Enabled {
 			return step{kind: stepOn}, nil
 		}
@@ -81,21 +100,74 @@ func diffStep(before, after state) (step, error) {
 		return step{kind: stepOff}, nil
 	}
 
-	return step{}, errManySteps
+	var steps []step
+
+	for _, id := range slices.Sorted(maps.Keys(before.Strategies)) {
+		was := before.Strategies[id]
+
+		switch now, ok := after.Strategies[id]; {
+		case !ok:
+			steps = append(steps, step{kind: stepDelete, id: id, from: was})
+		case !was.equal(now):
+			steps = append(steps, step{kind: stepUpdate, id: id, from: was, to: now})
+		}
+	}
+
+	for _, id := range slices.Sorted(maps.Keys(after.Strategies)) {
+		if _, ok := before.Strategies[id]; !ok {
+			steps = append(steps, step{kind: stepCreate, id: id, to: after.Strategies[id]})
+		}
+	}
+
+	if len(steps) != 1 {
+		return step{}, errNotOneStep
+	}
+
+	return steps[0], nil
 }
 
 // atAfter reports whether the live state already has what the step writes.
 func (s step) atAfter(live state) bool {
-	return live.Enabled == (s.kind == stepOn)
+	switch s.kind {
+	case stepOff:
+		return !live.Enabled
+	case stepOn:
+		return live.Enabled
+	case stepCreate:
+		_, ok := live.idOf(s.to)
+
+		return ok
+	case stepUpdate:
+		now, ok := live.Strategies[s.id]
+
+		return ok && now.equal(s.to)
+	case stepDelete:
+		_, ok := live.Strategies[s.id]
+
+		return !ok
+	default:
+		return false
+	}
 }
 
-// verb says what the step does to the flag, as "on" or "off".
-func (s step) verb() string {
-	if s.kind == stepOn {
-		return "on"
-	}
+// summary says what the step did, for a result.
+func (s step) summary(p Params) string {
+	where := fmt.Sprintf("in %s of project %s", p.Environment, p.Project)
 
-	return "off"
+	switch s.kind {
+	case stepOff:
+		return fmt.Sprintf("Turned flag %s off %s.", p.Flag, where)
+	case stepOn:
+		return fmt.Sprintf("Turned flag %s on %s.", p.Flag, where)
+	case stepCreate:
+		return fmt.Sprintf("Added a strategy to flag %s %s.", p.Flag, where)
+	case stepUpdate:
+		return fmt.Sprintf("Changed strategy %s of flag %s %s.", s.id, p.Flag, where)
+	case stepDelete:
+		return fmt.Sprintf("Removed strategy %s from flag %s %s.", s.id, p.Flag, where)
+	default:
+		return fmt.Sprintf("Changed flag %s %s.", p.Flag, where)
+	}
 }
 
 // same reports whether two states hold the same values, strategy by
@@ -119,6 +191,53 @@ func (s state) sameStrategies(other state) bool {
 	}
 
 	return true
+}
+
+// idOf returns the ID of a strategy that holds the same values as want.
+func (s state) idOf(want strategy) (string, bool) {
+	for _, id := range slices.Sorted(maps.Keys(s.Strategies)) {
+		if s.Strategies[id].equal(want) {
+			return id, true
+		}
+	}
+
+	return "", false
+}
+
+// hasEnabledStrategy reports whether the state has a strategy that is not
+// disabled. Unleash turns an environment off by itself when its strategies
+// are all disabled, and adds a default strategy when it is turned on with
+// none that is enabled.
+func (s state) hasEnabledStrategy() bool {
+	for _, st := range s.Strategies {
+		if !st.Disabled {
+			return true
+		}
+	}
+
+	return false
+}
+
+// cloned returns a copy of the state that can change without changing it.
+func (s state) cloned() state {
+	return state{Enabled: s.Enabled, Strategies: maps.Clone(s.Strategies)}
+}
+
+// withStrategy returns a copy of the state in which the strategy with id is
+// st.
+func (s state) withStrategy(id string, st strategy) state {
+	out := s.cloned()
+	out.Strategies[id] = st
+
+	return out
+}
+
+// withoutStrategy returns a copy of the state without the strategy with id.
+func (s state) withoutStrategy(id string) state {
+	out := s.cloned()
+	delete(out.Strategies, id)
+
+	return out
 }
 
 // normalised returns the strategy with every raw field in its fixed form:

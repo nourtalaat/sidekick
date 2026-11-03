@@ -1,9 +1,11 @@
-// Package unleashflag is the action unleash.flag: it turns a feature flag
-// off in one environment of an Unleash project through the Unleash Admin
-// API, after an approver approved the change. It is approval-only: it
-// embeds action.ReadWriteGate, so a route in read-write mode may list it
-// only when the config sets allowReadWrite: true. docs/plugins/actions.md
-// explains the steps it follows, and internal/action/datadog is its model.
+// Package unleashflag is the action unleash.flag: it changes a feature flag
+// in one environment of an Unleash project through the Unleash Admin API,
+// after an approver approved the change. It turns the flag off, or it
+// restores what the newest change of the flag in that environment did. It
+// is approval-only: it embeds action.ReadWriteGate, so a route in
+// read-write mode may list it only when the config sets
+// allowReadWrite: true. docs/plugins/actions.md explains the steps it
+// follows, and internal/action/datadog is its model.
 //
 // What the action relies on from Unleash, as its public source at the
 // release tag v8.2.1 (github.com/Unleash/unleash, directory src/lib) shows:
@@ -17,15 +19,43 @@
 //     (error/archivedfeature-error.ts) and 404 when the flag has no such
 //     environment. Turning off an environment that is off changes nothing
 //     and stores no event (feature-toggle-service.ts, updateEnabled and
-//     unprotectedUpdateEnabled).
+//     unprotectedUpdateEnabled). The same path with /on turns it on.
 //   - GET .../features/{flag} answers the flag with its environments and
 //     whether each is enabled, and answers 404 for a flag that is not in
 //     the project or is archived. GET .../environments/{environment}/strategies
-//     lists the strategies of the flag there, with their segments.
+//     lists the strategies of the flag there: id, name, title, disabled,
+//     sortOrder, constraints, parameters, variants, segments (IDs) and
+//     milestoneId, which is set for a strategy of a release plan.
+//   - A strategy is added with POST .../environments/{environment}/strategies
+//     (permission CREATE_FEATURE_STRATEGY), changed whole with PUT
+//     .../strategies/{id} (UPDATE_FEATURE_STRATEGY) and removed with DELETE
+//     .../strategies/{id} (DELETE_FEATURE_STRATEGY). Each answers 200. The
+//     body of the first two holds name, title, disabled, sortOrder,
+//     constraints, variants, parameters and segments
+//     (openapi/spec/create-feature-strategy-schema.ts and
+//     update-feature-strategy-schema.ts). A strategy that is added gets a
+//     new ID (features/feature-toggle/feature-toggle-strategies-store.ts,
+//     createStrategyFeatureEnv), so a removed strategy that is put back has
+//     another ID than before.
+//   - After a strategy is changed or removed, Unleash turns the environment
+//     off by itself when no strategy is left that is enabled, and turning it
+//     on with none that is enabled makes Unleash add a default strategy
+//     (feature-toggle-service.ts, optionallyDisableFeature and
+//     unprotectedUpdateEnabled). The action refuses a restore that would
+//     leave the flag on with no enabled strategy, so it never depends on it.
 //   - GET /api/admin/search/events with the filters project, environment and
 //     feature (each as IS:<value>) and limit lists the events newest first
 //     (features/events/event-search-controller.ts and event-store.ts). Any
-//     authenticated token may read it. Event IDs only grow.
+//     authenticated token may read it. Event IDs only grow. An event holds
+//     one change, not the whole environment: feature-environment-enabled and
+//     feature-environment-disabled hold no data, feature-strategy-add holds
+//     the strategy in data, feature-strategy-update holds the strategy
+//     before and after in preData and data, and feature-strategy-remove
+//     holds the strategy in preData (types/events.ts and
+//     feature-toggle-service.ts, featureStrategyToPublic). strategy-order-changed
+//     holds only the order of the IDs, not their sort orders, so it cannot be
+//     restored exactly. An event with a groupId belongs to a group of changes
+//     made together (events/index.ts, IEvent), such as a change request.
 //   - Unleash keeps no version or ETag for a flag, and no write has a
 //     precondition. The action uses the ID of the newest event of the flag
 //     in the environment as the version of the snapshot, and compares the
@@ -67,9 +97,10 @@ const Type = "unleash.flag"
 const maxKeyLength = 256
 
 var (
-	errNoSecrets    = errors.New("no secrets resolver to read the token with")
-	errNoSnapshot   = errors.New("the proposal has no snapshot")
-	errTargetDiffer = errors.New("the snapshot is of another flag")
+	errNoSecrets         = errors.New("no secrets resolver to read the token with")
+	errNoSnapshot        = errors.New("the proposal has no snapshot")
+	errTargetDiffer      = errors.New("the snapshot is of another flag")
+	errNoEnabledStrategy = errors.New("the flag has no enabled strategy, so turning it on would make Unleash add a default strategy; turn it on in Unleash")
 )
 
 // paramsSchemaFormat is the JSON Schema of Params. Its arguments are the
@@ -121,6 +152,8 @@ var (
 type reading struct {
 	state  state
 	newest event
+	// releasePlan is true when a strategy belongs to a release plan.
+	releasePlan bool
 }
 
 // New builds the action from its validated config. It does not call
@@ -164,9 +197,8 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (action
 func (a *Flag) Spec() action.Spec {
 	var b strings.Builder
 
-	b.WriteString("Turns a feature flag off in one environment of an Unleash project, through the Unleash API. " +
-		"The strategies of the flag are not changed, and no other environment is touched. " +
-		"Unleash environments that use change requests refuse it. Allowed flags: ")
+	b.WriteString("Changes a feature flag in one environment of an Unleash project, through the Unleash API. " +
+		"No other environment is touched, and an environment that uses change requests refuses it. Allowed flags: ")
 
 	for i, p := range a.limits.Projects {
 		if i > 0 {
@@ -176,9 +208,18 @@ func (a *Flag) Spec() action.Spec {
 		fmt.Fprintf(&b, "project %s, environments %s, flags %s", p.Key, strings.Join(p.Environments, ", "), strings.Join(p.Flags, ", "))
 	}
 
-	b.WriteString(". Changes: " + strings.Join(a.allow, ", ") + ".")
+	b.WriteString(". Changes: " + strings.Join(a.allow, ", ") + ". ")
 
-	return action.Spec{Name: a.name, Description: b.String(), ParamsSchema: a.schema}
+	if slices.Contains(a.allow, changeTurnOff) {
+		b.WriteString("turn_off turns the flag off and leaves its strategies as they are. ")
+	}
+
+	if slices.Contains(a.allow, changeRestorePrevious) {
+		b.WriteString("restore_previous undoes the newest change of the flag in the environment, and only that one: " +
+			"it restores " + restorable + ". Read the flag's changes first to see what the newest change is.")
+	}
+
+	return action.Spec{Name: a.name, Description: strings.TrimSpace(b.String()), ParamsSchema: a.schema}
 }
 
 // Validate implements action.Action. It runs without calling Unleash, so
@@ -251,12 +292,14 @@ func (a *Flag) Snapshot(ctx context.Context, raw json.RawMessage) (action.Snapsh
 		return action.Snapshot{}, fmt.Errorf("read the flag: %w", err)
 	}
 
-	if !live.state.Enabled {
-		return action.Snapshot{}, refusal("flag %s is already off in %s of project %s", p.Flag, p.Environment, p.Project)
+	after, err := target(p, live)
+	if err != nil {
+		return action.Snapshot{}, fmt.Errorf("compute the change: %w", err)
 	}
 
-	after := live.state
-	after.Enabled = false
+	if _, err := diffStep(live.state, after); err != nil {
+		return action.Snapshot{}, fmt.Errorf("check the change: %w", err)
+	}
 
 	before, err := json.Marshal(live.state)
 	if err != nil {
@@ -268,7 +311,7 @@ func (a *Flag) Snapshot(ctx context.Context, raw json.RawMessage) (action.Snapsh
 		return action.Snapshot{}, fmt.Errorf("encode the state after: %w", err)
 	}
 
-	return action.Snapshot{Target: target(p), Before: before, After: written, Version: version(live.newest)}, nil
+	return action.Snapshot{Target: targetName(p), Before: before, After: written, Version: version(live.newest)}, nil
 }
 
 // Execute implements action.Action. It checks the parameters again, reads
@@ -305,7 +348,7 @@ func (a *Flag) Execute(ctx context.Context, inv action.Invocation) (action.Resul
 		return action.Result{}, fmt.Errorf("flag %s in %s of project %s: %w", p.Flag, p.Environment, p.Project, action.ErrConflict)
 	}
 
-	if err := a.apply(ctx, p, st); err != nil {
+	if err := a.apply(ctx, p, st, live.state); err != nil {
 		return action.Result{}, fmt.Errorf("write the change: %w", err)
 	}
 
@@ -347,13 +390,36 @@ func (a *Flag) read(ctx context.Context, p Params) (reading, error) {
 		return reading{}, fmt.Errorf("read the state: %w", err)
 	}
 
-	return reading{state: st, newest: newest}, nil
+	releasePlan := slices.ContainsFunc(list, func(l liveStrategy) bool { return l.MilestoneID != nil && *l.MilestoneID != "" })
+
+	return reading{state: st, newest: newest, releasePlan: releasePlan}, nil
 }
 
-// apply makes the call of the step.
-func (a *Flag) apply(ctx context.Context, p Params, st step) error {
-	if err := a.client.toggle(ctx, p.Project, p.Flag, p.Environment, st.kind == stepOn); err != nil {
-		return fmt.Errorf("turn the flag %s: %w", st.verb(), err)
+// apply makes the call of the step. live is the state the flag has now.
+func (a *Flag) apply(ctx context.Context, p Params, st step, live state) error {
+	var err error
+
+	switch st.kind {
+	case stepOff:
+		err = a.client.toggle(ctx, p.Project, p.Flag, p.Environment, false)
+	case stepOn:
+		if !live.hasEnabledStrategy() {
+			return fmt.Errorf("%w: %w", action.ErrPermanent, errNoEnabledStrategy)
+		}
+
+		err = a.client.toggle(ctx, p.Project, p.Flag, p.Environment, true)
+	case stepCreate:
+		err = a.client.createStrategy(ctx, p.Project, p.Flag, p.Environment, st.to)
+	case stepUpdate:
+		err = a.client.updateStrategy(ctx, p.Project, p.Flag, p.Environment, st.id, st.to)
+	case stepDelete:
+		err = a.client.deleteStrategy(ctx, p.Project, p.Flag, p.Environment, st.id)
+	default:
+		return fmt.Errorf("%w: %w", action.ErrPermanent, errNotOneStep)
+	}
+
+	if err != nil {
+		return fmt.Errorf("call Unleash: %w", err)
 	}
 
 	return nil
@@ -361,10 +427,8 @@ func (a *Flag) apply(ctx context.Context, p Params, st step) error {
 
 // result is the result of a change that is in place.
 func (a *Flag) result(p Params, st step) action.Result {
-	summary := fmt.Sprintf("Turned flag %s %s in %s of project %s.", p.Flag, st.verb(), p.Environment, p.Project)
-
 	return action.Result{
-		Summary: summary,
+		Summary: st.summary(p),
 		Links:   []action.Link{{Title: "Flag " + p.Flag, URL: a.baseURL + "/projects/" + url.PathEscape(p.Project) + "/features/" + url.PathEscape(p.Flag)}},
 	}
 }
@@ -397,7 +461,7 @@ func statesOf(snap *action.Snapshot, p Params) (before, after state, err error) 
 		return state{}, state{}, fmt.Errorf("%w: %w", action.ErrPermanent, errNoSnapshot)
 	}
 
-	if snap.Target != target(p) {
+	if snap.Target != targetName(p) {
 		return state{}, state{}, fmt.Errorf("%w: %w", action.ErrPermanent, errTargetDiffer)
 	}
 
@@ -422,8 +486,34 @@ func paramsSchema(allow []string) json.RawMessage {
 	return json.RawMessage(fmt.Sprintf(paramsSchemaFormat, maxKeyLength, enum))
 }
 
-// target names the flag in its environment, as Snapshot.Target.
-func target(p Params) string {
+// target returns the state the change of p writes, from the state the flag
+// has now. A change that Sidekick will not make is a refusal that wraps
+// action.ErrLimit.
+func target(p Params, live reading) (state, error) {
+	switch p.Change {
+	case changeTurnOff:
+		if !live.state.Enabled {
+			return state{}, refusal("flag %s is already off in %s of project %s", p.Flag, p.Environment, p.Project)
+		}
+
+		after := live.state.cloned()
+		after.Enabled = false
+
+		return after, nil
+	case changeRestorePrevious:
+		if live.releasePlan {
+			return state{}, refusal("flag %s has a strategy that belongs to a release plan in %s of project %s, "+
+				"and Sidekick does not restore those; restore it in Unleash", p.Flag, p.Environment, p.Project)
+		}
+
+		return restoreTarget(live.state, live.newest)
+	default:
+		return state{}, refusal("change %q is not one of: %s", p.Change, strings.Join(knownChanges, ", "))
+	}
+}
+
+// targetName names the flag in its environment, as Snapshot.Target.
+func targetName(p Params) string {
 	return "unleash:" + p.Project + "/" + p.Environment + "/" + p.Flag
 }
 

@@ -16,11 +16,12 @@ import (
 // The changes the model may propose, as the parameter change and
 // limits.allow name them.
 const (
-	changeTurnOff = "turn_off"
+	changeTurnOff         = "turn_off"
+	changeRestorePrevious = "restore_previous"
 )
 
 // knownChanges are the values limits.allow and the parameter change accept.
-var knownChanges = []string{changeTurnOff}
+var knownChanges = []string{changeTurnOff, changeRestorePrevious}
 
 // keyPattern is the shape of an Unleash project, environment or flag key.
 // It holds no ':', ',' or '/', so a key can go into a request path or an
@@ -60,7 +61,8 @@ type Limits struct {
 	// them that the action may change. Everything is required, so nothing is
 	// allowed by default.
 	Projects []Project `yaml:"projects"`
-	// Allow lists the changes the model may propose. Empty means turn_off.
+	// Allow lists the changes the model may propose: turn_off, and
+	// restore_previous, which writes more. Empty means turn_off.
 	Allow []string `yaml:"allow"`
 }
 
