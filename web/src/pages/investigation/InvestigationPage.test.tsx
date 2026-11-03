@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { keys, type Investigation, type Step, type Watcher } from "../../api/investigations";
 import { FLUSH_MS } from "../../api/useInvestigationStream";
 import { detail, INVESTIGATION_ID, RESPONDER, step, watcher } from "../../test/fixtures";
+import { proposal } from "../../test/actionProposals";
 import { json, problem, renderApp, VIEWER } from "../../test/helpers";
 import { FakeEventSource, routes } from "../../test/streams";
 import type { Me } from "../../session";
@@ -374,6 +375,56 @@ describe("the investigation page", () => {
       FakeEventSource.last().emit("watchers", {});
 
       expect(await screen.findByText(/Back up: health/)).toBeInTheDocument();
+    });
+  });
+
+  describe("a link to a proposal", () => {
+    const UNDONE = "0192d3a4-0000-7000-8000-0000000000f9";
+    const proposals = [proposal({ id: UNDONE, status: "undone" }), proposal({ status: "succeeded", undoOf: UNDONE })];
+
+    /** jsdom has no layout and no scrollIntoView. */
+    function stubScroll() {
+      const scroll = vi.fn();
+      Object.defineProperty(Element.prototype, "scrollIntoView", { value: scroll, configurable: true, writable: true });
+
+      return scroll;
+    }
+
+    afterEach(() => {
+      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+    });
+
+    it("scrolls to the proposal that the address names and moves focus to its card", async () => {
+      const scroll = stubScroll();
+      renderApp({ route: `${ROUTE}#proposal-${UNDONE}`, handler: pageServer({ inv: detail({ proposals }) }).handler });
+
+      const cards = await screen.findAllByRole("article", { name: "Proposed action monitor-note" });
+      const card = cards.find((c) => c.id === `proposal-${UNDONE}`);
+
+      await waitFor(() => expect(card).toHaveFocus());
+      expect(scroll).toHaveBeenCalledTimes(1);
+      expect(scroll.mock.contexts[0]).toBe(card);
+    });
+
+    it("follows the Undoes link of an undo to the proposal it restores", async () => {
+      const user = userEvent.setup();
+      stubScroll();
+      renderApp({ route: ROUTE, handler: pageServer({ inv: detail({ proposals }) }).handler });
+
+      const cards = await screen.findAllByRole("article", { name: "Proposed action monitor-note" });
+
+      await user.click(screen.getByRole("link", { name: "monitor-note proposal" }));
+
+      await waitFor(() => expect(cards.find((c) => c.id === `proposal-${UNDONE}`)).toHaveFocus());
+    });
+
+    it("does nothing for an address that names no proposal on the page", async () => {
+      const scroll = stubScroll();
+      renderApp({ route: `${ROUTE}#proposal-0192d3a4-0000-7000-8000-0000000000aa`, handler: pageServer({ inv: detail({ proposals }) }).handler });
+
+      await screen.findAllByRole("article", { name: "Proposed action monitor-note" });
+
+      expect(scroll).not.toHaveBeenCalled();
     });
   });
 

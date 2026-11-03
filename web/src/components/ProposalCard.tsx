@@ -1,5 +1,6 @@
 import type { Proposal, ProposalStatus } from "../api/proposals";
 import { StatusBadge, type Status } from "./Badge";
+import { proposalAnchor } from "./proposal/anchor";
 import { Decide } from "./proposal/Decide";
 import { sections } from "./proposal/sections";
 import { Undo } from "./proposal/Undo";
@@ -23,7 +24,8 @@ const STATUS: Record<ProposalStatus, { label: string; status: Status; spinning?:
  * are shown as plain text; the parameters come from the server with hidden
  * characters written as \u escapes. An approver gets Approve and Reject while
  * the proposal waits. The investigation is linked and named in the review
- * queue, where it is not the page's subject. The body is the list of
+ * queue, where it is not the page's subject. The card can take focus from
+ * a link to its anchor, but is not a tab stop. The body is the list of
  * sections in `proposal/sections.tsx`.
  */
 export function ProposalCard({ proposal, canDecide, inQueue = false }: { proposal: Proposal; canDecide: boolean; inQueue?: boolean }) {
@@ -31,7 +33,7 @@ export function ProposalCard({ proposal, canDecide, inQueue = false }: { proposa
   const waiting = proposal.status === "proposed";
 
   return (
-    <article className="sk-proposal" aria-label={`Proposed action ${proposal.action}`}>
+    <article id={proposalAnchor(proposal.id)} tabIndex={-1} className="sk-proposal" aria-label={`Proposed action ${proposal.action}`}>
       <div className="sk-proposal__head">
         <h3 className="sk-proposal__title">{proposal.action}</h3>
         <StatusBadge status={status} spinning={spinning}>

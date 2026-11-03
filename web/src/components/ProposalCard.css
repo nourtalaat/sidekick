@@ -7,6 +7,7 @@
   border: 1px solid var(--sk-border-subtle);
   border-radius: var(--sk-radius-lg);
   box-shadow: var(--sk-shadow-raised);
+  scroll-margin-block: var(--sk-space-4);
 }
 
 .sk-proposal__head {

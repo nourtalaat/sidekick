@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import type { Proposal } from "../../api/proposals";
 import { formatTime } from "../../format";
+import { proposalAnchor } from "./anchor";
 import type { SectionProps } from "./section";
 
 /** How a proposal that the route's policy approved is described in place of a person's name. */
@@ -41,7 +42,9 @@ export function Facts({ proposal, inQueue }: SectionProps) {
       {proposal.undoOf && (
         <div>
           <dt>Undoes</dt>
-          <dd>The proposal {proposal.undoOf}</dd>
+          <dd>
+            <Link to={`/investigations/${proposal.investigationId}#${proposalAnchor(proposal.undoOf)}`}>{proposal.action} proposal</Link>
+          </dd>
         </div>
       )}
     </dl>

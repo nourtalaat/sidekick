@@ -164,6 +164,14 @@ describe("ProposalCard", () => {
     expect(screen.getByText("The notes service is down.")).toBeInTheDocument();
   });
 
+  it("has an anchor that can take focus from a link, and is no tab stop", () => {
+    renderWithProviders(<ProposalCard proposal={proposal()} canDecide={false} />);
+
+    const card = screen.getByRole("article", { name: "Proposed action monitor-note" });
+    expect(card).toHaveAttribute("id", `proposal-${PROPOSAL_ID}`);
+    expect(card).toHaveAttribute("tabindex", "-1");
+  });
+
   it("names and links the investigation in the review queue", () => {
     renderWithProviders(<ProposalCard proposal={proposal()} canDecide inQueue />);
 
@@ -377,7 +385,11 @@ describe("ProposalCard", () => {
     it("shows an undo as the proposal it restores, with no reason", () => {
       renderWithProviders(<ProposalCard proposal={proposal({ status: "succeeded", undoOf: "0192d3a4-0000-7000-8000-0000000000f9", reason: "" })} canDecide />);
 
-      expect(screen.getByText("The proposal 0192d3a4-0000-7000-8000-0000000000f9")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "monitor-note proposal" })).toHaveAttribute(
+        "href",
+        "/investigations/0192d3a4-0000-7000-8000-0000000000e2#proposal-0192d3a4-0000-7000-8000-0000000000f9",
+      );
+      expect(screen.queryByText(/0192d3a4-0000-7000-8000-0000000000f9/)).not.toBeInTheDocument();
       expect(screen.queryByText("Reason, written by the model and not checked")).not.toBeInTheDocument();
     });
 
