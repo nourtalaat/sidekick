@@ -82,6 +82,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/jobs/{id}/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Discard a dead job
+         * @description Deletes the dead job, so it cannot run again, and writes the discard
+         *     to the audit log with the job's kind, attempts and masked last error.
+         *     A job that is not dead answers 409.
+         */
+        post: operations["DiscardJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tokens": {
         parameters: {
             query?: never;
@@ -3403,6 +3425,27 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description The job is pending again. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DiscardJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The job is deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;

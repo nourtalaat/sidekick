@@ -3749,6 +3749,9 @@ type ServerInterface interface {
 	// ListJobs Dead jobs, newest first, a page at a time
 	// (GET /jobs)
 	ListJobs(w http.ResponseWriter, r *http.Request, params ListJobsParams)
+	// DiscardJob Discard a dead job
+	// (POST /jobs/{id}/discard)
+	DiscardJob(w http.ResponseWriter, r *http.Request, id int64)
 	// RetryJob Retry a dead job
 	// (POST /jobs/{id}/retry)
 	RetryJob(w http.ResponseWriter, r *http.Request, id int64)
@@ -4744,6 +4747,32 @@ func (siw *ServerInterfaceWrapper) ListJobs(w http.ResponseWriter, r *http.Reque
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListJobs(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DiscardJob operation middleware
+func (siw *ServerInterfaceWrapper) DiscardJob(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DiscardJob(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6588,6 +6617,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/config", wrapper.GetConfig)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/jobs", wrapper.ListJobs)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/jobs/{id}/retry", wrapper.RetryJob)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/jobs/{id}/discard", wrapper.DiscardJob)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tokens", wrapper.ListTokens)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/tokens", wrapper.CreateToken)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/tokens/{id}", wrapper.RevokeToken)
@@ -7435,6 +7465,39 @@ type ListJobsdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ListJobsdefaultApplicationProblemPlusJSONResponse) VisitListJobsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DiscardJobRequestObject struct {
+	Id int64 `json:"id"`
+}
+
+type DiscardJobResponseObject interface {
+	VisitDiscardJobResponse(w http.ResponseWriter) error
+}
+
+type DiscardJob204Response struct {
+}
+
+func (response DiscardJob204Response) VisitDiscardJobResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DiscardJobdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DiscardJobdefaultApplicationProblemPlusJSONResponse) VisitDiscardJobResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -9433,6 +9496,9 @@ type StrictServerInterface interface {
 	// ListJobs Dead jobs, newest first, a page at a time
 	// (GET /jobs)
 	ListJobs(ctx context.Context, request ListJobsRequestObject) (ListJobsResponseObject, error)
+	// DiscardJob Discard a dead job
+	// (POST /jobs/{id}/discard)
+	DiscardJob(ctx context.Context, request DiscardJobRequestObject) (DiscardJobResponseObject, error)
 	// RetryJob Retry a dead job
 	// (POST /jobs/{id}/retry)
 	RetryJob(ctx context.Context, request RetryJobRequestObject) (RetryJobResponseObject, error)
@@ -10125,6 +10191,32 @@ func (sh *strictHandler) ListJobs(w http.ResponseWriter, r *http.Request, params
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListJobsResponseObject); ok {
 		if err := validResponse.VisitListJobsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DiscardJob operation middleware
+func (sh *strictHandler) DiscardJob(w http.ResponseWriter, r *http.Request, id int64) {
+	var request DiscardJobRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DiscardJob(ctx, request.(DiscardJobRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DiscardJob")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DiscardJobResponseObject); ok {
+		if err := validResponse.VisitDiscardJobResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

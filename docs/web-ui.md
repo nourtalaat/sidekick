@@ -763,6 +763,11 @@ An investigation's page links its `runtime:N` version to that version.
   attempts reset. The retry is written to the audit log. A job that is
   not dead, or whose unique key a pending or running job holds, answers
   409.
+- `POST /api/v1/jobs/{id}/discard` deletes a dead job, so it cannot run
+  again, and answers 204. The discard is written to the audit log as
+  `job.discarded`, with the job's kind, its attempts and its last error,
+  masked, in the same transaction. A job that is not dead answers 409 and
+  stays, and an unknown ID answers 404.
 - `POST /api/v1/investigations/{id}/scenario-draft` exports a confirmed
   investigation as a benchmark scenario draft (201, or 200 with the scenario
   it has already). It answers 409 when nobody confirmed the verdict, and 422
