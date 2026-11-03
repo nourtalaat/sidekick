@@ -2728,6 +2728,182 @@ an undo, or `error`), the validations in `sidekick_githubpr_validations_total`
 `sidekick_githubpr_status_checks_total` (by `state`: `open`, `merged`,
 `closed`, `missing` or `error`).
 
+##### `gitlab.merge_request`
+
+Opens a merge request that changes monitor definitions kept in Git on
+gitlab.com or a self-managed GitLab: thresholds, durations, filters,
+exclusions, or the deletion of a monitor. It does for GitLab what
+[`github.pull_request`](#githubpull_request) does for GitHub, with the same
+limits, formats, validation, snapshot and Undo. The model reads the current
+files with the [GitLab source](sources/gitlab.md) and proposes the whole new
+content of each file it changes. Use it on a route in `approved` mode: a
+person reads the files before anything is pushed.
+
+```yaml
+actions:
+  monitor-mr:
+    type: gitlab.merge_request
+    tokenSecret: { name: sidekick-gitlab-actions, key: token }   # a token of its own, not the source's
+    # baseURL: https://gitlab.example.com   # self-managed GitLab; default https://gitlab.com
+    limits:
+      projects: [acme/platform/monitors]    # full paths, no wildcards
+      paths:                                # the first glob that matches decides the format
+        - { glob: "prometheus/rules/**", format: prometheus_rules }
+        - { glob: "datadog/**",          format: terraform }
+        - { glob: "grafana/alerting/**", format: grafana_alert_file }
+      maxFiles: 3                           # 1 to 25
+      maxChangedLines: 40                   # lines added plus lines removed, 1 to 1000
+      baseBranch: main                      # the only branch a merge request may target
+      draft: true                           # default true
+```
+
+A self-managed GitLab with a project in a subgroup, and merge requests that
+are ready for review:
+
+```yaml
+actions:
+  monitor-mr:
+    type: gitlab.merge_request
+    baseURL: https://gitlab.example.com
+    tokenSecret: { name: sidekick-gitlab-actions, key: token }
+    limits:
+      projects: [platform/observability/monitors]
+      paths:
+        - { glob: "rules/**", format: prometheus_rules }
+      maxFiles: 5
+      maxChangedLines: 100
+      baseBranch: main
+      draft: false
+
+routes:
+  - name: checkout
+    mode: approved
+    actions: [monitor-mr]
+```
+
+- **Credentials.** `tokenSecret` is the `{ name, key }` of the Secret that
+  holds an access token with the `api` scope and the Developer role on the
+  monitors projects only: a project access token is the simplest, and a group
+  or personal access token works too. `api` is the only scope of a project or
+  group token that allows the Commits and Merge Requests APIs, so the token
+  can do everything the Developer role can do in that project. From GitLab
+  19.2 a fine-grained personal access token can be limited to what the action
+  calls, which is Branch (create, delete, read), Commit (create), Merge
+  Request (create, read, update), and Repository (read, for files, the tree
+  and blobs); it belongs to a user, so make a user for Sidekick. Give the
+  action a token of its own, apart from the one of any GitLab source (that one
+  needs only `read_api` and the Reporter role). The token is read on every
+  call, so a rotated token needs no restart. `baseURL` is the root of your
+  GitLab, without `/api/v4`; it must be https, except for a loopback host. A
+  reverse proxy in front of GitLab must pass the encoded `%2F` in a path on as
+  it is.
+- **Protect the base branch.** Unlike a GitHub App, a token is not narrowed
+  for each run, so the token's role and the protected base branch are the
+  hard limit of what this action can do. Protect `baseBranch` (Settings,
+  Repository, Branch rules), set **Allowed to push and merge** to **No one**
+  and **Allowed to merge** to **Maintainers**. Then a Developer token cannot
+  push to the branch or merge into it, whatever a merge request says. Set
+  **Allowed to push and merge** explicitly: a value that is not set does not
+  stop pushes. Branches named `sidekick/*` need no protection. A push rule of
+  the project, such as one for commit messages or signed commits, applies to
+  the commit Sidekick makes and may refuse it; the message of GitLab then
+  goes into the error of the proposal.
+- **Paths and formats.** Every file the model changes must match a `glob`,
+  and the glob names its format. A path that matches none is refused. In a
+  glob, `*` and `?` do not match a slash, and a segment of `**` matches any
+  number of segments. The formats are `prometheus_rules`, `terraform` and
+  `grafana_alert_file`, as for [`github.pull_request`](#githubpull_request).
+- **Validation.** Before the branch is made, the files go to the
+  [validator](validator.md), set up with the [`validator`](#validator)
+  section and the chart. It runs when the model proposes, and again right
+  before the merge request opens, against the base branch as it is then. For
+  `terraform`, Sidekick reads the module directory of each changed file with
+  the repository tree API at the head of the base branch, and the local
+  modules it uses (`source = "../modules/x"`, up to 3 levels), applies the
+  changes and validates the directory. If a file fails, the errors go back to
+  the model as an error and nothing is stored; if they are found when the
+  proposal runs, the proposal fails with them. No branch is made in either
+  case. If the validator cannot be reached, the proposal is refused when the
+  model proposes, and the action is tried again when it runs.
+- **What it does.** On approval it makes the branch `sidekick/<proposal id>`
+  and one commit with all files in one call of the Commits API, starting from
+  the commit the files were read at, and opens the merge request from it. The
+  title has the `Draft:` prefix unless `draft: false`, because GitLab marks a
+  draft by its title; a draft prefix that the model wrote itself is removed
+  first, so `draft: false` gives a merge request that is not a draft. Sidekick
+  never sets an assignee, reviewers, labels, a milestone, auto-merge ("merge
+  when the pipeline succeeds") or squash, and never approves or merges.
+- **The description.** It is what the model wrote, cleaned, and a line that
+  names the proposal. `@mentions`, `#12` and `!34` references (also with a
+  project path, as `group/project#12`), and the target of a closing word such
+  as "fixes" or "closes" (an issue, a URL or a Jira key) go in code spans, so
+  the merge request notifies nobody, writes a note on nothing and closes
+  nothing. GitLab runs a line that starts with a slash and a command name, such
+  as `/merge`, `/approve`, `/assign`, `/label`, `/close`, `/draft` or `/ready`,
+  as a quick action when it saves a description, with the rights of the
+  token's user. So no line of the description, the title or the commit message
+  starts with a slash: such a line is put in a code span too.
+- **Retry after a crash.** The branch is named by the proposal, so a repeat
+  looks for the merge request from that branch, in any state, and returns the
+  one it finds without changing anything, even when its branch is gone after a
+  merge. A branch with no merge request gets one; the commit exists with the
+  branch, so it is not made twice. Two attempts at once end the same way.
+- **Limits.** `maxChangedLines` counts the lines that differ from the base
+  branch in all files together. A file the model sends unchanged is refused,
+  and so is a file larger than 256 KiB at the base, a file that is not UTF-8
+  text, and a path that is a directory. A request to change something outside
+  the limits is refused when the model proposes, and again when the proposal
+  runs. `maxFiles` is at most 25 because an approver reads up to 4 fields for
+  each file (its blob, its status and its two line counts), and a change may
+  differ in at most 100 fields in all. Repositories that use SHA-256 for their
+  objects are not supported.
+- **What the approver reads.** The proposal shows each file with what happens
+  to it (`changed`, `added` or `deleted`) and how many lines it adds and
+  removes, and the line diff of each file, read from GitLab by blob ID when a
+  person opens it. Sidekick stores the blob IDs of the files before and after,
+  and the SHA of the base commit, never the file contents.
+- **Files that changed meanwhile.** When the proposal runs, the action
+  compares each file on the base branch with the blob it had when the model
+  proposed. A file that someone changed meanwhile fails the proposal with a
+  conflict that names the file, so the merge request never overwrites their
+  edit; propose again from the new content. A file that already has the new
+  content is left out, and if every file does, the proposal succeeds without a
+  merge request.
+- **Undo.** An approver can undo a succeeded proposal. If its merge request is
+  still open or was closed, Sidekick closes it and deletes its branch. If it
+  was merged, Sidekick opens a revert merge request from the branch
+  `sidekick/<undo proposal id>`, as a draft unless `draft: false`. It restores
+  the earlier content of the files with the Commits API, not with GitLab's
+  revert call, so GitLab and GitHub behave alike, and with no format
+  validation, because the files only go back to what they were. The revert
+  merge request still needs review and merging; the undo is done once it is
+  opened. If a file on the base branch is not as the merged merge request left
+  it, nothing is restored until the approver confirms, and then the earlier
+  content overwrites it. The revert merge request is tracked like any other.
+
+Once a day, Sidekick reads from GitLab whether the merge requests it opened
+are still open, were merged or were closed, and records it in
+`pull_request_states`, in the same job as for `github.pull_request`. A merge
+request that GitLab is merging counts as open. The project of the proposal
+must still be one of `limits.projects`; one that is not is skipped. The merged
+ones feed the count of noisy alerts fixed. See `github.pull_request` for the
+window, the limit and the retention of the records.
+
+Sidekick counts the merge requests it opens in
+`sidekick_gitlabmr_merge_requests_total` (by `result`: `opened`, `existing`,
+`applied` for a change already on the base branch, `closed` or `reverted` for
+an undo, or `error`), the validations in `sidekick_gitlabmr_validations_total`
+(by `format` and `result`), and the daily checks in
+`sidekick_gitlabmr_status_checks_total` (by `state`: `open`, `merged`,
+`closed`, `missing` or `error`).
+
+**What it relies on.** The facts come from the public source and API
+documentation of GitLab at the tag `v19.5.1-ee`, and of Gitaly at `v19.5.1`,
+as the comments in `internal/action/gitlabmr` say. Nothing was tried against a
+GitLab instance. The action sends only these calls: read a branch, a file, a
+directory and a blob; list merge requests; make a commit; open a merge
+request; close a merge request; delete a branch.
+
 ##### `unleash.flag`
 
 Changes a feature flag in one environment of an Unleash project through the

@@ -126,4 +126,5 @@ proposals](web-ui.md#action-proposals) for how people approve them.
 - `prometheus.rule`: changes the rules of a `PrometheusRule` resource. See [its keys](configuration.md#prometheusrule).
 - `alertmanager.silence`: silences alerts in Alertmanager for a limited time, and ends the silence early on Undo. See [its keys](configuration.md#alertmanagersilence).
 - `github.pull_request`: opens a pull request that changes monitor definitions kept in Git. See [its keys](configuration.md#githubpull_request).
+- `gitlab.merge_request`: opens a merge request that changes monitor definitions kept in Git, on gitlab.com or a self-managed GitLab. See [its keys](configuration.md#gitlabmerge_request).
 - `unleash.flag`: turns an Unleash feature flag off in one environment, or undoes its newest change. See [its keys](configuration.md#unleashflag).
