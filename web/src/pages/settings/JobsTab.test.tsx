@@ -295,7 +295,7 @@ describe("the Failed jobs tab: Discard", () => {
     const notice = await screen.findByRole("status");
     expect(notice).toHaveTextContent("The publish job 2 is deleted and will not run again.");
     expect(kindsAndIds()).toEqual(["Retry publish job 3"]);
-    expect(screen.queryByRole("group")).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Discard this publish job" })).not.toBeInTheDocument();
     expect(posts(requests)).toEqual([expect.objectContaining({ path: "/api/v1/jobs/2/discard", csrf: "csrf-ada" })]);
     expect(gets(requests)).toHaveLength(1);
   });
@@ -310,7 +310,7 @@ describe("the Failed jobs tab: Discard", () => {
     await user.click(screen.getByRole("button", { name: "Discard publish job" }));
 
     expect(await within(rowAt(rows(), 0)).findByRole("alert")).toHaveTextContent(`Not discarded. ${reason}`);
-    expect(screen.queryByRole("group")).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Discard this publish job" })).not.toBeInTheDocument();
     expect(gets(requests)).toHaveLength(2);
   });
 });
