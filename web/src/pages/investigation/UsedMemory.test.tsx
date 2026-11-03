@@ -1,8 +1,10 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
+import { Route, Routes } from "react-router";
 import { describe, expect, it } from "vitest";
 import type { UsedMemory as UsedMemoryExample } from "../../api/investigations";
 import { renderWithProviders, fakeServer, VIEWER } from "../../test/helpers";
 import { ADMIN, RESPONDER } from "../../test/rules";
+import { RequireSession } from "../../session";
 import { UsedMemory } from "./UsedMemory";
 
 const ID = "0192d3a4-0000-7000-8000-0000000000e1";
@@ -22,24 +24,36 @@ function example(over: Partial<UsedMemoryExample> = {}): UsedMemoryExample {
   };
 }
 
-function show(examples: readonly UsedMemoryExample[] | undefined, me = VIEWER) {
-  return renderWithProviders(<UsedMemory examples={examples} />, { api: fakeServer(me).api });
+/** Renders the card under the session layout of the app, so it sees the user the fake server answers for. */
+async function show(examples: readonly UsedMemoryExample[] | undefined, me = VIEWER) {
+  const rendered = renderWithProviders(
+    <Routes>
+      <Route element={<RequireSession />}>
+        <Route path="*" element={<UsedMemory examples={examples} />} />
+      </Route>
+    </Routes>,
+    { api: fakeServer(me).api },
+  );
+
+  await waitFor(() => expect(screen.queryByText("Loading")).not.toBeInTheDocument());
+
+  return rendered;
 }
 
-describe("the memory used card", () => {
+describe("the memory used card", async () => {
   it.each([
     ["fingerprint", "Chosen for the same alert fingerprint"],
     ["service_alert", "Chosen for the same service and alert name"],
     ["text", "Chosen for similar words"],
     ["similar", "Chosen for a similar description"],
-  ] as const)("says why an example with the match %s was chosen", (match, words) => {
-    show([example({ match })]);
+  ] as const)("says why an example with the match %s was chosen", async (match, words) => {
+    await show([example({ match })]);
 
     expect(screen.getByText(words)).toBeInTheDocument();
   });
 
-  it("shows the verdict, links the title to the investigation and says once that the text is current", () => {
-    show([example(), example({ investigationId: "other", title: undefined, verdict: "false_positive", rank: 2 })]);
+  it("shows the verdict, links the title to the investigation and says once that the text is current", async () => {
+    await show([example(), example({ investigationId: "other", title: undefined, verdict: "false_positive", rank: 2 })]);
 
     const card = screen.getByRole("region", { name: "Memory used" });
 
@@ -50,8 +64,8 @@ describe("the memory used card", () => {
     expect(within(card).getAllByText("These are the entries as they are now; the prompt had their text at the time.")).toHaveLength(1);
   });
 
-  it("names an entry that is gone and still links it", () => {
-    show([example({ present: false, verdict: undefined, summary: undefined, cause: undefined })]);
+  it("names an entry that is gone and still links it", async () => {
+    await show([example({ present: false, verdict: undefined, summary: undefined, cause: undefined })]);
 
     const item = screen.getByRole("listitem");
 
@@ -60,38 +74,38 @@ describe("the memory used card", () => {
     expect(within(item).queryByText("Real issue")).not.toBeInTheDocument();
   });
 
-  it("names the investigation by its ID when nothing else is left of it", () => {
-    show([example({ present: false, title: undefined, verdict: undefined, summary: undefined })]);
+  it("names the investigation by its ID when nothing else is left of it", async () => {
+    await show([example({ present: false, title: undefined, verdict: undefined, summary: undefined })]);
 
     expect(screen.getByRole("link", { name: "Investigation 0192d3a4" })).toHaveAttribute("href", `/investigations/${ID}`);
   });
 
-  it("says that an entry was disabled", () => {
-    show([example({ disabled: true })]);
+  it("says that an entry was disabled", async () => {
+    await show([example({ disabled: true })]);
 
     expect(screen.getByText("Disabled since this run")).toBeInTheDocument();
     expect(screen.queryByText("No longer in memory")).not.toBeInTheDocument();
   });
 
-  it("says nothing about the state of an entry that is as it was", () => {
-    show([example()]);
+  it("says nothing about the state of an entry that is as it was", async () => {
+    await show([example()]);
 
     expect(screen.queryByText("Disabled since this run")).not.toBeInTheDocument();
     expect(screen.queryByText("No longer in memory")).not.toBeInTheDocument();
   });
 
-  it("keeps a long summary whole in the page and cuts it to a few lines", () => {
+  it("keeps a long summary whole in the page and cuts it to a few lines", async () => {
     const long = "word ".repeat(400).trim();
 
-    show([example({ title: undefined, summary: long })]);
+    await show([example({ title: undefined, summary: long })]);
 
     const link = screen.getByRole("link", { name: long });
 
     expect(link).toHaveClass("sk-memory__link");
   });
 
-  it("shows text with markup as plain text", () => {
-    const { container } = show([example({ title: "<b>Checkout</b> <script>x()</script>" })]);
+  it("shows text with markup as plain text", async () => {
+    const { container } = await show([example({ title: "<b>Checkout</b> <script>x()</script>" })]);
 
     expect(screen.getByRole("link", { name: "<b>Checkout</b> <script>x()</script>" })).toBeInTheDocument();
     expect(container.querySelector("b, script")).toBeNull();
@@ -101,8 +115,8 @@ describe("the memory used card", () => {
     ["an admin", ADMIN, true],
     ["a responder", RESPONDER, false],
     ["a viewer", VIEWER, false],
-  ] as const)("shows the link to the memory page to %s: %s", (_name, me, shown) => {
-    show([example()], me);
+  ] as const)("shows the link to the memory page to %s: %s", async (_name, me, shown) => {
+    await show([example()], me);
 
     const link = screen.queryByRole("link", { name: "Manage memory" });
 
@@ -113,8 +127,8 @@ describe("the memory used card", () => {
     }
   });
 
-  it.each([[undefined], [[]]])("is not shown for no examples (%j)", (examples) => {
-    show(examples, ADMIN);
+  it.each([[undefined], [[]]])("is not shown for no examples (%j)", async (examples) => {
+    await show(examples, ADMIN);
 
     expect(screen.queryByRole("region", { name: "Memory used" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Manage memory" })).not.toBeInTheDocument();
