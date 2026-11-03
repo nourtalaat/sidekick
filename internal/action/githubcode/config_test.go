@@ -1,0 +1,162 @@
+package githubcode
+
+import (
+	"fmt"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"go.yaml.in/yaml/v3"
+
+	"github.com/nourtalaat/sidekick/internal/config"
+)
+
+func TestConfigValidate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		change func(c *Config)
+		want   []string
+	}{
+		{name: "a whole config"},
+		{name: "a base URL for GitHub Enterprise", change: func(c *Config) { c.BaseURL = "https://github.example.com/api/v3" }},
+		{name: "plain http on localhost", change: func(c *Config) { c.BaseURL = "http://localhost:8080/" }},
+		{name: "refused paths and deletes", change: func(c *Config) {
+			c.Limits.RefusedPaths = []string{"internal/legacy/**"}
+			c.Limits.AllowDelete = true
+		}},
+		{name: "nothing set", change: func(c *Config) { *c = Config{} }, want: []string{
+			"app.appID: required",
+			"app.installationID: required",
+			"app.privateKeySecret: required",
+			"limits.repos: list at least one repository, as owner/name",
+			`limits.paths: list at least one glob, such as "src/**"`,
+			"limits.maxFiles: must be from 1 to 25, got 0",
+			"limits.maxChangedLines: must be from 1 to 1000, got 0",
+			"limits.baseBranch: required",
+		}},
+		{name: "plain http on another host", change: func(c *Config) { c.BaseURL = "http://github.example.com/api/v3/" }, want: []string{
+			`baseURL: "http://github.example.com/api/v3/" must use https; plain http is only allowed for localhost`,
+		}},
+		{name: "repos that are not names", change: func(c *Config) { c.Limits.Repos = []string{"acme", "acme/*", "acme/app"} }, want: []string{
+			`limits.repos[0]: "acme" must have the form owner/name, with no wildcards`,
+			`limits.repos[1]: "acme/*" must have the form owner/name, with no wildcards`,
+		}},
+		{name: "globs that are not valid", change: func(c *Config) { c.Limits.Paths = []string{"/src/**", "src/a**b", "src/[a", "src/**"} }, want: []string{
+			`limits.paths[0]: "/src/**" must be a path from the root of the repository, without a leading slash`,
+			`limits.paths[1]: "src/a**b": ** must be a whole path segment`,
+			`limits.paths[2]: "src/[a" is not a valid glob:`,
+		}},
+		{name: "a refused glob that is not valid", change: func(c *Config) { c.Limits.RefusedPaths = []string{"ok/**", ""} }, want: []string{
+			"limits.refusedPaths[1]: required",
+		}},
+		{name: "maxFiles just inside", change: func(c *Config) { c.Limits.MaxFiles = 25 }},
+		{name: "maxFiles just outside", change: func(c *Config) { c.Limits.MaxFiles = 26 }, want: []string{"limits.maxFiles: must be from 1 to 25, got 26"}},
+		{name: "maxFiles below", change: func(c *Config) { c.Limits.MaxFiles = 0 }, want: []string{"limits.maxFiles: must be from 1 to 25, got 0"}},
+		{name: "maxChangedLines just inside", change: func(c *Config) { c.Limits.MaxChangedLines = 1000 }},
+		{name: "maxChangedLines just outside", change: func(c *Config) { c.Limits.MaxChangedLines = 1001 }, want: []string{"limits.maxChangedLines: must be from 1 to 1000, got 1001"}},
+		{name: "maxChangedLines below", change: func(c *Config) { c.Limits.MaxChangedLines = 0 }, want: []string{"limits.maxChangedLines: must be from 1 to 1000, got 0"}},
+		{name: "a base branch that is not a name", change: func(c *Config) { c.Limits.BaseBranch = "a..b" }, want: []string{
+			`limits.baseBranch: "a..b" is not a branch name this action accepts`,
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			c := Config{App: testApp, Limits: validLimits()}
+			if tt.change != nil {
+				tt.change(&c)
+			}
+
+			err := c.Validate()
+			if len(tt.want) == 0 {
+				require.NoError(t, err)
+
+				return
+			}
+
+			require.Error(t, err)
+
+			for _, w := range tt.want {
+				require.ErrorContains(t, err, w)
+			}
+		})
+	}
+}
+
+func TestConfigBaseURL(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "https://api.github.com/", (&Config{}).baseURL())
+	require.Equal(t, "https://ghe.example.com/api/v3/", (&Config{BaseURL: "https://ghe.example.com/api/v3"}).baseURL())
+}
+
+const configSection = `
+app: {appID: 11, installationID: 22, privateKeySecret: {name: code-change, key: key.pem}}
+limits:
+  repos: [acme/app]
+  paths: ["internal/**", "cmd/**"]
+  refusedPaths: ["internal/legacy/**"]
+  maxFiles: 2
+  maxChangedLines: 30
+  baseBranch: main
+  allowDelete: true
+`
+
+// decodeSection decodes a section the way the config loader does: strictly,
+// so a key that is not in the struct is an error.
+func decodeSection(t *testing.T, text string) (Config, error) {
+	t.Helper()
+
+	var node yaml.Node
+
+	require.NoError(t, yaml.Unmarshal([]byte(text), &node))
+
+	var c Config
+
+	if err := (config.Section{Type: TypeName, Node: node.Content[0]}).Decode(&c); err != nil {
+		return c, fmt.Errorf("decode the section: %w", err)
+	}
+
+	return c, nil
+}
+
+func TestConfigReadsTheSection(t *testing.T) {
+	t.Parallel()
+
+	c, err := decodeSection(t, configSection)
+	require.NoError(t, err)
+	require.NoError(t, c.Validate())
+	require.Equal(t, []string{"internal/**", "cmd/**"}, c.Limits.Paths)
+	require.Equal(t, []string{"internal/legacy/**"}, c.Limits.RefusedPaths)
+	require.True(t, c.Limits.AllowDelete)
+	require.Equal(t, 2, c.Limits.MaxFiles)
+}
+
+func TestConfigRejectsADraftKey(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []string{"true", "false"} {
+		t.Run("draft: "+value, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := decodeSection(t, configSection+"  draft: "+value+"\n")
+			require.ErrorContains(t, err, "limits.draft")
+			require.ErrorContains(t, err, "unknown key")
+		})
+	}
+}
+
+func TestConfigRejectsOtherUnknownKeys(t *testing.T) {
+	t.Parallel()
+
+	// The action is not approval-only, so the key of that rule is unknown too.
+	_, err := decodeSection(t, configSection+"allowReadWrite: true\n")
+	require.ErrorContains(t, err, "allowReadWrite")
+	require.ErrorContains(t, err, "unknown key")
+
+	_, err = decodeSection(t, configSection+"formats: []\n")
+	require.ErrorContains(t, err, "unknown key")
+}
