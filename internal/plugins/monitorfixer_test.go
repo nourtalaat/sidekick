@@ -7,6 +7,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/awsecs"
+	"github.com/nourtalaat/sidekick/internal/action/awslambda"
 	"github.com/nourtalaat/sidekick/internal/action/datadog"
 	"github.com/nourtalaat/sidekick/internal/action/githubcode"
 	"github.com/nourtalaat/sidekick/internal/action/githubpr"
@@ -43,6 +44,7 @@ func TestMonitorFixers(t *testing.T) {
 		{name: "slack.reply fixes nothing", action: &slack.Reply{}},
 		{name: "unleash.flag fixes nothing", action: &unleashflag.Flag{}},
 		{name: "aws.ecs_rollback fixes nothing", action: &awsecs.Rollback{}},
+		{name: "aws.lambda_rollback fixes nothing", action: &awslambda.Rollback{}},
 		{name: "kubernetes.rollback fixes nothing", action: &kubernetesrollback.Rollback{}},
 	}
 

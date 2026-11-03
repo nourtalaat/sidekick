@@ -133,4 +133,5 @@ proposals](web-ui.md#action-proposals) for how people approve them.
 - `gitlab.merge_request`: opens a merge request that changes monitor definitions kept in Git, on gitlab.com or a self-managed GitLab. See [its keys](configuration.md#gitlabmerge_request).
 - `unleash.flag`: turns an Unleash feature flag off in one environment, or undoes its newest change. See [its keys](configuration.md#unleashflag).
 - `aws.ecs_rollback`: puts an Amazon ECS service back on an earlier task definition revision, with an IAM role of its own. See [its keys](configuration.md#awsecs_rollback).
+- `aws.lambda_rollback`: points an AWS Lambda alias back at the published version it served before, with an IAM role of its own. See [its keys](configuration.md#awslambda_rollback).
 - `helm.rollback`: puts a Helm release back on an earlier revision, with Helm's Go library. See [its keys](configuration.md#helmrollback).

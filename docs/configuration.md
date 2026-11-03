@@ -3944,6 +3944,163 @@ The calls were checked against the source of the AWS SDK for Go v2 at the tag
 `service/ecs/v1.102.0`, and the permissions against the model of the ECS API
 in the same tag and AWS's published list of ECS permissions.
 
+##### `aws.lambda_rollback`
+
+Points an AWS Lambda alias back at the published version it served before,
+through the Lambda API. It changes the alias and nothing else: not the code,
+not `$LATEST`, not the alias's description. The change is live as soon as it is
+made, since Lambda sends the next request to the alias's new version. It is
+approval-only, so a `read-write` route may list it only when the action sets
+`allowReadWrite: true`. Use it on routes with `mode: approved`.
+
+```yaml
+actions:
+  lambda-rollback:
+    type: aws.lambda_rollback
+    accounts:
+      - id: "111122223333"
+        roleARN: arn:aws:iam::111122223333:role/sidekick-lambda-rollback
+        externalID: sidekick-prod        # only if the role's trust policy asks for it
+    regions: [us-east-1]
+    maxRevisionsBack: 1                  # default 1, at most 10
+    limits:
+      functions: ["checkout", "cart-*"]
+      aliases: [live]
+
+routes:
+  - name: checkout
+    mode: approved
+    actions: [lambda-rollback]
+```
+
+- `accounts` are the accounts the action may change. Each has an `id` (12
+  digits; quote it in YAML), a `roleARN` in that account, and optionally the
+  `externalID` the role's trust policy asks for. The role is required for
+  every account: it is the action's own role, apart from the role of the
+  [AWS source](sources/aws.md), and its policy is the hard limit on what the
+  action can change. Sidekick assumes it with the session name `sidekick` and
+  keeps its credentials until shortly before they expire. Required.
+- `regions` are the Regions the action may change, in every account. Required.
+- `maxRevisionsBack` is how many published versions back the model may ask to
+  go. The default is 1. A value written in the file must be from 1 to 10.
+- `allowReadWrite` is false unless you set it. See [Action
+  modes](#action-modes).
+- `limits.functions` lists the names of the functions the action may change,
+  or patterns in which `*` stands for any run of characters, such as `cart-*`.
+  `limits.aliases` lists the names of the aliases it may change, in any of
+  those functions. Both are required, and they take names only, not ARNs,
+  since an ARN can name another account. An alias name cannot be only digits,
+  and `$LATEST` is not an alias.
+
+The model proposes a `function`, an `alias` and, optionally, `revisionsBack`
+(default 1, at most `maxRevisionsBack`). It also gives the `account` and
+`region`, which may be left out when the config lists only one of each. Before
+anything is sent, Sidekick checks them against the config.
+
+**Which version.** The running version is the one the alias serves
+(`FunctionVersion`). The one it goes back to is the highest published version
+below it, and with `revisionsBack` above 1, the one that many published
+versions down. Versions that were deleted are skipped. Lambda numbers versions
+in the order they were published, so this is the order of publishing, not the
+order of deployment: a version that nobody deployed can be the one it goes
+back to. Lambda keeps no history of an alias, so Sidekick cannot know what the
+alias served before the running version. The proposal shows both versions
+with the first characters of the SHA-256 hash of their code, their runtime
+(or "container image"), their description and when they were published. Lambda
+does not record who published a version, so the screens show "unknown" in that
+place. Read the code hash and the description before you approve.
+
+**Traffic splits.** An alias can send part of its traffic to a second version
+(weighted routing). The proposal shows the split. The rollback sets the one
+version and clears the split, so all requests go to the earlier version, and
+Undo puts the split back as it was.
+
+**Refused when the model proposes**, with a message it can act on: a function,
+alias, account, Region or number of versions outside the limits; a function or
+alias that does not exist; an alias that serves `$LATEST`; no published
+version, or fewer than asked, below the running one; a target version that
+Lambda cannot read; and a function with more than 1000 versions, which
+Sidekick does not read in full.
+
+**When it runs.** Right before it writes, Sidekick reads the alias again. If
+the alias already serves the version it was to go back to, with no split,
+which happens when a worker died after the write, it writes nothing and
+succeeds. If the alias is not as it was when the change was proposed, the
+proposal fails with a conflict, and the model or a person must propose again.
+The write carries the alias's `RevisionId`, which Lambda changes with every
+update of the alias, so Lambda refuses the write too when the alias changed
+between that read and the write; that is a conflict as well. The write is tried
+once by the AWS SDK; if it fails in a way that may pass, Sidekick tries again
+from a new read of the alias, so the change is made once.
+
+**Undo.** An approver can undo a rollback that worked. Undo points the alias
+back at the version, and the traffic split, it had before the rollback. If the
+alias is not as the rollback left it, Undo writes nothing and shows the
+version it serves now, and asks again with `force`. If the alias already has
+its old version and split, Undo writes nothing and succeeds. Undo fails when
+the old version was deleted. Lowering `maxRevisionsBack` does not stop an Undo.
+
+**The role.** Create a role for the action in each account, separate from the
+read-only role of the AWS source, and attach this policy and nothing else. In
+the AWS reference for Lambda permissions, each of the four actions applies to
+the resource type `function`, so the policy limits them to the allowed
+functions, one line per function (wildcards are fine, for example
+`function:cart-*`). IAM cannot limit them to one alias, so `limits.aliases` is
+enforced by Sidekick, and the role can change every alias of the functions
+listed. Use `arn:aws-us-gov:` or `arn:aws-cn:` in GovCloud or China.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "RollBackAllowedFunctions",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:GetAlias",
+        "lambda:UpdateAlias",
+        "lambda:ListVersionsByFunction",
+        "lambda:GetFunctionConfiguration"
+      ],
+      "Resource": [
+        "arn:aws:lambda:us-east-1:111122223333:function:checkout",
+        "arn:aws:lambda:us-east-1:111122223333:function:cart-*"
+      ]
+    }
+  ]
+}
+```
+
+If AWS refuses a call and the error names a qualified ARN, such as
+`arn:aws:lambda:us-east-1:111122223333:function:checkout:41`, add the same
+ARNs with `:*` at the end to the resource list.
+
+The role's trust policy names Sidekick's own role and, if you want one, an
+external ID, as for the source:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": { "AWS": "arn:aws:iam::<sidekick account id>:role/<sidekick role>" },
+      "Action": "sts:AssumeRole",
+      "Condition": { "StringEquals": { "sts:ExternalId": "<external id>" } }
+    }
+  ]
+}
+```
+
+Sidekick's own role needs `sts:AssumeRole` on this role and gets no Lambda
+permission of its own. With `networkPolicy.restrictEgress`, allow
+`lambda.<region>.amazonaws.com` and `sts.<region>.amazonaws.com` on port 443
+for each Region in `regions`.
+
+The calls were checked against the source of the AWS SDK for Go v2 at the tag
+`service/lambda/v1.113.3`, and the permissions against the model of the Lambda
+API in the same tag and AWS's published list of Lambda permissions.
+
 ### `validator`
 
 How Sidekick reaches the [monitor validator](validator.md), which checks
