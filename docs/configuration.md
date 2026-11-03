@@ -2877,6 +2877,142 @@ an undo, or `error`), the validations in `sidekick_githubpr_validations_total`
 `sidekick_githubpr_status_checks_total` (by `state`: `open`, `merged`,
 `closed`, `missing` or `error`).
 
+##### `github.code_change`
+
+Opens a draft pull request that changes application code, in a repository you
+allow. Use it when an investigation finds a bug in code that a small change
+fixes. The model reads the current files with the [GitHub
+source](sources/github.md) and proposes the whole new content of each file it
+changes. It is not for monitors: [`github.pull_request`](#githubpull_request)
+changes monitor definitions, with its own limits and its own app, so a team
+can allow one without the other. Use it on a route in `approved` mode: a
+person reads the change before anything is pushed.
+
+The pull request is always a draft, and Sidekick never merges it, turns on
+auto-merge, asks for a review or assigns anyone. The repository's own checks
+run on it, and a person reviews and merges it. There is no `draft` key, so a
+config that sets `draft` is an unknown key error. The action has no validator;
+the repository's own checks are the validator. It is not approval-only, as
+`github.pull_request` is not, but a draft pull request that nobody merges
+changes nothing, and the examples use `mode: approved`.
+
+```yaml
+actions:
+  code-change:
+    type: github.code_change
+    app:                              # a GitHub App of its own, not the source's
+      appID: 123456
+      installationID: 7890123
+      privateKeySecret: { name: sidekick-github-code, key: private-key.pem }
+    # baseURL: https://github.example.com/api/v3/   # GitHub Enterprise Server
+    limits:
+      repos: [acme/checkout]          # owner/name, no wildcards
+      paths: ["src/**", "internal/**/*.go"]   # globs of the files that may change
+      # refusedPaths: ["src/legacy/**"]       # added to the built-in refused paths
+      maxFiles: 3                     # 1 to 25
+      maxChangedLines: 60             # lines added plus lines removed, 1 to 1000
+      baseBranch: main                # the only branch a pull request may target
+      allowDelete: false              # default false
+
+routes:
+  - name: checkout
+    mode: approved
+    actions: [code-change]
+```
+
+- **Credentials.** Give the app its own installation on the repositories in
+  `limits.repos` only, with these repository permissions: Contents (read and
+  write), Pull requests (read and write) and Metadata (read). Do not give the
+  app the Workflows permission. Sidekick asks GitHub for installation tokens
+  with just the three permissions above, so its token never carries Workflows
+  either way. Use an app that no other action or source shares. Sidekick reads
+  the private key from its secret on each token exchange, so a rotated key
+  needs no restart. `baseURL` must be https, except for a loopback host.
+- **Paths.** Every file the model changes must match a glob of `paths`, and
+  none of the refused paths. In a glob, `*` and `?` do not match a slash, and a
+  segment of `**` matches any number of segments. A path that matches a
+  refused path is refused even when a glob of `paths` allows it, for example
+  with `paths: ["**"]`. Paths are compared as they are, except that refused
+  paths ignore case. The path is checked when the model proposes and again
+  when the proposal runs, so a change to the config in between applies.
+- **Built-in refused paths.** These are always on. You can add to them with
+  `refusedPaths`, but you cannot remove any:
+  - CI and build automation: `.github/**`, `.gitlab/**`, `.circleci/**`,
+    `.buildkite/**`, `.tekton/**`, `.gitea/**`, `.forgejo/**`,
+    `.woodpecker/**`, `.semaphore/**`, `.azure-pipelines/**`, `.drone.yml`,
+    `.travis.yml`, `.woodpecker.yml`, `.appveyor.yml`, `.cirrus.yml`,
+    `appveyor.yml`, `bitbucket-pipelines.yml`, `buildspec.yml`,
+    `**/.gitlab-ci.yml`, `**/Jenkinsfile*`, `**/azure-pipelines*.yml`,
+    `**/cloudbuild.y*ml`;
+  - ownership and review rules: `CODEOWNERS`, `**/CODEOWNERS`,
+    `renovate.json*`, `.renovaterc*`;
+  - Git settings and hooks: `.gitmodules`, `**/.gitattributes`, `.husky/**`,
+    `.githooks/**`, `.pre-commit-config.yaml`, `lefthook.y*ml`;
+  - secrets and keys: `**/.env`, `**/.env.*`, `**/*.env`, `**/.envrc`,
+    `**/*.pem`, `**/*.key`, `**/*.p12`, `**/*.pfx`, `**/*.p8`, `**/*.jks`,
+    `**/*.keystore`, `**/id_rsa*`, `**/id_ed25519*`, `**/id_ecdsa*`,
+    `**/id_dsa*`, `**/.npmrc`, `**/.pypirc`, `**/.netrc`,
+    `**/.git-credentials`, `**/.htpasswd`, `**/.aws/credentials`,
+    `**/.docker/config.json`, `**/.kube/config`, `**/*.tfvars`,
+    `**/*.tfvars.json`, `**/*.tfstate`, `**/*.tfstate.*`, `**/secrets/**`.
+- **What the model may send.** The whole new content of each file, or a
+  delete. A delete is refused unless `allowDelete` is true. A file must be at
+  most 256 KiB, at the base branch and in the new content, and must be UTF-8
+  text. Sidekick refuses a file that is binary, a symlink, a submodule or a
+  directory, and a file the model sends unchanged. A file that exists keeps its
+  mode (`100644` or `100755`), and a new file is written as `100644`.
+- **What it checks.** When the model proposes, Sidekick reads the head of the
+  base branch and each changed file at it, counts the lines that differ from the
+  base branch in all files together, and applies every limit above. The
+  errors go back to the model, which can propose again. The same checks run
+  again when the proposal runs, against the base branch as it is then. A file
+  is read through the Git trees API, which says what each entry is.
+- **What it does.** On approval it makes the branch `sidekick/<proposal id>`
+  from the head of the base branch with one commit, and opens the draft pull
+  request. The description is what the model wrote, with `@mentions` and issue
+  references after words such as "fixes" put in code spans so the pull
+  request notifies nobody and closes nothing, and a line that names the
+  proposal. If a worker dies half way, the retry finds the branch, and the
+  pull request if it was made, and does not make a second one. If GitHub does
+  not open the pull request as a draft, which can happen for a private
+  repository on a plan without drafts, Sidekick closes it, deletes the branch
+  and fails the proposal with that reason. The proposal's result holds the
+  number and the head SHA of the pull request.
+- **What the approver reads.** The proposal shows each file with what happens
+  to it (`changed`, `added` or `deleted`) and how many lines it adds and
+  removes, and the line diff of each file in the web UI (see [action
+  proposals](web-ui.md#action-proposals)). Sidekick stores the blob SHAs of
+  the files before and after, and the SHA of the base commit, never the file
+  contents.
+- **Files that changed meanwhile.** When the proposal runs, the action
+  compares each file on the base branch with the blob it had when the model
+  proposed. A file that someone changed meanwhile fails the proposal with a
+  conflict that names the file, so the pull request never overwrites their
+  edit; propose again from the new content. A file that already has the new
+  content is left out, and if every file does, the proposal succeeds without a
+  pull request.
+- **Undo.** An approver can undo a succeeded proposal. If its pull request is
+  still open or was closed, Sidekick closes it and deletes its branch. If it
+  was merged, Sidekick opens a draft revert pull request from the branch
+  `sidekick/<undo proposal id>` that restores the earlier content of the
+  files, by blob. A file the pull request added is deleted, and a file it
+  deleted comes back with the mode it had. The revert pull request still needs
+  review and merging; the undo is done once it is opened. If a file on the base
+  branch is not as the merged pull request left it, nothing is restored until
+  the approver confirms, and then the earlier content overwrites it. A file
+  that is a symlink, a submodule or a directory by then is never overwritten,
+  and a path that a refused path matches by then is refused.
+
+Once a day, Sidekick reads from GitHub whether the pull requests it opened are
+still open, were merged or were closed, as it does for `github.pull_request`
+(see there). Sidekick counts the pull requests it opens in
+`sidekick_githubcode_pull_requests_total` (by `result`: `opened`, `existing`,
+`applied` for a change already on the base branch, `closed` or `reverted` for
+an undo, or `error`), and the daily checks in
+`sidekick_githubcode_status_checks_total` (by `state`: `open`, `merged`,
+`closed`, `missing` or `error`). A pull request of this action does not count
+as a noisy alert fixed.
+
 ##### `unleash.flag`
 
 Changes a feature flag in one environment of an Unleash project through the
