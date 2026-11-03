@@ -177,7 +177,7 @@ func TestClientTokenErrors(t *testing.T) {
 		err     error
 		wantErr string
 	}{
-		{name: "an empty token", secret: []byte(" \n"), wantErr: ErrEmptyToken.Error()},
+		{name: "an empty token", secret: []byte(" \n"), wantErr: errEmptyToken.Error()},
 		{name: "a secret that cannot be read", err: errNoSecrets, wantErr: "resolve secret sidekick-gitlab/token"},
 	}
 
@@ -241,7 +241,7 @@ func TestClientRedirects(t *testing.T) {
 		var out map[string]any
 
 		_, err := c.Get(t.Context(), ProjectPath("acme/moved"), nil, &out)
-		require.ErrorIs(t, err, ErrRedirect)
+		require.ErrorIs(t, err, errRedirect)
 		require.Empty(t, other.Requests(), "the token never goes to the other host")
 	})
 
@@ -258,7 +258,7 @@ func TestClientRedirects(t *testing.T) {
 		var out map[string]any
 
 		_, err := c.Get(t.Context(), ProjectPath("acme/loop"), nil, &out)
-		require.ErrorIs(t, err, ErrRedirect)
+		require.ErrorIs(t, err, errRedirect)
 		require.Len(t, api.Requests(), maxRedirects+1)
 	})
 }
@@ -371,7 +371,7 @@ func TestClientSend(t *testing.T) {
 		c := newTestClient(t, api, secrets)
 
 		err := c.Send(t.Context(), http.MethodPut, "/projects/1/merge_requests/2", map[string]string{"state_event": "close"}, nil)
-		require.ErrorIs(t, err, ErrEmptyToken)
+		require.ErrorIs(t, err, errEmptyToken)
 		require.Empty(t, api.Requests())
 	})
 }

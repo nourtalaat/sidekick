@@ -88,7 +88,7 @@ func TestCheckBaseURL(t *testing.T) {
 func TestBaseURL(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, DefaultBaseURL, BaseURL(""))
+	require.Equal(t, defaultBaseURL, BaseURL(""))
 	require.Equal(t, "https://example.com/gitlab", BaseURL("https://example.com/gitlab/"))
 	require.Equal(t, "https://gitlab.example.com", BaseURL("https://gitlab.example.com"))
 }

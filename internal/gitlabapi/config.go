@@ -9,8 +9,8 @@ import (
 	"github.com/nourtalaat/sidekick/internal/httpclient"
 )
 
-// DefaultBaseURL is the root of gitlab.com.
-const DefaultBaseURL = "https://gitlab.com"
+// defaultBaseURL is the root of gitlab.com.
+const defaultBaseURL = "https://gitlab.com"
 
 // apiSuffix is the path of the REST API under the root of a GitLab.
 const apiSuffix = "/api/v4"
@@ -44,10 +44,10 @@ func CheckBaseURL(raw string) error {
 }
 
 // BaseURL returns the root of the GitLab for the base URL of a config,
-// without a trailing slash, or DefaultBaseURL when it is empty.
+// without a trailing slash, or defaultBaseURL when it is empty.
 func BaseURL(raw string) string {
 	if raw == "" {
-		return DefaultBaseURL
+		return defaultBaseURL
 	}
 
 	return strings.TrimSuffix(raw, "/")

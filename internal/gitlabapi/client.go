@@ -45,12 +45,12 @@ var (
 	// ErrResponseTooLarge is returned when a response body is larger than
 	// its limit.
 	ErrResponseTooLarge = errors.New("the response from GitLab is larger than the limit")
-	// ErrEmptyToken is returned when the token secret holds nothing.
-	ErrEmptyToken = errors.New("the token secret is empty")
-	// ErrRedirect is returned when GitLab redirects a request somewhere the
+	// errEmptyToken is returned when the token secret holds nothing.
+	errEmptyToken = errors.New("the token secret is empty")
+	// errRedirect is returned when GitLab redirects a request somewhere the
 	// client does not follow, so the token never goes to another host or
 	// over plain http.
-	ErrRedirect = errors.New("GitLab redirected the request to another address")
+	errRedirect = errors.New("GitLab redirected the request to another address")
 
 	errNoSecrets = errors.New("no secrets resolver in deps")
 )
@@ -208,7 +208,7 @@ func (c *Client) readToken(ctx context.Context) (string, error) {
 
 	token := string(bytes.TrimSpace(raw))
 	if token == "" {
-		return "", ErrEmptyToken
+		return "", errEmptyToken
 	}
 
 	return token, nil
@@ -225,11 +225,11 @@ func redirects(root *url.URL) func(req *http.Request, via []*http.Request) error
 		}
 
 		if len(via) > maxRedirects {
-			return fmt.Errorf("more than %d redirects: %w", maxRedirects, ErrRedirect)
+			return fmt.Errorf("more than %d redirects: %w", maxRedirects, errRedirect)
 		}
 
 		if req.URL.Scheme != root.Scheme || req.URL.Host != root.Host {
-			return fmt.Errorf("redirect to %s://%s: %w", req.URL.Scheme, req.URL.Host, ErrRedirect)
+			return fmt.Errorf("redirect to %s://%s: %w", req.URL.Scheme, req.URL.Host, errRedirect)
 		}
 
 		return nil
