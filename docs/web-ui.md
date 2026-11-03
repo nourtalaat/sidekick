@@ -934,7 +934,8 @@ would refuse is ignored, so every link opens. Days are UTC days.
   against the verdict people confirmed, precision and recall of each
   verdict, accuracy by model and strategy, and the newest benchmark runs.
   Choose two runs to compare them; the two runs are in the address too
-  (`a` and `b`).
+  (`a` and `b`). The link **All benchmark runs** opens the
+  [Benchmarks page](#the-benchmarks-page).
 - **Cost.** Spend per day by model with the daily cap as a dashed line and
   a status when today's spend is near the cap or over it, spend today by
   route, spend by route, the cost per investigation, and the tokens in and
@@ -1010,6 +1011,24 @@ for the range of equal length before it, for showing the change.
   scenario; the judge's reasons are left out. `GET /api/v1/bench/compare?a=<id>&b=<id>`
   lines up two runs: each metric with the change and whether the intervals
   overlap (`clear` or `none`), and the correct runs of each scenario.
+
+### The Benchmarks page
+
+`/benchmarks`, in the menu as Benchmarks, is open to every role from
+`viewer` up. It lists every run that `sidekick bench run --db` stored, newest
+first, 25 at a time; **Load more** adds the next 25. Each row has:
+
+- the run, as its label or its start time, with the Sidekick version and the
+  models under it; the name links to `/benchmarks/<id>`
+- the result, Passed or Failed, as a word with an icon
+- the overall score, the verdict accuracy, the mean cost per run and the mean
+  time per run
+- the scenario set, with its repeats and the number of runs
+- who started the run: Command line (`cli`), CI (`ci`) or Strategy gate
+  (`gate`)
+
+The dashboard card shows the same table for the newest ten runs. With no
+runs stored, the page says so and names the command that stores them.
 
 ## The JSON API
 
