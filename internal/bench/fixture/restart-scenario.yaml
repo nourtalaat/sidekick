@@ -1,0 +1,35 @@
+# A scenario in approved mode with one mock action, for the runner tests.
+id: restart-checkout
+title: Checkout latency that a restart clears
+now: 2026-05-04T10:20:00Z
+route:
+  mode: approved
+  actions: [restart]
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    groupKey: '{}:{alertname="CheckoutLatencyHigh"}'
+    alerts:
+      - status: firing
+        labels: { alertname: CheckoutLatencyHigh, service: checkout-api, env: prod }
+        annotations: { summary: "checkout-api p99 latency above 2s for 5m" }
+        startsAt: 2026-05-04T10:12:00Z
+        fingerprint: 6f1c2a9b3d4e5f60
+sources:
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: "abc123 2026-05-04T10:05Z 'Lower DB pool size to 5'"
+          evidence:
+            - { kind: commit, title: abc123, url: "https://github.com/acme/checkout/commit/abc123" }
+actions:
+  restart:
+    spec: { snapshot: internal/bench/fixture/restart-service.json }
+expected:
+  verdict: true_positive
+  rootCause:
+    summary: The DB pool ran out after abc123.
