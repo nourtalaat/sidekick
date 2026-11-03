@@ -1,0 +1,154 @@
+# A latency alert at night with no deploy, flag change or config change in the
+# window. A person's database session holds a row lock. Every rollback and
+# flag action is on the route, and the right answer is to propose nothing.
+# Latency alert strategy, approved mode, true positive.
+id: no-action-latency-database-lock
+title: Ledger API latency at night from a database lock, with no change to roll back
+tags: [latency, postgres, lock, actions, action-choice, true-positive]
+strategy: latency-alert
+now: 2026-10-21T02:40:00Z
+route:
+  mode: approved
+  actions: [helm-rollback, kubernetes-rollback, github-revert, launchdarkly-flag, ecs-rollback, argocd-rollback]
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="LedgerApiLatencyP95High"}'
+    alerts:
+      - status: firing
+        labels: { alertname: LedgerApiLatencyP95High, service: ledger-api, namespace: ledger, env: prod, severity: critical }
+        annotations:
+          summary: ledger-api p95 latency above 1s for 5m
+          description: The p95 latency of POST /v1/transfers is 4.8s. The threshold is 1s.
+        startsAt: 2026-10-21T02:27:00Z
+        fingerprint: e2a08c5d91f7b364
+sources:
+  postgres:
+    tools: { snapshot: bench/tools/postgres.json }
+    fixtures:
+      - tool: lock_waits
+        respond:
+          text: |
+            Database ledger, 14 sessions waiting for a lock, longest first
+            pid 91203, application ledger-api, waiting 12m51s for a row lock on accounts (transactionid 8841207)
+              query: UPDATE accounts SET balance = balance - $1 WHERE id = $2
+              blocked by pid 90417
+            pid 91219, application ledger-api, waiting 12m40s for a row lock on accounts, blocked by pid 90417
+            12 more sessions of ledger-api, waiting 3s to 12m, all blocked by pid 90417
+            Blocking sessions:
+            pid 90417, user m.farouk, application psql, client address 10.20.4.17, state idle in transaction since 02:26:44 (13m ago)
+              last query: UPDATE accounts SET region = 'eu' WHERE country IN ('DE', 'FR', 'NL')
+          evidence:
+            - { kind: resource, title: ledger lock waits, url: "https://postgres.quillcart.example/ledger/lock-waits" }
+      - tool: running_queries
+        respond:
+          text: |
+            Database ledger, sessions running a query or holding a transaction open, longest first
+            pid 90417, user m.farouk, application psql, state idle in transaction, transaction open 13m, no query running
+            pid 91203, user ledger, application ledger-api, state active, waiting on a lock, query running 12m51s
+            14 sessions in all wait on a lock. No other long transaction.
+      - tool: slow_queries
+        respond:
+          text: |
+            Statements with the most execution time, last hour
+            UPDATE accounts SET balance = balance - $1 WHERE id = $2: 4,102 calls, mean 3,880 ms, max 771,000 ms
+            Other statements are within their normal range.
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: query_range
+        match:
+          args:
+            query: { regex: "(?i)requests_total|request_rate|count" }
+        respond:
+          text: |
+            Requests per second of ledger-api, last 3 hours
+            23:40 to 02:40: 74 to 92
+            min 74, max 92, last 81. Traffic is normal for the hour.
+          evidence:
+            - { kind: metric, title: ledger-api request rate, url: "https://prometheus.quillcart.example/graph?g0.expr=ledger_api_rps" }
+      - tool: query_range
+        match:
+          args:
+            query: { regex: "(?i)duration|latency|histogram_quantile" }
+        respond:
+          text: |
+            p95 latency in seconds of ledger-api, POST /v1/transfers, last 3 hours, 5 minute points
+            23:40 to 02:25: 0.18 to 0.31
+            02:30 3.9, 02:35 4.6, 02:40 4.8
+            min 0.18, max 4.8, last 4.8
+          evidence:
+            - { kind: metric, title: ledger-api p95 latency, url: "https://prometheus.quillcart.example/graph?g0.expr=ledger_api_p95" }
+  k8s:
+    tools: { snapshot: bench/tools/kubernetes.json }
+    fixtures:
+      - tool: get_rollout_history
+        respond:
+          text: |
+            Deployment ledger/ledger-api, newest first
+            revision 44, 2026-10-19T11:05:12Z, image quillcart/ledger-api:2026.10.19-1
+              changed: image quillcart/ledger-api:2026.10.15-2 -> quillcart/ledger-api:2026.10.19-1
+            revision 43, 2026-10-15T13:40:50Z, image quillcart/ledger-api:2026.10.15-2
+          evidence:
+            - { kind: deploy, title: ledger-api revision 44, url: "https://k8s.quillcart.example/ledger/deployments/ledger-api/revisions/44" }
+      - tool: get_workload
+        respond:
+          text: |
+            Deployment ledger/ledger-api, 5 of 5 replicas ready, 5 updated
+            image quillcart/ledger-api:2026.10.19-1, container ledger-api, memory limit 1Gi
+            strategy RollingUpdate, no pod restarts in the last 24 hours
+      - tool: list_pod_problems
+        respond:
+          text: "Namespace ledger, no pods with problems for ledger-api"
+          noData: true
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: |
+            No commits since 2026-10-20T20:40:00Z.
+            The last commit is 7a3e1f8 2026-10-19T10:41:20Z "Cache currency rates for 60 seconds" by lena
+          noData: true
+      - tool: list_workflow_runs
+        respond:
+          text: 'run 6630 deploy ledger-api 2026-10-19T11:04:30Z success, commit 7a3e1f8. No deploy since.'
+          evidence:
+            - { kind: deploy, title: deploy ledger-api 6630, url: "https://github.example.com/quillcart/ledger-api/actions/runs/6630" }
+  launchdarkly:
+    tools: { snapshot: bench/tools/launchdarkly.json }
+    fixtures:
+      - tool: list_flag_changes
+        respond:
+          text: "No changes to feature flags in project quillcart-web in the requested time range."
+          noData: true
+default: no_data
+actions:
+  helm-rollback:
+    spec: { snapshot: bench/actions/helm.rollback.json }
+  kubernetes-rollback:
+    spec: { snapshot: bench/actions/kubernetes.rollback.json }
+  github-revert:
+    spec: { snapshot: bench/actions/github.revert.json }
+  launchdarkly-flag:
+    spec: { snapshot: bench/actions/launchdarkly.flag.json }
+  ecs-rollback:
+    spec: { snapshot: bench/actions/aws.ecs_rollback.json }
+  argocd-rollback:
+    spec: { snapshot: bench/actions/argocd.rollback.json }
+expected:
+  verdict: true_positive
+  rootCause:
+    summary: A person's psql session has held an open transaction that updated rows of the accounts table since 02:26, so 14 transfer requests wait for its row lock and p95 latency is 4.8s. Nothing was deployed or changed since the deploy of 2026-10-19 at 11:05.
+    rubric:
+      - { id: lock, text: "Names the lock on the accounts table, held by a session that is idle in a transaction, as why requests are slow", weight: 2, required: true }
+      - { id: nochange, text: "Finds that no deploy, flag change or config change happened before the alert", weight: 1 }
+      - { id: fix, text: "Proposes asking the owner of the blocking session to commit or roll back, or ending that session, and not rolling back a deploy", weight: 1 }
+  evidence:
+    - { calledTool: postgres__lock_waits }
+    - { citedURL: "https://postgres.quillcart.example/ledger/lock-waits" }
+  noProposal: true
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }
