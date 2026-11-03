@@ -60,9 +60,9 @@ func TestConfigValidate(t *testing.T) {
 			want: []string{`baseURL: "https://gitlab.example.com/?a=b" must be an absolute https URL, such as https://gitlab.example.com`},
 		},
 		{
-			name: "a base URL with credentials",
-			cfg:  Config{TokenSecret: token, Projects: []string{"acme/x"}, BaseURL: "https://me:pw@gitlab.example.com/"},
-			want: []string{`baseURL: "https://me:pw@gitlab.example.com/" must be an absolute https URL, such as https://gitlab.example.com`},
+			name: "a base URL with a user name",
+			cfg:  Config{TokenSecret: token, Projects: []string{"acme/x"}, BaseURL: "https://me@gitlab.example.com/"},
+			want: []string{`baseURL: "https://me@gitlab.example.com/" must be an absolute https URL, such as https://gitlab.example.com`},
 		},
 		{
 			name: "a base URL that is the API root",

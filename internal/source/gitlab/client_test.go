@@ -212,7 +212,7 @@ func TestClientRedirects(t *testing.T) {
 			_, _ = w.Write([]byte(`{"id":81}`))
 		})
 		api.HandleFunc(http.MethodGet, apiRoot+"/projects/acme/moved", func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, "http://"+r.Host+apiRoot+"/projects/81", http.StatusMovedPermanently)
+			movedTo(w, "http://"+r.Host+apiRoot+"/projects/81")
 		})
 
 		s := newTestSource(t, api, 0)
@@ -232,8 +232,8 @@ func TestClientRedirects(t *testing.T) {
 		other := fakehttp.New(t)
 
 		api := fakehttp.New(t)
-		api.HandleFunc(http.MethodGet, apiRoot+"/projects/acme/moved", func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, other.URL()+apiRoot+"/projects/81", http.StatusMovedPermanently)
+		api.HandleFunc(http.MethodGet, apiRoot+"/projects/acme/moved", func(w http.ResponseWriter, _ *http.Request) {
+			movedTo(w, other.URL()+apiRoot+"/projects/81")
 		})
 
 		s := newTestSource(t, api, 0)
@@ -250,7 +250,7 @@ func TestClientRedirects(t *testing.T) {
 
 		api := fakehttp.New(t)
 		api.HandleFunc(http.MethodGet, apiRoot+"/projects/acme/loop", func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, "http://"+r.Host+apiRoot+"/projects/acme/loop", http.StatusMovedPermanently)
+			movedTo(w, "http://"+r.Host+apiRoot+"/projects/acme/loop")
 		})
 
 		s := newTestSource(t, api, 0)
@@ -275,4 +275,10 @@ func TestClientResponseLimit(t *testing.T) {
 
 	_, err := s.client.getLimited(t.Context(), "/big", nil, &out, 50)
 	require.ErrorIs(t, err, errResponseTooLarge)
+}
+
+// movedTo answers a request with a permanent redirect to location.
+func movedTo(w http.ResponseWriter, location string) {
+	w.Header().Set("Location", location)
+	w.WriteHeader(http.StatusMovedPermanently)
 }
