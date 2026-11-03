@@ -239,6 +239,11 @@ func (r *Rule) Spec() action.Spec {
 	return action.Spec{Name: r.name, Description: b.String(), ParamsSchema: paramsSchema}
 }
 
+// FixKind implements action.MonitorFixer.
+func (*Rule) FixKind() action.FixKind {
+	return action.FixAPI
+}
+
 // Validate implements action.Action. It runs without calling the cluster,
 // so it checks what the parameters alone show: the namespace, the resource
 // name, each group and each field of set against the limits. A limit
