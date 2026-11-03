@@ -9,6 +9,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/action/datadog"
 	"github.com/nourtalaat/sidekick/internal/action/githubpr"
 	"github.com/nourtalaat/sidekick/internal/action/grafana"
+	"github.com/nourtalaat/sidekick/internal/action/helmrollback"
 	"github.com/nourtalaat/sidekick/internal/action/jira"
 	"github.com/nourtalaat/sidekick/internal/action/prometheusrule"
 	"github.com/nourtalaat/sidekick/internal/action/signoz"
@@ -29,6 +30,7 @@ func TestMonitorFixers(t *testing.T) {
 		{name: "grafana.alert_rule", action: &grafana.Rule{}, want: action.FixAPI},
 		{name: "prometheus.rule", action: &prometheusrule.Rule{}, want: action.FixAPI},
 		{name: "github.pull_request", action: &githubpr.PR{}, want: action.FixPullRequest},
+		{name: "helm.rollback fixes nothing", action: &helmrollback.Rollback{}},
 		{name: "jira.issue fixes nothing", action: &jira.Issue{}},
 		{name: "slack.reply fixes nothing", action: &slack.Reply{}},
 		{name: "unleash.flag fixes nothing", action: &unleashflag.Flag{}},
