@@ -3160,6 +3160,11 @@ export interface components {
             rootCauseScore?: number;
             /** Format: double */
             evidence?: number;
+            /**
+             * Format: double
+             * @description The share of the runs with scored proposals whose proposals are correct; left out when no scenario scores proposals.
+             */
+            proposalCorrect?: number;
             /** Format: double */
             sourceFailuresReported?: number;
             /** Format: double */
@@ -3219,6 +3224,8 @@ export interface components {
             requiredMet?: boolean;
             /** Format: double */
             evidenceScore?: number;
+            /** @description Whether the proposals of the run are correct; left out when the scenario does not score proposals. */
+            proposalCorrect?: boolean;
             /** Format: int64 */
             costMicros: number;
             /** Format: int64 */

@@ -18,7 +18,7 @@ VALUES
      "weights": {"verdict": 0.5, "rootCause": 0.3, "evidence": 0.2},
      "metrics": {"runs": 4, "verdictAccuracy": 0.75, "falsePositive": {"precision": 0.8, "recall": 1, "predicted": 2, "expected": 2, "hits": 2},
                  "truePositive": {"precision": null, "recall": 0.5, "predicted": 0, "expected": 2, "hits": 1},
-                 "rootCauseMatch": null, "rootCauseScore": 0.73, "evidence": null, "sourceFailuresReported": null, "overall": 0.7,
+                 "rootCauseMatch": null, "rootCauseScore": 0.73, "evidence": null, "proposalCorrect": 0.5, "sourceFailuresReported": null, "overall": 0.7,
                  "judgeErrors": 0, "toolCalls": 12, "inputTokens": 1000, "outputTokens": 500, "costMicros": 8000, "judgeCostMicros": 100,
                  "meanCostPerRunUSD": 0.002, "meanDurationMs": 1500},
      "intervals": {"overall": {"lower": 0.5, "upper": 0.9}, "verdictAccuracy": {"lower": 0.4, "upper": 1}},
@@ -40,12 +40,12 @@ VALUES
 
 INSERT INTO bench_results (
   run_id, scenario_id, repeat, verdict, expected_verdict, verdict_correct, root_cause_score, required_met, judge_reason,
-  evidence_score, cost_micros, duration_ms, input_tokens, output_tokens, tool_calls
+  evidence_score, proposal_correct, cost_micros, duration_ms, input_tokens, output_tokens, tool_calls
 )
 VALUES
-  ('0192d3a4-0000-7000-8000-0000000000a1', 's1', 1, 'false_positive', 'false_positive', true, 0.9, true, 'item 1: met: secret judge text', 1.0, 2000, 1200, 250, 125, 3),
-  ('0192d3a4-0000-7000-8000-0000000000a1', 's1', 2, 'false_positive', 'false_positive', true, 0.8, true, 'item 1: met', NULL, 2000, 1300, 250, 125, 3),
-  ('0192d3a4-0000-7000-8000-0000000000a1', 's2', 1, 'true_positive', 'true_positive', true, 0.5, false, 'item 1: not met', NULL, 2000, 1800, 250, 125, 3),
-  ('0192d3a4-0000-7000-8000-0000000000a1', 's2', 2, 'inconclusive', 'true_positive', false, NULL, NULL, NULL, NULL, 2000, 1700, 250, 125, 3),
-  ('0192d3a4-0000-7000-8000-0000000000a2', 's1', 1, 'inconclusive', 'false_positive', false, 0.2, false, 'item 1: not met', NULL, 4000, 2000, 200, 100, 3),
-  ('0192d3a4-0000-7000-8000-0000000000a2', 's3', 1, 'true_positive', 'true_positive', true, 1.0, true, 'item 1: met', NULL, 4000, 3000, 200, 100, 3);
+  ('0192d3a4-0000-7000-8000-0000000000a1', 's1', 1, 'false_positive', 'false_positive', true, 0.9, true, 'item 1: met: secret judge text', 1.0, true, 2000, 1200, 250, 125, 3),
+  ('0192d3a4-0000-7000-8000-0000000000a1', 's1', 2, 'false_positive', 'false_positive', true, 0.8, true, 'item 1: met', NULL, false, 2000, 1300, 250, 125, 3),
+  ('0192d3a4-0000-7000-8000-0000000000a1', 's2', 1, 'true_positive', 'true_positive', true, 0.5, false, 'item 1: not met', NULL, NULL, 2000, 1800, 250, 125, 3),
+  ('0192d3a4-0000-7000-8000-0000000000a1', 's2', 2, 'inconclusive', 'true_positive', false, NULL, NULL, NULL, NULL, NULL, 2000, 1700, 250, 125, 3),
+  ('0192d3a4-0000-7000-8000-0000000000a2', 's1', 1, 'inconclusive', 'false_positive', false, 0.2, false, 'item 1: not met', NULL, NULL, 4000, 2000, 200, 100, 3),
+  ('0192d3a4-0000-7000-8000-0000000000a2', 's3', 1, 'true_positive', 'true_positive', true, 1.0, true, 'item 1: met', NULL, NULL, 4000, 3000, 200, 100, 3);

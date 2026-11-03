@@ -195,6 +195,7 @@ func resultRow(runID uuid.UUID, sc ScenarioReport, r RunReport) db.InsertBenchRe
 		ExpectedVerdict: string(sc.ExpectedVerdict),
 		VerdictCorrect:  r.VerdictCorrect,
 		EvidenceScore:   float32Of(r.EvidenceScore),
+		ProposalCorrect: r.ProposalCorrect,
 		CostMicros:      r.CostMicros,
 		DurationMs:      clampInt32(r.DurationMs),
 		InputTokens:     r.InputTokens,
