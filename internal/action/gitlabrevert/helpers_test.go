@@ -586,19 +586,6 @@ func sent(s *fakehttp.Server) []string {
 	return out
 }
 
-// count returns how many requests of the fake were sent to method and path.
-func count(s *fakehttp.Server, method, path string) int {
-	n := 0
-
-	for _, r := range s.Requests() {
-		if r.Method == method && r.Path == apiPath(path) {
-			n++
-		}
-	}
-
-	return n
-}
-
 // bodyOf returns the JSON body of the first request to method and path.
 func bodyOf(t *testing.T, s *fakehttp.Server, method, path string) map[string]any {
 	t.Helper()

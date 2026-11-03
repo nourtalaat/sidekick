@@ -14,6 +14,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/action/githubpr"
 	"github.com/nourtalaat/sidekick/internal/action/githubrevert"
 	"github.com/nourtalaat/sidekick/internal/action/gitlabmr"
+	"github.com/nourtalaat/sidekick/internal/action/gitlabrevert"
 	"github.com/nourtalaat/sidekick/internal/action/grafana"
 	"github.com/nourtalaat/sidekick/internal/action/helmrollback"
 	"github.com/nourtalaat/sidekick/internal/action/jira"
@@ -41,6 +42,7 @@ func TestMonitorFixers(t *testing.T) {
 		{name: "github.revert fixes nothing", action: &githubrevert.Revert{}},
 		{name: "github.code_change fixes nothing", action: &githubcode.Code{}},
 		{name: "gitlab.merge_request", action: &gitlabmr.MR{}, want: action.FixPullRequest},
+		{name: "gitlab.revert fixes nothing", action: &gitlabrevert.Revert{}},
 		{name: "helm.rollback fixes nothing", action: &helmrollback.Rollback{}},
 		{name: "jira.issue fixes nothing", action: &jira.Issue{}},
 		{name: "slack.reply fixes nothing", action: &slack.Reply{}},

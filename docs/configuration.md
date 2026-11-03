@@ -3626,6 +3626,155 @@ and records it. Sidekick counts the pull requests it opens in
 `sidekick_githubrevert_status_checks_total` (by `state`: `open`, `merged`,
 `closed`, `missing` or `error`).
 
+##### `gitlab.revert`
+
+Opens a draft merge request that reverts one commit, or one merged merge
+request, on gitlab.com or a self-managed GitLab, when a recent change caused
+the alert. It does for GitLab what [`github.revert`](#githubrevert) does for
+GitHub. It is narrower than a code change: the model names what to revert and
+why, never the new content of a file, so a team can allow reverts without
+allowing arbitrary edits. It is also how to roll back what Flux, or Argo CD
+with auto-sync, deploys from a GitLab project. Use it on a route in `approved`
+mode: a person reads the files before anything is pushed.
+
+```yaml
+actions:
+  revert-deploy:
+    type: gitlab.revert
+    tokenSecret: { name: sidekick-gitlab-revert, key: token }   # a token of its own, not the source's
+    # baseURL: https://gitlab.example.com   # self-managed GitLab; default https://gitlab.com
+    limits:
+      projects: [acme/platform/deploy]      # full paths, no wildcards
+      baseBranch: main                      # the only branch a revert may target
+      maxAge: 72h                           # default 72h, at most 720h
+      maxFiles: 10                          # 1 to 25
+      maxChangedLines: 300                  # lines added plus lines removed, 1 to 1000
+      refusedPaths: ["deploy/prod/**"]      # added to the built-in list
+
+routes:
+  - name: api-errors
+    match: { intake: [alertmanager] }
+    mode: approved
+    actions: [revert-deploy]
+```
+
+- **Credentials.** Give the action a token of its own: a project, group or
+  personal access token with the `api` scope, whose user has the Developer
+  role on the projects in `limits.projects` and on no others. Developer is
+  enough to make a branch and to run GitLab's revert on it, as long as the
+  branches `sidekick/*` are not protected. Protect the base branch so that a
+  Developer cannot push to it; Sidekick never writes to it. The token is read
+  from its secret on every call, so a rotated token needs no restart.
+  `baseURL` must be the root of the GitLab, without `/api/v4`, and must use
+  https, except for a loopback host.
+- **Parameters.** `project` (the full path), `baseBranch`, exactly one of
+  `commit` (the full 40-character SHA, never a branch, a tag or a short SHA)
+  or `mergeRequest` (the IID of a merged merge request), a `title` (the title
+  of the merge request) and a `body` (the reason). The description is the
+  model's text, with `@mentions`, references such as `!12` and `#3`, targets
+  after words such as "fixes", and lines that start with a slash (GitLab's
+  quick actions) put in code spans, so the merge request notifies nobody,
+  closes nothing and runs no command. Then come the line `Reverts <commit or
+  merge request>`, a line that marks it as a Sidekick revert, and a line that
+  names the proposal and links the investigation. Several commits at once,
+  and cherry-picks, are not supported: name one commit, or one merge request.
+- **How the revert is made.** Sidekick makes the branch `sidekick/<proposal
+  id>` from the head of the base branch, then calls GitLab's revert on it
+  (`POST /projects/:id/repository/commits/:sha/revert`), which writes one
+  commit, and opens a merge request from the branch. GitLab reverts a merge
+  commit against its first parent, as `git revert -m 1` does. The merge
+  request is always a draft: there is no `draft` key. Sidekick never merges,
+  approves, turns on auto-merge, asks for a review or assigns anyone. If
+  GitLab does not make the merge request a draft, Sidekick closes it, deletes
+  its branch and fails the proposal, so a revert is never left open for
+  review. A repeat after a crash finds the branch, and the merge request if
+  it was made, and does not make a second one. GitLab's revert call can run
+  as a dry run, but Sidekick does not use it: proposing never writes to your
+  project, because a pushed branch can start pipelines and send events. The
+  checks below mean the revert applies cleanly, and the real call is the final
+  check.
+- **A merge request by name.** Sidekick finds the commit that holds the whole
+  change and reverts that. A merge request merged with a merge commit (also
+  with semi-linear history) is reverted by its merge commit. A squashed one is
+  reverted by its squash commit. One merged with fast-forward has no such
+  commit, so it is reverted only if it has exactly one commit; with several
+  the proposal is refused and the model is told to name the commits one at a
+  time.
+- **When it is refused.** Each refusal is an error the model reads, and
+  nothing is stored. It is refused when the commit is not on the base branch;
+  when it has no parent or more than two; when it landed on the base branch
+  longer ago than `maxAge`; when it is, or is held by, a revert made by this
+  action (there is no revert of a revert); when it touches a refused path;
+  when it changes more than `maxFiles` files or more than `maxChangedLines`
+  lines (added plus removed, counted for the revert); and when a file it
+  touched is not what the commit wrote any more because someone changed it
+  since, with the name of the file and a pointer to `gitlab.merge_request` or
+  to reverting by hand. It is also refused for what a revert cannot show or
+  write back: a symbolic link, a submodule, a change of file mode, a file
+  that GitLab did not diff in full, a file larger than 256 KiB, and a file
+  that is not UTF-8 text. These checks run when the model proposes and again
+  when the proposal runs.
+- **Age.** Git does not record when a commit reached a branch, so `maxAge`
+  is measured from the time GitLab gives: for a merge request, when it was
+  merged; for a commit, its committer date. A commit pushed long after it was
+  written is therefore refused as too old, which is the safe direction. Undo
+  is not subject to the age.
+- **Refused paths.** The built-in list is always on and cannot be shortened:
+  CI and build automation (`.gitlab-ci.yml`, `.gitlab/**` and the like),
+  ownership and review rules (`CODEOWNERS`, Renovate settings), Git settings
+  and hooks (`.gitmodules`, `.gitattributes`, hook directories) and secrets
+  and keys (`.env` files, private keys, Terraform state and variable files).
+  Paths are compared in lower case. `refusedPaths` adds globs to it; `*` and
+  `?` do not match a slash, and a segment of `**` matches any number of
+  segments. A revert of a commit that touches any of them is refused.
+- **What the approver reads.** The proposal shows each file with what
+  happens to it (`changed`, `added` or `deleted`) and how many lines the
+  revert adds and removes, and the line diff of each file is read from
+  GitLab when the approver opens it. Sidekick stores the blob IDs of the
+  files before and after, and the SHA of the base commit, never the file
+  contents.
+- **Files that changed meanwhile.** When the proposal runs, the action
+  compares each file on the base branch with the blob it had when the model
+  proposed. A file that someone changed meanwhile fails the proposal with a
+  conflict that names the file; propose again. A file that is back to what
+  the parent had already is left out, and if every file is, the proposal
+  succeeds without a merge request. If GitLab itself says the revert cannot
+  be applied (its answer is a 400 with the reason), the proposal fails with a
+  conflict that carries GitLab's message, and the branch is deleted.
+- **Result.** The result links the merge request and carries its IID, its
+  project and the SHA of its head commit.
+- **Undo.** An approver can undo a succeeded proposal. If its merge request
+  is still open or was closed, Sidekick closes it and deletes its branch. If
+  it was merged, Sidekick opens a draft merge request from the branch
+  `sidekick/<undo proposal id>` that puts back what the commit wrote, so the
+  change the revert took out comes back. It still needs review and merging;
+  the undo is done once it is opened. If a file on the base branch is not as
+  the revert left it, nothing is written until the approver confirms, and
+  then the file is overwritten. This merge request is marked as a revert too,
+  so Sidekick will not revert it.
+- **It does not fix a noisy monitor.** A revert undoes the cause of an
+  alert, so it never counts toward the noisy alerts fixed.
+
+**When to use which.** Use `gitlab.revert` for what Flux, or Argo CD with
+auto-sync, deploys from a GitLab project: put the earlier files back in Git
+and the controller rolls the cluster back. For a GitHub repository use
+[`github.revert`](#githubrevert), which works the same way for the model and
+the approver, and differs in what the host offers: GitHub has no revert call,
+so Sidekick writes the revert itself, and GitLab does it. Use
+[`gitlab.merge_request`](#gitlabmerge_request) to change a monitor
+definition, and the rollback actions for platforms that keep revisions of
+what they run, such as a Kubernetes Deployment, a Helm release or an ECS
+service, where no change in Git is needed.
+
+Once a day, the same job as for `gitlab.merge_request` reads whether the
+merge requests of succeeded proposals are still open, were merged or were
+closed, and records it. Sidekick counts the merge requests it opens in
+`sidekick_gitlabrevert_merge_requests_total` (by `result`: `opened`,
+`existing`, `applied` for a revert that is on the base branch already,
+`closed` or `reverted` for an undo, or `error`) and the daily checks in
+`sidekick_gitlabrevert_status_checks_total` (by `state`: `open`, `merged`,
+`closed`, `missing` or `error`).
+
 ##### `unleash.flag`
 
 Changes a feature flag in one environment of an Unleash project through the
