@@ -13,6 +13,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/action/prometheusrule"
 	"github.com/nourtalaat/sidekick/internal/action/signoz"
 	"github.com/nourtalaat/sidekick/internal/action/slack"
+	"github.com/nourtalaat/sidekick/internal/action/unleashflag"
 )
 
 func TestMonitorFixers(t *testing.T) {
@@ -30,6 +31,7 @@ func TestMonitorFixers(t *testing.T) {
 		{name: "github.pull_request", action: &githubpr.PR{}, want: action.FixPullRequest},
 		{name: "jira.issue fixes nothing", action: &jira.Issue{}},
 		{name: "slack.reply fixes nothing", action: &slack.Reply{}},
+		{name: "unleash.flag fixes nothing", action: &unleashflag.Flag{}},
 	}
 
 	for _, tt := range tests {
