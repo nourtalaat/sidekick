@@ -135,9 +135,9 @@ func TestWriteTable(t *testing.T) {
 					},
 				},
 			}}},
-			want: "SCENARIO            RUN  STATUS  VERDICT        EXPECTED       CORRECT  ROOT CAUSE  EVIDENCE  STOP       TOOL CALLS  TOKENS  COST     TIME\n" +
-				"checkout-pool-size  1/2  final   true_positive  true_positive  -        -           -         submitted  4           3600    $0.0215  1.235s\n" +
-				"checkout-pool-size  2/2  final   inconclusive   true_positive  -        -           -         budget     30          9900    $0.5000  2s\n",
+			want: "SCENARIO            RUN  STATUS  VERDICT        EXPECTED       CORRECT  ROOT CAUSE  EVIDENCE  PROPOSAL  STOP       TOOL CALLS  TOKENS  COST     TIME\n" +
+				"checkout-pool-size  1/2  final   true_positive  true_positive  -        -           -         -         submitted  4           3600    $0.0215  1.235s\n" +
+				"checkout-pool-size  2/2  final   inconclusive   true_positive  -        -           -         -         budget     30          9900    $0.5000  2s\n",
 		},
 		{
 			name: "scored runs show their scores",
@@ -156,9 +156,9 @@ func TestWriteTable(t *testing.T) {
 					},
 				},
 			}}},
-			want: "SCENARIO  RUN  STATUS  VERDICT        EXPECTED       CORRECT  ROOT CAUSE  EVIDENCE  STOP       TOOL CALLS  TOKENS  COST     TIME\n" +
-				"pool      1/2  final   true_positive  true_positive  yes      0.80        0.50      submitted  4           3600    $0.0215  1s\n" +
-				"pool      2/2  failed                 true_positive  no       error       -         error      0           0       $0.0000  0s\n",
+			want: "SCENARIO  RUN  STATUS  VERDICT        EXPECTED       CORRECT  ROOT CAUSE  EVIDENCE  PROPOSAL  STOP       TOOL CALLS  TOKENS  COST     TIME\n" +
+				"pool      1/2  final   true_positive  true_positive  yes      0.80        0.50      -         submitted  4           3600    $0.0215  1s\n" +
+				"pool      2/2  failed                 true_positive  no       error       -         -         error      0           0       $0.0000  0s\n",
 		},
 	}
 
@@ -191,8 +191,8 @@ func TestWriteSummary(t *testing.T) {
 				scenario("pool", report.TruePositive, usageRun(1000, time.Second), withVerdict(usageRun(3000, 3*time.Second), report.Inconclusive)),
 			}},
 			want: []string{
-				"SCENARIO  CORRECT  ROOT CAUSE  COST MIN / MEDIAN / MAX      TIME MIN / MEDIAN / MAX\n",
-				"pool      1/2      -           $0.0010 / $0.0020 / $0.0030  1s / 2s / 3s\n",
+				"SCENARIO  CORRECT  PROPOSALS  ROOT CAUSE  COST MIN / MEDIAN / MAX      TIME MIN / MEDIAN / MAX\n",
+				"pool      1/2      -          -           $0.0010 / $0.0020 / $0.0030  1s / 2s / 3s\n",
 				"METRIC                    VALUE  95% INTERVAL\n",
 				"overall score             0.50   ",
 				"verdict accuracy          0.50   ",

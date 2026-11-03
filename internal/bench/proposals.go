@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/nourtalaat/sidekick/internal/source/mock"
@@ -101,6 +102,39 @@ func scoreProposals(expected Expected, run RunResult) *ProposalResult {
 	out.Correct = correct
 
 	return out
+}
+
+// problem says in one line why the proposals of a run are not correct.
+func (p ProposalResult) problem() string {
+	var missing, unexpected []string
+
+	for _, e := range p.Expected {
+		if !e.Matched {
+			missing = append(missing, e.Action)
+		}
+	}
+
+	for _, o := range p.Proposed {
+		if o.Outcome == ProposalUnexpected {
+			unexpected = append(unexpected, o.Action)
+		}
+	}
+
+	var parts []string
+
+	if len(missing) > 0 {
+		parts = append(parts, "missing "+strings.Join(missing, ", "))
+	}
+
+	if len(unexpected) > 0 {
+		parts = append(parts, "unexpected "+strings.Join(unexpected, ", "))
+	}
+
+	if len(parts) == 0 {
+		return "the proposals are not correct: the run ended without a verdict"
+	}
+
+	return "the proposals are not correct: " + strings.Join(parts, "; ")
 }
 
 // proposalOutcome returns how a proposal counted, given the index of the

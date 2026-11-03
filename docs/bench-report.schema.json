@@ -40,7 +40,8 @@
       "properties": {
         "verdict": {"type": "number", "minimum": 0},
         "rootCause": {"type": "number", "minimum": 0},
-        "evidence": {"type": "number", "minimum": 0}
+        "evidence": {"type": "number", "minimum": 0},
+        "proposals": {"type": "number", "minimum": 0}
       }
     },
     "metrics": {"$ref": "#/$defs/metrics"},
@@ -65,7 +66,7 @@
       "additionalProperties": false,
       "required": ["name", "limit", "value", "passed"],
       "properties": {
-        "name": {"enum": ["verdictAccuracy", "fpPrecision", "rootCauseMatch", "maxCostPerRunUSD", "baseline"]},
+        "name": {"enum": ["verdictAccuracy", "fpPrecision", "rootCauseMatch", "proposalCorrect", "maxCostPerRunUSD", "baseline"]},
         "limit": {"type": "number"},
         "value": {"type": ["number", "null"]},
         "passed": {"type": "boolean"},
@@ -123,6 +124,7 @@
         "rootCauseMatch": {"$ref": "#/$defs/share"},
         "rootCauseScore": {"$ref": "#/$defs/share"},
         "evidence": {"$ref": "#/$defs/share"},
+        "proposalCorrect": {"$ref": "#/$defs/share"},
         "sourceFailuresReported": {"$ref": "#/$defs/share"},
         "overall": {"$ref": "#/$defs/share"},
         "judgeErrors": {"$ref": "#/$defs/count"},
@@ -154,6 +156,7 @@
         "correct": {"$ref": "#/$defs/count"},
         "rootCauseMean": {"$ref": "#/$defs/share"},
         "rootCauseSD": {"type": ["number", "null"], "minimum": 0},
+        "proposalCorrect": {"type": ["integer", "null"], "minimum": 0},
         "costUSD": {"$ref": "#/$defs/range"},
         "durationMs": {"$ref": "#/$defs/range"}
       }
@@ -213,12 +216,24 @@
         "evidenceScore": {"$ref": "#/$defs/share"},
         "sourcesReported": {"type": ["boolean", "null"]},
         "missingSources": {"type": "array", "items": {"type": "string"}},
+        "proposalCorrect": {"type": ["boolean", "null"]},
+        "proposals": {"type": "array", "items": {"$ref": "#/$defs/proposal"}},
+        "missingProposals": {"type": "array", "items": {"type": "string"}},
         "toolCalls": {"$ref": "#/$defs/count"},
         "tools": {"type": "array", "items": {"$ref": "#/$defs/toolCall"}},
         "inputTokens": {"$ref": "#/$defs/count"},
         "outputTokens": {"$ref": "#/$defs/count"},
         "costMicros": {"$ref": "#/$defs/count"},
         "durationMs": {"$ref": "#/$defs/count"}
+      }
+    },
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "outcome"],
+      "properties": {
+        "action": {"type": "string"},
+        "outcome": {"enum": ["expected", "acceptable", "unexpected"]}
       }
     },
     "toolCall": {
