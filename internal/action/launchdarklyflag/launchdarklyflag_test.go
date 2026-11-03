@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/actiontest"
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
 	"github.com/nourtalaat/sidekick/internal/registry"
 )
@@ -68,6 +69,18 @@ func TestSpecListsTheLimits(t *testing.T) {
 	require.Equal(t, "flag-off", spec.Name)
 	require.Contains(t, spec.Description, "project shop, environments production, flags checkout-*")
 	require.JSONEq(t, string(paramsSchema), string(spec.ParamsSchema))
+}
+
+func TestSpecSnapshot(t *testing.T) {
+	t.Parallel()
+
+	api := fakehttp.New(t)
+	cfg := limitedConfig(api)
+	cfg.Limits = Limits{Projects: []Project{
+		{Key: "quillcart-web", Environments: []string{"production", "staging"}, Flags: []string{"checkout-*", "promo-*"}},
+	}}
+
+	actiontest.CheckSpecSnapshot(t, Type, buildAction(t, api, cfg))
 }
 
 func TestApprovalOnly(t *testing.T) {

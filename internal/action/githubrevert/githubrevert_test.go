@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/actiontest"
 	"github.com/nourtalaat/sidekick/internal/action/githubgit"
 )
 
@@ -84,6 +85,19 @@ func TestSpecTellsTheModelTheLimits(t *testing.T) {
 	}
 
 	require.NotContains(t, strings.ToLower(spec.Description), "draft: false")
+}
+
+func TestSpecSnapshot(t *testing.T) {
+	t.Parallel()
+
+	b := newBed(t, func(l *Limits) {
+		l.Repos = []string{
+			"quillcart/cart-api", "quillcart/billing-portal", "quillcart/deploy-config",
+			"quillcart/order-intake", "quillcart/web-shop", "quillcart/ledger-api",
+		}
+	})
+
+	actiontest.CheckSpecSnapshot(t, TypeName, b.rev)
 }
 
 func TestReadBlob(t *testing.T) {

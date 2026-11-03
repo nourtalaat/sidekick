@@ -1,0 +1,39 @@
+{
+  "name": "ecs-rollback",
+  "description": "Puts an Amazon ECS service back on an earlier revision of its task definition, through the ECS API. It changes only the task definition: the service starts a new deployment of the older revision. The older revision is the highest ACTIVE revision of the same task definition family that is below the one the service runs, or the one revisionsBack such revisions below. That revision may never have been deployed: check its image in the proposal. It works only for services on the ECS deployment controller. Accounts: 111122223333. Regions: us-east-1. Clusters: quillcart-prod. Services: order-intake, notify-*. revisionsBack is at most 1.",
+  "paramsSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "account": {
+        "description": "The 12-digit AWS account ID. It may be left out when the action works in only one account.",
+        "type": "string"
+      },
+      "cluster": {
+        "description": "The name of the ECS cluster.",
+        "minLength": 1,
+        "type": "string"
+      },
+      "region": {
+        "description": "The AWS Region, for example us-east-1. It may be left out when the action works in only one Region.",
+        "type": "string"
+      },
+      "revisionsBack": {
+        "default": 1,
+        "description": "How many ACTIVE task definition revisions of the service's family to go back from the one it runs. Default 1.",
+        "maximum": 1,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "service": {
+        "description": "The name of the ECS service.",
+        "minLength": 1,
+        "type": "string"
+      }
+    },
+    "required": [
+      "cluster",
+      "service"
+    ],
+    "type": "object"
+  }
+}
