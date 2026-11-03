@@ -100,6 +100,9 @@ type prepared struct {
 	snapshot json.RawMessage
 	// undoable says the action implements action.Undoer.
 	undoable bool
+	// fixKind is what the action says in action.MonitorFixer, and empty for
+	// an action that does not implement it.
+	fixKind action.FixKind
 }
 
 // Spec returns the propose_action tool for an investigation of route in
@@ -283,6 +286,7 @@ func (s *Service) prepare(ctx context.Context, req ProposeRequest) (prepared, st
 	}
 
 	p.params, p.reason = params, s.redactReason(reason)
+	p.fixKind = s.fixKindOf(ctx, in.Action, a)
 
 	if refusal := s.snapshot(ctx, in.Action, &p); refusal != "" {
 		return p, refusal
@@ -359,6 +363,25 @@ func (s *Service) snapshot(ctx context.Context, name string, p *prepared) string
 	return ""
 }
 
+// fixKindOf returns the kind the action reports through action.MonitorFixer,
+// or "" when it does not implement it or reports a kind Sidekick does not
+// know, which is logged and stored as none.
+func (s *Service) fixKindOf(ctx context.Context, name string, a action.Action) action.FixKind {
+	fixer, ok := a.(action.MonitorFixer)
+	if !ok {
+		return ""
+	}
+
+	switch kind := fixer.FixKind(); kind {
+	case action.FixAPI, action.FixPullRequest:
+		return kind
+	default:
+		s.log.WarnContext(ctx, "action reports an unknown fix kind, so its proposals count as fixing nothing", "action", name, "fix_kind", string(kind))
+
+		return ""
+	}
+}
+
 // refusalText is the text of err for the model: redacted and cut.
 func (s *Service) refusalText(err error) string {
 	return cut(s.redactReason(err.Error()), maxRefusalChars)
@@ -419,6 +442,7 @@ func (s *Service) store(ctx context.Context, tx pgx.Tx, req ProposeRequest, p pr
 		ExpiresAt:       now.Add(s.opts.TTL),
 		Snapshot:        p.snapshot,
 		Undoable:        p.undoable,
+		FixKind:         fixKindText(p.fixKind),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ProposeResult{ID: id, Action: p.action}, false, nil
@@ -517,4 +541,13 @@ func (s *Service) approveByPolicy(ctx context.Context, tx pgx.Tx, route string, 
 // depends only on the call, so repeating the call finds the same row.
 func proposalID(investigationID uuid.UUID, toolCallID string) uuid.UUID {
 	return uuid.NewSHA1(proposalNamespace, []byte(investigationID.String()+"/"+toolCallID))
+}
+
+// fixKindText returns the stored form of kind: nil for none.
+func fixKindText(kind action.FixKind) *string {
+	if kind == "" {
+		return nil
+	}
+
+	return new(string(kind))
 }

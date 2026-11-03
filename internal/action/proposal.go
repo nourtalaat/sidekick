@@ -89,6 +89,9 @@ type Proposal struct {
 	// Undoable says an approver may undo it: it succeeded, the action can
 	// undo it, and it is not an undo itself.
 	Undoable bool
+	// FixKind says how the proposal fixes a noisy monitor, and is empty for
+	// a proposal that fixes none. An undo is empty too.
+	FixKind FixKind
 	// UndoOf is set on a proposal that restores an earlier one.
 	UndoOf string
 	Result *Result
