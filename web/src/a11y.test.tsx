@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Button } from "./components/Button";
 import { Card } from "./components/Card";
+import { ProposalCard } from "./components/ProposalCard";
 import { EmptyState } from "./components/EmptyState";
 import { QueryError } from "./components/QueryError";
 import { StatusBadge, VerdictBadge } from "./components/Badge";
@@ -11,6 +12,7 @@ import { ApiError } from "./api/client";
 import { LoginPage } from "./pages/LoginPage";
 import { THEME_STORAGE_KEY } from "./theme";
 import { renderApp, renderWithProviders, stubMedia, wcagViolations } from "./test/helpers";
+import { proposal, pullRequest } from "./test/actionProposals";
 import { ADMIN } from "./test/rules";
 
 // The theme comes from the stored choice, or from the system when there is none.
@@ -69,6 +71,12 @@ describe.each(THEMES)("accessibility, theme $name", (theme) => {
       const user = userEvent.setup();
       const { container } = renderApp({ route: "/investigations" });
       await user.click(await screen.findByRole("button", { name: /Ada Lovelace/ }));
+
+      expect(await wcagViolations(container)).toEqual([]);
+    });
+
+    it.each(["open", "merged", "closed"] as const)("has no WCAG 2.2 AA violations on a proposal card with a %s pull request", async (state) => {
+      const { container } = renderWithProviders(<ProposalCard proposal={proposal({ status: "succeeded", pullRequest: pullRequest({ state }) })} canDecide={false} />);
 
       expect(await wcagViolations(container)).toEqual([]);
     });
