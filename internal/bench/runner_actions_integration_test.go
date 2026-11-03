@@ -38,7 +38,7 @@ const (
 // the verdict.
 func restartTurns() []modeltest.Turn {
 	return []modeltest.Turn{
-		modeltest.ToolUse(testUsage, modeltest.Call("c1", "github__list_commits", `{"repo": "acme/checkout"}`)),
+		modeltest.ToolUse(testUsage, modeltest.Call("c1", "github__list_commits", `{"repo": "acme/checkout", "since": "2026-05-04T06:00:00Z"}`)),
 		modeltest.ToolUse(testUsage, modeltest.Call("p1", "propose_action", badProposal)),
 		modeltest.ToolUse(testUsage, modeltest.Call("p2", "propose_action", goodProposal)),
 		modeltest.ToolUse(testUsage, modeltest.Call("v1", report.SubmitVerdictTool, restartReport)),
