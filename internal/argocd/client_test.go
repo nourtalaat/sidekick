@@ -142,6 +142,70 @@ func TestClientGetApplication(t *testing.T) {
 	}
 }
 
+func TestClientRollback(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		response fakehttp.Response
+		wantCode int
+		wantMsg  string
+	}{
+		{name: "an accepted rollback", response: fakehttp.Response{Headers: jsonHeaders, BodyFile: "fixture/application.json"}},
+		{
+			name:     "auto-sync is on",
+			response: failed(http.StatusBadRequest, "rollback cannot be initiated when auto-sync is enabled"),
+			wantCode: http.StatusBadRequest,
+			wantMsg:  "rollback cannot be initiated when auto-sync is enabled",
+		},
+		{
+			name:     "an operation runs already",
+			response: failed(http.StatusBadRequest, "another operation is already in progress"),
+			wantCode: http.StatusBadRequest,
+			wantMsg:  "another operation is already in progress",
+		},
+		{
+			name:     "a token that may not sync",
+			response: failed(http.StatusForbidden, "permission denied"),
+			wantCode: http.StatusForbidden,
+			wantMsg:  "permission denied",
+		},
+		{name: "a server error", response: fakehttp.Response{Status: http.StatusBadGateway, Body: []byte("bad gateway")}, wantCode: http.StatusBadGateway},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			api := fakehttp.New(t)
+			api.Handle(http.MethodPost, "/api/v1/applications/checkout/rollback", tt.response)
+			api.ExpectAllCalled()
+
+			c := newTestClient(t, api, tokenSecrets(t))
+
+			app, err := c.Rollback(t.Context(), AppRef{Project: "shop", Name: "checkout"}, 5)
+
+			reqs := api.Requests()
+			require.Len(t, reqs, 1)
+			require.JSONEq(t, `{"id": 5, "project": "shop", "appNamespace": "argocd", "prune": false}`, string(reqs[0].Body))
+			require.Equal(t, "Bearer "+testToken, reqs[0].Header.Get("Authorization"))
+			require.Equal(t, "application/json", reqs[0].Header.Get("Content-Type"))
+
+			if tt.wantCode == 0 {
+				require.NoError(t, err)
+				require.Equal(t, "checkout", app.Metadata.Name)
+
+				return
+			}
+
+			se, ok := errors.AsType[*StatusError](err)
+			require.True(t, ok, "got %v", err)
+			require.Equal(t, tt.wantCode, se.Code)
+			require.Equal(t, tt.wantMsg, se.Message)
+		})
+	}
+}
+
 func TestClientListApplications(t *testing.T) {
 	t.Parallel()
 
