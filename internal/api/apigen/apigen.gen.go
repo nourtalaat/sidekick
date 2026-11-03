@@ -871,6 +871,27 @@ func (e StrategyProposalStatus) Valid() bool {
 	}
 }
 
+// Defines values for Theme.
+const (
+	ThemeDark   Theme = "dark"
+	ThemeLight  Theme = "light"
+	ThemeSystem Theme = "system"
+)
+
+// Valid indicates whether the value is a known member of the Theme enum.
+func (e Theme) Valid() bool {
+	switch e {
+	case ThemeDark:
+		return true
+	case ThemeLight:
+		return true
+	case ThemeSystem:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UsedMemoryMatch.
 const (
 	UsedMemoryFingerprint  UsedMemoryMatch = "fingerprint"
@@ -1898,6 +1919,10 @@ type Me struct {
 	// Name The user's name, or the token's name.
 	Name string `json:"name"`
 	Role Role   `json:"role"`
+
+	// Theme The theme the signed-in user chose. Absent until they choose one,
+	// and for an API token.
+	Theme *Theme `json:"theme,omitempty"`
 }
 
 // MeKind Whether the caller is a signed-in user or an API token.
@@ -3488,6 +3513,14 @@ type StrategyVersionList struct {
 	Versions []StrategyVersion `json:"versions"`
 }
 
+// Theme defines model for Theme.
+type Theme string
+
+// ThemeUpdate defines model for ThemeUpdate.
+type ThemeUpdate struct {
+	Theme Theme `json:"theme"`
+}
+
 // Token defines model for Token.
 type Token struct {
 	CreatedAt time.Time `json:"createdAt"`
@@ -3978,6 +4011,9 @@ type CreateListenerJSONRequestBody = NewListener
 // UpdateListenerJSONRequestBody defines body for UpdateListener for application/json ContentType.
 type UpdateListenerJSONRequestBody = ListenerUpdate
 
+// SetMyThemeJSONRequestBody defines body for SetMyTheme for application/json ContentType.
+type SetMyThemeJSONRequestBody = ThemeUpdate
+
 // UpdateMemoryEntryJSONRequestBody defines body for UpdateMemoryEntry for application/json ContentType.
 type UpdateMemoryEntryJSONRequestBody = MemoryEntryUpdate
 
@@ -4109,6 +4145,9 @@ type ServerInterface interface {
 	// GetMe The signed-in user or API token, and its role
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
+	// SetMyTheme Save the signed-in user's theme choice
+	// (PUT /me/theme)
+	SetMyTheme(w http.ResponseWriter, r *http.Request)
 	// ListMemoryEntries Memory entries, newest confirmation first, a page at a time
 	// (GET /memory/entries)
 	ListMemoryEntries(w http.ResponseWriter, r *http.Request, params ListMemoryEntriesParams)
@@ -5397,6 +5436,20 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetMyTheme operation middleware
+func (siw *ServerInterfaceWrapper) SetMyTheme(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetMyTheme(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6996,6 +7049,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me", wrapper.GetMe)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/theme", wrapper.SetMyTheme)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/config", wrapper.GetConfig)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/jobs", wrapper.ListJobs)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/jobs/{id}/retry", wrapper.RetryJob)
@@ -8293,6 +8347,39 @@ type GetMedefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetMedefaultApplicationProblemPlusJSONResponse) VisitGetMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetMyThemeRequestObject struct {
+	Body *SetMyThemeJSONRequestBody
+}
+
+type SetMyThemeResponseObject interface {
+	VisitSetMyThemeResponse(w http.ResponseWriter) error
+}
+
+type SetMyTheme204Response struct {
+}
+
+func (response SetMyTheme204Response) VisitSetMyThemeResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type SetMyThemedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response SetMyThemedefaultApplicationProblemPlusJSONResponse) VisitSetMyThemeResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -9955,6 +10042,9 @@ type StrictServerInterface interface {
 	// GetMe The signed-in user or API token, and its role
 	// (GET /me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
+	// SetMyTheme Save the signed-in user's theme choice
+	// (PUT /me/theme)
+	SetMyTheme(ctx context.Context, request SetMyThemeRequestObject) (SetMyThemeResponseObject, error)
 	// ListMemoryEntries Memory entries, newest confirmation first, a page at a time
 	// (GET /memory/entries)
 	ListMemoryEntries(ctx context.Context, request ListMemoryEntriesRequestObject) (ListMemoryEntriesResponseObject, error)
@@ -10956,6 +11046,37 @@ func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetMeResponseObject); ok {
 		if err := validResponse.VisitGetMeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetMyTheme operation middleware
+func (sh *strictHandler) SetMyTheme(w http.ResponseWriter, r *http.Request) {
+	var request SetMyThemeRequestObject
+
+	var body SetMyThemeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetMyTheme(ctx, request.(SetMyThemeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetMyTheme")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetMyThemeResponseObject); ok {
+		if err := validResponse.VisitSetMyThemeResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

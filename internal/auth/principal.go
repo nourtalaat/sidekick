@@ -44,6 +44,10 @@ type Principal struct {
 	// CSRFToken is the token a session's requests that change something
 	// must send. It is empty for an API token.
 	CSRFToken string
+	// Theme is the theme the user chose in the web UI: system, light or
+	// dark. It is empty for a user who never chose one, and for an API
+	// token.
+	Theme string
 }
 
 type principalKey struct{}
