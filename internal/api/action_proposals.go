@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -48,6 +49,8 @@ const (
 	detailExpired   = "This proposal expired before anyone decided it."
 	detailLongNote  = "note must be at most 500 characters."
 
+	detailNoActionNames = "No actions are configured, so no action can be filtered."
+
 	detailApproveByPerson = "An action is approved by a person who is signed in, not by an API token."
 	detailUndoByPerson    = "An action is undone by a person who is signed in, not by an API token."
 	detailUndoRunning     = "An undo of this proposal is running already."
@@ -80,6 +83,11 @@ func (s *server) ListProposals(ctx context.Context, req apigen.ListProposalsRequ
 		}
 	}
 
+	actionName, err := s.proposalActionFilter(req.Params.Action)
+	if err != nil {
+		return nil, fmt.Errorf("check the action filter: %w", err)
+	}
+
 	limit := defaultProposalsPage
 	if req.Params.Limit != nil {
 		limit = *req.Params.Limit
@@ -100,7 +108,7 @@ func (s *server) ListProposals(ctx context.Context, req apigen.ListProposalsRequ
 		after = c
 	}
 
-	views, err := actionproposals.List(ctx, s.pool, actionproposals.ListOptions{Statuses: statuses, After: after, PageSize: int32(limit + 1)}) //nolint:gosec // limit is at most maxProposalsPage.
+	views, err := actionproposals.List(ctx, s.pool, actionproposals.ListOptions{Statuses: statuses, Action: actionName, After: after, PageSize: int32(limit + 1)}) //nolint:gosec // limit is at most maxProposalsPage.
 	if err != nil {
 		return nil, fmt.Errorf("list proposals: %w", err)
 	}
@@ -119,6 +127,45 @@ func (s *server) ListProposals(ctx context.Context, req apigen.ListProposalsRequ
 	}
 
 	return list, nil
+}
+
+// ListProposalActions returns the names of the actions in the config,
+// sorted, for the action filter of the review queue.
+func (s *server) ListProposalActions(_ context.Context, _ apigen.ListProposalActionsRequestObject) (apigen.ListProposalActionsResponseObject, error) {
+	return apigen.ListProposalActions200JSONResponse{Actions: s.actionNames()}, nil
+}
+
+// proposalActionFilter returns the action to list: the name asked for, or
+// empty for every action. A name that the config does not define is a 400
+// that lists the names.
+func (s *server) proposalActionFilter(asked *string) (string, error) {
+	if asked == nil || *asked == "" {
+		return "", nil
+	}
+
+	names := s.actionNames()
+	if slices.Contains(names, *asked) {
+		return *asked, nil
+	}
+
+	if len(names) == 0 {
+		return "", problemf(http.StatusBadRequest, detailNoActionNames)
+	}
+
+	return "", problemf(http.StatusBadRequest, "action must be one of %s.", strings.Join(names, ", "))
+}
+
+// actionNames returns the names of the actions in the config, sorted. It
+// reads the config in memory, so it is empty when the server has none.
+func (s *server) actionNames() []string {
+	if s.cfg == nil {
+		return []string{}
+	}
+
+	names := slices.AppendSeq(make([]string, 0, len(s.cfg.Actions.Definitions)), maps.Keys(s.cfg.Actions.Definitions))
+	slices.Sort(names)
+
+	return names
 }
 
 // ApproveProposal approves a proposal that waits for a decision.

@@ -115,7 +115,7 @@ type filterSet struct {
 	route, service, model, verdict *string
 }
 
-// qualityPlans are the plan cases of the four quality queries for a range.
+// qualityPlans are the plan cases of the five quality queries for a range.
 // A range that must use the index also reads no table whole.
 func qualityPlans(prefix string, from, to pgtype.Date, index bool, f filterSet) []planCase {
 	wantIndex := []string(nil)
@@ -146,6 +146,15 @@ func qualityPlans(prefix string, from, to pgtype.Date, index bool, f filterSet) 
 			name: prefix + "QualityMatrix",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.QualityMatrix(ctx, db.QualityMatrixParams{FromDay: from, ToDay: to, Route: f.route, Service: f.service, Model: f.model, Verdict: f.verdict})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: wantIndex, scansTable: !index,
+		},
+		{
+			name: prefix + "QualityMatrixByDay",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.QualityMatrixByDay(ctx, db.QualityMatrixByDayParams{FromDay: from, ToDay: to, Route: f.route, Service: f.service, Model: f.model, Verdict: f.verdict})
 
 				return fmt.Errorf("run query: %w", err)
 			},

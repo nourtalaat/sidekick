@@ -2160,6 +2160,12 @@ type Proposal struct {
 	Undoable bool `json:"undoable"`
 }
 
+// ProposalActionList defines model for ProposalActionList.
+type ProposalActionList struct {
+	// Actions The configured action names, sorted.
+	Actions []string `json:"actions"`
+}
+
 // ProposalChange One field that differs. `before` and `after` are the JSON values as
 // text, like `paramsText`: characters that could hide something are
 // written as \u escapes, and nothing is cut. They come from the
@@ -2201,6 +2207,9 @@ type QualityDay struct {
 	Correct int64              `json:"correct"`
 	Day     openapi_types.Date `json:"day"`
 	Rated   int64              `json:"rated"`
+
+	// Scores Precision and recall of each verdict that was given or confirmed on the day, worked out from that day's confusion matrix in the same way as `perVerdict` for the range, with the same filters. Verdicts come in the order of a report. Empty when every rating of the day was wrong without a real verdict. A single day has few ratings, so the numbers move a lot.
+	Scores []VerdictScore `json:"scores"`
 }
 
 // QualityStats defines model for QualityStats.
@@ -3509,6 +3518,13 @@ type ListProposalsParams struct {
 	// Status Only proposals with one of these statuses. The default is proposed.
 	Status *[]ProposalStatus `form:"status,omitempty" json:"status,omitempty"`
 
+	// Action Only proposals of this action. It is a name from the `actions`
+	// section of the config, as `Proposal.action` holds it;
+	// `GET /proposals/actions` lists them. It combines with `status`
+	// and `cursor`. A name that is not configured answers 400, and the
+	// detail lists the names.
+	Action *string `form:"action,omitempty" json:"action,omitempty"`
+
 	// Cursor The nextCursor of the page before.
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
@@ -3784,6 +3800,9 @@ type ServerInterface interface {
 	// ListProposals Action proposals, newest first, a page at a time
 	// (GET /proposals)
 	ListProposals(w http.ResponseWriter, r *http.Request, params ListProposalsParams)
+	// ListProposalActions The names of the actions the config defines
+	// (GET /proposals/actions)
+	ListProposalActions(w http.ResponseWriter, r *http.Request)
 	// ApproveProposal Approve an action proposal
 	// (POST /proposals/{id}/approve)
 	ApproveProposal(w http.ResponseWriter, r *http.Request, id ProposalID)
@@ -5232,6 +5251,19 @@ func (siw *ServerInterfaceWrapper) ListProposals(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// ------------- Optional query parameter "action" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "action", r.URL.Query(), &params.Action, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "action"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "action", Err: err})
+		}
+		return
+	}
+
 	// ------------- Optional query parameter "cursor" -------------
 
 	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
@@ -5260,6 +5292,20 @@ func (siw *ServerInterfaceWrapper) ListProposals(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListProposals(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListProposalActions operation middleware
+func (siw *ServerInterfaceWrapper) ListProposalActions(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListProposalActions(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6591,6 +6637,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{id}/resolve", wrapper.ResolveInvestigation)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/watchers/{id}/stop", wrapper.StopWatcher)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/proposals", wrapper.ListProposals)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/proposals/actions", wrapper.ListProposalActions)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/proposals/{id}/approve", wrapper.ApproveProposal)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/proposals/{id}/reject", wrapper.RejectProposal)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/proposals/{id}/undo", wrapper.UndoProposal)
@@ -8004,6 +8051,44 @@ func (response ListProposalsdefaultApplicationProblemPlusJSONResponse) VisitList
 	return err
 }
 
+type ListProposalActionsRequestObject struct {
+}
+
+type ListProposalActionsResponseObject interface {
+	VisitListProposalActionsResponse(w http.ResponseWriter) error
+}
+
+type ListProposalActions200JSONResponse ProposalActionList
+
+func (response ListProposalActions200JSONResponse) VisitListProposalActionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListProposalActionsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListProposalActionsdefaultApplicationProblemPlusJSONResponse) VisitListProposalActionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ApproveProposalRequestObject struct {
 	Id ProposalID `json:"id"`
 }
@@ -9399,6 +9484,9 @@ type StrictServerInterface interface {
 	// ListProposals Action proposals, newest first, a page at a time
 	// (GET /proposals)
 	ListProposals(ctx context.Context, request ListProposalsRequestObject) (ListProposalsResponseObject, error)
+	// ListProposalActions The names of the actions the config defines
+	// (GET /proposals/actions)
+	ListProposalActions(ctx context.Context, request ListProposalActionsRequestObject) (ListProposalActionsResponseObject, error)
 	// ApproveProposal Approve an action proposal
 	// (POST /proposals/{id}/approve)
 	ApproveProposal(ctx context.Context, request ApproveProposalRequestObject) (ApproveProposalResponseObject, error)
@@ -10490,6 +10578,30 @@ func (sh *strictHandler) ListProposals(w http.ResponseWriter, r *http.Request, p
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListProposalsResponseObject); ok {
 		if err := validResponse.VisitListProposalsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListProposalActions operation middleware
+func (sh *strictHandler) ListProposalActions(w http.ResponseWriter, r *http.Request) {
+	var request ListProposalActionsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListProposalActions(ctx, request.(ListProposalActionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListProposalActions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListProposalActionsResponseObject); ok {
+		if err := validResponse.VisitListProposalActionsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

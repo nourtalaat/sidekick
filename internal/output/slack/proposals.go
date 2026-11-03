@@ -194,13 +194,24 @@ func undoableProposal(p action.Proposal) []block {
 		Type: elemButton, ActionID: ActionUndoProposal, Text: plain("Undo"), Value: p.ID,
 		Confirm: &confirmDialog{
 			Title:   plain("Undo this change?"),
-			Text:    plain("Sidekick puts back the fields it changed in " + undoTarget(p) + ". If someone changed them since, you see the difference first."),
+			Text:    plain(undoText(p)),
 			Confirm: plain("Undo"),
 			Deny:    plain("Not now"),
 		},
 	}
 
 	return append(blocks, block{Type: blockActions, BlockID: blockIDUndo + ":" + p.ID, Buttons: []button{undo}}, contextBlock("Needs the approver role"))
+}
+
+// undoText is what the Undo button asks before it undoes: for a change, that
+// Sidekick puts back the fields it changed, and for something the action
+// created, that Sidekick removes it.
+func undoText(p action.Proposal) string {
+	if p.Snapshot != nil && p.Snapshot.Creates() {
+		return "Sidekick ends what it created in " + undoTarget(p) + ". If someone changed it since, you see the difference first."
+	}
+
+	return "Sidekick puts back the fields it changed in " + undoTarget(p) + ". If someone changed them since, you see the difference first."
 }
 
 // undoTarget names what an undo restores, for the dialog.

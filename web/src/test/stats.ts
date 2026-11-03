@@ -14,8 +14,24 @@ export function quality(overrides: Partial<QualityStats> = {}): QualityStats {
     totals: { rated: 17, correct: 13, accuracy: 13 / 17 },
     previous: { rated: 4, correct: 3, accuracy: 0.75 },
     days: [
-      { day: "2026-10-20", rated: 13, correct: 11 },
-      { day: "2026-10-21", rated: 4, correct: 2 },
+      {
+        day: "2026-10-20",
+        rated: 13,
+        correct: 11,
+        scores: [
+          { verdict: "true_positive", predicted: 3, actual: 5, hits: 3, precision: 1, recall: 0.6 },
+          { verdict: "false_positive", predicted: 10, actual: 8, hits: 8, precision: 0.8, recall: 1 },
+        ],
+      },
+      {
+        day: "2026-10-21",
+        rated: 4,
+        correct: 2,
+        scores: [
+          { verdict: "true_positive", predicted: 3, actual: 2, hits: 2, precision: 2 / 3, recall: 1 },
+          { verdict: "false_positive", predicted: 0, actual: 1, hits: 0, recall: 0 },
+        ],
+      },
     ],
     matrix: [
       { predicted: "false_positive", confirmed: "false_positive", n: 8 },

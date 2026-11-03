@@ -1,0 +1,81 @@
+{
+  "name": "monitor-pr",
+  "description": "Opens a pull request that changes monitor definitions kept in Git: a threshold, a duration, a filter, an exclusion, or the deletion of a monitor. Read the current files first, then give the whole new content of each file you change. Allowed repositories: acme/monitors. Base branch: main. At most 3 files and 40 added and removed lines in all. Allowed paths and their formats: prometheus/rules/** (prometheus_rules), datadog/** (terraform), grafana/alerting/** (grafana_alert_file). Every file is checked with the validator for its format; if it finds errors you get them back and no pull request is opened.",
+  "paramsSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "repo",
+      "baseBranch",
+      "title",
+      "body",
+      "files"
+    ],
+    "properties": {
+      "repo": {
+        "type": "string",
+        "description": "The repository, as owner/name."
+      },
+      "baseBranch": {
+        "type": "string",
+        "description": "The branch the pull request targets."
+      },
+      "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+      },
+      "body": {
+        "type": "string",
+        "maxLength": 8000,
+        "description": "The pull request description: what changes and why."
+      },
+      "files": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 25,
+        "description": "The files to change. Give the whole new content of each, or delete it.",
+        "items": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "content"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "The path from the root of the repository."
+                },
+                "content": {
+                  "type": "string",
+                  "description": "The whole new content of the file."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "delete"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "The path from the root of the repository."
+                },
+                "delete": {
+                  "type": "boolean",
+                  "const": true
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

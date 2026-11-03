@@ -18,6 +18,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	actionmock "github.com/nourtalaat/sidekick/internal/action/mock"
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/source"
@@ -34,6 +35,10 @@ var scenarioExtensions = []string{".yaml", ".yml"}
 
 // idPattern is what a scenario ID may look like.
 var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,99}$`)
+
+// actionNamePattern is what the name of a mock action may look like, the
+// rule the config file has for action names.
+var actionNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,23}$`)
 
 // verdicts are the verdicts expected.verdict and expected.acceptable may
 // name.
@@ -61,6 +66,9 @@ type Scenario struct {
 	Event Event `yaml:"event"`
 	// Sources are the mock sources, by source name.
 	Sources map[string]mock.Config `yaml:"sources"`
+	// Actions are the mock actions, by action name. The route lists them.
+	// A mock action records the proposals the model makes and never runs.
+	Actions map[string]actionmock.Config `yaml:"actions,omitempty"`
 	// Default is what a call no fixture matches returns, for every source
 	// that does not set its own. Empty means mock.DefaultNoData.
 	Default mock.Default `yaml:"default,omitempty"`
@@ -76,8 +84,14 @@ type Scenario struct {
 
 // Route holds the route settings of a scenario's run.
 type Route struct {
-	// Mode is the action mode. Only read-only exists until M4.
+	// Mode is the action mode: read-only, the default, or approved, where
+	// the model may propose the route's actions. read-write is refused,
+	// because nothing runs in a benchmark.
 	Mode action.Mode `yaml:"mode,omitempty"`
+	// Actions are the names of the mock actions the model may propose, in
+	// the order the model reads them. Approved mode needs at least one;
+	// read-only mode has none.
+	Actions []string `yaml:"actions,omitempty"`
 	// Details are fixed facts about the route that the prompt shows, as
 	// the details of a route in the config file are. config.CheckRouteDetails
 	// has the limits.
@@ -275,9 +289,7 @@ func (s Scenario) validate() []string {
 		add("now: required")
 	}
 
-	if s.Route.Mode != "" && s.Route.Mode != action.ReadOnly {
-		add("route.mode: mode %q is not available yet: runs are read-only until action modes arrive in M4", s.Route.Mode)
-	}
+	problems = append(problems, s.validateRoute()...)
 
 	for _, problem := range config.CheckRouteDetails(s.Route.Details) {
 		add("route.details: %s", problem)
@@ -319,9 +331,77 @@ func (s Scenario) validate() []string {
 	return problems
 }
 
+// validateRoute checks the route's mode and the mock actions with it, and
+// returns every problem as "<field>: <problem>".
+func (s Scenario) validateRoute() []string {
+	var problems []string
+
+	add := func(format string, args ...any) {
+		problems = append(problems, fmt.Sprintf(format, args...))
+	}
+
+	approved := s.Route.Mode == action.Approved
+
+	switch s.Route.Mode {
+	case "", action.ReadOnly, action.Approved:
+	case action.ReadWrite:
+		add("route.mode: %s is not allowed in a scenario, because nothing runs in a benchmark; use %s to let the model propose actions", action.ReadWrite, action.Approved)
+	default:
+		add("route.mode: unknown mode %q; use %s or %s", s.Route.Mode, action.ReadOnly, action.Approved)
+	}
+
+	switch {
+	case approved && len(s.Route.Actions) == 0:
+		add("route.actions: list at least one action: mode %s lets the model propose only these", action.Approved)
+	case !approved && len(s.Route.Actions) > 0:
+		add("route.actions: must be empty unless route.mode is %s", action.Approved)
+	}
+
+	if !approved && len(s.Actions) > 0 {
+		add("actions: need route.mode %s, since the model can propose actions only there", action.Approved)
+	}
+
+	listed := map[string]bool{}
+
+	for i, name := range s.Route.Actions {
+		if listed[name] {
+			add("route.actions[%d]: %q is listed twice", i, name)
+		}
+
+		listed[name] = true
+
+		if _, ok := s.Actions[name]; !ok {
+			add("route.actions[%d]: %q is not an action of the scenario", i, name)
+		}
+	}
+
+	for _, name := range s.ActionNames() {
+		if !actionNamePattern.MatchString(name) {
+			add("actions.%s: the name must start with a lower-case letter, hold only lower-case letters, digits and '-', and have at most 24 characters", name)
+		}
+
+		if approved && !listed[name] {
+			add("actions.%s: not listed in route.actions, so the model could never propose it", name)
+		}
+
+		if err := s.Actions[name].Validate(); err != nil {
+			for line := range strings.Lines(err.Error()) {
+				add("actions.%s.%s", name, strings.TrimSuffix(line, "\n"))
+			}
+		}
+	}
+
+	return problems
+}
+
 // SourceNames returns the names of the scenario's sources, sorted.
 func (s Scenario) SourceNames() []string {
 	return slices.Sorted(maps.Keys(s.Sources))
+}
+
+// ActionNames returns the names of the scenario's mock actions, sorted.
+func (s Scenario) ActionNames() []string {
+	return slices.Sorted(maps.Keys(s.Actions))
 }
 
 // Body returns the event payload as the JSON a webhook delivery carries.
@@ -334,7 +414,8 @@ func (s Scenario) Body() ([]byte, error) {
 	return body, nil
 }
 
-// ResolveSnapshots makes each relative snapshot path relative to baseDir.
+// ResolveSnapshots makes each relative snapshot path, of a source's tools
+// and of an action's spec, relative to baseDir.
 // LoadScenarios does it for the files it reads; call it on a scenario read
 // from text with ParseScenario.
 func (s *Scenario) ResolveSnapshots(baseDir string) {
@@ -346,6 +427,13 @@ func (s *Scenario) ResolveSnapshots(baseDir string) {
 		if cfg.Tools.Snapshot != "" && !filepath.IsAbs(cfg.Tools.Snapshot) {
 			cfg.Tools.Snapshot = filepath.Join(baseDir, cfg.Tools.Snapshot)
 			s.Sources[name] = cfg
+		}
+	}
+
+	for name, cfg := range s.Actions {
+		if cfg.Spec.Snapshot != "" && !filepath.IsAbs(cfg.Spec.Snapshot) {
+			cfg.Spec.Snapshot = filepath.Join(baseDir, cfg.Spec.Snapshot)
+			s.Actions[name] = cfg
 		}
 	}
 }
