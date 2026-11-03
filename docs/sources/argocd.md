@@ -8,7 +8,8 @@ calls the Argo CD REST API with one API token, and it only reads. This page
 lists its keys, its tools and the exact access the token needs.
 
 It reads what is deployed. Changing an application, such as rolling it back,
-is a separate action that has a token of its own.
+is a separate action that has a token of its own: see
+[`argocd.rollback`](../configuration.md#argocdrollback).
 
 ## Config
 
