@@ -55,6 +55,7 @@ Kubernetes and cloud:
 Code and deploys:
 
 - `github`: commits, pull requests, releases and GitHub Actions runs. See [the GitHub source](sources/github.md).
+- `gitlab`: commits, merge requests, releases, pipelines, deployments and files of GitLab projects, on gitlab.com or self-managed. See [the GitLab source](sources/gitlab.md).
 
 Feature flags:
 
