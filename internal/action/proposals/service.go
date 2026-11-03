@@ -182,6 +182,13 @@ func (s *Service) notAllowed(route, actionName string) string {
 	return ""
 }
 
+// readWriteBlocked reports whether the action called name is approval-only
+// and the config does not allow it in read-write mode, so the route's
+// policy must not approve it.
+func (s *Service) readWriteBlocked(name string) bool {
+	return action.ReadWriteBlocked(s.opts.Actions[name])
+}
+
 // Decider is who approves or rejects a proposal: a Sidekick user, an API
 // token, or a Slack user who has no Sidekick user yet. At least one is set.
 type Decider struct {
