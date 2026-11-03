@@ -8,6 +8,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
+	"github.com/nourtalaat/sidekick/internal/action/githubgit"
 )
 
 // loaded is a proposal read against the head of the base branch: the
@@ -16,7 +17,7 @@ type loaded struct {
 	params  Params
 	owner   string
 	name    string
-	base    base
+	base    githubgit.Base
 	changes []gitchange.PlannedFile
 	reader  *reader
 	// files is the state at the base of each changed path.
@@ -45,12 +46,12 @@ func (p *PR) load(ctx context.Context, raw json.RawMessage) (*loaded, error) {
 
 	owner, name, _ := strings.Cut(params.Repo, "/")
 
-	head, err := baseOf(ctx, p.client, owner, name, params.BaseBranch)
+	head, err := githubgit.BaseOf(ctx, p.client, owner, name, params.BaseBranch)
 	if err != nil {
 		return nil, fmt.Errorf("read the base branch: %w", err)
 	}
 
-	r := newReader(p.client, owner, name, head.commit)
+	r := newReader(p.client, owner, name, head.Commit)
 	files := make(map[string]readFile, len(changes))
 
 	for _, c := range changes {
