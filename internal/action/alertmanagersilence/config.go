@@ -63,7 +63,7 @@ func (c *Config) Validate() error {
 
 	errs = append(errs, c.Check(httpauth.URL{Key: "url", Raw: c.URL})...)
 
-	if err := checkCreatedBy(c.CreatedBy); err != nil {
+	if err := CheckCreatedBy(c.CreatedBy); err != nil {
 		errs = append(errs, err)
 	}
 
@@ -87,9 +87,10 @@ func (c *Config) createdBy() string {
 	return c.CreatedBy
 }
 
-// checkCreatedBy checks that the name is short and has no control or
-// format characters. Empty is fine: it means the default.
-func checkCreatedBy(name string) error {
+// CheckCreatedBy checks that the name is short and has no control or
+// format characters. Empty is fine: it means the default. The config of
+// every backend uses it.
+func CheckCreatedBy(name string) error {
 	if len(name) > maxCreatedByBytes {
 		return fmt.Errorf("createdBy: longer than %d bytes", maxCreatedByBytes)
 	}
