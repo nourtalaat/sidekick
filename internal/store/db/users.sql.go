@@ -37,7 +37,7 @@ const insertUser = `-- name: InsertUser :one
 INSERT INTO users (id, oidc_issuer, oidc_subject, email, name, groups, role, created_at, last_login_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
 ON CONFLICT (oidc_issuer, oidc_subject) DO NOTHING
-RETURNING id, oidc_issuer, oidc_subject, email, name, groups, role, created_at, last_login_at
+RETURNING id, oidc_issuer, oidc_subject, email, name, groups, role, created_at, last_login_at, theme
 `
 
 type InsertUserParams struct {
@@ -75,6 +75,7 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (User, e
 		&i.Role,
 		&i.CreatedAt,
 		&i.LastLoginAt,
+		&i.Theme,
 	)
 	return i, err
 }
@@ -111,7 +112,7 @@ func (q *Queries) ListUserNames(ctx context.Context, ids []uuid.UUID) ([]ListUse
 }
 
 const lockUserBySubject = `-- name: LockUserBySubject :one
-SELECT id, oidc_issuer, oidc_subject, email, name, groups, role, created_at, last_login_at FROM users
+SELECT id, oidc_issuer, oidc_subject, email, name, groups, role, created_at, last_login_at, theme FROM users
 WHERE oidc_issuer = $1 AND oidc_subject = $2
 FOR UPDATE
 `
@@ -134,6 +135,7 @@ func (q *Queries) LockUserBySubject(ctx context.Context, arg LockUserBySubjectPa
 		&i.Role,
 		&i.CreatedAt,
 		&i.LastLoginAt,
+		&i.Theme,
 	)
 	return i, err
 }
@@ -174,11 +176,26 @@ func (q *Queries) ReleaseUserEmail(ctx context.Context, arg ReleaseUserEmailPara
 	return items, nil
 }
 
+const setUserTheme = `-- name: SetUserTheme :exec
+UPDATE users SET theme = $1 WHERE id = $2
+`
+
+type SetUserThemeParams struct {
+	Theme *string
+	ID    uuid.UUID
+}
+
+// SetUserTheme stores the theme the user chose: system, light or dark.
+func (q *Queries) SetUserTheme(ctx context.Context, arg SetUserThemeParams) error {
+	_, err := q.db.Exec(ctx, setUserTheme, arg.Theme, arg.ID)
+	return err
+}
+
 const updateUserLogin = `-- name: UpdateUserLogin :one
 UPDATE users
 SET email = $1, name = $2, groups = $3, role = $4, last_login_at = $5
 WHERE id = $6
-RETURNING id, oidc_issuer, oidc_subject, email, name, groups, role, created_at, last_login_at
+RETURNING id, oidc_issuer, oidc_subject, email, name, groups, role, created_at, last_login_at, theme
 `
 
 type UpdateUserLoginParams struct {
@@ -211,6 +228,7 @@ func (q *Queries) UpdateUserLogin(ctx context.Context, arg UpdateUserLoginParams
 		&i.Role,
 		&i.CreatedAt,
 		&i.LastLoginAt,
+		&i.Theme,
 	)
 	return i, err
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"slices"
 	"time"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/nourtalaat/sidekick/internal/awsauth"
-	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
@@ -129,22 +127,7 @@ func build(ctx context.Context, name string, cfg Config, deps registry.Deps, loa
 		return nil, fmt.Errorf("check the config: %w", err)
 	}
 
-	base := deps.HTTP
-	if base == nil {
-		base = httpclient.New()
-	}
-
-	base = httpclient.WithPlainBody(base)
-
-	next := base.Transport
-	if next == nil {
-		next = http.DefaultTransport
-	}
-
-	limited := *base
-	limited.Transport = limitTransport{next: next}
-
-	awsCfg, err := awsauth.Load(ctx, load, cfg.Regions[0], &limited)
+	awsCfg, err := awsauth.Load(ctx, load, cfg.Regions[0], awsauth.HTTPClient(deps.HTTP))
 	if err != nil {
 		return nil, fmt.Errorf("set up AWS credentials: %w", err)
 	}

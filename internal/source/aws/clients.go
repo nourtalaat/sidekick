@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 	"sync"
 
@@ -18,25 +17,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/nourtalaat/sidekick/internal/awsauth"
-	"github.com/nourtalaat/sidekick/internal/httpclient"
 )
 
-// sessionName is the session name of every role Sidekick assumes, which
-// CloudTrail shows as the caller.
-const sessionName = "sidekick"
-
-// maxResponseSize bounds one response body. The largest answers are Logs
-// Insights results; results are cut much smaller later.
-const maxResponseSize = 16 << 20
-
-var (
-	// errResponseTooLarge is returned when a response body is larger than
-	// maxResponseSize.
-	errResponseTooLarge = fmt.Errorf("the response from AWS is larger than %d bytes", maxResponseSize)
-	// errOtherAccount is returned when Sidekick's own credentials belong to
-	// another account than the one the config lists without a role.
-	errOtherAccount = errors.New("the credentials Sidekick has belong to another account")
-)
+// errOtherAccount is returned when Sidekick's own credentials belong to
+// another account than the one the config lists without a role.
+var errOtherAccount = errors.New("the credentials Sidekick has belong to another account")
 
 // account is one account in the config, with the credentials for it.
 type account struct {
@@ -57,12 +42,6 @@ type target struct {
 	region  string
 }
 
-// limitTransport fails the read of any response body larger than
-// maxResponseSize, so a huge answer cannot make Sidekick read without end.
-type limitTransport struct {
-	next http.RoundTripper
-}
-
 // credentialError is a failure to get credentials for an account: a role
 // that cannot be assumed, or no credentials at all. It is a failure of the
 // source, never a tool error.
@@ -79,18 +58,6 @@ func (e *credentialError) Error() string {
 // Unwrap returns the cause.
 func (e *credentialError) Unwrap() error {
 	return e.err
-}
-
-// RoundTrip implements http.RoundTripper.
-func (t limitTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	resp, err := t.next.RoundTrip(req)
-	if err != nil {
-		return nil, fmt.Errorf("send request: %w", err)
-	}
-
-	resp.Body = httpclient.LimitBody(resp.Body, maxResponseSize, errResponseTooLarge)
-
-	return resp, nil
 }
 
 // ready gets the credentials of the call's account, so a failure to get
@@ -195,7 +162,7 @@ func newAccounts(accounts []Account, own awssdk.CredentialsProvider, client *sts
 		acct := &account{id: a.ID, creds: own, own: true, sts: client}
 
 		if a.RoleARN != "" {
-			acct.creds = awsauth.AssumeRole(client, a.RoleARN, a.ExternalID, sessionName)
+			acct.creds = awsauth.AssumeRole(client, a.RoleARN, a.ExternalID, awsauth.SessionName)
 			acct.own = false
 		}
 
