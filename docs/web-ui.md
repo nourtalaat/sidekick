@@ -561,8 +561,7 @@ A scenario opens with:
 
 The **Actions** tab of the review queue (`/review?tab=actions`) lists the
 actions the model proposed on routes in `approved` mode, newest first, for
-the `approver` and `admin` roles. It shows the proposals that wait for a
-decision, or those already decided. Each proposal shows its action, route,
+the `approver` and `admin` roles. Each proposal shows its action, route,
 investigation, when it expires, the parameters whole, exactly as the action
 will run with them, and the model's reason, which is the model's own words
 and not checked. The parameters are plain text in which characters that
@@ -574,6 +573,30 @@ proposal that expired, or that the config no longer allows because its
 route is read-only now or no longer lists the action, answers 409 and can
 only be rejected. The investigation page lists its proposals too, with the
 same buttons for approvers.
+
+Two menus choose what the tab lists. **Action** is **Any action** or one of
+the action names in the `actions` section of the config. **Status** is one of
+these, and each asks for the statuses beside it:
+
+| Choice | Address word | Statuses |
+|---|---|---|
+| Waiting for a decision (the default) | `waiting` | `proposed` |
+| Approved (approved and waiting to run, or running) | `approved` | `approved`, `executing` |
+| Ran | `ran` | `succeeded` |
+| Failed | `failed` | `failed` |
+| Expired | `expired` | `expired` |
+| Undone | `undone` | `undone` |
+| Rejected | `rejected` | `rejected` |
+| Any status | `any` | every status |
+
+Both choices are kept in the address, for example
+`/review?tab=actions&action=monitor-pr&status=failed`, so a view can be shared.
+A choice that is the default is left out of the address, and a value in the
+address that the tab does not know is ignored. An empty list names the
+filters, for example "No failed actions for monitor-pr". The filter is by
+the action's name, which is what a proposal stores, so only names in the
+config are offered; proposals of an action that was removed from the config
+show under **Any action**.
 
 A proposal that changes a definition in place, such as a monitor, also shows
 **Changes, field by field**: each field with its value before and after, in
@@ -590,8 +613,11 @@ with a link to the proposal it restores, which opens its investigation and
 moves focus to that proposal.
 
 - `GET /api/v1/proposals` (approver) lists proposals a page at a time, with
-  `status` (repeat it for several, default `proposed`), `cursor` and
-  `limit`.
+  `status` (repeat it for several, default `proposed`), `action` (one name
+  from the config; a name that is not there answers 400 and lists the names),
+  `cursor` and `limit`.
+- `GET /api/v1/proposals/actions` (approver) returns the action names in the
+  config, sorted, as `{"actions": [...]}`. It reads the config in memory.
 - `POST /api/v1/proposals/{id}/approve` and `/reject` (approver) decide a
   proposal. Only a person who is signed in approves; an API token answers
   403 to an approval, because a script that holds a token could otherwise
