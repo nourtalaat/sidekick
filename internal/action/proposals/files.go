@@ -97,7 +97,7 @@ func (s *Service) FileDiff(ctx context.Context, id uuid.UUID, path string, full 
 		return FileDiff{}, fmt.Errorf("get the base of %q: %w", path, err)
 	}
 
-	updated, err := proposedContent(v.Params, file)
+	updated, err := proposedContent(ctx, reader, v, file)
 	if err != nil {
 		return FileDiff{}, fmt.Errorf("read the new content of %q: %w", path, err)
 	}
@@ -150,15 +150,21 @@ func baseOf(ctx context.Context, reader action.FileReader, v View, file action.P
 }
 
 // proposedContent is the text the proposal gives the file: the content in the
-// parameters, or nothing for a file that is deleted.
-func proposedContent(params json.RawMessage, file action.ProposalFile) (string, error) {
+// parameters, or nothing for a file that is deleted. A proposal whose
+// parameters hold no files, such as a revert, names the new content only by
+// the blob SHA in its snapshot, which is read through the action.
+func proposedContent(ctx context.Context, reader action.FileReader, v View, file action.ProposalFile) (string, error) {
 	if file.Status == gitchange.FileDeleted {
 		return "", nil
 	}
 
 	var edit gitchange.Edit
-	if err := json.Unmarshal(params, &edit); err != nil {
+	if err := json.Unmarshal(v.Params, &edit); err != nil {
 		return "", fmt.Errorf("decode the parameters: %w", err)
+	}
+
+	if len(edit.Files) == 0 {
+		return afterBlob(ctx, reader, v, file)
 	}
 
 	i := slices.IndexFunc(edit.Files, func(f gitchange.FileChange) bool { return f.Path == file.Path })
@@ -167,6 +173,30 @@ func proposedContent(params json.RawMessage, file action.ProposalFile) (string, 
 	}
 
 	return *edit.Files[i].Content, nil
+}
+
+// afterBlob reads the text of the file as the snapshot says the proposal
+// leaves it.
+func afterBlob(ctx context.Context, reader action.FileReader, v View, file action.ProposalFile) (string, error) {
+	sides, err := gitchange.ReadSnapshot(*v.Snapshot)
+	if err != nil {
+		return "", fmt.Errorf("read the snapshot: %w", err)
+	}
+
+	blob := sides.After[file.Path].Blob
+	if blob == "" {
+		return "", fmt.Errorf("the snapshot names no new blob for %q", file.Path)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, ReadTimeout)
+	defer cancel()
+
+	text, err := reader.ReadBlob(ctx, v.Params, blob)
+	if err != nil {
+		return "", &UnreadableError{Err: err}
+	}
+
+	return text, nil
 }
 
 // visibleLines returns the lines to answer with, and whether more follow.
