@@ -294,9 +294,9 @@ func TestWriteMarkdown(t *testing.T) {
 				"| verdict accuracy | 0.80 | ",
 				"| false positive precision | - | - |\n",
 				"| runs | 5 | |\n",
-				"| Scenario | Correct | Root cause | Median cost | Median time |\n",
-				"| pool | 2/3 | 0.73 ± 0.23 | $0.0020 | 2s |\n",
-				"| no-rubric | 1/1 | - | $0.0010 | 1s |\n",
+				"| Scenario | Correct | Proposals | Root cause | Median cost | Median time |\n",
+				"| pool | 2/3 | - | 0.73 ± 0.23 | $0.0020 | 2s |\n",
+				"| no-rubric | 1/1 | - | - | $0.0010 | 1s |\n",
 			},
 		},
 	}
@@ -384,4 +384,100 @@ func reportSchema(t *testing.T) *jsonschema.Resolved {
 	require.NoError(t, err)
 
 	return resolved
+}
+
+// scoredProposalResults returns the scored results of proposalResults.
+func scoredProposalResults(t *testing.T) *Results {
+	t.Helper()
+
+	results := proposalResults(true)
+	results.Repeat = 3
+	require.NoError(t, Score(t.Context(), results, ScoreOptions{Seed: DefaultSeed}))
+
+	return results
+}
+
+func TestReportProposals(t *testing.T) {
+	t.Parallel()
+
+	results := scoredProposalResults(t)
+
+	rep, err := results.Report(testInfo, nil)
+	require.NoError(t, err)
+
+	var out bytes.Buffer
+	require.NoError(t, rep.WriteJSON(&out))
+
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(out.Bytes(), &doc))
+	require.NoError(t, reportSchema(t).Validate(doc), "a report with proposal scores matches the schema")
+
+	runs := rep.Scenarios[0].Runs
+	require.True(t, *runs[0].ProposalCorrect)
+	require.Equal(t, []ProposalReport{{Action: "monitor-pr", Outcome: ProposalExpected}}, runs[0].Proposals)
+	require.Empty(t, runs[0].MissingProposals)
+
+	require.False(t, *runs[2].ProposalCorrect)
+	require.Empty(t, runs[2].Proposals)
+	require.Equal(t, []string{"monitor-pr"}, runs[2].MissingProposals)
+
+	require.Nil(t, rep.Scenarios[1].Runs[0].ProposalCorrect, "a scenario that does not score proposals has none")
+	require.Equal(t, 2, *rep.Scenarios[0].Spread.ProposalCorrect)
+	requireShare(t, new(2.0/3), rep.Metrics.ProposalCorrect)
+	require.NotContains(t, out.String(), "acme/monitors", "no parameters of a proposal are written")
+}
+
+func TestProposalsInOutputs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		write func(t *testing.T, r *Results, w *bytes.Buffer)
+		want  []string
+	}{
+		{
+			name:  "the console table",
+			write: func(t *testing.T, r *Results, w *bytes.Buffer) { t.Helper(); require.NoError(t, r.WriteTable(w)) },
+			want:  []string{"PROPOSAL", " yes ", " no "},
+		},
+		{
+			name:  "the console summary",
+			write: func(t *testing.T, r *Results, w *bytes.Buffer) { t.Helper(); require.NoError(t, r.WriteSummary(w)) },
+			want:  []string{"PROPOSALS", "proposals  3/3      2/3", "proposal correct          0.67"},
+		},
+		{
+			name: "the Markdown summary",
+			write: func(t *testing.T, r *Results, w *bytes.Buffer) {
+				t.Helper()
+				require.NoError(t, r.WriteMarkdown(w, testInfo, nil))
+			},
+			want: []string{"| proposal correct | 0.67 | ", "| proposals | 3/3 | 2/3 | - | $"},
+		},
+		{
+			name: "the JUnit file",
+			write: func(t *testing.T, r *Results, w *bytes.Buffer) {
+				t.Helper()
+				require.NoError(t, r.WriteJUnit(w, nil))
+			},
+			want: []string{
+				`<testsuite name="proposals" tests="3" failures="1"`,
+				"; proposals yes",
+				`<failure message="the proposals are not correct: missing monitor-pr">`,
+				`<testsuite name="plain" tests="1" failures="0"`,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var out bytes.Buffer
+			tt.write(t, scoredProposalResults(t), &out)
+
+			for _, want := range tt.want {
+				require.Contains(t, out.String(), want)
+			}
+		})
+	}
 }

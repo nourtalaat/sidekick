@@ -125,7 +125,11 @@ func pendingProposal(u output.Update, p action.Proposal) []block {
 		blocks = append(blocks, section(":warning: *This deletes "+escape(cut(p.Snapshot.Target, maxTitleChars))+". Sidekick cannot undo a delete.*"))
 	}
 
-	if len(p.Changes) > 0 {
+	if p.Revisions != nil {
+		shown, all := revisionBlocks("Rolls back from", *p.Revisions)
+		blocks = append(blocks, shown...)
+		complete = complete && all
+	} else if len(p.Changes) > 0 {
 		shown, all := changeBlocks("*Changes, field by field*", p.Changes, changedSides)
 		blocks = append(blocks, shown...)
 
@@ -167,6 +171,8 @@ func proposalButtons(_ output.Update, p action.Proposal, complete bool) block {
 // approveText is what the Approve button asks before it approves.
 func approveText(p action.Proposal) string {
 	switch {
+	case p.Revisions != nil:
+		return "Sidekick rolls back from " + revisionName(p.Revisions.Running) + " to " + revisionName(p.Revisions.GoesBackTo) + ", as shown above."
 	case deletesTarget(p):
 		return "Sidekick deletes " + cut(p.Snapshot.Target, maxTitleChars) + ". Sidekick cannot undo a delete."
 	case len(p.Changes) > 0:
@@ -181,7 +187,10 @@ func approveText(p action.Proposal) string {
 func undoableProposal(p action.Proposal) []block {
 	blocks := []block{contextBlock(proposalLine(p))}
 
-	if len(p.Changes) > 0 {
+	if p.Revisions != nil {
+		shown, _ := revisionBlocks("Rolled back from", *p.Revisions)
+		blocks = append(blocks, shown...)
+	} else if len(p.Changes) > 0 {
 		shown, all := changeBlocks("*What it changed*", p.Changes, changedSides)
 		if all {
 			blocks = append(blocks, shown...)

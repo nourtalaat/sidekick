@@ -1049,17 +1049,20 @@ type BenchMetricRow struct {
 // BenchMetrics The scores of a run. A share, from 0 to 1, is left out when the run
 // had nothing to count.
 type BenchMetrics struct {
-	CostMicros             int64    `json:"costMicros"`
-	Evidence               *float64 `json:"evidence,omitempty"`
-	FpPrecision            *float64 `json:"fpPrecision,omitempty"`
-	FpRecall               *float64 `json:"fpRecall,omitempty"`
-	InputTokens            int64    `json:"inputTokens"`
-	JudgeCostMicros        int64    `json:"judgeCostMicros"`
-	JudgeErrors            int      `json:"judgeErrors"`
-	MeanCostPerRunUsd      *float64 `json:"meanCostPerRunUsd,omitempty"`
-	MeanDurationMs         *float64 `json:"meanDurationMs,omitempty"`
-	OutputTokens           int64    `json:"outputTokens"`
-	Overall                *float64 `json:"overall,omitempty"`
+	CostMicros        int64    `json:"costMicros"`
+	Evidence          *float64 `json:"evidence,omitempty"`
+	FpPrecision       *float64 `json:"fpPrecision,omitempty"`
+	FpRecall          *float64 `json:"fpRecall,omitempty"`
+	InputTokens       int64    `json:"inputTokens"`
+	JudgeCostMicros   int64    `json:"judgeCostMicros"`
+	JudgeErrors       int      `json:"judgeErrors"`
+	MeanCostPerRunUsd *float64 `json:"meanCostPerRunUsd,omitempty"`
+	MeanDurationMs    *float64 `json:"meanDurationMs,omitempty"`
+	OutputTokens      int64    `json:"outputTokens"`
+	Overall           *float64 `json:"overall,omitempty"`
+
+	// ProposalCorrect The share of the runs with scored proposals whose proposals are correct; left out when no scenario scores proposals.
+	ProposalCorrect        *float64 `json:"proposalCorrect,omitempty"`
 	RootCauseMatch         *float64 `json:"rootCauseMatch,omitempty"`
 	RootCauseScore         *float64 `json:"rootCauseScore,omitempty"`
 	Runs                   int      `json:"runs"`
@@ -1078,6 +1081,9 @@ type BenchResult struct {
 	ExpectedVerdict string   `json:"expectedVerdict"`
 	InputTokens     int64    `json:"inputTokens"`
 	OutputTokens    int64    `json:"outputTokens"`
+
+	// ProposalCorrect Whether the proposals of the run are correct; left out when the scenario does not score proposals.
+	ProposalCorrect *bool `json:"proposalCorrect,omitempty"`
 
 	// Repeat 1 for the first run of the scenario, counting up.
 	Repeat         int      `json:"repeat"`
@@ -2229,12 +2235,18 @@ type Proposal struct {
 	Params map[string]interface{} `json:"params"`
 
 	// ParamsText The parameters as the approver reads them. Characters that could hide something are written as \u escapes, and nothing is cut.
-	ParamsText string         `json:"paramsText"`
-	ProposedAt time.Time      `json:"proposedAt"`
-	Reason     string         `json:"reason"`
-	Result     *ActionResult  `json:"result,omitempty"`
-	Route      string         `json:"route"`
-	Status     ProposalStatus `json:"status"`
+	ParamsText string        `json:"paramsText"`
+	ProposedAt time.Time     `json:"proposedAt"`
+	Reason     string        `json:"reason"`
+	Result     *ActionResult `json:"result,omitempty"`
+
+	// Revisions The two revisions of a rollback. Present when the action is a
+	// rollback: it replaces the field-by-field `changes` on a screen, and
+	// `changes` is still sent for a client that does not know it. On the
+	// undo of a rollback the two are the other way round.
+	Revisions *ProposalRevisions `json:"revisions,omitempty"`
+	Route     string             `json:"route"`
+	Status    ProposalStatus     `json:"status"`
 
 	// Target What an action that changes a definition in place changes, such as datadog:monitor/123. Absent for any other action.
 	Target *string `json:"target,omitempty"`
@@ -2324,6 +2336,51 @@ type ProposalList struct {
 	// NextCursor Pass it as cursor to get the next page. Absent on the last page.
 	NextCursor *string    `json:"nextCursor,omitempty"`
 	Proposals  []Proposal `json:"proposals"`
+}
+
+// ProposalRevision One revision of a workload on its platform. The text fields come
+// from the platform, like an image tag or the name of who deployed,
+// and are written like `paramsText`: characters that could hide
+// something are written as \u escapes, and nothing is cut. Show them
+// as plain text. A missing field means the platform does not say, and a
+// screen shows "unknown".
+type ProposalRevision struct {
+	DeployedAt *time.Time `json:"deployedAt,omitempty"`
+	DeployedBy *string    `json:"deployedBy,omitempty"`
+
+	// Id The platform's identifier, such as 7 or checkout:42.
+	Id string `json:"id"`
+
+	// Kind What the platform calls it, such as ReplicaSet revision or Helm release revision.
+	Kind string `json:"kind"`
+
+	// Notes Short text, such as the images of several containers.
+	Notes *string `json:"notes,omitempty"`
+
+	// Version What a person recognises, such as an image tag, a chart and app version or a git revision.
+	Version *string `json:"version,omitempty"`
+}
+
+// ProposalRevisions The two revisions of a rollback. Present when the action is a
+// rollback: it replaces the field-by-field `changes` on a screen, and
+// `changes` is still sent for a client that does not know it. On the
+// undo of a rollback the two are the other way round.
+type ProposalRevisions struct {
+	// GoesBackTo One revision of a workload on its platform. The text fields come
+	// from the platform, like an image tag or the name of who deployed,
+	// and are written like `paramsText`: characters that could hide
+	// something are written as \u escapes, and nothing is cut. Show them
+	// as plain text. A missing field means the platform does not say, and a
+	// screen shows "unknown".
+	GoesBackTo ProposalRevision `json:"goesBackTo"`
+
+	// Running One revision of a workload on its platform. The text fields come
+	// from the platform, like an image tag or the name of who deployed,
+	// and are written like `paramsText`: characters that could hide
+	// something are written as \u escapes, and nothing is cut. Show them
+	// as plain text. A missing field means the platform does not say, and a
+	// screen shows "unknown".
+	Running ProposalRevision `json:"running"`
 }
 
 // ProposalStatus defines model for ProposalStatus.
@@ -3900,6 +3957,9 @@ type ServerInterface interface {
 	// ListJobs Dead jobs, newest first, a page at a time
 	// (GET /jobs)
 	ListJobs(w http.ResponseWriter, r *http.Request, params ListJobsParams)
+	// DiscardJob Discard a dead job
+	// (POST /jobs/{id}/discard)
+	DiscardJob(w http.ResponseWriter, r *http.Request, id int64)
 	// RetryJob Retry a dead job
 	// (POST /jobs/{id}/retry)
 	RetryJob(w http.ResponseWriter, r *http.Request, id int64)
@@ -4898,6 +4958,32 @@ func (siw *ServerInterfaceWrapper) ListJobs(w http.ResponseWriter, r *http.Reque
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListJobs(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DiscardJob operation middleware
+func (siw *ServerInterfaceWrapper) DiscardJob(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DiscardJob(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6797,6 +6883,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/config", wrapper.GetConfig)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/jobs", wrapper.ListJobs)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/jobs/{id}/retry", wrapper.RetryJob)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/jobs/{id}/discard", wrapper.DiscardJob)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tokens", wrapper.ListTokens)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/tokens", wrapper.CreateToken)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/tokens/{id}", wrapper.RevokeToken)
@@ -7645,6 +7732,39 @@ type ListJobsdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ListJobsdefaultApplicationProblemPlusJSONResponse) VisitListJobsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DiscardJobRequestObject struct {
+	Id int64 `json:"id"`
+}
+
+type DiscardJobResponseObject interface {
+	VisitDiscardJobResponse(w http.ResponseWriter) error
+}
+
+type DiscardJob204Response struct {
+}
+
+func (response DiscardJob204Response) VisitDiscardJobResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DiscardJobdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DiscardJobdefaultApplicationProblemPlusJSONResponse) VisitDiscardJobResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -9683,6 +9803,9 @@ type StrictServerInterface interface {
 	// ListJobs Dead jobs, newest first, a page at a time
 	// (GET /jobs)
 	ListJobs(ctx context.Context, request ListJobsRequestObject) (ListJobsResponseObject, error)
+	// DiscardJob Discard a dead job
+	// (POST /jobs/{id}/discard)
+	DiscardJob(ctx context.Context, request DiscardJobRequestObject) (DiscardJobResponseObject, error)
 	// RetryJob Retry a dead job
 	// (POST /jobs/{id}/retry)
 	RetryJob(ctx context.Context, request RetryJobRequestObject) (RetryJobResponseObject, error)
@@ -10378,6 +10501,32 @@ func (sh *strictHandler) ListJobs(w http.ResponseWriter, r *http.Request, params
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListJobsResponseObject); ok {
 		if err := validResponse.VisitListJobsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DiscardJob operation middleware
+func (sh *strictHandler) DiscardJob(w http.ResponseWriter, r *http.Request, id int64) {
+	var request DiscardJobRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DiscardJob(ctx, request.(DiscardJobRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DiscardJob")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DiscardJobResponseObject); ok {
+		if err := validResponse.VisitDiscardJobResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -98,6 +98,9 @@ type RunResult struct {
 	// MissingSources are the ones that are not.
 	SourcesReported *bool
 	MissingSources  []string
+	// Proposal is the score of the run's proposals, or nil when the
+	// scenario does not score them.
+	Proposal *ProposalResult
 }
 
 // Proposal is one action the model proposed in a run.
@@ -123,20 +126,21 @@ type ToolResult struct {
 
 // WriteTable writes one line per run: the scenario, the run, the verdict
 // and the expected one, whether the verdict counts as correct, the
-// root-cause and evidence scores, how the run stopped, its tool calls,
+// root-cause and evidence scores, whether its proposals are correct, how
+// the run stopped, its tool calls,
 // tokens, cost and time. A score the run does not have shows as "-".
 func (r *Results) WriteTable(w io.Writer) error {
 	tw := tabwriter.NewWriter(w, tableMinWidth, tableTabWidth, tablePadding, tablePadChar, 0)
 
-	if _, err := fmt.Fprintln(tw, "SCENARIO\tRUN\tSTATUS\tVERDICT\tEXPECTED\tCORRECT\tROOT CAUSE\tEVIDENCE\tSTOP\tTOOL CALLS\tTOKENS\tCOST\tTIME"); err != nil {
+	if _, err := fmt.Fprintln(tw, "SCENARIO\tRUN\tSTATUS\tVERDICT\tEXPECTED\tCORRECT\tROOT CAUSE\tEVIDENCE\tPROPOSAL\tSTOP\tTOOL CALLS\tTOKENS\tCOST\tTIME"); err != nil {
 		return fmt.Errorf("write the table header: %w", err)
 	}
 
 	for _, s := range r.Scenarios {
 		for _, run := range s.Runs {
-			_, err := fmt.Fprintf(tw, "%s\t%d/%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t$%.4f\t%s\n",
+			_, err := fmt.Fprintf(tw, "%s\t%d/%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t$%.4f\t%s\n",
 				s.ID, run.Run, r.Repeat, run.Status, run.Report.Verdict, s.Expected.Verdict,
-				run.correctCell(), run.rootCauseCell(), shareCell(run.EvidenceScore), run.Report.StopReason,
+				run.correctCell(), run.rootCauseCell(), shareCell(run.EvidenceScore), run.proposalCell(), run.Report.StopReason,
 				run.ToolCalls, run.InputTokens+run.OutputTokens, run.CostUSD(), run.Duration.Round(time.Millisecond))
 			if err != nil {
 				return fmt.Errorf("write the row of %s run %d: %w", s.ID, run.Run, err)
@@ -160,7 +164,7 @@ func (r *Results) WriteSummary(w io.Writer) error {
 
 	tw := tabwriter.NewWriter(w, tableMinWidth, tableTabWidth, tablePadding, tablePadChar, 0)
 
-	if _, err := fmt.Fprintln(tw, "\nSCENARIO\tCORRECT\tROOT CAUSE\tCOST MIN / MEDIAN / MAX\tTIME MIN / MEDIAN / MAX"); err != nil {
+	if _, err := fmt.Fprintln(tw, "\nSCENARIO\tCORRECT\tPROPOSALS\tROOT CAUSE\tCOST MIN / MEDIAN / MAX\tTIME MIN / MEDIAN / MAX"); err != nil {
 		return fmt.Errorf("write the spread header: %w", err)
 	}
 
@@ -171,8 +175,8 @@ func (r *Results) WriteSummary(w io.Writer) error {
 
 		sp := s.Spread
 
-		_, err := fmt.Fprintf(tw, "%s\t%d/%d\t%s\t$%.4f / $%.4f / $%.4f\t%s / %s / %s\n",
-			s.ID, sp.Correct, sp.Runs, meanSDCell(sp.RootCauseMean, sp.RootCauseSD),
+		_, err := fmt.Fprintf(tw, "%s\t%d/%d\t%s\t%s\t$%.4f / $%.4f / $%.4f\t%s / %s / %s\n",
+			s.ID, sp.Correct, sp.Runs, sp.proposalsCell(), meanSDCell(sp.RootCauseMean, sp.RootCauseSD),
 			sp.CostUSD.Min, sp.CostUSD.Median, sp.CostUSD.Max,
 			msCell(sp.DurationMs.Min), msCell(sp.DurationMs.Median), msCell(sp.DurationMs.Max))
 		if err != nil {
@@ -220,6 +224,29 @@ func (r RunResult) correctCell() string {
 	default:
 		return "no"
 	}
+}
+
+// proposalCell is the PROPOSAL cell of the run: yes, no, or - when the
+// scenario does not score proposals.
+func (r RunResult) proposalCell() string {
+	switch {
+	case r.Proposal == nil:
+		return noValue
+	case r.Proposal.Correct:
+		return "yes"
+	default:
+		return "no"
+	}
+}
+
+// proposalsCell is the PROPOSALS cell of a scenario: the runs with correct
+// proposals out of all, or - when the scenario does not score proposals.
+func (s Spread) proposalsCell() string {
+	if s.ProposalCorrect == nil {
+		return noValue
+	}
+
+	return fmt.Sprintf("%d/%d", *s.ProposalCorrect, s.Runs)
 }
 
 // rootCauseCell is the ROOT CAUSE cell of the run: its score, "error" when

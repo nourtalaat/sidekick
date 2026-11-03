@@ -1,0 +1,5 @@
+.sk-revisions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-2);
+}

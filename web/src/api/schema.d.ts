@@ -82,6 +82,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/jobs/{id}/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Discard a dead job
+         * @description Deletes the dead job, so it cannot run again, and writes the discard
+         *     to the audit log with the job's kind, attempts and masked last error.
+         *     A job that is not dead answers 409.
+         */
+        post: operations["DiscardJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tokens": {
         parameters: {
             query?: never;
@@ -2134,6 +2156,7 @@ export interface components {
              *     the host. Absent for any other proposal and for an undo.
              */
             files?: components["schemas"]["ProposalFile"][];
+            revisions?: components["schemas"]["ProposalRevisions"];
             /** @description Whether the proposal can be undone now. True only for a succeeded proposal whose action can undo it, that is not an undo itself. */
             undoable: boolean;
             /**
@@ -2218,6 +2241,37 @@ export interface components {
             newLine?: number;
             /** @description The line without its line break, with characters that could hide something written as \u escapes. */
             text: string;
+        };
+        /**
+         * @description The two revisions of a rollback. Present when the action is a
+         *     rollback: it replaces the field-by-field `changes` on a screen, and
+         *     `changes` is still sent for a client that does not know it. On the
+         *     undo of a rollback the two are the other way round.
+         */
+        ProposalRevisions: {
+            running: components["schemas"]["ProposalRevision"];
+            goesBackTo: components["schemas"]["ProposalRevision"];
+        };
+        /**
+         * @description One revision of a workload on its platform. The text fields come
+         *     from the platform, like an image tag or the name of who deployed,
+         *     and are written like `paramsText`: characters that could hide
+         *     something are written as \u escapes, and nothing is cut. Show them
+         *     as plain text. A missing field means the platform does not say, and a
+         *     screen shows "unknown".
+         */
+        ProposalRevision: {
+            /** @description What the platform calls it, such as ReplicaSet revision or Helm release revision. */
+            kind: string;
+            /** @description The platform's identifier, such as 7 or checkout:42. */
+            id: string;
+            /** @description What a person recognises, such as an image tag, a chart and app version or a git revision. */
+            version?: string;
+            /** Format: date-time */
+            deployedAt?: string;
+            deployedBy?: string;
+            /** @description Short text, such as the images of several containers. */
+            notes?: string;
         };
         UndoProposalRequest: {
             /**
@@ -3251,6 +3305,11 @@ export interface components {
             rootCauseScore?: number;
             /** Format: double */
             evidence?: number;
+            /**
+             * Format: double
+             * @description The share of the runs with scored proposals whose proposals are correct; left out when no scenario scores proposals.
+             */
+            proposalCorrect?: number;
             /** Format: double */
             sourceFailuresReported?: number;
             /** Format: double */
@@ -3310,6 +3369,8 @@ export interface components {
             requiredMet?: boolean;
             /** Format: double */
             evidenceScore?: number;
+            /** @description Whether the proposals of the run are correct; left out when the scenario does not score proposals. */
+            proposalCorrect?: boolean;
             /** Format: int64 */
             costMicros: number;
             /** Format: int64 */
@@ -3494,6 +3555,27 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description The job is pending again. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DiscardJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The job is deleted. */
             204: {
                 headers: {
                     [name: string]: unknown;

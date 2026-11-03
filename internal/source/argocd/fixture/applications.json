@@ -1,0 +1,63 @@
+{
+  "metadata": {"resourceVersion": "4711"},
+  "items": [
+    {
+      "metadata": {"name": "checkout", "namespace": "argocd"},
+      "spec": {
+        "project": "shop",
+        "source": {"repoURL": "https://git.example.com/shop/deploy.git", "path": "apps/checkout", "targetRevision": "main"},
+        "destination": {"name": "prod", "namespace": "shop"},
+        "syncPolicy": {"automated": {"prune": true, "selfHeal": true}}
+      },
+      "status": {
+        "sync": {"status": "OutOfSync", "revision": "ffff0000"},
+        "health": {"status": "Degraded"},
+        "history": [
+          {"id": 4, "revision": "aaaa1111", "deployedAt": "2026-11-01T09:00:00Z"},
+          {"id": 5, "revision": "bbbb2222", "deployedAt": "2026-11-02T09:00:00Z"}
+        ]
+      }
+    },
+    {
+      "metadata": {"name": "cart", "namespace": "argocd"},
+      "spec": {
+        "project": "shop",
+        "destination": {"server": "https://kubernetes.default.svc", "namespace": "shop"},
+        "syncPolicy": {"automated": {"enabled": false}}
+      },
+      "status": {
+        "sync": {"status": "Synced", "revision": "dddd4444"},
+        "health": {"status": "Healthy"},
+        "history": [{"id": 0, "revision": "dddd4444", "deployedAt": "2026-10-30T12:00:00Z"}]
+      }
+    },
+    {
+      "metadata": {"name": "worker", "namespace": "argocd"},
+      "spec": {"project": "shop", "destination": {"name": "prod", "namespace": "shop"}},
+      "status": {
+        "sync": {"status": "Synced", "revision": "eeee5555"},
+        "health": {"status": "Progressing"},
+        "history": [{"id": 2, "revision": "eeee5555", "deployedAt": "2026-11-03T08:00:00Z"}]
+      }
+    },
+    {
+      "metadata": {"name": "ingress-nginx", "namespace": "argocd"},
+      "spec": {"project": "platform", "destination": {"name": "prod", "namespace": "ingress"}},
+      "status": {
+        "sync": {"status": "Synced", "revision": "1.9.0"},
+        "health": {"status": "Healthy"},
+        "history": [{"id": 1, "revision": "1.9.0", "deployedAt": "2026-10-01T00:00:00Z"}]
+      }
+    },
+    {
+      "metadata": {"name": "invoices", "namespace": "argocd"},
+      "spec": {"project": "billing"},
+      "status": {"sync": {"status": "Synced"}, "health": {"status": "Healthy"}}
+    },
+    {
+      "metadata": {"name": "checkout", "namespace": "team-a"},
+      "spec": {"project": "shop"},
+      "status": {"sync": {"status": "Synced"}, "health": {"status": "Healthy"}}
+    }
+  ]
+}

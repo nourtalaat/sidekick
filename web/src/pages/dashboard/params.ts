@@ -30,6 +30,9 @@ export const VERDICT_OPTIONS: readonly { value: Verdict; label: string }[] = [
   { value: "flapping", label: "Flapping" },
 ];
 
+/** The verdict that the precision and recall chart scores when the URL names none. */
+export const DEFAULT_SCORE_VERDICT: Verdict = "false_positive";
+
 /** What the URL of the dashboard keeps: the range, the filters and the two benchmark runs to compare. */
 export interface DashboardFilters {
   /** A preset such as "30d", or CUSTOM_RANGE with from and to. */
@@ -41,6 +44,8 @@ export interface DashboardFilters {
   service?: string;
   model?: string;
   verdict?: Verdict;
+  /** The verdict that the precision and recall chart scores; separate from `verdict`, which selects the verdict Sidekick gave. */
+  scoreVerdict?: Verdict;
   /** The IDs of the benchmark runs to compare. */
   compareA?: string;
   compareB?: string;
@@ -78,6 +83,11 @@ export function filtersFromParams(params: URLSearchParams): DashboardFilters {
     filters.verdict = verdict.value;
   }
 
+  const scoreVerdict = VERDICT_OPTIONS.find((option) => option.value === params.get("scoreVerdict"));
+  if (scoreVerdict) {
+    filters.scoreVerdict = scoreVerdict.value;
+  }
+
   for (const [param, key] of [
     ["a", "compareA"],
     ["b", "compareB"],
@@ -112,6 +122,10 @@ export function paramsFromFilters(filters: DashboardFilters): URLSearchParams {
 
   if (filters.verdict) {
     params.set("verdict", filters.verdict);
+  }
+
+  if (filters.scoreVerdict && filters.scoreVerdict !== DEFAULT_SCORE_VERDICT) {
+    params.set("scoreVerdict", filters.scoreVerdict);
   }
 
   if (filters.compareA) {

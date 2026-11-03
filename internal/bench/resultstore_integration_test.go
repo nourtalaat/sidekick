@@ -136,3 +136,52 @@ func TestOpenResultStoreNeedsCurrentSchema(t *testing.T) {
 		})
 	}
 }
+
+func TestResultStoreSaveProposals(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// want is proposal_correct of each row, ordered by scenario and repeat.
+		want []*bool
+	}{
+		{name: "a scenario that scores proposals and one that does not", want: []*bool{nil, new(true), new(true), new(false)}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dbURL := storetest.NewURL(t)
+
+			s, err := OpenResultStore(t.Context(), dbURL)
+			require.NoError(t, err)
+			t.Cleanup(s.Close)
+
+			rep, err := scoredProposalResults(t).Report(testInfo, nil)
+			require.NoError(t, err)
+
+			id, err := s.Save(t.Context(), rep)
+			require.NoError(t, err)
+
+			pool, err := store.Open(t.Context(), dbURL, testMaxConns)
+			require.NoError(t, err)
+			t.Cleanup(pool.Close)
+
+			rows, err := pool.Query(t.Context(), "SELECT proposal_correct FROM bench_results WHERE run_id = $1 ORDER BY scenario_id, repeat", id)
+			require.NoError(t, err)
+
+			var got []*bool
+
+			for rows.Next() {
+				var correct *bool
+
+				require.NoError(t, rows.Scan(&correct))
+				got = append(got, correct)
+			}
+
+			require.NoError(t, rows.Err())
+			require.Equal(t, tt.want, got)
+		})
+	}
+}

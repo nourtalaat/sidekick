@@ -3,6 +3,7 @@ package bench
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -428,4 +429,170 @@ func TestScenarioMarshalLeavesOutEmptyFields(t *testing.T) {
 	for _, key := range []string{"tags:", "strategy:", "route:", "default:", "limits:", "config:", "actions:", "acceptable:", "rubric:", "evidence:"} {
 		require.NotContains(t, string(raw), key)
 	}
+}
+
+// proposalScenario is minimal with approved mode, one mock action called
+// monitor-pr and the given lines under expected, which are indented here.
+func proposalScenario(expected string) string {
+	var b strings.Builder
+
+	b.WriteString(strings.Replace(minimal, "expected:\n  verdict: false_positive\n", "", 1))
+	b.WriteString("route: { mode: approved, actions: [monitor-pr] }\n")
+	b.WriteString("actions:\n  monitor-pr:\n    spec: { snapshot: bench/actions/github.pull_request.json }\n")
+	b.WriteString("expected:\n  verdict: false_positive\n")
+
+	for line := range strings.Lines(expected) {
+		b.WriteString("  " + line)
+	}
+
+	return b.String()
+}
+
+func TestParseScenarioProposals(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		in   string
+		// wantErr are the lines the error must hold. Empty means valid.
+		wantErr []string
+	}{
+		{name: "no expected proposals", in: proposalScenario("")},
+		{
+			name: "an expected proposal with checks",
+			in: proposalScenario(`proposals:
+  - action: monitor-pr
+    params:
+      repo: { equals: acme/monitors }
+      files[*].path: { regex: "^prometheus/rules/" }
+      files[0].content: { contains: alert }
+`),
+		},
+		{name: "an expected proposal with no checks", in: proposalScenario("proposals:\n  - action: monitor-pr\n")},
+		{name: "noProposal", in: proposalScenario("noProposal: true\n")},
+		{
+			name: "acceptable proposals",
+			in:   proposalScenario("proposals:\n  - action: monitor-pr\nacceptableProposals:\n  - action: monitor-pr\n"),
+		},
+		{
+			name:    "proposals and noProposal",
+			in:      proposalScenario("proposals:\n  - action: monitor-pr\nnoProposal: true\n"),
+			wantErr: []string{"expected.noProposal: set proposals or noProposal, not both"},
+		},
+		{
+			name:    "an empty list",
+			in:      proposalScenario("proposals: []\n"),
+			wantErr: []string{"expected.proposals: list at least one proposal, or set noProposal: true"},
+		},
+		{
+			name:    "proposals in a read-only scenario",
+			in:      minimal + "  proposals:\n    - action: monitor-pr\n",
+			wantErr: []string{"expected.proposals: need route.mode approved"},
+		},
+		{
+			name:    "noProposal in a read-only scenario",
+			in:      minimal + "  noProposal: true\n",
+			wantErr: []string{"expected.proposals: need route.mode approved"},
+		},
+		{
+			name:    "an action the scenario does not have",
+			in:      proposalScenario("proposals:\n  - action: rollback\n"),
+			wantErr: []string{`expected.proposals[0].action: "rollback" is not an action of the scenario`},
+		},
+		{
+			name:    "no action",
+			in:      proposalScenario("proposals:\n  - params: { repo: { equals: x } }\n"),
+			wantErr: []string{"expected.proposals[0].action: required"},
+		},
+		{
+			name:    "acceptable proposals with noProposal",
+			in:      proposalScenario("noProposal: true\nacceptableProposals:\n  - action: monitor-pr\n"),
+			wantErr: []string{"expected.acceptableProposals: must be empty with noProposal"},
+		},
+		{
+			name:    "acceptable proposals alone",
+			in:      proposalScenario("acceptableProposals:\n  - action: monitor-pr\n"),
+			wantErr: []string{"expected.acceptableProposals: need expected.proposals"},
+		},
+		{
+			name:    "an acceptable proposal with an unknown action",
+			in:      proposalScenario("proposals:\n  - action: monitor-pr\nacceptableProposals:\n  - action: nope\n"),
+			wantErr: []string{`expected.acceptableProposals[0].action: "nope" is not an action`},
+		},
+		{
+			name:    "a path that does not parse",
+			in:      proposalScenario("proposals:\n  - action: monitor-pr\n    params:\n      files[: { equals: x }\n"),
+			wantErr: []string{"expected.proposals[0].params.files[: "},
+		},
+		{
+			name:    "a check with no operator",
+			in:      proposalScenario("proposals:\n  - action: monitor-pr\n    params:\n      repo: {}\n"),
+			wantErr: []string{"expected.proposals[0].params.repo: set at least one of"},
+		},
+		{
+			name:    "a regex that does not compile",
+			in:      proposalScenario("proposals:\n  - action: monitor-pr\n    params:\n      repo: { regex: \"(\" }\n"),
+			wantErr: []string{"expected.proposals[0].params.repo: regex:"},
+		},
+		{
+			name:    "within in a check",
+			in:      proposalScenario("proposals:\n  - action: monitor-pr\n    params:\n      at: { within: 1h }\n"),
+			wantErr: []string{"expected.proposals[0].params.at: within is not available in a params check"},
+		},
+		{
+			name:    "exists false on any element",
+			in:      proposalScenario("proposals:\n  - action: monitor-pr\n    params:\n      files[*].delete: { exists: false }\n"),
+			wantErr: []string{"exists: false cannot be used on a path with [*]"},
+		},
+		{
+			name: "exists false on one element",
+			in:   proposalScenario("proposals:\n  - action: monitor-pr\n    params:\n      files[0].delete: { exists: false }\n"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := ParseScenario([]byte(tt.in))
+			if len(tt.wantErr) == 0 {
+				require.NoError(t, err)
+
+				return
+			}
+
+			require.ErrorIs(t, err, ErrInvalidScenario)
+
+			for _, want := range tt.wantErr {
+				require.ErrorContains(t, err, want)
+			}
+
+			require.Empty(t, got.ID)
+		})
+	}
+}
+
+func TestParseScenarioKeepsProposals(t *testing.T) {
+	t.Parallel()
+
+	sc, err := ParseScenario([]byte(proposalScenario(`proposals:
+  - action: monitor-pr
+    params:
+      repo: { equals: acme/monitors }
+acceptableProposals:
+  - action: monitor-pr
+`)))
+	require.NoError(t, err)
+	require.True(t, sc.Expected.scoresProposals())
+	require.Len(t, sc.Expected.Proposals, 1)
+	require.Equal(t, "monitor-pr", sc.Expected.Proposals[0].Action)
+	require.Equal(t, "acme/monitors", sc.Expected.Proposals[0].Params["repo"].Equals)
+	require.Len(t, sc.Expected.AcceptableProposals, 1)
+
+	raw, err := yaml.Marshal(sc)
+	require.NoError(t, err)
+
+	again, err := ParseScenario(raw)
+	require.NoError(t, err, string(raw))
+	require.Equal(t, sc, again)
 }

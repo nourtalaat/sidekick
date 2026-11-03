@@ -23,8 +23,8 @@ export interface ChartSpec {
   referenceLine?: { value: number; label: string };
   /** The range of the y axis; automatic when absent. */
   domain?: [number, number];
-  /** More columns for the table view than the series, such as the verdicts that share a color. */
-  tableColumns?: { key: string; label: string }[];
+  /** More columns for the table view than the series, such as the verdicts that share a color. A column writes its values with `format`, or with the chart's own when it has none. */
+  tableColumns?: { key: string; label: string; format?: (value: number) => string }[];
 }
 
 /** The categorical palette of the design language, in the order series take it. */

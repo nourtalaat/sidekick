@@ -125,6 +125,14 @@ the sources returned.
   longer allows, for example because its route is read-only now, can only
   be rejected.
 
+  A proposal that rolls a workload back to an earlier revision shows a block
+  "Rolls back from ... to ..." and the two revisions on separate lines, in
+  place of the changed fields: the revision, its version, when it was
+  deployed and who deployed it, with "unknown" for what the platform does not
+  say. Approve repeats the two versions when it asks, and is left out when the
+  revisions are too long to show whole. Once the rollback worked, the message
+  shows the same block above its Undo button.
+
 - **Undo** is on an action that changed a definition in place, such as a
   monitor, after it worked. The message shows the proposal's changes field
   by field, as the values before and after, and Approve is left out when
