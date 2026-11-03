@@ -1,0 +1,26 @@
+[
+  {
+    "old_path": "config/db.yaml",
+    "new_path": "config/db.yaml",
+    "a_mode": "100644",
+    "b_mode": "100644",
+    "new_file": false,
+    "renamed_file": false,
+    "deleted_file": false,
+    "collapsed": false,
+    "too_large": false,
+    "diff": "@@ -1,3 +1,3 @@\n pool:\n-  size: 20\n+  size: 5\n   timeout: 30\n"
+  },
+  {
+    "old_path": "docs/old.md",
+    "new_path": "docs/new.md",
+    "a_mode": "100644",
+    "b_mode": "100644",
+    "new_file": false,
+    "renamed_file": true,
+    "deleted_file": false,
+    "collapsed": false,
+    "too_large": false,
+    "diff": ""
+  }
+]

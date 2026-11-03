@@ -46,7 +46,7 @@ type Validator interface {
 	Validate() error
 }
 
-// SecretRef names a key in a Kubernetes Secret (CFG-3).
+// SecretRef names a key in a Kubernetes Secret.
 type SecretRef struct {
 	Name string `yaml:"name"`
 	Key  string `yaml:"key"`

@@ -36,6 +36,7 @@ import (
 	_ "github.com/nourtalaat/sidekick/internal/source/elasticsearch"    // Source type "elasticsearch".
 	_ "github.com/nourtalaat/sidekick/internal/source/gcp"              // Source type "gcp".
 	_ "github.com/nourtalaat/sidekick/internal/source/github"           // Source type "github".
+	_ "github.com/nourtalaat/sidekick/internal/source/gitlab"           // Source type "gitlab".
 	_ "github.com/nourtalaat/sidekick/internal/source/kubernetes"       // Source type "kubernetes".
 	_ "github.com/nourtalaat/sidekick/internal/source/launchdarkly"     // Source type "launchdarkly".
 	_ "github.com/nourtalaat/sidekick/internal/source/mcp"              // Source type "mcp".

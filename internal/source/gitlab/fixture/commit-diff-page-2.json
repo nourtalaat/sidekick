@@ -1,0 +1,14 @@
+[
+  {
+    "old_path": "scripts/new.sh",
+    "new_path": "scripts/new.sh",
+    "a_mode": "0",
+    "b_mode": "100755",
+    "new_file": true,
+    "renamed_file": false,
+    "deleted_file": false,
+    "collapsed": false,
+    "too_large": false,
+    "diff": "@@ -0,0 +1,2 @@\n+#!/bin/sh\n+echo hi\n"
+  }
+]

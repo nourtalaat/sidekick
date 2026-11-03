@@ -1,4 +1,4 @@
-// Package mcp is the source for Model Context Protocol servers (SRC-1). It
+// Package mcp is the source for Model Context Protocol servers. It
 // registers itself as the source type "mcp".
 //
 // A source talks to one server over streamable HTTP, legacy SSE or stdio,

@@ -1,4 +1,4 @@
-# An effort level the model does not support (MC-5).
+# An effort level the model does not support.
 database:
   urlSecret: { name: sidekick-db, key: url }
 

@@ -1,6 +1,7 @@
-package githubpr
+package gitchange
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -32,7 +33,7 @@ func TestPlainText(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			require.Equal(t, tt.want, plainText(tt.in))
+			require.Equal(t, tt.want, PlainText(tt.in))
 		})
 	}
 }
@@ -57,7 +58,7 @@ func TestMarkdownText(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			require.Equal(t, tt.want, markdownText(tt.in))
+			require.Equal(t, tt.want, MarkdownText(tt.in))
 		})
 	}
 }
@@ -65,6 +66,15 @@ func TestMarkdownText(t *testing.T) {
 func TestOneLine(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "a b c", oneLine("a\n\tb \r\n c\x00"))
-	require.Empty(t, oneLine(" \n "))
+	require.Equal(t, "a b c", OneLine("a\n\tb \r\n c\x00"))
+	require.Empty(t, OneLine(" \n "))
+}
+
+func TestTextRules(t *testing.T) {
+	t.Parallel()
+
+	quickAction := func(s string) string { return strings.ReplaceAll(s, "\n/", "\n`/`") }
+
+	require.Equal(t, "a\n`/`merge `@x`", PlainText("a\n/merge @x", quickAction), "the host's rule runs after the shared ones")
+	require.Equal(t, "a\n`/`merge `@x` &lt;b>", MarkdownText("a\n/merge @x <b>", quickAction), "the Markdown escapes run last")
 }

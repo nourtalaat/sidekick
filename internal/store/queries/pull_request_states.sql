@@ -2,11 +2,12 @@
 -- ListPullRequestsToCheck returns up to batch succeeded proposals of the
 -- given actions, executed since the given time, whose pull request has no
 -- state yet or was last checked as open before the given time. The ones
--- never checked come first, then those checked longest ago. The repository
--- is read from the proposal's parameters, or for an undo from the
--- proposal it undoes. An undo is checked only when it has a state, which
--- the action records when the undo opened a revert pull request.
-SELECT p.id, p.action, coalesce(p.params ->> 'repo', o.params ->> 'repo')::text AS repo
+-- never checked come first, then those checked longest ago. params are the
+-- parameters the action reads the repository or project from: the proposal's
+-- own, or for an undo those of the proposal it undoes. An undo is checked
+-- only when it has a state, which the action records when the undo opened a
+-- revert pull request.
+SELECT p.id, p.action, coalesce(o.params, p.params)::jsonb AS params
 FROM action_proposals p
 LEFT JOIN action_proposals o ON o.id = p.undo_of
 LEFT JOIN pull_request_states s ON s.proposal_id = p.id

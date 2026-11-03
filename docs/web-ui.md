@@ -752,6 +752,16 @@ An investigation's page links its `runtime:N` version to that version.
   holds an email, a host name or an IP address answers 422. See
   [Exporting a real investigation](benchmark.md#exporting-a-real-investigation).
 
+## The menu
+
+The left menu shows only the items the signed-in role can use. A viewer, a
+responder and an approver see Investigations, Dashboard, Review queue,
+Lessons, Routes, Strategies, Listeners and Benchmarks; an admin also sees
+Audit log and Settings. Someone who opens the address of a page their role
+cannot use, for example from a shared link, sees the page title and a
+message that names the role it needs; the page sends no request. The menu is
+a convenience, not a guard: the server checks the role on every request.
+
 ## Listeners, routes and the audit log in the UI
 
 The navigation has a page for each:

@@ -1,6 +1,6 @@
 //go:build integration
 
-package githubpr
+package gitchange
 
 import (
 	"context"
@@ -41,7 +41,7 @@ func TestQueryPlans(t *testing.T) {
 			name: "ListPullRequestsToCheck",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.ListPullRequestsToCheck(ctx, db.ListPullRequestsToCheckParams{
-					Actions: []string{"monitor-pr"}, Since: time.Now().Add(-trackedFor), Before: time.Now(), Batch: maxChecksPerRun,
+					Actions: []string{"monitor-pr"}, Since: time.Now().Add(-TrackedFor), Before: time.Now(), Batch: MaxChecksPerRun,
 				})
 
 				return fmt.Errorf("run query: %w", err)

@@ -650,6 +650,69 @@ How it behaves:
   stops waiting for response headers after 60 seconds; `sidekick config
   validate` rejects a longer one.
 
+#### GitLab sources (`type: gitlab`)
+
+A GitLab source reads projects on gitlab.com or a self-managed GitLab through
+the GitLab REST API, with an access token, so investigations can check what
+changed. Its tools only read. [GitLab source](sources/gitlab.md) lists the
+token's scope and role and how to make the token.
+
+| Key | Meaning |
+|---|---|
+| `tokenSecret` | `{ name, key }` of the Secret that holds the access token: a project, group or personal access token with the `read_api` scope and the Reporter role. Required. |
+| `projects` | The projects the tools may read, as full paths that may hold globs, for example `acme/checkout`, `acme/platform/*` or `acme/**`. `*` and `?` stay inside one part of the path, and `**` is a whole part that matches any number of parts. Required; a call for any other project fails. |
+| `serviceProjects` | Maps a service name to its project, so a tool can be called with the service an alert names. Each project must be one that `projects` allows. |
+| `baseURL` | The root of the GitLab, for example `https://gitlab.example.com`, without `/api/v4`. It must use `https`; plain `http` is accepted only for `localhost` and loopback addresses. Default: `https://gitlab.com`. |
+
+```yaml
+sources:
+  gitlab:
+    type: gitlab
+    tokenSecret: { name: sidekick-gitlab, key: token }
+    projects: ["acme/checkout", "acme/platform/*"]
+    serviceProjects:
+      checkout-api: acme/checkout
+```
+
+The tools, as the model sees them with the source name `gitlab`:
+
+| Tool | Returns |
+|---|---|
+| `gitlab__list_commits` | Commits since a time, newest first, optionally on a ref or touching a path. |
+| `gitlab__get_commit` | One commit: message, author, parents, changed files with line counts, and patches. |
+| `gitlab__list_merge_requests` | Merge requests opened or merged since a time. |
+| `gitlab__list_releases` | Releases with their dates, and optionally the newest tags. |
+| `gitlab__list_pipelines` | Pipelines, newest first, with status, source, ref and times. |
+| `gitlab__get_file` | A file at a ref, or the entries of a directory. |
+| `gitlab__compare` | The commits and changed files between two refs. |
+| `gitlab__list_deployments` | Deployments of a project or one environment, with status, ref, commit, who deployed and times. |
+
+How it behaves:
+
+- **Start-up never waits for GitLab.** The first tool call is the first
+  request. The token is read from its Secret for each request, so a rotated
+  token needs no restart.
+- **Project.** Every tool takes `project` (the full path) or `service` (a
+  name from `serviceProjects`). A project that `projects` does not allow, an
+  unknown service, a numeric project ID, or a ref or path that does not look
+  like one is a tool error, and nothing is sent to GitLab.
+- **Results** are JSON, and link to the GitLab pages of the commits, merge
+  requests, releases, pipelines, deployments and files they name, which
+  become evidence links in the report. Lists return up to `limit` items
+  (default 30, at most 100) and read at most 10 pages. Commit messages in
+  lists are cut at 1 KiB, the patches of one commit at 64 KiB in all, and
+  files at 256 KiB; binary files and files over 1 MB are left out.
+- **No data.** A project, ref or path GitLab does not have, and an empty
+  list, are reported as no data. GitLab gives the same "not found" for a
+  project the token cannot see.
+- **Errors.** Other refusals, such as a ref GitLab cannot resolve or a call
+  the token's role may not make, go to the model as tool errors with GitLab's
+  message. Server errors, rate limits and a refused token count as failures
+  of the source.
+- **Timeout.** `timeout` may be at most `60s`, because the HTTP client
+  stops waiting for response headers after 60 seconds; `sidekick config
+  validate` rejects a longer one.
+
 #### Backstage sources (`type: backstage`)
 
 A Backstage source reads a Backstage software catalog with a static token,

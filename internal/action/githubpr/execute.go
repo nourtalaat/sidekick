@@ -11,6 +11,7 @@ import (
 	gh "github.com/google/go-github/v93/github"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/source"
 	"github.com/nourtalaat/sidekick/internal/weblink"
 )
@@ -151,10 +152,10 @@ func (p *PR) push(ctx context.Context, pre *prepared, branch string, inv action.
 	entries := make([]*gh.TreeEntry, 0, len(pre.changes))
 
 	for _, c := range pre.changes {
-		entry := &gh.TreeEntry{Path: new(c.path)}
+		entry := &gh.TreeEntry{Path: new(c.Path)}
 
-		if !c.deleted() {
-			entry.Mode, entry.Type, entry.Content = new(fileMode), new(blobType), c.content
+		if !c.Deleted() {
+			entry.Mode, entry.Type, entry.Content = new(fileMode), new(blobType), c.Content
 		}
 
 		entries = append(entries, entry)
@@ -193,7 +194,7 @@ func (p *PR) commitTo(ctx context.Context, owner, name string, b base, entries [
 // open makes the pull request of a proposal from the branch.
 func (p *PR) open(ctx context.Context, params Params, owner, name, branch string, inv action.Invocation) (*gh.PullRequest, error) {
 	return p.openPullRequest(ctx, owner, name, gh.CreatePullRequest{
-		Title: new(oneLine(plainText(params.Title))),
+		Title: new(gitchange.OneLine(gitchange.PlainText(params.Title))),
 		Head:  branch,
 		Base:  params.BaseBranch,
 		Body:  new(p.description(params.Body, inv)),
@@ -232,7 +233,7 @@ func (p *PR) openPullRequest(ctx context.Context, owner, name string, req gh.Cre
 func (p *PR) description(body string, inv action.Invocation) string {
 	var b strings.Builder
 
-	b.WriteString(source.CutText(markdownText(body), maxPullRequestBodyBytes))
+	b.WriteString(source.CutText(gitchange.MarkdownText(body), maxPullRequestBodyBytes))
 	b.WriteString("\n\n---\n")
 	fmt.Fprintf(&b, "Opened by Sidekick for proposal `%s`.", inv.ProposalID)
 
@@ -257,9 +258,9 @@ func (p *PR) result(owner, name string, pr *gh.PullRequest, how string) action.R
 	switch state := stateOf(pr); {
 	case how == resultOpened:
 		summary = "Opened " + draft + "pull request " + title
-	case state == StateMerged:
+	case state == gitchange.StateMerged:
 		summary = "Found pull request " + title + ", which has been merged since it was opened"
-	case state == StateClosed:
+	case state == gitchange.StateClosed:
 		summary = "Found pull request " + title + ", which has been closed since it was opened"
 	default:
 		summary = "Found the already opened " + draft + "pull request " + title
@@ -271,7 +272,7 @@ func (p *PR) result(owner, name string, pr *gh.PullRequest, how string) action.R
 // commitMessage returns the message of the commit: the title on one line,
 // and the proposal it is for.
 func commitMessage(title, proposalID string) string {
-	line := source.CutText(oneLine(plainText(title)), maxCommitTitleBytes)
+	line := source.CutText(gitchange.OneLine(gitchange.PlainText(title)), maxCommitTitleBytes)
 
 	return line + "\n\nSidekick proposal " + proposalID + "\n"
 }

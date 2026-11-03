@@ -1,4 +1,4 @@
-package githubpr
+package gitchange
 
 import (
 	"strings"
@@ -40,7 +40,7 @@ func TestChangedLines(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, within := changedLines(tt.old, tt.updated, tt.limit)
+			got, within := ChangedLines(tt.old, tt.updated, tt.limit)
 			require.Equal(t, tt.wantWithin, within)
 
 			if within {

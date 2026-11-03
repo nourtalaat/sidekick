@@ -77,6 +77,7 @@ Run `make help` for the full list. The main ones:
 | `make notice` | Writes `NOTICE`, the licenses of every module linked into the binary. Run it after changing dependencies. |
 | `make migrate-new name=...` | Creates the next migration file in `internal/store/migrations`. |
 | `make verify-generated` | Runs `make generate` and fails if any file changed. |
+| `make check-private-ids` | Fails, with file and line, when a tracked file cites a requirement ID (letters, a dash and a number) or names a private design document. Say it in words instead. `make check-private-ids-test` tests the check. |
 | `make build` | Builds `bin/sidekick` with the version and commit set. |
 | `make workflow-lint` | actionlint on the workflows in `.github/workflows`. |
 | `make vulncheck` | govulncheck on the code and its dependencies. |

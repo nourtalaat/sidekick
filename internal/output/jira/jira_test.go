@@ -355,7 +355,7 @@ func TestPublish(t *testing.T) {
 		},
 		{
 			name: "no related issue posts nothing",
-			edit: func(u *output.Update) { u.Event.Labels = map[string]string{defaultLabel: "SEC-1"} },
+			edit: func(u *output.Update) { u.Event.Labels = map[string]string{defaultLabel: "ENG-1"} },
 			want: output.Ref{Sink: testOutput, Data: map[string]string{"seq": "5"}},
 		},
 		{

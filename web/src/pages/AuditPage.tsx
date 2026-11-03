@@ -1,14 +1,11 @@
 import { Link, useSearchParams } from "react-router";
 import { useState, type FormEvent } from "react";
-import { ApiError } from "../api/client";
 import { useAudit, type AuditEntry, type AuditFilters } from "../api/audit";
 import { Button } from "../components/Button";
 import { EmptyState } from "../components/EmptyState";
 import { QueryError } from "../components/QueryError";
 import { Table } from "../components/Table";
 import { TextField } from "../components/TextField";
-import { hasRole } from "../roles";
-import { useCurrentUser } from "../session";
 import { formatTime } from "./rules/format";
 import "./AuditPage.css";
 
@@ -41,23 +38,8 @@ const ACTOR_KINDS: Record<AuditEntry["actorKind"], string> = {
 
 const INVESTIGATION_ID_SHOWN = 8;
 
-/** The audit log: who changed what and when, with the old and new values, filtered by what the address says. */
+/** The audit log: who changed what and when, with the old and new values, filtered by what the address says. The route needs the admin role. */
 export function AuditPage() {
-  const me = useCurrentUser();
-
-  if (!hasRole(me.role, "admin")) {
-    return (
-      <div className="sk-page">
-        <h1 className="sk-page__title">Audit log</h1>
-        <QueryError error={new ApiError(403, "This needs the admin role.")} />
-      </div>
-    );
-  }
-
-  return <AuditLog />;
-}
-
-function AuditLog() {
   const [params, setParams] = useSearchParams();
   const filters = filtersOf(params);
   const audit = useAudit(filters);

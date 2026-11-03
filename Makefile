@@ -146,6 +146,16 @@ verify-generated: ## Fail if `make generate` changes any file
 migrate-new: ## Create the next goose migration: make migrate-new name=add_jobs
 	sh scripts/migrate-new.sh "$(name)"
 
+CI_TARGETS += check-private-ids
+.PHONY: check-private-ids
+check-private-ids: ## Fail if a tracked file cites a requirement ID or names a private design document
+	bash scripts/check-private-ids.sh
+
+CI_TARGETS += check-private-ids-test
+.PHONY: check-private-ids-test
+check-private-ids-test: ## Test that check-private-ids fails on text that cites a private document and passes on text that does not
+	bash scripts/check-private-ids-test.sh
+
 CI_TARGETS += build
 .PHONY: build
 build: ui-build ## Build the web UI, then bin/sidekick and bin/sidekick-validate with the version and commit set

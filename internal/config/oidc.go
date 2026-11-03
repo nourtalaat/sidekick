@@ -23,7 +23,7 @@ const AnyGroup = "*"
 // account can sign in to, so it never limits who a role reaches.
 const googleIssuer = "accounts.google.com"
 
-// OIDC sets up web UI login through an OpenID Connect provider (UI-1). The
+// OIDC sets up web UI login through an OpenID Connect provider. The
 // web UI and the JSON API are served only when the section is set.
 type OIDC struct {
 	// Issuer is the provider's issuer URL, such as https://acme.okta.com.
