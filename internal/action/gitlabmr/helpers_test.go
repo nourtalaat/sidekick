@@ -310,3 +310,13 @@ func keysOf(m map[string]any) []string {
 
 	return keys
 }
+
+// registrySecrets returns a resolver that serves the test token.
+func registrySecrets(t *testing.T) registry.Secrets {
+	t.Helper()
+
+	s := registry.NewMockSecrets(gomock.NewController(t))
+	s.EXPECT().Resolve(gomock.Any(), testToken).Return([]byte(testTokenValue), nil).AnyTimes()
+
+	return s
+}
