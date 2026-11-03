@@ -97,7 +97,7 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"action_proposals_pkey", "investigations_pkey", "users_pkey"},
+			wantIndex: []string{"action_proposals_pkey", "investigations_pkey", "users_pkey", "pull_request_states_pkey"},
 		},
 		{
 			name: "LockActionProposal",
@@ -166,7 +166,7 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey"},
+			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey", "pull_request_states_pkey"},
 		},
 		{
 			name: "ListActionProposalsDecided",
@@ -177,7 +177,7 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey"},
+			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey", "pull_request_states_pkey"},
 		},
 		{
 			name: "ListInvestigationActionProposals",
@@ -186,7 +186,7 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"action_proposals_investigation", "investigations_pkey"},
+			wantIndex: []string{"action_proposals_investigation", "investigations_pkey", "pull_request_states_pkey"},
 		},
 	}
 

@@ -35,4 +35,14 @@ SELECT md5('proposal' || i || '-' || n)::uuid, md5('investigation' || i)::uuid, 
        CASE WHEN n % 4 IN (2, 3) THEN now() - make_interval(secs => i * 60 - n - 10) ELSE NULL END
 FROM generate_series(1, 5000) AS i, generate_series(1, 10) AS n;
 
+-- The pull request of the second proposal of each investigation, which
+-- succeeded: a third open, a third merged and a third closed.
+INSERT INTO pull_request_states (proposal_id, repo, number, url, state, merged_at, closed_at, checked_at)
+SELECT md5('proposal' || i || '-2')::uuid, 'acme/monitors', i, 'https://github.com/acme/monitors/pull/' || i,
+       CASE i % 3 WHEN 0 THEN 'open' WHEN 1 THEN 'merged' ELSE 'closed' END,
+       CASE WHEN i % 3 = 1 THEN now() - make_interval(secs => i * 60 - 20) END,
+       CASE WHEN i % 3 = 2 THEN now() - make_interval(secs => i * 60 - 20) END,
+       now() - make_interval(secs => i * 60 - 30)
+FROM generate_series(1, 5000) AS i;
+
 ANALYZE;

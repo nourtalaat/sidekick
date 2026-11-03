@@ -87,9 +87,30 @@ type Proposal struct {
 	// UndoOf is set on a proposal that restores an earlier one.
 	UndoOf string
 	Result *Result
+	// PullRequest is what the daily check last read about the pull request
+	// the proposal opened. Nil when no check has recorded one.
+	PullRequest *PullRequest
 	// Error says why it failed. While it is retried it holds the last
 	// failed attempt.
 	Error string
+}
+
+// PullRequest is the state of the pull request or merge request that a
+// proposal opened, as the daily check last read it from the host.
+type PullRequest struct {
+	// Repo is the repository or project, as the host names it.
+	Repo   string
+	Number int64
+	URL    string
+	// State is open, merged or closed.
+	State string
+	// MergedAt is set for a merged pull request, ClosedAt for one closed
+	// without a merge.
+	MergedAt *time.Time
+	ClosedAt *time.Time
+	// CheckedAt is when the check last read it. A merged or closed pull
+	// request is not read again.
+	CheckedAt time.Time
 }
 
 // PolicyApprovalText is how a screen says that a route's policy approved a

@@ -24,9 +24,10 @@ SELECT * FROM action_proposals WHERE id = @id;
 
 -- name: GetActionProposalView :one
 -- GetActionProposalView returns a proposal with the route and title of its
--- investigation and the name of who decided it. These are read by primary
--- key for each row returned, after the page is cut, so a page costs the
--- same however many investigations and users there are.
+-- investigation, the name of who decided it and the state of its pull
+-- request, if it has one. These are read by primary key for each row
+-- returned, after the page is cut, so a page costs the same however many
+-- investigations, users and pull requests there are.
 SELECT
   sqlc.embed(p),
   (SELECT i.route FROM investigations i WHERE i.id = p.investigation_id)::text AS route,
@@ -34,8 +35,16 @@ SELECT
   coalesce(
     (SELECT u.name FROM users u WHERE u.id = p.decided_by),
     (SELECT t.name FROM api_tokens t WHERE t.id = p.decided_by),
-    '')::text AS decided_by_name
+    '')::text AS decided_by_name,
+  s.repo AS pr_repo,
+  s.number AS pr_number,
+  s.url AS pr_url,
+  s.state AS pr_state,
+  s.merged_at AS pr_merged_at,
+  s.closed_at AS pr_closed_at,
+  s.checked_at AS pr_checked_at
 FROM action_proposals p
+LEFT JOIN pull_request_states s ON s.proposal_id = p.id
 WHERE p.id = @id;
 
 -- name: LockActionProposal :one
@@ -141,8 +150,16 @@ SELECT
   coalesce(
     (SELECT u.name FROM users u WHERE u.id = p.decided_by),
     (SELECT t.name FROM api_tokens t WHERE t.id = p.decided_by),
-    '')::text AS decided_by_name
+    '')::text AS decided_by_name,
+  s.repo AS pr_repo,
+  s.number AS pr_number,
+  s.url AS pr_url,
+  s.state AS pr_state,
+  s.merged_at AS pr_merged_at,
+  s.closed_at AS pr_closed_at,
+  s.checked_at AS pr_checked_at
 FROM action_proposals p
+LEFT JOIN pull_request_states s ON s.proposal_id = p.id
 WHERE p.status = @status
   AND (p.proposed_at, p.id) < (@before_at::timestamptz, @before_id::uuid)
 ORDER BY p.proposed_at DESC, p.id DESC
@@ -158,7 +175,15 @@ SELECT
   coalesce(
     (SELECT u.name FROM users u WHERE u.id = p.decided_by),
     (SELECT t.name FROM api_tokens t WHERE t.id = p.decided_by),
-    '')::text AS decided_by_name
+    '')::text AS decided_by_name,
+  s.repo AS pr_repo,
+  s.number AS pr_number,
+  s.url AS pr_url,
+  s.state AS pr_state,
+  s.merged_at AS pr_merged_at,
+  s.closed_at AS pr_closed_at,
+  s.checked_at AS pr_checked_at
 FROM action_proposals p
+LEFT JOIN pull_request_states s ON s.proposal_id = p.id
 WHERE p.investigation_id = @investigation_id
 ORDER BY p.proposed_at, p.id;

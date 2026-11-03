@@ -265,8 +265,16 @@ SELECT
   coalesce(
     (SELECT u.name FROM users u WHERE u.id = p.decided_by),
     (SELECT t.name FROM api_tokens t WHERE t.id = p.decided_by),
-    '')::text AS decided_by_name
+    '')::text AS decided_by_name,
+  s.repo AS pr_repo,
+  s.number AS pr_number,
+  s.url AS pr_url,
+  s.state AS pr_state,
+  s.merged_at AS pr_merged_at,
+  s.closed_at AS pr_closed_at,
+  s.checked_at AS pr_checked_at
 FROM action_proposals p
+LEFT JOIN pull_request_states s ON s.proposal_id = p.id
 WHERE p.id = $1
 `
 
@@ -275,12 +283,20 @@ type GetActionProposalViewRow struct {
 	Route          string
 	AlertTitle     string
 	DecidedByName  string
+	PrRepo         *string
+	PrNumber       *int64
+	PrUrl          *string
+	PrState        *string
+	PrMergedAt     *time.Time
+	PrClosedAt     *time.Time
+	PrCheckedAt    *time.Time
 }
 
 // GetActionProposalView returns a proposal with the route and title of its
-// investigation and the name of who decided it. These are read by primary
-// key for each row returned, after the page is cut, so a page costs the
-// same however many investigations and users there are.
+// investigation, the name of who decided it and the state of its pull
+// request, if it has one. These are read by primary key for each row
+// returned, after the page is cut, so a page costs the same however many
+// investigations, users and pull requests there are.
 func (q *Queries) GetActionProposalView(ctx context.Context, id uuid.UUID) (GetActionProposalViewRow, error) {
 	row := q.db.QueryRow(ctx, getActionProposalView, id)
 	var i GetActionProposalViewRow
@@ -307,6 +323,13 @@ func (q *Queries) GetActionProposalView(ctx context.Context, id uuid.UUID) (GetA
 		&i.Route,
 		&i.AlertTitle,
 		&i.DecidedByName,
+		&i.PrRepo,
+		&i.PrNumber,
+		&i.PrUrl,
+		&i.PrState,
+		&i.PrMergedAt,
+		&i.PrClosedAt,
+		&i.PrCheckedAt,
 	)
 	return i, err
 }
@@ -457,8 +480,16 @@ SELECT
   coalesce(
     (SELECT u.name FROM users u WHERE u.id = p.decided_by),
     (SELECT t.name FROM api_tokens t WHERE t.id = p.decided_by),
-    '')::text AS decided_by_name
+    '')::text AS decided_by_name,
+  s.repo AS pr_repo,
+  s.number AS pr_number,
+  s.url AS pr_url,
+  s.state AS pr_state,
+  s.merged_at AS pr_merged_at,
+  s.closed_at AS pr_closed_at,
+  s.checked_at AS pr_checked_at
 FROM action_proposals p
+LEFT JOIN pull_request_states s ON s.proposal_id = p.id
 WHERE p.status = $1
   AND (p.proposed_at, p.id) < ($2::timestamptz, $3::uuid)
 ORDER BY p.proposed_at DESC, p.id DESC
@@ -477,6 +508,13 @@ type ListActionProposalsRow struct {
 	Route          string
 	AlertTitle     string
 	DecidedByName  string
+	PrRepo         *string
+	PrNumber       *int64
+	PrUrl          *string
+	PrState        *string
+	PrMergedAt     *time.Time
+	PrClosedAt     *time.Time
+	PrCheckedAt    *time.Time
 }
 
 // ListActionProposals lists proposals with one status, newest first, from
@@ -520,6 +558,13 @@ func (q *Queries) ListActionProposals(ctx context.Context, arg ListActionProposa
 			&i.Route,
 			&i.AlertTitle,
 			&i.DecidedByName,
+			&i.PrRepo,
+			&i.PrNumber,
+			&i.PrUrl,
+			&i.PrState,
+			&i.PrMergedAt,
+			&i.PrClosedAt,
+			&i.PrCheckedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -539,8 +584,16 @@ SELECT
   coalesce(
     (SELECT u.name FROM users u WHERE u.id = p.decided_by),
     (SELECT t.name FROM api_tokens t WHERE t.id = p.decided_by),
-    '')::text AS decided_by_name
+    '')::text AS decided_by_name,
+  s.repo AS pr_repo,
+  s.number AS pr_number,
+  s.url AS pr_url,
+  s.state AS pr_state,
+  s.merged_at AS pr_merged_at,
+  s.closed_at AS pr_closed_at,
+  s.checked_at AS pr_checked_at
 FROM action_proposals p
+LEFT JOIN pull_request_states s ON s.proposal_id = p.id
 WHERE p.investigation_id = $1
 ORDER BY p.proposed_at, p.id
 `
@@ -550,6 +603,13 @@ type ListInvestigationActionProposalsRow struct {
 	Route          string
 	AlertTitle     string
 	DecidedByName  string
+	PrRepo         *string
+	PrNumber       *int64
+	PrUrl          *string
+	PrState        *string
+	PrMergedAt     *time.Time
+	PrClosedAt     *time.Time
+	PrCheckedAt    *time.Time
 }
 
 // ListInvestigationActionProposals lists the proposals of an
@@ -586,6 +646,13 @@ func (q *Queries) ListInvestigationActionProposals(ctx context.Context, investig
 			&i.Route,
 			&i.AlertTitle,
 			&i.DecidedByName,
+			&i.PrRepo,
+			&i.PrNumber,
+			&i.PrUrl,
+			&i.PrState,
+			&i.PrMergedAt,
+			&i.PrClosedAt,
+			&i.PrCheckedAt,
 		); err != nil {
 			return nil, err
 		}
