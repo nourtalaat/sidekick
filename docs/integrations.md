@@ -54,6 +54,7 @@ Kubernetes and cloud:
 
 Code and deploys:
 
+- `argocd`: Argo CD applications, their sync status, health, auto-sync and deployment history. See [the Argo CD source](sources/argocd.md).
 - `github`: commits, pull requests, releases and GitHub Actions runs. See [the GitHub source](sources/github.md).
 - `gitlab`: commits, merge requests, releases, pipelines, deployments and files of GitLab projects, on gitlab.com or self-managed. See [the GitLab source](sources/gitlab.md).
 
