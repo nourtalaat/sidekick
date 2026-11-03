@@ -297,13 +297,26 @@ The web UI shows the investigations in two pages, which every role from
 - **The investigation page** (`/investigations/<id>`, the address the
   Slack link opens) shows the verdict, how sure Sidekick is, the reason,
   the state of the watchers, the report, what was checked, the cost and
-  the model, the lessons the prompt used, the alerts of the group, and the
+  the model, the lessons the prompt used, the memory entries it showed as
+  examples, the alerts of the group, and the
   record of the run, one line for each step with its time, tokens, cost
   and model. A step opens to show the model and the connector it ran
   through, then the tool call or result in a box with a copy button. The
   prompt step, and the triage prompt step, also say how many lessons they
   used and which lessons applied but were left out, with the reason; see
   [Lessons](#lessons).
+
+Under **Lessons used**, the **Memory used** card lists the past investigations
+that the prompt of the current run showed as examples, in the order of the
+prompt, up to 10. Each has its confirmed verdict, its alert title (or its
+summary) as a link to its investigation, and why it was chosen: "the same alert
+fingerprint", "the same service and alert name", "similar words" or "a similar
+description", as the prompt words it. An entry that was deleted since says "No
+longer in memory", and one that was disabled says "Disabled since this run".
+The card says that the entries are shown as they are now, and that the prompt
+had their text at the time. The card is left out when the run used no examples.
+An `admin` also sees **Manage memory**, a link to the Memory tab of the
+[Lessons and memory page](#the-lessons-and-memory-page).
 
 Under the watchers, each watcher has a **Checks** list that opens to show
 how the watcher started, how it ended and when, and its last checks, newest
@@ -481,6 +494,11 @@ and cause, disable or enable the entry, and delete it. Two things to know:
   is replaced; the disabled state stays.
 - A delete lasts until the confirmation changes too: Sidekick then writes a new
   entry. To keep an entry out of prompts for good, disable it.
+
+An investigation page lists the entries its prompt showed in its
+[Memory used card](#investigation-pages). The card reads the entries as they
+are now, so an edit, a disable or a delete shows there, while the prompt had
+the text at the time.
 
 The edit form and the delete step say so. See
 [Memory entries and service notes](#memory-entries-and-service-notes) for the
