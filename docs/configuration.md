@@ -2511,6 +2511,155 @@ edited in the Alertmanager UI keeps its ID when only its end changes and
 gets a new ID when its matchers change, and the comment, with the marker, is
 copied either way.
 
+##### `grafana.silence`
+
+Silences alerts in Grafana for a limited time, for planned work or a known
+noisy period. It uses the Alertmanager that is built into Grafana alerting,
+through Grafana's HTTP API. A silence mutes alerts; it does not close them,
+and Grafana keeps the silence after it ends. It works like
+[`alertmanager.silence`](#alertmanagersilence), with the same scopes and the
+same duration limit. Use it on routes with `mode: approved`: the silence
+starts as soon as it is approved. It needs no `allowReadWrite`. It supports
+Grafana 11.6 and later. For silences in an Alertmanager outside Grafana, use
+`alertmanager.silence`.
+
+```yaml
+actions:
+  mute-payments:
+    type: grafana.silence
+    url: https://acme.grafana.net            # the root of Grafana; https, or http on localhost
+    tokenSecret: { name: sidekick-grafana-silence, key: token }
+    createdBy: sidekick                      # the name Grafana shows; default sidekick
+    limits:
+      maxDuration: 2h                        # default 2h, at most 24h
+      scopes:                                # at least one
+        - labels:
+            alertname: [HighLatency, HighErrorRate]
+            grafana_folder: ["payments-*"]
+        - labels:
+            team: [payments]
+
+routes:
+  - name: payments-alerts
+    match: { grafana_folder: "payments-*" }
+    sources: [prometheus]
+    mode: approved
+    actions: [mute-payments]
+```
+
+- `url` is the root of Grafana, such as `https://acme.grafana.net`. If Grafana
+  is served from a sub-path, include it. It must be https, except for a
+  loopback host.
+- `tokenSecret` is a Grafana service account token. Use a token of its own,
+  apart from the token of any Grafana source and from the one of
+  `grafana.alert_rule`. It is read on every call, so a rotated token needs no
+  restart. The permissions it needs are below.
+- `tls` (`caSecret`, and `certSecret` with `keySecret`) takes the same form as
+  for the [Prometheus source](#prometheus-sources-type-prometheus). Use it for a
+  Grafana that is served with a certificate from your own CA.
+- `createdBy` is the name Grafana shows as the creator. It is at most 100
+  bytes. Grafana stores it as sent and does not replace it with the name of
+  the service account.
+- `limits.scopes` says which alerts may be silenced, and is required. A scope
+  is a set of labels, each with the values it allows, as globs where `*`
+  matches any text and every other character stands for itself. A scope with
+  no labels is refused, because it would allow silencing everything. The labels
+  are the labels of the alerts in Grafana, such as `alertname`,
+  `grafana_folder` and the labels of the rule.
+- `limits.maxDuration` is the longest silence: from `5m` to `24h`, `2h` when
+  not set. The shortest silence is 5 minutes.
+
+There is no key for the organization. A service account token belongs to one
+Grafana organization, and the action works in that organization. Do not send
+an `X-Grafana-Org-Id` header for another one: Grafana refuses it with a 401,
+so the action has no `headers` key.
+
+**The rule for a silence.** The model proposes `matchers` (each with `name`,
+`value`, `isRegex` and `isEqual`), a `duration` such as `30m` or `2h`, and a
+`comment` that says why. A silence is allowed when, for at least one scope,
+every label of the scope is pinned in the silence by an equality matcher
+(`isEqual: true`, `isRegex: false`) whose value matches one of that label's
+globs. With the scopes above, `alertname="HighLatency"` with
+`grafana_folder="payments-eu"` is allowed, and so is `team="payments"` alone.
+A regex or a not-equal matcher on a scope label does not count as pinning it.
+Any further matcher is allowed, because it can only narrow what is silenced.
+A silence has at most 10 matchers, and no matcher may have an empty name or an
+empty value. The comment is at most 500 characters, and line breaks and tabs
+become spaces. The limits are checked when the model proposes and again
+right before the silence is made.
+
+**What the approver sees.** The proposal shows the silence as it will be made:
+the matchers, the duration, the creator and the comment. It also shows the
+firing alerts that the matchers match at the time of the proposal, as a count
+and the first five, each with its state. That is information and not a limit.
+If Grafana cannot be asked, for example because the token may not read alerts,
+the proposal is shown without the alerts and says why. The silence starts
+when it is approved, not when it was proposed, and lasts the duration the
+approver read.
+
+**The marker.** Sidekick adds a line to the comment, `[sidekick proposal <id>]`.
+It shows people who made the silence, and a retry after a crash and Undo find
+the silence by it. Before it makes a silence, Sidekick looks for one with the
+marker in any state, so a crash makes one silence, and a silence that a person
+ended in the meantime is not made again. Do not remove the line when you edit
+a silence in Grafana: Undo could not find it then.
+
+**Edits in Grafana.** When a person edits a silence in Grafana, it keeps its
+ID if the matchers and the start are the same, as when only the end changes.
+If the matchers change, Grafana ends the old silence and makes a new one with a
+new ID. The comment, with the marker, is copied either way, so Sidekick finds
+the silence by the marker and not by its ID.
+
+**Undo.** An approver can end a silence early. Undo ends the silence that has
+the marker. A silence that has ended already counts as success. If someone
+edited the silence since, so that its matchers or its length are not what was
+written, Undo ends nothing and shows the silence as it is now; the approver
+then confirms to end it anyway. Undo does not check the scopes again, because
+ending a silence is the safe direction.
+
+**Too many silences.** Grafana can limit how many silences it keeps. When it is
+at its limit it answers a new silence with a 429, and the proposal fails with
+the message "Grafana has reached its limit on silences; remove old silences in
+Grafana (Alerting, Silences) and try again". Sidekick tries again as it does for
+any 429, which works if someone removes old silences in time.
+
+**Permissions.** Create a service account for Sidekick and give it only these
+three permissions, without a scope:
+
+- `alert.instances:read`, to list silences, to find the marker and for the
+  preview of firing alerts
+- `alert.instances:create`, to make a silence
+- `alert.instances:write`, to end a silence
+
+On Grafana Enterprise and Grafana Cloud, put them in a custom role. On open
+source Grafana there are no custom roles, and the Editor role holds them, so
+the service account needs the Editor role, which can also edit other things in
+the organization; keep the token as secret as any other credential that can do
+that.
+
+These permissions work in the whole organization. Grafana cannot limit them to
+alerts with certain labels, so the scopes and the duration limit that Sidekick
+enforces are the only limit on what is silenced, and a person who holds the
+token can make any silence in the organization directly. Keep it in a Secret
+that only Sidekick reads.
+
+The `alert.silences:read`, `alert.silences:create` and `alert.silences:write`
+permissions do not replace them. Grafana checks those only for a silence that
+names one alert rule with a `__alert_rule_uid__` matcher, and limits them to
+the folder of that rule. A silence on other labels, which is what the scopes
+describe, needs `alert.instances:create` to be made and `alert.instances:write`
+to be ended.
+
+**What it relies on.** The calls, fields and permissions come from the public
+source and the published API description of
+[grafana/grafana](https://github.com/grafana/grafana), checked at v13.2.5,
+v12.4.14 and v11.6.9; the silence calls and their permission checks are the
+same in v13.3.0. The comments in `internal/action/grafanasilence` name the
+files. Grafana answers 202 and not 200 when it makes a silence. In a Grafana
+that runs on several servers, silences are shared between them within a short
+time, so a retry that reaches another server right after a crash could not see
+the silence yet and make a second one.
+
 ##### `launchdarkly.flag`
 
 Turns a LaunchDarkly feature flag off in one environment through the

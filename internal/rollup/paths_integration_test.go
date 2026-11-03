@@ -5,6 +5,7 @@ package rollup
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"testing"
 	"time"
 
@@ -24,6 +25,9 @@ const (
 	pathFence = 7
 
 	pathProposal = "0192d3a4-0000-7000-8000-0000000000a1"
+	// pathJob is the ID of the claimed job of the cases that run the daily
+	// pull request check.
+	pathJob = 9001
 
 	// The marks of the investigation, created on 2026-10-26 at 14:00:01 UTC.
 	markStats   = "stats_hourly 2026-10-26 14:00"
@@ -63,6 +67,32 @@ func TestEveryPathThatChangesACountedValueMarksItsBuckets(t *testing.T) {
 	proposalExecuting := proposalIn("executing", "now() + interval '1 hour'")
 	proposalPastExpiry := proposalIn("proposed", "now() - interval '1 hour'")
 	proposalID := uuid.MustParse(pathProposal)
+	proposalWithPullRequest := `INSERT INTO action_proposals (id, investigation_id, action, params, mode, status, idempotency_key, proposed_at, expires_at, fix_kind)
+		VALUES ('` + pathProposal + `', '` + pathInvestigation + `', 'github.pull_request', '{}', 'approved', 'succeeded', 'key-1', now(), now() + interval '1 hour', 'pull_request')`
+	pullRequestOpen := `INSERT INTO pull_request_states (proposal_id, repo, number, url, state, checked_at)
+		VALUES ('` + pathProposal + `', 'acme/monitors', 7, 'https://github.com/acme/monitors/pull/7', 'open', now())`
+	claimedJob := `INSERT INTO jobs (id, kind, payload, status, claim_token) VALUES (` + strconv.Itoa(pathJob) + `, 'check_pull_requests', '{}', 'running', ` + strconv.Itoa(pathFence) + `)
+		ON CONFLICT (id) DO NOTHING`
+	recorded := db.RecordPullRequestStateParams{
+		ProposalID: proposalID, Repo: "acme/monitors", Number: 7, Url: "https://github.com/acme/monitors/pull/7",
+		State: "open", Now: time.Now(),
+	}
+	dailyCheck := func(state string) db.UpsertPullRequestStateParams {
+		at := time.Now()
+		params := db.UpsertPullRequestStateParams{
+			ProposalID: proposalID, Repo: "acme/monitors", Number: 7, Url: "https://github.com/acme/monitors/pull/7",
+			State: state, Now: at, JobID: pathJob, ClaimToken: pathFence,
+		}
+
+		switch state {
+		case "merged":
+			params.MergedAt = &at
+		case "closed":
+			params.ClosedAt = &at
+		}
+
+		return params
+	}
 	attemptError := "the service answered 503"
 
 	tests := []struct {
@@ -344,6 +374,43 @@ func TestEveryPathThatChangesACountedValueMarksItsBuckets(t *testing.T) {
 				require.NoError(t, err)
 			},
 			want: []string{markStats},
+		},
+		{
+			name:    "the action records a pull request it opened",
+			prepare: []string{proposalWithPullRequest},
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
+				require.NoError(t, q.RecordPullRequestState(ctx, recorded))
+			},
+			want: []string{markStats},
+		},
+		{
+			name:    "the daily check finds a pull request merged",
+			prepare: []string{proposalWithPullRequest, pullRequestOpen, claimedJob},
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
+				written, err := q.UpsertPullRequestState(ctx, dailyCheck("merged"))
+				require.NoError(t, err)
+				require.EqualValues(t, 1, written)
+			},
+			want: []string{markStats},
+		},
+		{
+			name:    "the daily check finds a pull request closed",
+			prepare: []string{proposalWithPullRequest, pullRequestOpen, claimedJob},
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
+				written, err := q.UpsertPullRequestState(ctx, dailyCheck("closed"))
+				require.NoError(t, err)
+				require.EqualValues(t, 1, written)
+			},
+			want: []string{markStats},
+		},
+		{
+			name:    "the daily check finds a pull request still open",
+			prepare: []string{proposalWithPullRequest, pullRequestOpen, claimedJob},
+			run: func(ctx context.Context, t *testing.T, q *db.Queries) {
+				written, err := q.UpsertPullRequestState(ctx, dailyCheck("open"))
+				require.NoError(t, err)
+				require.EqualValues(t, 1, written)
+			},
 		},
 	}
 

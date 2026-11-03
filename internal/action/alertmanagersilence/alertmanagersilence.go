@@ -5,6 +5,13 @@
 // longer than limits.maxDuration. The rules and the text that every mute
 // action shares are in internal/action/mute.
 //
+// The package also carries the Grafana backend: Grafana's built-in
+// Alertmanager serves the same API v2 under another path, so the action
+// grafana.silence (internal/action/grafanasilence) builds this silencer with
+// its own Backend and Config. A Backend names the vendor in messages, gives
+// the API path, the target prefix and the address of a silence in the UI,
+// and may add a hint to the error for a refused create.
+//
 // What the action relies on from Alertmanager, as its public source at the
 // release tag v0.34.1 shows (https://github.com/prometheus/alertmanager,
 // paths below are in that repository):
@@ -52,6 +59,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -75,6 +83,35 @@ var (
 	errNoUndoOf     = errors.New("the undo does not say which proposal it undoes")
 )
 
+// Backend says which service a silencer talks to, so one silencer serves
+// Alertmanager and the Alertmanager that is built into Grafana. The
+// Alertmanager backend is what New uses.
+type Backend struct {
+	// Vendor names the service in messages and in the description the model
+	// reads, such as "Alertmanager" or "Grafana".
+	Vendor string
+	// APIPath is the path of the API v2 below the root URL, such as /api/v2.
+	APIPath string
+	// TargetPrefix starts Snapshot.Target: "grafana" gives
+	// grafana:silence{...}.
+	TargetPrefix string
+	// SilenceURL returns the address of the silence with id in the web UI
+	// of the service whose root URL is root.
+	SilenceURL func(root, id string) string
+	// CreateLimitHint, when set, is added to the error of a create that the
+	// service answers with 429, to say what to do about it. The error is
+	// still retried, like any 429.
+	CreateLimitHint string
+}
+
+// alertmanagerBackend is the Backend of Prometheus Alertmanager.
+var alertmanagerBackend = Backend{
+	Vendor:       "Alertmanager",
+	APIPath:      "/api/v2",
+	TargetPrefix: "alertmanager",
+	SilenceURL:   func(root, id string) string { return root + "/#/silences/" + url.PathEscape(id) },
+}
+
 // init registers the action when the package is linked in.
 func init() {
 	registry.Actions.Register(Type, registry.Typed(New))
@@ -90,6 +127,7 @@ type params struct {
 // silencer is one configured alertmanager.silence action.
 type silencer struct {
 	name        string
+	backend     Backend
 	scopes      []mute.Scope
 	maxDuration time.Duration
 	createdBy   string
@@ -113,7 +151,14 @@ type request struct {
 // New builds the action from its validated config. It does not call
 // Alertmanager: a service that is down must not stop Sidekick from
 // starting.
-func New(_ context.Context, name string, cfg Config, deps registry.Deps) (action.Action, error) {
+func New(ctx context.Context, name string, cfg Config, deps registry.Deps) (action.Action, error) {
+	return NewSilencer(ctx, name, alertmanagerBackend, cfg, deps)
+}
+
+// NewSilencer builds the action for the service that backend describes,
+// from the config of one action. It does not call the service. A Grafana
+// config is turned into a Config first: its token becomes the bearer token.
+func NewSilencer(_ context.Context, name string, backend Backend, cfg Config, deps registry.Deps) (action.Action, error) {
 	limit, err := mute.MaxDuration(cfg.Limits.MaxDuration)
 	if err != nil {
 		return nil, fmt.Errorf("limits.maxDuration: %w", err)
@@ -143,12 +188,13 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (action
 
 	return &silencer{
 		name:        name,
+		backend:     backend,
 		scopes:      cfg.Limits.Scopes,
 		maxDuration: limit,
 		createdBy:   cfg.createdBy(),
 		client: &client{
 			http: &wrapped, root: strings.TrimSuffix(cfg.URL, "/"), userAgent: "sidekick/" + buildinfo.Version,
-			auth: httpauth.NewAuth(cfg.Config, deps.Secrets),
+			auth: httpauth.NewAuth(cfg.Config, deps.Secrets), backend: backend,
 		},
 		now: time.Now,
 	}, nil
@@ -159,7 +205,7 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (action
 func (s *silencer) Spec() action.Spec {
 	var b strings.Builder
 
-	b.WriteString("Silences alerts in Alertmanager for a limited time, from " + mute.FormatDuration(mute.MinDuration) +
+	b.WriteString("Silences alerts in " + s.backend.Vendor + " for a limited time, from " + mute.FormatDuration(mute.MinDuration) +
 		" to " + mute.FormatDuration(s.maxDuration) + ". The silence starts when it is approved and ends by itself. ")
 	b.WriteString("Give the matchers of the alerts to silence, each with name, value, isRegex and isEqual (false means not equal), " +
 		"the duration as a Go duration such as 30m or 2h, and the reason as the comment. ")

@@ -479,6 +479,10 @@ func (s *server) proposalOf(p action.Proposal, alertTitle string) apigen.Proposa
 		}
 	}
 
+	if p.PullRequest != nil {
+		out.PullRequest = pullRequestOf(*p.PullRequest)
+	}
+
 	return out
 }
 
@@ -500,6 +504,19 @@ func (s *server) proposalsOf(list []action.Proposal) []apigen.Proposal {
 	}
 
 	return out
+}
+
+// pullRequestOf is the API's view of the state of a proposal's pull request.
+func pullRequestOf(pr action.PullRequest) *apigen.ProposalPullRequest {
+	return &apigen.ProposalPullRequest{
+		Repo:      pr.Repo,
+		Number:    pr.Number,
+		Url:       pr.URL,
+		State:     apigen.ProposalPullRequestState(pr.State),
+		MergedAt:  pr.MergedAt,
+		ClosedAt:  pr.ClosedAt,
+		CheckedAt: pr.CheckedAt,
+	}
 }
 
 // proposalCursor encodes where a page of proposals ends.
