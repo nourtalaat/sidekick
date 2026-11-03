@@ -19,8 +19,10 @@ const (
 	toolGetCommit         = "get_commit"
 	toolListMergeRequests = "list_merge_requests"
 	toolListReleases      = "list_releases"
+	toolListPipelines     = "list_pipelines"
 	toolGetFile           = "get_file"
 	toolCompare           = "compare"
+	toolListDeployments   = "list_deployments"
 )
 
 // Limits on how many items a list tool returns.
@@ -31,6 +33,15 @@ const (
 	// maxLimit is the most items a list returns.
 	maxLimit = 100
 )
+
+// pipelineStatuses are the statuses GitLab can filter pipelines by.
+var pipelineStatuses = []any{
+	"created", "waiting_for_resource", "preparing", "waiting_for_callback", "pending", "running", "success",
+	"failed", "canceling", "canceled", "skipped", "manual", "scheduled",
+}
+
+// deploymentStatuses are the statuses GitLab can filter deployments by.
+var deploymentStatuses = []any{"created", "running", "success", "failed", "canceled", "skipped", "blocked"}
 
 // toolList is what Tools returns. Every tool only reads.
 var toolList = []source.Tool{
@@ -79,6 +90,19 @@ var toolList = []source.Tool{
 		ReadOnly: true,
 	},
 	{
+		Name: toolListPipelines,
+		Description: "List the pipelines of a GitLab project, newest first, for example to see what ran after a " +
+			"merge: status, source, ref, commit, times and link.",
+		InputSchema: schema(map[string]*jsonschema.Schema{
+			"since":  timeProperty("Only pipelines created at or after this time."),
+			"ref":    stringProperty("Only pipelines for this branch or tag."),
+			"status": {Type: "string", Description: "Only pipelines with this status.", Enum: pipelineStatuses},
+			"source": stringProperty("Only pipelines started by this source, such as push, web, schedule or merge_request_event."),
+			"limit":  limitProperty(),
+		}),
+		ReadOnly: true,
+	},
+	{
 		Name: toolGetFile,
 		Description: "Read a file of a GitLab project at a ref, or list a directory. Files over 256 KiB are " +
 			"cut, and binary files are not shown.",
@@ -97,6 +121,18 @@ var toolList = []source.Tool{
 			"head":  stringProperty("The newer branch, tag or SHA."),
 			"limit": limitProperty(),
 		}, "base", "head"),
+		ReadOnly: true,
+	},
+	{
+		Name: toolListDeployments,
+		Description: "List the deployments of a GitLab project, newest first, optionally of one environment: " +
+			"status, ref, commit, who deployed, times and link. Use it to see what was deployed when.",
+		InputSchema: schema(map[string]*jsonschema.Schema{
+			"since":       timeProperty("Only deployments created at or after this time."),
+			"environment": stringProperty("Only deployments to the environment with this name, for example production."),
+			"status":      {Type: "string", Description: "Only deployments with this status.", Enum: deploymentStatuses},
+			"limit":       limitProperty(),
+		}, "since"),
 		ReadOnly: true,
 	},
 }

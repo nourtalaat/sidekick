@@ -76,10 +76,14 @@ func (s *Source) run(ctx context.Context, call source.Call) (source.Result, erro
 		return s.listMergeRequests(ctx, call.Input)
 	case toolListReleases:
 		return s.listReleases(ctx, call.Input)
+	case toolListPipelines:
+		return s.listPipelines(ctx, call.Input)
 	case toolGetFile:
 		return s.getFile(ctx, call.Input)
 	case toolCompare:
 		return s.compare(ctx, call.Input)
+	case toolListDeployments:
+		return s.listDeployments(ctx, call.Input)
 	default:
 		return source.Result{}, fmt.Errorf("tool %q: %w", call.Tool, errUnknownTool)
 	}

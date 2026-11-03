@@ -26,6 +26,9 @@ const (
 	releasesPath      = apiRoot + "/projects/acme/checkout/releases"
 	tagsPath          = apiRoot + "/projects/acme/checkout/repository/tags"
 
+	pipelinesPath   = apiRoot + "/projects/acme/checkout/pipelines"
+	deploymentsPath = apiRoot + "/projects/acme/checkout/deployments"
+
 	filePath = apiRoot + "/projects/acme/checkout/repository/files/deploy/values.yaml"
 	treePath = apiRoot + "/projects/acme/checkout/repository/tree"
 
@@ -300,6 +303,66 @@ func TestSourceCall(t *testing.T) {
 				{http.MethodGet, tagsPath, []fakehttp.Response{body("[]")}},
 			},
 			wantQueries: []string{"page=1&per_page=30", "per_page=30"},
+			wantNoData:  true,
+		},
+		{
+			name:  "list_pipelines ends at the first pipeline created before the time",
+			tool:  toolListPipelines,
+			input: `{"project":"acme/checkout","since":"2026-05-04T09:00:00Z","ref":"main","status":"success","source":"web"}`,
+			routes: []route{{http.MethodGet, pipelinesPath, []fakehttp.Response{
+				fixture("pipelines.json"),
+			}}},
+			wantQueries: []string{"created_after=2026-05-04T09%3A00%3A00Z&order_by=id&page=1&per_page=30&ref=main&sort=desc&source=web&status=success"},
+			want: `{"project":"acme/checkout","pipelines":[
+				{"id":1002,"name":"Build pipeline","status":"running","source":"push","ref":"main","sha":"abc1234def5678abc1234def5678abc1234def56","created":"2026-05-04T10:06:00Z","updated":"2026-05-04T10:08:00Z","url":"https://gitlab.example.com/acme/checkout/-/pipelines/1002"},
+				{"id":1001,"name":"Deploy pipeline","status":"success","source":"web","ref":"main","sha":"0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c","created":"2026-05-04T09:31:00Z","updated":"2026-05-04T09:40:00Z","url":"https://gitlab.example.com/acme/checkout/-/pipelines/1001"}
+			]}`,
+			wantEvidence: []source.Evidence{
+				{Kind: source.EvidenceDeploy, Title: "acme/checkout pipeline #1002", URL: "https://gitlab.example.com/acme/checkout/-/pipelines/1002", At: at(10, 6)},
+				{Kind: source.EvidenceDeploy, Title: "acme/checkout pipeline #1001", URL: "https://gitlab.example.com/acme/checkout/-/pipelines/1001", At: at(9, 31)},
+			},
+		},
+		{
+			name:  "list_pipelines without a time lists the newest pipelines",
+			tool:  toolListPipelines,
+			input: `{"project":"acme/checkout","limit":1}`,
+			routes: []route{{http.MethodGet, pipelinesPath, []fakehttp.Response{
+				fixture("pipelines.json"),
+			}}},
+			wantQueries: []string{"order_by=id&page=1&per_page=1&sort=desc"},
+			want: `{"project":"acme/checkout","pipelines":[
+				{"id":1002,"name":"Build pipeline","status":"running","source":"push","ref":"main","sha":"abc1234def5678abc1234def5678abc1234def56","created":"2026-05-04T10:06:00Z","updated":"2026-05-04T10:08:00Z","url":"https://gitlab.example.com/acme/checkout/-/pipelines/1002"}
+			]}`,
+			wantEvidence: []source.Evidence{
+				{Kind: source.EvidenceDeploy, Title: "acme/checkout pipeline #1002", URL: "https://gitlab.example.com/acme/checkout/-/pipelines/1002", At: at(10, 6)},
+			},
+			wantTruncated: true,
+		},
+		{
+			name:  "list_deployments keeps those created since the time and links to their page",
+			tool:  toolListDeployments,
+			input: `{"project":"acme/checkout","since":"2026-05-04T09:00:00Z","environment":"production"}`,
+			routes: []route{{http.MethodGet, deploymentsPath, []fakehttp.Response{
+				fixture("deployments.json"),
+			}}},
+			wantQueries: []string{"environment=production&order_by=created_at&page=1&per_page=30&sort=desc&updated_after=2026-05-04T09%3A00%3A00Z"},
+			want: `{"project":"acme/checkout","deployments":[
+				{"id":41,"iid":7,"environment":"production","status":"success","ref":"main","sha":"abc1234def5678abc1234def5678abc1234def56","deployer":"deploy-bot","created":"2026-05-04T10:10:00Z","updated":"2026-05-04T10:12:00Z","finished":"2026-05-04T10:12:00Z","url":"{base}/acme/checkout/-/environments/9/deployments/7"},
+				{"id":40,"iid":6,"environment":"production","status":"failed","ref":"main","sha":"0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c","deployer":"ada","created":"2026-05-04T09:30:00Z","updated":"2026-05-04T09:35:00Z","url":"{base}/acme/checkout/-/environments/9/deployments/6"}
+			]}`,
+			wantEvidence: []source.Evidence{
+				{Kind: source.EvidenceDeploy, Title: "acme/checkout deploy production #7", URL: "{base}/acme/checkout/-/environments/9/deployments/7", At: at(10, 10)},
+				{Kind: source.EvidenceDeploy, Title: "acme/checkout deploy production #6", URL: "{base}/acme/checkout/-/environments/9/deployments/6", At: at(9, 30)},
+			},
+		},
+		{
+			name:  "list_deployments with a status and no deployments is no data",
+			tool:  toolListDeployments,
+			input: `{"project":"acme/checkout","since":"2026-05-04T09:00:00Z","status":"blocked"}`,
+			routes: []route{{http.MethodGet, deploymentsPath, []fakehttp.Response{
+				body("[]"),
+			}}},
+			wantQueries: []string{"order_by=created_at&page=1&per_page=30&sort=desc&status=blocked&updated_after=2026-05-04T09%3A00%3A00Z"},
 			wantNoData:  true,
 		},
 		{
@@ -608,6 +671,18 @@ func TestSourceCallInput(t *testing.T) {
 			tool:  toolGetFile,
 			input: `{"project":"acme/checkout","path":"a","ref":"main?x=1"}`,
 			want:  `ref: "main?x=1" is not a valid branch, tag or commit SHA`,
+		},
+		{
+			name:  "a pipeline source with a slash",
+			tool:  toolListPipelines,
+			input: `{"project":"acme/checkout","source":"a/b"}`,
+			want:  `source: "a/b" is not a pipeline source such as push or schedule`,
+		},
+		{
+			name:  "an environment name with a control character",
+			tool:  toolListDeployments,
+			input: `{"project":"acme/checkout","since":"2026-05-04T09:00:00Z","environment":"prod\u0000"}`,
+			want:  "is not an environment name",
 		},
 		{name: "compare without head", tool: toolCompare, input: `{"project":"acme/checkout","base":"main"}`, want: "give both base and head"},
 		{name: "compare with a ref that climbs out", tool: toolCompare, input: `{"project":"acme/checkout","base":"a/../b","head":"main"}`, want: `base: "a/../b" is not a valid branch, tag or commit SHA`},

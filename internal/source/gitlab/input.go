@@ -15,6 +15,14 @@ import (
 // characters Git allows in ref names that need no escaping in a URL path.
 var refPattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_./+-]*$`)
 
+// wordPattern is the shape of a pipeline source: lower case words joined by
+// underscores, such as merge_request_event.
+var wordPattern = regexp.MustCompile(`^[a-z][a-z_]{0,63}$`)
+
+// environmentPattern is the shape of an environment name: any text without
+// control characters, at most 255 characters.
+var environmentPattern = regexp.MustCompile(`^[^\x00-\x1f\x7f]{1,255}$`)
+
 // target names the project of a call: by its full path, or by a service
 // that serviceProjects maps to one. Every tool's input embeds it.
 type target struct {
