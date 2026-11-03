@@ -17,7 +17,7 @@ Sidekick receives alerts from webhooks or Slack, investigates them with the LLM 
 - When a route allows it, proposes changes such as a pull request or a ticket, and by default makes them only after a person approves.
 - Runs in your own Kubernetes cluster, with a model from Anthropic, Amazon Bedrock, OpenAI, Azure or Google, or one you host yourself.
 
-> **Status:** early. The latest release is v0.1.0; main has much more since then, and these docs describe main.
+> **Status:** early. The latest release is v0.2.0; these docs describe main, which can be ahead of it.
 
 ## Quick start
 

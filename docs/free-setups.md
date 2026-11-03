@@ -211,7 +211,7 @@ sidekick bench compare report.json other-report.json
 
 | Setup | Model | Served by | Verdict accuracy | False positive precision | Root cause match | Mean cost of a run | Sidekick version | Run date |
 |---|---|---|---|---|---|---|---|---|
-| Default | `claude-sonnet-5-5` | Anthropic API | 1.00 | 1.00 | 0.97 | $0.050 | `610c16a`, no release yet | 2026-11-02 |
+| Default | `claude-sonnet-5-5` | Anthropic API | 1.00 | 1.00 | 0.97 | $0.050 | v0.2.0 | 2026-11-02 |
 | 1, local | `Qwen/Qwen3.8-27B` | vLLM | not run by the project | not run by the project | not run by the project | none | | |
 | 1, local | `qwen3.8:27b` | Ollama | not run by the project | not run by the project | not run by the project | none | | |
 | 1, local | `google/gemma-4-31B-it` | vLLM | not run by the project | not run by the project | not run by the project | none | | |

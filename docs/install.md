@@ -41,9 +41,9 @@ kubectl -n sidekick create secret generic sidekick-slack \
 ### 3. Install the chart (4 minutes)
 
 ```sh
-helm install sidekick oci://ghcr.io/nourtalaat/charts/sidekick --version 0.1.0 \
+helm install sidekick oci://ghcr.io/nourtalaat/charts/sidekick --version 0.2.0 \
   --namespace sidekick \
-  -f https://raw.githubusercontent.com/nourtalaat/sidekick/v0.1.0/charts/sidekick/quickstart-values.yaml \
+  -f https://raw.githubusercontent.com/nourtalaat/sidekick/v0.2.0/charts/sidekick/quickstart-values.yaml \
   --set config.listeners.alerts.channel='#alerts'
 kubectl -n sidekick rollout status deploy/sidekick
 ```
@@ -154,11 +154,11 @@ Each release image is signed with cosign keyless signing in the release
 workflow, and has a signed SPDX SBOM. Check both before you install:
 
 ```sh
-cosign verify ghcr.io/nourtalaat/sidekick:0.1.0 \
-  --certificate-identity https://github.com/nourtalaat/sidekick/.github/workflows/release.yml@refs/tags/v0.1.0 \
+cosign verify ghcr.io/nourtalaat/sidekick:0.2.0 \
+  --certificate-identity https://github.com/nourtalaat/sidekick/.github/workflows/release.yml@refs/tags/v0.2.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
-cosign verify-attestation ghcr.io/nourtalaat/sidekick:0.1.0 --type spdxjson \
-  --certificate-identity https://github.com/nourtalaat/sidekick/.github/workflows/release.yml@refs/tags/v0.1.0 \
+cosign verify-attestation ghcr.io/nourtalaat/sidekick:0.2.0 --type spdxjson \
+  --certificate-identity https://github.com/nourtalaat/sidekick/.github/workflows/release.yml@refs/tags/v0.2.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
