@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router";
 import { LoginPage } from "./pages/LoginPage";
 import { AuditPage } from "./pages/AuditPage";
 import { BenchmarksPage } from "./pages/benchmarks/BenchmarksPage";
+import { BenchRunPage } from "./pages/benchmarks/BenchRunPage";
 import { DashboardPage } from "./pages/dashboard/DashboardPage";
 import InvestigationPage from "./pages/investigation/InvestigationPage";
 import InvestigationsPage from "./pages/investigations/InvestigationsPage";
@@ -57,6 +58,7 @@ export function App() {
             <Route path="/lessons" element={<LessonsPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/benchmarks" element={<BenchmarksPage />} />
+            <Route path="/benchmarks/:id" element={<BenchRunPage />} />
             <Route
               path="/settings"
               element={

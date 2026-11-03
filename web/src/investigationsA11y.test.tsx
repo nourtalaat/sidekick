@@ -32,7 +32,12 @@ const handler = routes({
   [`GET ${PATH}/steps`]: () =>
     json(200, {
       steps: [
-        step(1, { parts: [{ type: "tool_call", id: "c1", name: "search_logs", input: { query: "errors" } }] }),
+        step(1, {
+          costMicros: 12_300,
+          model: "big-model",
+          connector: "anthropic",
+          parts: [{ type: "tool_call", id: "c1", name: "search_logs", input: { query: "errors" } }],
+        }),
         step(2, { kind: "tool_result", tool: "search_logs", source: "signoz", parts: [{ type: "tool_result", callId: "c1", content: "3 errors" }] }),
       ],
     }),
@@ -90,6 +95,7 @@ describe.each(THEMES)("accessibility of the investigation pages, theme $name", (
       const { container } = renderApp({ me: RESPONDER, route: `/investigations/${INVESTIGATION_ID}`, handler });
       await user.click(await screen.findByRole("button", { name: /Model turn: called search_logs/ }));
       await screen.findByText(/Checking: health/);
+      expect(screen.getByText("Model: big-model through anthropic")).toBeInTheDocument();
       expect(screen.getByRole("form", { name: "Ask a follow-up" })).toBeInTheDocument();
 
       expect(await wcagViolations(container)).toEqual([]);

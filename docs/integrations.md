@@ -128,6 +128,8 @@ proposals](web-ui.md#action-proposals) for how people approve them.
 - `alertmanager.silence`: silences alerts in Alertmanager for a limited time, and ends the silence early on Undo. See [its keys](configuration.md#alertmanagersilence).
 - `grafana.silence`: silences alerts in Grafana for a limited time, and ends the silence early on Undo. See [its keys](configuration.md#grafanasilence).
 - `github.pull_request`: opens a pull request that changes monitor definitions kept in Git. See [its keys](configuration.md#githubpull_request).
+- `github.code_change`: opens a draft pull request that changes application code, which Sidekick never merges. See [its keys](configuration.md#githubcode_change).
 - `gitlab.merge_request`: opens a merge request that changes monitor definitions kept in Git, on gitlab.com or a self-managed GitLab. See [its keys](configuration.md#gitlabmerge_request).
 - `unleash.flag`: turns an Unleash feature flag off in one environment, or undoes its newest change. See [its keys](configuration.md#unleashflag).
 - `aws.ecs_rollback`: puts an Amazon ECS service back on an earlier task definition revision, with an IAM role of its own. See [its keys](configuration.md#awsecs_rollback).
+- `helm.rollback`: puts a Helm release back on an earlier revision, with Helm's Go library. See [its keys](configuration.md#helmrollback).

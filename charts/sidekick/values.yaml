@@ -242,16 +242,19 @@ rbac:
   # kubernetesSource makes these roles and their bindings. Turn it off to
   # manage them yourself.
   kubernetesSource: true
-  # actions makes what the actions of type prometheus.rule and
-  # kubernetes.rollback in config.actions need: a service account (config's
-  # serviceAccount, sidekick-actions and sidekick-kubernetes-rollback by
-  # default), a Role that lets Sidekick's own account create tokens for it
-  # and for no other account, and in each namespace the actions list a Role
-  # that allows get and patch on the PrometheusRules or the workloads they
-  # list by name (a kubernetes.rollback Role also lists ReplicaSets or
-  # ControllerRevisions, which cannot be limited by name). Turn it off to
-  # manage them yourself. Sidekick mounts its service account token whatever
-  # this says. docs/configuration.md lists every rule.
+  # actions makes what the actions of type prometheus.rule,
+  # kubernetes.rollback and helm.rollback in config.actions need: a service
+  # account (config's serviceAccount; sidekick-actions,
+  # sidekick-kubernetes-rollback and sidekick-helm-rollback by default), a
+  # Role that lets Sidekick's own account create tokens for it and for no
+  # other account, and, for prometheus.rule and kubernetes.rollback, in each
+  # namespace the actions list a Role that allows get and patch on the
+  # PrometheusRules or the workloads they list by name (a kubernetes.rollback
+  # Role also lists ReplicaSets or ControllerRevisions, which cannot be
+  # limited by name). A helm.rollback account gets no rights from the chart:
+  # bind a Role of your choice to it in each namespace of its limits. Turn it
+  # off to manage all of this yourself. Sidekick mounts its service account
+  # token whatever this says. docs/configuration.md lists every rule.
   actions: true
 
 pdb:
