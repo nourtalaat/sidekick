@@ -13,11 +13,9 @@ bundled Postgres for evaluation, and then the changes for production.
 
 ## Quick start
 
-Five steps, about 13 minutes by our estimate. The times assume the Slack and
-Anthropic accounts are ready; write down yours, it helps us make the quick
-start shorter.
+Five steps. Have the Slack and Anthropic accounts ready before you start.
 
-### 1. Create the Slack app (3 minutes)
+### 1. Create the Slack app
 
 Create an internal Slack app from the manifest in
 [`deploy/slack/manifest.yaml`](../deploy/slack/manifest.yaml): in
@@ -29,7 +27,7 @@ Sidekick uses it to open a Socket Mode connection, so it needs no public
 URL. [Investigations in Slack](slack.md#set-up-the-slack-app) has the
 details.
 
-### 2. Create the Secrets (2 minutes)
+### 2. Create the Secrets
 
 ```sh
 kubectl create namespace sidekick
@@ -38,7 +36,7 @@ kubectl -n sidekick create secret generic sidekick-slack \
   --from-literal=botToken='<xoxb-... bot token>' --from-literal=appToken='<xapp-... app-level token>'
 ```
 
-### 3. Install the chart (4 minutes)
+### 3. Install the chart
 
 ```sh
 helm install sidekick oci://ghcr.io/nourtalaat/charts/sidekick --version 0.2.0 \
@@ -65,7 +63,7 @@ only for alerts that do not come from Slack, such as webhooks (see
 [Next steps](#next-steps)); add `--set config.outputs.slack.channel=...`
 when you use another one.
 
-### 4. Invite the app and check the install (1 minute)
+### 4. Invite the app and check the install
 
 In Slack, invite the app to the channel: `/invite @Sidekick`. Then:
 
@@ -85,7 +83,7 @@ ok    prices: every configured model has a price
 ok    source k8s: connected; 5 of 5 tools exposed
 ```
 
-### 5. Send a test alert (3 minutes)
+### 5. Send a test alert
 
 ```sh
 kubectl -n sidekick exec deploy/sidekick -c sidekick -- sidekick test-alert --channel '#alerts'
