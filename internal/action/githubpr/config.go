@@ -99,7 +99,7 @@ func (l *Limits) check() []error {
 
 	errs = append(errs, l.checkRepos()...)
 	errs = append(errs, l.Paths.Check()...)
-	errs = append(errs, l.Bounds.Check()...)
+	errs = append(errs, l.Check()...)
 
 	return errs
 }
