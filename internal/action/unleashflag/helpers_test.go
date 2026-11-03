@@ -233,6 +233,20 @@ func (f *fakeUnleash) state(t *testing.T) state {
 	return st
 }
 
+// requireSameModuloIDs requires two states to hold the same values, where a
+// strategy that was removed and added again has another ID.
+func requireSameModuloIDs(t *testing.T, want, got state) {
+	t.Helper()
+
+	require.Equal(t, want.Enabled, got.Enabled)
+	require.Len(t, got.Strategies, len(want.Strategies))
+
+	for id, w := range want.Strategies {
+		_, ok := got.idOf(w)
+		require.True(t, ok, "the strategy that was %s is there", id)
+	}
+}
+
 // addEvent stores an event, and returns its ID. The caller holds f.mu.
 func (f *fakeUnleash) addEvent(eventType string, data, preData any) int64 {
 	id := int64(len(f.events)) + 100

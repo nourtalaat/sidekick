@@ -1,8 +1,8 @@
 // Package unleashflag is the action unleash.flag: it changes a feature flag
 // in one environment of an Unleash project through the Unleash Admin API,
 // after an approver approved the change. It turns the flag off, or it
-// restores what the newest change of the flag in that environment did. It
-// is approval-only: it embeds action.ReadWriteGate, so a route in
+// restores what the newest change of the flag in that environment did, and
+// it can put its own change back. It is approval-only: it embeds action.ReadWriteGate, so a route in
 // read-write mode may list it only when the config sets
 // allowReadWrite: true. docs/plugins/actions.md explains the steps it
 // follows, and internal/action/datadog is its model.
@@ -146,6 +146,7 @@ type Flag struct {
 var (
 	_ action.Action      = (*Flag)(nil)
 	_ action.Snapshotter = (*Flag)(nil)
+	_ action.Undoer      = (*Flag)(nil)
 )
 
 // reading is what the action reads of a flag in one environment.
@@ -233,8 +234,25 @@ func (a *Flag) Validate(_ context.Context, raw json.RawMessage) error {
 	return nil
 }
 
-// parse decodes the parameters and checks them against the limits.
+// parse decodes the parameters and checks them against the limits,
+// including limits.allow.
 func (a *Flag) parse(raw json.RawMessage) (Params, error) {
+	p, err := a.decode(raw)
+	if err != nil {
+		return Params{}, fmt.Errorf("check the flag: %w", err)
+	}
+
+	if !slices.Contains(a.allow, p.Change) {
+		return Params{}, refusal("change %q is not one of: %s", p.Change, strings.Join(a.allow, ", "))
+	}
+
+	return p, nil
+}
+
+// decode decodes the parameters and checks that limits.projects lists the
+// flag. Undo uses it alone, because an undo puts back a change that was
+// allowed when it was made.
+func (a *Flag) decode(raw json.RawMessage) (Params, error) {
 	var p Params
 	if err := action.DecodeParams(raw, &p); err != nil {
 		return Params{}, fmt.Errorf("decode the parameters: %w", err)
@@ -242,10 +260,6 @@ func (a *Flag) parse(raw json.RawMessage) (Params, error) {
 
 	if err := a.checkReach(p); err != nil {
 		return Params{}, fmt.Errorf("check the flag: %w", err)
-	}
-
-	if !slices.Contains(a.allow, p.Change) {
-		return Params{}, refusal("change %q is not one of: %s", p.Change, strings.Join(a.allow, ", "))
 	}
 
 	return p, nil
@@ -341,7 +355,7 @@ func (a *Flag) Execute(ctx context.Context, inv action.Invocation) (action.Resul
 	}
 
 	if st.atAfter(live.state) {
-		return a.result(p, st), nil
+		return a.result(p, st.summary(p)), nil
 	}
 
 	if version(live.newest) != inv.Snapshot.Version || !live.state.same(before) {
@@ -352,7 +366,61 @@ func (a *Flag) Execute(ctx context.Context, inv action.Invocation) (action.Resul
 		return action.Result{}, fmt.Errorf("write the change: %w", err)
 	}
 
-	return a.result(p, st), nil
+	return a.result(p, st.summary(p)), nil
+}
+
+// Undo implements action.Undoer. It puts back the one change the action
+// made, from snap, and leaves everything else of the flag as it is now.
+// When the flag already has what it had before, it writes nothing and
+// succeeds. When it no longer has what the action wrote, and force is
+// false, it writes nothing and returns an *action.ConflictError with the
+// state the flag has. Only the part the action changed is compared: a
+// strategy it did not touch may differ.
+func (a *Flag) Undo(ctx context.Context, inv action.Invocation, snap action.Snapshot, force bool) (action.Result, error) {
+	p, err := a.decode(inv.Params)
+	if err != nil {
+		return action.Result{}, fmt.Errorf("validate before undo: %w", err)
+	}
+
+	before, after, err := statesOf(&snap, p)
+	if err != nil {
+		return action.Result{}, fmt.Errorf("read the snapshot: %w", err)
+	}
+
+	made, err := diffStep(before, after)
+	if err != nil {
+		return action.Result{}, fmt.Errorf("%w: %w", action.ErrPermanent, err)
+	}
+
+	live, err := a.read(ctx, p)
+	if err != nil {
+		return action.Result{}, fmt.Errorf("read the flag: %w", err)
+	}
+
+	plan := planUndo(made, live.state, before)
+
+	if plan.restored {
+		return a.restoredResult(p), nil
+	}
+
+	if !plan.asWritten && !force {
+		current, err := json.Marshal(live.state)
+		if err != nil {
+			return action.Result{}, fmt.Errorf("encode the state of the flag: %w", err)
+		}
+
+		return action.Result{}, &action.ConflictError{Live: current}
+	}
+
+	if plan.err != nil {
+		return action.Result{}, fmt.Errorf("%w: %w", action.ErrPermanent, plan.err)
+	}
+
+	if err := a.apply(ctx, p, plan.back, live.state); err != nil {
+		return action.Result{}, fmt.Errorf("write the undo: %w", err)
+	}
+
+	return a.result(p, "Undid the change: "+plan.back.summary(p)), nil
 }
 
 // read reads the flag in the environment of p: its newest event there,
@@ -425,12 +493,19 @@ func (a *Flag) apply(ctx context.Context, p Params, st step, live state) error {
 	return nil
 }
 
-// result is the result of a change that is in place.
-func (a *Flag) result(p Params, st step) action.Result {
+// result is the result of a change that is in place, with a link to the
+// flag.
+func (a *Flag) result(p Params, summary string) action.Result {
 	return action.Result{
-		Summary: st.summary(p),
+		Summary: summary,
 		Links:   []action.Link{{Title: "Flag " + p.Flag, URL: a.baseURL + "/projects/" + url.PathEscape(p.Project) + "/features/" + url.PathEscape(p.Flag)}},
 	}
+}
+
+// restoredResult is the result of an undo that finds the flag as it was
+// before the change.
+func (a *Flag) restoredResult(p Params) action.Result {
+	return a.result(p, fmt.Sprintf("Flag %s in %s of project %s already has what it had before the change.", p.Flag, p.Environment, p.Project))
 }
 
 // project returns the entry of limits.projects for key.
@@ -457,7 +532,7 @@ func (a *Flag) projectKeys() []string {
 // invocation carries, after checking that it is of the flag of p. A
 // snapshot that is missing or is not Sidekick's fails permanently.
 func statesOf(snap *action.Snapshot, p Params) (before, after state, err error) {
-	if snap == nil {
+	if snap == nil || snap.Target == "" {
 		return state{}, state{}, fmt.Errorf("%w: %w", action.ErrPermanent, errNoSnapshot)
 	}
 

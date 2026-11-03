@@ -276,20 +276,7 @@ func TestExecuteRestorePrevious(t *testing.T) {
 				require.JSONEq(t, tt.wantBody, string(bodies[0]), "what Unleash had before the change is what is sent")
 			}
 
-			live := f.state(t)
-			require.Equal(t, before.Enabled, live.Enabled)
-			require.Len(t, live.Strategies, len(before.Strategies))
-
-			for id, want := range before.Strategies {
-				if got, ok := live.Strategies[id]; ok {
-					require.True(t, want.equal(got), "strategy %s is as it was", id)
-
-					continue
-				}
-
-				_, ok := live.idOf(want)
-				require.True(t, ok, "strategy %s is back, under a new ID", id)
-			}
+			requireSameModuloIDs(t, before, f.state(t))
 
 			again, err := a.Execute(t.Context(), inv)
 			require.NoError(t, err, "a retry after a crash finds the work done")

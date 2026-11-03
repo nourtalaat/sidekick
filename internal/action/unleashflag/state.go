@@ -150,6 +150,95 @@ func (s step) atAfter(live state) bool {
 	}
 }
 
+// undoPlan says where the flag stands with respect to a change Sidekick made,
+// and what puts it back.
+type undoPlan struct {
+	// restored is true when the flag has what it had before the change.
+	restored bool
+	// asWritten is true when the part of the flag the change wrote still has
+	// what the change wrote.
+	asWritten bool
+	// back is the step that puts the change back.
+	back step
+	// err says why no step can put it back, when none can.
+	err error
+}
+
+var (
+	errStrategyGone = errors.New("the strategy the change wrote is not in this environment any more")
+	errStrategyMany = errors.New("this environment has more than one new strategy that could be the one the change added, so Sidekick cannot tell which to remove")
+)
+
+// planUndo says where the live state stands with respect to the change made,
+// and which step puts it back. before is the state before the change; the
+// strategies it holds keep their IDs.
+func planUndo(made step, live, before state) undoPlan {
+	switch made.kind {
+	case stepOff:
+		return undoPlan{restored: live.Enabled, asWritten: !live.Enabled, back: step{kind: stepOn}}
+	case stepOn:
+		return undoPlan{restored: !live.Enabled, asWritten: live.Enabled, back: step{kind: stepOff}}
+	case stepUpdate:
+		now, ok := live.Strategies[made.id]
+		if !ok {
+			return undoPlan{err: errStrategyGone}
+		}
+
+		return undoPlan{
+			restored:  now.equal(made.from),
+			asWritten: now.equal(made.to),
+			back:      step{kind: stepUpdate, id: made.id, from: now, to: made.from},
+		}
+	case stepDelete:
+		_, backAgain := live.idOf(made.from)
+		_, present := live.Strategies[made.id]
+
+		return undoPlan{restored: backAgain, asWritten: !present, back: step{kind: stepCreate, id: newStrategyKey, to: made.from}}
+	case stepCreate:
+		return planUndoCreate(made, live, before)
+	default:
+		return undoPlan{err: errNotOneStep}
+	}
+}
+
+// planUndoCreate plans the undo of a change that added a strategy. Unleash
+// gave the strategy an ID the snapshot does not hold, so the strategy is
+// one of the strategies the live state has and the state before the change
+// had not: the only one, or else the only one that holds the values the
+// change wrote.
+func planUndoCreate(made step, live, before state) undoPlan {
+	var added []string
+
+	for _, id := range slices.Sorted(maps.Keys(live.Strategies)) {
+		if _, ok := before.Strategies[id]; !ok {
+			added = append(added, id)
+		}
+	}
+
+	plan := undoPlan{restored: len(added) == 0}
+
+	var matching []string
+
+	for _, id := range added {
+		if live.Strategies[id].equal(made.to) {
+			matching = append(matching, id)
+		}
+	}
+
+	plan.asWritten = len(matching) > 0
+
+	switch {
+	case len(added) == 1:
+		plan.back = step{kind: stepDelete, id: added[0], from: live.Strategies[added[0]]}
+	case len(matching) == 1:
+		plan.back = step{kind: stepDelete, id: matching[0], from: live.Strategies[matching[0]]}
+	case len(added) > 1:
+		plan.err = errStrategyMany
+	}
+
+	return plan
+}
+
 // summary says what the step did, for a result.
 func (s step) summary(p Params) string {
 	where := fmt.Sprintf("in %s of project %s", p.Environment, p.Project)
