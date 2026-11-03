@@ -1,0 +1,313 @@
+{
+  "tools": [
+    {
+      "name": "list_commits",
+      "description": "List the commits to a GitLab project since a time, newest first, optionally only those on a branch or that touch a path. Returns each commit's SHA, message, author, date and link.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 100. Default 30.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "path": {
+            "type": "string",
+            "description": "Only commits that touch this file or directory, for example deploy/values.yaml."
+          },
+          "project": {
+            "type": "string",
+            "description": "The project's full path, for example acme/checkout or acme/platform/checkout. Give project or service, not both."
+          },
+          "ref": {
+            "type": "string",
+            "description": "The branch, tag or SHA to list from. Default: the default branch."
+          },
+          "service": {
+            "type": "string",
+            "description": "A service name, such as the service an alert names; Sidekick looks up its project in its own settings. Give project or service, not both."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only commits made at or after this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z.",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "description": "Only commits made before this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "since"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_commit",
+      "description": "Get one commit of a GitLab project: its message, author, date, parents, the files it changed with line counts, and the patch of each file, cut when the commit is large.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "type": "string",
+            "description": "The project's full path, for example acme/checkout or acme/platform/checkout. Give project or service, not both."
+          },
+          "ref": {
+            "type": "string",
+            "description": "The commit SHA, or a branch or tag to get its latest commit."
+          },
+          "service": {
+            "type": "string",
+            "description": "A service name, such as the service an alert names; Sidekick looks up its project in its own settings. Give project or service, not both."
+          }
+        },
+        "required": [
+          "ref"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_merge_requests",
+      "description": "List the merge requests of a GitLab project that were opened or merged since a time, most recently updated first, with their state, branches, author, times, merge commit and link.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "base": {
+            "type": "string",
+            "description": "Only merge requests into this target branch, for example main."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 100. Default 30.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "project": {
+            "type": "string",
+            "description": "The project's full path, for example acme/checkout or acme/platform/checkout. Give project or service, not both."
+          },
+          "service": {
+            "type": "string",
+            "description": "A service name, such as the service an alert names; Sidekick looks up its project in its own settings. Give project or service, not both."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only merge requests opened or merged at or after this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z.",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "since"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_releases",
+      "description": "List the releases of a GitLab project, newest first, with tag, name, dates and link. With includeTags, also list the newest tags and the commit each points at.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "includeTags": {
+            "type": "boolean",
+            "description": "Also list the newest tags. Default false."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 100. Default 30.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "project": {
+            "type": "string",
+            "description": "The project's full path, for example acme/checkout or acme/platform/checkout. Give project or service, not both."
+          },
+          "service": {
+            "type": "string",
+            "description": "A service name, such as the service an alert names; Sidekick looks up its project in its own settings. Give project or service, not both."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only releases made at or after this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_pipelines",
+      "description": "List the pipelines of a GitLab project, newest first, for example to see what ran after a merge: status, source, ref, commit, times and link.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 100. Default 30.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "project": {
+            "type": "string",
+            "description": "The project's full path, for example acme/checkout or acme/platform/checkout. Give project or service, not both."
+          },
+          "ref": {
+            "type": "string",
+            "description": "Only pipelines for this branch or tag."
+          },
+          "service": {
+            "type": "string",
+            "description": "A service name, such as the service an alert names; Sidekick looks up its project in its own settings. Give project or service, not both."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only pipelines created at or after this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z.",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string",
+            "description": "Only pipelines started by this source, such as push, web, schedule or merge_request_event."
+          },
+          "status": {
+            "type": "string",
+            "description": "Only pipelines with this status.",
+            "enum": [
+              "created",
+              "waiting_for_resource",
+              "preparing",
+              "waiting_for_callback",
+              "pending",
+              "running",
+              "success",
+              "failed",
+              "canceling",
+              "canceled",
+              "skipped",
+              "manual",
+              "scheduled"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_file",
+      "description": "Read a file of a GitLab project at a ref, or list a directory. Files over 256 KiB are cut, and binary files are not shown.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "The file or directory, relative to the project root, for example deploy/values.yaml."
+          },
+          "project": {
+            "type": "string",
+            "description": "The project's full path, for example acme/checkout or acme/platform/checkout. Give project or service, not both."
+          },
+          "ref": {
+            "type": "string",
+            "description": "The branch, tag or commit SHA to read at. Default: the default branch."
+          },
+          "service": {
+            "type": "string",
+            "description": "A service name, such as the service an alert names; Sidekick looks up its project in its own settings. Give project or service, not both."
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "compare",
+      "description": "Compare two refs of a GitLab project, base...head: the newest commits of head that base lacks, and the files changed with line counts.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "base": {
+            "type": "string",
+            "description": "The older branch, tag or SHA, for example the tag of the last good release."
+          },
+          "head": {
+            "type": "string",
+            "description": "The newer branch, tag or SHA."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 100. Default 30.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "project": {
+            "type": "string",
+            "description": "The project's full path, for example acme/checkout or acme/platform/checkout. Give project or service, not both."
+          },
+          "service": {
+            "type": "string",
+            "description": "A service name, such as the service an alert names; Sidekick looks up its project in its own settings. Give project or service, not both."
+          }
+        },
+        "required": [
+          "base",
+          "head"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_deployments",
+      "description": "List the deployments of a GitLab project, newest first, optionally of one environment: status, ref, commit, who deployed, times and link. Use it to see what was deployed when.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "environment": {
+            "type": "string",
+            "description": "Only deployments to the environment with this name, for example production."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "The most items to return, 1 to 100. Default 30.",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "project": {
+            "type": "string",
+            "description": "The project's full path, for example acme/checkout or acme/platform/checkout. Give project or service, not both."
+          },
+          "service": {
+            "type": "string",
+            "description": "A service name, such as the service an alert names; Sidekick looks up its project in its own settings. Give project or service, not both."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only deployments created at or after this time, in RFC 3339 form, for example 2026-05-04T10:00:00Z.",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "description": "Only deployments with this status.",
+            "enum": [
+              "created",
+              "running",
+              "success",
+              "failed",
+              "canceled",
+              "skipped",
+              "blocked"
+            ]
+          }
+        },
+        "required": [
+          "since"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

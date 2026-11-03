@@ -650,6 +650,69 @@ How it behaves:
   stops waiting for response headers after 60 seconds; `sidekick config
   validate` rejects a longer one.
 
+#### GitLab sources (`type: gitlab`)
+
+A GitLab source reads projects on gitlab.com or a self-managed GitLab through
+the GitLab REST API, with an access token, so investigations can check what
+changed. Its tools only read. [GitLab source](sources/gitlab.md) lists the
+token's scope and role and how to make the token.
+
+| Key | Meaning |
+|---|---|
+| `tokenSecret` | `{ name, key }` of the Secret that holds the access token: a project, group or personal access token with the `read_api` scope and the Reporter role. Required. |
+| `projects` | The projects the tools may read, as full paths that may hold globs, for example `acme/checkout`, `acme/platform/*` or `acme/**`. `*` and `?` stay inside one part of the path, and `**` is a whole part that matches any number of parts. Required; a call for any other project fails. |
+| `serviceProjects` | Maps a service name to its project, so a tool can be called with the service an alert names. Each project must be one that `projects` allows. |
+| `baseURL` | The root of the GitLab, for example `https://gitlab.example.com`, without `/api/v4`. It must use `https`; plain `http` is accepted only for `localhost` and loopback addresses. Default: `https://gitlab.com`. |
+
+```yaml
+sources:
+  gitlab:
+    type: gitlab
+    tokenSecret: { name: sidekick-gitlab, key: token }
+    projects: ["acme/checkout", "acme/platform/*"]
+    serviceProjects:
+      checkout-api: acme/checkout
+```
+
+The tools, as the model sees them with the source name `gitlab`:
+
+| Tool | Returns |
+|---|---|
+| `gitlab__list_commits` | Commits since a time, newest first, optionally on a ref or touching a path. |
+| `gitlab__get_commit` | One commit: message, author, parents, changed files with line counts, and patches. |
+| `gitlab__list_merge_requests` | Merge requests opened or merged since a time. |
+| `gitlab__list_releases` | Releases with their dates, and optionally the newest tags. |
+| `gitlab__list_pipelines` | Pipelines, newest first, with status, source, ref and times. |
+| `gitlab__get_file` | A file at a ref, or the entries of a directory. |
+| `gitlab__compare` | The commits and changed files between two refs. |
+| `gitlab__list_deployments` | Deployments of a project or one environment, with status, ref, commit, who deployed and times. |
+
+How it behaves:
+
+- **Start-up never waits for GitLab.** The first tool call is the first
+  request. The token is read from its Secret for each request, so a rotated
+  token needs no restart.
+- **Project.** Every tool takes `project` (the full path) or `service` (a
+  name from `serviceProjects`). A project that `projects` does not allow, an
+  unknown service, a numeric project ID, or a ref or path that does not look
+  like one is a tool error, and nothing is sent to GitLab.
+- **Results** are JSON, and link to the GitLab pages of the commits, merge
+  requests, releases, pipelines, deployments and files they name, which
+  become evidence links in the report. Lists return up to `limit` items
+  (default 30, at most 100) and read at most 10 pages. Commit messages in
+  lists are cut at 1 KiB, the patches of one commit at 64 KiB in all, and
+  files at 256 KiB; binary files and files over 1 MB are left out.
+- **No data.** A project, ref or path GitLab does not have, and an empty
+  list, are reported as no data. GitLab gives the same "not found" for a
+  project the token cannot see.
+- **Errors.** Other refusals, such as a ref GitLab cannot resolve or a call
+  the token's role may not make, go to the model as tool errors with GitLab's
+  message. Server errors, rate limits and a refused token count as failures
+  of the source.
+- **Timeout.** `timeout` may be at most `60s`, because the HTTP client
+  stops waiting for response headers after 60 seconds; `sidekick config
+  validate` rejects a longer one.
+
 #### Backstage sources (`type: backstage`)
 
 A Backstage source reads a Backstage software catalog with a static token,
@@ -2118,6 +2181,109 @@ from the public source of Kubernetes v1.37.1, Prometheus Operator v0.94.1 and
 Prometheus v3.15.0; the comments in `internal/action/prometheusrule` name the
 files. With `networkPolicy.restrictEgress` on, allow egress to the Kubernetes
 API server.
+
+##### `launchdarkly.flag`
+
+Turns a LaunchDarkly feature flag off in one environment through the
+LaunchDarkly API, and can turn it back on. Only turning a flag off is
+supported: putting the earlier targeting back would need the full previous
+configuration of the environment, and LaunchDarkly's public documentation of
+its audit log does not show that an entry holds it. The action is
+approval-only (see [action modes](#action-modes)): a `read-write` route may
+list it only when the action sets `allowReadWrite: true`. Use it on routes
+with `mode: approved`.
+
+```yaml
+actions:
+  checkout-flag-off:
+    type: launchdarkly.flag
+    baseURL: https://app.launchdarkly.com   # default; https://app.eu.launchdarkly.com for EU
+    tokenSecret: { name: sidekick-launchdarkly-write, key: token }
+    allowReadWrite: false                   # default
+    limits:
+      projects:
+        - key: shop
+          environments: [production]
+          flags: ["checkout-*", new-search] # keys, or patterns where * is any text
+
+routes:
+  - name: checkout-errors
+    match: { intake: [alertmanager] }
+    mode: approved
+    actions: [checkout-flag-off]
+```
+
+| Key | Meaning |
+|---|---|
+| `tokenSecret` | A LaunchDarkly access token. Required. Use a token of its own with the custom role below, apart from the token of any LaunchDarkly source. It is read on every call, so a rotated token needs no restart. |
+| `baseURL` | The root of the instance: `https://app.eu.launchdarkly.com` for EU, `https://app.launchdarkly.us` for Federal. It must use `https`; plain `http` is accepted only for `localhost` and loopback addresses. Default: `https://app.launchdarkly.com`. |
+| `allowReadWrite` | See [action modes](#action-modes). Default: false. |
+| `limits.projects` | Required. Each entry has a project `key`, its `environments` and its `flags`, and all three are required, so nothing is allowed by default. A flag entry is a key, or a pattern in which `*` stands for any text and is the only wildcard. |
+
+The model proposes `project`, `environment`, `flag` and `change`, which is
+`turn_off`. A project, environment or flag outside the limits is refused
+before anything is sent. No other environment of the flag changes.
+
+**What it checks.** When the model proposes, Sidekick reads the flag and
+refuses a flag that is not found, archived or already off. It also refuses
+what LaunchDarkly would refuse to change directly, so the approver is not
+shown something that will fail: an environment that requires approval
+for the flag (`approvalSettings`, which apply to every flag or only to flags
+with one of `requiredApprovalTags`), a scheduled change for the flag in that
+environment, and an active workflow. The message says what to do, and the
+model reads it. If one of these three reads fails, for example because the
+token is not allowed to make it, the proposal is not refused for that: a
+warning is logged, and LaunchDarkly's own answer when the change is written
+(405 when approvals are required, 400 when the change would make a
+scheduled change or an approval request fail) ends the proposal as failed,
+with a plain message. Sidekick never sends `ignoreConflicts`. Approvers see
+one field, `on`, change from `true` to `false`.
+
+**Conflicts.** Right before it writes, Sidekick reads the flag again. If
+the environment's `version` is not the one at the proposal, or the flag was
+archived since, the proposal fails as a conflict and a new one is needed. A
+flag that is already off, which is what a repeat after a crash finds, is
+left alone and counts as done. LaunchDarkly has no precondition on the
+version for a semantic patch, so a change made in the short time between this
+read and the write is not detected, as for `datadog.monitor`. The change is
+made with the `turnFlagOff` instruction of a semantic patch, with a comment
+that names the proposal, so the flag's audit log says who turned it off.
+
+**Undo.** Undo turns the flag back on in that environment with `turnFlagOn`,
+and does nothing when the flag is on already. The action changes one setting,
+which is either on or off, so there is no later edit of that setting for
+`force` to confirm; edits to other settings of the flag stay.
+
+**The custom role.** Create a custom role for the token that can do only this,
+with `basePermissions` set to `no_access`, so it grants only what the policy
+allows. For the limits above:
+
+```json
+{
+  "key": "sidekick-flag-off",
+  "name": "Sidekick flag off",
+  "basePermissions": "no_access",
+  "policy": [
+    { "effect": "allow", "actions": ["viewProject"], "resources": ["proj/shop"] },
+    { "effect": "allow", "actions": ["updateOn"], "resources": ["proj/shop:env/production:flag/checkout-*"] }
+  ]
+}
+```
+
+`updateOn` turns targeting on or off, for the current environment only, and
+`viewProject` lets the token see the project and its flags. Add one pair for
+each project, environment and flag of `limits.projects`. LaunchDarkly's public
+documentation does not say which action the reads of the environment's
+approval settings, the scheduled changes and the workflows need. Without the
+right to make them, Sidekick cannot check these before the proposal and relies
+on LaunchDarkly's refusal when the change is written, as described above. The
+role gives the token no right to change targeting rules, targets, variations,
+approvals or workflows, to archive or delete flags, or to touch another
+environment.
+
+**What it relies on.** The facts come from LaunchDarkly's public OpenAPI file
+and documentation, as the comments in `internal/action/launchdarklyflag` say.
+Nothing was tried against a LaunchDarkly account.
 
 ##### `github.pull_request`
 

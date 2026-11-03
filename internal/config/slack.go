@@ -35,7 +35,7 @@ const (
 const DefaultSlackMode = SlackModeSocket
 
 // SlackFollowUps says which replies in the Slack thread of an
-// investigation are follow-up questions (INV-6).
+// investigation are follow-up questions.
 type SlackFollowUps string
 
 // Follow-up settings.
@@ -100,8 +100,7 @@ var (
 	userGroupIDPattern = regexp.MustCompile(`^S[A-Z0-9]{2,}$`)
 )
 
-// Slack holds the Slack app's credentials and how it receives events
-// (IN-4).
+// Slack holds the Slack app's credentials and how it receives events.
 type Slack struct {
 	// BotTokenSecret holds the bot token (xoxb-...), which posts messages
 	// and reads the messages Sidekick is asked about.
@@ -133,7 +132,7 @@ type Slack struct {
 }
 
 // Listener picks the Slack or Teams messages in one channel that start an
-// investigation (IN-5, IN-8). Every field of Match that is set must match.
+// investigation. Every field of Match that is set must match.
 type Listener struct {
 	// Source is the chat app of the channel: slack, the default, or teams.
 	Source ListenerSource `yaml:"source"`
@@ -151,7 +150,7 @@ type Listener struct {
 	// resolved event instead of an alert.
 	Recovery string `yaml:"recovery"`
 	// Trusted marks events from the bots in slack.trustedBots, or
-	// teams.trustedBots for a Teams listener, as trusted (ACT-6). Every
+	// teams.trustedBots for a Teams listener, as trusted. Every
 	// other sender stays untrusted.
 	Trusted bool `yaml:"trusted"`
 }

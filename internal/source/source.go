@@ -81,7 +81,7 @@ type Result struct {
 	Truncated  bool
 }
 
-// Filter is a per-source tool allowlist and denylist (SRC-2). Patterns use path.Match syntax.
+// Filter is a per-source tool allowlist and denylist. Patterns use path.Match syntax.
 // An empty Allow list allows every tool; Deny always wins.
 type Filter struct {
 	Allow []string `yaml:"allow"`

@@ -20,7 +20,7 @@ type Sink interface {
 	// callback, for example, wants only PhaseFinal.
 	Accepts(phase Phase) bool
 	// Publish sends or updates the sink's message. When update.Previous is set
-	// the sink edits that message in place instead of sending a new one (OUT-1).
+	// the sink edits that message in place instead of sending a new one.
 	// The returned Ref is stored and passed back as Previous next time.
 	Publish(ctx context.Context, update Update) (Ref, error)
 }
@@ -92,11 +92,11 @@ type Update struct {
 	// Answer is the reply to a follow-up question.
 	Answer    string
 	Proposals []action.Proposal
-	// Watchers is the current state of every watcher on the group, for live display (WT-6).
+	// Watchers is the current state of every watcher on the group, for live display.
 	Watchers []WatcherState
 	// Watcher is the watcher whose state changed, set only with PhaseWatcher.
 	Watcher *WatcherState
-	// Feedback is each responder's rating of the verdict, oldest first (FB-1).
+	// Feedback is each responder's rating of the verdict, oldest first.
 	Feedback []Feedback
 	// StoppedBy is the responder who stopped the run, when one did.
 	StoppedBy *Person
@@ -140,7 +140,7 @@ type Person struct {
 	Name string `json:"name,omitempty"`
 }
 
-// WatcherStatus is the state of one watcher (WT-4).
+// WatcherStatus is the state of one watcher.
 type WatcherStatus string
 
 // Watcher statuses. Every status but WatcherRunning is final.
@@ -173,7 +173,7 @@ type WatcherState struct {
 	StoppedBy *Person `json:"stoppedBy,omitempty"`
 }
 
-// EventName is the webhook callback event for a state change (WT-6), for
+// EventName is the webhook callback event for a state change, for
 // example "watcher.recovered". A running watcher reports "watcher.started".
 func (w WatcherState) EventName() string {
 	if w.Status == WatcherRunning {

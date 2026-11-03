@@ -59,7 +59,7 @@ type Settings struct {
 	Concurrency int `yaml:"concurrency"`
 }
 
-// ToolSettings filter and rename a source's tools (SRC-2).
+// ToolSettings filter and rename a source's tools.
 type ToolSettings struct {
 	// Filter holds the allow and deny globs, matched against the tool names
 	// the source uses. Deny wins.

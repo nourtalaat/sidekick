@@ -493,7 +493,7 @@ func (v *validator) actionConfig(name string) any {
 	return decoded
 }
 
-// checkTrust applies the trusted-sender rule (ACT-6) to a read-write
+// checkTrust applies the trusted-sender rule to a read-write
 // route: it may select only intakes and listeners marked trusted, unless it
 // sets allowUntrustedWrite. A route with no intake in its match selects
 // every intake, so it fails the rule while any of them is untrusted.

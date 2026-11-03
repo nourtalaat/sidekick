@@ -111,10 +111,10 @@ func (c *Connector) decodeNode(d *decoder, node *yaml.Node, path string) {
 type Webhook struct {
 	Section `yaml:"-"`
 
-	// Auth checks every delivery before it is parsed (IN-3).
+	// Auth checks every delivery before it is parsed.
 	Auth WebhookAuth `yaml:"auth"`
 	// Trusted marks events from this endpoint as coming from a trusted
-	// sender (ACT-6). It comes from config, never from the payload.
+	// sender. It comes from config, never from the payload.
 	Trusted bool `yaml:"trusted"`
 }
 

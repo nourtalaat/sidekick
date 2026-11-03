@@ -11,7 +11,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/source"
 )
 
-// Verdict is the investigation's conclusion (VR-1).
+// Verdict is the investigation's conclusion.
 type Verdict string
 
 // Verdicts.
@@ -32,7 +32,7 @@ func (v Verdict) Known() bool {
 	return slices.Contains(Verdicts, v)
 }
 
-// Confidence is low, medium or high (VR-2).
+// Confidence is low, medium or high.
 type Confidence string
 
 // Confidence levels.
@@ -50,7 +50,7 @@ func (c Confidence) Rank() int {
 	return slices.Index(confidenceOrder, c) + 1
 }
 
-// Finding is one claim with its evidence (VR-3).
+// Finding is one claim with its evidence.
 type Finding struct {
 	ID       string            `json:"id"`
 	Claim    string            `json:"claim"`
@@ -62,7 +62,7 @@ func (f Finding) Hypothesis() bool {
 	return len(f.Evidence) == 0
 }
 
-// Fix is a proposed change, ordered by how fast it reduces impact (VR-4).
+// Fix is a proposed change, ordered by how fast it reduces impact.
 type Fix struct {
 	ID     string `json:"id"`
 	Title  string `json:"title"`
@@ -71,7 +71,7 @@ type Fix struct {
 	ActionProposalID string `json:"actionProposalId,omitempty"`
 }
 
-// PreventionKind is the kind of monitor change that stops a false positive (VR-5).
+// PreventionKind is the kind of monitor change that stops a false positive.
 type PreventionKind string
 
 // Prevention kinds.
@@ -96,7 +96,7 @@ type Prevention struct {
 	Detail string         `json:"detail"`
 }
 
-// CheckStatus is the outcome of checking one source (VR-6).
+// CheckStatus is the outcome of checking one source.
 type CheckStatus string
 
 // Check statuses.
@@ -152,8 +152,7 @@ type Report struct {
 	FollowUps []FollowUp `json:"followUps,omitempty"`
 }
 
-// FollowUp is one follow-up run: the questions it took and its answer
-// (INV-6).
+// FollowUp is one follow-up run: the questions it took and its answer.
 type FollowUp struct {
 	// Run is the investigation's run number, from 2.
 	Run       int                `json:"run"`
@@ -190,17 +189,17 @@ const DefaultMinFalsePositiveConfidence = High
 // Rules are the checks applied to a submitted verdict. They come from config.
 // The zero value is the safe one: it requires DefaultMinFalsePositiveConfidence.
 type Rules struct {
-	// MinFalsePositiveConfidence guards against hiding real incidents (PRD
-	// risk 1, VR-7). Empty or unknown values mean
-	// DefaultMinFalsePositiveConfidence; lowering the bar takes an explicit
-	// Low or Medium.
+	// MinFalsePositiveConfidence guards against hiding real incidents.
+	// Empty or unknown values mean DefaultMinFalsePositiveConfidence; lowering
+	// the bar takes an explicit Low or Medium.
 	MinFalsePositiveConfidence Confidence
 }
 
 // ErrInvalid wraps every validation failure; the message goes back to the model.
 var ErrInvalid = errors.New("invalid report")
 
-// Validate checks the report against VR-1 to VR-7 and the configured rules.
+// Validate checks that the verdict, its confidence and the fields the verdict
+// needs are set, and applies the configured rules.
 func (r Report) Validate(rules Rules) error {
 	var errs []error
 	switch r.Verdict {

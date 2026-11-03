@@ -1,4 +1,4 @@
-// Package github is the native GitHub source (SRC-4). It registers itself
+// Package github is the native GitHub source. It registers itself
 // as the source type "github".
 //
 // A source reads the repositories its config lists through the GitHub REST

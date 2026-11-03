@@ -12,7 +12,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/event"
 )
 
-// Adapter converts one sender's webhook payload into events (IN-1, IN-2).
+// Adapter converts one sender's webhook payload into events.
 // One delivery may hold several alerts, as Alertmanager's does.
 type Adapter interface {
 	// Parse returns the events in the delivery. Each event must have a Key
@@ -39,5 +39,5 @@ type Request struct {
 	ReceivedAt time.Time
 }
 
-// ErrUnauthenticated is returned when a delivery fails authentication (IN-3).
+// ErrUnauthenticated is returned when a delivery fails authentication.
 var ErrUnauthenticated = errors.New("unauthenticated")

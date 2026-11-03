@@ -55,6 +55,7 @@ Kubernetes and cloud:
 Code and deploys:
 
 - `github`: commits, pull requests, releases and GitHub Actions runs. See [the GitHub source](sources/github.md).
+- `gitlab`: commits, merge requests, releases, pipelines, deployments and files of GitLab projects, on gitlab.com or self-managed. See [the GitLab source](sources/gitlab.md).
 
 Feature flags:
 
@@ -119,5 +120,6 @@ proposals](web-ui.md#action-proposals) for how people approve them.
 - `datadog.monitor`: changes or deletes a Datadog monitor. See [its keys](configuration.md#datadogmonitor).
 - `grafana.alert_rule`: changes or deletes a Grafana alert rule. See [its keys](configuration.md#grafanaalert_rule).
 - `signoz.alert_rule`: changes or deletes a SigNoz alert rule. See [its keys](configuration.md#signozalert_rule).
+- `launchdarkly.flag`: turns a LaunchDarkly feature flag off in one environment. See [its keys](configuration.md#launchdarklyflag).
 - `prometheus.rule`: changes the rules of a `PrometheusRule` resource. See [its keys](configuration.md#prometheusrule).
 - `github.pull_request`: opens a pull request that changes monitor definitions kept in Git. See [its keys](configuration.md#githubpull_request).

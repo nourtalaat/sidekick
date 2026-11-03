@@ -184,7 +184,7 @@ func (r *Run) call(ctx context.Context, call model.ToolCall) Result {
 	return res
 }
 
-// Checked returns the checked record of the run (VR-6): every source that
+// Checked returns the checked record of the run: every source that
 // was called, and every source that was unavailable or failed when the run
 // started, sorted by name. A source's status is the best of its calls: ok,
 // then no_data, then failed, then unavailable. Error holds the message of
