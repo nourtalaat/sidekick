@@ -89,14 +89,24 @@ func apiFailure(doing, what string, err error) error {
 // fileFailure maps what the shared reader cannot read as text to a refusal,
 // naming the path, and wraps any other error.
 func fileFailure(path string, err error) error {
+	if isUnreadable(err) {
+		return refuse("%q cannot be reverted by this action: %w; revert it by hand", path, err)
+	}
+
+	return fmt.Errorf("read %q: %w", path, err)
+}
+
+// isUnreadable reports whether err says a file or blob is not UTF-8 text, is
+// too large, is not a regular file, or has a hash the reader does not support.
+func isUnreadable(err error) bool {
 	for _, sentinel := range []error{
 		gitlabgit.ErrNotFile, gitlabgit.ErrTooBig, gitlabgit.ErrNotText,
 		gitlabgit.ErrUnsupportedHash, gitlabgit.ErrNotBase64,
 	} {
 		if errors.Is(err, sentinel) {
-			return refuse("%q cannot be reverted by this action: %w; revert it by hand", path, err)
+			return true
 		}
 	}
 
-	return fmt.Errorf("read %q: %w", path, err)
+	return false
 }
