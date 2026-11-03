@@ -4,6 +4,7 @@ package api_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http/httptest"
@@ -11,7 +12,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.yaml.in/yaml/v3"
 
+	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/api"
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/registry"
@@ -40,6 +43,21 @@ const (
 	responderUserID  = "01920000-0000-7000-8000-000000000050"
 )
 
+// gatedActionType is an approval-only action type that only the rule tests
+// register.
+const gatedActionType = "gated.note"
+
+// gatedActionConfig is the config of the gated.note action.
+type gatedActionConfig struct {
+	action.ReadWriteGate `yaml:",inline"`
+}
+
+func init() {
+	registry.Actions.Register(gatedActionType, registry.Typed(func(context.Context, string, gatedActionConfig, registry.Deps) (action.Action, error) {
+		return apiNoteAction{}, nil
+	}))
+}
+
 // ruleCeilingToolCalls is budgets.perInvestigation.maxToolCalls of the
 // config of the rule tests, which a runtime route may not exceed.
 const ruleCeilingToolCalls = 40
@@ -50,14 +68,14 @@ const ruleCeilingToolCalls = 40
 func setupRules(t *testing.T) server {
 	t.Helper()
 
-	s := setupWith(t, func(o *api.Options) { withRuleConfig(o.Config) })
+	s := setupWith(t, func(o *api.Options) { withRuleConfig(t, o.Config) })
 	storetest.LoadFixture(t, s.pool, "fixture/rules_api.sql")
 
 	return s
 }
 
 // withRuleConfig adds to cfg what the checks of runtime rules need.
-func withRuleConfig(cfg *config.Config) {
+func withRuleConfig(t *testing.T, cfg *config.Config) {
 	payments := config.NewRoute("payments")
 	payments.Priority = 50
 	payments.Match = &config.Match{Service: "payments-*"}
@@ -74,12 +92,28 @@ func withRuleConfig(cfg *config.Config) {
 	cfg.Outputs = map[string]config.Section{"slack-thread": {Type: "slack"}}
 	cfg.Listeners = map[string]config.Listener{"alerts": {Channel: "#alerts"}}
 	cfg.Intake.Webhooks = map[string]config.Webhook{"alertmanager": {Trusted: true}}
-	cfg.Actions.Definitions = map[string]config.Section{"monitor-note": {Type: "note.create"}}
+	cfg.Actions.Definitions = map[string]config.Section{
+		"monitor-note": {Type: "note.create"},
+		"rollback":     gatedSection(t, ""),
+		"rollback-ok":  gatedSection(t, "allowReadWrite: true"),
+	}
 	cfg.Routes = []config.Route{def, payments}
 	cfg.Budgets = config.Budgets{
 		PerInvestigation: config.Limits{MaxToolCalls: ruleCeilingToolCalls, MaxWallTime: 10 * time.Minute},
 		Concurrency:      8,
 	}
+}
+
+// gatedSection is the section of a gated.note action with the given keys,
+// as the config decoder leaves it.
+func gatedSection(t *testing.T, keys string) config.Section {
+	t.Helper()
+
+	var doc yaml.Node
+
+	require.NoError(t, yaml.Unmarshal([]byte("{"+keys+"}"), &doc))
+
+	return config.Section{Type: gatedActionType, Node: doc.Content[0]}
 }
 
 // ruleCaller says how a request is authenticated.

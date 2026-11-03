@@ -104,6 +104,7 @@ func (c *Config) RoutePolicyWith(r Route, st *strategy.Strategy) watch.RoutePoli
 func (c *Config) runtimeValidator(ctx context.Context, runtimeListeners []string) *validator {
 	v := newValidator(ctx, c, LoadOptions{})
 	v.strategies = c.strategySet
+	v.regs = c.registries.WithDefaults()
 	v.extraIntakes = runtimeListeners
 
 	return v

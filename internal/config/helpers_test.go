@@ -185,6 +185,14 @@ func (c *fakeActionConfig) Validate() error {
 	return nil
 }
 
+// fakeGatedActionConfig is the config of the fake gated.note action, which
+// is approval-only.
+type fakeGatedActionConfig struct {
+	action.ReadWriteGate `yaml:",inline"`
+
+	TokenSecret registry.SecretRef `yaml:"tokenSecret"`
+}
+
 type fakeAction struct{ name string }
 
 func (a fakeAction) Spec() action.Spec { return action.Spec{Name: a.name} }
@@ -245,6 +253,9 @@ func testRegistries() Registries {
 		return fakeSink{}, nil
 	}))
 	regs.Actions.Register("note.create", registry.Typed(func(_ context.Context, name string, _ fakeActionConfig, _ registry.Deps) (action.Action, error) {
+		return fakeAction{name: name}, nil
+	}))
+	regs.Actions.Register("gated.note", registry.Typed(func(_ context.Context, name string, _ fakeGatedActionConfig, _ registry.Deps) (action.Action, error) {
 		return fakeAction{name: name}, nil
 	}))
 	for _, typeName := range slackActionTypes {
