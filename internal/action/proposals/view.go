@@ -68,7 +68,7 @@ func OfInvestigation(ctx context.Context, q db.DBTX, investigationID uuid.UUID) 
 	out := make([]action.Proposal, 0, len(rows))
 
 	for _, r := range rows {
-		p, err := proposalOf(ctx, r.ActionProposal, r.Route, r.DecidedByName)
+		p, err := proposalOf(ctx, r.ActionProposal, r.Route, r.DecidedByName, pullRequestOf(r.PrState, r.PrRepo, r.PrUrl, r.PrNumber, r.PrMergedAt, r.PrClosedAt, r.PrCheckedAt))
 		if err != nil {
 			return nil, fmt.Errorf("proposal %s: %w", r.ActionProposal.ID, err)
 		}
@@ -90,7 +90,7 @@ func Get(ctx context.Context, q db.DBTX, id uuid.UUID) (View, error) {
 		return View{}, fmt.Errorf("read proposal %s: %w", id, err)
 	}
 
-	p, err := proposalOf(ctx, r.ActionProposal, r.Route, r.DecidedByName)
+	p, err := proposalOf(ctx, r.ActionProposal, r.Route, r.DecidedByName, pullRequestOf(r.PrState, r.PrRepo, r.PrUrl, r.PrNumber, r.PrMergedAt, r.PrClosedAt, r.PrCheckedAt))
 	if err != nil {
 		return View{}, fmt.Errorf("proposal %s: %w", id, err)
 	}
@@ -138,7 +138,7 @@ func List(ctx context.Context, q db.DBTX, opts ListOptions) ([]View, error) {
 	out := make([]View, 0, len(rows))
 
 	for _, r := range rows {
-		p, err := proposalOf(ctx, r.ActionProposal, r.Route, r.DecidedByName)
+		p, err := proposalOf(ctx, r.ActionProposal, r.Route, r.DecidedByName, pullRequestOf(r.PrState, r.PrRepo, r.PrUrl, r.PrNumber, r.PrMergedAt, r.PrClosedAt, r.PrCheckedAt))
 		if err != nil {
 			return nil, fmt.Errorf("proposal %s: %w", r.ActionProposal.ID, err)
 		}
@@ -150,8 +150,9 @@ func List(ctx context.Context, q db.DBTX, opts ListOptions) ([]View, error) {
 }
 
 // proposalOf converts a stored proposal, with the route of its
-// investigation and the name of who decided it.
-func proposalOf(ctx context.Context, row db.ActionProposal, route, decidedByName string) (action.Proposal, error) {
+// investigation, the name of who decided it and its pull request, which is
+// nil when it has none.
+func proposalOf(ctx context.Context, row db.ActionProposal, route, decidedByName string, pr *action.PullRequest) (action.Proposal, error) {
 	p := action.Proposal{
 		ID:                 row.ID.String(),
 		InvestigationID:    row.InvestigationID.String(),
@@ -170,6 +171,7 @@ func proposalOf(ctx context.Context, row db.ActionProposal, route, decidedByName
 		ApprovedByPolicy:   approvedByPolicy(row),
 		Error:              deref(row.Error),
 		FixKind:            action.FixKind(deref(row.FixKind)),
+		PullRequest:        pr,
 	}
 
 	if row.DecidedBy != nil {
@@ -212,6 +214,24 @@ func proposalOf(ctx context.Context, row db.ActionProposal, route, decidedByName
 	}
 
 	return p, nil
+}
+
+// pullRequestOf returns the pull request that the columns of a left join
+// with pull_request_states describe, or nil when the join found no row.
+func pullRequestOf(state, repo, url *string, number *int64, mergedAt, closedAt, checkedAt *time.Time) *action.PullRequest {
+	if state == nil {
+		return nil
+	}
+
+	return &action.PullRequest{
+		Repo:      deref(repo),
+		Number:    deref(number),
+		URL:       deref(url),
+		State:     *state,
+		MergedAt:  mergedAt,
+		ClosedAt:  closedAt,
+		CheckedAt: deref(checkedAt),
+	}
 }
 
 // revisionsOf returns the revisions of a rollback's snapshot as a person

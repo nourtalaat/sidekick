@@ -666,6 +666,17 @@ from the platform, so they are plain text with hidden characters written as
 `\u` escapes, and nothing is cut. Approve repeats the two versions when it
 asks. The undo of a rollback shows the same two revisions the other way round.
 
+A proposal that opened a pull request also shows a **Pull request**
+section after its result. It has the repository and number as a link to the
+pull request, its state (**Open**, **Merged** or **Closed**, each with an icon
+and the word), when it was merged or closed, and when Sidekick last read it
+from the Git host. Sidekick reads the state once a day, so what the card
+shows can be a day old; a pull request that was merged or closed is not read
+again, so its checked time stays at the time the check found it merged or
+closed. A proposal with no pull request, or one that was not checked yet,
+has no section. The link opens only when the address is an `http` or `https`
+one; otherwise the repository and number are plain text.
+
 - `GET /api/v1/proposals` (approver) lists proposals a page at a time, with
   `status` (repeat it for several, default `proposed`), `action` (one name
   from the config; a name that is not there answers 400 and lists the names),
@@ -700,6 +711,10 @@ asks. The undo of a rollback shows the same two revisions the other way round.
   `files`, each with `path`, `status`, `linesAdded`, `linesRemoved` and
   `diffAvailable`.
 - `GET /api/v1/investigations/{id}` has a `proposals` list.
+- A proposal in the queue and in that list has a `pullRequest` object when a
+  check has recorded one: `repo`, `number`, `url`, `state` (`open`, `merged`
+  or `closed`), `mergedAt`, `closedAt` and `checkedAt`. The answers to
+  approving, rejecting and undoing do not have it.
 
 Every proposal, approval, rejection, expiry and result is in the audit log
 as `action.proposed`, `action.approved`, `action.rejected`,
@@ -964,7 +979,8 @@ would refuse is ignored, so every link opens. Days are UTC days.
   time, the verdict Sidekick gave against the verdict people confirmed,
   precision and recall of each verdict, accuracy by model and strategy,
   and the newest benchmark runs. Choose two runs to compare them; the two
-  runs are in the address too (`a` and `b`).
+  runs are in the address too (`a` and `b`). The link **All benchmark
+  runs** opens the [Benchmarks page](#the-benchmarks-page).
 
   The precision and recall chart draws one verdict at a time, by day.
   Choose the verdict with the **Verdict** menu on the card; the default
@@ -995,9 +1011,14 @@ would refuse is ignored, so every link opens. Days are UTC days.
 
 Every chart has a text summary, a legend, a tooltip and a **Show as table**
 button for the same numbers. A chart with nothing to draw says "No data
-for this range" and links to the filters. A responder marks the fix of a
-false positive as applied on the investigation page; that is what "noisy
-alerts fixed" counts.
+for this range" and links to the filters. "Noisy alerts fixed" counts the
+false alarms that were fixed, in one of three ways: a responder marked the
+fix as applied on the investigation page, or the monitor pull request that
+Sidekick opened was merged, or the monitor change that Sidekick made through
+the tool's API ran and was not undone. A false alarm counts once, however
+many of the three apply. Pull requests are read once a day, so a merge can
+show on the chart up to a day late, and **Undo** takes a change out of the
+count.
 
 ## Dashboard numbers and benchmark runs
 
@@ -1039,9 +1060,8 @@ for the range of equal length before it, for showing the change.
 - `GET /api/v1/stats/operations` returns, by day or by hour (`interval`,
   hours for a range of at most 7 days), the investigations by verdict, the
   time to the first finding, the duration, tool calls, false positives,
-  noisy alerts fixed (false positives whose fix a responder
-  [marked as applied](#actions-on-investigations)), and the recoveries,
-  downtime and timed out watchers. A median is worked out from counts in
+  noisy alerts fixed (see below), and the recoveries, downtime and timed
+  out watchers. A median is worked out from counts in
   buckets of growing width, so it is about right, within a third, and not
   exact. The actions of an investigation count in its hour. Proposed is
   every proposal. Approved is the proposals that a person or the policy
@@ -1049,6 +1069,21 @@ for the range of equal length before it, for showing the change.
   those that failed after a decision; not the rejected or expired ones.
   Executed is the proposals that ran and succeeded, including the undone
   ones, which ran before they were undone.
+
+  Noisy alerts fixed counts, in the hour the investigation was created,
+  each investigation whose verdict is `false_positive` and that has at
+  least one of these: a responder
+  [marked the fix as applied](#actions-on-investigations); an action
+  proposal that opened a pull request that changes a monitor, whose status
+  is `succeeded` and whose pull request is merged; or an action proposal
+  that changed a monitor through the tool's API and whose status is
+  `succeeded`. An investigation counts once however many apply. Undo gives
+  the proposal the status `undone`, which takes it out of the count, and a
+  pull request that was closed without a merge does not count. Mutes,
+  rollbacks, flags, tickets and code changes never count. The state of a
+  pull request is read once a day (see
+  [the pull request check](configuration.md#actions)), so a merge shows up
+  to a day late, and a recount of the hour then counts it.
 - `GET /api/v1/stats/filters` lists the routes, services and models of the
   last 400 days, for the filter menus.
 - `GET /api/v1/bench/runs` lists the benchmark runs that
@@ -1058,6 +1093,24 @@ for the range of equal length before it, for showing the change.
   scenario; the judge's reasons are left out. `GET /api/v1/bench/compare?a=<id>&b=<id>`
   lines up two runs: each metric with the change and whether the intervals
   overlap (`clear` or `none`), and the correct runs of each scenario.
+
+### The Benchmarks page
+
+`/benchmarks`, in the menu as Benchmarks, is open to every role from
+`viewer` up. It lists every run that `sidekick bench run --db` stored, newest
+first, 25 at a time; **Load more** adds the next 25. Each row has:
+
+- the run, as its label or its start time, with the Sidekick version and the
+  models under it; the name links to `/benchmarks/<id>`
+- the result, Passed or Failed, as a word with an icon
+- the overall score, the verdict accuracy, the mean cost per run and the mean
+  time per run
+- the scenario set, with its repeats and the number of runs
+- who started the run: Command line (`cli`), CI (`ci`) or Strategy gate
+  (`gate`)
+
+The dashboard card shows the same table for the newest ten runs. With no
+runs stored, the page says so and names the command that stores them.
 
 ## The JSON API
 

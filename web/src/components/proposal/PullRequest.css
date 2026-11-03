@@ -1,0 +1,31 @@
+.sk-proposal__pr {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-2);
+}
+
+.sk-proposal__pr-lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sk-proposal__pr-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sk-space-2) var(--sk-space-3);
+}
+
+.sk-proposal__pr-name,
+.sk-proposal__pr-state a {
+  overflow-wrap: anywhere;
+}
+
+.sk-proposal__pr-moment {
+  color: var(--sk-text-secondary);
+  font: var(--sk-type-caption);
+}

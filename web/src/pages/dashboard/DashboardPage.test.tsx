@@ -233,6 +233,15 @@ describe("the dashboard", () => {
     expect(within(screen.getByRole("search", { name: "Filter the dashboard" })).getByRole("combobox", { name: "Verdict" })).toHaveValue("");
   });
 
+  it("says what the noisy alerts fixed chart counts", async () => {
+    renderApp({ route: "/dashboard", handler: dashboard().handler });
+
+    const card = (await screen.findByRole("heading", { name: "Noisy alerts fixed", level: 3 }, { timeout: LOAD_TIMEOUT })).closest("section") as HTMLElement;
+
+    expect(within(card).getByText(/the fix was marked as applied, the monitor pull request that Sidekick opened was merged, or the monitor change that Sidekick made through the tool's API ran and was not undone/)).toBeInTheDocument();
+    expect(within(card).getByText(/A false alarm counts once even when more than one applies\. 3 in all\./)).toBeInTheDocument();
+  });
+
   it("says so, with a link to the filters, for a chart with nothing to draw", async () => {
     renderApp({ route: "/dashboard", handler: dashboard({ operations: () => json(200, operations({ series: operations().series.map((b) => ({ ...b, noisyFixed: 0 })), totals: { ...operations().totals, noisyFixed: 0 } })) }).handler });
 
@@ -397,6 +406,12 @@ describe("the dashboard", () => {
     expect(within(runs).getByText("Passed")).toBeInTheDocument();
     expect(within(runs).getByText("Failed")).toBeInTheDocument();
     expect(within(runs).getByText("70%")).toBeInTheDocument();
+    expect(within(runs).getByRole("link", { name: /^baseline, / })).toHaveAttribute("href", `/benchmarks/${RUN_A_ID}`);
+    expect(within(runs).getByText("2 repeats, 4 runs")).toBeInTheDocument();
+    expect(within(runs).getByText("Command line")).toBeInTheDocument();
+    expect(within(runs).getByText("CI")).toBeInTheDocument();
+
+    expect(screen.getByRole("link", { name: "All benchmark runs" })).toHaveAttribute("href", "/benchmarks");
 
     await user.selectOptions(screen.getByRole("combobox", { name: "Compare run" }), RUN_A_ID);
     await user.selectOptions(screen.getByRole("combobox", { name: "With run" }), RUN_B_ID);
