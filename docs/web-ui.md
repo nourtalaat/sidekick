@@ -600,9 +600,9 @@ plain text, never as HTML.
 
 The **Strategies** tab lists the changes Sidekick drafted to strategies after
 repeated wrong feedback. See [`strategies.proposals`](configuration.md#proposed-changes)
-for what turns them on and what they cost. The server lets only an `admin`
-read them; the tab does not check the role first, so a lower role sees the
-server's refusal in place of the list.
+for what turns them on and what they cost. Only an `admin` can read them; a
+lower role sees a message that names the `admin` role, and the tab sends no
+request.
 
 Each proposal shows its status: being drafted, draft failed, waiting for the
 gate, gate running, passed the gate, did not pass, applied, approved (for a
