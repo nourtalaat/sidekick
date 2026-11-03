@@ -140,6 +140,10 @@ role, and nothing more.
   private project. From GitLab 18.7, the Planner role can read private code
   too, but Reporter works on every version.
 
+Keep this token for investigations only. The
+[`gitlab.merge_request` action](../configuration.md#gitlabmerge_request)
+needs write access, and uses a token of its own.
+
 A token can be one of three kinds. Any of them works; choose by how widely
 the token should read. Making a project access token takes the Maintainer or
 Owner role in the project, and a group access token the Owner role in the

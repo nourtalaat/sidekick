@@ -4,7 +4,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { keys, type Investigation, type Step, type Watcher } from "../../api/investigations";
 import { FLUSH_MS } from "../../api/useInvestigationStream";
-import { detail, INVESTIGATION_ID, RESPONDER, step, watcher } from "../../test/fixtures";
+import { check, checksOf, detail, INVESTIGATION_ID, RESPONDER, step, watcher } from "../../test/fixtures";
 import { proposal } from "../../test/actionProposals";
 import { json, problem, renderApp, VIEWER } from "../../test/helpers";
 import { FakeEventSource, routes } from "../../test/streams";
@@ -151,6 +151,30 @@ describe("the investigation page", () => {
     expect(within(region).getByText(/Stopped by Grace Hopper/)).toBeInTheDocument();
     expect(within(region).getByText("Back up: disk")).toBeInTheDocument();
     expect(within(region).queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("shows the checks of each watcher after the status region, not inside it", async () => {
+    const { handler } = pageServer({
+      watchers: [
+        watcher({ id: "w1", name: "health", checks: 2, recentChecks: [check(2, { result: "fail", detail: "HTTP 503" }), check(1, { result: "pass", detail: "HTTP 200" })] }),
+        watcher({ id: "w2", name: "disk", status: "recovered", endedAt: "2026-10-26T14:30:00Z", checks: 120, recentChecks: checksOf(50) }),
+        watcher({ id: "w3", name: "queue", status: "timed_out", endedAt: "2026-10-26T15:30:00Z", checks: 0, recentChecks: [] }),
+      ],
+    });
+    renderApp({ route: ROUTE, handler });
+
+    const region = await screen.findByRole("status", { name: "Watchers" });
+    const health = screen.getByText(/Checks \(2\)/).closest("details") as HTMLDetailsElement;
+    const disk = screen.getByText(/Checks \(120\)/).closest("details") as HTMLDetailsElement;
+    const queue = screen.getByText(/Checks \(0\)/).closest("details") as HTMLDetailsElement;
+
+    expect(region.contains(health) || region.contains(disk) || region.contains(queue)).toBe(false);
+    expect(within(region).queryByText(/Checks \(/)).not.toBeInTheDocument();
+    expect([health.open, disk.open, queue.open]).toEqual([true, false, false]);
+    expect(within(health).getByText("Failed")).toBeInTheDocument();
+    expect(within(health).getByText("HTTP 503")).toBeInTheDocument();
+    expect(within(disk).getByText("Showing the last 50 of 120 checks.")).toBeInTheDocument();
+    expect(within(queue).getByText("No checks yet.")).toBeInTheDocument();
   });
 
   describe("buttons by role", () => {

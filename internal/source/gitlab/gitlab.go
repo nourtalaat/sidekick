@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/nourtalaat/sidekick/internal/buildinfo"
+	"github.com/nourtalaat/sidekick/internal/gitlabapi"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
@@ -34,7 +36,7 @@ func init() {
 // concurrent use.
 type Source struct {
 	cfg    Config
-	client *client
+	client *gitlabapi.Client
 	// pageSize is how many items one page of a list asks for. Tests make it
 	// small to page through short lists.
 	pageSize int
@@ -101,7 +103,13 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (source
 		return nil, errNoSecrets
 	}
 
-	c, err := newClient(cfg, deps)
+	c, err := gitlabapi.New(gitlabapi.Options{
+		BaseURL:   cfg.BaseURL,
+		Token:     cfg.TokenSecret,
+		Secrets:   deps.Secrets,
+		HTTP:      deps.HTTP,
+		UserAgent: "sidekick/" + buildinfo.Version,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("make the GitLab client: %w", err)
 	}

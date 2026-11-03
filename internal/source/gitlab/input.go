@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nourtalaat/sidekick/internal/gitlabapi"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
 
@@ -52,7 +53,7 @@ func (s *Source) resolve(t target) (string, error) {
 		name = mapped
 	}
 
-	if !validProject(name) {
+	if !gitlabapi.ValidProject(name) {
 		return "", &source.ToolError{Message: fmt.Sprintf("project %q must be a full path such as group/project", name)}
 	}
 
@@ -152,4 +153,9 @@ func limitOf(limit int) int {
 	}
 
 	return min(limit, maxLimit)
+}
+
+// dots reports whether s is "." or "..".
+func dots(s string) bool {
+	return s == "." || s == ".."
 }

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/nourtalaat/sidekick/internal/gitlabapi"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
 
@@ -86,10 +87,10 @@ func (s *Source) listDeployments(ctx context.Context, input json.RawMessage) (so
 	setIf(query, "environment", in.Environment)
 	setIf(query, "status", in.Status)
 
-	path := projectPath(project, "deployments")
+	path := gitlabapi.ProjectPath(project, "deployments")
 
 	deployments, more, err := collect(ctx, limit, func(ctx context.Context, page int) ([]apiDeployment, int, error) {
-		return listPage[apiDeployment](ctx, s.client, path, query, page, min(s.pageSize, limit))
+		return gitlabapi.ListPage[apiDeployment](ctx, s.client, path, query, page, min(s.pageSize, limit))
 	}, func(d apiDeployment) (bool, bool) {
 		return true, d.CreatedAt.Before(since)
 	})
