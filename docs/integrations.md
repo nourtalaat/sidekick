@@ -123,4 +123,5 @@ proposals](web-ui.md#action-proposals) for how people approve them.
 - `launchdarkly.flag`: turns a LaunchDarkly feature flag off in one environment. See [its keys](configuration.md#launchdarklyflag).
 - `prometheus.rule`: changes the rules of a `PrometheusRule` resource. See [its keys](configuration.md#prometheusrule).
 - `alertmanager.silence`: silences alerts in Alertmanager for a limited time, and ends the silence early on Undo. See [its keys](configuration.md#alertmanagersilence).
+- `grafana.silence`: silences alerts in Grafana for a limited time, and ends the silence early on Undo. See [its keys](configuration.md#grafanasilence).
 - `github.pull_request`: opens a pull request that changes monitor definitions kept in Git. See [its keys](configuration.md#githubpull_request).
