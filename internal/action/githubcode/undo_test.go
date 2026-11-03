@@ -360,7 +360,8 @@ func TestUndoNeverLeavesARevertPullRequestThatIsNotADraft(t *testing.T) {
 
 		b := newBed(t, nil)
 		b.handlePulls(map[string]string{origHead: "[" + mergedPull(21) + "]", revertHead: "[" + pullInState(22, false, "closed") + "]"})
-		b.github.Handle(http.MethodGet, repoPath("git/ref/heads/"+undoBranch), reply(refBody("refs/heads/"+undoBranch, testCommitSHA)))
+		branchBody := reply(refBody("refs/heads/"+undoBranch, testCommitSHA))
+		b.github.Handle(http.MethodGet, repoPath("git/ref/heads/"+undoBranch), branchBody, branchBody)
 		b.github.Handle(http.MethodDelete, repoPath("git/refs/heads/"+undoBranch), replyStatus(http.StatusBadGateway, `{"message":"bad gateway"}`), fakeNoContent())
 
 		_, err := b.code.Undo(t.Context(), undoInvocation(), undoSnapshot(testEarlierSHA), false)

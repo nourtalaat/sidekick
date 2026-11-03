@@ -122,8 +122,8 @@ func TestFileDiffReadsTheBaseFromGitHub(t *testing.T) {
 	got, err := s.svc.FileDiff(t.Context(), res.ID, testGoPath, false)
 	require.NoError(t, err)
 	require.Equal(t, gitchange.FileChanged, got.Status)
-	require.Contains(t, renderLines(got.Lines), "-4/. \treturn 1")
-	require.Contains(t, renderLines(got.Lines), "+./4 \treturn 2")
+	require.Contains(t, renderLines(got.Lines), "-4/. \\u0009return 1")
+	require.Contains(t, renderLines(got.Lines), "+./4 \\u0009return 2")
 	require.False(t, got.Truncated)
 }
 

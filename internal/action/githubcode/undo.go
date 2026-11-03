@@ -126,16 +126,13 @@ func (c *Code) revert(ctx context.Context, inv action.Invocation, params Params,
 		}
 	}
 
-	switch {
-	case pr == nil:
+	if pr == nil {
 		pr, err = c.openDraft(ctx, owner, name, branch, c.revertRequest(inv, params, orig, branch))
 		if err != nil {
 			return action.Result{}, fmt.Errorf("make the revert pull request: %w", err)
 		}
-	default:
-		if err := c.requireDraft(ctx, owner, name, branch, pr); err != nil {
-			return action.Result{}, fmt.Errorf("check the revert pull request of an earlier attempt: %w", err)
-		}
+	} else if err := c.requireDraft(ctx, owner, name, branch, pr); err != nil {
+		return action.Result{}, fmt.Errorf("check the revert pull request of an earlier attempt: %w", err)
 	}
 
 	if err := c.record(ctx, inv.ProposalID, params.Repo, githubgit.StatusOf(pr)); err != nil {
@@ -328,7 +325,7 @@ func earlierMode(ctx context.Context, r *reader, commit, path, blob string) (str
 		return "", fmt.Errorf("find the path at the base commit: %w", err)
 	}
 
-	if entry == nil || entry.GetSHA() != blob || checkRegular(path, entry) != nil {
+	if entry == nil || entry.GetSHA() != blob || !isRegular(entry) {
 		return fileMode, nil
 	}
 

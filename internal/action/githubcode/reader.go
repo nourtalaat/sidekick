@@ -191,9 +191,15 @@ func checkRegular(path string, e *gh.TreeEntry) error {
 		return fmt.Errorf("%w: path %q is a symlink, which this action does not change", action.ErrPermanent, path)
 	case e.GetMode() == modeSubmodule || e.GetType() == typeCommit:
 		return fmt.Errorf("%w: path %q is a submodule, which this action does not change", action.ErrPermanent, path)
-	case e.GetType() != typeBlob || (e.GetMode() != fileMode && e.GetMode() != modeExecutable):
+	case !isRegular(e):
 		return fmt.Errorf("%w: path %q is not a regular file (mode %s)", action.ErrPermanent, path, e.GetMode())
 	}
 
 	return nil
+}
+
+// isRegular reports whether the entry is a blob with the mode 100644 or
+// 100755.
+func isRegular(e *gh.TreeEntry) bool {
+	return e.GetType() == typeBlob && (e.GetMode() == fileMode || e.GetMode() == modeExecutable)
 }
