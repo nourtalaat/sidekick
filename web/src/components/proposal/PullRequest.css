@@ -29,3 +29,30 @@
   color: var(--sk-text-secondary);
   font: var(--sk-type-caption);
 }
+
+.sk-proposal__ci {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-2);
+}
+
+.sk-proposal__ci-label {
+  color: var(--sk-text-secondary);
+  font: var(--sk-type-caption);
+}
+
+.sk-proposal__ci-summary {
+  overflow-wrap: anywhere;
+}
+
+.sk-proposal__ci-failed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-1);
+  margin: 0;
+  padding: 0 0 0 var(--sk-space-4);
+}
+
+.sk-proposal__ci-failed li {
+  overflow-wrap: anywhere;
+}

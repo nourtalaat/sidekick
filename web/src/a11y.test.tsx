@@ -12,7 +12,7 @@ import { ApiError } from "./api/client";
 import { LoginPage } from "./pages/LoginPage";
 import { THEME_STORAGE_KEY } from "./theme";
 import { json, renderApp, renderWithProviders, stubMedia, VIEWER, wcagViolations } from "./test/helpers";
-import { proposal, pullRequest } from "./test/actionProposals";
+import { ci, proposal, pullRequest } from "./test/actionProposals";
 import { ADMIN } from "./test/rules";
 import { detail, INVESTIGATION_ID } from "./test/fixtures";
 import { FakeEventSource, routes } from "./test/streams";
@@ -123,6 +123,27 @@ describe.each(THEMES)("accessibility, theme $name", (theme) => {
 
     it.each(["open", "merged", "closed"] as const)("has no WCAG 2.2 AA violations on a proposal card with a %s pull request", async (state) => {
       const { container } = renderWithProviders(<ProposalCard proposal={proposal({ status: "succeeded", pullRequest: pullRequest({ state }) })} canDecide={false} />);
+
+      expect(await wcagViolations(container)).toEqual([]);
+    });
+
+    it.each(["pending", "passed", "failed", "none", "unknown", "timed_out"] as const)("has no WCAG 2.2 AA violations on a proposal card with %s CI", async (state) => {
+      const over = {
+        pending: { state, passed: 1, total: 3, reportedAt: undefined },
+        passed: { state },
+        failed: {
+          state,
+          passed: 5,
+          total: 7,
+          failedCount: 12,
+          failed: [{ name: "unit tests", url: "https://ci.example.com/1" }, { name: "<b>lint</b>" }],
+        },
+        none: { state, passed: 0, total: 0 },
+        unknown: { state, passed: 0, total: 0, message: "Sidekick could not read the checks. The GitHub App needs Checks (read)." },
+        timed_out: { state, passed: 5, total: 7 },
+      }[state];
+
+      const { container } = renderWithProviders(<ProposalCard proposal={proposal({ status: "succeeded", pullRequest: pullRequest({ ci: ci(over) }) })} canDecide={false} />);
 
       expect(await wcagViolations(container)).toEqual([]);
     });

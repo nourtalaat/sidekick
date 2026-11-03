@@ -55,3 +55,16 @@ export function pullRequest(over: Partial<NonNullable<Proposal["pullRequest"]>> 
     ...over,
   };
 }
+
+/** The CI of a pull request, passed and reported on 2 November 2026. */
+export function ci(over: Partial<NonNullable<NonNullable<Proposal["pullRequest"]>["ci"]>> = {}): NonNullable<NonNullable<Proposal["pullRequest"]>["ci"]> {
+  return {
+    state: "passed",
+    passed: 7,
+    total: 7,
+    failedCount: 0,
+    checkedAt: "2026-11-02T06:10:00Z",
+    reportedAt: "2026-11-02T06:10:00Z",
+    ...over,
+  };
+}
