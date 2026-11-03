@@ -91,12 +91,13 @@ func TestValidateFilesResults(t *testing.T) {
 		err           error
 		wantErr       string
 		wantPermanent bool
+		wantLimit     bool
 		wantSeen      string
 	}{
-		{name: "the file fails", result: validateclient.Result{Errors: []validateclient.Problem{{Path: "rules/a.yaml", Line: 3, Message: "bad\nexpr"}}}, wantErr: "- rules/a.yaml:3: bad expr", wantPermanent: true, wantSeen: "prometheus_rules:failed"},
+		{name: "the file fails", result: validateclient.Result{Errors: []validateclient.Problem{{Path: "rules/a.yaml", Line: 3, Message: "bad\nexpr"}}}, wantErr: "- rules/a.yaml:3: bad expr", wantPermanent: true, wantLimit: true, wantSeen: "prometheus_rules:failed"},
 		{name: "the validator times out", err: validateclient.ErrTimeout, wantErr: "timed out", wantSeen: "prometheus_rules:unavailable"},
 		{name: "the validator refuses the request", err: validateclient.ErrBadRequest, wantErr: "refused the request", wantPermanent: true, wantSeen: "prometheus_rules:unavailable"},
-		{name: "the files are too large", err: validateclient.ErrTooLarge, wantErr: "too large", wantPermanent: true, wantSeen: "prometheus_rules:unavailable"},
+		{name: "the files are too large", err: validateclient.ErrTooLarge, wantErr: "too large", wantPermanent: true, wantLimit: true, wantSeen: "prometheus_rules:unavailable"},
 	}
 
 	for _, tt := range tests {
@@ -112,6 +113,7 @@ func TestValidateFilesResults(t *testing.T) {
 			err := ValidateFiles(t.Context(), validator, fakeReader{}, changes, func(format, result string) { seen = append(seen, format+":"+result) })
 			require.ErrorContains(t, err, tt.wantErr)
 			require.Equal(t, tt.wantPermanent, errors.Is(err, action.ErrPermanent))
+			require.Equal(t, tt.wantLimit, errors.Is(err, action.ErrLimit))
 			require.Equal(t, []string{tt.wantSeen}, seen)
 		})
 	}
