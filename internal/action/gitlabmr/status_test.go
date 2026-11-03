@@ -2,7 +2,6 @@ package gitlabmr
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -124,7 +123,7 @@ func TestPullRequestStateErrors(t *testing.T) {
 
 		_, _, err := b.mr.PullRequestState(t.Context(), json.RawMessage(`{"project":"`+testProject+`"}`), testBranch)
 		require.Error(t, err)
-		require.False(t, errors.Is(err, action.ErrPermanent))
+		require.NotErrorIs(t, err, action.ErrPermanent)
 	})
 }
 
