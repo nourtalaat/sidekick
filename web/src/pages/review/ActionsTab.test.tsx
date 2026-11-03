@@ -140,7 +140,8 @@ describe("the actions tab of the review queue", () => {
     );
     renderApp({ me: APPROVER, route: "/review?tab=actions", handler });
 
-    await user.selectOptions(await screen.findByLabelText("Action"), "slack-react");
+    await screen.findByRole("option", { name: "slack-react" });
+    await user.selectOptions(screen.getByLabelText("Action"), "slack-react");
     await user.click(await screen.findByRole("button", { name: "Show more" }));
 
     await waitFor(() => expect(listRequests(seen).at(-1)?.search.get("cursor")).toBe("abc"));
@@ -161,6 +162,7 @@ describe("the actions tab of the review queue", () => {
     await user.selectOptions(await screen.findByLabelText("Status"), "failed");
     expect(address).toHaveTextContent("?tab=actions&status=failed");
 
+    await screen.findByRole("option", { name: "slack-react" });
     await user.selectOptions(screen.getByLabelText("Action"), "slack-react");
     expect(address).toHaveTextContent("?tab=actions&status=failed&action=slack-react");
 
@@ -192,7 +194,7 @@ describe("the actions tab of the review queue", () => {
     renderTab("/review?tab=actions&action=deploy&status=maybe", handler);
 
     expect(await screen.findByLabelText("Status")).toHaveValue("waiting");
-    await screen.findByRole("article", { name: /Proposed action/ });
+    await screen.findByRole("article", { name: "Proposed action monitor-note" });
 
     expect(screen.getByLabelText("Action")).toHaveValue("");
 
@@ -268,7 +270,7 @@ describe.each([false, true])("accessibility of the actions tab, dark %s", (dark)
     const { handler } = queue();
     const { container } = renderApp({ me: APPROVER, route: "/review?tab=actions&status=any&action=slack-react", handler });
 
-    await screen.findByRole("article", { name: "Proposed action monitor-note" });
+    await screen.findByRole("article", { name: "Proposed action ticket-comment" });
 
     expect(await wcagViolations(container)).toEqual([]);
   });
