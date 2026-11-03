@@ -146,7 +146,7 @@ describe("accessibility of the components", () => {
         <Card title="A card">Content</Card>
         <TextField label="Name" help="As it shows in the audit log." />
         <TextField label="Email" error="Enter an email address." defaultValue="ada" />
-        <EmptyState title="Nothing here yet">Comes in a later release.</EmptyState>
+        <EmptyState title="Nothing here yet">Nothing to show yet.</EmptyState>
         <QueryError error={new ApiError(403, "This needs the admin role.")} />
       </main>,
     );

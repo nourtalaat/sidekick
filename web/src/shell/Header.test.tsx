@@ -33,7 +33,6 @@ describe("the search box in the header", () => {
     expect(box).not.toHaveAttribute("title");
     expect(box).toHaveAttribute("maxlength", String(SEARCH_MAX_LENGTH));
     expect(screen.getByRole("search", { name: "Search investigations" })).toContainElement(box);
-    expect(screen.queryByText(/comes with the investigation list/)).not.toBeInTheDocument();
   });
 
   it("opens the list with the text when Enter is pressed", async () => {
