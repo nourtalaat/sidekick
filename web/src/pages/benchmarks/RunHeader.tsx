@@ -7,6 +7,7 @@ import { CopyButton } from "../../components/CopyButton";
 import { formatTime } from "../../format";
 import { Fact } from "./Fact";
 import { nameOf, startedByOf } from "./RunsTable";
+import { connectorText } from "./runSettings";
 
 /** The title, the result and the facts a run was made with, and the links to the list and to a comparison. */
 export function RunHeader({ run }: { run: BenchRun }) {
@@ -42,7 +43,7 @@ export function RunHeader({ run }: { run: BenchRun }) {
               ? "none"
               : roles.map(([role, c]) => (
                   <span key={role} className="sk-table__line">
-                    {`${role}: ${c.model ?? "no model"} through ${c.connector}${c.provider ? ` (${c.provider})` : ""}`}
+                    {`${role}: ${connectorText(c)}`}
                   </span>
                 ))}
           </Fact>

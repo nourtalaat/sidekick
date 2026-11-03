@@ -9,24 +9,24 @@ import { FailedThreshold } from "./FailedThreshold";
 import { RunHeader } from "./RunHeader";
 import { ScenariosCard } from "./ScenariosCard";
 import { ScoresCard } from "./ScoresCard";
+import { isRunId } from "./runId";
 import { ThresholdsCard } from "./ThresholdsCard";
 import "./BenchRun.css";
 
 const NOT_FOUND = 404;
-const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * One benchmark run: its settings, scores with their intervals, thresholds,
  * cost and time, and each scenario with the result of each repeat. Every role
  * from viewer up sees it. An address that is not a run ID, such as
- * /benchmarks/compare, is a page that does not exist and sends no request.
+ * /benchmarks/latest, is a page that does not exist and sends no request.
  */
 export function BenchRunPage() {
   const { id = "" } = useParams();
-  const isRunId = RUN_ID.test(id);
-  const query = useBenchRun(isRunId ? id : undefined);
+  const validId = isRunId(id);
+  const query = useBenchRun(validId ? id : undefined);
 
-  if (!isRunId) {
+  if (!validId) {
     return <NotFoundPage />;
   }
 

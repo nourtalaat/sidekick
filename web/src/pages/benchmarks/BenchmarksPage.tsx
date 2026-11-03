@@ -1,5 +1,5 @@
 import { useBenchRunPages } from "../../api/bench";
-import { Button } from "../../components/Button";
+import { Button, LinkButton } from "../../components/Button";
 import { EmptyState } from "../../components/EmptyState";
 import { QueryError } from "../../components/QueryError";
 import { RunsTable } from "./RunsTable";
@@ -26,6 +26,11 @@ export function BenchmarksPage() {
       {pages.isSuccess && runs.length === 0 && <EmptyState title="No benchmark runs yet">Runs appear here when sidekick bench run stores its results with --db.</EmptyState>}
       {runs.length > 0 && (
         <>
+          {runs.length > 1 && (
+            <div className="sk-page__actions">
+              <LinkButton to="/benchmarks/compare">Compare two runs</LinkButton>
+            </div>
+          )}
           <RunsTable label="Benchmark runs" runs={runs} />
           <p role="status">{`Showing ${runs.length} ${runs.length === 1 ? "run" : "runs"}`}</p>
           {pages.isFetchNextPageError && <QueryError error={pages.error} onRetry={() => void pages.fetchNextPage()} />}

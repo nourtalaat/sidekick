@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/store/db"
@@ -239,6 +240,25 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: []string{"memory_entries_pkey"},
 		},
 		{
+			name: "InsertMemoryUses",
+			run: func(ctx context.Context, q *db.Queries) error {
+				return fmt.Errorf("run query: %w", q.InsertMemoryUses(ctx, db.InsertMemoryUsesParams{
+					InvestigationID: busy, Run: 2, ExampleIds: []uuid.UUID{md5UUID(t, pool, "inv11"), md5UUID(t, pool, "inv12")},
+					Matches: []string{"fingerprint", "text"},
+				}))
+			},
+			wantIndex: []string{"Insert on memory_uses", "Conflict Arbiter Indexes: memory_uses_pkey"},
+		},
+		{
+			name: "ListMemoryUsedBy",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListMemoryUsedBy(ctx, db.ListMemoryUsedByParams{InvestigationID: busy, Run: 1, MaxRows: MaxExamples})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"memory_uses_pkey", "memory_entries_pkey", "investigations_pkey"},
+		},
+		{
 			name: "GetServiceNotesDetail",
 			run: func(ctx context.Context, q *db.Queries) error {
 				_, err := q.GetServiceNotesDetail(ctx, "svc-42")
@@ -300,4 +320,15 @@ func TestQueryPlans(t *testing.T) {
 			require.NotContains(t, explain.Plan, "Seq Scan")
 		})
 	}
+}
+
+// md5UUID returns md5(seed) as a UUID, as the plan fixture makes its IDs.
+func md5UUID(t *testing.T, pool *pgxpool.Pool, seed string) uuid.UUID {
+	t.Helper()
+
+	var id uuid.UUID
+
+	require.NoError(t, pool.QueryRow(t.Context(), "SELECT md5($1)::uuid", seed).Scan(&id))
+
+	return id
 }

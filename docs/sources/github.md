@@ -36,7 +36,8 @@ GitHub enforces.
 Keep this app for investigations only. An action that opens pull requests
 needs write access, and should use a separate app installed only on the
 repository it changes, so the investigation source never holds write
-access.
+access. See [`github.pull_request`](../configuration.md#githubpull_request)
+and [`github.code_change`](../configuration.md#githubcode_change).
 
 ## Setting up the app
 

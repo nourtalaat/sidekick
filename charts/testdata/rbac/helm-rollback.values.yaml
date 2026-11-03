@@ -1,0 +1,35 @@
+# Two helm.rollback actions: one with the default service account,
+# sidekick-helm-rollback, and one with an account of its own. The chart makes
+# the two accounts and the one Role that lets Sidekick ask for tokens of them
+# and no others. It makes no Role and no binding in the namespaces of the
+# actions: a Helm rollback re-applies every object of a release, so the
+# operator binds a Role of their choice. Sidekick mounts its service account
+# token, because an action asks for tokens.
+secrets:
+  - sidekick-anthropic
+  - sidekick-slack
+  - sidekick-webhook
+  - sidekick-staging-cluster
+config:
+  sources:
+    # The quick-start source, pointed at another cluster, so no source reads this one.
+    k8s:
+      kubeconfigSecret: { name: sidekick-staging-cluster, key: kubeconfig }
+  actions:
+    helm-checkout:
+      type: helm.rollback
+      limits:
+        namespaces: [shop]
+        releases: [checkout, "web-*"]
+    helm-platform:
+      type: helm.rollback
+      serviceAccount: platform-helm
+      limits:
+        namespaces: [platform]
+        releases: [node-exporter]
+  routes:
+    - name: default
+      sources: [k8s]
+      outputs: [slack]
+      mode: approved
+      actions: [helm-checkout, helm-platform]
