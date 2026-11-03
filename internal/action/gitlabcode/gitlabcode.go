@@ -56,6 +56,10 @@ import (
 // with "type: gitlab.code_change".
 const TypeName = "gitlab.code_change"
 
+func init() {
+	registry.Actions.Register(TypeName, registry.Typed(New))
+}
+
 // Code is one configured gitlab.code_change action. It is safe for concurrent
 // use.
 type Code struct {
@@ -75,12 +79,19 @@ var (
 	_ action.Action          = (*Code)(nil)
 	_ action.ProposalChecker = (*Code)(nil)
 	_ action.Snapshotter     = (*Code)(nil)
+	_ action.FileReader      = (*Code)(nil)
 	_ action.Undoer          = (*Code)(nil)
 )
 
-// newCode builds the action from its validated config. It makes no network
-// call: the token is read and used by the first call to GitLab, so GitLab being
-// down blocks neither start-up nor readiness.
+// New builds the action from its validated config. It makes no network call:
+// the token is read and used by the first call to GitLab, so GitLab being down
+// blocks neither start-up nor readiness.
+func New(_ context.Context, name string, cfg Config, deps registry.Deps) (action.Action, error) {
+	return newCode(name, cfg, deps)
+}
+
+// newCode is New with the concrete type, for the code in this package that
+// needs more than the action interface.
 func newCode(name string, cfg Config, deps registry.Deps) (*Code, error) {
 	client, err := gitlabapi.New(gitlabapi.Options{
 		BaseURL:   cfg.BaseURL,

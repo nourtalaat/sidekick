@@ -1,12 +1,16 @@
 package gitlabcode
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
+	"github.com/nourtalaat/sidekick/internal/registry"
 )
 
 func TestSpecTellsTheModelTheLimits(t *testing.T) {
@@ -90,4 +94,67 @@ func TestCheckProposal(t *testing.T) {
 			require.ErrorIs(t, err, action.ErrLimit)
 		})
 	}
+}
+
+func TestNewMakesNoCallAndNeedsSecrets(t *testing.T) {
+	t.Parallel()
+
+	_, err := newCode("code-mr", Config{TokenSecret: testToken, Limits: validLimits()}, registry.Deps{})
+	require.ErrorContains(t, err, "GitLab client")
+
+	secrets := registry.NewMockSecrets(gomock.NewController(t))
+
+	built, err := New(t.Context(), "code-mr", Config{BaseURL: "http://127.0.0.1:1", TokenSecret: testToken, Limits: validLimits()}, registry.Deps{Secrets: secrets})
+	require.NoError(t, err, "the token is read by the first call, and nothing is called now")
+	require.Equal(t, "code-mr", built.Spec().Name)
+}
+
+func TestRegistered(t *testing.T) {
+	t.Parallel()
+
+	require.Contains(t, registry.Actions.Types(), TypeName)
+
+	yamlText := `
+baseURL: https://gitlab.example.com
+tokenSecret: {name: code-change, key: token}
+limits:
+  projects: [acme/platform/api]
+  paths: ["src/**"]
+  maxFiles: 2
+  maxChangedLines: 30
+  baseBranch: main
+`
+
+	var node yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte(yamlText), &node))
+
+	secrets := registry.NewMockSecrets(gomock.NewController(t))
+
+	built, err := registry.Actions.Build(t.Context(), TypeName, "code-mr", node.Content[0], registry.Deps{Secrets: secrets})
+	require.NoError(t, err)
+	require.Equal(t, "code-mr", built.Spec().Name)
+
+	_, isChecker := built.(action.ProposalChecker)
+	require.True(t, isChecker)
+
+	_, isSnapshotter := built.(action.Snapshotter)
+	require.True(t, isSnapshotter)
+
+	_, isReader := built.(action.FileReader)
+	require.True(t, isReader)
+
+	_, isUndoer := built.(action.Undoer)
+	require.True(t, isUndoer)
+
+	withDraft := strings.Replace(yamlText, "  maxFiles: 2\n", "  maxFiles: 2\n  draft: false\n", 1)
+	require.NoError(t, yaml.Unmarshal([]byte(withDraft), &node))
+
+	_, err = registry.Actions.Check(t.Context(), TypeName, "code-mr", node.Content[0])
+	require.ErrorContains(t, err, "draft")
+
+	plain := strings.Replace(yamlText, "https://gitlab.example.com", "http://gitlab.example.com", 1)
+	require.NoError(t, yaml.Unmarshal([]byte(plain), &node))
+
+	_, err = registry.Actions.Check(t.Context(), TypeName, "code-mr", node.Content[0])
+	require.ErrorContains(t, err, "must use https")
 }
