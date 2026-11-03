@@ -1,7 +1,8 @@
 const MS_PER_SECOND = 1000;
 const SECONDS_PER_MINUTE = 60;
 const MINUTES_PER_HOUR = 60;
-const MICROS_PER_DOLLAR = 1_000_000;
+/** How many micros make a dollar, the unit that costs are stored in. */
+export const MICROS_PER_DOLLAR = 1_000_000;
 const THOUSAND = 1000;
 
 /** A length of time such as "850 ms", "12 s", "4 min 5 s" or "1 h 3 min". */

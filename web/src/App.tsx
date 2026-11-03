@@ -1,13 +1,13 @@
 import { Navigate, Route, Routes } from "react-router";
 import { LoginPage } from "./pages/LoginPage";
 import { AuditPage } from "./pages/AuditPage";
+import { BenchmarksPage } from "./pages/benchmarks/BenchmarksPage";
 import { DashboardPage } from "./pages/dashboard/DashboardPage";
 import InvestigationPage from "./pages/investigation/InvestigationPage";
 import InvestigationsPage from "./pages/investigations/InvestigationsPage";
 import { ListenerFormPage } from "./pages/ListenerFormPage";
 import { ListenersPage } from "./pages/ListenersPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
-import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { RouteFormPage } from "./pages/RouteFormPage";
 import { RoutesPage } from "./pages/RoutesPage";
 import { SettingsPage } from "./pages/settings/SettingsPage";
@@ -56,7 +56,7 @@ export function App() {
             <Route path="/review" element={<ReviewPage />} />
             <Route path="/lessons" element={<LessonsPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/benchmarks" element={<PlaceholderPage title="Benchmarks" />} />
+            <Route path="/benchmarks" element={<BenchmarksPage />} />
             <Route
               path="/settings"
               element={
