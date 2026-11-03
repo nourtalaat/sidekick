@@ -9,11 +9,11 @@ import { FailedThreshold } from "./FailedThreshold";
 import { RunHeader } from "./RunHeader";
 import { ScenariosCard } from "./ScenariosCard";
 import { ScoresCard } from "./ScoresCard";
+import { isRunId } from "./runId";
 import { ThresholdsCard } from "./ThresholdsCard";
 import "./BenchRun.css";
 
 const NOT_FOUND = 404;
-const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * One benchmark run: its settings, scores with their intervals, thresholds,
@@ -23,10 +23,10 @@ const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
  */
 export function BenchRunPage() {
   const { id = "" } = useParams();
-  const isRunId = RUN_ID.test(id);
-  const query = useBenchRun(isRunId ? id : undefined);
+  const validId = isRunId(id);
+  const query = useBenchRun(validId ? id : undefined);
 
-  if (!isRunId) {
+  if (!validId) {
     return <NotFoundPage />;
   }
 
