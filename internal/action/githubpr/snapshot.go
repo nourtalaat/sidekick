@@ -9,6 +9,7 @@ import (
 	"io"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 )
 
 // The statuses of a file in the snapshot, as an approver reads them.
@@ -67,7 +68,7 @@ func (p *PR) Snapshot(ctx context.Context, raw json.RawMessage) (action.Snapshot
 			updated = *c.content
 		}
 
-		added, removed, within := lineCounts(f.text, updated, left)
+		added, removed, within := gitchange.LineCounts(f.text, updated, left)
 		if !within {
 			return action.Snapshot{}, fmt.Errorf("the changes add and remove more than the %d lines one pull request may change: %w", p.limits.MaxChangedLines, action.ErrLimit)
 		}

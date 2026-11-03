@@ -1,13 +1,13 @@
-package githubpr
+package gitchange
 
 import "strings"
 
-// changedLines returns how many lines differ between old and updated: lines
+// ChangedLines returns how many lines differ between old and updated: lines
 // removed plus lines added. It stops looking once the count passes limit
 // and then reports false, so a rewrite of a large file costs no more than
 // the limit allows.
-func changedLines(old, updated string, limit int) (int, bool) {
-	added, removed, within := lineCounts(old, updated, limit)
+func ChangedLines(old, updated string, limit int) (int, bool) {
+	added, removed, within := LineCounts(old, updated, limit)
 	if !within {
 		return limit + 1, false
 	}
@@ -15,12 +15,12 @@ func changedLines(old, updated string, limit int) (int, bool) {
 	return added + removed, true
 }
 
-// lineCounts returns how many lines updated adds to old and how many it
+// LineCounts returns how many lines updated adds to old and how many it
 // removes, from the length of the shortest edit script (Myers, 1986). It
 // stops looking once their sum passes limit and then reports false. Two
 // texts that differ only in the final newline count as one line removed and
 // one added.
-func lineCounts(old, updated string, limit int) (added, removed int, within bool) {
+func LineCounts(old, updated string, limit int) (added, removed int, within bool) {
 	if old == updated {
 		return 0, 0, true
 	}

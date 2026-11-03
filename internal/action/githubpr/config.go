@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/githubapp"
 	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/validateclient"
@@ -186,7 +187,7 @@ func (l *Limits) checkPaths() []error {
 	for i, rule := range l.Paths {
 		key := fmt.Sprintf("limits.paths[%d]", i)
 
-		if err := checkGlob(rule.Glob); err != nil {
+		if err := gitchange.CheckGlob(rule.Glob); err != nil {
 			errs = append(errs, fmt.Errorf("%s.glob: %w", key, err))
 		}
 
@@ -215,7 +216,7 @@ func (l *Limits) allowsRepo(repo string) bool {
 // formatFor returns the format of the first rule that matches path.
 func (l *Limits) formatFor(path string) (validateclient.Format, bool) {
 	for _, rule := range l.Paths {
-		if matchGlob(rule.Glob, path) {
+		if gitchange.MatchGlob(rule.Glob, path) {
 			return rule.Format, true
 		}
 	}

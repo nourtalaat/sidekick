@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 )
 
 // loaded is a proposal read against the head of the base branch: the
@@ -119,7 +120,7 @@ func (p *PR) checkLines(l *loaded) error {
 			return fmt.Errorf("%w: path %q already has this content; leave it out of the files", action.ErrPermanent, c.path)
 		}
 
-		n, within := changedLines(f.text, updated, left)
+		n, within := gitchange.ChangedLines(f.text, updated, left)
 		if !within {
 			return fmt.Errorf("the changes add and remove more than the %d lines one pull request may change: %w", p.limits.MaxChangedLines, action.ErrLimit)
 		}

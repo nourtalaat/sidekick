@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/source"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 	"github.com/nourtalaat/sidekick/internal/weblink"
@@ -211,7 +212,7 @@ func (p *PR) pushRevert(ctx context.Context, inv action.Invocation, params Param
 		return action.Result{Summary: "Nothing to revert: the files are as they were before the pull request."}, true, nil
 	}
 
-	message := revertPrefix + source.CutText(oneLine(plainText(params.Title)), maxCommitTitleBytes-len(revertPrefix)) +
+	message := revertPrefix + source.CutText(gitchange.OneLine(gitchange.PlainText(params.Title)), maxCommitTitleBytes-len(revertPrefix)) +
 		"\n\nSidekick proposal " + inv.ProposalID + ", which undoes " + inv.UndoOf + "\n"
 
 	if err := p.commitTo(ctx, owner, name, head, plan.entries, message, inv.IdempotencyKey); err != nil {
@@ -288,7 +289,7 @@ func (p *PR) revertRequest(inv action.Invocation, params Params, orig *gh.PullRe
 		fmt.Fprintf(&b, " [The investigation](%s).", link)
 	}
 
-	title := revertPrefix + source.CutText(oneLine(plainText(params.Title)), maxTitleChars-len(revertPrefix))
+	title := revertPrefix + source.CutText(gitchange.OneLine(gitchange.PlainText(params.Title)), maxTitleChars-len(revertPrefix))
 
 	return gh.CreatePullRequest{
 		Title: new(title),

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/source"
 	"github.com/nourtalaat/sidekick/internal/validateclient"
 )
@@ -47,7 +48,7 @@ func (e *validationError) Error() string {
 		}
 
 		b.WriteString(": ")
-		b.WriteString(oneLine(source.CutText(p.Message, maxProblemBytes)))
+		b.WriteString(gitchange.OneLine(source.CutText(p.Message, maxProblemBytes)))
 	}
 
 	return b.String()
