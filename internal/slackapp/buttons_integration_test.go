@@ -591,7 +591,7 @@ func (b *buttonsHarness) post(t *testing.T, interaction map[string]any, forged b
 	req.Header = signed(secret, time.Now(), body)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := b.client.Do(req)
 	require.NoError(t, err)
 
 	defer func() { require.NoError(t, resp.Body.Close()) }()
