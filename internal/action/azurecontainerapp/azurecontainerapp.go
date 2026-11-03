@@ -309,7 +309,7 @@ func (r *Rollback) Undo(ctx context.Context, inv action.Invocation, snap action.
 		return restored(s, revs, mode == trafficLatest && run.latest), nil
 	}
 
-	if !(runErr == nil && run.name == revs.GoesBackTo.ID) && !force {
+	if (runErr != nil || run.name != revs.GoesBackTo.ID) && !force {
 		return action.Result{}, &action.ConflictError{Live: liveDocument(s, l, run, runErr)}
 	}
 

@@ -29,7 +29,7 @@ var permanentStatuses = []int{http.StatusBadRequest, http.StatusUnauthorized, ht
 
 // errInProgress is returned while Azure is still changing the app, so the
 // job tries again later.
-var errInProgress = errors.New("Azure is still updating the container app; trying again later")
+var errInProgress = errors.New("the container app is still being updated in Azure; trying again later")
 
 // statusError is an answer of Azure that is not a success, without the body
 // that the SDK's own error text holds.
