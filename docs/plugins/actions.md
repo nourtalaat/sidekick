@@ -366,3 +366,65 @@ inside and outside the allowed fields; execute; execute when the target
 changed after the snapshot; execute twice after a crash; undo; undo when
 another field was edited (it stays); undo when a changed field was edited
 (conflict, then forced).
+
+## Rollback actions
+
+A rollback action goes back to an earlier revision of a workload that the
+platform keeps, such as a ReplicaSet, a Helm release or a task definition.
+It is approval-only (see [Approval-only actions](#approval-only-actions)), a
+`Snapshotter` and an `Undoer`, and it uses two things from the `action`
+package so that an approver sees both revisions and the model cannot go back
+too far.
+
+### The revision limit
+
+Embed `action.RevisionLimit` in the config, inline, beside the gate:
+
+```go
+type Config struct {
+	action.ReadWriteGate `yaml:",inline"`
+	action.RevisionLimit `yaml:",inline"`
+
+	// ...
+}
+```
+
+It adds `maxRevisionsBack`: how many revisions back the model may ask to go.
+Unset means 1. A value written in the file must be from 1 to 10, so `0` is an
+error and not one revision. Call `cfg.RevisionLimit.CheckConfig()` from the
+`Validate` of the config, and keep the `RevisionLimit` in the action too.
+Then call `CheckRequest(back)` from the action's `Validate`, which runs when
+the model proposes and again when the proposal runs. A request for more than
+the limit returns an error that wraps `action.ErrLimit`; the model reads it
+and may propose again.
+
+### The two revisions
+
+Describe each revision with an `action.Revision` and build the snapshot with
+`action.RevisionSnapshot`, never by writing the JSON yourself:
+
+```go
+running := action.Revision{Kind: "ReplicaSet revision", ID: "7", Version: "checkout:1.4.7", DeployedAt: &t, DeployedBy: "ana"}
+goesBackTo := action.Revision{Kind: "ReplicaSet revision", ID: "6", Version: "checkout:1.4.6"}
+
+snap, err := action.RevisionSnapshot("kubernetes:deployment/shop/checkout", "7", running, goesBackTo)
+```
+
+- `Kind` is what the platform calls a revision, and `ID` is its identifier.
+  Both are required.
+- `Version` is what a person recognises: an image tag, the chart and app
+  version, or a git revision. Leave a fact empty, or `DeployedAt` nil, when
+  the platform does not record it. Screens show "unknown". Do not guess.
+- `Notes` is short text, for example the images of several containers.
+- The third argument is the provider's version of the running revision, or
+  its ID, which Execute compares to notice a deploy since the proposal.
+
+`Before` of the snapshot is the revision running now and `After` the one it
+goes back to. Sidekick shows both in Slack and the web UI in place of the
+field-by-field list, and the proposal in the API has a `revisions` object. All
+the text is from outside, such as an image tag or the name of who deployed,
+and screens show it as plain text with hidden characters written as `\u`
+escapes. In `Undo`, read the revision to restore with `snap.Revisions()`: it
+returns the revision that ran before the rollback as `Running`. Sidekick's
+undo proposal has the snapshot the other way round, so its screens show the
+two revisions swapped with no code of yours.
