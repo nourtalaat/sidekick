@@ -121,6 +121,7 @@ func TestEnsureSupported(t *testing.T) {
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
 				require.ErrorIs(t, err, action.ErrPermanent)
+				require.ErrorIs(t, err, action.ErrLimit)
 
 				// A refused release is asked about again: SigNoz may be upgraded.
 				require.Error(t, c.ensureSupported(t.Context()))
