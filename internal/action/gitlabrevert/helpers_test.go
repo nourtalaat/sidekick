@@ -71,8 +71,9 @@ type world struct {
 	files map[string]map[string]string
 	// branches are the branches of the proposals that exist.
 	branches map[string]bool
-	// reverted says that the revert call succeeded on the branch.
-	reverted bool
+	// ahead is how many commits the branch of the proposal has that the base
+	// branch lacks: one once the revert call succeeded.
+	ahead int
 	// revertMessage, when set, makes the revert call answer 400 with it.
 	revertMessage string
 	// notDraft makes the fake ignore the draft title, as a GitLab that never
@@ -222,7 +223,7 @@ func (w *world) revert(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.reverted = true
+	w.ahead = 1
 	writeJSON(rw, http.StatusCreated, fmt.Sprintf(`{"id":%q}`, testRevertSHA))
 }
 
@@ -248,13 +249,12 @@ func (w *world) compare(rw http.ResponseWriter, _ *http.Request) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if w.reverted {
-		writeJSON(rw, http.StatusOK, fmt.Sprintf(`{"commits":[{"id":%q}]}`, testRevertSHA))
-
-		return
+	commits := make([]string, w.ahead)
+	for i := range commits {
+		commits[i] = fmt.Sprintf(`{"id":%q}`, testRevertSHA)
 	}
 
-	writeJSON(rw, http.StatusOK, `{"commits":[]}`)
+	writeJSON(rw, http.StatusOK, `{"commits":[`+strings.Join(commits, ",")+`]}`)
 }
 
 // listMergeRequests answers the list of merge requests by source branch.
@@ -342,6 +342,15 @@ func (w *world) setBranch(branch string, exists bool) {
 	defer w.mu.Unlock()
 
 	w.branches[branch] = exists
+}
+
+// setAhead sets how many commits the branch of the proposal has that the base
+// branch lacks.
+func (w *world) setAhead(n int) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.ahead = n
 }
 
 // failRevert makes the revert call answer 400 with the message.
