@@ -9,6 +9,7 @@ import (
 	_ "github.com/nourtalaat/sidekick/internal/action/awsecs"              // Action type "aws.ecs_rollback".
 	_ "github.com/nourtalaat/sidekick/internal/action/datadog"             // Action type "datadog.monitor".
 	_ "github.com/nourtalaat/sidekick/internal/action/datadogdowntime"     // Action type "datadog.downtime".
+	_ "github.com/nourtalaat/sidekick/internal/action/gcprun"              // Action type "gcp.cloud_run_rollback".
 	_ "github.com/nourtalaat/sidekick/internal/action/githubcode"          // Action type "github.code_change".
 	_ "github.com/nourtalaat/sidekick/internal/action/githubpr"            // Action type "github.pull_request".
 	_ "github.com/nourtalaat/sidekick/internal/action/githubrevert"        // Action type "github.revert".

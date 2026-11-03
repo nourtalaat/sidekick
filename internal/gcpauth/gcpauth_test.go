@@ -1,4 +1,4 @@
-package gcp
+package gcpauth
 
 import (
 	"crypto/rand"
@@ -20,6 +20,12 @@ import (
 
 // testKeyBits is the size of the service account key the tests make.
 const testKeyBits = 2048
+
+// testProject is the project of the test credential file.
+const testProject = "shop-prod"
+
+// jsonHeaders are the headers of a JSON answer.
+var jsonHeaders = map[string]string{"Content-Type": "application/json; charset=UTF-8"}
 
 // testCredentialsRef is the secret reference of the test credential file.
 var testCredentialsRef = registry.SecretRef{Name: "sidekick-gcp", Key: "credentials.json"}
@@ -75,7 +81,7 @@ func TestSecretTokens(t *testing.T) {
 			}
 
 			ref := testCredentialsRef
-			tokens := newTokens(&ref, secrets, api.Client())
+			tokens := NewTokens(&ref, secrets, api.Client())
 
 			token, err := tokens.Token()
 			if tt.wantErr != "" {
@@ -121,4 +127,9 @@ func serviceAccountFile(t *testing.T, tokenURL string) []byte {
 	require.NoError(t, err)
 
 	return data
+}
+
+// body returns a JSON answer.
+func body(s string) fakehttp.Response {
+	return fakehttp.Response{Headers: jsonHeaders, Body: []byte(s)}
 }
