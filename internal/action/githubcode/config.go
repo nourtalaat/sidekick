@@ -58,7 +58,7 @@ func (c *Config) Validate() error {
 		errs = append(errs, err)
 	}
 
-	errs = append(errs, c.CIConfig.Check()...)
+	errs = append(errs, c.Check()...)
 	errs = append(errs, c.Limits.check()...)
 
 	return errors.Join(errs...)

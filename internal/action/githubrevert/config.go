@@ -60,7 +60,7 @@ func (c *Config) Validate() error {
 		errs = append(errs, fmt.Errorf("check the base URL: %w", err))
 	}
 
-	errs = append(errs, c.CIConfig.Check()...)
+	errs = append(errs, c.Check()...)
 	errs = append(errs, c.Limits.check()...)
 
 	return errors.Join(errs...)

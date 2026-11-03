@@ -82,7 +82,7 @@ func TestCIReportPassesAfterARunningRead(t *testing.T) {
 	require.Empty(t, env.activeKeys(t), "a final report queues no more reads")
 	require.Equal(t, ciSeq(1), row.Seq, "the thread message has the first of the two seqs CIReported reserves")
 	require.EqualValues(t, 2, env.publishSeq(t))
-	require.EqualValues(t, 1, testutil.ToFloat64(env.counts.reports.WithLabelValues("github", CIPassed)))
+	require.InDelta(t, 1, testutil.ToFloat64(env.counts.reports.WithLabelValues("github", CIPassed)), 0)
 	require.Equal(t, 2, env.reader.callCount())
 }
 
@@ -109,7 +109,7 @@ func TestTwoWorkersAndARetriedJobReportOnce(t *testing.T) {
 	require.NotNil(t, env.report(t, ciProposal).ReportedAt)
 	require.Equal(t, ciSeq(1), env.report(t, ciProposal).Seq)
 	require.EqualValues(t, 2, env.publishSeq(t), "the message was queued once")
-	require.EqualValues(t, 1, testutil.ToFloat64(env.counts.reports.WithLabelValues("github", CIFailed)))
+	require.InDelta(t, 1, testutil.ToFloat64(env.counts.reports.WithLabelValues("github", CIFailed)), 0)
 
 	var sent output.CIReport
 
