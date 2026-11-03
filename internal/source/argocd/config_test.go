@@ -48,7 +48,7 @@ func TestConfigValidate(t *testing.T) {
 		},
 		{
 			name: "a base URL with user info",
-			cfg:  func(c *Config) { c.BaseURL = "https://admin:secret@argocd.example.com" },
+			cfg:  func(c *Config) { c.BaseURL = "https://admin@argocd.example.com" },
 			want: []string{"must be an absolute https URL"},
 		},
 		{

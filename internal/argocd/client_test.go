@@ -14,7 +14,7 @@ import (
 )
 
 // testToken is the API token the test secret holds.
-const testToken = "eyJ.test-token"
+const testToken = "argocd-test-token-0000"
 
 // testTokenRef is the secret reference of the test token.
 var testTokenRef = registry.SecretRef{Name: "sidekick-argocd", Key: "token"}
@@ -441,7 +441,7 @@ func TestCheckBaseURL(t *testing.T) {
 		{name: "no scheme", url: "argocd.example.com", wantErr: "absolute https URL"},
 		{name: "a query", url: "https://argocd.example.com?x=1", wantErr: "absolute https URL"},
 		{name: "a fragment", url: "https://argocd.example.com#x", wantErr: "absolute https URL"},
-		{name: "user info", url: "https://user:pw@argocd.example.com", wantErr: "absolute https URL"},
+		{name: "user info", url: "https://admin@argocd.example.com", wantErr: "absolute https URL"},
 		{name: "no host", url: "https://", wantErr: "absolute https URL"},
 	}
 
