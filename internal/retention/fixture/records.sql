@@ -91,6 +91,15 @@ VALUES
   ('2026-10-07 12:00:00+00', 'system', 'audit-2'),
   ('2026-10-23 12:00:00+00', 'system', 'audit-3');
 
+-- Memory uses: the prompts of c1 and c4 each showed two examples. The ones
+-- of c4 outlive c1, whose entry and investigation are old.
+INSERT INTO memory_uses (investigation_id, run, example_id, match, rank)
+VALUES
+  ('0192d3a4-0000-7000-8000-0000000000c1', 1, '0192d3a4-0000-7000-8000-0000000000e1', 'text', 1),
+  ('0192d3a4-0000-7000-8000-0000000000c1', 1, '0192d3a4-0000-7000-8000-0000000000e2', 'text', 2),
+  ('0192d3a4-0000-7000-8000-0000000000c4', 1, '0192d3a4-0000-7000-8000-0000000000e1', 'fingerprint', 1),
+  ('0192d3a4-0000-7000-8000-0000000000c4', 1, '0192d3a4-0000-7000-8000-0000000000c1', 'service_alert', 2);
+
 -- Memory entries: e1 and the disabled e2 are old; the newer one belongs to
 -- c1, an old investigation, and outlives it.
 INSERT INTO memory_entries (investigation_id, fingerprint, verdict, summary, confirmed_at, disabled)

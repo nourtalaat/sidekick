@@ -4725,7 +4725,8 @@ day, and dead jobs after 30 days. `sidekick_retention_deleted_rows_total`
 counts what it deleted, by table.
 
 Deleting an investigation also deletes its steps, its inbox, its
-published message references, its feedback, its watchers with their
+published message references, its feedback, its record of the
+[memory](#memory) examples its prompts showed, its watchers with their
 checks, and its event group. An investigation whose event group is
 still open is kept until the group closes.
 
