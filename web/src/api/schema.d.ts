@@ -2087,6 +2087,38 @@ export interface components {
             result?: components["schemas"]["ActionResult"];
             /** @description Why it failed. While it is tried again, the last failed attempt. */
             error?: string;
+            pullRequest?: components["schemas"]["ProposalPullRequest"];
+        };
+        /**
+         * @description The pull request or merge request that a succeeded proposal opened, as
+         *     Sidekick last read it from the host. Sidekick reads it once a day, so
+         *     it can be a day old. Absent for a proposal that opened none, and until
+         *     the first check has run.
+         */
+        ProposalPullRequest: {
+            /** @description The repository or project, as the host names it, such as acme/monitors. */
+            repo: string;
+            /** Format: int64 */
+            number: number;
+            /** @description The address of the pull request on the host. A screen links it only when it is an http or https address. */
+            url: string;
+            /** @enum {string} */
+            state: "open" | "merged" | "closed";
+            /**
+             * Format: date-time
+             * @description When it was merged. Set only when the state is merged.
+             */
+            mergedAt?: string;
+            /**
+             * Format: date-time
+             * @description When it was closed without a merge. Set only when the state is closed.
+             */
+            closedAt?: string;
+            /**
+             * Format: date-time
+             * @description When Sidekick last read it from the host. A merged or closed pull request is not read again, so this stays at the last time it was seen open or merged.
+             */
+            checkedAt: string;
         };
         /**
          * @description One field that differs. `before` and `after` are the JSON values as

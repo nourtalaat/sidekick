@@ -201,16 +201,16 @@ func (e FeedbackTargetKind) Valid() bool {
 
 // Defines values for InvestigationGroupStatus.
 const (
-	Closed InvestigationGroupStatus = "closed"
-	Open   InvestigationGroupStatus = "open"
+	InvestigationGroupStatusClosed InvestigationGroupStatus = "closed"
+	InvestigationGroupStatusOpen   InvestigationGroupStatus = "open"
 )
 
 // Valid indicates whether the value is a known member of the InvestigationGroupStatus enum.
 func (e InvestigationGroupStatus) Valid() bool {
 	switch e {
-	case Closed:
+	case InvestigationGroupStatusClosed:
 		return true
-	case Open:
+	case InvestigationGroupStatusOpen:
 		return true
 	default:
 		return false
@@ -361,6 +361,27 @@ func (e OperationsStatsInterval) Valid() bool {
 	case OperationsStatsIntervalDay:
 		return true
 	case OperationsStatsIntervalHour:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProposalPullRequestState.
+const (
+	ProposalPullRequestStateClosed ProposalPullRequestState = "closed"
+	ProposalPullRequestStateMerged ProposalPullRequestState = "merged"
+	ProposalPullRequestStateOpen   ProposalPullRequestState = "open"
+)
+
+// Valid indicates whether the value is a known member of the ProposalPullRequestState enum.
+func (e ProposalPullRequestState) Valid() bool {
+	switch e {
+	case ProposalPullRequestStateClosed:
+		return true
+	case ProposalPullRequestStateMerged:
+		return true
+	case ProposalPullRequestStateOpen:
 		return true
 	default:
 		return false
@@ -2143,12 +2164,18 @@ type Proposal struct {
 	Params map[string]interface{} `json:"params"`
 
 	// ParamsText The parameters as the approver reads them. Characters that could hide something are written as \u escapes, and nothing is cut.
-	ParamsText string         `json:"paramsText"`
-	ProposedAt time.Time      `json:"proposedAt"`
-	Reason     string         `json:"reason"`
-	Result     *ActionResult  `json:"result,omitempty"`
-	Route      string         `json:"route"`
-	Status     ProposalStatus `json:"status"`
+	ParamsText string    `json:"paramsText"`
+	ProposedAt time.Time `json:"proposedAt"`
+
+	// PullRequest The pull request or merge request that a succeeded proposal opened, as
+	// Sidekick last read it from the host. Sidekick reads it once a day, so
+	// it can be a day old. Absent for a proposal that opened none, and until
+	// the first check has run.
+	PullRequest *ProposalPullRequest `json:"pullRequest,omitempty"`
+	Reason      string               `json:"reason"`
+	Result      *ActionResult        `json:"result,omitempty"`
+	Route       string               `json:"route"`
+	Status      ProposalStatus       `json:"status"`
 
 	// Target What an action that changes a definition in place changes, such as datadog:monitor/123. Absent for any other action.
 	Target *string `json:"target,omitempty"`
@@ -2180,6 +2207,32 @@ type ProposalList struct {
 	NextCursor *string    `json:"nextCursor,omitempty"`
 	Proposals  []Proposal `json:"proposals"`
 }
+
+// ProposalPullRequest The pull request or merge request that a succeeded proposal opened, as
+// Sidekick last read it from the host. Sidekick reads it once a day, so
+// it can be a day old. Absent for a proposal that opened none, and until
+// the first check has run.
+type ProposalPullRequest struct {
+	// CheckedAt When Sidekick last read it from the host. A merged or closed pull request is not read again, so this stays at the last time it was seen open or merged.
+	CheckedAt time.Time `json:"checkedAt"`
+
+	// ClosedAt When it was closed without a merge. Set only when the state is closed.
+	ClosedAt *time.Time `json:"closedAt,omitempty"`
+
+	// MergedAt When it was merged. Set only when the state is merged.
+	MergedAt *time.Time `json:"mergedAt,omitempty"`
+	Number   int64      `json:"number"`
+
+	// Repo The repository or project, as the host names it, such as acme/monitors.
+	Repo  string                   `json:"repo"`
+	State ProposalPullRequestState `json:"state"`
+
+	// Url The address of the pull request on the host. A screen links it only when it is an http or https address.
+	Url string `json:"url"`
+}
+
+// ProposalPullRequestState defines model for ProposalPullRequest.State.
+type ProposalPullRequestState string
 
 // ProposalStatus defines model for ProposalStatus.
 type ProposalStatus string
