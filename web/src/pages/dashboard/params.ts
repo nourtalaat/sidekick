@@ -1,4 +1,5 @@
 import type { StatsQuery, Verdict } from "../../api/stats";
+import { isRunId } from "../benchmarks/runId";
 
 const MS_PER_DAY = 86_400_000;
 const ISO_DATE_LENGTH = 10;
@@ -53,7 +54,6 @@ export interface DashboardFilters {
 
 const TEXT_PARAMS = ["route", "service", "model"] as const;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const ID_PATTERN = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 
 /** The filters in a URL's query. A value the API would refuse is left out, so every link opens. */
 export function filtersFromParams(params: URLSearchParams): DashboardFilters {
@@ -93,7 +93,7 @@ export function filtersFromParams(params: URLSearchParams): DashboardFilters {
     ["b", "compareB"],
   ] as const) {
     const id = params.get(param);
-    if (id && ID_PATTERN.test(id)) {
+    if (id && isRunId(id)) {
       filters[key] = id;
     }
   }

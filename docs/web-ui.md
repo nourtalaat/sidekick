@@ -999,8 +999,11 @@ would refuse is ignored, so every link opens. Days are UTC days.
   time, the verdict Sidekick gave against the verdict people confirmed,
   precision and recall of each verdict, accuracy by model and strategy,
   and the newest benchmark runs. Choose two runs to compare them; the two
-  runs are in the address too (`a` and `b`). The link **All benchmark
-  runs** opens the [Benchmarks page](#the-benchmarks-page).
+  runs are in the address too (`a` and `b`). The link **Open this
+  comparison in Benchmarks** shows once two runs are chosen and opens the
+  same two runs on the [compare page](#comparing-two-benchmark-runs). The
+  link **All benchmark runs** opens the
+  [Benchmarks page](#the-benchmarks-page).
 
   The precision and recall chart draws one verdict at a time, by day.
   Choose the verdict with the **Verdict** menu on the card; the default
@@ -1130,7 +1133,9 @@ first, 25 at a time; **Load more** adds the next 25. Each row has:
   (`gate`)
 
 The dashboard card shows the same table for the newest ten runs. With no
-runs stored, the page says so and names the command that stores them.
+runs stored, the page says so and names the command that stores them. With
+two runs or more on the page, a button **Compare two runs** above the table
+opens the [compare page](#comparing-two-benchmark-runs).
 
 ### The page of one benchmark run
 
@@ -1178,6 +1183,46 @@ this ID." with a link back to the list. It shows, from the top:
 
 Everything that came from the run, such as labels, scenario IDs and details,
 is shown as plain text.
+
+### Comparing two benchmark runs
+
+`/benchmarks/compare`, open to every role from `viewer` up, shows any two
+runs side by side. The two runs are in the address as `a` and `b`, the same
+names the dashboard uses, so a comparison can be shared with a link; a value
+that is not a run ID is ignored, so every link opens. Choosing a run in a
+menu, or pressing **Swap runs**, changes the address. The button **Compare
+with another run** on the page of a run opens this page with that run as `a`.
+
+- **Choosing.** Two menus, **Run A** and **Run B**, list the newest 50 runs.
+  A run in the address that is not among them still shows, named by its ID.
+  With no run chosen the page says "Choose two runs to compare them."; with
+  one chosen it says which menu is still open. When no run is stored at all,
+  it says so. When the comparison fails, for example because no run has an
+  ID, the page shows the message of the API.
+- **Settings.** A table with one column for each run and a column **Differs**:
+  the label, the start, the Sidekick version, the Git commit, the scenario
+  set, the repeats, the model of each role, the version of each strategy,
+  and the prompt version, judge prompt version and config hash. A row where
+  the two runs differ says **Differs**, in a tinted row, and a row where they
+  match says **Same**. A role or a strategy that only one run has shows "not
+  used" for the other. The start is never compared, since it always differs.
+  The prompt versions and config hash come from the page of each run; while
+  one is loading the row says "Loading" and "Not compared yet", and if it
+  fails the row says "Not available" and a button **Try again** loads it
+  again. The rest of the page does not wait for it.
+- **Scores.** Each metric of both runs, the change from A to B and whether
+  the difference is clear, as on the dashboard card. A difference is clear
+  when the confidence intervals of the two runs do not overlap. The mean cost
+  and time keep their units, and have no interval, so they say "Not compared".
+- **Scenarios.** One row for each scenario of either run, with the expected
+  verdict, the correct runs of A and of B ("2 of 2") and the mean root cause
+  score of each. A scenario that went from every repeat right to none right
+  comes first and says **Right to wrong**; one that went from none right to
+  every repeat right comes next and says **Wrong to right**. The rest follow
+  by scenario ID and say **Same result**, **Changed in part** (some repeats
+  changed), or **Only in Run A** or **Only in Run B**.
+
+The dashboard card shows the same Scores and Scenarios tables.
 
 ## The JSON API
 

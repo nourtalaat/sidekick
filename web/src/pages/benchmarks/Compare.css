@@ -1,0 +1,17 @@
+.sk-compare__choose {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sk-space-3) var(--sk-space-4);
+  margin: var(--sk-space-4) 0;
+}
+
+.sk-table tr.sk-compare__row--differs th,
+.sk-table tr.sk-compare__row--differs td {
+  background: var(--sk-status-warning-bg);
+}
+
+.sk-table tr.sk-compare__row--differs th {
+  color: var(--sk-status-warning-fg);
+  box-shadow: inset 4px 0 0 var(--sk-status-warning-border);
+}
