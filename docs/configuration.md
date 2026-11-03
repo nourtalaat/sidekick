@@ -2182,6 +2182,162 @@ Prometheus v3.15.0; the comments in `internal/action/prometheusrule` name the
 files. With `networkPolicy.restrictEgress` on, allow egress to the Kubernetes
 API server.
 
+##### `alertmanager.silence`
+
+Silences alerts in a Prometheus Alertmanager for a limited time, for planned
+work or a known noisy period. A silence mutes alerts; it does not close
+them, and Alertmanager keeps the silence after it ends. Use it on routes
+with `mode: approved`: the silence starts as soon as it is approved. It
+needs no `allowReadWrite`.
+
+```yaml
+actions:
+  mute-checkout:
+    type: alertmanager.silence
+    url: https://alertmanager.example.com    # the part before /api/v2
+    bearerTokenSecret: { name: sidekick-alertmanager-silence, key: token }
+    createdBy: sidekick                      # the name Alertmanager shows; default sidekick
+    limits:
+      maxDuration: 2h                        # default 2h, at most 24h
+      scopes:                                # at least one
+        - labels:
+            alertname: [HighLatency, HighErrorRate]
+            service: ["checkout-*"]
+        - labels:
+            team: [payments]
+
+routes:
+  - name: checkout-alerts
+    match: { service: "checkout-*" }
+    sources: [prometheus]
+    mode: approved
+    actions: [mute-checkout]
+```
+
+- `url` is the root of the Alertmanager API, the part before `/api/v2`. It
+  may hold a path: for Grafana Mimir it is the address with
+  `/alertmanager`, such as `https://mimir.example.com/alertmanager`. It must
+  be https when the action sends a credential, except for a loopback host.
+- `bearerTokenSecret`, or `basicAuth` (`username` and `passwordSecret`), or
+  neither; `headers`, such as `X-Scope-OrgID` for the tenant of a Mimir
+  (not `Authorization`, `Proxy-Authorization` or `Cookie`); and `tls`
+  (`caSecret`, and `certSecret` with `keySecret`) take the same form as for
+  the `alertmanagerURL` of a [Prometheus source](#prometheus-sources-type-prometheus).
+  They are the action's own: give it a credential apart from the read-only
+  one of the source. Secrets are read on every call, so a rotated one needs
+  no restart.
+- `createdBy` is the name Alertmanager shows as the creator. It is at most
+  100 bytes.
+- `limits.scopes` says which alerts may be silenced, and is required. A
+  scope is a set of labels, each with the values it allows, as globs where
+  `*` matches any text and every other character stands for itself. A
+  scope with no labels is refused, because it would allow silencing
+  everything.
+- `limits.maxDuration` is the longest silence: from `5m` to `24h`, `2h`
+  when not set. The shortest silence is 5 minutes.
+
+**The rule for a silence.** The model proposes `matchers` (each with
+`name`, `value`, `isRegex` and `isEqual`, as the Alertmanager API writes
+them), a `duration` such as `30m` or `2h`, and a `comment` that says why.
+A silence is allowed when, for at least one scope, every label of the scope
+is pinned in the silence by an equality matcher (`isEqual: true`,
+`isRegex: false`) whose value matches one of that label's globs. With the
+scopes above, `alertname="HighLatency"` with `service="checkout-api"` is
+allowed, and so is `team="payments"` alone. A regex or a not-equal matcher
+on a scope label does not count as pinning it. Any further matcher is
+allowed, whatever its kind, because it can only narrow what is silenced. A
+silence has at most 10 matchers, and no matcher may have an empty name or an
+empty value. The label names must be letters, digits and underscores. The
+comment is at most 500 characters, and line breaks and tabs become spaces;
+text with other control characters is refused.
+
+**What the approver sees.** The proposal shows the silence as it will be
+made: the matchers, the duration, the creator and the comment. It also shows
+the firing alerts that the matchers match at the time of the proposal, as a
+count and the first five, each with its state. That is information and not a
+limit: a silence made ahead of planned work may match no alert yet. If
+Alertmanager cannot be asked, the proposal is shown without the alerts and
+says why. The silence starts when it is approved, not when it was proposed,
+and lasts the duration the approver read.
+
+**The marker.** Alertmanager has no way to recognise a repeated request, so
+Sidekick adds a line to the comment, `[sidekick proposal <id>]`. It shows
+people who made the silence, and a retry after a crash and Undo find the
+silence by it. Before it makes a silence, Sidekick looks for one with the
+marker in any state, so a crash makes one silence, and a silence that a
+person ended in the meantime is not made again. Do not remove the line when
+you edit a silence in Alertmanager: Undo could not find it then.
+
+**Undo.** An approver can end a silence early. Undo ends the silence that
+has the marker. A silence that has ended already counts as success. If
+someone edited the silence since, so that its matchers or its length are not
+what was written, Undo ends nothing and shows the silence as it is now; the
+approver then confirms to end it anyway. Undo does not check the scopes
+again, because ending a silence is the safe direction.
+
+**Permissions.** Alertmanager has no permission model of its own: anyone who
+can reach its API can make, change and end any silence. The credential of
+this action should therefore reach only the calls the action makes, which a
+reverse proxy in front of Alertmanager can enforce:
+
+- `POST /api/v2/silences`, to make a silence
+- `GET /api/v2/silences`, to find it by the marker
+- `DELETE /api/v2/silence/{id}`, to end it
+- `GET /api/v2/alerts`, for the proposal's preview
+
+For example, with nginx, a server block that is used only by Sidekick's
+silence credential, apart from the read-only access the Prometheus source
+uses:
+
+```nginx
+map $http_authorization $sidekick_silence {
+    default                        0;
+    "Bearer REPLACE_WITH_THE_TOKEN" 1;
+}
+
+server {
+    listen 8443 ssl;
+    # ssl_certificate and ssl_certificate_key as for any other server
+
+    if ($sidekick_silence = 0) { return 401; }
+
+    location = /api/v2/silences {
+        limit_except GET POST { deny all; }
+        proxy_pass http://alertmanager:9093;
+    }
+
+    location = /api/v2/alerts {
+        limit_except GET { deny all; }
+        proxy_pass http://alertmanager:9093;
+    }
+
+    location ~ "^/api/v2/silence/[0-9a-f-]{36}$" {
+        limit_except DELETE { deny all; }
+        proxy_pass http://alertmanager:9093;
+    }
+
+    location / { return 403; }
+}
+```
+
+Point `url` at this server. The proxy narrows which calls the credential can
+make; it cannot read the body of a request. The scopes and the duration
+limit are enforced by Sidekick, so a person who holds the token can still
+make any silence directly, and a post that names the ID of an existing
+silence changes that silence. Keep the token in a Secret that only
+Sidekick reads. The example was written for this page and was not run
+against a real server; check it with your own nginx before you rely on it.
+For a Mimir, use the same idea in the gateway that fronts it, and set the
+tenant in `headers`. The [Prometheus source](#prometheus-sources-type-prometheus)
+keeps its own read-only credential.
+
+**What it relies on.** The calls and fields come from the public source of
+Alertmanager v0.34.1 and of Grafana Mimir mimir-3.1.8; the comments in
+`internal/action/alertmanagersilence` name the files. A silence that is
+edited in the Alertmanager UI keeps its ID when only its end changes and
+gets a new ID when its matchers change, and the comment, with the marker, is
+copied either way.
+
 ##### `launchdarkly.flag`
 
 Turns a LaunchDarkly feature flag off in one environment through the

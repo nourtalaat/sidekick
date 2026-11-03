@@ -15,7 +15,7 @@ sidekick bench run --scenarios bench/scenarios/sample --config sidekick.yaml --r
 | Flag | Default | Does |
 |---|---|---|
 | `--scenarios`, `-s` | required | A scenario file, or a directory: every `.yaml` and `.yml` file under it is a scenario. |
-| `--config`, `-c` | `/etc/sidekick/sidekick.yaml` | The config file. Runs use its model connectors, roles and prices, its strategies, its report rules, its redaction settings and its per-investigation limits. They do not use its sources, outputs, webhooks, routes, rate limits or daily caps. |
+| `--config`, `-c` | `/etc/sidekick/sidekick.yaml` | The config file. Runs use its model connectors, roles and prices, its strategies, its report rules, its redaction settings, its per-investigation limits and `actions.maxPerInvestigation`. They do not use its sources, actions, outputs, webhooks, routes, rate limits or daily caps. |
 | `--repeat`, `-n` | `3` | How many times each scenario runs. |
 | `--db` | off | Run on the database of `database.urlSecret` instead of a temporary Postgres; see below. |
 | `--bench-config` | none | A `bench.yaml` with the weights of the overall score and the thresholds; see below. |
@@ -324,7 +324,7 @@ tags: [latency, database]
 strategy: generic-alert                # default: generic-alert
 now: 2026-05-04T10:20:00Z              # the scenario clock
 route:
-  mode: read-only                      # the only mode until actions arrive
+  mode: read-only                      # read-only (the default) or approved; see Actions in scenarios
 event:
   adapter: alertmanager                # the intake adapter type
   config: {}                           # the adapter's own settings, if it has any
@@ -378,6 +378,9 @@ limits: { maxToolCalls: 30, maxCostUSD: 0.50 }
 - `route.details` gives the run's route fixed facts that the prompt shows
   to the model, as `details` does for a [route](configuration.md#routes) in
   the config file, with the same limits. A scenario without it has none.
+- `route.mode` is `read-only` or `approved`. In approved mode the model may
+  propose the mock actions the route lists; see
+  [Actions in scenarios](#actions-in-scenarios).
 - `limits` take `maxTokens`, `maxToolCalls`, `maxWallTime` and
   `maxCostUSD`. A limit the scenario does not set takes the config's
   `budgets.perInvestigation` value, and the strategy's own limits still
@@ -426,6 +429,79 @@ Each entry under `sources` is a mock source, named as the model sees it:
 | `within: <duration>` | is an RFC 3339 time no further than the duration, such as `2h`, from `now`, before or after it. |
 
 One matcher can set several operators, and all of them must hold.
+
+## Actions in scenarios
+
+A scenario can let the model propose an action, so you can see whether it
+picks a good one. The run goes through the real `propose_action` tool, with
+its description and its limits (`actions.maxPerInvestigation` of the config
+file), so the model meets what it meets in a real deployment. The actions
+are mock actions: they record the proposal and never run anything. Nobody
+approves a proposal, nothing is posted to Slack, and no external system is
+called.
+
+```yaml
+route:
+  mode: approved                       # read-only (the default) or approved
+  actions: [monitor-pr]                # the mock actions the model may propose
+actions:                               # by name, like sources
+  monitor-pr:
+    spec: { snapshot: bench/actions/github.pull_request.json }
+```
+
+- `route.mode: approved` needs at least one name under `route.actions`, and
+  `route.actions` and `actions` need `route.mode: approved`. Every action
+  under `actions` must be listed in `route.actions`, and every name there
+  must be defined under `actions`. The order of `route.actions` is the order
+  the model reads the actions in.
+- `route.mode: read-write` is refused, because nothing runs in a benchmark.
+- An action's name follows the rule for action names in the config file: a
+  lower-case letter, then lower-case letters, digits and `-`, at most 24
+  characters. It is the name the model proposes the action by.
+- `spec.snapshot` is a JSON file of the form `{"name", "description",
+  "paramsSchema"}`, the `Spec` of the real action. A relative path is read
+  from the directory `sidekick bench run` runs in, as `tools.snapshot` is.
+  The model reads the description and the schema exactly as it would in a
+  deployment.
+- A proposal whose parameters break the schema is refused to the model with
+  the reason, as in a real run, and nothing is recorded. The mock action is
+  not a snapshot-taking action, so a proposal has no snapshot, and the
+  checks that real actions make against a live system are not part of a
+  scenario.
+- A run records the proposals the model made in `RunResult.Proposals`: the
+  action name, the parameters and the reason, oldest first. The report does
+  not score them yet.
+
+### Writing a spec snapshot
+
+The snapshots in `bench/actions` are written from the real actions, so they
+cannot drift from them. Each is named after the action type, for example
+`bench/actions/github.pull_request.json`. To add one, add a test to the
+action's package that builds the action the way its other tests do (no
+network and no real secret) and calls `actiontest.CheckSpecSnapshot`:
+
+```go
+func TestSpecSnapshot(t *testing.T) {
+	t.Parallel()
+
+	actiontest.CheckSpecSnapshot(t, TypeName, newTestAction(t))
+}
+```
+
+Then write the file with
+
+```sh
+go test ./internal/action/<package> -run TestSpecSnapshot -update-action-specs
+```
+
+and commit it. The same test fails when the action's `Spec` changes and the
+file does not, and says to run the command again.
+
+A snapshot's description carries the limits of the config the action was
+built with, for example the allowed repositories, paths and file counts. The
+model reads them, so build the action in the test with a config that a real
+deployment could have, and not with one made to be as narrow or as wide as
+possible.
 
 ## Exporting a real investigation
 

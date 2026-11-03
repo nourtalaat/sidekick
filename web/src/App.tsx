@@ -10,6 +10,7 @@ import { NotFoundPage } from "./pages/NotFoundPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { RouteFormPage } from "./pages/RouteFormPage";
 import { RoutesPage } from "./pages/RoutesPage";
+import { SettingsPage } from "./pages/settings/SettingsPage";
 import { LessonsPage } from "./pages/lessons/LessonsPage";
 import { ReviewPage } from "./pages/review/ReviewPage";
 import { StrategiesPage } from "./pages/StrategiesPage";
@@ -60,7 +61,7 @@ export function App() {
               path="/settings"
               element={
                 <RequireRole role="admin" title="Settings">
-                  <PlaceholderPage title="Settings" />
+                  <SettingsPage />
                 </RequireRole>
               }
             />

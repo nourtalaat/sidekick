@@ -61,8 +61,10 @@ type harness struct {
 	// nothing. monitor-fix and monitor-pr are the same action reporting each
 	// kind of fix.
 	monitor *fakeMonitor
-	policy  *movablePolicy
-	clock   *clock
+	// mute is the fake mute action, which creates what it undoes.
+	mute   *fakeMute
+	policy *movablePolicy
+	clock  *clock
 }
 
 // movablePolicy is a Policy whose routes a test changes while it runs.
@@ -119,9 +121,10 @@ func setup(t *testing.T) *harness {
 		pool:    pool,
 		note:    newFakeNote("monitor-note"),
 		monitor: newFakeMonitor("monitor"),
+		mute:    newFakeMute("mute"),
 		clock:   &clock{now: time.Now().UTC().Truncate(time.Second)},
 		policy: &movablePolicy{routes: action.StaticPolicy{
-			"payments": {Mode: action.Approved, Actions: []string{"monitor-note", "monitor", "monitor-fix", "monitor-pr"}},
+			"payments": {Mode: action.Approved, Actions: []string{"monitor-note", "monitor", "monitor-fix", "monitor-pr", "mute"}},
 			"default":  {Mode: action.ReadOnly},
 		}},
 	}
@@ -142,6 +145,7 @@ func (h *harness) service(t *testing.T, opts Options) *Service {
 		"monitor":      h.monitor,
 		"monitor-fix":  fixingMonitor{fakeMonitor: newFakeMonitor("monitor-fix"), kind: action.FixAPI},
 		"monitor-pr":   fixingMonitor{fakeMonitor: newFakeMonitor("monitor-pr"), kind: action.FixPullRequest},
+		"mute":         h.mute,
 	}
 
 	s, err := New(opts)
