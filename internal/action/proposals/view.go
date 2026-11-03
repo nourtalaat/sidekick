@@ -181,6 +181,16 @@ func proposalOf(row db.ActionProposal, route, decidedByName string) (action.Prop
 		}
 
 		p.Snapshot, p.Changes = snap, changes
+
+		revisions, err := snap.Revisions()
+		if err != nil {
+			return action.Proposal{}, fmt.Errorf("read the revisions: %w", err)
+		}
+
+		if revisions != nil {
+			shown := revisions.Display()
+			p.Revisions = &shown
+		}
 	}
 
 	p.Undoable = row.Undoable && p.Status == action.StatusSucceeded && p.UndoOf == "" && (p.Snapshot == nil || !p.Snapshot.Deletes())
