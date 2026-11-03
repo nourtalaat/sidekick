@@ -517,6 +517,7 @@ type User struct {
 	Role        string
 	CreatedAt   time.Time
 	LastLoginAt time.Time
+	Theme       *string
 }
 
 type Watcher struct {
