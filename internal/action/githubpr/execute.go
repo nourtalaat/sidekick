@@ -258,9 +258,9 @@ func (p *PR) result(owner, name string, pr *gh.PullRequest, how string) action.R
 	switch state := stateOf(pr); {
 	case how == resultOpened:
 		summary = "Opened " + draft + "pull request " + title
-	case state == StateMerged:
+	case state == gitchange.StateMerged:
 		summary = "Found pull request " + title + ", which has been merged since it was opened"
-	case state == StateClosed:
+	case state == gitchange.StateClosed:
 		summary = "Found pull request " + title + ", which has been closed since it was opened"
 	default:
 		summary = "Found the already opened " + draft + "pull request " + title

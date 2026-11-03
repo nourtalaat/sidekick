@@ -1,6 +1,6 @@
 //go:build integration
 
-package githubpr
+package gitchange
 
 import (
 	"testing"

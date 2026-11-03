@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/store/db"
@@ -27,7 +28,7 @@ type statusBed struct {
 	*bed
 
 	pool    *pgxpool.Pool
-	checker *StatusChecker
+	checker *gitchange.StatusChecker
 	now     time.Time
 
 	mu    sync.Mutex
@@ -65,14 +66,11 @@ func newStatusBed(t *testing.T) *statusBed {
 		_, _ = w.Write(resp.Body)
 	})
 
-	checker, err := NewStatusChecker(StatusOptions{
+	s.checker = gitchange.NewStatusChecker(gitchange.StatusOptions{
 		Pool:    pool,
 		Actions: map[string]action.Action{"monitor-pr": s.pr},
 		Now:     func() time.Time { return s.now },
 	})
-	require.NoError(t, err)
-
-	s.checker = checker
 
 	return s
 }
@@ -177,7 +175,7 @@ func TestStatusJobRecordsEachState(t *testing.T) {
 
 	o := s.state(t, open)
 	require.NotNil(t, o)
-	require.Equal(t, StateOpen, o.State)
+	require.Equal(t, gitchange.StateOpen, o.State)
 	require.Equal(t, int64(1), o.Number)
 	require.Equal(t, "https://github.com/acme/monitors/pull/1", o.Url)
 	require.Nil(t, o.MergedAt)
@@ -185,13 +183,13 @@ func TestStatusJobRecordsEachState(t *testing.T) {
 
 	m := s.state(t, mergedID)
 	require.NotNil(t, m)
-	require.Equal(t, StateMerged, m.State)
+	require.Equal(t, gitchange.StateMerged, m.State)
 	require.NotNil(t, m.MergedAt)
 	require.Equal(t, time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC), m.MergedAt.UTC())
 
 	c := s.state(t, closedID)
 	require.NotNil(t, c)
-	require.Equal(t, StateClosed, c.State)
+	require.Equal(t, gitchange.StateClosed, c.State)
 }
 
 func TestStatusJobChecksOnlyWhatCanChange(t *testing.T) {
@@ -201,7 +199,7 @@ func TestStatusJobChecksOnlyWhatCanChange(t *testing.T) {
 
 	stillOpen := s.proposal(t, "monitor-pr", testRepo, s.now.Add(-3*time.Hour))
 	done := s.proposal(t, "monitor-pr", testRepo, s.now.Add(-2*time.Hour))
-	old := s.proposal(t, "monitor-pr", testRepo, s.now.Add(-trackedFor-time.Hour))
+	old := s.proposal(t, "monitor-pr", testRepo, s.now.Add(-gitchange.TrackedFor-time.Hour))
 	other := s.proposal(t, "monitor-note", testRepo, s.now.Add(-time.Hour))
 
 	s.pull(stillOpen, 1, "open", "")
@@ -217,7 +215,7 @@ func TestStatusJobChecksOnlyWhatCanChange(t *testing.T) {
 	s.pull(stillOpen, 1, "closed", "2026-11-03T12:00:00Z")
 
 	require.NoError(t, s.checker.Handle(t.Context(), s.claim(t)))
-	require.Equal(t, StateMerged, s.state(t, stillOpen).State, "an open pull request is checked again")
+	require.Equal(t, gitchange.StateMerged, s.state(t, stillOpen).State, "an open pull request is checked again")
 	require.Equal(t, 2, s.called(stillOpen))
 	require.Equal(t, 1, s.called(done), "a merged pull request is not checked again")
 	require.Zero(t, s.called(old))
@@ -227,7 +225,7 @@ func TestStatusJobChecksOnlyWhatCanChange(t *testing.T) {
 	s.now = s.now.Add(time.Hour)
 
 	require.NoError(t, s.checker.Handle(t.Context(), s.claim(t)))
-	require.Equal(t, StateMerged, s.state(t, stillOpen).State, "a recorded merge does not change")
+	require.Equal(t, gitchange.StateMerged, s.state(t, stillOpen).State, "a recorded merge does not change")
 	require.Equal(t, 2, s.called(stillOpen))
 }
 
@@ -286,7 +284,7 @@ func TestStatusJobErrors(t *testing.T) {
 
 			g := s.state(t, good)
 			require.NotNil(t, g, "the other pull requests are still recorded")
-			require.Equal(t, StateMerged, g.State)
+			require.Equal(t, gitchange.StateMerged, g.State)
 		})
 	}
 }

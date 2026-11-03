@@ -15,14 +15,6 @@ const (
 	labelState  = "state"
 )
 
-// Results of reading the state of a pull request, besides its states.
-const (
-	resultMissing = "missing"
-)
-
-// tracerName names the tracer of the status job.
-const tracerName = "github.com/nourtalaat/sidekick/internal/action/githubpr"
-
 // Results of opening a pull request.
 const (
 	resultOpened   = "opened"
@@ -37,6 +29,7 @@ const (
 type metrics struct {
 	validations  *prometheus.CounterVec
 	pullRequests *prometheus.CounterVec
+	statusChecks *prometheus.CounterVec
 }
 
 // newMetrics creates the metrics and registers them with reg, which may be
@@ -58,7 +51,15 @@ func newMetrics(reg prometheus.Registerer) (*metrics, error) {
 		return nil, fmt.Errorf("register the pull request metric: %w", err)
 	}
 
-	return &metrics{validations: validations, pullRequests: pullRequests}, nil
+	statusChecks, err := registry.RegisterOrExisting(reg, prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "sidekick_githubpr_status_checks_total",
+		Help: "Pull requests the status job read from GitHub, by state (open, merged, closed), missing for one that was not found, and error.",
+	}, []string{labelState}))
+	if err != nil {
+		return nil, fmt.Errorf("register the status metric: %w", err)
+	}
+
+	return &metrics{validations: validations, pullRequests: pullRequests, statusChecks: statusChecks}, nil
 }
 
 // validated counts one validation of files in format.
@@ -71,16 +72,7 @@ func (m *metrics) pullRequest(result string) {
 	m.pullRequests.WithLabelValues(result).Inc()
 }
 
-// newStatusMetric creates the counter of the status job's checks and
-// registers it with reg, which may be nil.
-func newStatusMetric(reg prometheus.Registerer) (*prometheus.CounterVec, error) {
-	checks, err := registry.RegisterOrExisting(reg, prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "sidekick_githubpr_status_checks_total",
-		Help: "Pull requests the status job read from GitHub, by state (open, merged, closed), missing for one that was not found, and error.",
-	}, []string{labelState}))
-	if err != nil {
-		return nil, fmt.Errorf("register the status metric: %w", err)
-	}
-
-	return checks, nil
+// statusCheck counts one check of the status job.
+func (m *metrics) statusCheck(state string) {
+	m.statusChecks.WithLabelValues(state).Inc()
 }
