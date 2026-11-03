@@ -15,10 +15,12 @@ import (
 // Tool names, as the source names them. The model sees them with the
 // source prefix, for example gitlab__list_commits.
 const (
-	toolListCommits = "list_commits"
-	toolGetCommit   = "get_commit"
-	toolGetFile     = "get_file"
-	toolCompare     = "compare"
+	toolListCommits       = "list_commits"
+	toolGetCommit         = "get_commit"
+	toolListMergeRequests = "list_merge_requests"
+	toolListReleases      = "list_releases"
+	toolGetFile           = "get_file"
+	toolCompare           = "compare"
 )
 
 // Limits on how many items a list tool returns.
@@ -52,6 +54,28 @@ var toolList = []source.Tool{
 		InputSchema: schema(map[string]*jsonschema.Schema{
 			"ref": stringProperty("The commit SHA, or a branch or tag to get its latest commit."),
 		}, "ref"),
+		ReadOnly: true,
+	},
+	{
+		Name: toolListMergeRequests,
+		Description: "List the merge requests of a GitLab project that were opened or merged since a time, " +
+			"most recently updated first, with their state, branches, author, times, merge commit and link.",
+		InputSchema: schema(map[string]*jsonschema.Schema{
+			"since": timeProperty("Only merge requests opened or merged at or after this time."),
+			"base":  stringProperty("Only merge requests into this target branch, for example main."),
+			"limit": limitProperty(),
+		}, "since"),
+		ReadOnly: true,
+	},
+	{
+		Name: toolListReleases,
+		Description: "List the releases of a GitLab project, newest first, with tag, name, dates and link. " +
+			"With includeTags, also list the newest tags and the commit each points at.",
+		InputSchema: schema(map[string]*jsonschema.Schema{
+			"since":       timeProperty("Only releases made at or after this time."),
+			"includeTags": {Type: "boolean", Description: "Also list the newest tags. Default false."},
+			"limit":       limitProperty(),
+		}),
 		ReadOnly: true,
 	},
 	{

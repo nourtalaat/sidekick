@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -20,6 +21,10 @@ import (
 const (
 	abcSHA = "abc1234def5678abc1234def5678abc1234def56"
 	botSHA = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c"
+
+	mergeRequestsPath = apiRoot + "/projects/acme/checkout/merge_requests"
+	releasesPath      = apiRoot + "/projects/acme/checkout/releases"
+	tagsPath          = apiRoot + "/projects/acme/checkout/repository/tags"
 
 	filePath = apiRoot + "/projects/acme/checkout/repository/files/deploy/values.yaml"
 	treePath = apiRoot + "/projects/acme/checkout/repository/tree"
@@ -203,6 +208,99 @@ func TestSourceCall(t *testing.T) {
 			wantQueries: []string{""},
 			wantNoData:  true,
 			wantText:    notFoundText,
+		},
+		{
+			name:  "list_merge_requests keeps those opened or merged since the time and stops at the first one not touched since",
+			tool:  toolListMergeRequests,
+			input: `{"project":"acme/checkout","since":"2026-05-04T08:00:00Z","base":"main"}`,
+			routes: []route{{http.MethodGet, mergeRequestsPath, []fakehttp.Response{
+				fixture("merge-requests.json"),
+			}}},
+			wantQueries: []string{"order_by=updated_at&page=1&per_page=30&sort=desc&state=all&target_branch=main&updated_after=2026-05-04T08%3A00%3A00Z"},
+			want: `{"project":"acme/checkout","mergeRequests":[
+				{"iid":42,"title":"Draft: Add caching to the cart","state":"opened","draft":true,"author":"grace","base":"main","head":"cart-cache","created":"2026-05-04T09:30:00Z","url":"https://gitlab.example.com/acme/checkout/-/merge_requests/42"},
+				{"iid":41,"title":"Lower DB pool size","state":"merged","author":"ada","base":"main","head":"db-pool","created":"2026-05-04T08:00:00Z","merged":"2026-05-04T09:50:00Z","mergeCommit":"abc1234def5678abc1234def5678abc1234def56","url":"https://gitlab.example.com/acme/checkout/-/merge_requests/41"}
+			]}`,
+			wantEvidence: []source.Evidence{
+				{Kind: source.EvidenceCommit, Title: "acme/checkout!42", URL: "https://gitlab.example.com/acme/checkout/-/merge_requests/42", At: at(9, 30)},
+				{Kind: source.EvidenceCommit, Title: "acme/checkout!41", URL: "https://gitlab.example.com/acme/checkout/-/merge_requests/41", At: at(9, 50)},
+			},
+		},
+		{
+			name:  "list_merge_requests stops at the limit",
+			tool:  toolListMergeRequests,
+			input: `{"project":"acme/checkout","since":"2026-05-04T08:00:00Z","limit":1}`,
+			routes: []route{{http.MethodGet, mergeRequestsPath, []fakehttp.Response{
+				fixture("merge-requests.json"),
+			}}},
+			wantQueries: []string{"order_by=updated_at&page=1&per_page=1&sort=desc&state=all&updated_after=2026-05-04T08%3A00%3A00Z"},
+			want: `{"project":"acme/checkout","mergeRequests":[
+				{"iid":42,"title":"Draft: Add caching to the cart","state":"opened","draft":true,"author":"grace","base":"main","head":"cart-cache","created":"2026-05-04T09:30:00Z","url":"https://gitlab.example.com/acme/checkout/-/merge_requests/42"}
+			]}`,
+			wantEvidence: []source.Evidence{
+				{Kind: source.EvidenceCommit, Title: "acme/checkout!42", URL: "https://gitlab.example.com/acme/checkout/-/merge_requests/42", At: at(9, 30)},
+			},
+			wantTruncated: true,
+		},
+		{
+			name:  "list_merge_requests with none is no data",
+			tool:  toolListMergeRequests,
+			input: `{"project":"acme/checkout","since":"2026-05-04T08:00:00Z"}`,
+			routes: []route{{http.MethodGet, mergeRequestsPath, []fakehttp.Response{
+				body("[]"),
+			}}},
+			wantQueries: []string{"order_by=updated_at&page=1&per_page=30&sort=desc&state=all&updated_after=2026-05-04T08%3A00%3A00Z"},
+			wantNoData:  true,
+		},
+		{
+			name:  "list_releases ends at the first release made before the time",
+			tool:  toolListReleases,
+			input: `{"project":"acme/checkout","since":"2026-05-03T00:00:00Z"}`,
+			routes: []route{{http.MethodGet, releasesPath, []fakehttp.Response{
+				fixture("releases.json"),
+			}}},
+			wantQueries: []string{"page=1&per_page=30"},
+			want: `{"project":"acme/checkout","releases":[
+				{"tag":"v1.4.0","name":"Checkout 1.4.0","commit":"abc1234def5678abc1234def5678abc1234def56","author":"ada","created":"2026-05-04T10:00:00Z","released":"2026-05-04T10:00:00Z","url":"https://gitlab.example.com/acme/checkout/-/releases/v1.4.0"}
+			]}`,
+			wantEvidence: []source.Evidence{
+				{Kind: source.EvidenceDeploy, Title: "acme/checkout release v1.4.0", URL: "https://gitlab.example.com/acme/checkout/-/releases/v1.4.0", At: at(10, 0)},
+			},
+		},
+		{
+			name:  "list_releases adds the newest tags",
+			tool:  toolListReleases,
+			input: `{"project":"acme/checkout","includeTags":true}`,
+			routes: []route{
+				{http.MethodGet, releasesPath, []fakehttp.Response{fixture("releases.json")}},
+				{http.MethodGet, tagsPath, []fakehttp.Response{fixture("tags.json")}},
+			},
+			wantQueries: []string{"page=1&per_page=30", "per_page=30"},
+			want: `{"project":"acme/checkout","releases":[
+				{"tag":"v1.4.0","name":"Checkout 1.4.0","commit":"abc1234def5678abc1234def5678abc1234def56","author":"ada","created":"2026-05-04T10:00:00Z","released":"2026-05-04T10:00:00Z","url":"https://gitlab.example.com/acme/checkout/-/releases/v1.4.0"},
+				{"tag":"v1.3.2","name":"Checkout 1.3.2","commit":"0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c","author":"grace","created":"2026-05-02T09:00:00Z","released":"2026-05-02T10:00:00Z","url":"https://gitlab.example.com/acme/checkout/-/releases/v1.3.2"}
+			],"tags":[
+				{"name":"v1.4.0","sha":"abc1234def5678abc1234def5678abc1234def56","created":"2026-05-04T10:00:00Z"},
+				{"name":"v1.3.2","sha":"0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c"}
+			]}`,
+			wantEvidence: []source.Evidence{
+				{Kind: source.EvidenceDeploy, Title: "acme/checkout release v1.4.0", URL: "https://gitlab.example.com/acme/checkout/-/releases/v1.4.0", At: at(10, 0)},
+				{
+					Kind: source.EvidenceDeploy, Title: "acme/checkout release v1.3.2", URL: "https://gitlab.example.com/acme/checkout/-/releases/v1.3.2",
+					At: time.Date(2026, 5, 2, 10, 0, 0, 0, time.UTC),
+				},
+			},
+		},
+		{
+			name:  "list_releases with no releases and no tags is no data",
+			tool:  toolListReleases,
+			input: `{"project":"acme/checkout","includeTags":true}`,
+			routes: []route{
+				{http.MethodGet, releasesPath, []fakehttp.Response{body("[]")}},
+				{http.MethodGet, tagsPath, []fakehttp.Response{body("[]")}},
+			},
+			wantQueries: []string{"page=1&per_page=30", "per_page=30"},
+			wantNoData:  true,
 		},
 		{
 			name:  "get_file reads a file at a ref and links to the commit it read",

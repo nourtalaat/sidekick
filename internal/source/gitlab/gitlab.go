@@ -72,6 +72,10 @@ func (s *Source) run(ctx context.Context, call source.Call) (source.Result, erro
 		return s.listCommits(ctx, call.Input)
 	case toolGetCommit:
 		return s.getCommit(ctx, call.Input)
+	case toolListMergeRequests:
+		return s.listMergeRequests(ctx, call.Input)
+	case toolListReleases:
+		return s.listReleases(ctx, call.Input)
 	case toolGetFile:
 		return s.getFile(ctx, call.Input)
 	case toolCompare:
