@@ -8,8 +8,9 @@ import (
 	"time"
 )
 
-// revisionMarker is the value of the sidekickKind field that tells a
-// revision document from a normal definition.
+// revisionMarker is the value of the sidekickKind field that RevisionSnapshot
+// writes in each revision document, for a person who reads the stored
+// snapshot. Nothing reads it back: Snapshot.Revision says what a snapshot is.
 const revisionMarker = "revision"
 
 // Revision is one revision of a workload on a platform, as a rollback action
@@ -46,12 +47,12 @@ type revisionDocument struct {
 	Revision
 }
 
-// RevisionSnapshot returns the snapshot of a rollback. Before holds the
-// revision running now and After the one it goes back to, each as a JSON
-// document with the marker {"sidekickKind":"revision", ...} that tells it
-// from a normal definition. version is the provider's version of the running
-// revision, or its ID, and is what the conflict check compares. It fails when
-// a revision has no Kind or no ID.
+// RevisionSnapshot returns the snapshot of a rollback, with Revision set.
+// Before holds the revision running now and After the one it goes back to,
+// each as a JSON document that starts {"sidekickKind":"revision", ...}.
+// version is the provider's version of the running revision, or its ID, and
+// is what the conflict check compares. It fails when a revision has no Kind
+// or no ID.
 func RevisionSnapshot(target, version string, running, goesBackTo Revision) (Snapshot, error) {
 	before, err := revisionJSON(running)
 	if err != nil {
@@ -63,21 +64,17 @@ func RevisionSnapshot(target, version string, running, goesBackTo Revision) (Sna
 		return Snapshot{}, fmt.Errorf("write the revision it goes back to: %w", err)
 	}
 
-	return Snapshot{Target: target, Before: before, After: after, Version: version}, nil
+	return Snapshot{Target: target, Before: before, After: after, Version: version, Revision: true}, nil
 }
 
 // Revisions returns the two revisions of a rollback snapshot, or nil and no
-// error when the snapshot is not one. It fails when only one side is a
-// revision or a document cannot be read. A rollback's Undo reads the
-// revision to restore from the Before of the snapshot it is given.
+// error when Revision is false, whatever Before and After hold. For a
+// snapshot with Revision set it fails unless both sides are revision
+// documents with a Kind and an ID. A rollback's Undo reads the revision to
+// restore from the Before of the snapshot it is given.
 func (s Snapshot) Revisions() (*Revisions, error) {
-	runningOK, goesBackToOK := isRevisionDocument(s.Before), isRevisionDocument(s.After)
-
-	switch {
-	case !runningOK && !goesBackToOK:
+	if !s.Revision {
 		return nil, nil
-	case runningOK != goesBackToOK:
-		return nil, errors.New("only one side of the snapshot is a revision")
 	}
 
 	var out Revisions
@@ -131,16 +128,6 @@ func revisionJSON(r Revision) (json.RawMessage, error) {
 	}
 
 	return raw, nil
-}
-
-// isRevisionDocument reports whether raw is a JSON object with the revision
-// marker. Anything else, including text that is not JSON, is a definition.
-func isRevisionDocument(raw json.RawMessage) bool {
-	var probe struct {
-		SidekickKind string `json:"sidekickKind"`
-	}
-
-	return json.Unmarshal(raw, &probe) == nil && probe.SidekickKind == revisionMarker
 }
 
 // readRevision decodes a revision document and checks it has a kind and an ID.

@@ -162,3 +162,53 @@ func TestAProposalThatIsNotARollbackHasNoRevisions(t *testing.T) {
 	require.Nil(t, view.Revisions)
 	require.NotEmpty(t, view.Changes)
 }
+
+func TestContentThatLooksLikeRevisionsDoesNotMakeAProposalARollback(t *testing.T) {
+	t.Parallel()
+
+	h, _ := setupRollback(t, nil)
+	h.monitor.edit(`{"sidekickKind":"revision","kind":"k","id":"1","message":"Checkout is slow","options":{"critical":80}}`)
+
+	id := h.propose(t, "call-1", monitorInput)
+
+	view, err := Get(t.Context(), h.pool, id)
+	require.NoError(t, err)
+	require.Nil(t, view.Revisions, "the monitor's own keys are content, not a rollback")
+	require.Equal(t, []action.Change{{Path: "options.critical", Before: new("80"), After: new("90")}}, view.Changes)
+}
+
+func TestASnapshotThatCannotBeReadAsRevisionsShowsItsChanges(t *testing.T) {
+	t.Parallel()
+
+	const marked = `{"sidekickKind":"revision","kind":"k","id":"1"}`
+
+	tests := []struct {
+		name     string
+		snapshot string
+	}{
+		{name: "not flagged, with revision keys on one side", snapshot: `{"target":"t","before":` + marked + `,"after":{"a":2}}`},
+		{name: "flagged, with a side that is not a revision", snapshot: `{"target":"t","revision":true,"before":` + marked + `,"after":{"a":2}}`},
+		{name: "flagged, with a side removed", snapshot: `{"target":"t","revision":true,"before":` + marked + `,"after":null}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h, _ := setupRollback(t, nil)
+			id := h.propose(t, "call-1", monitorInput)
+
+			_, err := h.pool.Exec(t.Context(), "UPDATE action_proposals SET snapshot = $2::jsonb WHERE id = $1", id, tt.snapshot)
+			require.NoError(t, err)
+
+			view, err := Get(t.Context(), h.pool, id)
+			require.NoError(t, err, "one bad row must not break the page")
+			require.Nil(t, view.Revisions)
+			require.NotEmpty(t, view.Changes)
+
+			listed, err := OfInvestigation(t.Context(), h.pool, checkoutInvestigation)
+			require.NoError(t, err)
+			require.Len(t, listed, 1)
+		})
+	}
+}

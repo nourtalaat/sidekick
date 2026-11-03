@@ -20,10 +20,18 @@ func TestRevisionSnapshotRoundTrips(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "kubernetes:deployment/shop/checkout", snap.Target)
 	require.Equal(t, "7", snap.Version)
+	require.True(t, snap.Revision, "only RevisionSnapshot says a snapshot is a rollback")
 	require.JSONEq(t, `{"sidekickKind":"revision","kind":"ReplicaSet revision","id":"6"}`, string(snap.After))
 	require.Contains(t, string(snap.Before), `"sidekickKind":"revision"`)
 
-	got, err := snap.Revisions()
+	stored, err := json.Marshal(snap)
+	require.NoError(t, err)
+
+	var read Snapshot
+
+	require.NoError(t, json.Unmarshal(stored, &read), "the flag survives being stored")
+
+	got, err := read.Revisions()
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	require.True(t, got.Running.DeployedAt.Equal(deployed))
@@ -64,6 +72,7 @@ func TestSnapshotRevisions(t *testing.T) {
 
 	tests := []struct {
 		name          string
+		revision      bool
 		before, after string
 		want          *Revisions
 		wantErr       bool
@@ -71,20 +80,26 @@ func TestSnapshotRevisions(t *testing.T) {
 		{name: "a normal definition", before: `{"a":1}`, after: `{"a":2}`},
 		{name: "no definition on either side", before: ``, after: `null`},
 		{name: "not JSON", before: `{`, after: `[`},
-		{name: "a marker with another value", before: `{"sidekickKind":"flag"}`, after: `{"sidekickKind":"flag"}`},
-		{name: "two revisions", before: revision, after: revision, want: &Revisions{Running: Revision{Kind: "k", ID: "1"}, GoesBackTo: Revision{Kind: "k", ID: "1"}}},
-		{name: "only the before side", before: revision, after: `{"a":1}`, wantErr: true},
-		{name: "a revision and a removal", before: revision, after: `null`, wantErr: true},
-		{name: "only the after side", before: `null`, after: revision, wantErr: true},
-		{name: "no ID", before: `{"sidekickKind":"revision","kind":"k"}`, after: revision, wantErr: true},
-		{name: "a field of the wrong type", before: `{"sidekickKind":"revision","kind":1,"id":"1"}`, after: revision, wantErr: true},
+		{name: "content that looks like revisions is not a rollback", before: revision, after: revision},
+		{name: "content that looks like a revision on one side is not a rollback", before: revision, after: `{"a":1}`},
+		{name: "content that looks like a revision and a removal is not a rollback", before: revision, after: `null`},
+		{name: "two revisions", revision: true, before: revision, after: revision, want: &Revisions{Running: Revision{Kind: "k", ID: "1"}, GoesBackTo: Revision{Kind: "k", ID: "1"}}},
+		{name: "the marker inside the documents decides nothing", revision: true, before: `{"kind":"k","id":"1"}`, after: `{"kind":"k","id":"2"}`, want: &Revisions{Running: Revision{Kind: "k", ID: "1"}, GoesBackTo: Revision{Kind: "k", ID: "2"}}},
+		{name: "flagged, with a definition on one side", revision: true, before: revision, after: `{"a":1}`, wantErr: true},
+		{name: "flagged, with a removal", revision: true, before: revision, after: `null`, wantErr: true},
+		{name: "flagged, with nothing before", revision: true, before: ``, after: revision, wantErr: true},
+		{name: "flagged, not JSON", revision: true, before: `{`, after: revision, wantErr: true},
+		{name: "flagged, no ID", revision: true, before: `{"kind":"k"}`, after: revision, wantErr: true},
+		{name: "flagged, a field of the wrong type", revision: true, before: `{"kind":1,"id":"1"}`, after: revision, wantErr: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := Snapshot{Before: json.RawMessage(tt.before), After: json.RawMessage(tt.after)}.Revisions()
+			snap := Snapshot{Before: json.RawMessage(tt.before), After: json.RawMessage(tt.after), Revision: tt.revision}
+
+			got, err := snap.Revisions()
 			if tt.wantErr {
 				require.Error(t, err)
 

@@ -72,6 +72,11 @@ type Snapshot struct {
 	// Version is the provider's version or modification time of Before, used
 	// to detect a change made by someone else between proposal and execution.
 	Version string `json:"version,omitempty"`
+	// Revision is true for the snapshot of a rollback, whose Before and
+	// After are revision documents. Only RevisionSnapshot sets it. What
+	// Before and After hold never makes a snapshot a rollback, because they
+	// come from outside tools and from the model.
+	Revision bool `json:"revision,omitempty"`
 }
 
 // ErrPermanent is wrapped by an Execute error that repeating the call cannot
