@@ -916,11 +916,29 @@ would refuse is ignored, so every link opens. Days are UTC days.
   the median time to the first finding, and today's spend against the
   daily cap. Each shows its change against the range before it in words,
   such as "Up 4 points".
-- **Quality.** Verdict accuracy over time, the verdict Sidekick gave
-  against the verdict people confirmed, precision and recall of each
-  verdict, accuracy by model and strategy, and the newest benchmark runs.
-  Choose two runs to compare them; the two runs are in the address too
-  (`a` and `b`).
+- **Quality.** Verdict accuracy over time, precision and recall over
+  time, the verdict Sidekick gave against the verdict people confirmed,
+  precision and recall of each verdict, accuracy by model and strategy,
+  and the newest benchmark runs. Choose two runs to compare them; the two
+  runs are in the address too (`a` and `b`).
+
+  The precision and recall chart draws one verdict at a time, by day.
+  Choose the verdict with the **Verdict** menu on the card; the default
+  is False alarm, since a wrong false alarm hides a real problem. The
+  choice is in the address as `scoreVerdict`, and an unknown value is
+  ignored. It is separate from the verdict filter of the page, which
+  selects the verdict Sidekick gave. A day with no figure for the verdict
+  is a gap in the lines. The card has a text summary, such as "False
+  alarm: precision 96% and recall 88% over the range, from 120 verdicts
+  given and 110 confirmed", and a **Show as table** view that adds the
+  counts of verdicts given, confirmed and agreed for each day.
+
+  Recall needs the investigations of every verdict. With the verdict
+  filter of the page set, the API reads only the investigations where
+  Sidekick gave that verdict, so the card draws precision only, for the
+  filtered verdict, and says "Recall needs every verdict. Clear the
+  verdict filter to see it." The precision and recall by verdict table
+  leaves out its Recall column with the same note.
 - **Cost.** Spend per day by model with the daily cap as a dashed line and
   a status when today's spend is near the cap or over it, spend today by
   route, spend by route, the cost per investigation, and the tokens in and
