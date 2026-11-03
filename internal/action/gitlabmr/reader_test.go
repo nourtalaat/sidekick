@@ -25,7 +25,7 @@ func TestReaderFile(t *testing.T) {
 		for range 2 {
 			f, err := r.file(t.Context(), testRulesPath)
 			require.NoError(t, err)
-			require.Equal(t, readFile{text: testRulesBefore, sha: blobSHA(testRulesBefore), exists: true}, f)
+			require.Equal(t, readFile{text: testRulesBefore, sha: gitchange.BlobSHA(testRulesBefore), exists: true}, f)
 		}
 
 		require.Equal(t, []string{"GET repository/files/" + testRulesPath}, sent(b.gitlab))
@@ -159,8 +159,8 @@ func TestReaderDir(t *testing.T) {
 		got, err := r.Dir(t.Context(), "datadog/prod")
 		require.NoError(t, err)
 		require.Equal(t, []gitchange.DirEntry{
-			{Name: "main.tf", Path: "datadog/prod/main.tf", SHA: blobSHA("datadog/prod/main.tf")},
-			{Name: "vars.tf", Path: "datadog/prod/vars.tf", SHA: blobSHA("datadog/prod/vars.tf")},
+			{Name: "main.tf", Path: "datadog/prod/main.tf", SHA: gitchange.BlobSHA("datadog/prod/main.tf")},
+			{Name: "vars.tf", Path: "datadog/prod/vars.tf", SHA: gitchange.BlobSHA("datadog/prod/vars.tf")},
 		}, got, "only regular files are listed")
 
 		queries := b.gitlab.Requests()

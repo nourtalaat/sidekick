@@ -21,6 +21,8 @@ type apiMergeRequest struct {
 	State  string `json:"state"`
 	Draft  bool   `json:"draft"`
 	WebURL string `json:"web_url"`
+	// SHA is the head commit of the source branch.
+	SHA string `json:"sha"`
 	// MergedAt and ClosedAt are set for a merge request that was merged or
 	// closed.
 	MergedAt *time.Time `json:"merged_at"`

@@ -231,7 +231,7 @@ func (m *MR) pushRevert(ctx context.Context, inv action.Invocation, params Param
 	message := revertPrefix + source.CutText(commitTitle(params.Title), maxCommitTitleBytes-len(revertPrefix)) +
 		"\n\nSidekick proposal " + inv.ProposalID + ", which undoes " + inv.UndoOf + "\n"
 
-	err = m.commitTo(ctx, params.Project, commitRequest{
+	_, err = m.commitTo(ctx, params.Project, commitRequest{
 		Branch:        inv.IdempotencyKey,
 		StartSHA:      head.commit,
 		CommitMessage: message,

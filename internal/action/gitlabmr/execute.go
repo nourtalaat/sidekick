@@ -103,8 +103,10 @@ func (m *MR) Execute(ctx context.Context, inv action.Invocation) (action.Result,
 	if mr != nil {
 		m.metrics.mergeRequest(resultExisting)
 
-		return m.result(params.Project, mr, resultExisting), nil
+		return m.result(params.Project, mr, resultExisting, ""), nil
 	}
+
+	var pushed string
 
 	branchExists, err := m.branchExists(ctx, params.Project, branch)
 	if err != nil {
@@ -125,7 +127,8 @@ func (m *MR) Execute(ctx context.Context, inv action.Invocation) (action.Result,
 			return action.Result{Summary: "The change is on the base branch already, so no merge request was opened."}, nil
 		}
 
-		if err := m.push(ctx, pre, branch, inv); err != nil {
+		pushed, err = m.push(ctx, pre, branch, inv)
+		if err != nil {
 			m.metrics.mergeRequest(resultError)
 
 			return action.Result{}, fmt.Errorf("push the branch: %w", err)
@@ -142,7 +145,7 @@ func (m *MR) Execute(ctx context.Context, inv action.Invocation) (action.Result,
 	m.metrics.mergeRequest(resultOpened)
 	m.log.InfoContext(ctx, "merge request opened", "proposal_id", inv.ProposalID, "project", params.Project, "iid", mr.IID)
 
-	return m.result(params.Project, mr, resultOpened), nil
+	return m.result(params.Project, mr, resultOpened, pushed), nil
 }
 
 // mergeRequestFrom returns the merge request whose source branch is branch,
@@ -206,9 +209,9 @@ func (m *MR) branchExists(ctx context.Context, project, branch string) (bool, er
 // of the base branch. The branch and its commit appear together, so a crash
 // never leaves an empty branch. The parent is the commit the files were read
 // at, so a base branch that moved meanwhile does not change what the commit
-// is built on. A branch that exists already, made by another attempt a moment
-// ago, is left as it is.
-func (m *MR) push(ctx context.Context, pre *prepared, branch string, inv action.Invocation) error {
+// is built on. It returns the SHA of the commit. A branch that exists already,
+// made by another attempt a moment ago, is left as it is, and the SHA is empty.
+func (m *MR) push(ctx context.Context, pre *prepared, branch string, inv action.Invocation) (string, error) {
 	actions := make([]commitAction, 0, len(pre.changes))
 
 	for _, c := range pre.changes {
@@ -230,20 +233,24 @@ func (m *MR) push(ctx context.Context, pre *prepared, branch string, inv action.
 	})
 }
 
-// commitTo makes the commit. GitLab answers every failure of the call with
+// commitTo makes the commit and returns its SHA. GitLab answers every failure of the call with
 // 400, so when it fails, the branch is read again: a branch that is there now
 // was made by another attempt, and its commit is the one wanted.
-func (m *MR) commitTo(ctx context.Context, project string, req commitRequest) error {
-	err := m.client.Send(ctx, http.MethodPost, gitlabapi.ProjectPath(project, "repository", "commits"), req, nil)
+func (m *MR) commitTo(ctx context.Context, project string, req commitRequest) (string, error) {
+	var made struct {
+		ID string `json:"id"`
+	}
+
+	err := m.client.Send(ctx, http.MethodPost, gitlabapi.ProjectPath(project, "repository", "commits"), req, &made)
 	if err == nil {
-		return nil
+		return made.ID, nil
 	}
 
 	if exists, lookErr := m.branchExists(ctx, project, req.Branch); lookErr == nil && exists {
-		return nil
+		return "", nil
 	}
 
-	return classify("make the commit on "+req.Branch, err)
+	return "", classify("make the commit on "+req.Branch, err)
 }
 
 // open makes the merge request of a proposal from the branch.
@@ -301,8 +308,10 @@ func (m *MR) description(body string, inv action.Invocation) string {
 	return b.String()
 }
 
-// result describes the merge request for people and for the proposal.
-func (m *MR) result(project string, mr *apiMergeRequest, how string) action.Result {
+// result describes the merge request for people and for the proposal. Its
+// head is the head of the source branch as GitLab says it, or the commit the
+// action made when GitLab does not say.
+func (m *MR) result(project string, mr *apiMergeRequest, how, pushed string) action.Result {
 	title := project + "!" + strconv.Itoa(mr.IID)
 
 	draft := ""
@@ -323,7 +332,16 @@ func (m *MR) result(project string, mr *apiMergeRequest, how string) action.Resu
 		summary = "Found the already opened " + draft + "merge request " + title
 	}
 
-	return action.Result{Summary: summary, Links: []action.Link{{Title: title, URL: mr.WebURL}}}
+	head := mr.SHA
+	if head == "" {
+		head = pushed
+	}
+
+	return action.Result{
+		Summary:     summary,
+		Links:       []action.Link{{Title: title, URL: mr.WebURL}},
+		PullRequest: &action.PullRequestRef{Number: int64(mr.IID), HeadSHA: head},
+	}
 }
 
 // commitMessage returns the message of the commit: the title on one line,

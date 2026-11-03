@@ -60,6 +60,7 @@ func TestExecuteOpensMergeRequest(t *testing.T) {
 			require.NoError(t, err)
 			require.Contains(t, res.Summary, tt.wantWord)
 			require.Equal(t, []action.Link{{Title: "acme/platform/monitors!12", URL: testWebURL + "12"}}, res.Links)
+			require.Equal(t, &action.PullRequestRef{Number: 12, HeadSHA: testCommitSHA}, res.PullRequest)
 
 			require.Equal(t, []string{
 				"GET merge_requests",
@@ -292,6 +293,8 @@ func TestExecuteRetryAfterCrash(t *testing.T) {
 			res, err := b.mr.Execute(t.Context(), invocation(rulesParams()))
 			require.NoError(t, err)
 			require.Equal(t, tt.wantText, res.Summary)
+			require.NotNil(t, res.PullRequest, "a retry that finds the merge request names it as well")
+			require.Equal(t, testCommitSHA, res.PullRequest.HeadSHA)
 			require.Equal(t, tt.want, sent(b.gitlab))
 			require.Empty(t, b.validator.Requests(), "a repeat does not validate again")
 		})
@@ -573,7 +576,7 @@ func TestExecuteRefusesWhatTheLimitsDoNotAllow(t *testing.T) {
 func TestExecuteComparesWithTheSnapshot(t *testing.T) {
 	t.Parallel()
 
-	afterBlob := blobSHA(testRulesAfter)
+	afterBlob := gitchange.BlobSHA(testRulesAfter)
 
 	snapshot := func(before string) *action.Snapshot {
 		return &action.Snapshot{
@@ -608,7 +611,7 @@ func TestExecuteComparesWithTheSnapshot(t *testing.T) {
 			name: "a snapshot of other content", live: testRulesBefore, liveSHA: testRulesSHA,
 			snap: &action.Snapshot{
 				Before: json.RawMessage(`{"` + testRulesPath + `": {"blob": "` + testRulesSHA + `"}}`),
-				After:  json.RawMessage(`{"` + testRulesPath + `": {"blob": "` + blobSHA("something else") + `"}}`),
+				After:  json.RawMessage(`{"` + testRulesPath + `": {"blob": "` + gitchange.BlobSHA("something else") + `"}}`),
 			},
 			wantErrIs: action.ErrPermanent, wantErr: "is not the content the snapshot describes",
 		},

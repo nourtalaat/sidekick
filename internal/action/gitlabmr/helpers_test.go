@@ -117,7 +117,7 @@ func branchBody(sha string) string {
 
 // fileBody is the answer to reading a file, with the blob ID of its content.
 func fileBody(path, text string) string {
-	return fileBodyWithSHA(path, text, blobSHA(text))
+	return fileBodyWithSHA(path, text, gitchange.BlobSHA(text))
 }
 
 // fileBodyWithSHA is fileBody for a file with a blob ID of the test's choice.
@@ -133,13 +133,13 @@ func blobBody(sha, text string) string {
 
 // treeEntry is one entry of a directory listing.
 func treeEntry(path, kind, mode string) string {
-	return fmt.Sprintf(`{"id":%q,"name":%q,"type":%q,"path":%q,"mode":%q}`, blobSHA(path), path[strings.LastIndex(path, "/")+1:], kind, path, mode)
+	return fmt.Sprintf(`{"id":%q,"name":%q,"type":%q,"path":%q,"mode":%q}`, gitchange.BlobSHA(path), path[strings.LastIndex(path, "/")+1:], kind, path, mode)
 }
 
 // mergeRequestBody is a merge request as GitLab describes it.
 func mergeRequestBody(iid int, state string, draft bool) string {
-	return fmt.Sprintf(`{"iid":%d,"state":%q,"draft":%t,"web_url":"%s%d","source_branch":%q,"target_branch":"main","merged_at":%s,"closed_at":%s}`,
-		iid, state, draft, testWebURL, iid, testBranch, timeOrNull(state == "merged"), timeOrNull(state == "closed"))
+	return fmt.Sprintf(`{"iid":%d,"state":%q,"draft":%t,"web_url":"%s%d","sha":%q,"source_branch":%q,"target_branch":"main","merged_at":%s,"closed_at":%s}`,
+		iid, state, draft, testWebURL, iid, testCommitSHA, testBranch, timeOrNull(state == "merged"), timeOrNull(state == "closed"))
 }
 
 // timeOrNull returns a JSON time when set is true, and null otherwise.

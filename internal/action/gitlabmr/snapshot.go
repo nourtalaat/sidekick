@@ -2,11 +2,8 @@ package gitlabmr
 
 import (
 	"context"
-	"crypto/sha1" //nolint:gosec // Git names a blob by the SHA-1 of its content, which is what the snapshot compares.
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
@@ -81,9 +78,9 @@ func afterOf(c gitchange.PlannedFile, f readFile, added, removed int) gitchange.
 	case c.Deleted():
 		return gitchange.AfterEntry{Status: gitchange.FileDeleted, LinesRemoved: &removed}
 	case !f.exists:
-		return gitchange.AfterEntry{Blob: blobSHA(*c.Content), Status: gitchange.FileAdded, LinesAdded: &added, LinesRemoved: &removed}
+		return gitchange.AfterEntry{Blob: gitchange.BlobSHA(*c.Content), Status: gitchange.FileAdded, LinesAdded: &added, LinesRemoved: &removed}
 	default:
-		return gitchange.AfterEntry{Blob: blobSHA(*c.Content), Status: gitchange.FileChanged, LinesAdded: &added, LinesRemoved: &removed}
+		return gitchange.AfterEntry{Blob: gitchange.BlobSHA(*c.Content), Status: gitchange.FileChanged, LinesAdded: &added, LinesRemoved: &removed}
 	}
 }
 
@@ -106,7 +103,7 @@ func (l *loaded) applySnapshot(snap action.Snapshot) error {
 			return fmt.Errorf("%w: the snapshot has no entry for %q", action.ErrPermanent, c.Path)
 		}
 
-		if !c.Deleted() && blobSHA(*c.Content) != after.Blob {
+		if !c.Deleted() && gitchange.BlobSHA(*c.Content) != after.Blob {
 			return fmt.Errorf("%w: the content of %q is not the content the snapshot describes", action.ErrPermanent, c.Path)
 		}
 
@@ -124,15 +121,4 @@ func (l *loaded) applySnapshot(snap action.Snapshot) error {
 	l.changes = keep
 
 	return nil
-}
-
-// blobSHA returns the SHA Git gives a blob with this content: the SHA-1 of
-// "blob <length>", a NUL byte and the content.
-func blobSHA(content string) string {
-	h := sha1.New() //nolint:gosec // see the import.
-
-	_, _ = fmt.Fprintf(h, "blob %d\x00", len(content))
-	_, _ = io.WriteString(h, content)
-
-	return hex.EncodeToString(h.Sum(nil))
 }

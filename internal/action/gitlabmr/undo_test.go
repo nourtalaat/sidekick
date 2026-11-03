@@ -47,8 +47,8 @@ func undoSnapshot() action.Snapshot {
 			"prometheus/rules/new.yaml": null,
 			"prometheus/rules/old.yaml": {"blob": "` + blobOldBefore + `"}}`),
 		After: json.RawMessage(`{
-			"` + testRulesPath + `": {"blob": "` + blobSHA(testRulesAfter) + `", "status": "changed", "linesAdded": 1, "linesRemoved": 1},
-			"prometheus/rules/new.yaml": {"blob": "` + blobSHA("x: 1\n") + `", "status": "added", "linesAdded": 1, "linesRemoved": 0},
+			"` + testRulesPath + `": {"blob": "` + gitchange.BlobSHA(testRulesAfter) + `", "status": "changed", "linesAdded": 1, "linesRemoved": 1},
+			"prometheus/rules/new.yaml": {"blob": "` + gitchange.BlobSHA("x: 1\n") + `", "status": "added", "linesAdded": 1, "linesRemoved": 0},
 			"prometheus/rules/old.yaml": {"status": "deleted", "linesRemoved": 1}}`),
 	}
 }
@@ -203,7 +203,7 @@ func TestUndoConflict(t *testing.T) {
 		require.True(t, ok)
 		require.JSONEq(t, `{
 			"`+testRulesPath+`": {"blob": "`+blobEdited+`"},
-			"prometheus/rules/new.yaml": {"blob": "`+blobSHA("x: 1\n")+`"},
+			"prometheus/rules/new.yaml": {"blob": "`+gitchange.BlobSHA("x: 1\n")+`"},
 			"prometheus/rules/old.yaml": null
 		}`, string(conflict.Live))
 

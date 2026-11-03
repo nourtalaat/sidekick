@@ -11,13 +11,6 @@ import (
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 )
 
-func TestBlobSHA(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, "ce013625030ba8dba906f756967f9e9ca394464a", blobSHA("hello\n"), "what git hash-object gives")
-	require.Equal(t, "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391", blobSHA(""), "the empty blob")
-}
-
 func TestSnapshot(t *testing.T) {
 	t.Parallel()
 
@@ -46,8 +39,8 @@ func TestSnapshot(t *testing.T) {
 		"prometheus/rules/old.yaml": {"blob": "`+testOldSHA+`"}
 	}`, string(snap.Before))
 	require.JSONEq(t, `{
-		"`+testRulesPath+`": {"blob": "`+blobSHA(testRulesAfter)+`", "status": "changed", "linesAdded": 1, "linesRemoved": 1},
-		"prometheus/rules/new.yaml": {"blob": "`+blobSHA("groups: []\nx: 1\n")+`", "status": "added", "linesAdded": 2, "linesRemoved": 0},
+		"`+testRulesPath+`": {"blob": "`+gitchange.BlobSHA(testRulesAfter)+`", "status": "changed", "linesAdded": 1, "linesRemoved": 1},
+		"prometheus/rules/new.yaml": {"blob": "`+gitchange.BlobSHA("groups: []\nx: 1\n")+`", "status": "added", "linesAdded": 2, "linesRemoved": 0},
 		"prometheus/rules/old.yaml": {"status": "deleted", "linesRemoved": 2}
 	}`, string(snap.After))
 
