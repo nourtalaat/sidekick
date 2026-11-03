@@ -3,6 +3,7 @@ package gitlabcode
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -136,6 +137,11 @@ limits:
 
 	_, isChecker := built.(action.ProposalChecker)
 	require.True(t, isChecker)
+
+	ciReader, isCIReader := built.(gitchange.CIReader)
+	require.True(t, isCIReader, "it can report the CI of its merge requests")
+	require.Equal(t, "gitlab", ciReader.CIHost())
+	require.Equal(t, 2*time.Hour, ciReader.CIReportTimeout())
 
 	_, isSnapshotter := built.(action.Snapshotter)
 	require.True(t, isSnapshotter)

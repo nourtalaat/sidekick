@@ -30,6 +30,8 @@ func TestConfigValidate(t *testing.T) {
 		wantErr string
 	}{
 		{name: "valid"},
+		{name: "a CI timeout", change: func(c *Config) { c.ReportTimeout = 6 * time.Hour }},
+		{name: "a CI timeout over a day", change: func(c *Config) { c.ReportTimeout = 25 * time.Hour }, wantErr: "ciReportTimeout: must be from 1m0s to 24h0m0s, got 25h0m0s"},
 		{name: "every limit at its top", change: func(c *Config) {
 			c.Limits.MaxFiles, c.Limits.MaxChangedLines, c.Limits.MaxAge = 25, 1000, 30*24*time.Hour
 			c.Limits.RefusedPaths = []string{"infra/**"}
