@@ -3,7 +3,6 @@ package gitlabrevert
 import (
 	"encoding/json"
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -74,6 +73,6 @@ func TestSpec(t *testing.T) {
 	require.NotEmpty(t, spec.ParamsSchema)
 
 	for _, want := range []string{"acme/platform/deploy, acme/web", "Base branch: main", "at most 72h0m0s ago", "at most 5 files and 100 added and removed lines"} {
-		require.True(t, strings.Contains(spec.Description, want), "%q is in the description: %s", want, spec.Description)
+		require.Contains(t, spec.Description, want)
 	}
 }

@@ -86,7 +86,9 @@ func TestResolveMergeRequest(t *testing.T) {
 	const trailer = "Why.\n\nSidekick-Revert: 0192d3a4-0000-7000-8000-0000000000ff"
 
 	merged := func(source, description, mergeSHA, squashSHA string) func(w *world) {
-		return func(w *world) { w.mergeRequest(12, mergeRequestBody(12, "merged", false, source, description, mergeSHA, squashSHA)) }
+		return func(w *world) {
+			w.mergeRequest(12, mergeRequestBody(12, "merged", false, source, description, mergeSHA, squashSHA))
+		}
 	}
 
 	tests := []struct {

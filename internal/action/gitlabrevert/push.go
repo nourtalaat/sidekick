@@ -31,7 +31,7 @@ func (r *Revert) commitsAhead(ctx context.Context, project, base, branch string)
 	query := url.Values{"from": {base}, "to": {branch}}
 
 	if _, err := r.client.Get(ctx, gitlabapi.ProjectPath(project, "repository", "compare"), query, &cmp); err != nil {
-		return 0, gitlabgit.Classify(fmt.Sprintf("compare %s with %s", branch, base), err)
+		return 0, fmt.Errorf("list the commits: %w", gitlabgit.Classify(fmt.Sprintf("compare %s with %s", branch, base), err))
 	}
 
 	return len(cmp.Commits), nil
@@ -50,7 +50,7 @@ func (r *Revert) createBranch(ctx context.Context, project, branch, from string)
 		return nil
 	}
 
-	return gitlabgit.Classify("make the branch "+branch, err)
+	return fmt.Errorf("create the branch: %w", gitlabgit.Classify("make the branch "+branch, err))
 }
 
 // revertCommit runs GitLab's revert of a commit on the branch and returns the

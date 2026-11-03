@@ -118,7 +118,7 @@ func (r *Revert) onBase(ctx context.Context, project, sha, branch, what string) 
 	case gitlabapi.IsStatus(err, http.StatusNotFound):
 		return false, nil
 	case err != nil:
-		return false, gitlabgit.Classify(fmt.Sprintf("compare %s with %s", what, branch), err)
+		return false, fmt.Errorf("find the common ancestor: %w", gitlabgit.Classify(fmt.Sprintf("compare %s with %s", what, branch), err))
 	default:
 		return base.ID == sha, nil
 	}

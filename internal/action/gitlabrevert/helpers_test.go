@@ -47,8 +47,6 @@ var (
 	// testBranch and testUndoBranch are the branches the tests expect.
 	testBranch     = "sidekick/" + testProposalID
 	testUndoBranch = "sidekick/" + testUndoID
-
-	jsonHeaders = map[string]string{"Content-Type": "application/json"}
 )
 
 // fakeMR is a merge request the fake GitLab holds.
@@ -513,7 +511,7 @@ func apiPath(rest string) string {
 func writeJSON(rw http.ResponseWriter, status int, body string) {
 	rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(status)
-	_, _ = rw.Write([]byte(body))
+	_, _ = rw.Write([]byte(body)) //nolint:gosec // a test server answers with JSON fixtures that no browser renders
 }
 
 // branchBody is the answer to reading a branch.
