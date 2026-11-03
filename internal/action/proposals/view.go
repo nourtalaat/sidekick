@@ -160,6 +160,7 @@ func proposalOf(row db.ActionProposal, route, decidedByName string, pr *action.P
 		DecidedAt:          deref(row.DecidedAt),
 		ApprovedByPolicy:   approvedByPolicy(row),
 		Error:              deref(row.Error),
+		FixKind:            action.FixKind(deref(row.FixKind)),
 		PullRequest:        pr,
 	}
 
