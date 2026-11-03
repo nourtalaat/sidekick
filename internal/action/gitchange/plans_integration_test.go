@@ -28,6 +28,14 @@ func TestQueryPlans(t *testing.T) {
 
 	require.NoError(t, pool.QueryRow(t.Context(), "SELECT proposal_id FROM pull_request_states LIMIT 1").Scan(&proposal))
 
+	// investigation is the investigation of the proposals, and undo a
+	// succeeded undo proposal that has no CI report, for the insert.
+	var investigation, undo uuid.UUID
+
+	require.NoError(t, pool.QueryRow(t.Context(), "SELECT investigation_id, md5('undo' || 1)::uuid FROM action_proposals WHERE id = $1", proposal).Scan(&investigation, &undo))
+
+	now := time.Now()
+
 	tests := []struct {
 		name string
 		// run calls the query through q, which explains it instead of
@@ -90,6 +98,83 @@ func TestQueryPlans(t *testing.T) {
 				return fmt.Errorf("run query: %w", err)
 			},
 			wantIndex: []string{"jobs_check_pull_requests_key"},
+			notWant:   []string{"Seq Scan"},
+		},
+		{
+			name: "InsertCIReport",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.InsertCIReport(ctx, db.InsertCIReportParams{ProposalID: undo, Now: now})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"ci_reports_pkey"},
+		},
+		{
+			name: "GetCIReportForJob",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.GetCIReportForJob(ctx, proposal)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"ci_reports_pkey", "action_proposals_pkey"},
+			notWant:   []string{"Seq Scan"},
+		},
+		{
+			name: "LockCIReport",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.LockCIReport(ctx, proposal)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"ci_reports_pkey"},
+			notWant:   []string{"Seq Scan"},
+		},
+		{
+			name: "RecordCICheck",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.RecordCICheck(ctx, db.RecordCICheckParams{ProposalID: proposal, Now: &now, Detail: []byte(`{}`)})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"ci_reports_pkey"},
+			notWant:   []string{"Seq Scan"},
+		},
+		{
+			name: "FinishCIReport",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.FinishCIReport(ctx, db.FinishCIReportParams{ProposalID: proposal, State: "passed", Detail: []byte(`{}`), Now: &now})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: []string{"ci_reports_pkey"},
+			notWant:   []string{"Seq Scan"},
+		},
+		{
+			name: "SetCIReportSeq",
+			run: func(ctx context.Context, q *db.Queries) error {
+				seq := int64(7)
+
+				return fmt.Errorf("run query: %w", q.SetCIReportSeq(ctx, db.SetCIReportSeqParams{ProposalID: proposal, Seq: &seq}))
+			},
+			wantIndex: []string{"ci_reports_pkey"},
+			notWant:   []string{"Seq Scan"},
+		},
+		{
+			// All the proposals of this fixture are in one investigation, far
+			// more than a real one has, so the plan only has to be logged.
+			name: "ListUnsentCIReports",
+			run: func(ctx context.Context, q *db.Queries) error {
+				_, err := q.ListUnsentCIReports(ctx, db.ListUnsentCIReportsParams{InvestigationID: investigation, MaxSeq: 1 << 40, Sink: "webhook"})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+		},
+		{
+			name: "MarkCIReportSent",
+			run: func(ctx context.Context, q *db.Queries) error {
+				return fmt.Errorf("run query: %w", q.MarkCIReportSent(ctx, db.MarkCIReportSentParams{ProposalID: proposal, Sink: "webhook"}))
+			},
+			wantIndex: []string{"ci_reports_pkey"},
 			notWant:   []string{"Seq Scan"},
 		},
 	}
