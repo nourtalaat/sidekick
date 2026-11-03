@@ -185,6 +185,11 @@ func (s *Service) run(ctx context.Context, row db.ActionProposal, route string) 
 		return s.fail(ctx, row, "The config does not allow this any more: "+reason+". Propose it again if it is still needed.")
 	}
 
+	if approvedByPolicy(row) && s.readWriteBlocked(row.Action) {
+		return s.fail(ctx, row, fmt.Sprintf("The config does not allow this any more: action %q is approval-only and does not allow read-write mode, "+
+			"so the route's policy cannot approve it. Propose it again if it is still needed.", row.Action))
+	}
+
 	if row.UndoOf != nil {
 		undoCtx, cancel := context.WithTimeout(ctx, ExecuteTimeout)
 		defer cancel()

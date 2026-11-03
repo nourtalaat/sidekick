@@ -198,6 +198,60 @@ Describe the action type, its keys, its limits and the permissions its
 credentials need in [`docs/configuration.md`](../configuration.md), next to
 the other action types, and say which routes should use `mode: approved`.
 
+## Approval-only actions
+
+An action that changes a running system, such as a rollback, must not run
+without a person unless the operator chose that for the action. Mark it
+approval-only by embedding `action.ReadWriteGate` in two places, and
+nothing else:
+
+```go
+type Config struct {
+	action.ReadWriteGate `yaml:",inline"`
+
+	TokenSecret registry.SecretRef `yaml:"tokenSecret"`
+	// ...
+}
+
+type Action struct {
+	action.ReadWriteGate
+
+	// ...
+}
+
+func New(_ context.Context, name string, cfg Config, deps registry.Deps) (*Action, error) {
+	return &Action{ReadWriteGate: cfg.ReadWriteGate /* ... */}, nil
+}
+```
+
+The gate adds one key, `allowReadWrite` (default false), to the action's
+config. Both places are needed:
+
+- The config embeds it so the key is read from the file. Config validation
+  asks the decoded config, and refuses a `read-write` route that lists the
+  action unless the key is true. This is also the check for a route saved in
+  the web UI or the API.
+- The action embeds it so the built instance reports it too. Sidekick asks
+  the instance when the model proposes, when a proposal runs, and at
+  start-up, and the instance is all it has there. Copy the gate from the
+  config in the constructor.
+
+Do not write your own `ReadWriteAllowed` method and do not read the key
+yourself. An action type that does not embed the gate does not take the key:
+`allowReadWrite` is an unknown-key error for it, and it can be listed on
+`read-write` routes as before.
+
+What the operator sees: the error `action "<name>" (type <type>) is
+approval-only, ...` for a `read-write` route without the key; a warning at
+every start for an action that has the key and is listed on a `read-write`
+route; and proposals of a gated action in a `read-write` investigation that
+wait for a person when the key is missing.
+
+To test it, make a small action type in a `_test.go` file that embeds the
+gate in its config and in the action, and check three cases: a `read-write`
+route is refused without the key, it loads with `allowReadWrite: true`, and
+it loads in `mode: approved`.
+
 ## Changing a definition in place: snapshots and Undo
 
 An action that edits something that already exists, such as a monitor or an
