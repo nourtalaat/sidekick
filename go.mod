@@ -18,6 +18,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ecs v1.102.0
 	github.com/aws/aws-sdk-go-v2/service/eks v1.104.2
 	github.com/aws/aws-sdk-go-v2/service/health v1.50.2
+	github.com/aws/aws-sdk-go-v2/service/lambda v1.113.3
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.5
 	github.com/aws/smithy-go v1.28.6
 	github.com/coreos/go-oidc/v3 v3.20.0
