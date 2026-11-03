@@ -906,7 +906,14 @@ for the range of equal length before it, for showing the change.
   of each verdict, and the accuracy by model and strategy. A rating of
   wrong without a real verdict counts as wrong in the accuracy and is left
   out of precision and recall. The `verdict` filter selects the verdict
-  Sidekick gave.
+  Sidekick gave. Each day also has `scores`, the precision and recall of
+  each verdict given or confirmed on that day, worked out from the day's
+  ratings in the same way as for the range, with the same filters. A day
+  with ratings of wrong without a real verdict only has an empty list. A
+  single day has few ratings, so the numbers move a lot from one day to the
+  next. With the `verdict` filter set, only investigations where Sidekick
+  gave that verdict are read, so recall is too high, for a day as for the
+  range.
 - `GET /api/v1/stats/cost` returns what model calls cost, by day, model
   and route, with the tokens, from the same table the daily caps read, and
   today's spend against the global cap and each route's. That table has no

@@ -84,29 +84,33 @@ type qualityBody struct {
 	Totals   qualityTotals `json:"totals"`
 	Previous qualityTotals `json:"previous"`
 	Days     []struct {
-		Day     string `json:"day"`
-		Rated   int64  `json:"rated"`
-		Correct int64  `json:"correct"`
+		Day     string             `json:"day"`
+		Rated   int64              `json:"rated"`
+		Correct int64              `json:"correct"`
+		Scores  []verdictScoreBody `json:"scores"`
 	} `json:"days"`
 	Matrix []struct {
 		Predicted string `json:"predicted"`
 		Confirmed string `json:"confirmed"`
 		N         int64  `json:"n"`
 	} `json:"matrix"`
-	PerVerdict []struct {
-		Verdict   string   `json:"verdict"`
-		Predicted int64    `json:"predicted"`
-		Actual    int64    `json:"actual"`
-		Hits      int64    `json:"hits"`
-		Precision *float64 `json:"precision"`
-		Recall    *float64 `json:"recall"`
-	} `json:"perVerdict"`
+	PerVerdict []verdictScoreBody `json:"perVerdict"`
 	Comparison []struct {
 		Model    string `json:"model"`
 		Strategy string `json:"strategy"`
 		Rated    int64  `json:"rated"`
 		Correct  int64  `json:"correct"`
 	} `json:"comparison"`
+}
+
+// verdictScoreBody is a VerdictScore of the response.
+type verdictScoreBody struct {
+	Verdict   string   `json:"verdict"`
+	Predicted int64    `json:"predicted"`
+	Actual    int64    `json:"actual"`
+	Hits      int64    `json:"hits"`
+	Precision *float64 `json:"precision"`
+	Recall    *float64 `json:"recall"`
 }
 
 type qualityTotals struct {
