@@ -5,6 +5,10 @@ import type { components } from "./schema";
 
 export type BenchRunSummary = components["schemas"]["BenchRunSummary"];
 export type BenchComparison = components["schemas"]["BenchComparison"];
+export type BenchRun = components["schemas"]["BenchRun"];
+export type BenchResult = components["schemas"]["BenchResult"];
+export type BenchThreshold = components["schemas"]["BenchThreshold"];
+export type BenchInterval = components["schemas"]["BenchInterval"];
 
 /** How many benchmark runs the dashboard lists. */
 export const BENCH_RUNS_SHOWN = 10;
@@ -19,6 +23,23 @@ export function useBenchRuns() {
   return useQuery({
     queryKey: ["bench", "runs"],
     queryFn: async () => unwrap(await api.client.GET("/bench/runs", { params: { query: { limit: BENCH_RUNS_SHOWN } } })),
+    staleTime: STALE_MS,
+  });
+}
+
+/** The query key of one benchmark run. */
+export function benchRunKey(id: string) {
+  return ["bench", "run", id] as const;
+}
+
+/** One benchmark run with its intervals, thresholds and results; waits until there is an id. */
+export function useBenchRun(id: string | undefined) {
+  const api = useApi();
+
+  return useQuery({
+    queryKey: benchRunKey(id ?? ""),
+    enabled: id !== undefined,
+    queryFn: async () => unwrap(await api.client.GET("/bench/runs/{id}", { params: { path: { id: id as string } } })),
     staleTime: STALE_MS,
   });
 }

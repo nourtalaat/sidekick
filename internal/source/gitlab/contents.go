@@ -12,6 +12,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/nourtalaat/sidekick/internal/gitlabapi"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
 
@@ -112,7 +113,7 @@ func (s *Source) getFile(ctx context.Context, input json.RawMessage) (source.Res
 	switch {
 	case isNotFound(err):
 		return s.directory(ctx, project, p, in.Ref)
-	case errors.Is(err, errResponseTooLarge):
+	case errors.Is(err, gitlabapi.ErrResponseTooLarge):
 		out.Omitted = omittedFileTooLarge
 
 		return structured(out, nil, true, false)
@@ -141,8 +142,8 @@ func (s *Source) readFile(ctx context.Context, project, p, ref string) (apiFile,
 
 	var file apiFile
 
-	path := projectPath(project, "repository", "files", url.PathEscape(p))
-	if _, err := s.client.getLimited(ctx, path, url.Values{"ref": {ref}}, &file, maxFileBody); err != nil {
+	path := gitlabapi.ProjectPath(project, "repository", "files", url.PathEscape(p))
+	if _, err := s.client.GetLimited(ctx, path, url.Values{"ref": {ref}}, &file, maxFileBody); err != nil {
 		return apiFile{}, fmt.Errorf("read the file: %w", err)
 	}
 
@@ -156,10 +157,10 @@ func (s *Source) directory(ctx context.Context, project, p, ref string) (source.
 	setIf(query, "path", p)
 	setIf(query, "ref", ref)
 
-	path := projectPath(project, "repository", "tree")
+	path := gitlabapi.ProjectPath(project, "repository", "tree")
 
 	entries, more, err := collect(ctx, maxEntries, func(ctx context.Context, page int) ([]apiTreeEntry, int, error) {
-		return listPage[apiTreeEntry](ctx, s.client, path, query, page, s.pageSize)
+		return gitlabapi.ListPage[apiTreeEntry](ctx, s.client, path, query, page, s.pageSize)
 	}, nil)
 	if err != nil {
 		return source.Result{}, fmt.Errorf("list %s of %s: %w", cmp.Or(p, "the root"), project, err)
@@ -216,9 +217,7 @@ func (s *Source) fileURL(project, ref, p string) string {
 
 // isNotFound reports whether err is GitLab's 404.
 func isNotFound(err error) bool {
-	se, ok := errors.AsType[*statusError](err)
-
-	return ok && se.code == http.StatusNotFound
+	return gitlabapi.IsStatus(err, http.StatusNotFound)
 }
 
 // entryType returns the kind of a directory entry as GitLab's tree endpoint

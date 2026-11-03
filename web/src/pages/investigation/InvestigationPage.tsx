@@ -17,6 +17,7 @@ import { SideColumn } from "./SideColumn";
 import { StepTimeline } from "./StepTimeline";
 import { VerdictPanel } from "./VerdictPanel";
 import { WatcherBox } from "./WatcherBox";
+import { WatcherChecks } from "./WatcherChecks";
 import "./InvestigationPage.css";
 
 /**
@@ -85,6 +86,7 @@ export default function InvestigationPage() {
               {stopWatcher.error.message}
             </p>
           )}
+          {watchers.data?.map((watcher) => <WatcherChecks key={watcher.id} watcher={watcher} />)}
           {investigation.data.report && <ReportSections report={investigation.data.report} run={investigation.data.run} />}
           <FixApplied inv={investigation.data} canAct={canAct} />
           <ProposalsSection proposals={investigation.data.proposals} canDecide={canDecide} />
