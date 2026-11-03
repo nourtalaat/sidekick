@@ -21,7 +21,7 @@ import (
 // again. CINone from a read is not final until the start grace has passed.
 // CITimedOut is never given by a read; the job sets it.
 const (
-	CIPending  = "pending"
+	CIPending  = action.CIPending
 	CIPassed   = output.CIPassed
 	CIFailed   = output.CIFailed
 	CINone     = output.CINone

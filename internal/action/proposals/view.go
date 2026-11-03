@@ -16,6 +16,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
+	"github.com/nourtalaat/sidekick/internal/output"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
@@ -68,7 +69,7 @@ func OfInvestigation(ctx context.Context, q db.DBTX, investigationID uuid.UUID) 
 	out := make([]action.Proposal, 0, len(rows))
 
 	for _, r := range rows {
-		p, err := proposalOf(ctx, r.ActionProposal, r.Route, r.DecidedByName, pullRequestOf(r.PrState, r.PrRepo, r.PrUrl, r.PrNumber, r.PrMergedAt, r.PrClosedAt, r.PrCheckedAt))
+		p, err := proposalOf(ctx, r.ActionProposal, r.Route, r.DecidedByName, pullRequestOf(r.PrState, r.PrRepo, r.PrUrl, r.PrNumber, r.PrMergedAt, r.PrClosedAt, r.PrCheckedAt, ciOf(ctx, r.CiState, r.CiDetail, r.CiCheckedAt, r.CiReportedAt)))
 		if err != nil {
 			return nil, fmt.Errorf("proposal %s: %w", r.ActionProposal.ID, err)
 		}
@@ -90,7 +91,7 @@ func Get(ctx context.Context, q db.DBTX, id uuid.UUID) (View, error) {
 		return View{}, fmt.Errorf("read proposal %s: %w", id, err)
 	}
 
-	p, err := proposalOf(ctx, r.ActionProposal, r.Route, r.DecidedByName, pullRequestOf(r.PrState, r.PrRepo, r.PrUrl, r.PrNumber, r.PrMergedAt, r.PrClosedAt, r.PrCheckedAt))
+	p, err := proposalOf(ctx, r.ActionProposal, r.Route, r.DecidedByName, pullRequestOf(r.PrState, r.PrRepo, r.PrUrl, r.PrNumber, r.PrMergedAt, r.PrClosedAt, r.PrCheckedAt, ciOf(ctx, r.CiState, r.CiDetail, r.CiCheckedAt, r.CiReportedAt)))
 	if err != nil {
 		return View{}, fmt.Errorf("proposal %s: %w", id, err)
 	}
@@ -138,7 +139,7 @@ func List(ctx context.Context, q db.DBTX, opts ListOptions) ([]View, error) {
 	out := make([]View, 0, len(rows))
 
 	for _, r := range rows {
-		p, err := proposalOf(ctx, r.ActionProposal, r.Route, r.DecidedByName, pullRequestOf(r.PrState, r.PrRepo, r.PrUrl, r.PrNumber, r.PrMergedAt, r.PrClosedAt, r.PrCheckedAt))
+		p, err := proposalOf(ctx, r.ActionProposal, r.Route, r.DecidedByName, pullRequestOf(r.PrState, r.PrRepo, r.PrUrl, r.PrNumber, r.PrMergedAt, r.PrClosedAt, r.PrCheckedAt, ciOf(ctx, r.CiState, r.CiDetail, r.CiCheckedAt, r.CiReportedAt)))
 		if err != nil {
 			return nil, fmt.Errorf("proposal %s: %w", r.ActionProposal.ID, err)
 		}
@@ -217,8 +218,9 @@ func proposalOf(ctx context.Context, row db.ActionProposal, route, decidedByName
 }
 
 // pullRequestOf returns the pull request that the columns of a left join
-// with pull_request_states describe, or nil when the join found no row.
-func pullRequestOf(state, repo, url *string, number *int64, mergedAt, closedAt, checkedAt *time.Time) *action.PullRequest {
+// with pull_request_states describe, or nil when the join found no row. ci is
+// the state of its CI, which is nil when the proposal has no report.
+func pullRequestOf(state, repo, url *string, number *int64, mergedAt, closedAt, checkedAt *time.Time, ci *action.PullRequestCI) *action.PullRequest {
 	if state == nil {
 		return nil
 	}
@@ -231,7 +233,35 @@ func pullRequestOf(state, repo, url *string, number *int64, mergedAt, closedAt, 
 		MergedAt:  mergedAt,
 		ClosedAt:  closedAt,
 		CheckedAt: deref(checkedAt),
+		CI:        ci,
 	}
+}
+
+// ciOf returns the CI that the columns of a left join with ci_reports
+// describe, or nil when the join found no row. A report whose detail cannot
+// be read is logged and shown with its state alone, so one bad row cannot
+// break a page.
+func ciOf(ctx context.Context, state *string, detail json.RawMessage, checkedAt, reportedAt *time.Time) *action.PullRequestCI {
+	if state == nil {
+		return nil
+	}
+
+	ci := &action.PullRequestCI{State: *state, CheckedAt: checkedAt, ReportedAt: reportedAt}
+
+	var stored output.CIReport
+	if err := json.Unmarshal(detail, &stored); err != nil {
+		slog.WarnContext(ctx, "the CI detail of a proposal cannot be read, so its state alone is shown", "error", err.Error())
+
+		return ci
+	}
+
+	ci.Passed, ci.Total, ci.FailedCount, ci.Message = stored.Passed, stored.Total, stored.FailedCount, stored.Message
+
+	for _, f := range stored.Failed {
+		ci.Failed = append(ci.Failed, action.CICheck{Name: f.Name, URL: f.URL})
+	}
+
+	return ci
 }
 
 // revisionsOf returns the revisions of a rollback's snapshot as a person

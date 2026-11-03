@@ -2278,6 +2278,53 @@ export interface components {
              * @description When Sidekick last read it from the host. A merged or closed pull request is not read again, so this stays at the time the check found it merged or closed.
              */
             checkedAt: string;
+            ci?: components["schemas"]["ProposalCI"];
+        };
+        /**
+         * @description What Sidekick found about the CI (the checks or the pipeline) of the
+         *     pull request or merge request. It follows the CI of the head commit
+         *     until a final state or the end of the wait, then reports once in the
+         *     investigation's thread. Absent when the proposal's action does not
+         *     report CI, and until Sidekick has made the pull request known to this
+         *     screen. The names of the failed checks come from the host: show them
+         *     as plain text.
+         */
+        ProposalCI: {
+            /**
+             * @description `pending` means Sidekick is still waiting and reads again soon. The
+             *     others are final: `passed`, `failed`, `none` (no check or pipeline
+             *     started within 10 minutes), `unknown` (Sidekick could not read the
+             *     CI, and `message` says why) and `timed_out` (checks had not
+             *     finished when Sidekick stopped waiting).
+             * @enum {string}
+             */
+            state: "pending" | "passed" | "failed" | "none" | "unknown" | "timed_out";
+            /** @description How many checks passed. Zero until Sidekick has read the CI. */
+            passed: number;
+            /** @description How many checks Sidekick read. */
+            total: number;
+            /** @description How many checks failed. `failed` names at most the first 10 of them. */
+            failedCount: number;
+            failed?: components["schemas"]["ProposalCICheck"][];
+            /** @description Sidekick's own sentence for the state `unknown`, such as which permission it needs. */
+            message?: string;
+            /**
+             * Format: date-time
+             * @description When Sidekick last read the CI.
+             */
+            checkedAt?: string;
+            /**
+             * Format: date-time
+             * @description When Sidekick reported the final state. Absent while the state is `pending`.
+             */
+            reportedAt?: string;
+        };
+        /** @description One check or pipeline job that failed. */
+        ProposalCICheck: {
+            /** @description The name the host gave the check, as plain text, cut to 80 characters. It is text from outside; show it as text, never as markup. */
+            name: string;
+            /** @description The address of the check on the host. A screen links it only when it is an http or https address. */
+            url?: string;
         };
         /**
          * @description One field that differs. `before` and `after` are the JSON values as

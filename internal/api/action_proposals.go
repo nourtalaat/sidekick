@@ -480,7 +480,7 @@ func (s *server) proposalOf(p action.Proposal, alertTitle string) apigen.Proposa
 	}
 
 	if p.PullRequest != nil {
-		out.PullRequest = pullRequestOf(*p.PullRequest)
+		out.PullRequest = s.pullRequestOf(*p.PullRequest)
 	}
 
 	return out
@@ -507,8 +507,8 @@ func (s *server) proposalsOf(list []action.Proposal) []apigen.Proposal {
 }
 
 // pullRequestOf is the API's view of the state of a proposal's pull request.
-func pullRequestOf(pr action.PullRequest) *apigen.ProposalPullRequest {
-	return &apigen.ProposalPullRequest{
+func (s *server) pullRequestOf(pr action.PullRequest) *apigen.ProposalPullRequest {
+	out := &apigen.ProposalPullRequest{
 		Repo:      pr.Repo,
 		Number:    pr.Number,
 		Url:       pr.URL,
@@ -517,6 +517,38 @@ func pullRequestOf(pr action.PullRequest) *apigen.ProposalPullRequest {
 		ClosedAt:  pr.ClosedAt,
 		CheckedAt: pr.CheckedAt,
 	}
+
+	if pr.CI != nil {
+		out.Ci = s.ciOf(*pr.CI)
+	}
+
+	return out
+}
+
+// ciOf is the API's view of the CI of a pull request. The names of checks and
+// the message come from the host or are built from it, so they are masked like
+// any other text.
+func (s *server) ciOf(ci action.PullRequestCI) *apigen.ProposalCI {
+	out := &apigen.ProposalCI{
+		State:       apigen.ProposalCIState(ci.State),
+		Passed:      ci.Passed,
+		Total:       ci.Total,
+		FailedCount: ci.FailedCount,
+		Message:     nonEmptyText(s.mask(ci.Message)),
+		CheckedAt:   ci.CheckedAt,
+		ReportedAt:  ci.ReportedAt,
+	}
+
+	if len(ci.Failed) > 0 {
+		failed := make([]apigen.ProposalCICheck, 0, len(ci.Failed))
+		for _, f := range ci.Failed {
+			failed = append(failed, apigen.ProposalCICheck{Name: s.mask(f.Name), Url: nonEmptyText(f.URL)})
+		}
+
+		out.Failed = &failed
+	}
+
+	return out
 }
 
 // proposalCursor encodes where a page of proposals ends.

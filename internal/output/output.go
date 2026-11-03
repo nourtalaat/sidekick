@@ -190,11 +190,11 @@ func (w WatcherState) EventName() string {
 // CI states of a CIReport. Only these are reported: a read that is not
 // final is not shown to an output.
 const (
-	CIPassed   = "passed"
-	CIFailed   = "failed"
-	CINone     = "none"
-	CIUnknown  = "unknown"
-	CITimedOut = "timed_out"
+	CIPassed   = action.CIPassed
+	CIFailed   = action.CIFailed
+	CINone     = action.CINone
+	CIUnknown  = action.CIUnknown
+	CITimedOut = action.CITimedOut
 )
 
 // CIReport is the final CI result of a pull request or merge request that a
