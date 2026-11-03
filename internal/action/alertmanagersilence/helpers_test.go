@@ -195,7 +195,7 @@ func (am *fakeAM) state(s *fakeSilence) string {
 	switch {
 	case am.now.Before(s.StartsAt):
 		return "pending"
-	case am.now.After(s.EndsAt):
+	case !am.now.Before(s.EndsAt):
 		return "expired"
 	default:
 		return "active"

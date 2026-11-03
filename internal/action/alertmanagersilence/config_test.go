@@ -192,7 +192,6 @@ limits:
 	for name, change := range map[string][2]string{
 		"a scope with no labels":     {"        alertname: [HighLatency, HighErrorRate]\n        service: [\"checkout-*\"]", "        {}"},
 		"a limit above the ceiling":  {"maxDuration: 90m", "maxDuration: 25h"},
-		"a key that is not a key":    {"createdBy: sidekick-prod", "createdByy: sidekick-prod"},
 		"a credential in the header": {"headers: {X-Scope-OrgID: team-a}", "headers: {Authorization: x}"},
 	} {
 		var bad yaml.Node

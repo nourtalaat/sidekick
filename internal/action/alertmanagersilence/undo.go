@@ -120,9 +120,7 @@ func liveJSON(silences []silence) (json.RawMessage, error) {
 	live := make([]liveSilence, 0, len(silences))
 
 	for _, s := range silences {
-		live = append(live, liveSilence{
-			ID: s.ID, State: s.State, Matchers: s.Matchers, StartsAt: s.StartsAt, EndsAt: s.EndsAt, CreatedBy: s.CreatedBy, Comment: s.Comment,
-		})
+		live = append(live, liveSilence(s))
 	}
 
 	var v any = live

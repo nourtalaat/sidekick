@@ -1,6 +1,7 @@
 package httpauth_test
 
 import (
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -11,6 +12,18 @@ import (
 
 func ref(name string) *registry.SecretRef {
 	return &registry.SecretRef{Name: name, Key: "value"}
+}
+
+// withUserInfo returns raw with a user name and a password in it.
+func withUserInfo(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		panic(err)
+	}
+
+	u.User = url.UserPassword("user", "secret")
+
+	return u.String()
 }
 
 func TestConfigCheck(t *testing.T) {
@@ -116,7 +129,7 @@ func TestCheckAPIURL(t *testing.T) {
 		{name: "http to localhost with credentials", raw: "http://localhost:9093", credentials: true},
 		{name: "http with credentials", raw: "http://am:9093", credentials: true, wantErr: "must use https"},
 		{name: "a host that only looks like loopback", raw: "http://localhost.example.com", credentials: true, wantErr: "must use https"},
-		{name: "user info", raw: "https://u:p@am.example.com", wantErr: "must not hold a user name or password"},
+		{name: "user info", raw: withUserInfo("https://am.example.com"), wantErr: "must not hold a user name or password"},
 		{name: "a query", raw: "https://am.example.com?x=1", wantErr: "must be an absolute http or https URL"},
 		{name: "a fragment", raw: "https://am.example.com#x", wantErr: "must be an absolute http or https URL"},
 		{name: "no host", raw: "https://", wantErr: "must be an absolute http or https URL"},
