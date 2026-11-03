@@ -116,6 +116,56 @@ each namespace to the sorted PrometheusRule names listed for it.
 {{- end }}
 
 {{/*
+What the actions in config of type kubernetes.rollback ask of the cluster
+Sidekick runs in, as JSON. "any" says whether there is one. "accounts" maps
+each service account they use (serviceAccount, sidekick-kubernetes-rollback
+when it is not set) to the namespaces its actions list, each namespace to
+the workload resources of their kinds (deployments, statefulsets,
+daemonsets; all three when limits.kinds is not set), and each resource to
+the sorted names listed for it.
+*/}}
+{{- define "sidekick.actions.rollback.access" -}}
+{{- $access := dict "any" false "accounts" dict }}
+{{- $resourceOf := dict "Deployment" "deployments" "StatefulSet" "statefulsets" "DaemonSet" "daemonsets" }}
+{{- range $name, $act := dig "actions" dict (default dict .Values.config) }}
+{{- if and (kindIs "map" $act) (eq (toString (get $act "type")) "kubernetes.rollback") }}
+{{- $_ := set $access "any" true }}
+{{- $account := default "sidekick-kubernetes-rollback" (get $act "serviceAccount") }}
+{{- if not (hasKey $access.accounts $account) }}
+{{- $_ = set $access.accounts $account dict }}
+{{- end }}
+{{- $namespaces := get $access.accounts $account }}
+{{- $limits := default dict (get $act "limits") }}
+{{- $names := default list (get $limits "names") | compact }}
+{{- $kinds := default (list "Deployment" "StatefulSet" "DaemonSet") (get $limits "kinds") }}
+{{- range $namespace := (default list (get $limits "namespaces") | compact) }}
+{{- $resources := default dict (get $namespaces $namespace) }}
+{{- range $kind := $kinds }}
+{{- $resource := get $resourceOf $kind }}
+{{- if $resource }}
+{{- $_ = set $resources $resource (concat (default list (get $resources $resource)) $names | uniq | sortAlpha) }}
+{{- end }}
+{{- end }}
+{{- $_ = set $namespaces $namespace $resources }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- toJson $access }}
+{{- end }}
+
+{{/*
+The service accounts of the actions of every type, as JSON: "accounts" is
+their sorted names, and "any" says whether there is one. Each type has an
+access template of its own; this one joins them.
+*/}}
+{{- define "sidekick.actions.accounts" -}}
+{{- $rules := include "sidekick.actions.access" . | fromJson }}
+{{- $rollbacks := include "sidekick.actions.rollback.access" . | fromJson }}
+{{- $accounts := concat (keys $rules.accounts) (keys $rollbacks.accounts) | uniq | sortAlpha }}
+{{- dict "any" (or $rules.any $rollbacks.any) "accounts" $accounts | toJson }}
+{{- end }}
+
+{{/*
 The name of a Role or binding of the actions, which starts with the
 release's namespace for the same reason as sidekick.kubernetesSource.rbacName.
 Takes a dict with "context" and "suffix": "tokens" for the Role that lets
@@ -134,6 +184,6 @@ validator's Jobs.
 */}}
 {{- define "sidekick.automountToken" -}}
 {{- $access := include "sidekick.kubernetesSource.access" . | fromJson }}
-{{- $actions := include "sidekick.actions.access" . | fromJson }}
+{{- $actions := include "sidekick.actions.accounts" . | fromJson }}
 {{- or .Values.serviceAccount.automountToken $access.any $actions.any (eq (include "sidekick.validator.job" .) "true") }}
 {{- end }}
