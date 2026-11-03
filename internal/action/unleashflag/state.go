@@ -74,7 +74,7 @@ func newState(enabled bool, live []liveStrategy) (state, error) {
 	st := state{Enabled: enabled, Strategies: make(map[string]strategy, len(live))}
 
 	for _, l := range live {
-		s, err := l.strategy.normalised()
+		s, err := l.normalised()
 		if err != nil {
 			return state{}, fmt.Errorf("read strategy %s: %w", l.ID, err)
 		}

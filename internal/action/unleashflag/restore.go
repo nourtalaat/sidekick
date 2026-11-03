@@ -161,7 +161,7 @@ func strategyOf(raw json.RawMessage) (string, strategy, error) {
 		return "", strategy{}, errNoEventData
 	}
 
-	st, err := held.strategy.normalised()
+	st, err := held.normalised()
 	if err != nil {
 		return "", strategy{}, fmt.Errorf("read the strategy: %w", err)
 	}
