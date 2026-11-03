@@ -72,6 +72,7 @@ type Code struct {
 }
 
 var (
+	_ action.Action          = (*Code)(nil)
 	_ action.ProposalChecker = (*Code)(nil)
 	_ action.Snapshotter     = (*Code)(nil)
 )
