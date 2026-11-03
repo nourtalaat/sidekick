@@ -134,7 +134,12 @@ func (m *MR) open(ctx context.Context, params Params, branch string, inv action.
 	}
 
 	if m.limits.draft() {
-		return gitlabgit.OpenDraft(ctx, m.client, params.Project, branch, req)
+		mr, err := gitlabgit.OpenDraft(ctx, m.client, params.Project, branch, req)
+		if err != nil {
+			return nil, fmt.Errorf("open the draft merge request: %w", err)
+		}
+
+		return mr, nil
 	}
 
 	mr, err := gitlabgit.OpenMergeRequest(ctx, m.client, params.Project, req)

@@ -2,6 +2,7 @@ package githubpr
 
 import (
 	"context"
+	"fmt"
 
 	gh "github.com/google/go-github/v93/github"
 
@@ -12,10 +13,20 @@ import (
 // GitHub made it a draft, and closes it if it did not.
 func (p *PR) open(ctx context.Context, owner, name, branch string, req gh.CreatePullRequest) (*gh.PullRequest, error) {
 	if p.limits.draft() {
-		return githubgit.OpenDraft(ctx, p.client, owner, name, branch, req)
+		pr, err := githubgit.OpenDraft(ctx, p.client, owner, name, branch, req)
+		if err != nil {
+			return nil, fmt.Errorf("open the draft pull request: %w", err)
+		}
+
+		return pr, nil
 	}
 
-	return githubgit.OpenPullRequest(ctx, p.client, owner, name, req)
+	pr, err := githubgit.OpenPullRequest(ctx, p.client, owner, name, req)
+	if err != nil {
+		return nil, fmt.Errorf("open the pull request: %w", err)
+	}
+
+	return pr, nil
 }
 
 // requireDraft checks a pull request found from an earlier attempt when
@@ -26,5 +37,9 @@ func (p *PR) requireDraft(ctx context.Context, owner, name, branch string, pr *g
 		return nil
 	}
 
-	return githubgit.RequireDraft(ctx, p.client, owner, name, branch, pr)
+	if err := githubgit.RequireDraft(ctx, p.client, owner, name, branch, pr); err != nil {
+		return fmt.Errorf("check that the pull request is a draft: %w", err)
+	}
+
+	return nil
 }
