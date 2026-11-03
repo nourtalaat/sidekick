@@ -3897,6 +3897,139 @@ nothing once the release is restored.
 `internal/action/helmrollback` name the files. With `networkPolicy.restrictEgress`
 on, allow egress to the Kubernetes API server.
 
+##### `azure.container_app_rollback`
+
+Moves all the traffic of an Azure Container App back to an earlier revision,
+through Azure Resource Manager. It is approval-only, so a `read-write` route
+may list it only when the action sets `allowReadWrite: true`. Use it on
+routes with `mode: approved`: the traffic moves as soon as the proposal is
+approved. The action does not wait for the app to be healthy; the
+[watcher](#watchers) of the investigation reports whether the error rate
+recovers. A rollback fixes the cause of an incident, not a noisy monitor, so
+it never counts as a fix of a monitor.
+
+```yaml
+actions:
+  rollback-checkout:
+    type: azure.container_app_rollback
+    tenantID: 22222222-3333-4444-5555-666666666666
+    clientID: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+    clientSecret: { name: sidekick-azure-rollback, key: client-secret }   # leave out on AKS
+    maxRevisionsBack: 1            # default 1, at most 10
+    limits:
+      subscriptions: [11111111-2222-3333-4444-555555555555]
+      resourceGroups: [shop]
+      apps: ["checkout-*", worker]
+
+routes:
+  - name: checkout
+    mode: approved
+    actions: [rollback-checkout]
+```
+
+- `tenantID` and `clientID` are the Microsoft Entra tenant and the client ID
+  of the identity. They are GUIDs. Left out, they come from `AZURE_TENANT_ID`
+  and `AZURE_CLIENT_ID`, which the AKS Workload Identity webhook sets.
+- `clientSecret` is the `{ name, key }` of a Secret that holds the client
+  secret of an app registration, for running outside AKS. It needs
+  `tenantID` and `clientID`, and the secret is read again for each new
+  token, so a rotated secret needs no restart. Left out, the action uses AKS
+  Workload Identity. There is no other credential source: the action does not
+  try the other ways the Azure tools look for a login. Give the action an
+  identity of its own, apart from the identity of any Azure source.
+- `allowReadWrite` is false unless you set it. See [Action
+  modes](#action-modes).
+- `maxRevisionsBack` is how many revisions back the model may ask to go. The
+  default is 1; a value written in the file must be from 1 to 10.
+- `limits.subscriptions` lists the subscription IDs, `limits.resourceGroups`
+  the resource group names and `limits.apps` the container app names, or
+  patterns in which `*` stands for any run of characters, such as
+  `checkout-*`. All three are required, so nothing is allowed by default.
+  App names are lower case, as Azure makes them.
+
+The model proposes an `app`, and optionally a `subscription`, a
+`resourceGroup` and `revisionsBack` (default 1). The subscription and the
+resource group may be left out when the limits list only one of each. Sidekick
+checks them against the limits before anything is sent.
+
+**Which revision.** The running revision is the one all the traffic goes to.
+A weight that follows the latest revision counts as the latest revision that
+is ready, and Sidekick checks that against the traffic that Azure reports for
+each revision. "N back" counts every revision of the app by the time it was
+created, and takes the Nth one older than the running revision. When it
+proposes, Sidekick refuses, with a message the model can act on, an app that:
+
+- is in **single revision mode**. Azure then sends all traffic to the latest
+  revision and there are no weights to move. The way back is to deploy the
+  earlier template, which this action does not do;
+- has no ingress;
+- sends its traffic to several revisions, or to none;
+- has an inactive revision where it would go. Azure sends no traffic to an
+  inactive revision, and the action does not activate revisions;
+- has fewer older revisions than asked for, or has revisions whose creation
+  time Azure does not report.
+
+The approver sees both revisions: the revision name, the container image,
+when it was created, and who deployed it, which Container Apps does not
+record and so shows as "unknown".
+
+**Pinning.** If the traffic followed the latest revision, the rollback sets
+it to the older revision by name. That is a pin: a revision made by a later
+deploy gets no traffic until someone moves it. The proposal, Slack and the
+web UI say so, and so does the result. Labels of the traffic list stay, and
+the action changes no other setting of the app: it sends Azure a JSON merge
+patch that holds only the traffic list (and the app's own location), and
+Azure replaces the list as a whole.
+
+**What the identity needs.** Create a custom role with exactly these actions
+and assign it to the identity on the container app or on its resource group,
+never on the subscription:
+
+```json
+{
+  "Name": "Sidekick Container Apps rollback",
+  "IsCustom": true,
+  "Description": "Moves the traffic of a container app between its revisions.",
+  "Actions": [
+    "Microsoft.App/containerApps/read",
+    "Microsoft.App/containerApps/write",
+    "Microsoft.App/containerApps/revisions/read"
+  ],
+  "NotActions": [],
+  "DataActions": [],
+  "NotDataActions": [],
+  "AssignableScopes": ["/subscriptions/<subscription id>/resourceGroups/<resource group>"]
+}
+```
+
+`write` lets the identity change any setting of the app: Azure cannot limit
+it to the traffic list, and the action only ever sends the traffic list. The
+action never starts, stops, restarts or deletes an app, never activates a
+revision and never reads the app's secrets. Do not give the identity a broad
+role such as Contributor. If an app uses a user-assigned managed identity or
+a private registry, Azure may ask for more permissions on a change; try one
+rollback on a test app first.
+
+**When it runs.** Right before it changes the traffic, Sidekick reads the app
+again. The proposal fails with a conflict when the traffic list, the latest
+revision or the revisions mode changed since the proposal, or when the
+revision it would move to is not active any more. Azure has no precondition
+for this change (container apps offer no ETag to check), so a change made in
+the moment between that read and the write is not noticed. The traffic
+change is a long-running operation in Azure, and Sidekick waits for it
+within the 5 minutes a run has. If a worker dies after the change, the next
+try finds all the traffic on the revision and succeeds without a second
+change; while Azure still reports the app as updating, the try waits and
+runs again.
+
+**Undo.** An approver can undo a rollback that worked. Undo moves all the
+traffic back to the revision that ran before, and sets it the way it was: by
+name, or following the latest revision again while that revision is still the
+latest one that is ready (otherwise it is set by name). If the traffic is not
+all on the revision the rollback moved it to, Undo writes nothing and shows
+what runs now, and asks again with `force`. If the traffic is on the
+earlier revision already, Undo succeeds without a change.
+
 ##### `aws.ecs_rollback`
 
 Puts an Amazon ECS service back on an earlier revision of its task definition

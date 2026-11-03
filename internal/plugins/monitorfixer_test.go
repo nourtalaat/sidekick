@@ -7,6 +7,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/awsecs"
+	"github.com/nourtalaat/sidekick/internal/action/azurecontainerapp"
 	"github.com/nourtalaat/sidekick/internal/action/datadog"
 	"github.com/nourtalaat/sidekick/internal/action/gcprun"
 	"github.com/nourtalaat/sidekick/internal/action/githubcode"
@@ -46,6 +47,7 @@ func TestMonitorFixers(t *testing.T) {
 		{name: "unleash.flag fixes nothing", action: &unleashflag.Flag{}},
 		{name: "aws.ecs_rollback fixes nothing", action: &awsecs.Rollback{}},
 		{name: "kubernetes.rollback fixes nothing", action: &kubernetesrollback.Rollback{}},
+		{name: "azure.container_app_rollback fixes nothing", action: &azurecontainerapp.Rollback{}},
 	}
 
 	for _, tt := range tests {

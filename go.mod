@@ -6,6 +6,7 @@ require (
 	cloud.google.com/go/auth v0.23.2
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.3
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.15.0
+	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/appcontainers/armappcontainers/v5 v5.0.0
 	github.com/anthropics/anthropic-sdk-go/v2 v2.3.0
 	github.com/aws/aws-sdk-go-v2 v1.47.4
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.24

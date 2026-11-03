@@ -135,3 +135,4 @@ proposals](web-ui.md#action-proposals) for how people approve them.
 - `unleash.flag`: turns an Unleash feature flag off in one environment, or undoes its newest change. See [its keys](configuration.md#unleashflag).
 - `aws.ecs_rollback`: puts an Amazon ECS service back on an earlier task definition revision, with an IAM role of its own. See [its keys](configuration.md#awsecs_rollback).
 - `helm.rollback`: puts a Helm release back on an earlier revision, with Helm's Go library. See [its keys](configuration.md#helmrollback).
+- `azure.container_app_rollback`: moves all the traffic of an Azure Container App back to an earlier revision, and puts the traffic back on Undo. See [its keys](configuration.md#azurecontainer_app_rollback).
