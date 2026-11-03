@@ -575,17 +575,19 @@ route is read-only now or no longer lists the action, answers 409 and can
 only be rejected. The investigation page lists its proposals too, with the
 same buttons for approvers.
 
-A proposal that changes a definition in place, such as a monitor, also
-shows **Changes, field by field**: each field with its value before and
-after, as plain text with hidden characters written as `\u` escapes. A
-proposal that deletes something says so, and Approve repeats that Sidekick
-cannot undo a delete. When the change worked and the action can undo it, an
-approver sees **Undo**, which asks once. Undo puts back only the fields
-Sidekick changed and leaves every other field as it is. If someone changed
-one of those fields since, nothing is restored: the card shows what a
-restore would overwrite, and **Restore anyway** restores it. The undo is a
-proposal of its own, approved by the person who asked, and the original
-becomes undone.
+A proposal that changes a definition in place, such as a monitor, also shows
+**Changes, field by field**: each field with its value before and after, in
+two labelled blocks that scroll and take focus, as plain text with hidden
+characters written as `\u` escapes. A proposal that deletes something says
+so, and Approve repeats that Sidekick cannot undo a delete. When the change
+worked and the action can undo it, an approver sees **Undo**, which asks
+once. Undo puts back only the fields Sidekick changed and leaves every other
+field as it is. If someone changed one of those fields since, nothing is
+restored: the card shows what a restore would overwrite, and **Restore
+anyway** restores it. The undo is a proposal of its own, approved by the
+person who asked, and the original becomes undone. The undo shows **Undoes**
+with a link to the proposal it restores, which opens its investigation and
+moves focus to that proposal.
 
 - `GET /api/v1/proposals` (approver) lists proposals a page at a time, with
   `status` (repeat it for several, default `proposed`), `cursor` and
