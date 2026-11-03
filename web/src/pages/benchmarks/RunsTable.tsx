@@ -11,6 +11,11 @@ const STARTED_BY_WORDS: Record<string, string> = {
   gate: "Strategy gate",
 };
 
+/** Who started a run, in words; a value this page does not know shows as the API sent it. */
+export function startedByOf(triggeredBy: string): string {
+  return STARTED_BY_WORDS[triggeredBy] ?? triggeredBy;
+}
+
 interface RunsTableProps {
   /** The name of the table region, which says what the rows are. */
   label: string;
@@ -54,7 +59,7 @@ export function RunsTable({ label, runs }: RunsTableProps) {
               {run.scenarioSet}
               <span className="sk-table__secondary">{`${count(run.repeats, "repeat")}, ${count(run.metrics.runs, "run")}`}</span>
             </td>
-            <td>{STARTED_BY_WORDS[run.triggeredBy] ?? run.triggeredBy}</td>
+            <td>{startedByOf(run.triggeredBy)}</td>
           </tr>
         ))}
       </tbody>

@@ -1,0 +1,55 @@
+.sk-benchrun__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sk-space-3);
+}
+
+.sk-benchrun__title .sk-page__title {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.sk-benchrun__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: var(--sk-space-4);
+  margin: 0;
+}
+
+.sk-benchrun__fact dt {
+  color: var(--sk-text-secondary);
+  font: var(--sk-type-label);
+}
+
+.sk-benchrun__fact dd {
+  margin: var(--sk-space-1) 0 0;
+  overflow-wrap: anywhere;
+}
+
+.sk-benchrun__mono {
+  font: var(--sk-type-mono);
+}
+
+.sk-table td.sk-benchrun__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.sk-benchrun__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sk-space-1);
+  min-height: var(--sk-size-control-md);
+  padding: 0;
+  background: none;
+  color: inherit;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sk-benchrun__repeats {
+  background: var(--sk-bg-sunken);
+}
