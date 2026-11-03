@@ -29,7 +29,7 @@ func TestSnapshot(t *testing.T) {
 	b.github.ExpectAllCalled()
 
 	params := validParams()
-	params.Files = []FileChange{
+	params.Files = []gitchange.FileChange{
 		{Path: testRulesPath, Content: text(testRulesAfter)},
 		{Path: "prometheus/rules/new.yaml", Content: text("groups: []\nx: 1\n")},
 		{Path: "prometheus/rules/old.yaml", Delete: true},

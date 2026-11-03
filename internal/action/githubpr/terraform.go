@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/validateclient"
 )
 
@@ -40,7 +41,7 @@ type moduleLoad struct {
 // terraformRequests makes one validation request for each module directory
 // that a change touches: the files of the directory at the base commit, with
 // the changes applied, and the local modules it uses.
-func terraformRequests(ctx context.Context, r *reader, changes []change) ([]validateclient.Request, error) {
+func terraformRequests(ctx context.Context, r *reader, changes []gitchange.PlannedFile) ([]validateclient.Request, error) {
 	var requests []validateclient.Request
 
 	for _, dir := range terraformDirs(changes) {
@@ -61,15 +62,15 @@ func terraformRequests(ctx context.Context, r *reader, changes []change) ([]vali
 // terraformDirs lists, in order, the directories of the module files that
 // changes touch. Files of other kinds in the same directory, such as a
 // README, do not make a module.
-func terraformDirs(changes []change) []string {
+func terraformDirs(changes []gitchange.PlannedFile) []string {
 	var dirs []string
 
 	for _, c := range changes {
-		if c.format != validateclient.FormatTerraform || !isModuleFile(c.path) {
+		if c.Format != validateclient.FormatTerraform || !isModuleFile(c.Path) {
 			continue
 		}
 
-		if dir := path.Dir(c.path); !slices.Contains(dirs, dir) {
+		if dir := path.Dir(c.Path); !slices.Contains(dirs, dir) {
 			dirs = append(dirs, dir)
 		}
 	}
@@ -157,19 +158,19 @@ func localModules(dir, text string) []string {
 // one at the base, and a deleted file goes away. A change to a file that
 // is not part of a module, or that is in a directory the module does not
 // use, is left out.
-func applyChanges(files map[string]string, dirs []string, changes []change) {
+func applyChanges(files map[string]string, dirs []string, changes []gitchange.PlannedFile) {
 	for _, c := range changes {
-		if c.format != validateclient.FormatTerraform || !isModuleFile(c.path) || !slices.Contains(dirs, path.Dir(c.path)) {
+		if c.Format != validateclient.FormatTerraform || !isModuleFile(c.Path) || !slices.Contains(dirs, path.Dir(c.Path)) {
 			continue
 		}
 
-		if c.deleted() {
-			delete(files, c.path)
+		if c.Deleted() {
+			delete(files, c.Path)
 
 			continue
 		}
 
-		files[c.path] = *c.content
+		files[c.Path] = *c.Content
 	}
 }
 

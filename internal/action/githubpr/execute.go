@@ -152,10 +152,10 @@ func (p *PR) push(ctx context.Context, pre *prepared, branch string, inv action.
 	entries := make([]*gh.TreeEntry, 0, len(pre.changes))
 
 	for _, c := range pre.changes {
-		entry := &gh.TreeEntry{Path: new(c.path)}
+		entry := &gh.TreeEntry{Path: new(c.Path)}
 
-		if !c.deleted() {
-			entry.Mode, entry.Type, entry.Content = new(fileMode), new(blobType), c.content
+		if !c.Deleted() {
+			entry.Mode, entry.Type, entry.Content = new(fileMode), new(blobType), c.Content
 		}
 
 		entries = append(entries, entry)

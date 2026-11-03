@@ -64,7 +64,7 @@ func (*validationError) Unwrap() error {
 // own. It returns a *validationError when any file fails, listing the
 // errors of all of them. A validator that cannot be reached, or that is
 // busy, is an error that is tried again.
-func (p *PR) validateFiles(ctx context.Context, r *reader, changes []change) error {
+func (p *PR) validateFiles(ctx context.Context, r *reader, changes []gitchange.PlannedFile) error {
 	requests := flatRequests(changes)
 
 	modules, err := terraformRequests(ctx, r, changes)
@@ -106,15 +106,15 @@ func (p *PR) validateFiles(ctx context.Context, r *reader, changes []change) err
 
 // flatRequests makes one request for each format whose files are checked one
 // by one: the files of the rule and Grafana formats that the changes write.
-func flatRequests(changes []change) []validateclient.Request {
+func flatRequests(changes []gitchange.PlannedFile) []validateclient.Request {
 	var requests []validateclient.Request
 
 	for _, format := range []validateclient.Format{validateclient.FormatPrometheusRules, validateclient.FormatGrafanaAlertFile} {
 		var files []validateclient.File
 
 		for _, c := range changes {
-			if c.format == format && !c.deleted() {
-				files = append(files, validateclient.File{Path: c.path, Content: *c.content})
+			if c.Format == format && !c.Deleted() {
+				files = append(files, validateclient.File{Path: c.Path, Content: *c.Content})
 			}
 		}
 

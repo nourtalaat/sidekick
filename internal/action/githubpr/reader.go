@@ -7,6 +7,8 @@ import (
 	"net/http"
 
 	gh "github.com/google/go-github/v93/github"
+
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 )
 
 // maxBaseFileBytes is the largest file the action reads from the base
@@ -127,7 +129,7 @@ func (r *reader) file(ctx context.Context, path string) (readFile, error) {
 		return readFile{}, fmt.Errorf("decode %s: %w", path, err)
 	}
 
-	if !validContent(text) {
+	if !gitchange.ValidContent(text) {
 		return readFile{}, fmt.Errorf("%s %w", path, errNotText)
 	}
 
@@ -195,7 +197,7 @@ func (r *reader) blob(ctx context.Context, e dirEntry) (string, error) {
 	}
 
 	text := string(raw)
-	if !validContent(text) {
+	if !gitchange.ValidContent(text) {
 		return "", fmt.Errorf("%s %w", e.path, errNotText)
 	}
 

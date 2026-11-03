@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
 )
 
@@ -53,7 +54,7 @@ func undoSnapshot() action.Snapshot {
 // undoParams returns the parameters of the proposal that is undone.
 func undoParams() Params {
 	p := validParams()
-	p.Files = []FileChange{
+	p.Files = []gitchange.FileChange{
 		{Path: testRulesPath, Content: text(testRulesAfter)},
 		{Path: "prometheus/rules/new.yaml", Content: text("x: 1\n")},
 		{Path: "prometheus/rules/old.yaml", Delete: true},

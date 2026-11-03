@@ -289,7 +289,7 @@ func (p *PR) revertRequest(inv action.Invocation, params Params, orig *gh.PullRe
 		fmt.Fprintf(&b, " [The investigation](%s).", link)
 	}
 
-	title := revertPrefix + source.CutText(gitchange.OneLine(gitchange.PlainText(params.Title)), maxTitleChars-len(revertPrefix))
+	title := revertPrefix + source.CutText(gitchange.OneLine(gitchange.PlainText(params.Title)), gitchange.MaxTitleChars-len(revertPrefix))
 
 	return gh.CreatePullRequest{
 		Title: new(title),

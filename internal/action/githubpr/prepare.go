@@ -17,7 +17,7 @@ type loaded struct {
 	owner   string
 	name    string
 	base    base
-	changes []change
+	changes []gitchange.PlannedFile
 	reader  *reader
 	// files is the state at the base of each changed path.
 	files map[string]readFile
@@ -54,12 +54,12 @@ func (p *PR) load(ctx context.Context, raw json.RawMessage) (*loaded, error) {
 	files := make(map[string]readFile, len(changes))
 
 	for _, c := range changes {
-		f, err := r.file(ctx, c.path)
+		f, err := r.file(ctx, c.Path)
 		if err != nil {
 			return nil, fmt.Errorf("read the file at the base: %w", err)
 		}
 
-		files[c.path] = f
+		files[c.Path] = f
 	}
 
 	return &loaded{params: params, owner: owner, name: name, base: head, changes: changes, reader: r, files: files}, nil
@@ -105,19 +105,19 @@ func (p *PR) checkLines(l *loaded) error {
 	left := p.limits.MaxChangedLines
 
 	for _, c := range l.changes {
-		f := l.files[c.path]
+		f := l.files[c.Path]
 
-		if c.deleted() && !f.exists {
-			return fmt.Errorf("%w: path %q does not exist on the base branch, so it cannot be deleted", action.ErrPermanent, c.path)
+		if c.Deleted() && !f.exists {
+			return fmt.Errorf("%w: path %q does not exist on the base branch, so it cannot be deleted", action.ErrPermanent, c.Path)
 		}
 
 		updated := ""
-		if !c.deleted() {
-			updated = *c.content
+		if !c.Deleted() {
+			updated = *c.Content
 		}
 
-		if f.exists && !c.deleted() && f.text == updated {
-			return fmt.Errorf("%w: path %q already has this content; leave it out of the files", action.ErrPermanent, c.path)
+		if f.exists && !c.Deleted() && f.text == updated {
+			return fmt.Errorf("%w: path %q already has this content; leave it out of the files", action.ErrPermanent, c.Path)
 		}
 
 		n, within := gitchange.ChangedLines(f.text, updated, left)

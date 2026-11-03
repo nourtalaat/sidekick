@@ -11,6 +11,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/validateclient"
@@ -209,7 +210,7 @@ limits:
 func TestValidatorOfDeps(t *testing.T) {
 	t.Parallel()
 
-	changes := []change{{path: "prometheus/rules/a.yaml", format: validateclient.FormatPrometheusRules, content: text("groups: []\n")}}
+	changes := []gitchange.PlannedFile{{Path: "prometheus/rules/a.yaml", Format: validateclient.FormatPrometheusRules, Content: text("groups: []\n")}}
 
 	t.Run("a validator in the deps is used instead of the URL", func(t *testing.T) {
 		t.Parallel()

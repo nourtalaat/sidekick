@@ -61,11 +61,11 @@ func (p *PR) Snapshot(ctx context.Context, raw json.RawMessage) (action.Snapshot
 	left := p.limits.MaxChangedLines
 
 	for _, c := range l.changes {
-		f := l.files[c.path]
+		f := l.files[c.Path]
 
 		updated := ""
-		if !c.deleted() {
-			updated = *c.content
+		if !c.Deleted() {
+			updated = *c.Content
 		}
 
 		added, removed, within := gitchange.LineCounts(f.text, updated, left)
@@ -76,12 +76,12 @@ func (p *PR) Snapshot(ctx context.Context, raw json.RawMessage) (action.Snapshot
 		left -= added + removed
 
 		if f.exists {
-			before[c.path] = blobRef{Blob: f.sha}
+			before[c.Path] = blobRef{Blob: f.sha}
 		} else {
-			before[c.path] = nil
+			before[c.Path] = nil
 		}
 
-		after[c.path] = afterOf(c, f, added, removed)
+		after[c.Path] = afterOf(c, f, added, removed)
 	}
 
 	beforeRaw, err := json.Marshal(before)
@@ -103,14 +103,14 @@ func (p *PR) Snapshot(ctx context.Context, raw json.RawMessage) (action.Snapshot
 }
 
 // afterOf describes the file as the change leaves it.
-func afterOf(c change, f readFile, added, removed int) afterEntry {
+func afterOf(c gitchange.PlannedFile, f readFile, added, removed int) afterEntry {
 	switch {
-	case c.deleted():
+	case c.Deleted():
 		return afterEntry{Status: fileDeleted, LinesRemoved: &removed}
 	case !f.exists:
-		return afterEntry{Blob: blobSHA(*c.content), Status: fileAdded, LinesAdded: &added, LinesRemoved: &removed}
+		return afterEntry{Blob: blobSHA(*c.Content), Status: fileAdded, LinesAdded: &added, LinesRemoved: &removed}
 	default:
-		return afterEntry{Blob: blobSHA(*c.content), Status: fileChanged, LinesAdded: &added, LinesRemoved: &removed}
+		return afterEntry{Blob: blobSHA(*c.Content), Status: fileChanged, LinesAdded: &added, LinesRemoved: &removed}
 	}
 }
 
@@ -125,26 +125,26 @@ func (l *loaded) applySnapshot(snap action.Snapshot) error {
 		return fmt.Errorf("read the snapshot: %w", err)
 	}
 
-	keep := make([]change, 0, len(l.changes))
+	keep := make([]gitchange.PlannedFile, 0, len(l.changes))
 
 	for _, c := range l.changes {
-		after, ok := sides.after[c.path]
+		after, ok := sides.after[c.Path]
 		if !ok {
-			return fmt.Errorf("%w: the snapshot has no entry for %q", action.ErrPermanent, c.path)
+			return fmt.Errorf("%w: the snapshot has no entry for %q", action.ErrPermanent, c.Path)
 		}
 
-		if !c.deleted() && blobSHA(*c.content) != after.Blob {
-			return fmt.Errorf("%w: the content of %q is not the content the snapshot describes", action.ErrPermanent, c.path)
+		if !c.Deleted() && blobSHA(*c.Content) != after.Blob {
+			return fmt.Errorf("%w: the content of %q is not the content the snapshot describes", action.ErrPermanent, c.Path)
 		}
 
-		live := l.files[c.path].sha
+		live := l.files[c.Path].sha
 
 		switch {
-		case live == blobOf(sides.before[c.path]):
+		case live == blobOf(sides.before[c.Path]):
 			keep = append(keep, c)
 		case live == after.Blob:
 		default:
-			return fmt.Errorf("%q changed on the base branch after the proposal was made: %w", c.path, action.ErrConflict)
+			return fmt.Errorf("%q changed on the base branch after the proposal was made: %w", c.Path, action.ErrConflict)
 		}
 	}
 
