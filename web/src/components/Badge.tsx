@@ -35,9 +35,9 @@ export function VerdictBadge({ verdict }: { verdict: Verdict }) {
   );
 }
 
-/** A state of the system, such as "Queued" or "Failed", as an icon and its label. */
-export function StatusBadge({ status, spinning = false, children }: { status: Status; spinning?: boolean; children: string }) {
-  const Icon = spinning ? LoaderCircle : STATUS_ICONS[status];
+/** A state of the system, such as "Queued" or "Failed", as an icon and its label. `icon` replaces the icon of the status, except while `spinning`. */
+export function StatusBadge({ status, spinning = false, icon, children }: { status: Status; spinning?: boolean; icon?: LucideIcon; children: string }) {
+  const Icon = spinning ? LoaderCircle : (icon ?? STATUS_ICONS[status]);
 
   return (
     <span className={`sk-badge sk-badge--status-${status}`}>

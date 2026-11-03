@@ -43,3 +43,15 @@ export function fileDiff(over: Partial<ProposalFileDiff> = {}): ProposalFileDiff
 
   return { path: "prometheus/rules/checkout.yaml", status: "changed", lines, truncated: false, ...over };
 }
+
+/** The pull request of a proposal, open and read on 2 November 2026. */
+export function pullRequest(over: Partial<NonNullable<Proposal["pullRequest"]>> = {}): NonNullable<Proposal["pullRequest"]> {
+  return {
+    repo: "acme/monitors",
+    number: 12,
+    url: "https://github.com/acme/monitors/pull/12",
+    state: "open",
+    checkedAt: "2026-11-02T06:00:00Z",
+    ...over,
+  };
+}

@@ -26,7 +26,7 @@ const (
 	maxResponseBytes = 8 << 20
 	// maxErrorBytes is how much of an error answer is read for its message.
 	maxErrorBytes = 64 << 10
-	// maxMessageBytes is the longest message of Alertmanager that is kept.
+	// maxMessageBytes is the longest message of the service that is kept.
 	maxMessageBytes = 400
 )
 
@@ -34,20 +34,22 @@ const (
 const stateExpired = "expired"
 
 var (
-	errTooLarge = errors.New("the answer from Alertmanager is larger than the action reads")
-	errNoBody   = errors.New("the answer from Alertmanager is not something this action can read")
+	errTooLarge = errors.New("the answer is larger than the action reads")
+	errNoBody   = errors.New("the answer is not something this action can read")
 )
 
-// statusError is an answer of Alertmanager that is not a success.
+// statusError is an answer of the service that is not a success.
 type statusError struct {
-	code int
-	// message is Alertmanager's own message, untrusted, cut.
+	// vendor names the service, as Backend.Vendor does.
+	vendor string
+	code   int
+	// message is the service's own message, untrusted, cut.
 	message string
 }
 
 // Error implements error.
 func (e *statusError) Error() string {
-	text := fmt.Sprintf("Alertmanager answered %d", e.code)
+	text := fmt.Sprintf("%s answered %d", e.vendor, e.code)
 	if e.message != "" {
 		text += ": " + e.message
 	}
@@ -55,13 +57,14 @@ func (e *statusError) Error() string {
 	return text
 }
 
-// client sends requests to the Alertmanager API with the action's
-// credentials.
+// client sends requests to the Alertmanager API v2 of the backend with the
+// action's credentials.
 type client struct {
 	http      *http.Client
 	root      string
 	userAgent string
 	auth      *httpauth.Auth
+	backend   Backend
 }
 
 // silence is a silence as Alertmanager lists it, with the state it has now.
@@ -110,11 +113,11 @@ type postedSilence struct {
 	Comment   string         `json:"comment"`
 }
 
-// silences lists every silence, in every state: GET /api/v2/silences.
+// silences lists every silence, in every state: GET <API path>/silences.
 func (c *client) silences(ctx context.Context) ([]silence, error) {
 	var raw []wireSilence
 
-	if err := c.do(ctx, http.MethodGet, "/api/v2/silences", nil, nil, &raw); err != nil {
+	if err := c.do(ctx, http.MethodGet, "/silences", nil, nil, &raw); err != nil {
 		return nil, fmt.Errorf("list the silences: %w", err)
 	}
 
@@ -134,7 +137,7 @@ func (c *client) silences(ctx context.Context) ([]silence, error) {
 }
 
 // alerts lists the firing alerts that match all the matchers:
-// GET /api/v2/alerts with one filter for each matcher.
+// GET <API path>/alerts with one filter for each matcher.
 func (c *client) alerts(ctx context.Context, matchers []mute.Matcher) ([]alert, error) {
 	query := url.Values{}
 	for _, m := range matchers {
@@ -148,7 +151,7 @@ func (c *client) alerts(ctx context.Context, matchers []mute.Matcher) ([]alert, 
 		} `json:"status"`
 	}
 
-	if err := c.do(ctx, http.MethodGet, "/api/v2/alerts", query, nil, &raw); err != nil {
+	if err := c.do(ctx, http.MethodGet, "/alerts", query, nil, &raw); err != nil {
 		return nil, fmt.Errorf("list the alerts: %w", err)
 	}
 
@@ -160,15 +163,21 @@ func (c *client) alerts(ctx context.Context, matchers []mute.Matcher) ([]alert, 
 	return out, nil
 }
 
-// create makes a silence and returns its ID: POST /api/v2/silences, which
-// answers {"silenceID": "..."}. The body has no id, so it is always a new
-// silence.
+// create makes a silence and returns its ID: POST <API path>/silences,
+// which answers {"silenceID": "..."}, with 200 or, from Grafana, 202. The
+// body has no id, so it is always a new silence. An answer of 429 gets the
+// backend's CreateLimitHint, and is still retried.
 func (c *client) create(ctx context.Context, body postedSilence) (string, error) {
 	var out struct {
 		SilenceID string `json:"silenceID"`
 	}
 
-	if err := c.do(ctx, http.MethodPost, "/api/v2/silences", nil, body, &out); err != nil {
+	if err := c.do(ctx, http.MethodPost, "/silences", nil, body, &out); err != nil {
+		var status *statusError
+		if c.backend.CreateLimitHint != "" && errors.As(err, &status) && status.code == http.StatusTooManyRequests {
+			return "", fmt.Errorf("create the silence: %s: %w", c.backend.CreateLimitHint, err)
+		}
+
 		return "", fmt.Errorf("create the silence: %w", err)
 	}
 
@@ -179,11 +188,11 @@ func (c *client) create(ctx context.Context, body postedSilence) (string, error)
 	return out.SilenceID, nil
 }
 
-// expire ends the silence with id now: DELETE /api/v2/silence/{id}, which
+// expire ends the silence with id now: DELETE <API path>/silence/{id}, which
 // expires it and does not delete it. A silence that is gone already is not
 // an error.
 func (c *client) expire(ctx context.Context, id string) error {
-	err := c.do(ctx, http.MethodDelete, "/api/v2/silence/"+url.PathEscape(id), nil, nil, nil)
+	err := c.do(ctx, http.MethodDelete, "/silence/"+url.PathEscape(id), nil, nil, nil)
 
 	var status *statusError
 	if errors.As(err, &status) && status.code == http.StatusNotFound {
@@ -214,7 +223,7 @@ func (c *client) do(ctx context.Context, method, path string, query url.Values, 
 		reader = bytes.NewReader(raw)
 	}
 
-	target := c.root + path
+	target := c.root + c.backend.APIPath + path
 	if len(query) > 0 {
 		target += "?" + query.Encode()
 	}
@@ -248,7 +257,7 @@ func (c *client) do(ctx context.Context, method, path string, query url.Values, 
 	limited := httpclient.LimitBody(resp.Body, maxResponseBytes, errTooLarge)
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return statusFailure(resp.StatusCode, limited)
+		return c.statusFailure(resp.StatusCode, limited)
 	}
 
 	if out == nil {
@@ -263,8 +272,8 @@ func (c *client) do(ctx context.Context, method, path string, query url.Values, 
 }
 
 // statusFailure makes the error of an answer that is not a success.
-func statusFailure(code int, body io.Reader) error {
-	e := &statusError{code: code}
+func (c *client) statusFailure(code int, body io.Reader) error {
+	e := &statusError{vendor: c.backend.Vendor, code: code}
 
 	data, err := io.ReadAll(io.LimitReader(body, maxErrorBytes))
 	if err == nil {
@@ -280,7 +289,7 @@ func statusFailure(code int, body io.Reader) error {
 }
 
 // messageOf reads the message of an error answer. Alertmanager sends a JSON
-// string or {"message": "..."}; a proxy in front of it may send plain text.
+// string and Grafana {"message": "..."}; a proxy in front of it may send plain text.
 func messageOf(data []byte) string {
 	var text string
 	if json.Unmarshal(data, &text) == nil {

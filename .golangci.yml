@@ -143,10 +143,10 @@ linters:
               desc: intake may import only event
 
     wrapcheck:
-      # The default list, plus action.LimitError, which builds an error that
-      # wraps action.ErrLimit and the cause, and kubeaccess.Redact, which
-      # returns the error it is given with the tokens cut out of its text and
-      # unwraps to it; both are the wrapping itself.
+      # The default list, plus action.LimitError, githubgit.Classify and
+      # kubeaccess.Redact, which build an error that wraps the cause with what
+      # was being done, or return the error they are given with the tokens cut
+      # out of its text; they are the wrapping itself.
       ignore-sigs:
         - .Errorf(
         - errors.New(
@@ -158,6 +158,7 @@ linters:
         - .WithMessagef(
         - .WithStack(
         - action.LimitError(
+        - githubgit.Classify(
         - kubeaccess.Redact(
 
     # Only the "blank line after a block" rule, not the rest of wsl.
