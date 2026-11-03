@@ -62,8 +62,8 @@ function accuracySpec(stats: QualityStats, days: string[]): ChartSpec {
     domain: [0, PERCENT],
     tableColumns: [
       { key: "accuracy", label: "Accuracy" },
-      { key: "rated", label: "Rated" },
-      { key: "correct", label: "Confirmed as given" },
+      { key: "rated", label: "Rated", format: formatCount },
+      { key: "correct", label: "Confirmed as given", format: formatCount },
     ],
   };
 }
@@ -84,8 +84,8 @@ function comparisonSpec(stats: QualityStats): ChartSpec {
     domain: [0, PERCENT],
     tableColumns: [
       { key: "accuracy", label: "Accuracy" },
-      { key: "rated", label: "Rated" },
-      { key: "correct", label: "Confirmed as given" },
+      { key: "rated", label: "Rated", format: formatCount },
+      { key: "correct", label: "Confirmed as given", format: formatCount },
     ],
   };
 }

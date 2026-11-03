@@ -128,6 +128,10 @@ describe("the dashboard", () => {
     // One row for each day of the range, 30 in all, and the header.
     expect(within(table).getAllByRole("row")).toHaveLength(31);
 
+    // The counts are written as counts and only the accuracy as a percentage.
+    const day = within(within(table).getByRole("rowheader", { name: "Oct 20" }).closest("tr") as HTMLElement);
+    expect(day.getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["85%", "13", "11"]);
+
     await user.click(within(card).getByRole("button", { name: "Show as chart" }));
 
     expect(within(card).queryByRole("table")).not.toBeInTheDocument();
