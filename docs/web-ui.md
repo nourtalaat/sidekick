@@ -99,6 +99,24 @@ but `GET`, `HEAD` and `OPTIONS`), logout included, must send the
 session's CSRF token in the `X-CSRF-Token` header. `GET /api/v1/me`
 returns it as `csrfToken`.
 
+## Theme
+
+The theme switch in the header chooses System, Light or Dark. The choice is
+saved for the signed-in user on the server, so it follows the person to
+every browser and survives clearing site data. The browser also keeps a copy
+in `localStorage`, so the page does not flash the wrong theme before the
+server answers. After sign-in, the server's choice wins over the copy. A
+person who has no saved choice yet keeps the one their browser holds, which
+is saved at the first sign-in after an upgrade. If a save fails, the page
+keeps the choice on screen and the next change tries again.
+
+The login page has no session, so it uses the choice the browser holds, or
+the operating system's setting. `PUT /api/v1/me/theme` with
+`{"theme": "dark"}` saves the choice and `GET /api/v1/me` returns it as
+`theme`. Only a session can use them: an API token has no theme and gets
+403. A value other than `system`, `light` or `dark` gets 422. Saving a theme
+writes no audit row.
+
 ## API tokens
 
 Automation, such as a CI job that uploads benchmark results, calls the
