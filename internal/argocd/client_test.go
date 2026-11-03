@@ -14,7 +14,7 @@ import (
 )
 
 // testToken is the API token the test secret holds.
-const testToken = "argocd-test-token-0000"
+const testToken = "argocd-test-token"
 
 // testTokenRef is the secret reference of the test token.
 var testTokenRef = registry.SecretRef{Name: "sidekick-argocd", Key: "token"}

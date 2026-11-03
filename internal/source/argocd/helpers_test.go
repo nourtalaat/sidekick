@@ -14,7 +14,7 @@ import (
 )
 
 // testToken is the API token the test secret holds.
-const testToken = "argocd-test-token-0000"
+const testToken = "argocd-test-token"
 
 // Paths of the fake API.
 const (
