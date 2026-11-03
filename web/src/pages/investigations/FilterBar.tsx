@@ -2,7 +2,7 @@ import { Button } from "../../components/Button";
 import { Select } from "../../components/Select";
 import { TextField } from "../../components/TextField";
 import type { ListFilters } from "../../api/investigations";
-import { RANGE_OPTIONS, STATUS_OPTIONS, VERDICT_OPTIONS } from "./filters";
+import { RANGE_OPTIONS, SEARCH_MAX_LENGTH, STATUS_OPTIONS, VERDICT_OPTIONS } from "./filters";
 import "./FilterBar.css";
 
 const ANY = "";
@@ -45,7 +45,7 @@ export function FilterBar({ filters, onChange }: FilterBarProps) {
         onChange({ ...filters, ...typed(event.currentTarget) });
       }}
     >
-      <TextField label="Alert title" name="q" defaultValue={filters.q ?? ""} maxLength={200} />
+      <TextField label="Alert title" name="q" defaultValue={filters.q ?? ""} maxLength={SEARCH_MAX_LENGTH} />
       <Select
         label="Verdict"
         value={filters.verdict ?? ANY}

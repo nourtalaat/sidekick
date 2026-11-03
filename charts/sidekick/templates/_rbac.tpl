@@ -154,6 +154,27 @@ the sorted names listed for it.
 {{- end }}
 
 {{/*
+What the actions in config of type helm.rollback ask of the cluster Sidekick
+runs in, as JSON. "any" says whether there is one. "accounts" lists, sorted,
+the service accounts they use (serviceAccount, sidekick-helm-rollback when it
+is not set). The chart gives these accounts no rights, because a Helm
+rollback re-applies every object of a release and Kubernetes RBAC cannot
+narrow that to one release, so there are no namespaces here: the operator
+binds a Role of their choice.
+*/}}
+{{- define "sidekick.actions.helm.access" -}}
+{{- $access := dict "any" false "accounts" list }}
+{{- range $name, $act := dig "actions" dict (default dict .Values.config) }}
+{{- if and (kindIs "map" $act) (eq (toString (get $act "type")) "helm.rollback") }}
+{{- $_ := set $access "any" true }}
+{{- $account := default "sidekick-helm-rollback" (get $act "serviceAccount") }}
+{{- $_ = set $access "accounts" (append $access.accounts $account | uniq | sortAlpha) }}
+{{- end }}
+{{- end }}
+{{- toJson $access }}
+{{- end }}
+
+{{/*
 The service accounts of the actions of every type, as JSON: "accounts" is
 their sorted names, and "any" says whether there is one. Each type has an
 access template of its own; this one joins them.
@@ -161,8 +182,9 @@ access template of its own; this one joins them.
 {{- define "sidekick.actions.accounts" -}}
 {{- $rules := include "sidekick.actions.access" . | fromJson }}
 {{- $rollbacks := include "sidekick.actions.rollback.access" . | fromJson }}
-{{- $accounts := concat (keys $rules.accounts) (keys $rollbacks.accounts) | uniq | sortAlpha }}
-{{- dict "any" (or $rules.any $rollbacks.any) "accounts" $accounts | toJson }}
+{{- $helm := include "sidekick.actions.helm.access" . | fromJson }}
+{{- $accounts := concat (keys $rules.accounts) (keys $rollbacks.accounts) $helm.accounts | uniq | sortAlpha }}
+{{- dict "any" (or $rules.any $rollbacks.any $helm.any) "accounts" $accounts | toJson }}
 {{- end }}
 
 {{/*
