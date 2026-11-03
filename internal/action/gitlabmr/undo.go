@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"maps"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -132,13 +130,13 @@ func (m *MR) pushRevert(ctx context.Context, inv action.Invocation, params Param
 		return action.Result{}, false, fmt.Errorf("read the base branch: %w", err)
 	}
 
-	plan, err := m.planRevert(ctx, gitlabgit.NewReader(m.client, params.Project, head.Commit), sides)
+	plan, err := gitlabgit.PlanRevert(ctx, gitlabgit.NewReader(m.client, params.Project, head.Commit), sides, nil)
 	if err != nil {
 		return action.Result{}, false, fmt.Errorf("plan the revert: %w", err)
 	}
 
-	if len(plan.conflicts) > 0 && !force {
-		live, merr := json.Marshal(plan.live)
+	if len(plan.Conflicts) > 0 && !force {
+		live, merr := json.Marshal(plan.Live)
 		if merr != nil {
 			return action.Result{}, false, fmt.Errorf("encode the files as they are now: %w", merr)
 		}
@@ -146,11 +144,11 @@ func (m *MR) pushRevert(ctx context.Context, inv action.Invocation, params Param
 		return action.Result{}, false, &action.ConflictError{Live: live}
 	}
 
-	if len(plan.restores) == 0 {
+	if len(plan.Restores) == 0 {
 		return action.Result{Summary: "Nothing to revert: the files are as they were before the merge request."}, true, nil
 	}
 
-	actions, err := m.restoreActions(ctx, params.Project, plan.restores)
+	actions, err := gitlabgit.RestoreActions(ctx, m.client, params.Project, plan.Restores)
 	if err != nil {
 		return action.Result{}, false, fmt.Errorf("read the earlier content of the files: %w", err)
 	}
@@ -169,91 +167,6 @@ func (m *MR) pushRevert(ctx context.Context, inv action.Invocation, params Param
 	}
 
 	return action.Result{}, false, nil
-}
-
-// revertPlan is what restoring the files takes.
-type revertPlan struct {
-	// restores are the files that are not at their earlier content.
-	restores []restore
-	// conflicts are the files that are neither as the merge request left
-	// them nor as they were before it.
-	conflicts []string
-	// live maps every file of the change to the blob it has now, or nil.
-	live map[string]*gitchange.BlobRef
-}
-
-// restore puts one file back to a blob.
-type restore struct {
-	path string
-	// blob is the blob the file had before, or empty for a file that was
-	// added, which is deleted.
-	blob string
-	// exists says whether the file is there now.
-	exists bool
-}
-
-// planRevert reads the files of the change on the base branch and decides
-// what restores them. A file that is at its earlier content already needs
-// nothing. A file that was added is deleted. Any other file gets the blob it
-// had before. Nothing is written, and no earlier content is read yet, so a
-// conflict that stops the revert costs no more reads.
-func (m *MR) planRevert(ctx context.Context, r *gitlabgit.Reader, sides gitchange.SnapshotFiles) (revertPlan, error) {
-	plan := revertPlan{live: make(map[string]*gitchange.BlobRef, len(sides.After))}
-
-	for _, path := range slices.Sorted(maps.Keys(sides.After)) {
-		f, err := r.File(ctx, path)
-		if err != nil {
-			return revertPlan{}, fmt.Errorf("read the file at the base: %w", err)
-		}
-
-		if f.Exists {
-			plan.live[path] = &gitchange.BlobRef{Blob: f.SHA}
-		} else {
-			plan.live[path] = nil
-		}
-
-		before := gitchange.BlobOf(sides.Before[path])
-		if f.SHA == before {
-			continue
-		}
-
-		if f.SHA != sides.After[path].Blob {
-			plan.conflicts = append(plan.conflicts, path)
-		}
-
-		plan.restores = append(plan.restores, restore{path: path, blob: before, exists: f.Exists})
-	}
-
-	return plan, nil
-}
-
-// restoreActions turns the restores into the actions of a commit. The
-// Commits API takes content and not a blob, so the earlier content of each
-// file is read by its blob ID.
-func (m *MR) restoreActions(ctx context.Context, project string, restores []restore) ([]gitlabgit.CommitAction, error) {
-	actions := make([]gitlabgit.CommitAction, 0, len(restores))
-
-	for _, r := range restores {
-		if r.blob == "" {
-			actions = append(actions, gitlabgit.CommitAction{Action: gitlabgit.CommitDelete, FilePath: r.path})
-
-			continue
-		}
-
-		content, err := gitlabgit.ReadBlobText(ctx, m.client, project, r.blob, r.path+" as it was")
-		if err != nil {
-			return nil, fmt.Errorf("read %s: %w", r.path, err)
-		}
-
-		kind := gitlabgit.CommitCreate
-		if r.exists {
-			kind = gitlabgit.CommitUpdate
-		}
-
-		actions = append(actions, gitlabgit.CommitAction{Action: kind, FilePath: r.path, Content: &content})
-	}
-
-	return actions, nil
 }
 
 // revertRequest is the merge request that reverts orig. Its text is the
