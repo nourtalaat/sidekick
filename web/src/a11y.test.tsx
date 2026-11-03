@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Button } from "./components/Button";
@@ -11,7 +11,7 @@ import { TextField } from "./components/TextField";
 import { ApiError } from "./api/client";
 import { LoginPage } from "./pages/LoginPage";
 import { THEME_STORAGE_KEY } from "./theme";
-import { renderApp, renderWithProviders, stubMedia, wcagViolations } from "./test/helpers";
+import { renderApp, renderWithProviders, stubMedia, VIEWER, wcagViolations } from "./test/helpers";
 import { proposal, pullRequest } from "./test/actionProposals";
 import { ADMIN } from "./test/rules";
 
@@ -50,6 +50,15 @@ describe.each(THEMES)("accessibility, theme $name", (theme) => {
       const { container } = renderApp({ route: "/investigations" });
       await screen.findByRole("heading", { name: "Investigations", level: 1 });
 
+      expect(await wcagViolations(container)).toEqual([]);
+    });
+
+    it("has no WCAG 2.2 AA violations on the shell when the theme saved on the server replaces the stored one", async () => {
+      const saved = theme.stored === "dark" ? "light" : "dark";
+      const { container } = renderApp({ me: { ...VIEWER, theme: saved }, route: "/investigations" });
+      await screen.findByRole("heading", { name: "Investigations", level: 1 });
+
+      await waitFor(() => expect(document.documentElement).toHaveAttribute("data-theme", saved));
       expect(await wcagViolations(container)).toEqual([]);
     });
 
