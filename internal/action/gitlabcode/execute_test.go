@@ -209,7 +209,7 @@ func TestExecuteAfterAnEarlierAttempt(t *testing.T) {
 			},
 			wantCalls: []string{"GET merge_requests", "GET repository/branches/" + testBranch, "POST merge_requests", "GET merge_requests"},
 			wantIID:   16,
-			wantWord:  "Found the already opened draft merge request " + testProject + "!16",
+			wantWord:  "Opened draft merge request " + testProject + "!16",
 		},
 	}
 

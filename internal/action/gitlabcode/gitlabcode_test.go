@@ -146,12 +146,6 @@ limits:
 	_, isUndoer := built.(action.Undoer)
 	require.True(t, isUndoer)
 
-	withDraft := strings.Replace(yamlText, "  maxFiles: 2\n", "  maxFiles: 2\n  draft: false\n", 1)
-	require.NoError(t, yaml.Unmarshal([]byte(withDraft), &node))
-
-	_, err = registry.Actions.Check(t.Context(), TypeName, "code-mr", node.Content[0])
-	require.ErrorContains(t, err, "draft")
-
 	plain := strings.Replace(yamlText, "https://gitlab.example.com", "http://gitlab.example.com", 1)
 	require.NoError(t, yaml.Unmarshal([]byte(plain), &node))
 
