@@ -1,0 +1,118 @@
+# A p95 latency alert at night, when a handful of requests move the percentile,
+# and the alert rule lives in Git. The right answer is a false positive and a
+# pull request that fixes the rule. Latency alert strategy, approved mode with
+# one mock action.
+id: latency-low-traffic-rule-fix-pull-request
+title: Receipt render p95 latency at night on almost no traffic, with the rule kept in Git
+tags: [latency, low-traffic, false-positive, actions]
+strategy: latency-alert
+now: 2026-09-23T03:25:00Z
+route:
+  mode: approved
+  actions: [monitor-pr]
+  details:
+    alert-rules: Prometheus alert rules are kept in the Git repository acme/monitors, in prometheus/rules.
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="ReceiptRenderLatencyP95High"}'
+    alerts:
+      - status: firing
+        labels: { alertname: ReceiptRenderLatencyP95High, service: receipt-render, env: prod, severity: warning }
+        annotations:
+          summary: receipt-render p95 latency above 1s for 5m
+          description: The p95 latency of POST /v1/receipts is 2.4s. The threshold is 1s.
+        startsAt: 2026-09-23T03:14:00Z
+        fingerprint: 3a9f6c1d82b47e05
+sources:
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: query_range
+        match:
+          args:
+            query: { regex: "(?i)requests_total|request_rate|count" }
+        respond:
+          text: |
+            Requests per second of receipt-render, last 24 hours, hourly points
+            daytime (08:00 to 22:00) 25 to 48, 23:00 6, 00:00 2, 01:00 0.6, 02:00 0.2, 03:00 0.1, 03:20 0.1
+            min 0.1, max 48, last 0.1. Traffic at 03:20 is about 6 requests per minute.
+          evidence:
+            - { kind: metric, title: receipt-render request rate, url: "https://prometheus.acme.example/graph?g0.expr=receipt_render_rps" }
+      - tool: query_range
+        match:
+          args:
+            query: { regex: "(?i)duration|latency|histogram_quantile" }
+        respond:
+          text: |
+            p95 latency in seconds of receipt-render, POST /v1/receipts, last 7 days
+            Each day 08:00 to 22:00: 0.21 to 0.38.
+            Every night between 02:40 and 04:10 for the last 7 nights: 1.1 to 2.6, for 10 to 30 minutes.
+            Now (03:20): 2.4
+          evidence:
+            - { kind: metric, title: receipt-render p95 latency, url: "https://prometheus.acme.example/graph?g0.expr=receipt_render_p95" }
+      - tool: get_rules
+        respond:
+          text: |
+            group receipt-render, alert ReceiptRenderLatencyP95High, for 5m
+            expr: histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{service="receipt-render"}[5m]))) > 1
+            health ok, last evaluation 03:24:50
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: "No commits since the requested time."
+          noData: true
+      - tool: list_workflow_runs
+        respond:
+          text: 'run 7120 deploy receipt-render 2026-09-14T11:40:05Z success. No deploy since.'
+          evidence:
+            - { kind: deploy, title: deploy receipt-render 7120, url: "https://github.example.com/acme/receipt-render/actions/runs/7120" }
+      - tool: get_file
+        match:
+          args:
+            repo: { equals: acme/monitors }
+            path: { regex: "prometheus/rules/receipt-render\\.ya?ml$" }
+        respond:
+          text: |
+            acme/monitors, prometheus/rules/receipt-render.yml, main
+            groups:
+              - name: receipt-render
+                rules:
+                  - alert: ReceiptRenderLatencyP95High
+                    expr: histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{service="receipt-render"}[5m]))) > 1
+                    for: 5m
+                    labels:
+                      severity: warning
+                      service: receipt-render
+                    annotations:
+                      summary: receipt-render p95 latency above 1s for 5m
+          evidence:
+            - { kind: resource, title: prometheus/rules/receipt-render.yml, url: "https://github.example.com/acme/monitors/blob/main/prometheus/rules/receipt-render.yml" }
+actions:
+  monitor-pr:
+    spec: { snapshot: bench/actions/github.pull_request.json }
+default: no_data
+expected:
+  verdict: false_positive
+  rootCause:
+    summary: Traffic at night is about 6 requests per minute, so a few slow requests set the p95. The same pattern shows on each of the last 7 nights, nothing changed, and the alert rule has no minimum traffic condition.
+    rubric:
+      - { id: volume, text: "Finds that traffic is very low at this hour, a few requests per minute, so a few slow requests move the p95", weight: 2, required: true }
+      - { id: pattern, text: "Notes that the same night-time pattern appears on earlier nights, or that nothing changed recently", weight: 1 }
+      - { id: fix, text: "Proposes changing the alert rule in the monitors repository, for example with a minimum request rate condition or a longer duration", weight: 2 }
+  evidence:
+    - { calledTool: prometheus__query_range }
+    - { calledTool: github__get_file }
+  proposals:
+    - action: monitor-pr
+      params:
+        repo: { equals: acme/monitors }
+        baseBranch: { equals: main }
+        files[*].path: { regex: '^prometheus/rules/receipt-render\.ya?ml$' }
+        files[*].content: { contains: ReceiptRenderLatencyP95High }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }

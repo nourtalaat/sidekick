@@ -5105,6 +5105,10 @@ components:
         evidence:
           type: number
           format: double
+        proposalCorrect:
+          type: number
+          format: double
+          description: The share of the runs with scored proposals whose proposals are correct; left out when no scenario scores proposals.
         sourceFailuresReported:
           type: number
           format: double
@@ -5206,6 +5210,9 @@ components:
         evidenceScore:
           type: number
           format: double
+        proposalCorrect:
+          type: boolean
+          description: Whether the proposals of the run are correct; left out when the scenario does not score proposals.
         costMicros:
           type: integer
           format: int64

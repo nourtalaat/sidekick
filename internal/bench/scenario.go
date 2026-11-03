@@ -132,6 +132,26 @@ type Expected struct {
 	// UnavailableReported are the sources the report must list as
 	// unavailable in checked.
 	UnavailableReported []string `yaml:"unavailableReported,omitempty"`
+	// Proposals are the proposals a good run makes, each matched by at most
+	// one proposal of the run. Set Proposals or NoProposal to score the
+	// run's proposals; with neither they are not scored.
+	Proposals []ExpectedProposal `yaml:"proposals,omitempty"`
+	// NoProposal says proposing anything is wrong.
+	NoProposal bool `yaml:"noProposal,omitempty"`
+	// AcceptableProposals are proposals a run may make besides the
+	// expected ones without being wrong.
+	AcceptableProposals []ExpectedProposal `yaml:"acceptableProposals,omitempty"`
+}
+
+// ExpectedProposal is a proposal a run may make: a mock action and checks
+// on its parameters.
+type ExpectedProposal struct {
+	// Action is the name of a mock action of the scenario.
+	Action string `yaml:"action"`
+	// Params are checks on the proposal's parameters, by path: keys joined
+	// with ".", with [n] for the array element n, counting from 0, and [*]
+	// for any element. Every check must hold.
+	Params map[string]mock.Matcher `yaml:"params,omitempty"`
 }
 
 // RootCause is the expected cause and its rubric.
@@ -326,6 +346,7 @@ func (s Scenario) validate() []string {
 	}
 
 	problems = append(problems, s.Expected.validate(s.Sources)...)
+	problems = append(problems, s.Expected.validateProposals(s.Route.Mode == action.Approved, s.Actions)...)
 	problems = append(problems, s.Limits.validate()...)
 
 	return problems
@@ -470,6 +491,92 @@ func (e Expected) validate(sources map[string]mock.Config) []string {
 	for i, name := range e.UnavailableReported {
 		if _, ok := sources[name]; !ok {
 			add("expected.unavailableReported[%d]: %q is not a source of the scenario", i, name)
+		}
+	}
+
+	return problems
+}
+
+// scoresProposals reports whether the run's proposals are scored.
+func (e Expected) scoresProposals() bool {
+	return len(e.Proposals) > 0 || e.NoProposal
+}
+
+// validateProposals checks the expected proposals against the scenario's
+// mock actions, and returns every problem as "<field>: <problem>".
+func (e Expected) validateProposals(approved bool, actions map[string]actionmock.Config) []string {
+	var problems []string
+
+	add := func(format string, args ...any) {
+		problems = append(problems, fmt.Sprintf(format, args...))
+	}
+
+	switch {
+	case e.Proposals != nil && len(e.Proposals) == 0:
+		add("expected.proposals: list at least one proposal, or set noProposal: true")
+	case len(e.Proposals) > 0 && e.NoProposal:
+		add("expected.noProposal: set proposals or noProposal, not both")
+	case e.scoresProposals() && !approved:
+		add("expected.proposals: need route.mode %s, since a scenario that cannot propose has no proposals to score", action.Approved)
+	}
+
+	switch {
+	case len(e.AcceptableProposals) > 0 && e.NoProposal:
+		add("expected.acceptableProposals: must be empty with noProposal, since nothing is acceptable")
+	case len(e.AcceptableProposals) > 0 && len(e.Proposals) == 0:
+		add("expected.acceptableProposals: need expected.proposals")
+	}
+
+	for i, p := range e.Proposals {
+		problems = append(problems, p.validate(fmt.Sprintf("expected.proposals[%d]", i), actions)...)
+	}
+
+	for i, p := range e.AcceptableProposals {
+		problems = append(problems, p.validate(fmt.Sprintf("expected.acceptableProposals[%d]", i), actions)...)
+	}
+
+	return problems
+}
+
+// validate checks one expected proposal against the scenario's mock
+// actions. path is its field, for example expected.proposals[0].
+func (p ExpectedProposal) validate(path string, actions map[string]actionmock.Config) []string {
+	var problems []string
+
+	add := func(format string, args ...any) {
+		problems = append(problems, fmt.Sprintf(format, args...))
+	}
+
+	switch _, ok := actions[p.Action]; {
+	case p.Action == "":
+		add("%s.action: required", path)
+	case !ok:
+		add("%s.action: %q is not an action of the scenario", path, p.Action)
+	}
+
+	for _, key := range slices.Sorted(maps.Keys(p.Params)) {
+		field := fmt.Sprintf("%s.params.%s", path, key)
+		matcher := p.Params[key]
+
+		steps, err := parsePath(key)
+		if err != nil {
+			add("%s: %v", field, err)
+
+			continue
+		}
+
+		if err := matcher.Validate(); err != nil {
+			for line := range strings.Lines(err.Error()) {
+				add("%s: %s", field, strings.TrimSuffix(line, "\n"))
+			}
+		}
+
+		if matcher.Within != 0 {
+			add("%s: within is not available in a params check", field)
+		}
+
+		if matcher.Exists != nil && !*matcher.Exists && hasWildcard(steps) {
+			add("%s: exists: false cannot be used on a path with [*]", field)
 		}
 	}
 

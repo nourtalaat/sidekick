@@ -51,8 +51,8 @@ type junitFailure struct {
 // WriteJUnit writes the scored results as JUnit XML, for CI systems that
 // show test results: one test suite per scenario with one test case per
 // run, and a suite of the thresholds when there are any. A run fails when
-// its verdict does not count as correct, or its root cause was graded and
-// does not match.
+// its verdict does not count as correct, its root cause was graded and
+// does not match, or its proposals were scored and are not correct.
 func (r *Results) WriteJUnit(w io.Writer, thresholds []ThresholdResult) error {
 	root := junitSuites{Name: junitName}
 
@@ -126,6 +126,14 @@ func (r RunResult) junitCase(sc ScenarioResult) junitCase {
 		}
 
 		problems = append(problems, reason)
+	}
+
+	if p := r.Proposal; p != nil {
+		c.SystemOut += "; proposals " + r.proposalCell()
+
+		if !p.Correct {
+			problems = append(problems, p.problem())
+		}
 	}
 
 	if len(problems) > 0 {

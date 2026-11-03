@@ -180,3 +180,80 @@ func toolResult(t *testing.T, req model.Request, callID string) model.ToolResult
 
 	return model.ToolResult{}
 }
+
+// ledgerProposal fits the action's schema but restarts the wrong service.
+const ledgerProposal = `{"action": "restart", "params": {"service": "ledger"}, "reason": "Restart it."}`
+
+func TestRunScoresProposals(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// turns are the scripted turns of the one run.
+		turns []modeltest.Turn
+		// edit changes the scenario before the run.
+		edit        func(sc *Scenario)
+		wantCorrect bool
+		wantOutcome ProposalOutcome
+	}{
+		{
+			name:        "the expected proposal scores correct",
+			turns:       restartTurns(),
+			wantCorrect: true,
+			wantOutcome: ProposalExpected,
+		},
+		{
+			name: "a proposal with other parameters scores wrong",
+			turns: []modeltest.Turn{
+				modeltest.ToolUse(testUsage, modeltest.Call("c1", "github__list_commits", `{"repo": "acme/checkout", "since": "2026-05-04T06:00:00Z"}`)),
+				modeltest.ToolUse(testUsage, modeltest.Call("p1", "propose_action", ledgerProposal)),
+				modeltest.ToolUse(testUsage, modeltest.Call("v1", report.SubmitVerdictTool, restartReport)),
+			},
+			wantOutcome: ProposalUnexpected,
+		},
+		{
+			name:        "noProposal scores wrong when something is proposed",
+			turns:       restartTurns(),
+			edit:        func(sc *Scenario) { sc.Expected.Proposals, sc.Expected.NoProposal = nil, true },
+			wantOutcome: ProposalUnexpected,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			conn := modeltest.New(t, model.Capabilities{ToolCalling: true}, tt.turns...)
+			conn.ExpectAllUsed()
+
+			scenarios, err := LoadScenarios(restartScenario, LoadOptions{BaseDir: repoRoot})
+			require.NoError(t, err)
+			require.Len(t, scenarios, 1)
+
+			sc := scenarios[0]
+			if tt.edit != nil {
+				tt.edit(&sc)
+			}
+
+			results, err := newRunner(t, conn, 1, sc).Run(t.Context(), inDefaultSchema(t))
+			require.NoError(t, err)
+			require.NoError(t, Score(t.Context(), results, ScoreOptions{}))
+
+			run := results.Scenarios[0].Runs[0]
+			require.NotNil(t, run.Proposal)
+			require.Equal(t, tt.wantCorrect, run.Proposal.Correct)
+			require.Len(t, run.Proposal.Proposed, 1)
+			require.Equal(t, tt.wantOutcome, run.Proposal.Proposed[0].Outcome)
+			requireShare(t, new(boolShare(tt.wantCorrect)), results.Summary.Metrics.ProposalCorrect)
+		})
+	}
+}
+
+// boolShare returns 1 for true and 0 for false.
+func boolShare(b bool) float64 {
+	if b {
+		return 1
+	}
+
+	return 0
+}

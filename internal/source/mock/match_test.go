@@ -80,7 +80,7 @@ func TestMatcherHolds(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			require.NoError(t, tt.matcher.validate())
+			require.NoError(t, tt.matcher.Validate())
 
 			var re *regexp.Regexp
 			if tt.matcher.Regex != "" {
@@ -93,6 +93,38 @@ func TestMatcherHolds(t *testing.T) {
 			}
 
 			require.Equal(t, tt.want, tt.matcher.holds(value, tt.arg != "", re, clock))
+		})
+	}
+}
+
+func TestMatcherMatches(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		matcher Matcher
+		// arg is the value as JSON; empty means it is not there.
+		arg  string
+		want bool
+	}{
+		{name: "a regex that matches", matcher: Matcher{Regex: "^prometheus/"}, arg: `"prometheus/rules/a.yml"`, want: true},
+		{name: "a regex that does not match", matcher: Matcher{Regex: "^prometheus/"}, arg: `"datadog/a.tf"`, want: false},
+		{name: "a regex on a number", matcher: Matcher{Regex: "5"}, arg: `5`, want: false},
+		{name: "equals a number by value", matcher: Matcher{Equals: 5}, arg: `5.0`, want: true},
+		{name: "within uses the clock it is given", matcher: Matcher{Within: time.Hour}, arg: `"2026-05-04T10:00:00Z"`, want: true},
+		{name: "a missing value", matcher: Matcher{Equals: "x"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var value any
+			if tt.arg != "" {
+				require.NoError(t, json.Unmarshal([]byte(tt.arg), &value))
+			}
+
+			require.Equal(t, tt.want, tt.matcher.Matches(value, tt.arg != "", clock))
 		})
 	}
 }

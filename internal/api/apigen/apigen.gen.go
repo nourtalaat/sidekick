@@ -1049,17 +1049,20 @@ type BenchMetricRow struct {
 // BenchMetrics The scores of a run. A share, from 0 to 1, is left out when the run
 // had nothing to count.
 type BenchMetrics struct {
-	CostMicros             int64    `json:"costMicros"`
-	Evidence               *float64 `json:"evidence,omitempty"`
-	FpPrecision            *float64 `json:"fpPrecision,omitempty"`
-	FpRecall               *float64 `json:"fpRecall,omitempty"`
-	InputTokens            int64    `json:"inputTokens"`
-	JudgeCostMicros        int64    `json:"judgeCostMicros"`
-	JudgeErrors            int      `json:"judgeErrors"`
-	MeanCostPerRunUsd      *float64 `json:"meanCostPerRunUsd,omitempty"`
-	MeanDurationMs         *float64 `json:"meanDurationMs,omitempty"`
-	OutputTokens           int64    `json:"outputTokens"`
-	Overall                *float64 `json:"overall,omitempty"`
+	CostMicros        int64    `json:"costMicros"`
+	Evidence          *float64 `json:"evidence,omitempty"`
+	FpPrecision       *float64 `json:"fpPrecision,omitempty"`
+	FpRecall          *float64 `json:"fpRecall,omitempty"`
+	InputTokens       int64    `json:"inputTokens"`
+	JudgeCostMicros   int64    `json:"judgeCostMicros"`
+	JudgeErrors       int      `json:"judgeErrors"`
+	MeanCostPerRunUsd *float64 `json:"meanCostPerRunUsd,omitempty"`
+	MeanDurationMs    *float64 `json:"meanDurationMs,omitempty"`
+	OutputTokens      int64    `json:"outputTokens"`
+	Overall           *float64 `json:"overall,omitempty"`
+
+	// ProposalCorrect The share of the runs with scored proposals whose proposals are correct; left out when no scenario scores proposals.
+	ProposalCorrect        *float64 `json:"proposalCorrect,omitempty"`
 	RootCauseMatch         *float64 `json:"rootCauseMatch,omitempty"`
 	RootCauseScore         *float64 `json:"rootCauseScore,omitempty"`
 	Runs                   int      `json:"runs"`
@@ -1078,6 +1081,9 @@ type BenchResult struct {
 	ExpectedVerdict string   `json:"expectedVerdict"`
 	InputTokens     int64    `json:"inputTokens"`
 	OutputTokens    int64    `json:"outputTokens"`
+
+	// ProposalCorrect Whether the proposals of the run are correct; left out when the scenario does not score proposals.
+	ProposalCorrect *bool `json:"proposalCorrect,omitempty"`
 
 	// Repeat 1 for the first run of the scenario, counting up.
 	Repeat         int      `json:"repeat"`

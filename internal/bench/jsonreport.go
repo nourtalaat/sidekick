@@ -106,11 +106,19 @@ type RunReport struct {
 	EvidenceScore   *float64          `json:"evidenceScore"`
 	SourcesReported *bool             `json:"sourcesReported"`
 	MissingSources  []string          `json:"missingSources,omitempty"`
-	ToolCalls       int               `json:"toolCalls"`
-	InputTokens     int64             `json:"inputTokens"`
-	OutputTokens    int64             `json:"outputTokens"`
-	CostMicros      int64             `json:"costMicros"`
-	DurationMs      int64             `json:"durationMs"`
+	// ProposalCorrect is nil when the scenario does not score proposals.
+	// Proposals are the run's proposals with how each counted, and
+	// MissingProposals the actions of expected proposals that none matched.
+	// Neither holds the parameters or the reason, which can carry customer
+	// data.
+	ProposalCorrect  *bool            `json:"proposalCorrect"`
+	Proposals        []ProposalReport `json:"proposals,omitempty"`
+	MissingProposals []string         `json:"missingProposals,omitempty"`
+	ToolCalls        int              `json:"toolCalls"`
+	InputTokens      int64            `json:"inputTokens"`
+	OutputTokens     int64            `json:"outputTokens"`
+	CostMicros       int64            `json:"costMicros"`
+	DurationMs       int64            `json:"durationMs"`
 
 	// Reason is the reason the run gave for its verdict. StopDetail says
 	// why a run that ended without a verdict stopped, such as the last
@@ -130,6 +138,13 @@ type RunReport struct {
 type ToolCallReport struct {
 	Tool   string `json:"tool"`
 	Status string `json:"status"`
+}
+
+// ProposalReport is one proposal of a run in report.json: the action and
+// how it counted.
+type ProposalReport struct {
+	Action  string          `json:"action"`
+	Outcome ProposalOutcome `json:"outcome"`
 }
 
 // RootCauseReport is the graded root cause of a run in report.json.
@@ -247,6 +262,20 @@ func (r RunResult) report() RunReport {
 		out.RootCause = &RootCauseReport{
 			Score: rc.Score, RequiredMet: rc.RequiredMet, Match: rc.Match,
 			Items: rc.Items, Error: rc.Error, CostMicros: rc.CostMicros,
+		}
+	}
+
+	if p := r.Proposal; p != nil {
+		out.ProposalCorrect = &p.Correct
+
+		for _, o := range p.Proposed {
+			out.Proposals = append(out.Proposals, ProposalReport(o))
+		}
+
+		for _, e := range p.Expected {
+			if !e.Matched {
+				out.MissingProposals = append(out.MissingProposals, e.Action)
+			}
 		}
 	}
 

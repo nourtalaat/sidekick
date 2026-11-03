@@ -65,7 +65,7 @@ func (r *Results) WriteMarkdown(w io.Writer, info RunInfo, thresholds []Threshol
 	fmt.Fprintf(&b, "| runs | %d | |\n| cost | $%.4f | |\n| judge errors | %d | |\n\n",
 		m.Runs, float64(m.CostMicros)/microsPerUSD, m.JudgeErrors)
 
-	b.WriteString("| Scenario | Correct | Root cause | Median cost | Median time |\n|---|---|---|---|---|\n")
+	b.WriteString("| Scenario | Correct | Proposals | Root cause | Median cost | Median time |\n|---|---|---|---|---|---|\n")
 
 	for _, sc := range r.Scenarios {
 		if sc.Spread == nil {
@@ -73,8 +73,8 @@ func (r *Results) WriteMarkdown(w io.Writer, info RunInfo, thresholds []Threshol
 		}
 
 		sp := sc.Spread
-		fmt.Fprintf(&b, "| %s | %d/%d | %s | $%.4f | %s |\n",
-			sc.ID, sp.Correct, sp.Runs, meanSDCell(sp.RootCauseMean, sp.RootCauseSD), sp.CostUSD.Median, msCell(sp.DurationMs.Median))
+		fmt.Fprintf(&b, "| %s | %d/%d | %s | %s | $%.4f | %s |\n",
+			sc.ID, sp.Correct, sp.Runs, sp.proposalsCell(), meanSDCell(sp.RootCauseMean, sp.RootCauseSD), sp.CostUSD.Median, msCell(sp.DurationMs.Median))
 	}
 
 	if _, err := io.WriteString(w, b.String()); err != nil {

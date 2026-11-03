@@ -119,6 +119,7 @@ func scoreRun(ctx context.Context, expected Expected, run *RunResult, opts Score
 	run.VerdictCorrect = expected.accepts(run.Report.Verdict)
 	run.Evidence, run.EvidenceScore = checkEvidence(expected.Evidence, *run)
 	run.SourcesReported, run.MissingSources = reportedSources(expected.UnavailableReported, run.Report)
+	run.Proposal = scoreProposals(expected, *run)
 
 	rubric := expected.RootCause.Rubric
 	if opts.Grader == nil || len(rubric) == 0 {
