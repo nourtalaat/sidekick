@@ -366,3 +366,30 @@ inside and outside the allowed fields; execute; execute when the target
 changed after the snapshot; execute twice after a crash; undo; undo when
 another field was edited (it stays); undo when a changed field was edited
 (conflict, then forced).
+
+## Actions that fix noisy monitors
+
+Sidekick counts the false alarms that ended in a fix, so it needs to know
+which actions change a monitor to stop it from firing again. An action says
+so by implementing one more interface:
+
+```go
+type MonitorFixer interface {
+	FixKind() action.FixKind
+}
+```
+
+`FixKind` returns `action.FixAPI` when the action changes a monitor or an
+alert rule through its tool's API, and `action.FixPullRequest` when it opens
+a pull request or merge request that changes a monitor definition kept in
+Git. Sidekick stores the answer with each proposal when the model proposes
+it, so it does not change afterwards.
+
+The rule: implement `MonitorFixer` only for an action whose purpose is to
+stop a false positive from firing again. Mutes, rollbacks, flags, tickets,
+Slack messages and code changes that do not edit a monitor definition never
+implement it. An action that does not implement it fixes nothing, and an
+undo is never a fix.
+
+Add one row for the action to the table test in
+`internal/plugins/monitorfixer_test.go`.

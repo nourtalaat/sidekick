@@ -200,6 +200,52 @@ func TestPrepare(t *testing.T) {
 	}
 }
 
+func TestPrepareFixKind(t *testing.T) {
+	t.Parallel()
+
+	policy := action.StaticPolicy{"payments": {Mode: action.Approved, Actions: []string{"api", "pr", "odd", "plain", "monitor-note"}}}
+	input := func(name, params string) json.RawMessage {
+		return json.RawMessage(`{"action": "` + name + `", "params": ` + params + `, "reason": "Too noisy."}`)
+	}
+
+	tests := []struct {
+		name  string
+		input json.RawMessage
+		want  action.FixKind
+	}{
+		{name: "an action that fixes through an API", input: input("api", `{"threshold": 90}`), want: action.FixAPI},
+		{name: "an action that fixes through a pull request", input: input("pr", `{"threshold": 90}`), want: action.FixPullRequest},
+		{name: "a kind that is not known is stored as none", input: input("odd", `{"threshold": 90}`)},
+		{name: "an action that changes a definition and fixes nothing", input: input("plain", `{"threshold": 90}`)},
+		{name: "an action that is not a monitor", input: input("monitor-note", `{"board": "ops", "title": "t"}`)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := offlineWith(t, policy, map[string]action.Action{
+				"api":          fixingMonitor{fakeMonitor: newFakeMonitor("api"), kind: action.FixAPI},
+				"pr":           fixingMonitor{fakeMonitor: newFakeMonitor("pr"), kind: action.FixPullRequest},
+				"odd":          fixingMonitor{fakeMonitor: newFakeMonitor("odd"), kind: "mute"},
+				"plain":        newFakeMonitor("plain"),
+				"monitor-note": newFakeNote("monitor-note"),
+			})
+
+			got, refusal := s.prepare(t.Context(), ProposeRequest{InvestigationID: uuid.New(), ToolCallID: "call-1", Route: "payments", Mode: action.Approved, Input: tt.input})
+			require.Empty(t, refusal)
+			require.Equal(t, tt.want, got.fixKind)
+		})
+	}
+}
+
+func TestFixKindText(t *testing.T) {
+	t.Parallel()
+
+	require.Nil(t, fixKindText(""))
+	require.Equal(t, "pull_request", *fixKindText(action.FixPullRequest))
+}
+
 func TestPrepareSnapshot(t *testing.T) {
 	t.Parallel()
 

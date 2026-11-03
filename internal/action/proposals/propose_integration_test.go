@@ -79,6 +79,38 @@ func TestProposeStoresTheSnapshot(t *testing.T) {
 	require.False(t, plain.Undoable)
 }
 
+func TestProposeStoresTheFixKind(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		input        string
+		want         *string
+		wantProposal action.FixKind
+	}{
+		{name: "an action that fixes through an API", input: fixAPIInput, want: new("api"), wantProposal: action.FixAPI},
+		{name: "an action that fixes through a pull request", input: fixPullRequestInput, want: new("pull_request"), wantProposal: action.FixPullRequest},
+		{name: "a monitor change that fixes nothing", input: monitorInput},
+		{name: "an action that is not a monitor", input: noteInput},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := setup(t)
+
+			row := h.row(t, h.propose(t, "call-1", tt.input))
+			require.Equal(t, tt.want, row.FixKind)
+
+			proposals, err := OfInvestigation(t.Context(), h.pool, checkoutInvestigation)
+			require.NoError(t, err)
+			require.Len(t, proposals, 1)
+			require.Equal(t, tt.wantProposal, proposals[0].FixKind)
+		})
+	}
+}
+
 func TestProposeRefusesWhatTheActionRefuses(t *testing.T) {
 	t.Parallel()
 
@@ -184,7 +216,7 @@ func TestStoredParamsCannotChange(t *testing.T) {
 
 	for _, column := range []string{
 		"params = '{}'", "action = 'other'", "reason = 'x'", "idempotency_key = 'x'", "expires_at = now() + interval '1 year'",
-		"snapshot = '{}'", "undoable = true", "undo_of = id",
+		"snapshot = '{}'", "undoable = true", "undo_of = id", "fix_kind = 'api'",
 	} {
 		_, err := h.pool.Exec(t.Context(), "UPDATE action_proposals SET "+column+" WHERE id = $1", id)
 		require.ErrorContains(t, err, "what an action proposal asks for cannot be changed", column)
@@ -192,6 +224,22 @@ func TestStoredParamsCannotChange(t *testing.T) {
 
 	_, err := h.pool.Exec(t.Context(), "UPDATE action_proposals SET error = 'x' WHERE id = $1", id)
 	require.NoError(t, err, "the other columns change")
+}
+
+func TestFixKindCannotChange(t *testing.T) {
+	t.Parallel()
+
+	h := setup(t)
+	id := h.propose(t, "call-1", fixAPIInput)
+
+	for _, column := range []string{"fix_kind = NULL", "fix_kind = 'pull_request'"} {
+		_, err := h.pool.Exec(t.Context(), "UPDATE action_proposals SET "+column+" WHERE id = $1", id)
+		require.ErrorContains(t, err, "what an action proposal asks for cannot be changed", column)
+	}
+
+	_, err := h.pool.Exec(t.Context(), "INSERT INTO action_proposals (id, investigation_id, action, params, mode, status, idempotency_key, proposed_at, expires_at, fix_kind) "+
+		"VALUES (gen_random_uuid(), $1, 'x', '{}', 'approved', 'proposed', 'key-x', now(), now(), 'mute')", checkoutInvestigation)
+	require.ErrorContains(t, err, "action_proposals_fix_kind_check")
 }
 
 // cmpMode returns m, or approved for the zero value.
