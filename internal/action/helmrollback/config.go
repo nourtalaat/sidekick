@@ -82,7 +82,7 @@ type Limits struct {
 func (c *Config) Validate() error {
 	var errs []error
 
-	if err := c.RevisionLimit.CheckConfig(); err != nil {
+	if err := c.CheckConfig(); err != nil {
 		errs = append(errs, fmt.Errorf("check the revision limit: %w", err))
 	}
 

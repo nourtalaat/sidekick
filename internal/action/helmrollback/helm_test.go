@@ -16,12 +16,12 @@ import (
 )
 
 const (
-	podNamespace = "sidekick"
-	account      = "sidekick-helm-rollback"
-	ownToken     = "own-token-secret-value"
-	mintedToken  = "minted-token-1"
-	tokenPath    = "/api/v1/namespaces/" + podNamespace + "/serviceaccounts/" + account + "/token"
-	secretsPath  = "/api/v1/namespaces/shop/secrets"
+	podNamespace       = "sidekick"
+	account            = "sidekick-helm-rollback"
+	ownToken           = "own-token-secret-value"
+	mintedToken        = "minted-token-1"
+	tokenPath          = "/api/v1/namespaces/" + podNamespace + "/serviceaccounts/" + account + "/token"
+	releaseRecordsPath = "/api/v1/namespaces/shop/secrets"
 )
 
 // newAPI starts a fake Kubernetes API server that gives the token of the
@@ -124,7 +124,7 @@ func TestHistoryOfAReleaseWithNoRecords(t *testing.T) {
 	t.Parallel()
 
 	api := newAPI(t)
-	api.HandleFunc(http.MethodGet, secretsPath, func(w http.ResponseWriter, _ *http.Request) {
+	api.HandleFunc(http.MethodGet, releaseRecordsPath, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
 		_ = json.NewEncoder(w).Encode(map[string]any{"apiVersion": "v1", "kind": "SecretList", "items": []any{}})
@@ -139,7 +139,7 @@ func TestHistoryOfAReleaseWithNoRecords(t *testing.T) {
 
 	requests := api.Requests()
 	list := requests[len(requests)-1]
-	require.Equal(t, secretsPath, list.Path)
+	require.Equal(t, releaseRecordsPath, list.Path)
 	require.Equal(t, "name=web,owner=helm", list.Query.Get("labelSelector"))
 	require.Equal(t, "Bearer "+mintedToken, list.Header.Get("Authorization"))
 }
@@ -166,7 +166,7 @@ func TestHistoryErrorsHoldNoTokenAndSayThatTheAccountIsRefused(t *testing.T) {
 	t.Parallel()
 
 	api := newAPI(t)
-	api.HandleFunc(http.MethodGet, secretsPath, func(w http.ResponseWriter, r *http.Request) {
+	api.HandleFunc(http.MethodGet, releaseRecordsPath, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
 

@@ -680,6 +680,9 @@ func TestExecuteWhenTheClusterCannotBeReachedMayBeTriedAgain(t *testing.T) {
 	require.ErrorContains(t, err, "will be tried again")
 	require.NotErrorIs(t, err, action.ErrPermanent)
 	require.NotErrorIs(t, err, action.ErrConflict)
+
+	f.kube.ConnectionError = nil
+
 	require.Len(t, f.history(), 3, "nothing was written")
 }
 
