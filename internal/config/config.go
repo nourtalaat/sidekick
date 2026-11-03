@@ -249,8 +249,7 @@ type BenchGate struct {
 	BaseDir string `yaml:"baseDir"`
 }
 
-// Route decides how matching events are investigated and where the report
-// goes (RT-1, RT-2).
+// Route decides how matching events are investigated and where the report goes.
 type Route struct {
 	Name string `yaml:"name"`
 	// Priority orders routes, lower first; ties are ordered by name.
@@ -270,12 +269,12 @@ type Route struct {
 	Mode action.Mode `yaml:"mode"`
 	// AllowUntrustedWrite lets a read-write route select intakes and
 	// listeners that are not trusted, and keeps read-write mode for their
-	// events (ACT-6). Sidekick logs a warning for it on every start.
+	// events. Sidekick logs a warning for it on every start.
 	AllowUntrustedWrite bool `yaml:"allowUntrustedWrite"`
 	// Actions lists the actions the route may propose, by their names in
 	// the actions section. It is empty in read-only mode.
 	Actions []string `yaml:"actions"`
-	// Outputs lists where reports go (OUT-5).
+	// Outputs lists where reports go.
 	Outputs []string `yaml:"outputs"`
 	// Details are fixed facts about the route, such as the owning team or
 	// the environment. The prompt shows them to the model as trusted text,
@@ -294,7 +293,7 @@ type Route struct {
 	// window. Nil means only budgets.rateLimit holds them.
 	RateLimit *RateLimit `yaml:"rateLimit"`
 	// Grouping decides which of the route's events join one group and one
-	// investigation (RT-3).
+	// investigation.
 	Grouping Grouping `yaml:"grouping"`
 	// WatcherDefaults are the defaults of the route's watchers, including
 	// those the model starts. Zero values come from watch.defaults.
@@ -359,7 +358,7 @@ type Match struct {
 }
 
 // Budgets hold the global investigation limits. They are the defaults for
-// routes and the ceilings route budgets must stay within (CFG-1).
+// routes and the ceilings route budgets must stay within.
 type Budgets struct {
 	PerInvestigation Limits `yaml:"perInvestigation"`
 	// Daily is the global daily spending cap and the time zone of every

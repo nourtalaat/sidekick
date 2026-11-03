@@ -1,4 +1,4 @@
-# A route that names an output that does not exist (OUT-5).
+# A route that names an output that does not exist.
 database:
   urlSecret: { name: sidekick-db, key: url }
 
