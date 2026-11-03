@@ -19,12 +19,8 @@ import { StrategyVersionPage } from "./pages/StrategyVersionPage";
 import { LOGIN_ROUTE } from "./routes";
 import { RequireRole } from "./components/RequireRole";
 import { RequireSession } from "./session";
-import { NAV_ITEMS } from "./shell/Nav";
 import { Shell } from "./shell/Shell";
 import { UnauthorizedRedirect } from "./UnauthorizedRedirect";
-
-/** The paths of the navigation that have their own routes below, so no placeholder is made for them. */
-const BUILT_PATHS = ["/investigations", "/routes", "/listeners", "/strategies", "/audit", "/review", "/lessons"];
 
 /** The routes of the app. Everything but the login page needs a session. */
 export function App() {
@@ -58,9 +54,16 @@ export function App() {
             />
             <Route path="/review" element={<ReviewPage />} />
             <Route path="/lessons" element={<LessonsPage />} />
-            {NAV_ITEMS.filter(({ to }) => !BUILT_PATHS.includes(to)).map(({ to, label }) => (
-              <Route key={to} path={to} element={to === "/dashboard" ? <DashboardPage /> : <PlaceholderPage title={label} />} />
-            ))}
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/benchmarks" element={<PlaceholderPage title="Benchmarks" />} />
+            <Route
+              path="/settings"
+              element={
+                <RequireRole role="admin" title="Settings">
+                  <PlaceholderPage title="Settings" />
+                </RequireRole>
+              }
+            />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Route>

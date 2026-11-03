@@ -8,9 +8,9 @@ import { problem, renderApp } from "./test/helpers";
 
 describe("the signed-in app", () => {
   it("shows the shell with its navigation, and the empty state of a page that is not built yet", async () => {
-    renderApp({ route: "/settings" });
+    renderApp({ route: "/benchmarks" });
 
-    expect(await screen.findByRole("heading", { name: "Settings", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Benchmarks", level: 1 })).toBeInTheDocument();
     expect(screen.getByText("Comes in a later release.")).toBeInTheDocument();
 
     const nav = screen.getByRole("navigation", { name: "Main" });
@@ -18,7 +18,7 @@ describe("the signed-in app", () => {
       expect(within(nav).getByRole("link", { name: label })).toBeInTheDocument();
     }
 
-    expect(within(nav).getByRole("link", { name: "Settings" })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("link", { name: "Benchmarks" })).toHaveAttribute("aria-current", "page");
   });
 
   it("opens Investigations from the root", async () => {
@@ -56,17 +56,17 @@ describe("a missing session", () => {
 
   it("sends the browser to the login page when a later API call answers 401", async () => {
     const { api } = renderApp({
-      route: "/settings",
+      route: "/benchmarks",
       handler: () => problem(401, "Sign in to continue."),
     });
-    await screen.findByRole("heading", { name: "Settings", level: 1 });
+    await screen.findByRole("heading", { name: "Benchmarks", level: 1 });
 
     await act(async () => {
       await api.client.GET("/tokens");
     });
 
     expect(await screen.findByRole("heading", { name: "Sidekick", level: 1 })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/auth/login?return=%2Fsettings");
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/auth/login?return=%2Fbenchmarks");
   });
 
   it("does not let the return parameter leave the site", async () => {
