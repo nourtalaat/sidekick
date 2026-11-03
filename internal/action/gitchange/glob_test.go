@@ -1,4 +1,4 @@
-package githubpr
+package gitchange
 
 import (
 	"testing"
@@ -68,7 +68,7 @@ func TestCheckGlob(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := checkGlob(tt.pattern)
+			err := CheckGlob(tt.pattern)
 			if tt.wantErr == "" {
 				require.NoError(t, err)
 

@@ -18,6 +18,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/store/db"
@@ -235,7 +236,7 @@ func invocation(params Params) action.Invocation {
 // rulesParams returns parameters that change the rules file.
 func rulesParams() Params {
 	p := validParams()
-	p.Files = []FileChange{{Path: testRulesPath, Content: text(testRulesAfter)}}
+	p.Files = []gitchange.FileChange{{Path: testRulesPath, Content: text(testRulesAfter)}}
 
 	return p
 }

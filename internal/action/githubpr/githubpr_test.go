@@ -11,6 +11,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/validateclient"
@@ -158,21 +159,6 @@ func TestSpec(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestValidationErrorText(t *testing.T) {
-	t.Parallel()
-
-	problems := make([]validateclient.Problem, 0, maxReportedProblems+3)
-	for range maxReportedProblems + 3 {
-		problems = append(problems, validateclient.Problem{Path: "a.yaml", Line: 2, Message: strings.Repeat("m", maxProblemBytes+50)})
-	}
-
-	text := (&validationError{problems: problems}).Error()
-
-	require.Equal(t, maxReportedProblems+1, strings.Count(text, "\n"), "the listed problems and the line that counts the rest, each after the lead")
-	require.Contains(t, text, "\n- and 3 more")
-	require.NotContains(t, text, strings.Repeat("m", maxProblemBytes+1))
-}
-
 func TestRegistered(t *testing.T) {
 	t.Parallel()
 
@@ -209,7 +195,7 @@ limits:
 func TestValidatorOfDeps(t *testing.T) {
 	t.Parallel()
 
-	changes := []change{{path: "prometheus/rules/a.yaml", format: validateclient.FormatPrometheusRules, content: text("groups: []\n")}}
+	changes := []gitchange.PlannedFile{{Path: "prometheus/rules/a.yaml", Format: validateclient.FormatPrometheusRules, Content: text("groups: []\n")}}
 
 	t.Run("a validator in the deps is used instead of the URL", func(t *testing.T) {
 		t.Parallel()

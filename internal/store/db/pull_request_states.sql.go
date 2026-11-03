@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,7 +34,7 @@ func (q *Queries) GetPullRequestState(ctx context.Context, proposalID uuid.UUID)
 }
 
 const listPullRequestsToCheck = `-- name: ListPullRequestsToCheck :many
-SELECT p.id, p.action, coalesce(p.params ->> 'repo', o.params ->> 'repo')::text AS repo
+SELECT p.id, p.action, coalesce(o.params, p.params)::jsonb AS params
 FROM action_proposals p
 LEFT JOIN action_proposals o ON o.id = p.undo_of
 LEFT JOIN pull_request_states s ON s.proposal_id = p.id
@@ -56,16 +57,17 @@ type ListPullRequestsToCheckParams struct {
 type ListPullRequestsToCheckRow struct {
 	ID     uuid.UUID
 	Action string
-	Repo   string
+	Params json.RawMessage
 }
 
 // ListPullRequestsToCheck returns up to batch succeeded proposals of the
 // given actions, executed since the given time, whose pull request has no
 // state yet or was last checked as open before the given time. The ones
-// never checked come first, then those checked longest ago. The repository
-// is read from the proposal's parameters, or for an undo from the
-// proposal it undoes. An undo is checked only when it has a state, which
-// the action records when the undo opened a revert pull request.
+// never checked come first, then those checked longest ago. params are the
+// parameters the action reads the repository or project from: the proposal's
+// own, or for an undo those of the proposal it undoes. An undo is checked
+// only when it has a state, which the action records when the undo opened a
+// revert pull request.
 func (q *Queries) ListPullRequestsToCheck(ctx context.Context, arg ListPullRequestsToCheckParams) ([]ListPullRequestsToCheckRow, error) {
 	rows, err := q.db.Query(ctx, listPullRequestsToCheck,
 		arg.Actions,
@@ -80,7 +82,7 @@ func (q *Queries) ListPullRequestsToCheck(ctx context.Context, arg ListPullReque
 	var items []ListPullRequestsToCheckRow
 	for rows.Next() {
 		var i ListPullRequestsToCheckRow
-		if err := rows.Scan(&i.ID, &i.Action, &i.Repo); err != nil {
+		if err := rows.Scan(&i.ID, &i.Action, &i.Params); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

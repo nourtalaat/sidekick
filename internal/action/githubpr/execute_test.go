@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
 	"github.com/nourtalaat/sidekick/internal/validateclient"
 )
@@ -105,7 +106,7 @@ func TestExecuteDeletesAndCreatesFiles(t *testing.T) {
 	b.github.ExpectAllCalled()
 
 	params := validParams()
-	params.Files = []FileChange{
+	params.Files = []gitchange.FileChange{
 		{Path: "prometheus/rules/old.yaml", Delete: true},
 		{Path: "prometheus/rules/new.yaml", Content: text("groups:\n- name: a\n  rules: []\n")},
 	}
@@ -434,7 +435,7 @@ func TestExecuteTerraformModule(t *testing.T) {
 	b.validator.ExpectAllCalled()
 
 	params := validParams()
-	params.Files = []FileChange{
+	params.Files = []gitchange.FileChange{
 		{Path: "datadog/prod/main.tf", Content: text(mainNew)},
 		{Path: "datadog/prod/old.tf", Delete: true},
 	}
@@ -467,7 +468,7 @@ func TestExecuteSeveralFormats(t *testing.T) {
 	b.github.Handle(http.MethodPost, repoPath("pulls"), replyStatus(http.StatusCreated, pullBody(6, true)))
 
 	params := validParams()
-	params.Files = []FileChange{
+	params.Files = []gitchange.FileChange{
 		{Path: testRulesPath, Content: text(testRulesAfter)},
 		{Path: grafanaFile, Content: text("apiVersion: 1\ngroups: []\n")},
 	}

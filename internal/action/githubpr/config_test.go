@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/githubapp"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/validateclient"
@@ -18,14 +19,12 @@ var testApp = githubapp.App{AppID: 11, InstallationID: 22, PrivateKeySecret: reg
 func validLimits() Limits {
 	return Limits{
 		Repos: []string{"acme/monitors"},
-		Paths: []PathRule{
+		Paths: []gitchange.PathRule{
 			{Glob: "prometheus/rules/**", Format: validateclient.FormatPrometheusRules},
 			{Glob: "datadog/**", Format: validateclient.FormatTerraform},
 			{Glob: "grafana/alerting/**", Format: validateclient.FormatGrafanaAlertFile},
 		},
-		MaxFiles:        3,
-		MaxChangedLines: 40,
-		BaseBranch:      "main",
+		Bounds: gitchange.Bounds{MaxFiles: 3, MaxChangedLines: 40, BaseBranch: "main"},
 	}
 }
 
@@ -62,7 +61,7 @@ func TestConfigValidate(t *testing.T) {
 			`limits.repos[2]: "../x" must have the form owner/name, with no wildcards`,
 		}},
 		{name: "path rules that are wrong", change: func(c *Config) {
-			c.Limits.Paths = []PathRule{{Glob: "", Format: validateclient.FormatTerraform}, {Glob: "a/**"}, {Glob: "b/**", Format: "nagios"}}
+			c.Limits.Paths = []gitchange.PathRule{{Glob: "", Format: validateclient.FormatTerraform}, {Glob: "a/**"}, {Glob: "b/**", Format: "nagios"}}
 		}, want: []string{
 			"limits.paths[0].glob: required",
 			"limits.paths[1].format: required; use one of prometheus_rules, terraform, grafana_alert_file",

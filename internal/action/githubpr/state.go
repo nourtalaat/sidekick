@@ -1,12 +1,9 @@
 package githubpr
 
-import gh "github.com/google/go-github/v93/github"
+import (
+	gh "github.com/google/go-github/v93/github"
 
-// The states of a pull request, as pull_request_states.state holds them.
-const (
-	StateOpen   = "open"
-	StateMerged = "merged"
-	StateClosed = "closed"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 )
 
 // stateOfClosed is the state GitHub gives a pull request that is not open.
@@ -17,10 +14,10 @@ const stateOfClosed = "closed"
 func stateOf(pr *gh.PullRequest) string {
 	switch {
 	case pr.MergedAt != nil:
-		return StateMerged
+		return gitchange.StateMerged
 	case pr.GetState() == stateOfClosed:
-		return StateClosed
+		return gitchange.StateClosed
 	default:
-		return StateOpen
+		return gitchange.StateOpen
 	}
 }

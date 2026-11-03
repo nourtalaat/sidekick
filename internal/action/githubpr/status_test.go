@@ -5,9 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
-	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
+	"github.com/nourtalaat/sidekick/internal/registry"
 )
 
 func TestStatus(t *testing.T) {
@@ -19,23 +21,23 @@ func TestStatus(t *testing.T) {
 	tests := []struct {
 		name string
 		list string
-		want *Status
+		want *gitchange.Status
 	}{
 		{name: "no pull request", list: "[]"},
 		{
 			name: "an open pull request",
 			list: `[{"number":4,"state":"open","draft":true,"html_url":"https://github.com/acme/monitors/pull/4"}]`,
-			want: &Status{Number: 4, URL: "https://github.com/acme/monitors/pull/4", State: StateOpen},
+			want: &gitchange.Status{Number: 4, URL: "https://github.com/acme/monitors/pull/4", State: gitchange.StateOpen},
 		},
 		{
 			name: "a merged pull request",
 			list: `[{"number":5,"state":"closed","html_url":"https://github.com/acme/monitors/pull/5","merged_at":"2026-11-03T10:00:00Z","closed_at":"2026-11-03T10:00:00Z"}]`,
-			want: &Status{Number: 5, URL: "https://github.com/acme/monitors/pull/5", State: StateMerged, MergedAt: &merged},
+			want: &gitchange.Status{Number: 5, URL: "https://github.com/acme/monitors/pull/5", State: gitchange.StateMerged, MergedAt: &merged},
 		},
 		{
 			name: "a pull request closed without a merge",
 			list: `[{"number":6,"state":"closed","html_url":"https://github.com/acme/monitors/pull/6","closed_at":"2026-11-04T09:30:00Z","merged_at":null}]`,
-			want: &Status{Number: 6, URL: "https://github.com/acme/monitors/pull/6", State: StateClosed, ClosedAt: &closed},
+			want: &gitchange.Status{Number: 6, URL: "https://github.com/acme/monitors/pull/6", State: gitchange.StateClosed, ClosedAt: &closed},
 		},
 	}
 
@@ -69,17 +71,35 @@ func TestStatusGitHubError(t *testing.T) {
 	require.True(t, hasPermanent(err))
 }
 
-func TestStatusCheckerEnabled(t *testing.T) {
+func TestCountCheckKeepsTheGitHubMetric(t *testing.T) {
 	t.Parallel()
 
-	b := newBed(t, nil)
+	reg := prometheus.NewRegistry()
 
-	enabled, err := NewStatusChecker(StatusOptions{Actions: map[string]action.Action{"monitor-pr": b.pr}})
+	pr, err := newPR("monitor-pr", Config{App: testApp, Limits: validLimits()}, registry.Deps{Secrets: secretsWithKey(t), Metrics: reg})
 	require.NoError(t, err)
-	require.True(t, enabled.Enabled())
-	require.Equal(t, []string{"monitor-pr"}, enabled.names)
 
-	none, err := NewStatusChecker(StatusOptions{Actions: map[string]action.Action{}})
+	pr.CountCheck(gitchange.StateMerged)
+	pr.CountCheck(gitchange.StateMerged)
+	pr.CountCheck("error")
+
+	families, err := reg.Gather()
 	require.NoError(t, err)
-	require.False(t, none.Enabled())
+
+	got := map[string]float64{}
+
+	for _, family := range families {
+		if family.GetName() != "sidekick_githubpr_status_checks_total" {
+			continue
+		}
+
+		for _, m := range family.GetMetric() {
+			require.Len(t, m.GetLabel(), 1)
+			require.Equal(t, "state", m.GetLabel()[0].GetName())
+
+			got[m.GetLabel()[0].GetValue()] = m.GetCounter().GetValue()
+		}
+	}
+
+	require.Equal(t, map[string]float64{"merged": 2, "error": 1}, got)
 }
