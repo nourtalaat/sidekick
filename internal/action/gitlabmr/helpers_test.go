@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 
@@ -286,4 +287,26 @@ func validatorRequest(t *testing.T, s *fakehttp.Server, n int) validateclient.Re
 	require.NoError(t, json.Unmarshal(reqs[n].Body, &out))
 
 	return out
+}
+
+// expectCommit makes the fake GitLab accept the commit that makes the branch.
+func (b *bed) expectCommit() {
+	b.gitlab.Handle(http.MethodPost, apiPath("repository/commits"), replyStatus(http.StatusCreated, fmt.Sprintf(`{"id":%q}`, testCommitSHA)))
+}
+
+// expectOpen makes the fake GitLab accept the merge request.
+func (b *bed) expectOpen(iid int, draft bool) {
+	b.gitlab.Handle(http.MethodPost, apiPath("merge_requests"), replyStatus(http.StatusCreated, mergeRequestBody(iid, "opened", draft)))
+}
+
+// keysOf returns the keys of a decoded JSON object, sorted.
+func keysOf(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+
+	slices.Sort(keys)
+
+	return keys
 }

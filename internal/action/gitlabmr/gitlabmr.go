@@ -111,11 +111,19 @@ type MR struct {
 }
 
 var (
+	_ action.Action          = (*MR)(nil)
 	_ action.ProposalChecker = (*MR)(nil)
 	_ action.Snapshotter     = (*MR)(nil)
 	_ action.FileReader      = (*MR)(nil)
 	_ action.MonitorFixer    = (*MR)(nil)
 )
+
+// New builds the action from its validated config. It makes no network
+// call: the token is read and used by the first call to GitLab, so GitLab or
+// the validator being down blocks neither start-up nor readiness.
+func New(_ context.Context, name string, cfg Config, deps registry.Deps) (action.Action, error) {
+	return newMR(name, cfg, deps)
+}
 
 // newMR is New with the concrete type, for the code in this package that
 // needs more than the action interface.
