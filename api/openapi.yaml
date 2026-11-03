@@ -3215,11 +3215,17 @@ components:
       description: |
         One file of a pull request or merge request. `path` comes from the
         model, so a screen shows it as plain text.
-      required: [path, status, linesAdded, linesRemoved]
+      required: [path, status, linesAdded, linesRemoved, diffAvailable]
       properties:
         path:
           type: string
           description: The path from the root of the repository.
+        diffAvailable:
+          type: boolean
+          description: |
+            Whether the line diff of the file can be asked for: the action
+            that made the proposal is still in the config and can read files
+            from its host.
         status:
           type: string
           enum: [added, changed, deleted]

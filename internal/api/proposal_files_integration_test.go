@@ -3,7 +3,9 @@
 package api_test
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"testing"
 
@@ -46,16 +48,39 @@ const pullRequestParams = `{
 
 // proposalFileBody is a file of a proposal as the API returns it.
 type proposalFileBody struct {
-	Path         string `json:"path"`
-	Status       string `json:"status"`
-	LinesAdded   int    `json:"linesAdded"`
-	LinesRemoved int    `json:"linesRemoved"`
+	Path          string `json:"path"`
+	Status        string `json:"status"`
+	LinesAdded    int    `json:"linesAdded"`
+	LinesRemoved  int    `json:"linesRemoved"`
+	DiffAvailable bool   `json:"diffAvailable"`
 }
 
 // proposalFilesBody is the part of a proposal the file tests read.
 type proposalFilesBody struct {
 	ID    string             `json:"id"`
 	Files []proposalFileBody `json:"files"`
+}
+
+// apiReaderAction is an action that can read files from a host: it answers
+// ReadBlob from its blobs, by SHA, or fails with err when it is set.
+type apiReaderAction struct {
+	apiNoteAction
+
+	blobs map[string]string
+	err   error
+}
+
+func (a apiReaderAction) ReadBlob(_ context.Context, _ json.RawMessage, blob string) (string, error) {
+	if a.err != nil {
+		return "", a.err
+	}
+
+	text, ok := a.blobs[blob]
+	if !ok {
+		return "", errors.New("the host has no such blob")
+	}
+
+	return text, nil
 }
 
 // setupFiles returns a server whose payments route proposes the actions, with
@@ -124,15 +149,30 @@ func readFilesProposals(t *testing.T, s server) map[string]proposalFilesBody {
 func TestProposalListsTheFilesOfAPullRequest(t *testing.T) {
 	t.Parallel()
 
-	s := setupFiles(t, map[string]action.Action{"monitor-pr": apiNoteAction{}, "monitor-note": apiNoteAction{}})
-	got := readFilesProposals(t, s)
+	tests := []struct {
+		name      string
+		pr        action.Action
+		available bool
+	}{
+		{name: "an action that reads files", pr: apiReaderAction{}, available: true},
+		{name: "an action that cannot read files", pr: apiNoteAction{}, available: false},
+	}
 
-	require.Equal(t, []proposalFileBody{
-		{Path: "rules/a.yaml", Status: "changed", LinesAdded: 2, LinesRemoved: 1},
-		{Path: "rules/b.yaml", Status: "added", LinesAdded: 3},
-		{Path: "rules/c.yaml", Status: "deleted", LinesRemoved: 5},
-	}, got[propPullRequest].Files, "the files come from the snapshot, sorted by path")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	require.Empty(t, got[propPullUndo].Files, "an undo has the swapped snapshot, which is not a list of files")
-	require.Empty(t, got[propSucceeded].Files, "a proposal that changes no files has none")
+			s := setupFiles(t, map[string]action.Action{"monitor-pr": tt.pr, "monitor-note": apiNoteAction{}})
+			got := readFilesProposals(t, s)
+
+			require.Equal(t, []proposalFileBody{
+				{Path: "rules/a.yaml", Status: "changed", LinesAdded: 2, LinesRemoved: 1, DiffAvailable: tt.available},
+				{Path: "rules/b.yaml", Status: "added", LinesAdded: 3, DiffAvailable: tt.available},
+				{Path: "rules/c.yaml", Status: "deleted", LinesRemoved: 5, DiffAvailable: tt.available},
+			}, got[propPullRequest].Files, "the files come from the snapshot, sorted by path")
+
+			require.Empty(t, got[propPullUndo].Files, "an undo has the swapped snapshot, which is not a list of files")
+			require.Empty(t, got[propSucceeded].Files, "a proposal that changes no files has none")
+		})
+	}
 }

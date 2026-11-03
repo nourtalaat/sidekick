@@ -2115,6 +2115,12 @@ export interface components {
         ProposalFile: {
             /** @description The path from the root of the repository. */
             path: string;
+            /**
+             * @description Whether the line diff of the file can be asked for: the action
+             *     that made the proposal is still in the config and can read files
+             *     from its host.
+             */
+            diffAvailable: boolean;
             /** @enum {string} */
             status: "added" | "changed" | "deleted";
             linesAdded: number;

@@ -58,6 +58,7 @@ var (
 	_ action.Action          = (*PR)(nil)
 	_ action.ProposalChecker = (*PR)(nil)
 	_ action.Snapshotter     = (*PR)(nil)
+	_ action.FileReader      = (*PR)(nil)
 	_ action.Undoer          = (*PR)(nil)
 )
 

@@ -337,9 +337,13 @@ func (s *server) proposalOf(p action.Proposal, alertTitle string) apigen.Proposa
 	}
 
 	if len(p.Files) > 0 {
+		diffAvailable := s.actions != nil && s.actions.ReadsFiles(p.Action)
 		files := make([]apigen.ProposalFile, 0, len(p.Files))
+
 		for _, f := range p.Files {
-			files = append(files, apigen.ProposalFile{Path: f.Path, Status: apigen.ProposalFileStatus(f.Status), LinesAdded: f.LinesAdded, LinesRemoved: f.LinesRemoved})
+			files = append(files, apigen.ProposalFile{
+				Path: f.Path, Status: apigen.ProposalFileStatus(f.Status), LinesAdded: f.LinesAdded, LinesRemoved: f.LinesRemoved, DiffAvailable: diffAvailable,
+			})
 		}
 
 		out.Files = &files

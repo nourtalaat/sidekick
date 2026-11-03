@@ -2203,8 +2203,12 @@ type ProposalChange struct {
 // ProposalFile One file of a pull request or merge request. `path` comes from the
 // model, so a screen shows it as plain text.
 type ProposalFile struct {
-	LinesAdded   int `json:"linesAdded"`
-	LinesRemoved int `json:"linesRemoved"`
+	// DiffAvailable Whether the line diff of the file can be asked for: the action
+	// that made the proposal is still in the config and can read files
+	// from its host.
+	DiffAvailable bool `json:"diffAvailable"`
+	LinesAdded    int  `json:"linesAdded"`
+	LinesRemoved  int  `json:"linesRemoved"`
 
 	// Path The path from the root of the repository.
 	Path   string             `json:"path"`
