@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { THEME_STORAGE_KEY } from "./theme";
 import { ProposalCard } from "./components/ProposalCard";
@@ -41,14 +41,14 @@ describe.each(THEMES)("accessibility of the files of a pull request proposal, th
 
     it("has no WCAG 2.2 AA violations on a card with a diff open", async () => {
       const { container } = renderCard(() => json(200, fileDiff({ truncated: true, finalNewline: "added" })));
-      await screen.findAllByRole("region", { name: /^Changes in / });
+      await waitFor(() => expect(screen.getAllByRole("region", { name: /^Changes in / })).toHaveLength(2));
 
       expect(await wcagViolations(container)).toEqual([]);
     });
 
     it("has no WCAG 2.2 AA violations on a file that could not be read", async () => {
       const { container } = renderCard(() => problem(502, "Sidekick could not read the file on the base branch from the host: not found"));
-      await screen.findAllByRole("alert");
+      await waitFor(() => expect(screen.getAllByRole("alert")).toHaveLength(2));
 
       expect(await wcagViolations(container)).toEqual([]);
     });

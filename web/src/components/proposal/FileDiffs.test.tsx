@@ -92,7 +92,7 @@ describe("the files of a pull request proposal", () => {
     const { container } = renderWithProviders(card(paths(2)), { api });
 
     expect(disclosures(container).map((d) => d.open)).toEqual([true, true]);
-    expect(await screen.findAllByRole("region", { name: /^Changes in / })).toHaveLength(2);
+    await waitFor(() => expect(screen.getAllByRole("region", { name: /^Changes in / })).toHaveLength(2));
     expect(asked.map((a) => a.path).sort()).toEqual(paths(2));
   });
 
@@ -102,7 +102,7 @@ describe("the files of a pull request proposal", () => {
     const first = renderWithProviders(card(paths(3)), { api: three.api });
 
     expect(disclosures(first.container).map((d) => d.open)).toEqual([true, true, true]);
-    await screen.findAllByRole("region", { name: /^Changes in / });
+    await waitFor(() => expect(screen.getAllByRole("region", { name: /^Changes in / })).toHaveLength(3));
     first.unmount();
 
     const five = diffServer();

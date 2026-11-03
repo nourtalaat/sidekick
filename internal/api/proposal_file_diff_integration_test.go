@@ -186,7 +186,7 @@ func TestGetProposalFileDiffCutsAtFourHundredLines(t *testing.T) {
 func TestGetProposalFileDiffSpellsHiddenCharacters(t *testing.T) {
 	t.Parallel()
 
-	s := setupFileDiff(t, apiReaderAction{blobs: map[string]string{"a1": "ab‮cd\r\n", "c1": ""}})
+	s := setupFileDiff(t, apiReaderAction{blobs: map[string]string{"a1": "ab\u202ecd\r\n", "c1": ""}})
 
 	got := readFileDiff(t, s.doWithToken(t, http.MethodGet, diffRoute(propPullRequest, "rules/a.yaml", false), approverToken, nil))
 	require.Equal(t, []string{"-1/. ab\\u202ecd\\u000d", "+./1 one", "+./2 two", "+./3 three"}, renderDiff(got.Lines))
