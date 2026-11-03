@@ -232,7 +232,7 @@ func TestExecuteRetryAfterCrash(t *testing.T) {
 		},
 		{
 			name:     "the merge request was closed meanwhile",
-			lists:    "[" + mergeRequestBody(12, "closed", false) + "]",
+			lists:    "[" + mergeRequestBody(12, "closed", true) + "]",
 			wantText: "Found merge request acme/platform/monitors!12, which has been closed since it was opened",
 			want:     []string{"GET merge_requests"},
 		},
@@ -244,8 +244,8 @@ func TestExecuteRetryAfterCrash(t *testing.T) {
 		},
 		{
 			name:     "the merge request is being merged",
-			lists:    "[" + mergeRequestBody(12, "locked", false) + "]",
-			wantText: "Found the already opened merge request acme/platform/monitors!12",
+			lists:    "[" + mergeRequestBody(12, "locked", true) + "]",
+			wantText: "Found the already opened draft merge request acme/platform/monitors!12",
 			want:     []string{"GET merge_requests"},
 		},
 		{
