@@ -1,0 +1,131 @@
+# An error rate alert ten minutes after a Deployment moved to a new image that
+# panics on promo codes. The right answer is a rollback of that Deployment,
+# with a revert pull request and a Helm rollback on the route as other
+# choices. Error rate strategy, approved mode, true positive.
+id: rollback-kubernetes-bad-image
+title: Cart API errors after a rollout to an image that panics on promo codes
+tags: [error-rate, kubernetes, deploy, actions, action-choice, true-positive]
+strategy: error-rate-alert
+now: 2026-10-14T10:30:00Z
+route:
+  mode: approved
+  actions: [github-revert, kubernetes-rollback, helm-rollback]
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="CartApiErrorRateHigh"}'
+    alerts:
+      - status: firing
+        labels: { alertname: CartApiErrorRateHigh, service: cart-api, namespace: shop, env: prod, severity: critical }
+        annotations:
+          summary: cart-api 5xx ratio above 5% for 5m
+          description: 31% of requests to cart-api failed with 5xx in the last 5m. The threshold is 5%.
+        startsAt: 2026-10-14T10:13:00Z
+        fingerprint: 6b2d90e1c47a5f38
+sources:
+  k8s:
+    tools: { snapshot: bench/tools/kubernetes.json }
+    fixtures:
+      - tool: get_rollout_history
+        respond:
+          text: |
+            Deployment shop/cart-api, newest first (revisionHistoryLimit 2)
+            revision 31, 2026-10-14T10:03:40Z, image quillcart/cart-api:2026.10.14-2
+              changed: image quillcart/cart-api:2026.10.14-1 -> quillcart/cart-api:2026.10.14-2
+            revision 30, 2026-10-14T08:52:15Z, image quillcart/cart-api:2026.10.14-1
+          evidence:
+            - { kind: deploy, title: cart-api revision 31, url: "https://k8s.quillcart.example/shop/deployments/cart-api/revisions/31" }
+      - tool: get_workload
+        respond:
+          text: |
+            Deployment shop/cart-api, 6 of 6 replicas ready, 6 updated
+            image quillcart/cart-api:2026.10.14-2, container cart-api, memory limit 512Mi
+            strategy RollingUpdate, rollout complete at 10:05:52
+            horizontal pod autoscaler cart-api, 6 to 12 replicas, now 6
+      - tool: list_pod_problems
+        respond:
+          text: "Namespace shop, no pods with problems for cart-api"
+          noData: true
+      - tool: get_pod_logs
+        respond:
+          text: |
+            cart-api-7c5d84f6b9-4hq2v, container cart-api, last lines
+            10:27:41 INFO POST /v1/cart/items 200 18ms
+            10:27:44 ERROR panic: runtime error: invalid memory address or nil pointer dereference
+            10:27:44 ERROR   cart.ApplyPromo(0x0, {0xc0003a2d80, 0x6}) cart/promo.go:112
+            10:27:44 ERROR   cart.(*Handler).AddItem cart/handler.go:57
+            10:27:44 INFO POST /v1/cart/items 500 2ms
+            10:27:50 INFO GET /v1/cart 200 9ms
+            The first such panic in this pod is at 10:04:31. Requests without a promo code succeed.
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: query_range
+        respond:
+          text: |
+            Share of 5xx responses of cart-api, last 3 hours, 5 minute points
+            08:30 to 10:00: 0.1% to 0.3%
+            10:05 0.4%, 10:10 24%, 10:15 33%, 10:20 31%, 10:25 30%, 10:30 31%
+            min 0.1%, max 33%, last 31%
+          evidence:
+            - { kind: metric, title: cart-api 5xx ratio, url: "https://prometheus.quillcart.example/graph?g0.expr=cart_api_5xx_ratio" }
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: |
+            6c1d9e4 2026-10-14T09:41:08Z "Stack promo codes on the cart" by mara
+            b07e5a2 2026-10-13T15:12:30Z "Round cart totals to the currency's minor unit" by mara
+          evidence:
+            - { kind: commit, title: 6c1d9e4, url: "https://github.example.com/quillcart/cart-api/commit/6c1d9e4" }
+      - tool: get_commit
+        match:
+          args:
+            ref: { regex: "^6c1d9e4" }
+        respond:
+          text: |
+            6c1d9e4 "Stack promo codes on the cart"
+            cart/promo.go (+41 -9)
+              -      return c.applySingle(code)
+              +      applied := c.Promos.Applied()
+              +      return c.applyStacked(code, applied)
+            cart/handler.go (+6 -2)
+            cart/promo_test.go (+30 -0)
+            Cart.Promos is set only when the cart is loaded from the cache.
+          evidence:
+            - { kind: commit, title: 6c1d9e4, url: "https://github.example.com/quillcart/cart-api/commit/6c1d9e4" }
+      - tool: list_workflow_runs
+        respond:
+          text: 'run 9120 deploy cart-api 2026-10-14T10:02:10Z success, commit 6c1d9e4, image 2026.10.14-2'
+          evidence:
+            - { kind: deploy, title: deploy cart-api 9120, url: "https://github.example.com/quillcart/cart-api/actions/runs/9120" }
+default: no_data
+actions:
+  github-revert:
+    spec: { snapshot: bench/actions/github.revert.json }
+  kubernetes-rollback:
+    spec: { snapshot: bench/actions/kubernetes.rollback.json }
+  helm-rollback:
+    spec: { snapshot: bench/actions/helm.rollback.json }
+expected:
+  verdict: true_positive
+  rootCause:
+    summary: Revision 31 at 10:03 (image 2026.10.14-2, commit 6c1d9e4) added promo code stacking, and cart requests that use a promo code panic in cart.ApplyPromo, so about a third of requests fail with 5xx.
+    rubric:
+      - { id: panic, text: "Names the nil pointer panic in the promo code path of cart-api as why requests fail", weight: 2, required: true }
+      - { id: change, text: "Ties it to revision 31 (image 2026.10.14-2) or commit 6c1d9e4, deployed shortly before the alert", weight: 2, required: true }
+      - { id: fix, text: "Proposes going back to the previous revision first", weight: 1 }
+  evidence:
+    - { calledTool: k8s__get_rollout_history }
+    - { citedURL: "https://k8s.quillcart.example/shop/deployments/cart-api/revisions/31" }
+  proposals:
+    - action: kubernetes-rollback
+      params:
+        kind: { equals: Deployment }
+        namespace: { equals: shop }
+        name: { equals: cart-api }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }
