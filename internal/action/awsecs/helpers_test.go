@@ -144,7 +144,11 @@ func arnOf(family string, revision int) string {
 // serve answers one ECS call.
 func (f *fakeECS) serve(w http.ResponseWriter, req *http.Request) {
 	body, err := io.ReadAll(req.Body)
-	require.NoError(f.t, err)
+	if err != nil {
+		f.t.Errorf("read the request: %v", err)
+
+		return
+	}
 
 	op := strings.TrimPrefix(req.Header.Get(targetHeader), targetPrefix)
 
@@ -192,7 +196,10 @@ func (f *fakeECS) serve(w http.ResponseWriter, req *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", jsonType)
-	require.NoError(f.t, json.NewEncoder(w).Encode(out))
+
+	if err := json.NewEncoder(w).Encode(out); err != nil {
+		f.t.Errorf("write the answer: %v", err)
+	}
 }
 
 // apiError answers with an error of ECS.

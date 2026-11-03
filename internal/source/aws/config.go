@@ -9,9 +9,6 @@ import (
 	"github.com/nourtalaat/sidekick/internal/source"
 )
 
-// maxLogGroupLen is the longest log group name CloudWatch Logs allows.
-const maxLogGroupLen = 512
-
 // logGroupPattern is the shape of a log group name, or the start of one.
 var logGroupPattern = regexp.MustCompile(`^[\w./#-]{1,512}$`)
 

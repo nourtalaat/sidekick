@@ -24,8 +24,6 @@ const (
 	// revision, and in descending order the families that share the prefix
 	// come first, so the search is cut.
 	maxListPages = 10
-	// maxMessageLen is the most bytes of an AWS message in an error.
-	maxMessageLen = 400
 )
 
 // primaryStatus is the status of the most recent deployment of a service.
@@ -39,8 +37,11 @@ type state struct {
 }
 
 // refusal is an error that says, for the model or a person to read, why the
-// action will not do something. It wraps action.ErrPermanent, so Sidekick
-// fails the proposal at once, and its text is only the reason.
+// action will not do something, and its text is only the reason. It matches
+// action.ErrLimit, because Sidekick shows the model only a Snapshot error that
+// wraps it as a refusal with its reason, and anything else as a failure to read
+// the service, to try again later. ErrLimit counts as permanent, as does
+// action.ErrPermanent, which it also matches, so Execute and Undo fail for good.
 type refusal struct {
 	text string
 }
@@ -50,9 +51,9 @@ func (e *refusal) Error() string {
 	return e.text
 }
 
-// Is makes the error match action.ErrPermanent.
+// Is makes the error match action.ErrLimit and action.ErrPermanent.
 func (e *refusal) Is(target error) bool {
-	return target == action.ErrPermanent
+	return target == action.ErrLimit || target == action.ErrPermanent
 }
 
 // refuse makes a refusal from format and args.

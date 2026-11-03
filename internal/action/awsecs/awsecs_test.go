@@ -243,10 +243,9 @@ func TestSnapshotRefusals(t *testing.T) {
 		wantErr string
 		// wantNoCalls is true when nothing is sent to ECS.
 		wantNoCalls bool
-		wantErrIs   error
 	}{
 		{
-			name: "more revisions back than the limit", params: paramsBack2, wantNoCalls: true, wantErrIs: action.ErrLimit,
+			name: "more revisions back than the limit", params: paramsBack2, wantNoCalls: true,
 			wantErr: "2 revisions back is more than maxRevisionsBack allows (1)",
 		},
 		{
@@ -314,11 +313,8 @@ func TestSnapshotRefusals(t *testing.T) {
 			_, err := r.Snapshot(t.Context(), json.RawMessage(tt.params))
 			require.ErrorContains(t, err, tt.wantErr)
 
-			if tt.wantErrIs != nil {
-				require.ErrorIs(t, err, tt.wantErrIs)
-			} else {
-				require.ErrorIs(t, err, action.ErrPermanent)
-			}
+			require.ErrorIs(t, err, action.ErrLimit, "the model is shown the reason as a refusal")
+			require.ErrorIs(t, err, action.ErrPermanent)
 
 			if tt.wantNoCalls {
 				require.Empty(t, f.ops)
