@@ -3,33 +3,23 @@ package datadog
 import (
 	"errors"
 	"fmt"
-	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/nourtalaat/sidekick/internal/action"
-	"github.com/nourtalaat/sidekick/internal/httpclient"
+	"github.com/nourtalaat/sidekick/internal/action/datadogapi"
 	"github.com/nourtalaat/sidekick/internal/registry"
 )
-
-// DefaultSite is the Datadog site used when the config names none. The API
-// is at api.<site>.
-const DefaultSite = "datadoghq.com"
 
 // editableRoots are the top-level fields of a monitor that limits.fields
 // may name. The others are set by Datadog or cannot change after the
 // monitor is made, such as its id, its type and its creator.
 var editableRoots = []string{"name", "query", "message", "tags", "priority", "options"}
 
-// siteHost is the shape of a Datadog site: a DNS name with a dot, such as
-// datadoghq.com, datadoghq.eu or us3.datadoghq.com.
-var siteHost = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$`)
-
 // Config is the config section of one datadog.monitor action.
 type Config struct {
 	// Site is the Datadog site, such as datadoghq.eu. Empty means
-	// DefaultSite. It cannot be set together with URL.
+	// datadoghq.com. It cannot be set together with URL.
 	Site string `yaml:"site"`
 	// URL is the root of the API, for a proxy or a test server. It replaces
 	// the address made from Site. It must be https, or http on a loopback
@@ -66,26 +56,7 @@ type Limits struct {
 // Validate checks the section without secrets or network calls. Each error
 // starts with the key of its field.
 func (c *Config) Validate() error {
-	var errs []error
-
-	switch {
-	case c.Site != "" && c.URL != "":
-		errs = append(errs, errors.New("url: cannot be set together with site"))
-	case c.URL != "":
-		if err := checkURL(c.URL); err != nil {
-			errs = append(errs, err)
-		}
-	case c.Site != "" && !siteHost.MatchString(c.Site):
-		errs = append(errs, fmt.Errorf("site: %q must be a Datadog site, such as datadoghq.com or datadoghq.eu", c.Site))
-	}
-
-	if c.APIKeySecret == (registry.SecretRef{}) {
-		errs = append(errs, errors.New("apiKeySecret: required"))
-	}
-
-	if c.AppKeySecret == (registry.SecretRef{}) {
-		errs = append(errs, errors.New("appKeySecret: required"))
-	}
+	errs := datadogapi.CheckConnection(c.Site, c.URL, c.APIKeySecret, c.AppKeySecret)
 
 	errs = append(errs, c.Limits.check()...)
 
@@ -140,46 +111,7 @@ func checkField(field string) error {
 	return nil
 }
 
-// checkURL checks that the URL is absolute and keeps the keys from crossing
-// the network unencrypted: https, or http on a loopback host.
-func checkURL(raw string) error {
-	u, err := url.Parse(raw)
-
-	switch {
-	case err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.RawQuery != "" || u.Fragment != "" || u.User != nil:
-		return fmt.Errorf("url: %q must be an absolute https URL, such as https://api.datadoghq.eu", raw)
-	case u.Scheme == "http" && !httpclient.IsLoopbackHost(u.Hostname()):
-		return fmt.Errorf("url: %q must use https; plain http is only allowed for localhost", raw)
-	default:
-		return nil
-	}
-}
-
-// site returns the Datadog site, with the default filled in.
-func (c *Config) site() string {
-	if c.Site == "" {
-		return DefaultSite
-	}
-
-	return c.Site
-}
-
 // apiURL returns the root of the API, without a trailing slash.
 func (c *Config) apiURL() string {
-	if c.URL != "" {
-		return strings.TrimSuffix(c.URL, "/")
-	}
-
-	return "https://api." + c.site()
-}
-
-// appHost returns the host of the Datadog web app for a site, or "" when it
-// is not known. Sites of two labels, such as datadoghq.com, use app.<site>;
-// regional sites such as us3.datadoghq.com are the app host themselves.
-func appHost(site string) string {
-	if strings.Count(site, ".") == 1 {
-		return "app." + site
-	}
-
-	return site
+	return datadogapi.APIURL(c.Site, c.URL)
 }
