@@ -63,6 +63,19 @@ var (
 	_ action.Undoer      = (*fakeMonitor)(nil)
 )
 
+// fixingMonitor is a fake monitor that also says it fixes a noisy monitor,
+// in the kind it was given.
+type fixingMonitor struct {
+	*fakeMonitor
+	kind action.FixKind
+}
+
+var _ action.MonitorFixer = fixingMonitor{}
+
+func (m fixingMonitor) FixKind() action.FixKind {
+	return m.kind
+}
+
 func newFakeMonitor(name string) *fakeMonitor {
 	return &fakeMonitor{name: name, live: json.RawMessage(startMonitor), version: 1}
 }

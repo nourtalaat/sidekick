@@ -159,6 +159,7 @@ func proposalOf(row db.ActionProposal, route, decidedByName string) (action.Prop
 		DecidedAt:          deref(row.DecidedAt),
 		ApprovedByPolicy:   approvedByPolicy(row),
 		Error:              deref(row.Error),
+		FixKind:            action.FixKind(deref(row.FixKind)),
 	}
 
 	if row.DecidedBy != nil {

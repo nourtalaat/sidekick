@@ -159,6 +159,11 @@ func (a *AlertRule) Spec() action.Spec {
 	return action.Spec{Name: a.name, Description: b.String(), ParamsSchema: paramsSchema}
 }
 
+// FixKind implements action.MonitorFixer.
+func (*AlertRule) FixKind() action.FixKind {
+	return action.FixAPI
+}
+
 // Validate implements action.Action. It runs without calling SigNoz, so it
 // checks what the parameters alone show: the rule ID against limits.ruleIds
 // when the limits have no name pattern, and each field of set against

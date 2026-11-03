@@ -39,6 +39,31 @@ func (h *harness) changedMonitor(t *testing.T, callID string) uuid.UUID {
 	return id
 }
 
+func TestUndoOfAFixStoresNoFixKind(t *testing.T) {
+	t.Parallel()
+
+	h := setup(t)
+	h.svc = h.service(t, Options{MaxPerInvestigation: 2})
+
+	id := h.propose(t, "call-1", fixAPIInput)
+	_, err := h.svc.Approve(t.Context(), id, Decider{UserID: anaUser})
+	require.NoError(t, err)
+
+	ran, err := h.runJob(t)
+	require.True(t, ran)
+	require.NoError(t, err)
+
+	undo, err := h.svc.Undo(t.Context(), id, Decider{UserID: anaUser}, false)
+	require.NoError(t, err)
+	require.Equal(t, id.String(), undo.UndoOf)
+	require.Equal(t, action.FixKind(""), undo.FixKind)
+
+	undoID, err := uuid.Parse(undo.ID)
+	require.NoError(t, err)
+	require.Nil(t, h.row(t, undoID).FixKind)
+	require.Equal(t, new("api"), h.row(t, id).FixKind)
+}
+
 func TestUndo(t *testing.T) {
 	t.Parallel()
 
