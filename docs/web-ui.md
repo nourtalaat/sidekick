@@ -595,8 +595,8 @@ pull request, its state (**Open**, **Merged** or **Closed**, each with an icon
 and the word), when it was merged or closed, and when Sidekick last read it
 from the Git host. Sidekick reads the state once a day, so what the card
 shows can be a day old; a pull request that was merged or closed is not read
-again, so its checked time stays at the last time it was seen open or
-merged. A proposal with no pull request, or one that was not checked yet,
+again, so its checked time stays at the time the check found it merged or
+closed. A proposal with no pull request, or one that was not checked yet,
 has no section. The link opens only when the address is an `http` or `https`
 one; otherwise the repository and number are plain text.
 

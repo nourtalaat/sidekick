@@ -2213,7 +2213,7 @@ type ProposalList struct {
 // it can be a day old. Absent for a proposal that opened none, and until
 // the first check has run.
 type ProposalPullRequest struct {
-	// CheckedAt When Sidekick last read it from the host. A merged or closed pull request is not read again, so this stays at the last time it was seen open or merged.
+	// CheckedAt When Sidekick last read it from the host. A merged or closed pull request is not read again, so this stays at the time the check found it merged or closed.
 	CheckedAt time.Time `json:"checkedAt"`
 
 	// ClosedAt When it was closed without a merge. Set only when the state is closed.

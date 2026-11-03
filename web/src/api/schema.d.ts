@@ -2116,7 +2116,7 @@ export interface components {
             closedAt?: string;
             /**
              * Format: date-time
-             * @description When Sidekick last read it from the host. A merged or closed pull request is not read again, so this stays at the last time it was seen open or merged.
+             * @description When Sidekick last read it from the host. A merged or closed pull request is not read again, so this stays at the time the check found it merged or closed.
              */
             checkedAt: string;
         };
