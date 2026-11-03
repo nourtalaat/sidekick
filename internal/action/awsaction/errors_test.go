@@ -35,6 +35,8 @@ func TestFail(t *testing.T) {
 		{name: "a service that does not exist", err: apiError("ServiceNotFoundException", smithy.FaultClient, http.StatusBadRequest), wantPermanent: true},
 		{name: "a policy that refuses", err: apiError("AccessDeniedException", smithy.FaultClient, http.StatusForbidden), wantPermanent: true},
 		{name: "a parameter AWS rejects", err: apiError("InvalidParameterException", smithy.FaultClient, http.StatusBadRequest), wantPermanent: true},
+		{name: "a refusal that names no fault, with a 4xx status", err: apiError("AccessDenied", smithy.FaultUnknown, http.StatusForbidden), wantPermanent: true},
+		{name: "an error that names no fault, with a 5xx status", err: apiError("Oops", smithy.FaultUnknown, http.StatusInternalServerError)},
 		{name: "a rate limit with a throttle code", err: apiError("ThrottlingException", smithy.FaultClient, http.StatusBadRequest)},
 		{name: "a rate limit with status 429", err: apiError("SomeLimit", smithy.FaultClient, http.StatusTooManyRequests)},
 		{name: "a request that timed out", err: apiError("RequestTimeout", smithy.FaultClient, http.StatusBadRequest)},

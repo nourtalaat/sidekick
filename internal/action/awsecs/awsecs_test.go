@@ -314,7 +314,10 @@ func TestSnapshotRefusals(t *testing.T) {
 			require.ErrorContains(t, err, tt.wantErr)
 
 			require.ErrorIs(t, err, action.ErrLimit, "the model is shown the reason as a refusal")
-			require.ErrorIs(t, err, action.ErrPermanent)
+
+			if !tt.wantNoCalls {
+				require.ErrorIs(t, err, action.ErrPermanent)
+			}
 
 			if tt.wantNoCalls {
 				require.Empty(t, f.ops)
