@@ -718,7 +718,7 @@ An investigation's page links its `runtime:N` version to that version.
   to a Secret's name and key, never as values. In case a credential was
   written into the file by mistake, the user and password of every URL
   are removed, and strings the [redaction](configuration.md#redaction)
-  rules match are redacted.
+  rules match are redacted. The [Settings page](#settings) shows it.
 - `GET /api/v1/audit` returns the audit log, newest first, 50 entries at
   a time (`limit` takes up to 200); pass the answer's `nextCursor` as
   `cursor` for the next page. The filters `from` (inclusive), `to`
@@ -751,6 +751,38 @@ An investigation's page links its `runtime:N` version to that version.
   `revision` answers 409, and a file that is not a valid scenario or still
   holds an email, a host name or an IP address answers 422. See
   [Exporting a real investigation](benchmark.md#exporting-a-real-investigation).
+
+## Settings
+
+The **Settings** item of the navigation (`/settings`) is a page for the
+`admin` role, with tabs. The tab is in the address (`/settings?tab=config`), so
+a link opens the page on it. A role below `admin` that opens the address sees a
+message that names the role, and the page sends no request.
+
+The **Config** tab shows the config Sidekick runs with, from
+`GET /api/v1/config`. It is read-only: change the config in the config file or
+the Helm values. Text on the page is plain text, never HTML.
+
+- **File settings.** One card for each top-level key of the config file, in the
+  order the API gives them, closed to a one-line summary. Open a card to see its
+  values: a nested map is a list of names and values, a list is a bullet list,
+  and a long value scrolls in a block that you can reach with the keyboard. The
+  page shows keys it does not know, such as those of a plugin, in the same way.
+  Defaults that the file leaves out are shown too. A duration is its text, such
+  as `10m0s`.
+- **Secrets.** A reference to a Secret shows as "Secret `<name>`, key `<key>`".
+  Sidekick never holds the value in its config, so there is no value to show and
+  no button to copy one. A reference that is empty shows as "No secret set".
+- **Added at runtime.** Two cards, Listeners and Routes, list what was added in
+  the web UI or by the `/sidekick` commands: the name, whether it is on or off,
+  its version, who changed it last and when, and its settings. A link opens the
+  [Listeners or Routes page](#listeners-routes-and-the-audit-log-in-the-ui)
+  to change them.
+- **Filter.** The text field narrows the cards and the values in them to the
+  keys and values that contain the text, ignoring case. The text is not a
+  pattern. It is kept in the address as `q`, so a view can be shared, and while
+  it is set the cards that match are open.
+- Strings that the server redacted are shown as they come.
 
 ## The menu
 
