@@ -102,8 +102,8 @@ describe("the theme saved per user", () => {
 
     await renderSignedIn({ theme: "dark", saveTheme });
 
+    await waitFor(() => expect(document.documentElement).toHaveAttribute("data-theme", "dark"));
     expect(screen.getByRole("radio", { name: "Dark" })).toBeChecked();
-    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
     expect(saved).toEqual([]);
   });

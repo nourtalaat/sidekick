@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Button } from "./components/Button";
@@ -58,7 +58,7 @@ describe.each(THEMES)("accessibility, theme $name", (theme) => {
       const { container } = renderApp({ me: { ...VIEWER, theme: saved }, route: "/investigations" });
       await screen.findByRole("heading", { name: "Investigations", level: 1 });
 
-      expect(document.documentElement).toHaveAttribute("data-theme", saved);
+      await waitFor(() => expect(document.documentElement).toHaveAttribute("data-theme", saved));
       expect(await wcagViolations(container)).toEqual([]);
     });
 
