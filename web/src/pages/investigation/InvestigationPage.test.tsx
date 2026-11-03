@@ -81,6 +81,27 @@ describe("the investigation page", () => {
     expect(await screen.findByRole("button", { name: /Model turn: called search_logs/ })).toBeInTheDocument();
   });
 
+  it("lists the memory examples of the run in the side column, under the lessons", async () => {
+    const memoryExamples = [{ investigationId: "ex1", title: "Checkout errors", verdict: "false_positive" as const, match: "text" as const, rank: 1, present: true, disabled: false }];
+    const { handler } = pageServer({ inv: detail({ memoryExamples }) });
+    renderApp({ route: ROUTE, handler });
+
+    const side = await screen.findByRole("complementary", { name: "About this investigation" });
+    const card = within(side).getByRole("region", { name: "Memory used" });
+
+    expect(within(card).getByRole("link", { name: "Checkout errors" })).toHaveAttribute("href", "/investigations/ex1");
+    expect(within(side).getByRole("region", { name: "Lessons used" }).compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("shows no memory card when the run used no examples", async () => {
+    const { handler } = pageServer({ inv: detail({ memoryExamples: [] }) });
+    renderApp({ route: ROUTE, handler });
+
+    await screen.findByRole("region", { name: "Lessons used" });
+
+    expect(screen.queryByRole("region", { name: "Memory used" })).not.toBeInTheDocument();
+  });
+
   it("opens a step to show the call in a box with a copy button", async () => {
     const user = userEvent.setup();
     const writeText = vi.fn().mockResolvedValue(undefined);

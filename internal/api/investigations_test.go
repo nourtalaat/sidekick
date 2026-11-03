@@ -10,7 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
+	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/model"
+	"github.com/nourtalaat/sidekick/internal/prompt"
 )
 
 func TestInvestigationCursor(t *testing.T) {
@@ -200,4 +202,43 @@ func TestCutPart(t *testing.T) {
 	got, cut = cutPart(exact + "a")
 	require.Len(t, got, maxPartBytes)
 	require.True(t, cut)
+}
+
+func TestUsedMemoryOf(t *testing.T) {
+	t.Parallel()
+
+	id := uuid.MustParse("0192d3a4-0000-7000-8000-0000000000c1")
+
+	tests := []struct {
+		name string
+		used []memory.Use
+		want []apigen.UsedMemory
+	}{
+		{name: "none", used: nil, want: []apigen.UsedMemory{}},
+		{
+			name: "an entry that is there",
+			used: []memory.Use{{
+				ExampleID: id, Match: prompt.MatchFingerprint, Rank: 1, Present: true, Summary: "Slow after a deploy.",
+				Cause: "Deploy 4f2c1a", Verdict: "true_positive", Disabled: true, Title: "Checkout slow",
+			}},
+			want: []apigen.UsedMemory{{
+				InvestigationId: id, Match: apigen.UsedMemoryFingerprint, Rank: 1, Present: true, Disabled: true,
+				Title: new("Checkout slow"), Summary: new("Slow after a deploy."), Cause: new("Deploy 4f2c1a"),
+				Verdict: new(apigen.Verdict("true_positive")),
+			}},
+		},
+		{
+			name: "an entry and an investigation that are gone",
+			used: []memory.Use{{ExampleID: id, Match: prompt.MatchSimilar, Rank: 2}},
+			want: []apigen.UsedMemory{{InvestigationId: id, Match: apigen.UsedMemorySimilar, Rank: 2}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, &tt.want, usedMemoryOf(tt.used))
+		})
+	}
 }

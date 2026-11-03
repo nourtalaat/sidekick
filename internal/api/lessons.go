@@ -15,6 +15,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/api/apigen"
 	"github.com/nourtalaat/sidekick/internal/auth"
 	"github.com/nourtalaat/sidekick/internal/lessons"
+	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/problem"
 )
 
@@ -29,6 +30,9 @@ const maxLessonSearchChars = 200
 
 // maxUsedLessons is how many lessons an investigation shows as used.
 const maxUsedLessons = 50
+
+// maxUsedExamples is how many memory examples an investigation shows as used.
+const maxUsedExamples = memory.MaxExamples
 
 // The codes of the problems that lesson changes answer with, besides those
 // of rule changes.

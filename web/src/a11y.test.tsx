@@ -1,6 +1,6 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Button } from "./components/Button";
 import { Card } from "./components/Card";
 import { ProposalCard } from "./components/ProposalCard";
@@ -11,9 +11,12 @@ import { TextField } from "./components/TextField";
 import { ApiError } from "./api/client";
 import { LoginPage } from "./pages/LoginPage";
 import { THEME_STORAGE_KEY } from "./theme";
-import { renderApp, renderWithProviders, stubMedia, VIEWER, wcagViolations } from "./test/helpers";
+import { json, renderApp, renderWithProviders, stubMedia, VIEWER, wcagViolations } from "./test/helpers";
 import { proposal, pullRequest } from "./test/actionProposals";
 import { ADMIN } from "./test/rules";
+import { detail, INVESTIGATION_ID } from "./test/fixtures";
+import { FakeEventSource, routes } from "./test/streams";
+import type { UsedMemory } from "./api/investigations";
 
 // The theme comes from the stored choice, or from the system when there is none.
 const THEMES = [
@@ -90,6 +93,32 @@ describe.each(THEMES)("accessibility, theme $name", (theme) => {
       await user.click(await screen.findByRole("button", { name: /Ada Lovelace/ }));
 
       expect(await wcagViolations(container)).toEqual([]);
+    });
+
+    it("has no WCAG 2.2 AA violations on the investigation page with the memory card", async () => {
+      vi.stubGlobal("EventSource", FakeEventSource);
+
+      const path = `/api/v1/investigations/${INVESTIGATION_ID}`;
+      const base = { investigationId: "0192d3a4-0000-7000-8000-0000000000e1", title: "Checkout p99", verdict: "true_positive", summary: "A deploy.", rank: 1, present: true, disabled: false } as const;
+      const memoryExamples: UsedMemory[] = [
+        { ...base, match: "fingerprint" },
+        { ...base, investigationId: "e2", match: "service_alert", rank: 2, present: false, verdict: undefined, summary: undefined },
+        { ...base, investigationId: "e3", match: "text", rank: 3, disabled: true },
+        { ...base, investigationId: "e4", match: "similar", rank: 4 },
+      ];
+      const handler = routes({
+        [`GET ${path}`]: () => json(200, detail({ memoryExamples })),
+        [`GET ${path}/steps`]: () => json(200, { steps: [] }),
+        [`GET ${path}/watchers`]: () => json(200, { watchers: [] }),
+        [`GET ${path}/feedback`]: () => json(200, { parts: [] }),
+      });
+      const { container } = renderApp({ me: ADMIN, route: `/investigations/${INVESTIGATION_ID}`, handler });
+      await screen.findByRole("region", { name: "Memory used" });
+
+      expect(screen.getByRole("link", { name: "Manage memory" })).toBeInTheDocument();
+      expect(await wcagViolations(container)).toEqual([]);
+
+      vi.unstubAllGlobals();
     });
 
     it.each(["open", "merged", "closed"] as const)("has no WCAG 2.2 AA violations on a proposal card with a %s pull request", async (state) => {
