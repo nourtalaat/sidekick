@@ -2119,6 +2119,109 @@ Prometheus v3.15.0; the comments in `internal/action/prometheusrule` name the
 files. With `networkPolicy.restrictEgress` on, allow egress to the Kubernetes
 API server.
 
+##### `launchdarkly.flag`
+
+Turns a LaunchDarkly feature flag off in one environment through the
+LaunchDarkly API, and can turn it back on. Only turning a flag off is
+supported: putting the earlier targeting back would need the full previous
+configuration of the environment, and LaunchDarkly's public documentation of
+its audit log does not show that an entry holds it. The action is
+approval-only (see [action modes](#action-modes)): a `read-write` route may
+list it only when the action sets `allowReadWrite: true`. Use it on routes
+with `mode: approved`.
+
+```yaml
+actions:
+  checkout-flag-off:
+    type: launchdarkly.flag
+    baseURL: https://app.launchdarkly.com   # default; https://app.eu.launchdarkly.com for EU
+    tokenSecret: { name: sidekick-launchdarkly-write, key: token }
+    allowReadWrite: false                   # default
+    limits:
+      projects:
+        - key: shop
+          environments: [production]
+          flags: ["checkout-*", new-search] # keys, or patterns where * is any text
+
+routes:
+  - name: checkout-errors
+    match: { intake: [alertmanager] }
+    mode: approved
+    actions: [checkout-flag-off]
+```
+
+| Key | Meaning |
+|---|---|
+| `tokenSecret` | A LaunchDarkly access token. Required. Use a token of its own with the custom role below, apart from the token of any LaunchDarkly source. It is read on every call, so a rotated token needs no restart. |
+| `baseURL` | The root of the instance: `https://app.eu.launchdarkly.com` for EU, `https://app.launchdarkly.us` for Federal. It must use `https`; plain `http` is accepted only for `localhost` and loopback addresses. Default: `https://app.launchdarkly.com`. |
+| `allowReadWrite` | See [action modes](#action-modes). Default: false. |
+| `limits.projects` | Required. Each entry has a project `key`, its `environments` and its `flags`, and all three are required, so nothing is allowed by default. A flag entry is a key, or a pattern in which `*` stands for any text and is the only wildcard. |
+
+The model proposes `project`, `environment`, `flag` and `change`, which is
+`turn_off`. A project, environment or flag outside the limits is refused
+before anything is sent. No other environment of the flag changes.
+
+**What it checks.** When the model proposes, Sidekick reads the flag and
+refuses a flag that is not found, archived or already off. It also refuses
+what LaunchDarkly would refuse to change directly, so the approver is not
+shown something that will fail: an environment that requires approval
+for the flag (`approvalSettings`, which apply to every flag or only to flags
+with one of `requiredApprovalTags`), a scheduled change for the flag in that
+environment, and an active workflow. The message says what to do, and the
+model reads it. If one of these three reads fails, for example because the
+token is not allowed to make it, the proposal is not refused for that: a
+warning is logged, and LaunchDarkly's own answer when the change is written
+(405 when approvals are required, 400 when the change would make a
+scheduled change or an approval request fail) ends the proposal as failed,
+with a plain message. Sidekick never sends `ignoreConflicts`. Approvers see
+one field, `on`, change from `true` to `false`.
+
+**Conflicts.** Right before it writes, Sidekick reads the flag again. If
+the environment's `version` is not the one at the proposal, or the flag was
+archived since, the proposal fails as a conflict and a new one is needed. A
+flag that is already off, which is what a repeat after a crash finds, is
+left alone and counts as done. LaunchDarkly has no precondition on the
+version for a semantic patch, so a change made in the short time between this
+read and the write is not detected, as for `datadog.monitor`. The change is
+made with the `turnFlagOff` instruction of a semantic patch, with a comment
+that names the proposal, so the flag's audit log says who turned it off.
+
+**Undo.** Undo turns the flag back on in that environment with `turnFlagOn`,
+and does nothing when the flag is on already. The action changes one setting,
+which is either on or off, so there is no later edit of that setting for
+`force` to confirm; edits to other settings of the flag stay.
+
+**The custom role.** Create a custom role for the token that can do only this,
+with `basePermissions` set to `no_access`, so it grants only what the policy
+allows. For the limits above:
+
+```json
+{
+  "key": "sidekick-flag-off",
+  "name": "Sidekick flag off",
+  "basePermissions": "no_access",
+  "policy": [
+    { "effect": "allow", "actions": ["viewProject"], "resources": ["proj/shop"] },
+    { "effect": "allow", "actions": ["updateOn"], "resources": ["proj/shop:env/production:flag/checkout-*"] }
+  ]
+}
+```
+
+`updateOn` turns targeting on or off, for the current environment only, and
+`viewProject` lets the token see the project and its flags. Add one pair for
+each project, environment and flag of `limits.projects`. LaunchDarkly's public
+documentation does not say which action the reads of the environment's
+approval settings, the scheduled changes and the workflows need. Without the
+right to make them, Sidekick cannot check these before the proposal and relies
+on LaunchDarkly's refusal when the change is written, as described above. The
+role gives the token no right to change targeting rules, targets, variations,
+approvals or workflows, to archive or delete flags, or to touch another
+environment.
+
+**What it relies on.** The facts come from LaunchDarkly's public OpenAPI file
+and documentation, as the comments in `internal/action/launchdarklyflag` say.
+Nothing was tried against a LaunchDarkly account.
+
 ##### `github.pull_request`
 
 Opens a pull request that changes monitor definitions kept in Git:
