@@ -1,8 +1,11 @@
 import type { ProposalChange } from "../../api/proposals";
+import { BeforeAfter } from "./BeforeAfter";
+import "./ChangeList.css";
 
 /** What a side of a change shows when it has no value. */
 const NOT_SET = "(not set)";
 const REMOVED = "(removed)";
+const WHOLE_DEFINITION = "(the whole definition)";
 
 /** The words that name the two values of a change. */
 export interface Sides {
@@ -24,18 +27,14 @@ export function ChangeList({ changes, heading, sides = CHANGED }: { changes: Pro
       <h4 className="sk-proposal__label">{heading}</h4>
       <ul className="sk-changes__list">
         {changes.map((c) => (
-          <li key={c.path} className="sk-changes__item">
-            <code className="sk-changes__path">{c.path === "" ? "(the whole definition)" : c.path}</code>
-            <dl className="sk-changes__values">
-              <div>
-                <dt>{sides.before}</dt>
-                <dd className="sk-changes__before">{c.before ?? NOT_SET}</dd>
-              </div>
-              <div>
-                <dt>{sides.after}</dt>
-                <dd className="sk-changes__after">{c.after ?? REMOVED}</dd>
-              </div>
-            </dl>
+          <li key={c.path}>
+            <BeforeAfter
+              title={c.path === "" ? WHOLE_DEFINITION : c.path}
+              beforeLabel={sides.before}
+              before={c.before ?? NOT_SET}
+              afterLabel={sides.after}
+              after={c.after ?? REMOVED}
+            />
           </li>
         ))}
       </ul>

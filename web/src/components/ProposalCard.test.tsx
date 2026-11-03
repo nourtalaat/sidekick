@@ -198,6 +198,32 @@ describe("ProposalCard", () => {
       expect(section).toHaveTextContent("Before(not set)After30");
     });
 
+    it("gives each field a Before and an After side that a screen reader names with the field", () => {
+      renderWithProviders(<ProposalCard proposal={proposal({ changes: CHANGES })} canDecide />);
+
+      for (const change of CHANGES) {
+        expect(screen.getByRole("heading", { name: change.path, level: 5 })).toBeInTheDocument();
+        expect(screen.getByRole("region", { name: `Before, ${change.path}` })).toBeInTheDocument();
+        expect(screen.getByRole("region", { name: `After, ${change.path}` })).toBeInTheDocument();
+      }
+    });
+
+    it("names the whole definition, and scrolls and focuses a long value", async () => {
+      const user = userEvent.setup();
+      const long = '{"query":"' + "x".repeat(5000) + '"}';
+      renderWithProviders(<ProposalCard proposal={proposal({ changes: [{ path: "", before: long }] })} canDecide />);
+
+      const before = screen.getByRole("region", { name: "Before, (the whole definition)" });
+      expect(before).toHaveTextContent(long);
+      expect(before).toHaveAttribute("tabindex", "0");
+      expect(screen.getByRole("region", { name: "After, (the whole definition)" })).toHaveTextContent("(removed)");
+
+      await user.tab();
+      await user.tab();
+
+      expect(before).toHaveFocus();
+    });
+
     it("shows the values as text, never as markup", () => {
       const { container } = renderWithProviders(
         <ProposalCard proposal={proposal({ changes: [{ path: "message", before: '"<img src=x onerror=alert(1)>"', after: '"<b>bold</b>"' }] })} canDecide />,
