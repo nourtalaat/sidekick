@@ -128,3 +128,4 @@ proposals](web-ui.md#action-proposals) for how people approve them.
 - `grafana.silence`: silences alerts in Grafana for a limited time, and ends the silence early on Undo. See [its keys](configuration.md#grafanasilence).
 - `github.pull_request`: opens a pull request that changes monitor definitions kept in Git. See [its keys](configuration.md#githubpull_request).
 - `unleash.flag`: turns an Unleash feature flag off in one environment, or undoes its newest change. See [its keys](configuration.md#unleashflag).
+- `azure.container_app_rollback`: moves all the traffic of an Azure Container App back to an earlier revision, and puts the traffic back on Undo. See [its keys](configuration.md#azurecontainer_app_rollback).
