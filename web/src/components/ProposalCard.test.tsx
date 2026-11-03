@@ -306,6 +306,37 @@ describe("ProposalCard", () => {
       expect(sent[0]).toEqual({ csrf: "csrf-ada", body: { force: false } });
     });
 
+    it("says that Undo ends what the action created", async () => {
+      const user = userEvent.setup();
+      const { api } = undoServer();
+      renderWithProviders(
+        <ProposalCard proposal={undoable({ target: "alertmanager:silence", changes: [{ path: "", after: '{"duration":"1h"}' }] })} canDecide />,
+        { api },
+      );
+
+      await user.click(screen.getByRole("button", { name: "Undo monitor-note" }));
+
+      expect(screen.getByText("End what this change created in alertmanager:silence? If someone changed it since, you see the difference first.")).toBeInTheDocument();
+    });
+
+    it("does not call the undo of a creation a delete", () => {
+      renderWithProviders(
+        <ProposalCard
+          proposal={proposal({
+            status: "succeeded",
+            undoOf: "0192d3a4-0000-7000-8000-0000000000f9",
+            reason: "",
+            target: "alertmanager:silence",
+            changes: [{ path: "", before: '{"duration":"1h"}' }],
+          })}
+          canDecide
+        />,
+      );
+
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "After, (the whole definition)" })).toHaveTextContent("(removed)");
+    });
+
     it("sends nothing if the person is not sure", async () => {
       const user = userEvent.setup();
       const { api, sent } = undoServer();

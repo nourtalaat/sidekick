@@ -2,6 +2,7 @@ import { useState } from "react";
 import { UndoConflictError, useUndoProposal, type Proposal } from "../../api/proposals";
 import { Button } from "../Button";
 import { ChangeList, RESTORE } from "./ChangeList";
+import { creates } from "./deletes";
 
 /**
  * Undo, for a change that worked and can be undone. It asks once before it
@@ -49,7 +50,7 @@ export function Undo({ proposal }: { proposal: Proposal }) {
       )}
       {asking && (
         <div role="group" aria-label={`Confirm undoing ${proposal.action}`} className="sk-proposal__reject">
-          <p className="sk-proposal__text">{`Put back the fields this change set in ${proposal.target ?? proposal.action}? If someone changed them since, you see the difference first.`}</p>
+          <p className="sk-proposal__text">{undoQuestion(proposal)}</p>
           <div className="sk-proposal__buttons">
             <Button variant="primary" disabled={undo.isPending} onClick={() => undo.mutate(false)}>
               Undo it
@@ -67,4 +68,15 @@ export function Undo({ proposal }: { proposal: Proposal }) {
       )}
     </div>
   );
+}
+
+/** What the confirm step of Undo asks: to put fields back, or, for something the action created, to end it. */
+function undoQuestion(p: Proposal): string {
+  const target = p.target ?? p.action;
+
+  if (creates(p)) {
+    return `End what this change created in ${target}? If someone changed it since, you see the difference first.`;
+  }
+
+  return `Put back the fields this change set in ${target}? If someone changed them since, you see the difference first.`;
 }
