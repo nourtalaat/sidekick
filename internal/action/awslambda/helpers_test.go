@@ -171,12 +171,12 @@ func readBody(t *testing.T, req *http.Request) json.RawMessage {
 }
 
 // apiError answers with an error of Lambda.
-func apiError(w http.ResponseWriter, status int, code, message string) {
+func apiError(w http.ResponseWriter, status int, code string) {
 	w.Header().Set("Content-Type", jsonType)
 	w.Header().Set("X-Amzn-Errortype", code)
 	w.WriteHeader(status)
 
-	_, _ = fmt.Fprintf(w, `{"Type":"User","Message":%q}`, message)
+	_, _ = w.Write([]byte(`{"Type":"User","Message":"no"}`))
 }
 
 // aliasJSON is the alias as Lambda describes it.
@@ -195,7 +195,7 @@ func (f *fakeLambda) aliasJSON() map[string]any {
 // getAlias answers GetAlias, or writes the error itself and returns nil.
 func (f *fakeLambda) getAlias(w http.ResponseWriter) any {
 	if f.noAlias {
-		apiError(w, http.StatusNotFound, "ResourceNotFoundException", "Cannot find alias arn: arn:aws:lambda:us-east-1:111122223333:function:checkout:live")
+		apiError(w, http.StatusNotFound, "ResourceNotFoundException")
 
 		return nil
 	}
@@ -223,7 +223,7 @@ func (f *fakeLambda) updateAlias(w http.ResponseWriter, body json.RawMessage) an
 	}
 
 	if in.RevisionId != "" && in.RevisionId != "rev-"+strconv.Itoa(f.revision) {
-		apiError(w, http.StatusPreconditionFailed, "PreconditionFailedException", "The Revision Id provided does not match the latest Revision Id.")
+		apiError(w, http.StatusPreconditionFailed, "PreconditionFailedException")
 
 		return nil
 	}
@@ -286,7 +286,7 @@ func (f *fakeLambda) getConfiguration(w http.ResponseWriter, qualifier string) a
 		return cfg
 	}
 
-	apiError(w, http.StatusNotFound, "ResourceNotFoundException", "Function not found: arn:aws:lambda:us-east-1:111122223333:function:checkout:"+qualifier)
+	apiError(w, http.StatusNotFound, "ResourceNotFoundException")
 
 	return nil
 }

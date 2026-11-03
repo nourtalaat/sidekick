@@ -27,9 +27,6 @@ const (
 	maxListPages = 20
 )
 
-// latest is the version name of the unpublished code of a function.
-const latest = "$LATEST"
-
 // aliasState is what the action needs to know about an alias: the version it
 // serves, the extra version that gets part of its traffic, if any, and the
 // RevisionId that changes whenever the alias does.

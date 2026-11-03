@@ -168,7 +168,7 @@ func TestSnapshot(t *testing.T) {
 			require.NoError(t, err)
 
 			require.Equal(t, "aws:lambda/111122223333/us-east-1/checkout/live", snap.Target)
-			require.Equal(t, `{"revisionId":"rev-1"}`, snap.Version)
+			require.JSONEq(t, `{"revisionId":"rev-1"}`, snap.Version)
 			require.True(t, snap.Revision)
 
 			revs, err := snap.Revisions()
