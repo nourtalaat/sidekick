@@ -18,6 +18,8 @@ func TestNewMakesNoNetworkCall(t *testing.T) {
 	b.w.serve()
 
 	require.Equal(t, "revert", b.rev.Spec().Name)
+	require.Equal(t, "github", b.rev.CIHost())
+	require.Equal(t, 2*time.Hour, b.rev.CIReportTimeout())
 	require.Empty(t, b.w.gh.Requests())
 }
 

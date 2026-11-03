@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
@@ -125,6 +126,11 @@ func TestRegistered(t *testing.T) {
 
 	_, isChecker := built.(action.ProposalChecker)
 	require.True(t, isChecker)
+
+	reader, isReader := built.(gitchange.CIReader)
+	require.True(t, isReader, "it can report the CI of its pull requests")
+	require.Equal(t, "github", reader.CIHost())
+	require.Equal(t, 2*time.Hour, reader.CIReportTimeout())
 
 	_, isFixer := built.(action.MonitorFixer)
 	require.False(t, isFixer, "a code change fixes code, not a noisy monitor")
