@@ -248,6 +248,10 @@ describe("the dashboard", () => {
     expect(within(runs).getByText("Passed")).toBeInTheDocument();
     expect(within(runs).getByText("Failed")).toBeInTheDocument();
     expect(within(runs).getByText("70%")).toBeInTheDocument();
+    expect(within(runs).getByRole("link", { name: /^baseline, / })).toHaveAttribute("href", `/benchmarks/${RUN_A_ID}`);
+    expect(within(runs).getByText("2 repeats, 4 runs")).toBeInTheDocument();
+    expect(within(runs).getByText("Command line")).toBeInTheDocument();
+    expect(within(runs).getByText("CI")).toBeInTheDocument();
 
     await user.selectOptions(screen.getByRole("combobox", { name: "Compare run" }), RUN_A_ID);
     await user.selectOptions(screen.getByRole("combobox", { name: "With run" }), RUN_B_ID);
