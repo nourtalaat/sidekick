@@ -32,7 +32,7 @@ describe("the pages that need no more than the viewer role", () => {
     { route: "/dashboard", title: "Dashboard" },
     { route: "/benchmarks", title: "Benchmarks" },
   ])("opens $route for a viewer", async ({ route, title }) => {
-    renderApp({ me: VIEWER, route });
+    renderApp({ me: VIEWER, route, handler: () => json(200, { runs: [] }) });
 
     expect(await screen.findByRole("heading", { name: title, level: 1 })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Needs the admin role" })).not.toBeInTheDocument();
