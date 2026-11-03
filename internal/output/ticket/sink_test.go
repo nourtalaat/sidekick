@@ -127,14 +127,14 @@ func TestFindTheRelatedTicket(t *testing.T) {
 		},
 		{
 			name:   "a ticket outside the scopes is not looked up",
-			labels: map[string]string{"ticket": "SEC-1"},
-			links:  []event.Link{{URL: testLinkPrefix + "SEC-2"}},
+			labels: map[string]string{"ticket": "ENG-1"},
+			links:  []event.Link{{URL: testLinkPrefix + "ENG-2"}},
 		},
 		{
 			name:   "a ticket that moved out of the scopes is skipped",
 			labels: map[string]string{"ticket": "OPS-123"},
 			setupMocks: func(tr *MockTracker) {
-				tr.EXPECT().Issue(gomock.Any(), "OPS-123").Return(Issue{ID: "id-ops-123", Key: "SEC-4", Scope: "SEC"}, nil)
+				tr.EXPECT().Issue(gomock.Any(), "OPS-123").Return(Issue{ID: "id-ops-123", Key: "ENG-4", Scope: "ENG"}, nil)
 			},
 		},
 		{

@@ -1,4 +1,4 @@
-# The investigate role on a model without tool calling (MC-7).
+# The investigate role on a model without tool calling.
 database:
   urlSecret: { name: sidekick-db, key: url }
 

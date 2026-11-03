@@ -42,8 +42,8 @@ var (
 	teamsBotPattern = regexp.MustCompile(`^28:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 )
 
-// Teams holds the Microsoft Teams bot's identity and how it gets tokens
-// (IN-8). The bot is an Azure Bot resource, of type single tenant or
+// Teams holds the Microsoft Teams bot's identity and how it gets tokens.
+// The bot is an Azure Bot resource, of type single tenant or
 // user-assigned managed identity, whose messaging endpoint is Sidekick's
 // /teams/messages.
 type Teams struct {

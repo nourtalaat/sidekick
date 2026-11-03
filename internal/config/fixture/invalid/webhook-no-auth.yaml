@@ -1,4 +1,4 @@
-# A webhook without authentication (IN-3).
+# A webhook without authentication.
 database:
   urlSecret: { name: sidekick-db, key: url }
 

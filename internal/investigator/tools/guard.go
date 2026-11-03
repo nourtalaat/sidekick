@@ -59,8 +59,8 @@ type Options struct {
 	Tracer trace.Tracer
 }
 
-// Guard runs source tool calls for investigations with failure isolation
-// (SRC-10). Build one at start-up for all sources and share it: it is safe
+// Guard runs source tool calls for investigations with failure isolation.
+// Build one at start-up for all sources and share it: it is safe
 // for concurrent use. The per-source concurrency limits and circuit
 // breakers are per replica.
 type Guard struct {
