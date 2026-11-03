@@ -1,0 +1,36 @@
+# A helm.rollback action and a prometheus.rule action. The chart makes both
+# accounts and one Role that lets Sidekick ask for tokens of both. The
+# prometheus.rule account gets its Role and binding in the namespace of its
+# action. The helm.rollback account gets none, because the operator binds the
+# rights of a Helm rollback.
+validator:
+  enabled: true
+secrets:
+  - sidekick-anthropic
+  - sidekick-slack
+  - sidekick-webhook
+  - sidekick-staging-cluster
+config:
+  sources:
+    # The quick-start source, pointed at another cluster, so no source reads this one.
+    k8s:
+      kubeconfigSecret: { name: sidekick-staging-cluster, key: kubeconfig }
+  actions:
+    prom-checkout:
+      type: prometheus.rule
+      limits:
+        namespaces: [monitoring]
+        names: [checkout-alerts]
+        groups: [checkout.rules]
+        fields: [expr]
+    helm-checkout:
+      type: helm.rollback
+      limits:
+        namespaces: [shop]
+        releases: [checkout]
+  routes:
+    - name: default
+      sources: [k8s]
+      outputs: [slack]
+      mode: approved
+      actions: [prom-checkout, helm-checkout]
