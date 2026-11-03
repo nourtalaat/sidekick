@@ -3,6 +3,9 @@ import { hasRole, type Role } from "../../roles";
 
 const ROLES_LOW_TO_HIGH: readonly Role[] = ["viewer", "responder", "approver", "admin"];
 
+/** The name of each role as the page shows it. */
+export const ROLE_LABELS: Record<Role, string> = { viewer: "Viewer", responder: "Responder", approver: "Approver", admin: "Admin" };
+
 /** The expiry presets, in days from now. The last one is the longest a token may last. */
 export const EXPIRY_PRESET_DAYS = [30, 90, 180, 365] as const;
 
