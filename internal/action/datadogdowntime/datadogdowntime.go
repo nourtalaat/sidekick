@@ -129,6 +129,7 @@ type downtimer struct {
 var (
 	_ action.Action      = (*downtimer)(nil)
 	_ action.Snapshotter = (*downtimer)(nil)
+	_ action.Undoer      = (*downtimer)(nil)
 )
 
 // New builds the action from its validated config. It does not call

@@ -24,6 +24,12 @@ const (
 	monitorPageSize = 100
 )
 
+// The statuses of a downtime that stop it from muting.
+const (
+	statusActive    = "active"
+	statusScheduled = "scheduled"
+)
+
 // endLayout writes the end of a downtime as Datadog reads it: ISO-8601 with
 // an offset of zero.
 const endLayout = "2006-01-02T15:04:05+00:00"
@@ -196,6 +202,23 @@ func (c *client) create(ctx context.Context, req request, message string, end ti
 	}
 
 	return out.Data.ID, nil
+}
+
+// cancel cancels the downtime with id: DELETE /api/v2/downtime/{id}, which
+// answers 204. A downtime that is gone already is not an error.
+func (c *client) cancel(ctx context.Context, id string) error {
+	err := c.Do(ctx, http.MethodDelete, "/api/v2/downtime/"+url.PathEscape(id), nil, nil)
+
+	var status *datadogapi.StatusError
+	if errors.As(err, &status) && status.Code == http.StatusNotFound {
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("cancel downtime %s: %w", id, err)
+	}
+
+	return nil
 }
 
 // monitor reads the monitor with id: GET /api/v1/monitor/{id}.
