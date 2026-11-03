@@ -561,8 +561,7 @@ A scenario opens with:
 
 The **Actions** tab of the review queue (`/review?tab=actions`) lists the
 actions the model proposed on routes in `approved` mode, newest first, for
-the `approver` and `admin` roles. It shows the proposals that wait for a
-decision, or those already decided. Each proposal shows its action, route,
+the `approver` and `admin` roles. Each proposal shows its action, route,
 investigation, when it expires, the parameters whole, exactly as the action
 will run with them, and the model's reason, which is the model's own words
 and not checked. The parameters are plain text in which characters that
@@ -574,6 +573,30 @@ proposal that expired, or that the config no longer allows because its
 route is read-only now or no longer lists the action, answers 409 and can
 only be rejected. The investigation page lists its proposals too, with the
 same buttons for approvers.
+
+Two menus choose what the tab lists. **Action** is **Any action** or one of
+the action names in the `actions` section of the config. **Status** is one of
+these, and each asks for the statuses beside it:
+
+| Choice | Address word | Statuses |
+|---|---|---|
+| Waiting for a decision (the default) | `waiting` | `proposed` |
+| Approved (approved and waiting to run, or running) | `approved` | `approved`, `executing` |
+| Ran | `ran` | `succeeded` |
+| Failed | `failed` | `failed` |
+| Expired | `expired` | `expired` |
+| Undone | `undone` | `undone` |
+| Rejected | `rejected` | `rejected` |
+| Any status | `any` | every status |
+
+Both choices are kept in the address, for example
+`/review?tab=actions&action=monitor-pr&status=failed`, so a view can be shared.
+A choice that is the default is left out of the address, and a value in the
+address that the tab does not know is ignored. An empty list names the
+filters, for example "No failed actions for monitor-pr". The filter is by
+the action's name, which is what a proposal stores, so only names in the
+config are offered; proposals of an action that was removed from the config
+show under **Any action**.
 
 A proposal that changes a definition in place, such as a monitor, also shows
 **Changes, field by field**: each field with its value before and after, in
@@ -601,8 +624,11 @@ has no section. The link opens only when the address is an `http` or `https`
 one; otherwise the repository and number are plain text.
 
 - `GET /api/v1/proposals` (approver) lists proposals a page at a time, with
-  `status` (repeat it for several, default `proposed`), `cursor` and
-  `limit`.
+  `status` (repeat it for several, default `proposed`), `action` (one name
+  from the config; a name that is not there answers 400 and lists the names),
+  `cursor` and `limit`.
+- `GET /api/v1/proposals/actions` (approver) returns the action names in the
+  config, sorted, as `{"actions": [...]}`. It reads the config in memory.
 - `POST /api/v1/proposals/{id}/approve` and `/reject` (approver) decide a
   proposal. Only a person who is signed in approves; an API token answers
   403 to an approval, because a script that holds a token could otherwise
@@ -733,7 +759,7 @@ An investigation's page links its `runtime:N` version to that version.
   to a Secret's name and key, never as values. In case a credential was
   written into the file by mistake, the user and password of every URL
   are removed, and strings the [redaction](configuration.md#redaction)
-  rules match are redacted.
+  rules match are redacted. The [Settings page](#settings) shows it.
 - `GET /api/v1/audit` returns the audit log, newest first, 50 entries at
   a time (`limit` takes up to 200); pass the answer's `nextCursor` as
   `cursor` for the next page. The filters `from` (inclusive), `to`
@@ -766,6 +792,38 @@ An investigation's page links its `runtime:N` version to that version.
   `revision` answers 409, and a file that is not a valid scenario or still
   holds an email, a host name or an IP address answers 422. See
   [Exporting a real investigation](benchmark.md#exporting-a-real-investigation).
+
+## Settings
+
+The **Settings** item of the navigation (`/settings`) is a page for the
+`admin` role, with tabs. The tab is in the address (`/settings?tab=config`), so
+a link opens the page on it. A role below `admin` that opens the address sees a
+message that names the role, and the page sends no request.
+
+The **Config** tab shows the config Sidekick runs with, from
+`GET /api/v1/config`. It is read-only: change the config in the config file or
+the Helm values. Text on the page is plain text, never HTML.
+
+- **File settings.** One card for each top-level key of the config file, in the
+  order the API gives them, closed to a one-line summary. Open a card to see its
+  values: a nested map is a list of names and values, a list is a bullet list,
+  and a long value scrolls in a block that you can reach with the keyboard. The
+  page shows keys it does not know, such as those of a plugin, in the same way.
+  Defaults that the file leaves out are shown too. A duration is its text, such
+  as `10m0s`.
+- **Secrets.** A reference to a Secret shows as "Secret `<name>`, key `<key>`".
+  Sidekick never holds the value in its config, so there is no value to show and
+  no button to copy one. A reference that is empty shows as "No secret set".
+- **Added at runtime.** Two cards, Listeners and Routes, list what was added in
+  the web UI or by the `/sidekick` commands: the name, whether it is on or off,
+  its version, who changed it last and when, and its settings. A link opens the
+  [Listeners or Routes page](#listeners-routes-and-the-audit-log-in-the-ui)
+  to change them.
+- **Filter.** The text field narrows the cards and the values in them to the
+  keys and values that contain the text, ignoring case. The text is not a
+  pattern. It is kept in the address as `q`, so a view can be shared, and while
+  it is set the cards that match are open.
+- Strings that the server redacted are shown as they come.
 
 ## The menu
 
@@ -863,7 +921,14 @@ for the range of equal length before it, for showing the change.
   of each verdict, and the accuracy by model and strategy. A rating of
   wrong without a real verdict counts as wrong in the accuracy and is left
   out of precision and recall. The `verdict` filter selects the verdict
-  Sidekick gave.
+  Sidekick gave. Each day also has `scores`, the precision and recall of
+  each verdict given or confirmed on that day, worked out from the day's
+  ratings in the same way as for the range, with the same filters. A day
+  with ratings of wrong without a real verdict only has an empty list. A
+  single day has few ratings, so the numbers move a lot from one day to the
+  next. With the `verdict` filter set, only investigations where Sidekick
+  gave that verdict are read, so recall is too high, for a day as for the
+  range.
 - `GET /api/v1/stats/cost` returns what model calls cost, by day, model
   and route, with the tokens, from the same table the daily caps read, and
   today's spend against the global cap and each route's. That table has no

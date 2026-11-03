@@ -143,6 +143,7 @@ RETURNING id, investigation_id, action;
 -- the page that starts after the cursor (before_at, before_id). The index
 -- on the status and the time gives the order, so a page reads only its own
 -- rows. A list of several statuses is the merge of one such page for each.
+-- A null action lists every action; otherwise only that action's proposals.
 SELECT
   sqlc.embed(p),
   (SELECT i.route FROM investigations i WHERE i.id = p.investigation_id)::text AS route,
@@ -161,6 +162,7 @@ SELECT
 FROM action_proposals p
 LEFT JOIN pull_request_states s ON s.proposal_id = p.id
 WHERE p.status = @status
+  AND (sqlc.narg(action)::text IS NULL OR p.action = sqlc.narg(action))
   AND (p.proposed_at, p.id) < (@before_at::timestamptz, @before_id::uuid)
 ORDER BY p.proposed_at DESC, p.id DESC
 LIMIT @page_size;

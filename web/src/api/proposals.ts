@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useApi } from "./ApiContext";
 import { ApiError, detailOf } from "./client";
 import { keys } from "./investigations";
@@ -8,28 +8,28 @@ export type Proposal = components["schemas"]["Proposal"];
 export type ProposalStatus = components["schemas"]["ProposalStatus"];
 export type ProposalChange = components["schemas"]["ProposalChange"];
 
-/** The statuses of a proposal that waits for a decision. */
-export const WAITING: readonly ProposalStatus[] = ["proposed"];
-
-/** The statuses of a proposal that was decided, or went past that. */
-export const DECIDED: readonly ProposalStatus[] = ["approved", "rejected", "expired", "executing", "succeeded", "failed", "undone"];
-
 /** How many proposals one request asks for. */
 export const PROPOSALS_PAGE_SIZE = 25;
 
 /** The key of the review queue's queries, so a decision can refresh them. */
 export const PROPOSALS_KEY = ["proposals"] as const;
 
-/** The review queue, newest first, a page at a time: the next page is fetched with the cursor of the last. */
-export function useProposals(statuses: readonly ProposalStatus[]) {
+/** The key of the query for the names of the actions that can be proposed. */
+const PROPOSAL_ACTIONS_KEY = ["proposal-actions"] as const;
+
+/**
+ * The review queue, newest first, a page at a time: the next page is fetched
+ * with the cursor of the last. An empty action lists every action.
+ */
+export function useProposals(statuses: readonly ProposalStatus[], action: string) {
   const api = useApi();
 
   return useInfiniteQuery({
-    queryKey: [...PROPOSALS_KEY, statuses],
+    queryKey: [...PROPOSALS_KEY, statuses, action],
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam }) => {
       const { data, error, response } = await api.client.GET("/proposals", {
-        params: { query: { status: [...statuses], cursor: pageParam, limit: PROPOSALS_PAGE_SIZE } },
+        params: { query: { status: [...statuses], action: action === "" ? undefined : action, cursor: pageParam, limit: PROPOSALS_PAGE_SIZE } },
       });
       if (data === undefined) {
         throw new ApiError(response.status, detailOf(error, response.statusText));
@@ -38,6 +38,23 @@ export function useProposals(statuses: readonly ProposalStatus[]) {
       return data;
     },
     getNextPageParam: (last) => last.nextCursor,
+  });
+}
+
+/** The names of the actions in the config, sorted: the values the action filter of the queue takes. */
+export function useProposalActions() {
+  const api = useApi();
+
+  return useQuery({
+    queryKey: PROPOSAL_ACTIONS_KEY,
+    queryFn: async () => {
+      const { data, error, response } = await api.client.GET("/proposals/actions");
+      if (data === undefined) {
+        throw new ApiError(response.status, detailOf(error, response.statusText));
+      }
+
+      return data.actions;
+    },
   });
 }
 

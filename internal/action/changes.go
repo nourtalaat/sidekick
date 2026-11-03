@@ -70,6 +70,13 @@ func (s Snapshot) Deletes() bool {
 	return isAbsent(s.After) && !isAbsent(s.Before)
 }
 
+// Creates reports whether the snapshot makes a definition that did not
+// exist: Before is absent and After is not. Undoing it removes the
+// definition.
+func (s Snapshot) Creates() bool {
+	return isAbsent(s.Before) && !isAbsent(s.After)
+}
+
 // Diff returns the fields that differ between two versions of a definition,
 // sorted by path. Objects are compared key by key. Arrays are compared
 // whole, except that two arrays of the same length whose elements are all

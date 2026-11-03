@@ -500,13 +500,15 @@ SELECT
 FROM action_proposals p
 LEFT JOIN pull_request_states s ON s.proposal_id = p.id
 WHERE p.status = $1
-  AND (p.proposed_at, p.id) < ($2::timestamptz, $3::uuid)
+  AND ($2::text IS NULL OR p.action = $2)
+  AND (p.proposed_at, p.id) < ($3::timestamptz, $4::uuid)
 ORDER BY p.proposed_at DESC, p.id DESC
-LIMIT $4
+LIMIT $5
 `
 
 type ListActionProposalsParams struct {
 	Status   string
+	Action   *string
 	BeforeAt time.Time
 	BeforeID uuid.UUID
 	PageSize int32
@@ -530,9 +532,11 @@ type ListActionProposalsRow struct {
 // the page that starts after the cursor (before_at, before_id). The index
 // on the status and the time gives the order, so a page reads only its own
 // rows. A list of several statuses is the merge of one such page for each.
+// A null action lists every action; otherwise only that action's proposals.
 func (q *Queries) ListActionProposals(ctx context.Context, arg ListActionProposalsParams) ([]ListActionProposalsRow, error) {
 	rows, err := q.db.Query(ctx, listActionProposals,
 		arg.Status,
+		arg.Action,
 		arg.BeforeAt,
 		arg.BeforeID,
 		arg.PageSize,
