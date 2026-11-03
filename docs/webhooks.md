@@ -221,7 +221,7 @@ With `--channel`, the command posts a sample alert into a Slack channel
 instead, as the Sidekick bot, with the bot token of the `slack` section. A
 listener on the channel then takes it like an alert from a monitoring bot,
 and Sidekick answers in its thread. It needs no webhook endpoint, so it is
-the test of the [quick start](install.md#5-send-a-test-alert-3-minutes):
+the test of the [quick start](install.md#5-send-a-test-alert):
 
 ```sh
 kubectl exec deploy/sidekick -c sidekick -- sidekick test-alert --channel '#alerts'
