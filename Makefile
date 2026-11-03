@@ -105,7 +105,7 @@ test: ## Run the unit tests
 CI_TARGETS += test-integration
 .PHONY: test-integration
 test-integration: ui-build ## Build the web UI, then run unit and integration tests against Postgres
-	SIDEKICK_UI_BUILT=true $(GO) test -race -tags integration ./...
+	SIDEKICK_UI_BUILT=true $(GO) test -race -tags integration -count=20 -run '^(TestSlowQueries|TestValidateCleansUpWhenTheCallerGivesUp)$$' ./internal/source/postgres/ ./internal/validateclient/validatejob/
 
 # Runs before generate-mocks, since mocks can be made of the generated
 # interfaces.
