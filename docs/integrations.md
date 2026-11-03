@@ -122,3 +122,4 @@ proposals](web-ui.md#action-proposals) for how people approve them.
 - `signoz.alert_rule`: changes or deletes a SigNoz alert rule. See [its keys](configuration.md#signozalert_rule).
 - `prometheus.rule`: changes the rules of a `PrometheusRule` resource. See [its keys](configuration.md#prometheusrule).
 - `github.pull_request`: opens a pull request that changes monitor definitions kept in Git. See [its keys](configuration.md#githubpull_request).
+- `unleash.flag`: turns an Unleash feature flag off in one environment, or undoes its newest change. See [its keys](configuration.md#unleashflag).
