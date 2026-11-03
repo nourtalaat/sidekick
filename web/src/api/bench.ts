@@ -10,6 +10,7 @@ export type BenchRun = components["schemas"]["BenchRun"];
 export type BenchResult = components["schemas"]["BenchResult"];
 export type BenchThreshold = components["schemas"]["BenchThreshold"];
 export type BenchInterval = components["schemas"]["BenchInterval"];
+export type BenchConnector = components["schemas"]["BenchConnector"];
 
 /** How many benchmark runs the dashboard lists. */
 export const BENCH_RUNS_SHOWN = 10;

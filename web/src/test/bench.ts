@@ -1,4 +1,6 @@
-import type { BenchResult, BenchRun, BenchRunSummary } from "../api/bench";
+import type { BenchComparison, BenchResult, BenchRun, BenchRunSummary } from "../api/bench";
+import { json, problem } from "./helpers";
+import { benchComparison, benchRuns, RUN_A_ID, RUN_B_ID } from "./stats";
 
 const HOUR_MS = 3_600_000;
 const NEWEST = Date.UTC(2026, 9, 28, 12);
@@ -100,5 +102,46 @@ export function benchResult(scenarioId: string, repeat: number, overrides: Parti
     outputTokens: 100,
     toolCalls: 3,
     ...overrides,
+  };
+}
+
+/** The detail of a run that has the settings of summary, with the prompt versions, thresholds and results of benchRunDetail. */
+export function benchRunDetailOf(summary: BenchRunSummary, overrides: Partial<BenchRun> = {}): BenchRun {
+  return { ...benchRunDetail(1), ...summary, ...overrides };
+}
+
+/** What the compare page's server answers; each part has a default that works. */
+export interface CompareAnswers {
+  /** The newest runs, as GET /bench/runs answers. */
+  runs?: BenchRunSummary[];
+  /** Replaces the answer of GET /bench/runs, for a list that fails. */
+  list?: () => Response | Promise<Response>;
+  /** The answer of GET /bench/compare. */
+  compare?: () => Response | Promise<Response>;
+  /** The answer of GET /bench/runs/{id}, by ID, for the two runs of benchComparison. */
+  details?: Partial<Record<string, () => Response | Promise<Response>>>;
+}
+
+/** An answer function for `recording` that serves the list, the comparison and the two run details of benchComparison. */
+export function compareAnswers(options: CompareAnswers = {}): (request: { path: string }) => Response | Promise<Response> {
+  const comparison: BenchComparison = benchComparison();
+  const summaries = { [RUN_A_ID]: comparison.a, [RUN_B_ID]: comparison.b };
+
+  return (request) => {
+    if (request.path === "/api/v1/bench/runs") {
+      return options.list ? options.list() : json(200, { runs: options.runs ?? benchRuns() });
+    }
+
+    if (request.path === "/api/v1/bench/compare") {
+      return options.compare ? options.compare() : json(200, comparison);
+    }
+
+    for (const [id, summary] of Object.entries(summaries)) {
+      if (request.path === `/api/v1/bench/runs/${id}`) {
+        return options.details?.[id]?.() ?? json(200, benchRunDetailOf(summary));
+      }
+    }
+
+    return problem(404, `No route for ${request.path}.`);
   };
 }

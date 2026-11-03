@@ -42,6 +42,11 @@ export function BenchRuns({ filters, onChange }: BenchRunsProps) {
             <RunSelect label="Compare run" value={filters.compareA} runs={runs.data.runs} onChange={(id) => onChange({ ...filters, compareA: id })} />
             <RunSelect label="With run" value={filters.compareB} runs={runs.data.runs} onChange={(id) => onChange({ ...filters, compareB: id })} />
           </div>
+          {filters.compareA && filters.compareB && (
+            <p>
+              <Link to={`/benchmarks/compare?a=${encodeURIComponent(filters.compareA)}&b=${encodeURIComponent(filters.compareB)}`}>Open this comparison in Benchmarks</Link>
+            </p>
+          )}
           {comparison.isPending && comparison.fetchStatus !== "idle" && (
             <p role="status" className="sk-loading">
               Loading

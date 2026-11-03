@@ -413,8 +413,15 @@ describe("the dashboard", () => {
 
     expect(screen.getByRole("link", { name: "All benchmark runs" })).toHaveAttribute("href", "/benchmarks");
 
+    expect(screen.queryByRole("link", { name: "Open this comparison in Benchmarks" })).not.toBeInTheDocument();
+
     await user.selectOptions(screen.getByRole("combobox", { name: "Compare run" }), RUN_A_ID);
+
+    expect(screen.queryByRole("link", { name: "Open this comparison in Benchmarks" })).not.toBeInTheDocument();
+
     await user.selectOptions(screen.getByRole("combobox", { name: "With run" }), RUN_B_ID);
+
+    expect(screen.getByRole("link", { name: "Open this comparison in Benchmarks" })).toHaveAttribute("href", `/benchmarks/compare?a=${RUN_A_ID}&b=${RUN_B_ID}`);
 
     const metrics = await screen.findByRole("region", { name: /^Metrics of / });
 
@@ -439,5 +446,22 @@ describe("the dashboard", () => {
 
     expect(await screen.findByRole("region", { name: /^Metrics of / }, { timeout: LOAD_TIMEOUT })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Compare run" })).toHaveValue(RUN_A_ID);
+  });
+
+  it("opens the same comparison on the Benchmarks compare page from the link of the card", async () => {
+    const user = userEvent.setup();
+    const { handler, urls } = dashboard();
+    renderApp({ route: `/dashboard?a=${RUN_A_ID}&b=${RUN_B_ID}`, handler });
+
+    await user.click(await screen.findByRole("link", { name: "Open this comparison in Benchmarks" }, { timeout: LOAD_TIMEOUT }));
+
+    expect(await screen.findByRole("heading", { name: "Compare benchmark runs", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: /^Metrics of / })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Run A" })).toHaveValue(RUN_A_ID);
+    expect(screen.getByRole("combobox", { name: "Run B" })).toHaveValue(RUN_B_ID);
+
+    const compare = urls.filter((url) => url.includes("/bench/compare")).at(-1) as string;
+    expect(new URL(compare).searchParams.get("a")).toBe(RUN_A_ID);
+    expect(new URL(compare).searchParams.get("b")).toBe(RUN_B_ID);
   });
 });
