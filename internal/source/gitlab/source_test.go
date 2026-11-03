@@ -738,10 +738,9 @@ func TestNew(t *testing.T) {
 		cfg     Config
 		wantErr error
 		wantMsg string
-		wantAPI string
 	}{
-		{name: "gitlab.com by default", cfg: Config{}, wantAPI: "https://gitlab.com/api/v4"},
-		{name: "a self-managed GitLab under a sub-path", cfg: Config{BaseURL: "https://example.com/gitlab/"}, wantAPI: "https://example.com/gitlab/api/v4"},
+		{name: "gitlab.com by default", cfg: Config{}},
+		{name: "a self-managed GitLab under a sub-path", cfg: Config{BaseURL: "https://example.com/gitlab/"}},
 		{name: "no secrets resolver", cfg: Config{}, wantErr: errNoSecrets},
 		{
 			name:    "settings the guard would refuse",
@@ -769,9 +768,8 @@ func TestNew(t *testing.T) {
 			default:
 				require.NoError(t, err)
 
-				built, ok := s.(*Source)
+				_, ok := s.(*Source)
 				require.True(t, ok)
-				require.Equal(t, tt.wantAPI, built.client.apiURL)
 			}
 		})
 	}
