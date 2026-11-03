@@ -1367,7 +1367,7 @@ paths:
         cursor names. `params`, `paramsText` and `reason` are text the
         model wrote: show them as plain text, and show `paramsText`, which
         spells out characters that could hide something, to the person who
-        decides.
+        decides. `action` narrows the list to one action name.
       x-sidekick-role: approver
       parameters:
         - name: status
@@ -1377,6 +1377,16 @@ paths:
             type: array
             items:
               $ref: "#/components/schemas/ProposalStatus"
+        - name: action
+          in: query
+          description: |
+            Only proposals of this action. It is a name from the `actions`
+            section of the config, as `Proposal.action` holds it;
+            `GET /proposals/actions` lists them. It combines with `status`
+            and `cursor`. A name that is not configured answers 400, and the
+            detail lists the names.
+          schema:
+            type: string
         - name: cursor
           in: query
           description: The nextCursor of the page before.
@@ -1396,6 +1406,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProposalList"
+        default:
+          $ref: "#/components/responses/Problem"
+  /proposals/actions:
+    get:
+      operationId: ListProposalActions
+      summary: The names of the actions the config defines
+      description: |
+        The names in the `actions` section of the config, sorted. They are
+        the values the `action` parameter of `GET /proposals` takes. They
+        are read from the config in memory, not from the proposals, so an
+        action that was removed from the config is not listed even when
+        proposals of it exist.
+      x-sidekick-role: approver
+      responses:
+        "200":
+          description: The action names.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProposalActionList"
         default:
           $ref: "#/components/responses/Problem"
   /proposals/{id}/approve:
@@ -1491,6 +1521,57 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Proposal"
+        default:
+          $ref: "#/components/responses/Problem"
+  /proposals/{id}/files/diff:
+    get:
+      operationId: GetProposalFileDiff
+      summary: The line diff of one file of a pull request proposal
+      description: |
+        The unified line diff of the file at `path`, from the file on the
+        base branch of the host to the content in the proposal's
+        parameters. A person opens one file at a time, so the base is read
+        from the host through the action when this is asked and is never
+        stored. The proposal can have any status, so a person can read what
+        was proposed after it expired or was rejected.
+
+        Without `full` the answer holds the lines that changed with three
+        unchanged lines on each side, cut at 400 lines (`truncated` true);
+        a jump in the line numbers between two lines means lines were left
+        out. With `full` true it holds every line of the file, uncut. A
+        deleted file has only removed lines and a new file only added ones.
+        `text` is one line of the file, with characters that could hide
+        something written as \u escapes, and is plain text: show it as
+        such.
+
+        The answer is 400 without `path`, 404 when the proposal does not
+        exist or does not change a file with that path, 409 with `code`
+        diff_unavailable when the action that made the proposal is gone from
+        the config or cannot read files from its host, and 502 when the host
+        did not give the base of the file (it does not have the blob, or the
+        file is too large or not text).
+      x-sidekick-role: approver
+      parameters:
+        - $ref: "#/components/parameters/ProposalID"
+        - name: path
+          in: query
+          required: true
+          description: The path of a file in the `files` of the proposal.
+          schema:
+            type: string
+        - name: full
+          in: query
+          description: Return every line of the file, with no cut.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: The diff.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProposalFileDiff"
         default:
           $ref: "#/components/responses/Problem"
   /investigations/{id}/fix-applied:
@@ -3086,6 +3167,15 @@ components:
     ProposalStatus:
       type: string
       enum: [proposed, approved, rejected, expired, executing, succeeded, failed, undone]
+    ProposalActionList:
+      type: object
+      required: [actions]
+      properties:
+        actions:
+          type: array
+          description: The configured action names, sorted.
+          items:
+            type: string
     ActionLink:
       type: object
       required: [title, url]
@@ -3147,6 +3237,14 @@ components:
             `path` and no `after` removes the whole definition.
           items:
             $ref: "#/components/schemas/ProposalChange"
+        files:
+          type: array
+          description: |
+            The files of a proposal that opens a pull request or a merge
+            request, sorted by path, read from the snapshot with no call to
+            the host. Absent for any other proposal and for an undo.
+          items:
+            $ref: "#/components/schemas/ProposalFile"
         undoable:
           type: boolean
           description: Whether the proposal can be undone now. True only for a succeeded proposal whose action can undo it, that is not an undo itself.
@@ -3202,6 +3300,70 @@ components:
           type: string
         after:
           type: string
+    ProposalFile:
+      type: object
+      description: |
+        One file of a pull request or merge request. `path` comes from the
+        model, so a screen shows it as plain text.
+      required: [path, status, linesAdded, linesRemoved, diffAvailable]
+      properties:
+        path:
+          type: string
+          description: The path from the root of the repository.
+        diffAvailable:
+          type: boolean
+          description: |
+            Whether the line diff of the file can be asked for: the action
+            that made the proposal is still in the config and can read files
+            from its host.
+        status:
+          type: string
+          enum: [added, changed, deleted]
+        linesAdded:
+          type: integer
+          minimum: 0
+        linesRemoved:
+          type: integer
+          minimum: 0
+    ProposalFileDiff:
+      type: object
+      description: The line diff of one file of a proposal. The lines are plain text.
+      required: [path, status, lines, truncated]
+      properties:
+        path:
+          type: string
+        status:
+          type: string
+          enum: [added, changed, deleted]
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProposalDiffLine"
+        truncated:
+          type: boolean
+          description: True when more lines follow than the ones returned. Ask again with `full` true to get them.
+        finalNewline:
+          type: string
+          enum: [added, removed]
+          description: Set when the change adds a newline at the end of the file, or removes the one it had.
+    ProposalDiffLine:
+      type: object
+      required: [kind, text]
+      properties:
+        kind:
+          type: string
+          enum: [context, added, removed]
+        oldLine:
+          type: integer
+          minimum: 1
+          description: The number of the line in the file on the base branch. Absent for an added line.
+        newLine:
+          type: integer
+          minimum: 1
+          description: The number of the line in the new file. Absent for a removed line.
+        text:
+          type: string
+          description: The line without its line break, with characters that could hide something written as \u escapes.
     UndoProposalRequest:
       type: object
       properties:
@@ -4387,7 +4549,7 @@ components:
           description: correct over rated, from 0 to 1; left out when nothing was rated.
     QualityDay:
       type: object
-      required: [day, rated, correct]
+      required: [day, rated, correct, scores]
       properties:
         day:
           type: string
@@ -4398,6 +4560,11 @@ components:
         correct:
           type: integer
           format: int64
+        scores:
+          type: array
+          description: Precision and recall of each verdict that was given or confirmed on the day, worked out from that day's confusion matrix in the same way as `perVerdict` for the range, with the same filters. Verdicts come in the order of a report. Empty when every rating of the day was wrong without a real verdict. A single day has few ratings, so the numbers move a lot.
+          items:
+            $ref: "#/components/schemas/VerdictScore"
     ConfusionCell:
       type: object
       required: [predicted, confirmed, n]

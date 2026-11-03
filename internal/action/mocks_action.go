@@ -160,6 +160,45 @@ func (mr *MockSnapshotterMockRecorder) Snapshot(ctx, params any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Snapshot", reflect.TypeOf((*MockSnapshotter)(nil).Snapshot), ctx, params)
 }
 
+// MockFileReader is a mock of FileReader interface.
+type MockFileReader struct {
+	ctrl     *gomock.Controller
+	recorder *MockFileReaderMockRecorder
+	isgomock struct{}
+}
+
+// MockFileReaderMockRecorder is the mock recorder for MockFileReader.
+type MockFileReaderMockRecorder struct {
+	mock *MockFileReader
+}
+
+// NewMockFileReader creates a new mock instance.
+func NewMockFileReader(ctrl *gomock.Controller) *MockFileReader {
+	mock := &MockFileReader{ctrl: ctrl}
+	mock.recorder = &MockFileReaderMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockFileReader) EXPECT() *MockFileReaderMockRecorder {
+	return m.recorder
+}
+
+// ReadBlob mocks base method.
+func (m *MockFileReader) ReadBlob(ctx context.Context, params json.RawMessage, blob string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadBlob", ctx, params, blob)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadBlob indicates an expected call of ReadBlob.
+func (mr *MockFileReaderMockRecorder) ReadBlob(ctx, params, blob any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadBlob", reflect.TypeOf((*MockFileReader)(nil).ReadBlob), ctx, params, blob)
+}
+
 // MockUndoer is a mock of Undoer interface.
 type MockUndoer struct {
 	ctrl     *gomock.Controller

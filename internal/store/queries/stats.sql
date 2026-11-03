@@ -37,6 +37,18 @@ WHERE day >= @from_day::date AND day <= @to_day::date
 GROUP BY predicted, confirmed
 ORDER BY predicted, confirmed;
 
+-- name: QualityMatrixByDay :many
+-- QualityMatrixByDay is QualityMatrix for each day of the range.
+SELECT day, predicted, confirmed, sum(n)::bigint AS n
+FROM quality_daily
+WHERE day >= @from_day::date AND day <= @to_day::date
+  AND (sqlc.narg(route)::text IS NULL OR route = sqlc.narg(route))
+  AND (sqlc.narg(service)::text IS NULL OR service = sqlc.narg(service))
+  AND (sqlc.narg(model)::text IS NULL OR model = sqlc.narg(model))
+  AND (sqlc.narg(verdict)::text IS NULL OR predicted = sqlc.narg(verdict))
+GROUP BY day, predicted, confirmed
+ORDER BY day, predicted, confirmed;
+
 -- name: QualityComparison :many
 -- QualityComparison is QualityTotals for each model and strategy of the
 -- range.

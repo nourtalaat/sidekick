@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -36,6 +37,8 @@ const (
 	codeDecided    = "decided"
 	codeNotAllowed = "not_allowed"
 
+	codeDiffUnavailable = "diff_unavailable"
+
 	codeNotUndoable = "not_undoable"
 	codeUndoRunning = "undo_running"
 	codeUndoFailed  = "undo_failed"
@@ -47,6 +50,10 @@ const (
 	detailNoProp    = "No action proposal has this ID."
 	detailExpired   = "This proposal expired before anyone decided it."
 	detailLongNote  = "note must be at most 500 characters."
+	detailNoFile    = "This proposal does not change a file with this path."
+	detailNoDiff    = "The action that made this proposal cannot read files from its host."
+
+	detailNoActionNames = "No actions are configured, so no action can be filtered."
 
 	detailApproveByPerson = "An action is approved by a person who is signed in, not by an API token."
 	detailUndoByPerson    = "An action is undone by a person who is signed in, not by an API token."
@@ -80,6 +87,11 @@ func (s *server) ListProposals(ctx context.Context, req apigen.ListProposalsRequ
 		}
 	}
 
+	actionName, err := s.proposalActionFilter(req.Params.Action)
+	if err != nil {
+		return nil, fmt.Errorf("check the action filter: %w", err)
+	}
+
 	limit := defaultProposalsPage
 	if req.Params.Limit != nil {
 		limit = *req.Params.Limit
@@ -100,7 +112,7 @@ func (s *server) ListProposals(ctx context.Context, req apigen.ListProposalsRequ
 		after = c
 	}
 
-	views, err := actionproposals.List(ctx, s.pool, actionproposals.ListOptions{Statuses: statuses, After: after, PageSize: int32(limit + 1)}) //nolint:gosec // limit is at most maxProposalsPage.
+	views, err := actionproposals.List(ctx, s.pool, actionproposals.ListOptions{Statuses: statuses, Action: actionName, After: after, PageSize: int32(limit + 1)}) //nolint:gosec // limit is at most maxProposalsPage.
 	if err != nil {
 		return nil, fmt.Errorf("list proposals: %w", err)
 	}
@@ -119,6 +131,45 @@ func (s *server) ListProposals(ctx context.Context, req apigen.ListProposalsRequ
 	}
 
 	return list, nil
+}
+
+// ListProposalActions returns the names of the actions in the config,
+// sorted, for the action filter of the review queue.
+func (s *server) ListProposalActions(_ context.Context, _ apigen.ListProposalActionsRequestObject) (apigen.ListProposalActionsResponseObject, error) {
+	return apigen.ListProposalActions200JSONResponse{Actions: s.actionNames()}, nil
+}
+
+// proposalActionFilter returns the action to list: the name asked for, or
+// empty for every action. A name that the config does not define is a 400
+// that lists the names.
+func (s *server) proposalActionFilter(asked *string) (string, error) {
+	if asked == nil || *asked == "" {
+		return "", nil
+	}
+
+	names := s.actionNames()
+	if slices.Contains(names, *asked) {
+		return *asked, nil
+	}
+
+	if len(names) == 0 {
+		return "", problemf(http.StatusBadRequest, detailNoActionNames)
+	}
+
+	return "", problemf(http.StatusBadRequest, "action must be one of %s.", strings.Join(names, ", "))
+}
+
+// actionNames returns the names of the actions in the config, sorted. It
+// reads the config in memory, so it is empty when the server has none.
+func (s *server) actionNames() []string {
+	if s.cfg == nil {
+		return []string{}
+	}
+
+	names := slices.AppendSeq(make([]string, 0, len(s.cfg.Actions.Definitions)), maps.Keys(s.cfg.Actions.Definitions))
+	slices.Sort(names)
+
+	return names
 }
 
 // ApproveProposal approves a proposal that waits for a decision.
@@ -184,6 +235,71 @@ func (s *server) UndoProposal(ctx context.Context, req apigen.UndoProposalReques
 	}
 
 	return apigen.UndoProposal200JSONResponse(s.proposalOf(got, "")), nil
+}
+
+// GetProposalFileDiff returns the line diff of one file of a pull request
+// proposal. The proposal can have any status.
+func (s *server) GetProposalFileDiff(ctx context.Context, req apigen.GetProposalFileDiffRequestObject) (apigen.GetProposalFileDiffResponseObject, error) {
+	if s.actions == nil {
+		return nil, problemf(http.StatusServiceUnavailable, detailNoActions)
+	}
+
+	if req.Params.Path == "" {
+		return nil, problemf(http.StatusBadRequest, "path is required.")
+	}
+
+	diff, err := s.actions.FileDiff(ctx, req.Id, req.Params.Path, valueOf(req.Params.Full))
+	if err != nil {
+		return nil, fmt.Errorf("diff %q of proposal %s: %w", req.Params.Path, req.Id, s.fileDiffProblem(err))
+	}
+
+	out := apigen.GetProposalFileDiff200JSONResponse{
+		Path: diff.Path, Status: apigen.ProposalFileDiffStatus(diff.Status), Truncated: diff.Truncated,
+		Lines: make([]apigen.ProposalDiffLine, 0, len(diff.Lines)),
+	}
+
+	if diff.FinalNewline != "" {
+		newline := apigen.ProposalFileDiffFinalNewline(diff.FinalNewline)
+		out.FinalNewline = &newline
+	}
+
+	for _, l := range diff.Lines {
+		out.Lines = append(out.Lines, apigen.ProposalDiffLine{Kind: apigen.ProposalDiffLineKind(l.Kind), OldLine: lineNumber(l.Old), NewLine: lineNumber(l.New), Text: l.Text})
+	}
+
+	return out, nil
+}
+
+// fileDiffProblem turns the error of a file diff into the answer to give: 404
+// for a proposal or a file that does not exist, 409 for an action that cannot
+// read files, 502 when the host did not give the base of the file, and the
+// error itself otherwise. The message of a failed read is masked, because it
+// comes from the host.
+func (s *server) fileDiffProblem(err error) error {
+	var unreadable *actionproposals.UnreadableError
+
+	switch {
+	case errors.Is(err, actionproposals.ErrNotFound):
+		return problemf(http.StatusNotFound, detailNoProp)
+	case errors.Is(err, actionproposals.ErrNoSuchFile):
+		return problemf(http.StatusNotFound, detailNoFile)
+	case errors.Is(err, actionproposals.ErrDiffUnavailable):
+		return withCode(problemf(http.StatusConflict, detailNoDiff), codeDiffUnavailable)
+	case errors.As(err, &unreadable):
+		return problemf(http.StatusBadGateway, "Sidekick could not read the file on the base branch from the host: %s", s.mask(unreadable.Err.Error()))
+	default:
+		return err
+	}
+}
+
+// lineNumber is the number of a line, or nil for a line that is not in that
+// version of the file.
+func lineNumber(n int) *int {
+	if n == 0 {
+		return nil
+	}
+
+	return &n
 }
 
 // undoProblem turns the error of an undo into the answer to give: 403 for
@@ -334,6 +450,19 @@ func (s *server) proposalOf(p action.Proposal, alertTitle string) apigen.Proposa
 		}
 
 		out.Changes = &changes
+	}
+
+	if len(p.Files) > 0 {
+		diffAvailable := s.actions != nil && s.actions.ReadsFiles(p.Action)
+		files := make([]apigen.ProposalFile, 0, len(p.Files))
+
+		for _, f := range p.Files {
+			files = append(files, apigen.ProposalFile{
+				Path: f.Path, Status: apigen.ProposalFileStatus(f.Status), LinesAdded: f.LinesAdded, LinesRemoved: f.LinesRemoved, DiffAvailable: diffAvailable,
+			})
+		}
+
+		out.Files = &files
 	}
 
 	if p.Result != nil {

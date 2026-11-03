@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
@@ -34,6 +35,9 @@ type View struct {
 type ListOptions struct {
 	// Statuses are the statuses to list.
 	Statuses []action.ProposalStatus
+	// Action is the name of the one action to list. Empty lists every
+	// action.
+	Action string
 	// After is the cursor of the page: the proposal that comes before the
 	// first one returned. The zero value starts with the newest.
 	After Cursor
@@ -107,11 +111,16 @@ func List(ctx context.Context, q db.DBTX, opts ListOptions) ([]View, error) {
 
 	queries := db.New(q)
 
+	var actionName *string
+	if opts.Action != "" {
+		actionName = &opts.Action
+	}
+
 	var rows []db.ListActionProposalsRow
 
 	for _, status := range slices.Compact(slices.Sorted(slices.Values(opts.Statuses))) {
 		page, err := queries.ListActionProposals(ctx, db.ListActionProposalsParams{
-			Status: string(status), BeforeAt: after.ProposedAt, BeforeID: after.ID, PageSize: opts.PageSize,
+			Status: string(status), Action: actionName, BeforeAt: after.ProposedAt, BeforeID: after.ID, PageSize: opts.PageSize,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("list %s proposals: %w", status, err)
@@ -182,6 +191,10 @@ func proposalOf(row db.ActionProposal, route, decidedByName string) (action.Prop
 		}
 
 		p.Snapshot, p.Changes = snap, changes
+
+		if p.UndoOf == "" {
+			p.Files = gitchange.FilesOf(*snap)
+		}
 	}
 
 	p.Undoable = row.Undoable && p.Status == action.StatusSucceeded && p.UndoOf == "" && (p.Snapshot == nil || !p.Snapshot.Deletes())

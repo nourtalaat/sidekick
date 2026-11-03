@@ -938,9 +938,33 @@ export interface paths {
          *     cursor names. `params`, `paramsText` and `reason` are text the
          *     model wrote: show them as plain text, and show `paramsText`, which
          *     spells out characters that could hide something, to the person who
-         *     decides.
+         *     decides. `action` narrows the list to one action name.
          */
         get: operations["ListProposals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/proposals/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The names of the actions the config defines
+         * @description The names in the `actions` section of the config, sorted. They are
+         *     the values the `action` parameter of `GET /proposals` takes. They
+         *     are read from the config in memory, not from the proposals, so an
+         *     action that was removed from the config is not listed even when
+         *     proposals of it exist.
+         */
+        get: operations["ListProposalActions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1034,6 +1058,47 @@ export interface paths {
          *     a job tries again.
          */
         post: operations["UndoProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/proposals/{id}/files/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The line diff of one file of a pull request proposal
+         * @description The unified line diff of the file at `path`, from the file on the
+         *     base branch of the host to the content in the proposal's
+         *     parameters. A person opens one file at a time, so the base is read
+         *     from the host through the action when this is asked and is never
+         *     stored. The proposal can have any status, so a person can read what
+         *     was proposed after it expired or was rejected.
+         *
+         *     Without `full` the answer holds the lines that changed with three
+         *     unchanged lines on each side, cut at 400 lines (`truncated` true);
+         *     a jump in the line numbers between two lines means lines were left
+         *     out. With `full` true it holds every line of the file, uncut. A
+         *     deleted file has only removed lines and a new file only added ones.
+         *     `text` is one line of the file, with characters that could hide
+         *     something written as \u escapes, and is plain text: show it as
+         *     such.
+         *
+         *     The answer is 400 without `path`, 404 when the proposal does not
+         *     exist or does not change a file with that path, 409 with `code`
+         *     diff_unavailable when the action that made the proposal is gone from
+         *     the config or cannot read files from its host, and 502 when the host
+         *     did not give the base of the file (it does not have the blob, or the
+         *     file is too large or not text).
+         */
+        get: operations["GetProposalFileDiff"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2020,6 +2085,10 @@ export interface components {
         };
         /** @enum {string} */
         ProposalStatus: "proposed" | "approved" | "rejected" | "expired" | "executing" | "succeeded" | "failed" | "undone";
+        ProposalActionList: {
+            /** @description The configured action names, sorted. */
+            actions: string[];
+        };
         ActionLink: {
             title: string;
             url: string;
@@ -2059,6 +2128,12 @@ export interface components {
              *     `path` and no `after` removes the whole definition.
              */
             changes?: components["schemas"]["ProposalChange"][];
+            /**
+             * @description The files of a proposal that opens a pull request or a merge
+             *     request, sorted by path, read from the snapshot with no call to
+             *     the host. Absent for any other proposal and for an undo.
+             */
+            files?: components["schemas"]["ProposalFile"][];
             /** @description Whether the proposal can be undone now. True only for a succeeded proposal whose action can undo it, that is not an undo itself. */
             undoable: boolean;
             /**
@@ -2101,6 +2176,48 @@ export interface components {
             path: string;
             before?: string;
             after?: string;
+        };
+        /**
+         * @description One file of a pull request or merge request. `path` comes from the
+         *     model, so a screen shows it as plain text.
+         */
+        ProposalFile: {
+            /** @description The path from the root of the repository. */
+            path: string;
+            /**
+             * @description Whether the line diff of the file can be asked for: the action
+             *     that made the proposal is still in the config and can read files
+             *     from its host.
+             */
+            diffAvailable: boolean;
+            /** @enum {string} */
+            status: "added" | "changed" | "deleted";
+            linesAdded: number;
+            linesRemoved: number;
+        };
+        /** @description The line diff of one file of a proposal. The lines are plain text. */
+        ProposalFileDiff: {
+            path: string;
+            /** @enum {string} */
+            status: "added" | "changed" | "deleted";
+            lines: components["schemas"]["ProposalDiffLine"][];
+            /** @description True when more lines follow than the ones returned. Ask again with `full` true to get them. */
+            truncated: boolean;
+            /**
+             * @description Set when the change adds a newline at the end of the file, or removes the one it had.
+             * @enum {string}
+             */
+            finalNewline?: "added" | "removed";
+        };
+        ProposalDiffLine: {
+            /** @enum {string} */
+            kind: "context" | "added" | "removed";
+            /** @description The number of the line in the file on the base branch. Absent for an added line. */
+            oldLine?: number;
+            /** @description The number of the line in the new file. Absent for a removed line. */
+            newLine?: number;
+            /** @description The line without its line break, with characters that could hide something written as \u escapes. */
+            text: string;
         };
         UndoProposalRequest: {
             /**
@@ -2819,6 +2936,8 @@ export interface components {
             rated: number;
             /** Format: int64 */
             correct: number;
+            /** @description Precision and recall of each verdict that was given or confirmed on the day, worked out from that day's confusion matrix in the same way as `perVerdict` for the range, with the same filters. Verdicts come in the order of a report. Empty when every rating of the day was wrong without a real verdict. A single day has few ratings, so the numbers move a lot. */
+            scores: components["schemas"]["VerdictScore"][];
         };
         ConfusionCell: {
             predicted: components["schemas"]["Verdict"];
@@ -4551,6 +4670,14 @@ export interface operations {
             query?: {
                 /** @description Only proposals with one of these statuses. The default is proposed. */
                 status?: components["schemas"]["ProposalStatus"][];
+                /**
+                 * @description Only proposals of this action. It is a name from the `actions`
+                 *     section of the config, as `Proposal.action` holds it;
+                 *     `GET /proposals/actions` lists them. It combines with `status`
+                 *     and `cursor`. A name that is not configured answers 400, and the
+                 *     detail lists the names.
+                 */
+                action?: string;
                 /** @description The nextCursor of the page before. */
                 cursor?: string;
                 limit?: number;
@@ -4568,6 +4695,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProposalList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListProposalActions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The action names. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalActionList"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -4648,6 +4796,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Proposal"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetProposalFileDiff: {
+        parameters: {
+            query: {
+                /** @description The path of a file in the `files` of the proposal. */
+                path: string;
+                /** @description Return every line of the file, with no cut. */
+                full?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description The ID of an action proposal. */
+                id: components["parameters"]["ProposalID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The diff. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalFileDiff"];
                 };
             };
             default: components["responses"]["Problem"];

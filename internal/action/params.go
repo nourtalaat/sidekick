@@ -100,6 +100,13 @@ func DisplayParams(params json.RawMessage) string {
 	return spell(string(out))
 }
 
+// DisplayText returns text for an approver to read with every character that
+// could hide or change what it says written as a \u escape, as DisplayParams
+// does for parameters. A newline is kept.
+func DisplayText(s string) string {
+	return spell(s)
+}
+
 // checkValue reads one value from dec and fails for an object that has a
 // key twice or a value nested deeper than maxParamsDepth.
 func checkValue(dec *json.Decoder, depth int) error {

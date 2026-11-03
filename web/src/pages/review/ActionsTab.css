@@ -8,3 +8,9 @@
 .sk-actions__note {
   color: var(--sk-text-secondary);
 }
+
+.sk-actions__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sk-space-4);
+}

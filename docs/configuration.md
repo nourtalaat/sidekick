@@ -2182,6 +2182,162 @@ Prometheus v3.15.0; the comments in `internal/action/prometheusrule` name the
 files. With `networkPolicy.restrictEgress` on, allow egress to the Kubernetes
 API server.
 
+##### `alertmanager.silence`
+
+Silences alerts in a Prometheus Alertmanager for a limited time, for planned
+work or a known noisy period. A silence mutes alerts; it does not close
+them, and Alertmanager keeps the silence after it ends. Use it on routes
+with `mode: approved`: the silence starts as soon as it is approved. It
+needs no `allowReadWrite`.
+
+```yaml
+actions:
+  mute-checkout:
+    type: alertmanager.silence
+    url: https://alertmanager.example.com    # the part before /api/v2
+    bearerTokenSecret: { name: sidekick-alertmanager-silence, key: token }
+    createdBy: sidekick                      # the name Alertmanager shows; default sidekick
+    limits:
+      maxDuration: 2h                        # default 2h, at most 24h
+      scopes:                                # at least one
+        - labels:
+            alertname: [HighLatency, HighErrorRate]
+            service: ["checkout-*"]
+        - labels:
+            team: [payments]
+
+routes:
+  - name: checkout-alerts
+    match: { service: "checkout-*" }
+    sources: [prometheus]
+    mode: approved
+    actions: [mute-checkout]
+```
+
+- `url` is the root of the Alertmanager API, the part before `/api/v2`. It
+  may hold a path: for Grafana Mimir it is the address with
+  `/alertmanager`, such as `https://mimir.example.com/alertmanager`. It must
+  be https when the action sends a credential, except for a loopback host.
+- `bearerTokenSecret`, or `basicAuth` (`username` and `passwordSecret`), or
+  neither; `headers`, such as `X-Scope-OrgID` for the tenant of a Mimir
+  (not `Authorization`, `Proxy-Authorization` or `Cookie`); and `tls`
+  (`caSecret`, and `certSecret` with `keySecret`) take the same form as for
+  the `alertmanagerURL` of a [Prometheus source](#prometheus-sources-type-prometheus).
+  They are the action's own: give it a credential apart from the read-only
+  one of the source. Secrets are read on every call, so a rotated one needs
+  no restart.
+- `createdBy` is the name Alertmanager shows as the creator. It is at most
+  100 bytes.
+- `limits.scopes` says which alerts may be silenced, and is required. A
+  scope is a set of labels, each with the values it allows, as globs where
+  `*` matches any text and every other character stands for itself. A
+  scope with no labels is refused, because it would allow silencing
+  everything.
+- `limits.maxDuration` is the longest silence: from `5m` to `24h`, `2h`
+  when not set. The shortest silence is 5 minutes.
+
+**The rule for a silence.** The model proposes `matchers` (each with
+`name`, `value`, `isRegex` and `isEqual`, as the Alertmanager API writes
+them), a `duration` such as `30m` or `2h`, and a `comment` that says why.
+A silence is allowed when, for at least one scope, every label of the scope
+is pinned in the silence by an equality matcher (`isEqual: true`,
+`isRegex: false`) whose value matches one of that label's globs. With the
+scopes above, `alertname="HighLatency"` with `service="checkout-api"` is
+allowed, and so is `team="payments"` alone. A regex or a not-equal matcher
+on a scope label does not count as pinning it. Any further matcher is
+allowed, whatever its kind, because it can only narrow what is silenced. A
+silence has at most 10 matchers, and no matcher may have an empty name or an
+empty value. The label names must be letters, digits and underscores. The
+comment is at most 500 characters, and line breaks and tabs become spaces;
+text with other control characters is refused.
+
+**What the approver sees.** The proposal shows the silence as it will be
+made: the matchers, the duration, the creator and the comment. It also shows
+the firing alerts that the matchers match at the time of the proposal, as a
+count and the first five, each with its state. That is information and not a
+limit: a silence made ahead of planned work may match no alert yet. If
+Alertmanager cannot be asked, the proposal is shown without the alerts and
+says why. The silence starts when it is approved, not when it was proposed,
+and lasts the duration the approver read.
+
+**The marker.** Alertmanager has no way to recognise a repeated request, so
+Sidekick adds a line to the comment, `[sidekick proposal <id>]`. It shows
+people who made the silence, and a retry after a crash and Undo find the
+silence by it. Before it makes a silence, Sidekick looks for one with the
+marker in any state, so a crash makes one silence, and a silence that a
+person ended in the meantime is not made again. Do not remove the line when
+you edit a silence in Alertmanager: Undo could not find it then.
+
+**Undo.** An approver can end a silence early. Undo ends the silence that
+has the marker. A silence that has ended already counts as success. If
+someone edited the silence since, so that its matchers or its length are not
+what was written, Undo ends nothing and shows the silence as it is now; the
+approver then confirms to end it anyway. Undo does not check the scopes
+again, because ending a silence is the safe direction.
+
+**Permissions.** Alertmanager has no permission model of its own: anyone who
+can reach its API can make, change and end any silence. The credential of
+this action should therefore reach only the calls the action makes, which a
+reverse proxy in front of Alertmanager can enforce:
+
+- `POST /api/v2/silences`, to make a silence
+- `GET /api/v2/silences`, to find it by the marker
+- `DELETE /api/v2/silence/{id}`, to end it
+- `GET /api/v2/alerts`, for the proposal's preview
+
+For example, with nginx, a server block that is used only by Sidekick's
+silence credential, apart from the read-only access the Prometheus source
+uses:
+
+```nginx
+map $http_authorization $sidekick_silence {
+    default                        0;
+    "Bearer REPLACE_WITH_THE_TOKEN" 1;
+}
+
+server {
+    listen 8443 ssl;
+    # ssl_certificate and ssl_certificate_key as for any other server
+
+    if ($sidekick_silence = 0) { return 401; }
+
+    location = /api/v2/silences {
+        limit_except GET POST { deny all; }
+        proxy_pass http://alertmanager:9093;
+    }
+
+    location = /api/v2/alerts {
+        limit_except GET { deny all; }
+        proxy_pass http://alertmanager:9093;
+    }
+
+    location ~ "^/api/v2/silence/[0-9a-f-]{36}$" {
+        limit_except DELETE { deny all; }
+        proxy_pass http://alertmanager:9093;
+    }
+
+    location / { return 403; }
+}
+```
+
+Point `url` at this server. The proxy narrows which calls the credential can
+make; it cannot read the body of a request. The scopes and the duration
+limit are enforced by Sidekick, so a person who holds the token can still
+make any silence directly, and a post that names the ID of an existing
+silence changes that silence. Keep the token in a Secret that only
+Sidekick reads. The example was written for this page and was not run
+against a real server; check it with your own nginx before you rely on it.
+For a Mimir, use the same idea in the gateway that fronts it, and set the
+tenant in `headers`. The [Prometheus source](#prometheus-sources-type-prometheus)
+keeps its own read-only credential.
+
+**What it relies on.** The calls and fields come from the public source of
+Alertmanager v0.34.1 and of Grafana Mimir mimir-3.1.8; the comments in
+`internal/action/alertmanagersilence` name the files. A silence that is
+edited in the Alertmanager UI keeps its ID when only its end changes and
+gets a new ID when its matchers change, and the comment, with the marker, is
+copied either way.
+
 ##### `launchdarkly.flag`
 
 Turns a LaunchDarkly feature flag off in one environment through the
@@ -2398,6 +2554,128 @@ an undo, or `error`), the validations in `sidekick_githubpr_validations_total`
 (by `format` and `result`), and the daily checks in
 `sidekick_githubpr_status_checks_total` (by `state`: `open`, `merged`,
 `closed`, `missing` or `error`).
+
+##### `unleash.flag`
+
+Changes a feature flag in one environment of an Unleash project through the
+Unleash Admin API: it turns the flag off, or undoes the newest change of the
+flag in that environment. It is approval-only, so a `read-write` route may
+list it only when the action sets `allowReadWrite: true`. Use it on routes
+with `mode: approved`: the change is live as soon as it is approved. The
+flag's other environments are never touched.
+
+```yaml
+actions:
+  unleash-flag:
+    type: unleash.flag
+    baseURL: https://unleash.example.com
+    tokenSecret: { name: sidekick-unleash-write, key: token }
+    limits:
+      projects:
+        - key: default
+          environments: [production]
+          flags: ["checkout-*", "new-search"]
+      allow: [turn_off]                # default; add restore_previous to allow it
+
+routes:
+  - name: checkout
+    mode: approved
+    actions: [unleash-flag]
+```
+
+- `baseURL` is the root of your Unleash instance. It may hold a path, for an
+  instance served under one. It must use `https`; plain `http` is accepted
+  only for `localhost` and loopback addresses, because the token is sent
+  with each request. Required.
+- `tokenSecret` is the `{ name, key }` of the Secret that holds the token of
+  a service account. Give the action a service account of its own, apart
+  from the one of any Unleash source, and give it only the permissions
+  listed below. The token is read on every call, so a rotated token needs no
+  restart.
+- `allowReadWrite` is false unless you set it. See [Action
+  modes](#action-modes).
+- `limits.projects` lists the projects the action may change, each with its
+  `key`, the `environments` in it, and the `flags`: flag names, or patterns
+  in which `*` stands for any run of characters, such as `checkout-*`. All
+  three are required for every project, so nothing is allowed by default.
+  Keys may hold letters, digits, `.`, `_` and `-`.
+- `limits.allow` lists the changes the model may propose: `turn_off` and
+  `restore_previous`. The default is `turn_off` only, because restoring
+  writes more. Listing a change here is how you allow it.
+
+The model proposes a `project`, an `environment`, a `flag` and a `change`.
+When it proposes, Sidekick checks them against the limits before anything is
+sent, then reads the flag, its strategies and its newest event from Unleash,
+and shows the approver the field that changes. It refuses, with a message
+the model can act on, a flag that is outside the limits, does not exist in
+the project or is archived, or has no such environment.
+
+**`turn_off`** turns the flag off in the environment and leaves its
+strategies as they are. It is refused when the flag is already off.
+
+**`restore_previous`** undoes the newest change of the flag in that
+environment, and only that one. Unleash records each change as an event that
+holds that one change, not the whole environment, so Sidekick can restore
+exactly these:
+
+- turning the flag on (the restore turns it off) or off (the restore turns
+  it on);
+- changing a strategy (it gets the values it had before, all of them:
+  constraints, parameters, variants, segments, title, sort order and
+  whether it is disabled);
+- adding a strategy (it is removed);
+- removing a strategy (it is added again, with a new ID).
+
+It is one call to Unleash. It is refused, with the reason, when the newest
+change is anything else, such as reordering the strategies or a change that
+is part of a group of changes made together (a change request); when the
+flag has a strategy that belongs to a release plan; when the strategy it
+would change is gone, or already has its earlier values; and when the result
+would leave the flag on with no enabled strategy, because Unleash then turns
+the flag off, or adds a default strategy, by itself. Use `turn_off`, or
+change it in Unleash, for those.
+
+**What the token needs.** In the Unleash UI, create a service account for
+Sidekick and give it a custom project role with only these permissions, on
+the allowed projects and, where Unleash lets you, only the allowed
+environments:
+
+- `UPDATE_FEATURE_ENVIRONMENT`, for `turn_off`, for the turn on and off of
+  `restore_previous`, and for undoing either;
+- `CREATE_FEATURE_STRATEGY`, `UPDATE_FEATURE_STRATEGY` and
+  `DELETE_FEATURE_STRATEGY`, only when `restore_previous` is allowed.
+
+The action also reads the flag, its strategies and its events, which any
+signed-in service account may do, so a root role with no write permissions,
+such as Viewer, is enough besides the project role. Do not give the account
+`SKIP_CHANGE_REQUEST` or an admin role. Do not use an `ADMIN` API token or
+a client token.
+
+**Change requests.** An environment that uses change requests refuses a
+direct change from an account that cannot skip them, and Sidekick never
+opens a change request. Unleash does not say which environments use them
+through the public API, so Sidekick finds out only when the approved change
+runs: the proposal then fails, with a message that says so, and nothing is
+changed. Make the change in Unleash with a change request instead.
+
+**When it runs.** Right before it writes, Sidekick reads the flag again.
+The version of a flag is the ID of its newest event in the environment, so
+the proposal fails with a conflict when someone changed the flag since, or
+when its strategies are not as they were when it was proposed. Unleash has
+no precondition on writes, so a change made in the moment between that read
+and the write is not noticed. When the flag already has the new state, which
+happens when a worker died after the write, it writes nothing and succeeds.
+
+**Undo.** An approver can undo a change that worked. Undo makes the one call
+that reverses it: it turns the flag back on or off, puts a strategy back,
+removes the strategy that was added, or adds the one that was removed. It
+looks only at the part the action changed. If that part is not as the action
+left it, Undo writes nothing and shows the flag as it is, and asks again
+with `force`. A strategy that the action added has no ID in the proposal, so
+Undo takes the strategy that is new since the change; if there are several
+new ones and Sidekick cannot tell which is it, Undo fails and says so.
+
+The calls were checked against the source of Unleash 8.2.1.
 
 ### `validator`
 

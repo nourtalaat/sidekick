@@ -1,0 +1,13 @@
+{
+  "name": "restart-service",
+  "description": "Restarts a service. Allowed services: checkout-api, ledger.",
+  "paramsSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["service"],
+    "properties": {
+      "service": { "type": "string", "enum": ["checkout-api", "ledger"] },
+      "graceSeconds": { "type": "integer", "minimum": 0, "maximum": 60 }
+    }
+  }
+}

@@ -18,8 +18,11 @@ const (
 	// approver reads: its blob, its status and its two line counts.
 	fieldsPerFile = 4
 	// MaxFilesCeiling keeps the difference within action.MaxChanges.
-	MaxFilesCeiling        = action.MaxChanges / fieldsPerFile
-	maxChangedLinesCeiling = 1000
+	MaxFilesCeiling = action.MaxChanges / fieldsPerFile
+	// MaxChangedLinesCeiling is the most lines a config may allow one pull
+	// request to add and remove, and so the most a line diff of one of its
+	// files holds.
+	MaxChangedLinesCeiling = 1000
 )
 
 // branchPattern is the shape of a branch name an action accepts: letters,
@@ -70,8 +73,8 @@ func (b *Bounds) Check() []error {
 		errs = append(errs, fmt.Errorf("limits.maxFiles: must be from 1 to %d, got %d", MaxFilesCeiling, b.MaxFiles))
 	}
 
-	if b.MaxChangedLines < 1 || b.MaxChangedLines > maxChangedLinesCeiling {
-		errs = append(errs, fmt.Errorf("limits.maxChangedLines: must be from 1 to %d, got %d", maxChangedLinesCeiling, b.MaxChangedLines))
+	if b.MaxChangedLines < 1 || b.MaxChangedLines > MaxChangedLinesCeiling {
+		errs = append(errs, fmt.Errorf("limits.maxChangedLines: must be from 1 to %d, got %d", MaxChangedLinesCeiling, b.MaxChangedLines))
 	}
 
 	switch {

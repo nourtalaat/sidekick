@@ -108,8 +108,30 @@ API with an API token instead of a session:
 curl -H "Authorization: Bearer $SIDEKICK_TOKEN" https://sidekick.example.com/api/v1/me
 ```
 
-An admin signed in to the web UI creates tokens with
-`POST /api/v1/tokens`, giving a name, a role and an expiry:
+An admin makes and revokes tokens on the **API tokens** tab of Settings
+(`/settings?tab=tokens`):
+
+1. Enter a name for what the token is for, 1 to 100 characters.
+2. Choose a role. The list holds your own role and every role below it, so an
+   admin can choose any of the four.
+3. Choose when it expires: in 30, 90, 180 or 365 days, or on a date you pick.
+   The token works until the end of that day. The latest date is a year from
+   today; a later date is refused before anything is sent.
+4. Press **Create token**. The page shows the token, which starts with `skt_`,
+   with a **Copy** button. Copy it now: it is not shown again. It is held only
+   on the page, never in the browser's storage or the address, and it is gone
+   when you press **Done**, create another token or leave the tab.
+5. To stop a token, press **Revoke** on its row and confirm. Anything that uses
+   it stops working at once. The button is gone once a token is revoked.
+
+The list shows each token's name, role, when it was created and the ID of the
+user who created it, when it expires, when it was last used (to the minute, or
+"Never") and its status. Tokens that work come first, then expired and revoked
+ones, each group with the newest first. Expired and revoked rows are dimmed and
+say **Expired** or **Revoked** in words; a revoked row also shows when.
+
+The form calls `POST /api/v1/tokens` as the signed-in admin, with a name, a
+role and an expiry:
 
 ```json
 {"name": "nightly bench", "role": "viewer", "expiresAt": "2027-04-01T00:00:00Z"}
@@ -561,8 +583,7 @@ A scenario opens with:
 
 The **Actions** tab of the review queue (`/review?tab=actions`) lists the
 actions the model proposed on routes in `approved` mode, newest first, for
-the `approver` and `admin` roles. It shows the proposals that wait for a
-decision, or those already decided. Each proposal shows its action, route,
+the `approver` and `admin` roles. Each proposal shows its action, route,
 investigation, when it expires, the parameters whole, exactly as the action
 will run with them, and the model's reason, which is the model's own words
 and not checked. The parameters are plain text in which characters that
@@ -574,6 +595,30 @@ proposal that expired, or that the config no longer allows because its
 route is read-only now or no longer lists the action, answers 409 and can
 only be rejected. The investigation page lists its proposals too, with the
 same buttons for approvers.
+
+Two menus choose what the tab lists. **Action** is **Any action** or one of
+the action names in the `actions` section of the config. **Status** is one of
+these, and each asks for the statuses beside it:
+
+| Choice | Address word | Statuses |
+|---|---|---|
+| Waiting for a decision (the default) | `waiting` | `proposed` |
+| Approved (approved and waiting to run, or running) | `approved` | `approved`, `executing` |
+| Ran | `ran` | `succeeded` |
+| Failed | `failed` | `failed` |
+| Expired | `expired` | `expired` |
+| Undone | `undone` | `undone` |
+| Rejected | `rejected` | `rejected` |
+| Any status | `any` | every status |
+
+Both choices are kept in the address, for example
+`/review?tab=actions&action=monitor-pr&status=failed`, so a view can be shared.
+A choice that is the default is left out of the address, and a value in the
+address that the tab does not know is ignored. An empty list names the
+filters, for example "No failed actions for monitor-pr". The filter is by
+the action's name, which is what a proposal stores, so only names in the
+config are offered; proposals of an action that was removed from the config
+show under **Any action**.
 
 A proposal that changes a definition in place, such as a monitor, also shows
 **Changes, field by field**: each field with its value before and after, in
@@ -589,9 +634,33 @@ person who asked, and the original becomes undone. The undo shows **Undoes**
 with a link to the proposal it restores, which opens its investigation and
 moves focus to that proposal.
 
+A proposal that opens a pull request also lists its **Files**: each file
+with its path, what happens to it (added, changed or deleted) and how many
+lines it adds and removes. The list comes from what Sidekick recorded when
+the model proposed, so it needs no call to the host. Each file is a
+disclosure, open when the proposal has up to three files and closed when it
+has more. When a person opens a file, Sidekick reads the file as it is on the
+base branch from the host, with the credential of the action, and compares it
+with the content in the proposal's parameters. The file is read when it is
+opened and is never stored. The diff has a line number for each side, a
+`+` or `-` sign and the words "Added" and "Removed" for a screen reader, as
+well as a tint, so color is never the only signal. It shows the changed lines
+with three unchanged lines around each change, and says where lines were left
+out. A diff longer than 400 lines is cut there, and **Show the whole file**
+asks for every line of the file. The lines are plain text with hidden
+characters written as `\u` escapes, as in the parameters; this includes a
+carriage return at the end of a line from a file with Windows line ends. When
+the host cannot give the file, for example because the host no longer has it
+or it is not text, the card says so and offers to try again. The diff
+answers also for an expired or rejected proposal. Slack keeps the field-by-field
+changes and links to the investigation, where the diff is.
+
 - `GET /api/v1/proposals` (approver) lists proposals a page at a time, with
-  `status` (repeat it for several, default `proposed`), `cursor` and
-  `limit`.
+  `status` (repeat it for several, default `proposed`), `action` (one name
+  from the config; a name that is not there answers 400 and lists the names),
+  `cursor` and `limit`.
+- `GET /api/v1/proposals/actions` (approver) returns the action names in the
+  config, sorted, as `{"actions": [...]}`. It reads the config in memory.
 - `POST /api/v1/proposals/{id}/approve` and `/reject` (approver) decide a
   proposal. Only a person who is signed in approves; an API token answers
   403 to an approval, because a script that holds a token could otherwise
@@ -606,6 +675,16 @@ moves focus to that proposal.
   difference a restore would overwrite. The other 409 codes are
   `not_undoable`, `not_allowed`, `undo_running` and `undo_failed`. A proposal
   has `changes` (field, before and after), `target`, `undoable` and `undoOf`.
+- `GET /api/v1/proposals/{id}/files/diff?path=...` (approver) returns the
+  line diff of one file of a pull request proposal, as a list of lines, each
+  `context`, `added` or `removed`, with its line number in the old and the
+  new file. It answers for a proposal of any status, so a person can read what
+  was proposed after it expired or was rejected. It answers 400 without
+  `path`, 404 for a proposal or a path the proposal does not change, 409 with
+  `code` `diff_unavailable` when the action cannot read files from its host,
+  and 502 when the host did not give the base of the file. A proposal has
+  `files`, each with `path`, `status`, `linesAdded`, `linesRemoved` and
+  `diffAvailable`.
 - `GET /api/v1/investigations/{id}` has a `proposals` list.
 
 Every proposal, approval, rejection, expiry and result is in the audit log
@@ -718,7 +797,7 @@ An investigation's page links its `runtime:N` version to that version.
   to a Secret's name and key, never as values. In case a credential was
   written into the file by mistake, the user and password of every URL
   are removed, and strings the [redaction](configuration.md#redaction)
-  rules match are redacted.
+  rules match are redacted. The [Settings page](#settings) shows it.
 - `GET /api/v1/audit` returns the audit log, newest first, 50 entries at
   a time (`limit` takes up to 200); pass the answer's `nextCursor` as
   `cursor` for the next page. The filters `from` (inclusive), `to`
@@ -751,6 +830,39 @@ An investigation's page links its `runtime:N` version to that version.
   `revision` answers 409, and a file that is not a valid scenario or still
   holds an email, a host name or an IP address answers 422. See
   [Exporting a real investigation](benchmark.md#exporting-a-real-investigation).
+
+## Settings
+
+The **Settings** item of the navigation (`/settings`) is a page for the
+`admin` role, with tabs: **Config** and **API tokens**, which is described under
+[API tokens](#api-tokens). The tab is in the address (`/settings?tab=config`), so
+a link opens the page on it. A role below `admin` that opens the address sees a
+message that names the role, and the page sends no request.
+
+The **Config** tab shows the config Sidekick runs with, from
+`GET /api/v1/config`. It is read-only: change the config in the config file or
+the Helm values. Text on the page is plain text, never HTML.
+
+- **File settings.** One card for each top-level key of the config file, in the
+  order the API gives them, closed to a one-line summary. Open a card to see its
+  values: a nested map is a list of names and values, a list is a bullet list,
+  and a long value scrolls in a block that you can reach with the keyboard. The
+  page shows keys it does not know, such as those of a plugin, in the same way.
+  Defaults that the file leaves out are shown too. A duration is its text, such
+  as `10m0s`.
+- **Secrets.** A reference to a Secret shows as "Secret `<name>`, key `<key>`".
+  Sidekick never holds the value in its config, so there is no value to show and
+  no button to copy one. A reference that is empty shows as "No secret set".
+- **Added at runtime.** Two cards, Listeners and Routes, list what was added in
+  the web UI or by the `/sidekick` commands: the name, whether it is on or off,
+  its version, who changed it last and when, and its settings. A link opens the
+  [Listeners or Routes page](#listeners-routes-and-the-audit-log-in-the-ui)
+  to change them.
+- **Filter.** The text field narrows the cards and the values in them to the
+  keys and values that contain the text, ignoring case. The text is not a
+  pattern. It is kept in the address as `q`, so a view can be shared, and while
+  it is set the cards that match are open.
+- Strings that the server redacted are shown as they come.
 
 ## The menu
 
@@ -853,7 +965,14 @@ for the range of equal length before it, for showing the change.
   of each verdict, and the accuracy by model and strategy. A rating of
   wrong without a real verdict counts as wrong in the accuracy and is left
   out of precision and recall. The `verdict` filter selects the verdict
-  Sidekick gave.
+  Sidekick gave. Each day also has `scores`, the precision and recall of
+  each verdict given or confirmed on that day, worked out from the day's
+  ratings in the same way as for the range, with the same filters. A day
+  with ratings of wrong without a real verdict only has an empty list. A
+  single day has few ratings, so the numbers move a lot from one day to the
+  next. With the `verdict` filter set, only investigations where Sidekick
+  gave that verdict are read, so recall is too high, for a day as for the
+  range.
 - `GET /api/v1/stats/cost` returns what model calls cost, by day, model
   and route, with the tokens, from the same table the daily caps read, and
   today's spend against the global cap and each route's. That table has no

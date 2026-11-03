@@ -359,6 +359,41 @@ that removes its target (`After` is `null`) cannot be undone, and Sidekick
 does not offer Undo for it. An `Undoer` that has no snapshot gets the zero
 `Snapshot`.
 
+An action that creates something, such as a mute, has a snapshot whose
+`Before` is `null`. Slack and the web UI show the whole `After` as the new
+definition, and the Undo button says that Sidekick ends what it created. Its
+`Undo` removes what `Execute` made. If someone changed it since and `force`
+is false, return `&action.ConflictError{Live: live}`: the approver is shown
+the live definition that a forced Undo removes.
+
+### FileReader: let a person read the diff of each file
+
+An action that opens a pull request or a merge request can implement one
+more interface, so the web UI can show a line diff of each file:
+
+```go
+type FileReader interface {
+	ReadBlob(ctx context.Context, params json.RawMessage, blob string) (string, error)
+}
+```
+
+The snapshot of such an action names each changed file by the blob SHA it has
+on the base branch (`before`), and holds, for each file, a status (`added`,
+`changed` or `deleted`) and the lines it adds and removes (`after`); see
+`gitchange.FilesOf`, which the proposal uses to list the files, and the
+`githubpr` action for the shape. The snapshot holds no file content. When a
+person opens a file in the web UI, Sidekick calls `ReadBlob` with the
+proposal's parameters and the blob SHA of the file, compares the text it
+gets with the content in the parameters and shows the difference.
+
+`ReadBlob` reads with the action's own credential, so the API needs no client
+of the host, and never writes. It must check that the repository or project
+in `params` is one the config allows, and it returns an error when the file
+cannot be read as text: the host has no such blob, the file is too large, or
+it is not UTF-8 text. The web UI shows that error to the person. An action
+that does not implement `FileReader` still lists its files, but the web UI
+cannot show their diff.
+
 ### Tests
 
 Add to the tests of step 8, with `internal/fakehttp`: propose a change

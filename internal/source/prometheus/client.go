@@ -1,18 +1,16 @@
 package prometheus
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"github.com/nourtalaat/sidekick/internal/httpauth"
 	"github.com/nourtalaat/sidekick/internal/httpclient"
-	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
 
@@ -29,8 +27,6 @@ var (
 	// maxResponseSize.
 	errResponseTooLarge = fmt.Errorf("the answer is larger than %d MiB; narrow the query, for example with more label matchers or a shorter range",
 		maxResponseSize>>20)
-	// errEmptySecret is returned when a credential secret holds nothing.
-	errEmptySecret = errors.New("the secret is empty")
 )
 
 // Names of the services in error messages.
@@ -45,16 +41,7 @@ type client struct {
 	root      string
 	service   string
 	userAgent string
-	auth      *auth
-}
-
-// auth is what every request carries: the extra headers, and a bearer
-// token or basic auth read from Secrets.
-type auth struct {
-	secrets registry.Secrets
-	bearer  *registry.SecretRef
-	basic   *BasicAuth
-	headers map[string]string
+	auth      *httpauth.Auth
 }
 
 // statusError is an answer that is not a success.
@@ -96,7 +83,7 @@ func (c *client) get(ctx context.Context, path string, query url.Values, out any
 		return fmt.Errorf("make the request: %w", err)
 	}
 
-	if err := c.auth.apply(ctx, req); err != nil {
+	if err := c.auth.Apply(ctx, req); err != nil {
 		return fmt.Errorf("add the credentials: %w", err)
 	}
 
@@ -119,47 +106,6 @@ func (c *client) get(ctx context.Context, path string, query url.Values, out any
 	}
 
 	return nil
-}
-
-// apply adds the headers and the credentials to req. The secrets are read
-// for every request, so a rotated one needs no restart.
-func (a *auth) apply(ctx context.Context, req *http.Request) error {
-	for name, value := range a.headers {
-		req.Header.Set(name, value)
-	}
-
-	switch {
-	case a.bearer != nil:
-		raw, err := a.read(ctx, *a.bearer)
-		if err != nil {
-			return fmt.Errorf("read the bearer token: %w", err)
-		}
-
-		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(raw))
-	case a.basic != nil:
-		raw, err := a.read(ctx, a.basic.PasswordSecret)
-		if err != nil {
-			return fmt.Errorf("read the basic auth password: %w", err)
-		}
-
-		req.SetBasicAuth(a.basic.Username, strings.TrimRight(raw, "\r\n"))
-	}
-
-	return nil
-}
-
-// read returns the text of a secret, which must not be empty.
-func (a *auth) read(ctx context.Context, ref registry.SecretRef) (string, error) {
-	raw, err := a.secrets.Resolve(ctx, ref)
-	if err != nil {
-		return "", fmt.Errorf("resolve secret %s/%s: %w", ref.Name, ref.Key, err)
-	}
-
-	if len(bytes.TrimSpace(raw)) == 0 {
-		return "", fmt.Errorf("secret %s/%s: %w", ref.Name, ref.Key, errEmptySecret)
-	}
-
-	return string(raw), nil
 }
 
 // limitTransport fails the read of any response body larger than
