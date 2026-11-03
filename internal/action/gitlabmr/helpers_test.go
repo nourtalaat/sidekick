@@ -320,3 +320,13 @@ func registrySecrets(t *testing.T) registry.Secrets {
 
 	return s
 }
+
+// noSlashLines requires that no line of s, once carriage returns are gone as
+// GitLab removes them, starts with a slash after spaces or tabs.
+func noSlashLines(t *testing.T, s string) {
+	t.Helper()
+
+	for line := range strings.SplitSeq(strings.ReplaceAll(s, "\r", ""), "\n") {
+		require.False(t, strings.HasPrefix(strings.TrimLeft(line, " \t"), "/"), "a line starts with a slash: %q", line)
+	}
+}

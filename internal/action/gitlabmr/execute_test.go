@@ -11,6 +11,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
+	"github.com/nourtalaat/sidekick/internal/action/gitlabgit"
 	"github.com/nourtalaat/sidekick/internal/validateclient"
 )
 
@@ -84,7 +85,7 @@ func TestExecuteOpensMergeRequest(t *testing.T) {
 			require.Equal(t, []string{"actions", "branch", "commit_message", "start_sha"}, keysOf(commit), "the commit has only what the action sets")
 			require.Equal(t, testBranch, commit["branch"])
 			require.Equal(t, testBaseSHA, commit["start_sha"], "the branch is made from the commit the files were read at")
-			require.Equal(t, commitTitle(tt.title)+"\n\nSidekick proposal "+testProposalID+"\n", commit["commit_message"])
+			require.Equal(t, gitlabgit.CommitTitle(tt.title)+"\n\nSidekick proposal "+testProposalID+"\n", commit["commit_message"])
 
 			actions, err := json.Marshal(commit["actions"])
 			require.NoError(t, err)
@@ -504,7 +505,7 @@ func TestExecuteFailures(t *testing.T) {
 
 		_, err := b.mr.Execute(t.Context(), inv)
 		require.ErrorIs(t, err, action.ErrPermanent)
-		require.ErrorIs(t, err, errNoBranch)
+		require.ErrorIs(t, err, gitlabgit.ErrNoBranch)
 		require.Empty(t, b.gitlab.Requests())
 	})
 
@@ -517,7 +518,7 @@ func TestExecuteFailures(t *testing.T) {
 		b.gitlab.Handle(http.MethodPost, apiPath("merge_requests"), replyStatus(http.StatusCreated, `{}`))
 
 		_, err := b.mr.Execute(t.Context(), invocation(rulesParams()))
-		require.ErrorIs(t, err, errNoIID)
+		require.ErrorIs(t, err, gitlabgit.ErrNoIID)
 	})
 }
 

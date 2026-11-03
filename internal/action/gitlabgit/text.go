@@ -1,11 +1,13 @@
-package gitlabmr
+package gitlabgit
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/source"
+	"github.com/nourtalaat/sidekick/internal/weblink"
 )
 
 // draftMarker starts the title of a draft merge request. GitLab has no
@@ -15,17 +17,14 @@ const draftMarker = "Draft: "
 
 // Limits of the text sent to GitLab.
 const (
-	// maxCommitTitleBytes is the longest first line of the commit message.
-	maxCommitTitleBytes = 72
+	// MaxCommitTitleBytes is the longest first line of the commit message.
+	MaxCommitTitleBytes = 72
 	// maxDescriptionBytes is the most of a description the action sends;
 	// GitLab accepts 1,048,576 characters.
 	maxDescriptionBytes = 60000
 	// maxDraftStrips bounds the loop that removes draft prefixes, as GitLab
 	// bounds its own.
 	maxDraftStrips = 20
-	// fallbackTitle is the title of a merge request whose given title is
-	// nothing but a draft prefix.
-	fallbackTitle = "Update monitor definitions"
 )
 
 // draftPrefixPattern finds one draft prefix at the start of a title, with
@@ -51,16 +50,17 @@ var closingTargetPattern = regexp.MustCompile("(?i)(\\b(?:clos(?:e[sd]?|ing)|fix
 // code span is not wrapped again inside.
 var gitlabRules = []gitchange.TextRule{referenceRule, quickActionRule}
 
-// mergeRequestTitle returns the title of the merge request: on one line,
+// MergeRequestTitle returns the title of the merge request: on one line,
 // with mentions, references and quick actions made harmless, and as a draft
 // unless draft is false. A draft prefix the model wrote is removed first, so
-// that draft: false really gives a merge request that is not a draft.
-func mergeRequestTitle(raw string, draft bool) string {
+// that draft: false really gives a merge request that is not a draft. A title
+// that is nothing but a draft prefix becomes fallback.
+func MergeRequestTitle(raw string, draft bool, fallback string) string {
 	t := stripDraftPrefixes(gitchange.OneLine(raw))
 	t = gitchange.OneLine(gitchange.PlainText(t, gitlabRules...))
 
 	if t == "" {
-		t = fallbackTitle
+		t = fallback
 	}
 
 	if draft {
@@ -70,10 +70,33 @@ func mergeRequestTitle(raw string, draft bool) string {
 	return t
 }
 
-// commitTitle returns the first line of the commit message: the title on one
+// CommitTitle returns the first line of the commit message: the title on one
 // line, made harmless like the title of the merge request.
-func commitTitle(raw string) string {
-	return source.CutText(gitchange.OneLine(gitchange.PlainText(raw, gitlabRules...)), maxCommitTitleBytes)
+func CommitTitle(raw string) string {
+	return source.CutText(gitchange.OneLine(gitchange.PlainText(raw, gitlabRules...)), MaxCommitTitleBytes)
+}
+
+// CommitMessage returns the message of a commit: the title on one line, and
+// the proposal it is for.
+func CommitMessage(title, proposalID string) string {
+	return CommitTitle(title) + "\n\nSidekick proposal " + proposalID + "\n"
+}
+
+// Description returns the description of a merge request: the model's text,
+// made safe, and a line that says which proposal it came from, with a link to
+// the investigation when publicURL is set.
+func Description(body, proposalID, investigationID, publicURL string) string {
+	var b strings.Builder
+
+	b.WriteString(descriptionText(body))
+	b.WriteString("\n\n---\n")
+	fmt.Fprintf(&b, "Opened by Sidekick for proposal `%s`.", proposalID)
+
+	if link := weblink.Investigation(publicURL, investigationID); link != "" {
+		fmt.Fprintf(&b, " [The investigation](%s).", link)
+	}
+
+	return b.String()
 }
 
 // descriptionText returns the text the model wrote for the description, made
