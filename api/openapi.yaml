@@ -2881,6 +2881,43 @@ components:
           $ref: "#/components/schemas/LessonScope"
         status:
           $ref: "#/components/schemas/LessonStatus"
+    UsedMemory:
+      type: object
+      required: [investigationId, match, rank, present, disabled]
+      description: A memory example that the prompt of an investigation showed, as it is now.
+      properties:
+        investigationId:
+          type: string
+          format: uuid
+          description: The investigation the example came from.
+        title:
+          type: string
+          description: Its alert title. Absent when the investigation is gone or had none.
+        verdict:
+          $ref: "#/components/schemas/Verdict"
+        summary:
+          type: string
+          description: Absent when the entry is gone.
+        cause:
+          type: string
+          description: Absent when the entry is gone or has no cause.
+        match:
+          type: string
+          description: |
+            Why the example was chosen: the same alert fingerprint, the same
+            service and alert name, similar words, or a similar description.
+          enum: [fingerprint, service_alert, text, similar]
+          x-enum-varnames: [UsedMemoryFingerprint, UsedMemoryServiceAlert, UsedMemoryText, UsedMemorySimilar]
+        rank:
+          type: integer
+          minimum: 1
+          description: The example's position in the prompt, from 1.
+        present:
+          type: boolean
+          description: Whether the memory entry still exists.
+        disabled:
+          type: boolean
+          description: Whether the entry is disabled now. Always false when present is false.
     LeftOutLesson:
       type: object
       required: [id, reason, scope]
@@ -3908,6 +3945,15 @@ components:
             was deleted is not listed.
           items:
             $ref: "#/components/schemas/UsedLesson"
+        memoryExamples:
+          type: array
+          description: |
+            The past investigations that the prompt of the current run showed
+            as examples, in the order of the prompt. The text is as it is now,
+            not as the prompt had it. It came from alerts and the model: show
+            it as plain text.
+          items:
+            $ref: "#/components/schemas/UsedMemory"
     Confirmation:
       type: object
       required: [verdict, at]
