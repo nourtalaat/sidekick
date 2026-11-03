@@ -291,10 +291,11 @@ The web UI shows the investigations in two pages, which every role from
   Slack link opens) shows the verdict, how sure Sidekick is, the reason,
   the state of the watchers, the report, what was checked, the cost and
   the model, the lessons the prompt used, the alerts of the group, and the
-  record of the run, one line for each step. A step opens to show the tool
-  call or result in a box with a copy button. The prompt step, and the
-  triage prompt step, also say how many lessons they used and which
-  lessons applied but were left out, with the reason; see
+  record of the run, one line for each step with its time, tokens, cost
+  and model. A step opens to show the model and the connector it ran
+  through, then the tool call or result in a box with a copy button. The
+  prompt step, and the triage prompt step, also say how many lessons they
+  used and which lessons applied but were left out, with the reason; see
   [Lessons](#lessons).
 
 Under the watchers, each watcher has a **Checks** list that opens to show
