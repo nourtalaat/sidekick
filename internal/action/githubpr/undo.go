@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"net/http"
 	"slices"
 	"strings"
 	"time"
@@ -14,14 +13,13 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
+	"github.com/nourtalaat/sidekick/internal/action/githubgit"
 	"github.com/nourtalaat/sidekick/internal/source"
 	"github.com/nourtalaat/sidekick/internal/weblink"
 )
 
 // revertPrefix starts the title of a revert pull request.
 const revertPrefix = "Revert: "
-
-var errNoUndoOf = fmt.Errorf("%w: the call does not say which proposal it undoes", action.ErrPermanent)
 
 // Undo implements action.Undoer. It undoes the pull request that the
 // proposal inv.UndoOf made.
@@ -37,7 +35,7 @@ var errNoUndoOf = fmt.Errorf("%w: the call does not say which proposal it undoes
 // It is safe to repeat: it finds the revert branch and pull request of an
 // earlier attempt, and closing a closed pull request changes nothing.
 func (p *PR) Undo(ctx context.Context, inv action.Invocation, snap action.Snapshot, force bool) (action.Result, error) {
-	branch, err := undoBranches(inv)
+	branch, err := githubgit.UndoBranch(inv)
 	if err != nil {
 		return action.Result{}, fmt.Errorf("check the call to undo: %w", err)
 	}
@@ -49,7 +47,7 @@ func (p *PR) Undo(ctx context.Context, inv action.Invocation, snap action.Snapsh
 
 	owner, name, _ := strings.Cut(params.Repo, "/")
 
-	orig, err := p.pullRequestFrom(ctx, owner, name, branch)
+	orig, err := githubgit.PullRequestFrom(ctx, p.client, owner, name, branch)
 	if err != nil {
 		return action.Result{}, fmt.Errorf("look for the pull request to undo: %w", err)
 	}
@@ -58,26 +56,11 @@ func (p *PR) Undo(ctx context.Context, inv action.Invocation, snap action.Snapsh
 		return action.Result{}, fmt.Errorf("%w: no pull request was made from the branch %s", action.ErrPermanent, branch)
 	}
 
-	if stateOf(orig) == gitchange.StateMerged {
+	if githubgit.StateOf(orig) == gitchange.StateMerged {
 		return p.revert(ctx, inv, params, orig, snap, force)
 	}
 
 	return p.closeOriginal(ctx, inv, params, orig, branch)
-}
-
-// undoBranches checks the invocation of an undo and returns the branch of the
-// proposal that is undone.
-func undoBranches(inv action.Invocation) (string, error) {
-	if inv.UndoOf == "" {
-		return "", errNoUndoOf
-	}
-
-	branch := action.IdempotencyKey(inv.UndoOf)
-	if !branchOfProposal.MatchString(branch) || !branchOfProposal.MatchString(inv.IdempotencyKey) {
-		return "", fmt.Errorf("%w: %w", action.ErrPermanent, errNoBranch)
-	}
-
-	return branch, nil
 }
 
 // closeOriginal closes the pull request, if it is open, deletes its branch and
@@ -87,20 +70,20 @@ func (p *PR) closeOriginal(ctx context.Context, inv action.Invocation, params Pa
 	title := fmt.Sprintf("%s#%d", params.Repo, orig.GetNumber())
 	closed, summary := orig, "The pull request "+title+" was closed already; its branch is deleted."
 
-	if stateOf(orig) == gitchange.StateOpen {
-		updated, _, err := p.client.PullRequests.Edit(ctx, owner, name, orig.GetNumber(), &gh.PullRequest{State: new(stateOfClosed)})
+	if githubgit.StateOf(orig) == gitchange.StateOpen {
+		updated, err := githubgit.ClosePullRequest(ctx, p.client, owner, name, orig.GetNumber())
 		if err != nil {
-			return action.Result{}, classify("close the pull request", err)
+			return action.Result{}, fmt.Errorf("close the original: %w", err)
 		}
 
 		closed, summary = updated, "Closed the pull request "+title+" and deleted its branch."
 	}
 
-	if err := p.deleteBranch(ctx, owner, name, branch); err != nil {
+	if err := githubgit.DeleteBranch(ctx, p.client, owner, name, branch); err != nil {
 		return action.Result{}, fmt.Errorf("remove the branch of the closed pull request: %w", err)
 	}
 
-	st := statusOf(closed)
+	st := githubgit.StatusOf(closed)
 	if st.State == gitchange.StateOpen {
 		st.State, st.ClosedAt = gitchange.StateClosed, new(time.Now())
 	}
@@ -109,24 +92,9 @@ func (p *PR) closeOriginal(ctx context.Context, inv action.Invocation, params Pa
 		return action.Result{}, fmt.Errorf("record the original as %s: %w", st.State, err)
 	}
 
-	p.metrics.pullRequest(resultClosed)
+	p.metrics.PullRequest(githubgit.ResultClosed)
 
 	return action.Result{Summary: summary, Links: []action.Link{{Title: title, URL: orig.GetHTMLURL()}}}, nil
-}
-
-// deleteBranch deletes a branch. A branch that is gone already is not an
-// error.
-func (p *PR) deleteBranch(ctx context.Context, owner, name, branch string) error {
-	_, err := p.client.Git.DeleteRef(ctx, owner, name, branchRef+branch)
-	if isStatus(err, http.StatusNotFound) || isStatus(err, http.StatusUnprocessableEntity) {
-		return nil
-	}
-
-	if err != nil {
-		return classify("delete the branch "+branch, err)
-	}
-
-	return nil
 }
 
 // revert opens a pull request that restores the files of a merged pull
@@ -135,11 +103,11 @@ func (p *PR) revert(ctx context.Context, inv action.Invocation, params Params, o
 	owner, name, _ := strings.Cut(params.Repo, "/")
 	branch := inv.IdempotencyKey
 
-	if err := p.record(ctx, inv.UndoOf, params.Repo, statusOf(orig)); err != nil {
+	if err := p.record(ctx, inv.UndoOf, params.Repo, githubgit.StatusOf(orig)); err != nil {
 		return action.Result{}, fmt.Errorf("record the original as merged: %w", err)
 	}
 
-	pr, branchExists, err := p.existing(ctx, owner, name, branch)
+	pr, branchExists, err := githubgit.Existing(ctx, p.client, owner, name, branch)
 	if err != nil {
 		return action.Result{}, fmt.Errorf("look for an earlier attempt: %w", err)
 	}
@@ -156,17 +124,17 @@ func (p *PR) revert(ctx context.Context, inv action.Invocation, params Params, o
 	}
 
 	if pr == nil {
-		pr, err = p.openPullRequest(ctx, owner, name, p.revertRequest(inv, params, orig, branch))
+		pr, err = githubgit.OpenPullRequest(ctx, p.client, owner, name, p.revertRequest(inv, params, orig, branch))
 		if err != nil {
 			return action.Result{}, fmt.Errorf("make the revert pull request: %w", err)
 		}
 	}
 
-	if err := p.record(ctx, inv.ProposalID, params.Repo, statusOf(pr)); err != nil {
+	if err := p.record(ctx, inv.ProposalID, params.Repo, githubgit.StatusOf(pr)); err != nil {
 		return action.Result{}, fmt.Errorf("record the revert pull request: %w", err)
 	}
 
-	p.metrics.pullRequest(resultReverted)
+	p.metrics.PullRequest(githubgit.ResultReverted)
 
 	title := fmt.Sprintf("%s#%d", params.Repo, pr.GetNumber())
 
@@ -187,12 +155,12 @@ func (p *PR) pushRevert(ctx context.Context, inv action.Invocation, params Param
 		return action.Result{}, false, fmt.Errorf("read the snapshot: %w", err)
 	}
 
-	head, err := baseOf(ctx, p.client, owner, name, params.BaseBranch)
+	head, err := githubgit.BaseOf(ctx, p.client, owner, name, params.BaseBranch)
 	if err != nil {
 		return action.Result{}, false, fmt.Errorf("read the base branch: %w", err)
 	}
 
-	plan, err := p.planRevert(ctx, newReader(p.client, owner, name, head.commit), sides)
+	plan, err := p.planRevert(ctx, newReader(p.client, owner, name, head.Commit), sides)
 	if err != nil {
 		return action.Result{}, false, fmt.Errorf("plan the revert: %w", err)
 	}
@@ -210,10 +178,10 @@ func (p *PR) pushRevert(ctx context.Context, inv action.Invocation, params Param
 		return action.Result{Summary: "Nothing to revert: the files are as they were before the pull request."}, true, nil
 	}
 
-	message := revertPrefix + source.CutText(gitchange.OneLine(gitchange.PlainText(params.Title)), maxCommitTitleBytes-len(revertPrefix)) +
+	message := revertPrefix + source.CutText(gitchange.OneLine(gitchange.PlainText(params.Title)), githubgit.MaxCommitTitleBytes-len(revertPrefix)) +
 		"\n\nSidekick proposal " + inv.ProposalID + ", which undoes " + inv.UndoOf + "\n"
 
-	if err := p.commitTo(ctx, owner, name, head, plan.entries, message, inv.IdempotencyKey); err != nil {
+	if err := githubgit.CommitTo(ctx, p.client, owner, name, head, plan.entries, message, inv.IdempotencyKey); err != nil {
 		return action.Result{}, false, fmt.Errorf("push the revert branch: %w", err)
 	}
 

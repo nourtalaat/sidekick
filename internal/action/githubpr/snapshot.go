@@ -2,11 +2,8 @@ package githubpr
 
 import (
 	"context"
-	"crypto/sha1" //nolint:gosec // Git names a blob by the SHA-1 of its content, which is what the snapshot compares.
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
@@ -69,7 +66,7 @@ func (p *PR) Snapshot(ctx context.Context, raw json.RawMessage) (action.Snapshot
 		Target:  snapshotTarget + l.params.Repo,
 		Before:  beforeRaw,
 		After:   afterRaw,
-		Version: l.base.commit,
+		Version: l.base.Commit,
 	}, nil
 }
 
@@ -124,13 +121,5 @@ func (l *loaded) applySnapshot(snap action.Snapshot) error {
 	return nil
 }
 
-// blobSHA returns the SHA Git gives a blob with this content: the SHA-1 of
-// "blob <length>", a NUL byte and the content.
-func blobSHA(content string) string {
-	h := sha1.New() //nolint:gosec // see the import.
-
-	_, _ = fmt.Fprintf(h, "blob %d\x00", len(content))
-	_, _ = io.WriteString(h, content)
-
-	return hex.EncodeToString(h.Sum(nil))
-}
+// blobSHA returns the SHA Git gives a blob with this content.
+var blobSHA = gitchange.BlobSHA
