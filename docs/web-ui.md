@@ -1124,6 +1124,53 @@ first, 25 at a time; **Load more** adds the next 25. Each row has:
 The dashboard card shows the same table for the newest ten runs. With no
 runs stored, the page says so and names the command that stores them.
 
+### The page of one benchmark run
+
+`/benchmarks/<id>`, which the name of a run in the list links to, is open to
+every role from `viewer` up. An ID that no run has shows "No benchmark run has
+this ID." with a link back to the list. It shows, from the top:
+
+- **The run.** Its label, or its start time when it has no label, with the
+  result Passed or Failed as a word with an icon. A button **Compare with
+  another run** opens `/benchmarks/compare?a=<id>`. Below it: when the run
+  started and finished, the Sidekick version and Git commit, who started it,
+  the scenario set and repeats, the model and connector of each role, the
+  version of each strategy the scenarios used, the prompt and judge prompt
+  versions, and the config hash, with a button that copies it.
+- **The first failed threshold.** For a failed run, a message above the
+  tables names the first threshold that failed, in the order the run checked
+  them, with its value and its limit, and says how many others also failed.
+- **Scores.** Each share metric of [Scores](benchmark.md#scores): overall
+  score, verdict accuracy, false positive and true positive precision and
+  recall, root cause match and score, evidence, proposals correct and source
+  failures reported. Each has its value and its 95% interval, written
+  "62% to 88%". A metric the run had nothing to count shows "none yet", and a
+  metric that has no interval shows "none". Two runs whose intervals of a
+  metric overlap may differ only by chance.
+- **Thresholds.** The thresholds of `bench.yaml` that the run was checked
+  against: the limit ("at least 80%", or "at most $0.0500" for the mean cost
+  of a run), the run's value, Passed or Failed as a word with an icon, and the
+  detail the check gave, for example that a metric with nothing to count
+  passes. Percentages here show one decimal, so a miss never looks equal to
+  its limit.
+- **Cost and time.** The total model cost, the judge's own cost, input and
+  output tokens, tool calls, the mean cost and time of a run, and the number
+  of judge errors. A run with many judge errors has a low root cause score
+  for that reason, so read this figure before you trust the score.
+- **Scenarios.** One row for each scenario, wrong ones first: a scenario with
+  no correct repeat is marked **Wrong**, one with some correct and some not
+  **Partly wrong**, and one with every repeat correct **Correct**. A row shows
+  the expected verdict, how many repeats were correct ("4 of 5"), the verdicts
+  given, and the mean root cause score, cost and time. A row opens to its
+  repeats: the verdict given, whether it was correct, the root cause score,
+  whether every required item of the rubric was met, the evidence score,
+  whether the proposals were correct (when the scenario scores them), the
+  cost, time, tokens and tool calls. The judge's reasons are not shown, since
+  the API leaves them out.
+
+Everything that came from the run, such as labels, scenario IDs and details,
+is shown as plain text.
+
 ## The JSON API
 
 The API is under `/api/v1`, described in OpenAPI 3.1 in
