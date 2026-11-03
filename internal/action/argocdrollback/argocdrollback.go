@@ -152,7 +152,7 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (action
 		RevisionLimit: cfg.RevisionLimit,
 		name:          name,
 		applications:  cfg.Limits.Applications,
-		schema:        json.RawMessage(fmt.Sprintf(paramsSchemaFormat, cfg.RevisionLimit.Max())),
+		schema:        json.RawMessage(fmt.Sprintf(paramsSchemaFormat, cfg.Max())),
 		client:        client,
 		pollEvery:     defaultPollInterval,
 		waitFor:       defaultWaitLimit,
