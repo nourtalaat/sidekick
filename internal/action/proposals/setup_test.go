@@ -52,8 +52,10 @@ type harness struct {
 	note *fakeNote
 	// monitor is the fake monitor action, a Snapshotter and Undoer.
 	monitor *fakeMonitor
-	policy  *movablePolicy
-	clock   *clock
+	// mute is the fake mute action, which creates what it undoes.
+	mute   *fakeMute
+	policy *movablePolicy
+	clock  *clock
 }
 
 // movablePolicy is a Policy whose routes a test changes while it runs.
@@ -110,9 +112,10 @@ func setup(t *testing.T) *harness {
 		pool:    pool,
 		note:    newFakeNote("monitor-note"),
 		monitor: newFakeMonitor("monitor"),
+		mute:    newFakeMute("mute"),
 		clock:   &clock{now: time.Now().UTC().Truncate(time.Second)},
 		policy: &movablePolicy{routes: action.StaticPolicy{
-			"payments": {Mode: action.Approved, Actions: []string{"monitor-note", "monitor"}},
+			"payments": {Mode: action.Approved, Actions: []string{"monitor-note", "monitor", "mute"}},
 			"default":  {Mode: action.ReadOnly},
 		}},
 	}
@@ -128,7 +131,7 @@ func (h *harness) service(t *testing.T, opts Options) *Service {
 	t.Helper()
 
 	opts.Pool, opts.Policy, opts.Now = h.pool, h.policy, h.clock.Now
-	opts.Actions = map[string]action.Action{"monitor-note": h.note, "monitor": h.monitor}
+	opts.Actions = map[string]action.Action{"monitor-note": h.note, "monitor": h.monitor, "mute": h.mute}
 
 	s, err := New(opts)
 	require.NoError(t, err)
