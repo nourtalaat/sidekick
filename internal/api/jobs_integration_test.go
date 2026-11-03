@@ -4,10 +4,12 @@ package api_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -160,6 +162,193 @@ func TestRetryJob(t *testing.T) {
 			require.Equal(t, tt.wantActor, actorKind)
 		})
 	}
+}
+
+func TestDiscardJob(t *testing.T) {
+	t.Parallel()
+
+	const (
+		notDeadSuffix = ", not dead; only dead jobs can be discarded."
+		noSuchJob     = "No job has this ID."
+	)
+
+	tests := []struct {
+		name       string
+		id         string
+		session    string
+		csrf       string
+		token      string
+		wantStatus int
+		wantActor  string
+		wantDetail string
+	}{
+		{name: "an admin discards a dead job", id: "3", session: adSession, csrf: adCSRF, wantStatus: http.StatusNoContent, wantActor: "user"},
+		{name: "an admin token discards a dead job", id: "3", token: "skt_admin", wantStatus: http.StatusNoContent, wantActor: "token"},
+		{name: "a dead job whose last error holds an email", id: "1", session: adSession, csrf: adCSRF, wantStatus: http.StatusNoContent, wantActor: "user"},
+		{name: "no CSRF token", id: "3", session: adSession, wantStatus: http.StatusForbidden},
+		{name: "a viewer is denied", id: "3", session: viSession, csrf: viCSRF, wantStatus: http.StatusForbidden},
+		{name: "a pending job", id: "4", session: adSession, csrf: adCSRF, wantStatus: http.StatusConflict, wantDetail: "The job is pending" + notDeadSuffix},
+		{name: "a running job", id: "7", session: adSession, csrf: adCSRF, wantStatus: http.StatusConflict, wantDetail: "The job is running" + notDeadSuffix},
+		{name: "no such job", id: "99", session: adSession, csrf: adCSRF, wantStatus: http.StatusNotFound, wantDetail: noSuchJob},
+		{name: "an ID that is not a number", id: "three", session: adSession, csrf: adCSRF, wantStatus: http.StatusBadRequest},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := setupJobs(t)
+			path := "/api/v1/jobs/" + tt.id + "/discard"
+
+			var rec *httptest.ResponseRecorder
+			if tt.token != "" {
+				rec = s.doWithToken(t, http.MethodPost, path, tt.token, nil)
+			} else {
+				rec = s.do(t, http.MethodPost, path, tt.session, tt.csrf, nil)
+			}
+
+			require.Equal(t, tt.wantStatus, rec.Code, rec.Body.String())
+
+			var audited int
+
+			require.NoError(t, s.pool.QueryRow(t.Context(),
+				"SELECT count(*) FROM audit_log WHERE action = 'job.discarded'").Scan(&audited))
+
+			var exists bool
+
+			require.NoError(t, s.pool.QueryRow(t.Context(),
+				"SELECT EXISTS (SELECT 1 FROM jobs WHERE id::text = $1)", tt.id).Scan(&exists), "id %s", tt.id)
+
+			if tt.wantStatus != http.StatusNoContent {
+				require.Equal(t, "application/problem+json", rec.Header().Get("Content-Type"))
+				require.Zero(t, audited)
+
+				if tt.wantDetail != "" {
+					require.Equal(t, tt.wantDetail, problemDetail(t, rec))
+				}
+
+				if tt.wantStatus != http.StatusNotFound && tt.wantStatus != http.StatusBadRequest {
+					require.True(t, exists, "the job stays")
+				}
+
+				return
+			}
+
+			require.False(t, exists, "the job is deleted")
+			require.Equal(t, 1, audited)
+
+			var actorKind, details string
+
+			require.NoError(t, s.pool.QueryRow(t.Context(),
+				"SELECT actor_kind, details::text FROM audit_log WHERE action = 'job.discarded' AND target_kind = 'job' AND target_id = $1", tt.id).
+				Scan(&actorKind, &details))
+			require.Equal(t, tt.wantActor, actorKind)
+			require.NotContains(t, details, "ana@example.com", "the last error is masked")
+		})
+	}
+}
+
+func TestDiscardJobAudit(t *testing.T) {
+	t.Parallel()
+
+	s := setupJobs(t)
+
+	rec := s.do(t, http.MethodPost, "/api/v1/jobs/2/discard", adSession, adCSRF, nil)
+	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
+
+	var details string
+
+	require.NoError(t, s.pool.QueryRow(t.Context(),
+		"SELECT details::text FROM audit_log WHERE action = 'job.discarded' AND target_id = '2'").Scan(&details))
+	require.JSONEq(t, `{"old": {"kind": "investigate", "attempts": 5, "lastError": "model: overloaded"}}`, details)
+}
+
+// TestDiscardJobRollsBackWithItsAudit makes the audit write fail, and
+// checks that the delete is undone with it. The trigger lives in the
+// database of this test alone, which setupJobs makes new and which is
+// dropped when the test ends.
+func TestDiscardJobRollsBackWithItsAudit(t *testing.T) {
+	t.Parallel()
+
+	s := setupJobs(t)
+
+	_, err := s.pool.Exec(t.Context(), `
+		CREATE FUNCTION refuse_discard_audit() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN RAISE EXCEPTION 'audit refused'; END $$;
+		CREATE TRIGGER refuse_discard_audit BEFORE INSERT ON audit_log
+		FOR EACH ROW WHEN (NEW.action = 'job.discarded') EXECUTE FUNCTION refuse_discard_audit();`)
+	require.NoError(t, err)
+
+	rec := s.do(t, http.MethodPost, "/api/v1/jobs/3/discard", adSession, adCSRF, nil)
+	require.Equal(t, http.StatusInternalServerError, rec.Code, rec.Body.String())
+
+	var status string
+
+	require.NoError(t, s.pool.QueryRow(t.Context(), "SELECT status FROM jobs WHERE id = 3").Scan(&status), "the job stays")
+	require.Equal(t, "dead", status)
+}
+
+// TestDiscardJobTakenMeanwhile holds the row of a dead job in a transaction
+// that makes it running, starts a discard that waits for that lock, and
+// commits. The discard must then answer 409 and leave the job.
+func TestDiscardJobTakenMeanwhile(t *testing.T) {
+	t.Parallel()
+
+	s := setupJobs(t)
+
+	holder, err := s.pool.Begin(t.Context())
+	require.NoError(t, err)
+
+	defer func() { _ = holder.Rollback(t.Context()) }()
+
+	_, err = holder.Exec(t.Context(), "UPDATE jobs SET status = 'running', finished_at = NULL WHERE id = 3")
+	require.NoError(t, err)
+
+	answer := make(chan *httptest.ResponseRecorder, 1)
+
+	go func() {
+		answer <- s.do(t, http.MethodPost, "/api/v1/jobs/3/discard", adSession, adCSRF, nil)
+	}()
+
+	require.Eventually(t, func() bool {
+		var waiting bool
+
+		err := s.pool.QueryRow(t.Context(), `
+			SELECT EXISTS (
+			  SELECT 1 FROM pg_stat_activity
+			  WHERE datname = current_database() AND pid <> pg_backend_pid()
+			    AND wait_event_type = 'Lock' AND query LIKE '%DELETE FROM jobs%')`).Scan(&waiting)
+
+		return err == nil && waiting
+	}, testWait, testPoll, "the discard never waited for the lock on the job")
+
+	require.NoError(t, holder.Commit(t.Context()))
+
+	select {
+	case rec := <-answer:
+		require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
+		require.Equal(t, "The job is running, not dead; only dead jobs can be discarded.", problemDetail(t, rec))
+	case <-time.After(testWait):
+		require.FailNow(t, fmt.Sprintf("the discard did not answer within %s after the lock was released", testWait))
+	}
+
+	var status string
+
+	require.NoError(t, s.pool.QueryRow(t.Context(), "SELECT status FROM jobs WHERE id = 3").Scan(&status), "the job stays")
+	require.Equal(t, "running", status)
+}
+
+// problemDetail is the detail of a problem document answer.
+func problemDetail(t *testing.T, rec *httptest.ResponseRecorder) string {
+	t.Helper()
+
+	var body struct {
+		Detail string `json:"detail"`
+	}
+
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+
+	return body.Detail
 }
 
 func decodeJobs(t *testing.T, rec *httptest.ResponseRecorder) jobList {

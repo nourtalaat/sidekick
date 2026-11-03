@@ -174,6 +174,15 @@ func TestQueryPlans(t *testing.T) {
 			},
 			wantIndex: "jobs_pkey",
 		},
+		{
+			name: "DiscardDeadJob",
+			run: func(ctx context.Context, q *db.Queries, rows planRows) error {
+				_, err := q.DiscardDeadJob(ctx, rows.deadID)
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "jobs_pkey",
+		},
 	}
 
 	for _, tt := range tests {
