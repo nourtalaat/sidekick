@@ -2059,6 +2059,12 @@ export interface components {
              *     `path` and no `after` removes the whole definition.
              */
             changes?: components["schemas"]["ProposalChange"][];
+            /**
+             * @description The files of a proposal that opens a pull request or a merge
+             *     request, sorted by path, read from the snapshot with no call to
+             *     the host. Absent for any other proposal and for an undo.
+             */
+            files?: components["schemas"]["ProposalFile"][];
             /** @description Whether the proposal can be undone now. True only for a succeeded proposal whose action can undo it, that is not an undo itself. */
             undoable: boolean;
             /**
@@ -2101,6 +2107,18 @@ export interface components {
             path: string;
             before?: string;
             after?: string;
+        };
+        /**
+         * @description One file of a pull request or merge request. `path` comes from the
+         *     model, so a screen shows it as plain text.
+         */
+        ProposalFile: {
+            /** @description The path from the root of the repository. */
+            path: string;
+            /** @enum {string} */
+            status: "added" | "changed" | "deleted";
+            linesAdded: number;
+            linesRemoved: number;
         };
         UndoProposalRequest: {
             /**

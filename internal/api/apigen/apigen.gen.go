@@ -367,6 +367,27 @@ func (e OperationsStatsInterval) Valid() bool {
 	}
 }
 
+// Defines values for ProposalFileStatus.
+const (
+	Added   ProposalFileStatus = "added"
+	Changed ProposalFileStatus = "changed"
+	Deleted ProposalFileStatus = "deleted"
+)
+
+// Valid indicates whether the value is a known member of the ProposalFileStatus enum.
+func (e ProposalFileStatus) Valid() bool {
+	switch e {
+	case Added:
+		return true
+	case Changed:
+		return true
+	case Deleted:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ProposalStatus.
 const (
 	ProposalStatusApproved  ProposalStatus = "approved"
@@ -2133,8 +2154,13 @@ type Proposal struct {
 	DecidedBySlackUser *string `json:"decidedBySlackUser,omitempty"`
 
 	// Error Why it failed. While it is tried again, the last failed attempt.
-	Error           *string            `json:"error,omitempty"`
-	ExpiresAt       time.Time          `json:"expiresAt"`
+	Error     *string   `json:"error,omitempty"`
+	ExpiresAt time.Time `json:"expiresAt"`
+
+	// Files The files of a proposal that opens a pull request or a merge
+	// request, sorted by path, read from the snapshot with no call to
+	// the host. Absent for any other proposal and for an undo.
+	Files           *[]ProposalFile    `json:"files,omitempty"`
 	Id              openapi_types.UUID `json:"id"`
 	InvestigationId openapi_types.UUID `json:"investigationId"`
 	Mode            string             `json:"mode"`
@@ -2173,6 +2199,20 @@ type ProposalChange struct {
 	// Path The field, such as options.thresholds.critical or rules[0].expr.
 	Path string `json:"path"`
 }
+
+// ProposalFile One file of a pull request or merge request. `path` comes from the
+// model, so a screen shows it as plain text.
+type ProposalFile struct {
+	LinesAdded   int `json:"linesAdded"`
+	LinesRemoved int `json:"linesRemoved"`
+
+	// Path The path from the root of the repository.
+	Path   string             `json:"path"`
+	Status ProposalFileStatus `json:"status"`
+}
+
+// ProposalFileStatus defines model for ProposalFile.Status.
+type ProposalFileStatus string
 
 // ProposalList defines model for ProposalList.
 type ProposalList struct {

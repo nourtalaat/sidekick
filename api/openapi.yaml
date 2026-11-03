@@ -3147,6 +3147,14 @@ components:
             `path` and no `after` removes the whole definition.
           items:
             $ref: "#/components/schemas/ProposalChange"
+        files:
+          type: array
+          description: |
+            The files of a proposal that opens a pull request or a merge
+            request, sorted by path, read from the snapshot with no call to
+            the host. Absent for any other proposal and for an undo.
+          items:
+            $ref: "#/components/schemas/ProposalFile"
         undoable:
           type: boolean
           description: Whether the proposal can be undone now. True only for a succeeded proposal whose action can undo it, that is not an undo itself.
@@ -3202,6 +3210,25 @@ components:
           type: string
         after:
           type: string
+    ProposalFile:
+      type: object
+      description: |
+        One file of a pull request or merge request. `path` comes from the
+        model, so a screen shows it as plain text.
+      required: [path, status, linesAdded, linesRemoved]
+      properties:
+        path:
+          type: string
+          description: The path from the root of the repository.
+        status:
+          type: string
+          enum: [added, changed, deleted]
+        linesAdded:
+          type: integer
+          minimum: 0
+        linesRemoved:
+          type: integer
+          minimum: 0
     UndoProposalRequest:
       type: object
       properties:
