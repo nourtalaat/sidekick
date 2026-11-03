@@ -30,6 +30,28 @@ paths:
                 $ref: "#/components/schemas/Me"
         default:
           $ref: "#/components/responses/Problem"
+  /me/theme:
+    put:
+      operationId: SetMyTheme
+      summary: Save the signed-in user's theme choice
+      description: |
+        Stores the choice of system, light or dark for the user, so the web UI
+        shows it in every browser. It is a display preference and writes no
+        audit row. Only a session can set it: an API token answers 403, since
+        tokens have no theme. A value other than system, light or dark answers
+        422. Requests made with the session send the CSRF token.
+      x-sidekick-role: viewer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ThemeUpdate"
+      responses:
+        "204":
+          description: The theme is saved.
+        default:
+          $ref: "#/components/responses/Problem"
   /config:
     get:
       operationId: GetConfig
@@ -2145,6 +2167,15 @@ components:
     Role:
       type: string
       enum: [viewer, responder, approver, admin]
+    Theme:
+      type: string
+      enum: [system, light, dark]
+    ThemeUpdate:
+      type: object
+      required: [theme]
+      properties:
+        theme:
+          $ref: "#/components/schemas/Theme"
     Me:
       type: object
       required: [kind, id, name, role]
@@ -2170,6 +2201,11 @@ components:
             The session's CSRF token. Requests made with the session that
             change anything send it in the X-CSRF-Token header. Absent for
             an API token.
+        theme:
+          $ref: "#/components/schemas/Theme"
+          description: |
+            The theme the signed-in user chose. Absent until they choose one,
+            and for an API token.
     EffectiveConfig:
       type: object
       required: [file, runtime]
