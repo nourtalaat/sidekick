@@ -6,7 +6,7 @@ import { benchRunDetail, benchRunId, benchRunRange } from "../test/bench";
 import { fakeServer, json, problem } from "../test/helpers";
 import { recording } from "../test/rules";
 import { ApiProvider } from "./ApiContext";
-import { BENCH_PAGE_SIZE, benchRunKey, useBenchRun, useBenchRunPages } from "./bench";
+import { BENCH_COMPARE_CHOICES, BENCH_PAGE_SIZE, BENCH_RUNS_SHOWN, benchRunKey, useBenchRun, useBenchRunPages, useBenchRuns } from "./bench";
 
 function setup(answer: Parameters<typeof recording>[0]) {
   const { handler, seen } = recording(answer);
@@ -94,5 +94,32 @@ describe("useBenchRun", () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
 
     expect(result.current.error?.message).toBe("No benchmark run has this ID.");
+  });
+});
+
+describe("useBenchRuns", () => {
+  function setupRuns(limit: number | undefined) {
+    const { handler, seen } = recording(() => json(200, { runs: benchRunRange(1, 2) }));
+    const { api } = fakeServer(undefined, handler);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <ApiProvider api={api}>
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      </ApiProvider>
+    );
+
+    return { ...renderHook(() => useBenchRuns(limit), { wrapper }), seen };
+  }
+
+  it.each([
+    ["the dashboard's ten without a limit", undefined, BENCH_RUNS_SHOWN],
+    ["the number the compare page offers", BENCH_COMPARE_CHOICES, 50],
+  ])("asks for %s", async (_name, limit, want) => {
+    const { result, seen } = setupRuns(limit);
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(seen[0]?.search.get("limit")).toBe(String(want));
   });
 });

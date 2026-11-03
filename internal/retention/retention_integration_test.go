@@ -28,6 +28,7 @@ const (
 	listEvents         = "SELECT key FROM events ORDER BY key"
 	listAuditLog       = "SELECT action FROM audit_log ORDER BY action"
 	listMemoryEntries  = "SELECT right(investigation_id::text, 2) FROM memory_entries ORDER BY 1"
+	listMemoryUses     = "SELECT right(investigation_id::text, 2) || '/' || run || '/' || right(example_id::text, 2) FROM memory_uses ORDER BY 1"
 	listJobs           = "SELECT unique_key FROM jobs ORDER BY unique_key"
 )
 
@@ -63,6 +64,7 @@ func TestHandleDeletesOnlyOldRows(t *testing.T) {
 		{listEvents, []string{"ev-3"}},
 		{listAuditLog, []string{"audit-3"}},
 		{listMemoryEntries, []string{"c1"}},
+		{listMemoryUses, []string{"c4/1/c1", "c4/1/e1"}},
 		{listJobs, []string{"job-dead-2d", "job-done-1h", "job-pending"}},
 	}
 
@@ -187,9 +189,10 @@ func TestBatchTakesTheOldestFirst(t *testing.T) {
 
 // TestDeletingAnInvestigationTakesWhatBelongsToIt checks that deleting the
 // old investigations removes their steps, inbox rows, output refs, publish
-// states, feedback, watchers with their checks, and event groups, and
-// leaves those of the others. Memory entries stay, even that of a deleted
-// investigation.
+// states, feedback, memory uses, watchers with their checks, and event
+// groups, and leaves those of the others. Memory entries stay, even that of
+// a deleted investigation, and so does a use of an example whose
+// investigation was deleted.
 func TestDeletingAnInvestigationTakesWhatBelongsToIt(t *testing.T) {
 	t.Parallel()
 
@@ -215,6 +218,7 @@ func TestDeletingAnInvestigationTakesWhatBelongsToIt(t *testing.T) {
 		{listWatcherChecks, []string{"d4/1", "d4/2", "d4/3"}},
 		{listEvents, []string{"ev-1", "ev-2", "ev-3", "ev-4"}},
 		{listMemoryEntries, []string{"c1", "e1", "e2"}},
+		{listMemoryUses, []string{"c4/1/c1", "c4/1/e1"}},
 	}
 
 	for _, w := range want {

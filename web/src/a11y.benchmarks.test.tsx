@@ -2,9 +2,10 @@ import { QueryClient } from "@tanstack/react-query";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { benchRunDetail, benchRunId, benchRunRange } from "./test/bench";
+import { benchRunDetail, benchRunDetailOf, benchRunId, benchRunRange, compareAnswers } from "./test/bench";
 import { json, problem, renderApp, stubMedia, wcagViolations } from "./test/helpers";
 import { recording } from "./test/rules";
+import { benchComparison, RUN_A_ID, RUN_B_ID } from "./test/stats";
 import { THEME_STORAGE_KEY } from "./theme";
 
 const NO_RUN = "No benchmark run has this ID.";
@@ -18,6 +19,7 @@ const THEMES = [
 ] as const;
 
 const NEXT = "cursor-of-page-one";
+const COMPARE = `/benchmarks/compare?a=${RUN_A_ID}&b=${RUN_B_ID}`;
 
 describe.each(THEMES)("accessibility of the Benchmarks page, theme $name", (theme) => {
   describe.each([false, true])("forced colors %s", (forcedColors) => {
@@ -95,6 +97,65 @@ describe.each(THEMES)("accessibility of the Benchmarks page, theme $name", (them
       missing.unmount();
 
       const broken = renderApp({ route: `/benchmarks/${benchRunId(9)}`, handler: () => problem(500, "The database is down."), queryClient });
+      await screen.findByText("The database is down.");
+
+      expect(await wcagViolations(broken.container)).toEqual([]);
+    });
+
+    it("has no WCAG 2.2 AA violations on the compare page with differing settings and scenarios that flipped", async () => {
+      const comparison = benchComparison();
+      const { handler } = recording(
+        compareAnswers({ details: { [RUN_B_ID]: () => json(200, benchRunDetailOf(comparison.b, { promptVersion: "p-4", configHash: "00ff11aa22bb" })) } }),
+      );
+      const { container } = renderApp({ route: COMPARE, handler });
+      await screen.findByText("p-4");
+
+      expect(await wcagViolations(container)).toEqual([]);
+    });
+
+    it("has no WCAG 2.2 AA violations on the compare page with one run chosen, with no run chosen, and with no runs", async () => {
+      const one = renderApp({ route: `/benchmarks/compare?a=${RUN_A_ID}`, handler: recording(compareAnswers()).handler });
+      await screen.findByText("Choose Run B to compare it with Run A.");
+      await screen.findAllByRole("option", { name: /^baseline, / });
+
+      expect(await wcagViolations(one.container)).toEqual([]);
+
+      one.unmount();
+
+      const none = renderApp({ route: "/benchmarks/compare", handler: recording(compareAnswers()).handler });
+      await screen.findByText("Choose two runs to compare them.");
+
+      expect(await wcagViolations(none.container)).toEqual([]);
+
+      none.unmount();
+
+      const empty = renderApp({ route: "/benchmarks/compare", handler: recording(compareAnswers({ runs: [] })).handler });
+      await screen.findByRole("heading", { name: "No benchmark runs yet" });
+
+      expect(await wcagViolations(empty.container)).toEqual([]);
+    });
+
+    it("has no WCAG 2.2 AA violations on the compare page when the comparison fails, when a detail is loading, and when a detail fails", async () => {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const failed = renderApp({ route: COMPARE, handler: recording(compareAnswers({ compare: () => problem(404, NO_RUN) })).handler, queryClient });
+      await screen.findByText(NO_RUN);
+
+      expect(await wcagViolations(failed.container)).toEqual([]);
+
+      failed.unmount();
+
+      const loading = renderApp({ route: COMPARE, handler: recording(compareAnswers({ details: { [RUN_A_ID]: () => new Promise<Response>(() => undefined) } })).handler });
+      await screen.findByRole("region", { name: /^Metrics of / });
+
+      expect(await wcagViolations(loading.container)).toEqual([]);
+
+      loading.unmount();
+
+      const broken = renderApp({
+        route: COMPARE,
+        handler: recording(compareAnswers({ details: { [RUN_B_ID]: () => problem(500, "The database is down.") } })).handler,
+        queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+      });
       await screen.findByText("The database is down.");
 
       expect(await wcagViolations(broken.container)).toEqual([]);

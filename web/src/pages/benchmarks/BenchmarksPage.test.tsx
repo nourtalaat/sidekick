@@ -57,6 +57,19 @@ describe("the Benchmarks page", () => {
     expect(within(table).getByRole("link", { name: /^Run of / })).toHaveAttribute("href", `/benchmarks/${benchRunId(2)}`);
   });
 
+  it("links to the compare page above the table when there are two runs or more, and not for one run", async () => {
+    const two = renderApp({ route: "/benchmarks", handler: () => json(200, { runs: [benchRun(1), benchRun(2)] }) });
+    await screen.findByRole("region", { name: "Benchmark runs" });
+
+    expect(screen.getByRole("link", { name: "Compare two runs" })).toHaveAttribute("href", "/benchmarks/compare");
+
+    two.unmount();
+    renderApp({ route: "/benchmarks", handler: () => json(200, { runs: [benchRun(1)] }) });
+    await screen.findByRole("region", { name: "Benchmark runs" });
+
+    expect(screen.queryByRole("link", { name: "Compare two runs" })).not.toBeInTheDocument();
+  });
+
   it("says that there are no runs yet and what stores them", async () => {
     renderApp({ route: "/benchmarks", handler: () => json(200, { runs: [] }) });
 

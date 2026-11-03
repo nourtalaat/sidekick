@@ -1,4 +1,4 @@
-import type { BenchResult } from "../../api/bench";
+import type { BenchResult, BenchScenarioRow } from "../../api/bench";
 
 /** How a scenario did: no repeat right, some right, or every repeat right. */
 export type ScenarioState = "wrong" | "partly" | "right";
@@ -24,6 +24,13 @@ export interface ScenarioGroup {
   meanDurationMs: number;
 }
 
+/**
+ * How a scenario changed from run A to run B: it went from all repeats right
+ * to none right, from none right to all right, changed in another way, stayed
+ * the same, or only one of the runs has it.
+ */
+export type ScenarioChange = "right-to-wrong" | "wrong-to-right" | "other" | "same" | "missing";
+
 const STATE_ORDER: Record<ScenarioState, number> = { wrong: 0, partly: 1, right: 2 };
 
 /**
@@ -41,6 +48,39 @@ export function groupScenarios(results: readonly BenchResult[]): ScenarioGroup[]
   return [...byScenario.entries()].map(([scenarioId, repeats]) => groupOf(scenarioId, repeats)).sort(compareGroups);
 }
 
+/** How a scenario of a comparison changed from run A to run B. */
+export function scenarioChange(row: BenchScenarioRow): ScenarioChange {
+  if (!row.a || !row.b) {
+    return "missing";
+  }
+
+  const before = stateOf(row.a.correct, row.a.runs);
+  const after = stateOf(row.b.correct, row.b.runs);
+
+  if (before === "right" && after === "wrong") {
+    return "right-to-wrong";
+  }
+
+  if (before === "wrong" && after === "right") {
+    return "wrong-to-right";
+  }
+
+  const sameShare = row.a.correct * row.b.runs === row.b.correct * row.a.runs;
+
+  return before === after && (before !== "partly" || sameShare) ? "same" : "other";
+}
+
+const CHANGE_ORDER: Record<ScenarioChange, number> = { "right-to-wrong": 0, "wrong-to-right": 1, other: 2, same: 2, missing: 2 };
+
+/**
+ * The scenarios of a comparison with the ones that went from right to wrong
+ * first, then the ones that went from wrong to right, then the rest; inside
+ * each group by scenario ID.
+ */
+export function compareScenarios(rows: readonly BenchScenarioRow[]): BenchScenarioRow[] {
+  return [...rows].sort((a, b) => CHANGE_ORDER[scenarioChange(a)] - CHANGE_ORDER[scenarioChange(b)] || a.scenarioId.localeCompare(b.scenarioId));
+}
+
 function groupOf(scenarioId: string, unsorted: BenchResult[]): ScenarioGroup {
   const repeats = [...unsorted].sort((a, b) => a.repeat - b.repeat);
   const correct = repeats.filter((r) => r.verdictCorrect).length;
@@ -52,7 +92,7 @@ function groupOf(scenarioId: string, unsorted: BenchResult[]): ScenarioGroup {
     repeats,
     correct,
     total: repeats.length,
-    state: correct === 0 ? "wrong" : correct === repeats.length ? "right" : "partly",
+    state: stateOf(correct, repeats.length),
     verdicts: verdictCounts(repeats),
     meanRootCauseScore: scores.length === 0 ? undefined : mean(scores),
     meanCostMicros: mean(repeats.map((r) => r.costMicros)),
@@ -76,4 +116,9 @@ function compareGroups(a: ScenarioGroup, b: ScenarioGroup): number {
 
 function mean(values: readonly number[]): number {
   return values.reduce((sum, v) => sum + v, 0) / values.length;
+}
+
+/** How a scenario did when correct of total repeats were right. */
+function stateOf(correct: number, total: number): ScenarioState {
+  return correct === 0 ? "wrong" : correct === total ? "right" : "partly";
 }

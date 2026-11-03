@@ -10,6 +10,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/action/gcprun"
 	"github.com/nourtalaat/sidekick/internal/action/githubcode"
 	"github.com/nourtalaat/sidekick/internal/action/githubpr"
+	"github.com/nourtalaat/sidekick/internal/action/githubrevert"
 	"github.com/nourtalaat/sidekick/internal/action/gitlabmr"
 	"github.com/nourtalaat/sidekick/internal/action/grafana"
 	"github.com/nourtalaat/sidekick/internal/action/helmrollback"
@@ -35,6 +36,7 @@ func TestMonitorFixers(t *testing.T) {
 		{name: "prometheus.rule", action: &prometheusrule.Rule{}, want: action.FixAPI},
 		{name: "github.pull_request", action: &githubpr.PR{}, want: action.FixPullRequest},
 		{name: "gcp.cloud_run_rollback fixes nothing", action: &gcprun.Rollback{}},
+		{name: "github.revert fixes nothing", action: &githubrevert.Revert{}},
 		{name: "github.code_change fixes nothing", action: &githubcode.Code{}},
 		{name: "gitlab.merge_request", action: &gitlabmr.MR{}, want: action.FixPullRequest},
 		{name: "helm.rollback fixes nothing", action: &helmrollback.Rollback{}},
