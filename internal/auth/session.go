@@ -114,6 +114,10 @@ func (s *Service) session(r *http.Request) (Principal, []byte, error) {
 		p.Email = *row.Email
 	}
 
+	if row.Theme != nil {
+		p.Theme = *row.Theme
+	}
+
 	return p, hash, nil
 }
 

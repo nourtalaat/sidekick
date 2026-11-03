@@ -21,6 +21,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/theme": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save the signed-in user's theme choice
+         * @description Stores the choice of system, light or dark for the user, so the web UI
+         *     shows it in every browser. It is a display preference and writes no
+         *     audit row. Only a session can set it: an API token answers 403, since
+         *     tokens have no theme. A value other than system, light or dark answers
+         *     422. Requests made with the session send the CSRF token.
+         */
+        put: operations["SetMyTheme"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/config": {
         parameters: {
             query?: never;
@@ -1465,6 +1489,11 @@ export interface components {
     schemas: {
         /** @enum {string} */
         Role: "viewer" | "responder" | "approver" | "admin";
+        /** @enum {string} */
+        Theme: "system" | "light" | "dark";
+        ThemeUpdate: {
+            theme: components["schemas"]["Theme"];
+        };
         Me: {
             /**
              * @description Whether the caller is a signed-in user or an API token.
@@ -1484,6 +1513,11 @@ export interface components {
              *     an API token.
              */
             csrfToken?: string;
+            /**
+             * @description The theme the signed-in user chose. Absent until they choose one,
+             *     and for an API token.
+             */
+            theme?: components["schemas"]["Theme"];
         };
         EffectiveConfig: {
             /** @description sidekick.yaml with its defaults, by YAML key. Read-only. */
@@ -3523,6 +3557,29 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Me"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    SetMyTheme: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThemeUpdate"];
+            };
+        };
+        responses: {
+            /** @description The theme is saved. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };

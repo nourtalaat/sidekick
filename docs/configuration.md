@@ -3774,6 +3774,176 @@ nothing once the release is restored.
 `internal/action/helmrollback` name the files. With `networkPolicy.restrictEgress`
 on, allow egress to the Kubernetes API server.
 
+##### `aws.ecs_rollback`
+
+Puts an Amazon ECS service back on an earlier revision of its task definition
+through the ECS API. It changes the task definition and nothing else: not the
+number of tasks, and it does not force a new deployment. ECS then starts a new
+deployment of the older revision. It is approval-only, so a `read-write` route
+may list it only when the action sets `allowReadWrite: true`. Use it on routes
+with `mode: approved`: the change is live as soon as it is approved. Sidekick
+does not wait for the rollout to finish; the watcher reports whether the alert
+recovers.
+
+```yaml
+actions:
+  ecs-rollback:
+    type: aws.ecs_rollback
+    accounts:
+      - id: "111122223333"
+        roleARN: arn:aws:iam::111122223333:role/sidekick-ecs-rollback
+        externalID: sidekick-prod        # only if the role's trust policy asks for it
+    regions: [us-east-1]
+    maxRevisionsBack: 1                  # default 1, at most 10
+    limits:
+      clusters: [shop]
+      services: ["checkout", "cart-*"]
+
+routes:
+  - name: checkout
+    mode: approved
+    actions: [ecs-rollback]
+```
+
+- `accounts` are the accounts the action may change. Each has an `id` (12
+  digits; quote it in YAML), a `roleARN` in that account, and optionally the
+  `externalID` the role's trust policy asks for. The role is required for
+  every account: it is the action's own role, apart from the role of the
+  [AWS source](sources/aws.md), and its policy is the hard limit on what the
+  action can change. Sidekick assumes it with the session name `sidekick` and
+  keeps its credentials until shortly before they expire. Required.
+- `regions` are the Regions the action may change, in every account. Required.
+- `maxRevisionsBack` is how many revisions back the model may ask to go. The
+  default is 1. A value written in the file must be from 1 to 10.
+- `allowReadWrite` is false unless you set it. See [Action
+  modes](#action-modes).
+- `limits.clusters` lists the names of the clusters the action may change, and
+  `limits.services` the names of the services, or patterns in which `*` stands
+  for any run of characters, such as `cart-*`. Both are required, and they
+  take names only, not ARNs, since an ARN can name another account.
+
+The model proposes a `cluster`, a `service` and, optionally, `revisionsBack`
+(default 1, at most `maxRevisionsBack`). It also gives the `account` and
+`region`, which may be left out when the config lists only one of each. Before
+anything is sent, Sidekick checks them against the config.
+
+**Which task definition.** The running one is the task definition of the
+service's primary deployment. The one it goes back to is the highest ACTIVE
+revision of the same task definition family that is lower than the running
+one, and with `revisionsBack` above 1, the one that many ACTIVE revisions
+down. Revisions that are INACTIVE or were deleted are skipped. ECS numbers
+revisions in the order they were registered, so this is the order of
+registration, not the order of deployment: a revision that a build registered
+and nobody deployed can be the one it goes back to. The proposal shows both
+task definitions with their container images, when they were registered, and
+who registered them (ECS does not record who updated the service, so the
+screens show "registered by" in that place). Read the image before you approve.
+
+**Refused when the model proposes**, with a message it can act on: a cluster,
+service, account, Region or number of revisions outside the limits; a service
+that does not exist, or is not ACTIVE; a service on the CodeDeploy or an
+external deployment controller (only the ECS controller is supported); a
+service with no primary deployment; no ACTIVE revision, or fewer than asked,
+below the running one; and a target that is not ACTIVE. The search for earlier
+revisions reads the newest 1000 task definitions whose family name starts with
+the family's name, and refuses with a message to that effect when it does not
+find enough.
+
+**When it runs.** Right before it writes, Sidekick reads the service again. If
+the service already runs the task definition it was to go back to, which
+happens when a worker died after the write, it writes nothing and succeeds.
+If the primary deployment or its task definition is not what it was when the
+change was proposed, the proposal fails with a conflict, and the model or a
+person must propose again. `UpdateService` has no precondition, so a deploy in
+the moment between that read and the write is not noticed. The write is tried
+once by the AWS SDK; if it fails in a way that may pass, Sidekick tries again
+from a new read of the service, so the change is made once.
+
+**Undo.** An approver can undo a rollback that worked. Undo puts the service
+back on the task definition it ran before the rollback. If the service does
+not run the task definition the rollback set, Undo writes nothing and shows the
+task definition it runs now, and asks again with `force`. If the service
+already runs the old task definition, Undo writes nothing and succeeds. Undo
+fails when the old task definition is not ACTIVE any more, and when you have
+lowered `maxRevisionsBack` below the number of revisions the rollback went
+back.
+
+**The role.** Create a role for the action in each account, separate from the
+read-only role of the AWS source, and attach this policy and nothing else. It
+limits `ecs:DescribeServices` and `ecs:UpdateService` to the allowed services,
+one line per cluster and service (wildcards are fine, for example
+`service/shop/cart-*`). `ecs:DescribeTaskDefinition` and
+`ecs:ListTaskDefinitions` cannot be limited to resources. Use `arn:aws-us-gov:`
+or `arn:aws-cn:` in GovCloud or China.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ChangeAllowedServices",
+      "Effect": "Allow",
+      "Action": ["ecs:DescribeServices", "ecs:UpdateService"],
+      "Resource": [
+        "arn:aws:ecs:us-east-1:111122223333:service/shop/checkout",
+        "arn:aws:ecs:us-east-1:111122223333:service/shop/cart-*"
+      ]
+    },
+    {
+      "Sid": "ReadTaskDefinitions",
+      "Effect": "Allow",
+      "Action": ["ecs:DescribeTaskDefinition", "ecs:ListTaskDefinitions"],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+AWS lists `iam:PassRole` among the permissions `UpdateService` may need, but
+does not say when it is enforced, and Sidekick could not confirm it. Leave it
+out at first. If AWS refuses the update with an error that names
+`iam:PassRole`, add this statement, with the task role and the task execution
+role of the task definitions the action may go back to:
+
+```json
+{
+  "Sid": "PassTaskRoles",
+  "Effect": "Allow",
+  "Action": "iam:PassRole",
+  "Resource": [
+    "arn:aws:iam::111122223333:role/checkout-task",
+    "arn:aws:iam::111122223333:role/ecsTaskExecutionRole"
+  ],
+  "Condition": { "StringEquals": { "iam:PassedToService": "ecs-tasks.amazonaws.com" } }
+}
+```
+
+The role's trust policy names Sidekick's own role and, if you want one, an
+external ID, as for the source:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": { "AWS": "arn:aws:iam::<sidekick account id>:role/<sidekick role>" },
+      "Action": "sts:AssumeRole",
+      "Condition": { "StringEquals": { "sts:ExternalId": "<external id>" } }
+    }
+  ]
+}
+```
+
+Sidekick's own role needs `sts:AssumeRole` on this role and gets no ECS
+permission of its own. With `networkPolicy.restrictEgress`, allow
+`ecs.<region>.amazonaws.com` and `sts.<region>.amazonaws.com` on port 443 for
+each Region in `regions`.
+
+The calls were checked against the source of the AWS SDK for Go v2 at the tag
+`service/ecs/v1.102.0`, and the permissions against the model of the ECS API
+in the same tag and AWS's published list of ECS permissions.
+
 ##### `argocd.rollback`
 
 Puts an Argo CD application back on an earlier deployed revision through
