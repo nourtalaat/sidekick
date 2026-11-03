@@ -282,3 +282,96 @@ func movedTo(w http.ResponseWriter, location string) {
 	w.Header().Set("Location", location)
 	w.WriteHeader(http.StatusMovedPermanently)
 }
+
+func TestClientSend(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a JSON body and a JSON answer", func(t *testing.T) {
+		t.Parallel()
+
+		api := fakehttp.New(t)
+		api.Handle(http.MethodPost, apiRoot+"/projects/acme/checkout/repository/commits", fakehttp.Response{
+			Status: http.StatusCreated, Headers: jsonHeaders, Body: []byte(`{"id":"abc"}`),
+		})
+		api.ExpectAllCalled()
+
+		c := newTestClient(t, api, tokenSecrets(t))
+
+		var out struct {
+			ID string `json:"id"`
+		}
+
+		err := c.Send(t.Context(), http.MethodPost, ProjectPath("acme/checkout", "repository", "commits"), map[string]string{"branch": "b"}, &out)
+		require.NoError(t, err)
+		require.Equal(t, "abc", out.ID)
+
+		requests := api.Requests()
+		require.Len(t, requests, 1)
+		require.JSONEq(t, `{"branch":"b"}`, string(requests[0].Body))
+		require.Equal(t, "application/json", requests[0].Header.Get("Content-Type"))
+		require.Equal(t, testToken, requests[0].Header.Get("PRIVATE-TOKEN"))
+	})
+
+	t.Run("no body and an answer with no content", func(t *testing.T) {
+		t.Parallel()
+
+		api := fakehttp.New(t)
+		api.Handle(http.MethodDelete, apiRoot+"/projects/acme/checkout/repository/branches/sidekick/x", fakehttp.Response{Status: http.StatusNoContent})
+		api.ExpectAllCalled()
+
+		c := newTestClient(t, api, tokenSecrets(t))
+
+		err := c.Send(t.Context(), http.MethodDelete, ProjectPath("acme/checkout", "repository", "branches", "sidekick%2Fx"), nil, nil)
+		require.NoError(t, err)
+
+		requests := api.Requests()
+		require.Len(t, requests, 1)
+		require.Empty(t, requests[0].Body)
+		require.Empty(t, requests[0].Header.Get("Content-Type"))
+	})
+
+	t.Run("an error answer carries GitLab's message", func(t *testing.T) {
+		t.Parallel()
+
+		api := fakehttp.New(t)
+		api.Handle(http.MethodPost, apiRoot+"/projects/acme/checkout/merge_requests", fakehttp.Response{
+			Status: http.StatusConflict, Headers: jsonHeaders, Body: []byte(`{"message":["Another open merge request already exists"]}`),
+		})
+
+		c := newTestClient(t, api, tokenSecrets(t))
+
+		err := c.Send(t.Context(), http.MethodPost, ProjectPath("acme/checkout", "merge_requests"), map[string]string{"title": "t"}, nil)
+		require.Error(t, err)
+		require.True(t, IsStatus(err, http.StatusConflict))
+		require.ErrorContains(t, err, "Another open merge request already exists")
+	})
+
+	t.Run("a redirect is never followed", func(t *testing.T) {
+		t.Parallel()
+
+		api := fakehttp.New(t)
+		api.HandleFunc(http.MethodPost, apiRoot+"/projects/acme/moved/merge_requests", func(w http.ResponseWriter, r *http.Request) {
+			movedTo(w, "http://"+r.Host+apiRoot+"/projects/81/merge_requests")
+		})
+
+		c := newTestClient(t, api, tokenSecrets(t))
+
+		err := c.Send(t.Context(), http.MethodPost, ProjectPath("acme/moved", "merge_requests"), map[string]string{"title": "t"}, nil)
+		require.True(t, IsStatus(err, http.StatusMovedPermanently))
+		require.Len(t, api.Requests(), 1, "the redirect is not followed, so nothing is sent to the new address")
+	})
+
+	t.Run("no request goes out without a token", func(t *testing.T) {
+		t.Parallel()
+
+		secrets := registry.NewMockSecrets(gomock.NewController(t))
+		secrets.EXPECT().Resolve(gomock.Any(), testTokenRef).Return([]byte(" \n"), nil)
+
+		api := fakehttp.New(t)
+		c := newTestClient(t, api, secrets)
+
+		err := c.Send(t.Context(), http.MethodPut, "/projects/1/merge_requests/2", map[string]string{"state_event": "close"}, nil)
+		require.ErrorIs(t, err, ErrEmptyToken)
+		require.Empty(t, api.Requests())
+	})
+}
