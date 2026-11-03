@@ -17,7 +17,7 @@ const approveActionProposalByPolicy = `-- name: ApproveActionProposalByPolicy :o
 UPDATE action_proposals
 SET status = 'approved', decided_at = $1::timestamptz
 WHERE id = $2 AND status = 'proposed'
-RETURNING id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, decided_by, decided_by_slack_user, decided_at, executed_at, result, error, snapshot, undo_of, undoable
+RETURNING id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, decided_by, decided_by_slack_user, decided_at, executed_at, result, error, snapshot, undo_of, undoable, fix_kind
 `
 
 type ApproveActionProposalByPolicyParams struct {
@@ -54,6 +54,7 @@ func (q *Queries) ApproveActionProposalByPolicy(ctx context.Context, arg Approve
 		&i.Snapshot,
 		&i.UndoOf,
 		&i.Undoable,
+		&i.FixKind,
 	)
 	return i, err
 }
@@ -79,7 +80,7 @@ SET status = $1,
     decided_by_slack_user = $3,
     decided_at = $4::timestamptz
 WHERE id = $5 AND status = 'proposed' AND expires_at > $4::timestamptz
-RETURNING id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, decided_by, decided_by_slack_user, decided_at, executed_at, result, error, snapshot, undo_of, undoable
+RETURNING id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, decided_by, decided_by_slack_user, decided_at, executed_at, result, error, snapshot, undo_of, undoable, fix_kind
 `
 
 type DecideActionProposalParams struct {
@@ -122,6 +123,7 @@ func (q *Queries) DecideActionProposal(ctx context.Context, arg DecideActionProp
 		&i.Snapshot,
 		&i.UndoOf,
 		&i.Undoable,
+		&i.FixKind,
 	)
 	return i, err
 }
@@ -179,7 +181,7 @@ SET status = $1,
     result = $3,
     error = $4
 WHERE id = $5 AND status IN ('approved', 'executing')
-RETURNING id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, decided_by, decided_by_slack_user, decided_at, executed_at, result, error, snapshot, undo_of, undoable
+RETURNING id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, decided_by, decided_by_slack_user, decided_at, executed_at, result, error, snapshot, undo_of, undoable, fix_kind
 `
 
 type FinishActionExecutionParams struct {
@@ -222,12 +224,13 @@ func (q *Queries) FinishActionExecution(ctx context.Context, arg FinishActionExe
 		&i.Snapshot,
 		&i.UndoOf,
 		&i.Undoable,
+		&i.FixKind,
 	)
 	return i, err
 }
 
 const getActionProposal = `-- name: GetActionProposal :one
-SELECT id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, decided_by, decided_by_slack_user, decided_at, executed_at, result, error, snapshot, undo_of, undoable FROM action_proposals WHERE id = $1
+SELECT id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, decided_by, decided_by_slack_user, decided_at, executed_at, result, error, snapshot, undo_of, undoable, fix_kind FROM action_proposals WHERE id = $1
 `
 
 func (q *Queries) GetActionProposal(ctx context.Context, id uuid.UUID) (ActionProposal, error) {
@@ -253,13 +256,14 @@ func (q *Queries) GetActionProposal(ctx context.Context, id uuid.UUID) (ActionPr
 		&i.Snapshot,
 		&i.UndoOf,
 		&i.Undoable,
+		&i.FixKind,
 	)
 	return i, err
 }
 
 const getActionProposalView = `-- name: GetActionProposalView :one
 SELECT
-  p.id, p.investigation_id, p.action, p.params, p.reason, p.mode, p.status, p.idempotency_key, p.proposed_at, p.expires_at, p.decided_by, p.decided_by_slack_user, p.decided_at, p.executed_at, p.result, p.error, p.snapshot, p.undo_of, p.undoable,
+  p.id, p.investigation_id, p.action, p.params, p.reason, p.mode, p.status, p.idempotency_key, p.proposed_at, p.expires_at, p.decided_by, p.decided_by_slack_user, p.decided_at, p.executed_at, p.result, p.error, p.snapshot, p.undo_of, p.undoable, p.fix_kind,
   (SELECT i.route FROM investigations i WHERE i.id = p.investigation_id)::text AS route,
   coalesce((SELECT i.alert_title FROM investigations i WHERE i.id = p.investigation_id), '')::text AS alert_title,
   coalesce(
@@ -304,6 +308,7 @@ func (q *Queries) GetActionProposalView(ctx context.Context, id uuid.UUID) (GetA
 		&i.ActionProposal.Snapshot,
 		&i.ActionProposal.UndoOf,
 		&i.ActionProposal.Undoable,
+		&i.ActionProposal.FixKind,
 		&i.Route,
 		&i.AlertTitle,
 		&i.DecidedByName,
@@ -321,7 +326,7 @@ VALUES (
   $10, $11
 )
 ON CONFLICT (id) DO NOTHING
-RETURNING id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, decided_by, decided_by_slack_user, decided_at, executed_at, result, error, snapshot, undo_of, undoable
+RETURNING id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, decided_by, decided_by_slack_user, decided_at, executed_at, result, error, snapshot, undo_of, undoable, fix_kind
 `
 
 type InsertActionProposalParams struct {
@@ -376,6 +381,7 @@ func (q *Queries) InsertActionProposal(ctx context.Context, arg InsertActionProp
 		&i.Snapshot,
 		&i.UndoOf,
 		&i.Undoable,
+		&i.FixKind,
 	)
 	return i, err
 }
@@ -389,7 +395,7 @@ VALUES (
   $1, $2, $3, $4, '', $5, 'executing', $6, $7::timestamptz, $7::timestamptz,
   $8, $9, $7::timestamptz, $10, $11::uuid
 )
-RETURNING id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, decided_by, decided_by_slack_user, decided_at, executed_at, result, error, snapshot, undo_of, undoable
+RETURNING id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, decided_by, decided_by_slack_user, decided_at, executed_at, result, error, snapshot, undo_of, undoable, fix_kind
 `
 
 type InsertUndoProposalParams struct {
@@ -445,13 +451,14 @@ func (q *Queries) InsertUndoProposal(ctx context.Context, arg InsertUndoProposal
 		&i.Snapshot,
 		&i.UndoOf,
 		&i.Undoable,
+		&i.FixKind,
 	)
 	return i, err
 }
 
 const listActionProposals = `-- name: ListActionProposals :many
 SELECT
-  p.id, p.investigation_id, p.action, p.params, p.reason, p.mode, p.status, p.idempotency_key, p.proposed_at, p.expires_at, p.decided_by, p.decided_by_slack_user, p.decided_at, p.executed_at, p.result, p.error, p.snapshot, p.undo_of, p.undoable,
+  p.id, p.investigation_id, p.action, p.params, p.reason, p.mode, p.status, p.idempotency_key, p.proposed_at, p.expires_at, p.decided_by, p.decided_by_slack_user, p.decided_at, p.executed_at, p.result, p.error, p.snapshot, p.undo_of, p.undoable, p.fix_kind,
   (SELECT i.route FROM investigations i WHERE i.id = p.investigation_id)::text AS route,
   coalesce((SELECT i.alert_title FROM investigations i WHERE i.id = p.investigation_id), '')::text AS alert_title,
   coalesce(
@@ -517,6 +524,7 @@ func (q *Queries) ListActionProposals(ctx context.Context, arg ListActionProposa
 			&i.ActionProposal.Snapshot,
 			&i.ActionProposal.UndoOf,
 			&i.ActionProposal.Undoable,
+			&i.ActionProposal.FixKind,
 			&i.Route,
 			&i.AlertTitle,
 			&i.DecidedByName,
@@ -533,7 +541,7 @@ func (q *Queries) ListActionProposals(ctx context.Context, arg ListActionProposa
 
 const listInvestigationActionProposals = `-- name: ListInvestigationActionProposals :many
 SELECT
-  p.id, p.investigation_id, p.action, p.params, p.reason, p.mode, p.status, p.idempotency_key, p.proposed_at, p.expires_at, p.decided_by, p.decided_by_slack_user, p.decided_at, p.executed_at, p.result, p.error, p.snapshot, p.undo_of, p.undoable,
+  p.id, p.investigation_id, p.action, p.params, p.reason, p.mode, p.status, p.idempotency_key, p.proposed_at, p.expires_at, p.decided_by, p.decided_by_slack_user, p.decided_at, p.executed_at, p.result, p.error, p.snapshot, p.undo_of, p.undoable, p.fix_kind,
   (SELECT i.route FROM investigations i WHERE i.id = p.investigation_id)::text AS route,
   coalesce((SELECT i.alert_title FROM investigations i WHERE i.id = p.investigation_id), '')::text AS alert_title,
   coalesce(
@@ -583,6 +591,7 @@ func (q *Queries) ListInvestigationActionProposals(ctx context.Context, investig
 			&i.ActionProposal.Snapshot,
 			&i.ActionProposal.UndoOf,
 			&i.ActionProposal.Undoable,
+			&i.ActionProposal.FixKind,
 			&i.Route,
 			&i.AlertTitle,
 			&i.DecidedByName,
@@ -598,7 +607,7 @@ func (q *Queries) ListInvestigationActionProposals(ctx context.Context, investig
 }
 
 const lockActionProposal = `-- name: LockActionProposal :one
-SELECT p.id, p.investigation_id, p.action, p.params, p.reason, p.mode, p.status, p.idempotency_key, p.proposed_at, p.expires_at, p.decided_by, p.decided_by_slack_user, p.decided_at, p.executed_at, p.result, p.error, p.snapshot, p.undo_of, p.undoable, i.route
+SELECT p.id, p.investigation_id, p.action, p.params, p.reason, p.mode, p.status, p.idempotency_key, p.proposed_at, p.expires_at, p.decided_by, p.decided_by_slack_user, p.decided_at, p.executed_at, p.result, p.error, p.snapshot, p.undo_of, p.undoable, p.fix_kind, i.route
 FROM action_proposals p
 JOIN investigations i ON i.id = p.investigation_id
 WHERE p.id = $1
@@ -635,6 +644,7 @@ func (q *Queries) LockActionProposal(ctx context.Context, id uuid.UUID) (LockAct
 		&i.ActionProposal.Snapshot,
 		&i.ActionProposal.UndoOf,
 		&i.ActionProposal.Undoable,
+		&i.ActionProposal.FixKind,
 		&i.Route,
 	)
 	return i, err
@@ -642,7 +652,7 @@ func (q *Queries) LockActionProposal(ctx context.Context, id uuid.UUID) (LockAct
 
 const markActionUndone = `-- name: MarkActionUndone :one
 UPDATE action_proposals SET status = 'undone' WHERE id = $1 AND status = 'succeeded'
-RETURNING id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, decided_by, decided_by_slack_user, decided_at, executed_at, result, error, snapshot, undo_of, undoable
+RETURNING id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, decided_by, decided_by_slack_user, decided_at, executed_at, result, error, snapshot, undo_of, undoable, fix_kind
 `
 
 // MarkActionUndone moves a succeeded proposal to undone. It returns no row
@@ -670,6 +680,7 @@ func (q *Queries) MarkActionUndone(ctx context.Context, id uuid.UUID) (ActionPro
 		&i.Snapshot,
 		&i.UndoOf,
 		&i.Undoable,
+		&i.FixKind,
 	)
 	return i, err
 }
@@ -692,7 +703,7 @@ func (q *Queries) RecordActionAttemptError(ctx context.Context, arg RecordAction
 
 const startActionExecution = `-- name: StartActionExecution :one
 UPDATE action_proposals SET status = 'executing' WHERE id = $1 AND status = 'approved'
-RETURNING id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, decided_by, decided_by_slack_user, decided_at, executed_at, result, error, snapshot, undo_of, undoable
+RETURNING id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, decided_by, decided_by_slack_user, decided_at, executed_at, result, error, snapshot, undo_of, undoable, fix_kind
 `
 
 // StartActionExecution moves an approved proposal to executing. It returns
@@ -720,6 +731,7 @@ func (q *Queries) StartActionExecution(ctx context.Context, id uuid.UUID) (Actio
 		&i.Snapshot,
 		&i.UndoOf,
 		&i.Undoable,
+		&i.FixKind,
 	)
 	return i, err
 }
