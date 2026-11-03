@@ -69,6 +69,32 @@ describe.each(THEMES)("accessibility of the dashboard, theme $name", (theme) => 
     );
 
     it(
+      "has no WCAG 2.2 AA violations with the precision and recall card scoring another verdict",
+      async () => {
+        const { container } = renderApp({ route: "/dashboard?scoreVerdict=true_positive", handler: server("data") });
+
+        await screen.findByRole("heading", { name: "Precision and recall over time", level: 3 }, { timeout: LOAD_TIMEOUT });
+        await waitFor(() => expect(container.querySelector(".recharts-responsive-container")).not.toBeNull(), { timeout: LOAD_TIMEOUT });
+
+        expect(await wcagViolations(container)).toEqual([]);
+      },
+      TEST_TIMEOUT,
+    );
+
+    it(
+      "has no WCAG 2.2 AA violations with the verdict filter set, so the card shows its note",
+      async () => {
+        const { container } = renderApp({ route: "/dashboard?verdict=false_positive", handler: server("data") });
+
+        await screen.findAllByText("Recall needs every verdict. Clear the verdict filter to see it.", undefined, { timeout: LOAD_TIMEOUT });
+        await waitFor(() => expect(container.querySelector(".recharts-responsive-container")).not.toBeNull(), { timeout: LOAD_TIMEOUT });
+
+        expect(await wcagViolations(container)).toEqual([]);
+      },
+      TEST_TIMEOUT,
+    );
+
+    it(
       "has no WCAG 2.2 AA violations with every chart as a table",
       async () => {
         const user = userEvent.setup();
