@@ -89,13 +89,17 @@ on pods/log for get_pod_logs, and "namespaced", which leaves out nodes.
 
 {{/*
 What the actions in config ask of the cluster Sidekick runs in, as JSON.
-Only actions of type prometheus.rule count. "any" says whether there is
-one. "accounts" maps each service account the actions use (serviceAccount,
-sidekick-actions when it is not set) to the namespaces its actions list, and
-each namespace to the sorted PrometheusRule names listed for it.
+Only actions of type prometheus.rule and helm.rollback count. "any" says
+whether there is one. "accounts" maps each service account the
+prometheus.rule actions use (serviceAccount, sidekick-actions when it is
+not set) to the namespaces its actions list, and each namespace to the
+sorted PrometheusRule names listed for it. "helmAccounts" lists, sorted, the
+service accounts the helm.rollback actions use (serviceAccount,
+sidekick-helm-rollback when it is not set). A helm.rollback account gets no
+rights from the chart, so it has no namespaces here.
 */}}
 {{- define "sidekick.actions.access" -}}
-{{- $access := dict "any" false "accounts" dict }}
+{{- $access := dict "any" false "accounts" dict "helmAccounts" list }}
 {{- range $name, $act := dig "actions" dict (default dict .Values.config) }}
 {{- if and (kindIs "map" $act) (eq (toString (get $act "type")) "prometheus.rule") }}
 {{- $_ := set $access "any" true }}
@@ -110,9 +114,22 @@ each namespace to the sorted PrometheusRule names listed for it.
 {{- $known := default list (get $namespaces .) }}
 {{- $_ = set $namespaces . (concat $known $names | uniq | sortAlpha) }}
 {{- end }}
+{{- else if and (kindIs "map" $act) (eq (toString (get $act "type")) "helm.rollback") }}
+{{- $_ := set $access "any" true }}
+{{- $helmAccount := default "sidekick-helm-rollback" (get $act "serviceAccount") }}
+{{- $_ = set $access "helmAccounts" (append $access.helmAccounts $helmAccount | uniq | sortAlpha) }}
 {{- end }}
 {{- end }}
 {{- toJson $access }}
+{{- end }}
+
+{{/*
+Every service account the actions use, sorted: the accounts of the
+prometheus.rule actions and of the helm.rollback actions. Takes the result
+of sidekick.actions.access, as a dict, and returns JSON.
+*/}}
+{{- define "sidekick.actions.allAccounts" -}}
+{{- concat (keys .accounts) .helmAccounts | uniq | sortAlpha | toJson }}
 {{- end }}
 
 {{/*

@@ -1,0 +1,25 @@
+# rbac.actions off with a helm.rollback action: no accounts and no roles.
+rbac:
+  actions: false
+secrets:
+  - sidekick-anthropic
+  - sidekick-slack
+  - sidekick-webhook
+  - sidekick-staging-cluster
+config:
+  sources:
+    # The quick-start source, pointed at another cluster, so no source reads this one.
+    k8s:
+      kubeconfigSecret: { name: sidekick-staging-cluster, key: kubeconfig }
+  actions:
+    helm-checkout:
+      type: helm.rollback
+      limits:
+        namespaces: [shop]
+        releases: [checkout]
+  routes:
+    - name: default
+      sources: [k8s]
+      outputs: [slack]
+      mode: approved
+      actions: [helm-checkout]

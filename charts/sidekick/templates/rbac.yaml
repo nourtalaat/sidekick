@@ -73,10 +73,12 @@ subjects:
 {{- $actions := include "sidekick.actions.access" . | fromJson }}
 {{- if and .Values.rbac.actions $actions.any }}
 {{- $accounts := keys $actions.accounts | sortAlpha }}
-{{- range $account := $accounts }}
+{{- $everyAccount := include "sidekick.actions.allAccounts" $actions | fromJsonArray }}
+{{- range $account := $everyAccount }}
 ---
-# The service account of the prometheus.rule actions. Nothing runs as it:
-# Sidekick asks the API server for short-lived tokens of it.
+# A service account of the actions. Nothing runs as it: Sidekick asks the API
+# server for short-lived tokens of it. The chart gives a prometheus.rule
+# account its rights, and gives a helm.rollback account none.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -99,7 +101,7 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: [serviceaccounts/token]
-    resourceNames: {{ $accounts | toJson }}
+    resourceNames: {{ $everyAccount | toJson }}
     verbs: [create]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
