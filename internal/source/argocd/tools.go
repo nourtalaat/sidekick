@@ -16,6 +16,7 @@ import (
 const (
 	toolListApplications = "list_applications"
 	toolGetApplication   = "get_application"
+	toolGetHistory       = "get_history"
 )
 
 // Limits on how many applications list_applications returns.
@@ -67,6 +68,18 @@ var toolList = []source.Tool{
 			"auto-sync is on, its sync status and health, the revision deployed now and the one it was last compared "+
 			"with, the last operation (phase, message, times, who started it), its conditions, the images it runs, and "+
 			"up to %d resources that are not synced or not healthy.", maxResources),
+		InputSchema: schema(map[string]*jsonschema.Schema{
+			"application": applicationProperty(),
+		}, "application"),
+		ReadOnly: true,
+	},
+	{
+		Name: toolGetHistory,
+		Description: fmt.Sprintf("Get the deployment history of one Argo CD application, newest first: the history ID, the "+
+			"revision, when it was deployed, who started it (a user, or automated), the source, and for each of the "+
+			"newest %d the commit message, author and date of its revision. The entry marked current is what runs now. "+
+			"Argo CD keeps as many entries as the application's revisionHistoryLimit, 10 by default, so do not look for "+
+			"older ones.", maxCommits),
 		InputSchema: schema(map[string]*jsonschema.Schema{
 			"application": applicationProperty(),
 		}, "application"),

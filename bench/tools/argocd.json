@@ -50,6 +50,23 @@
         ],
         "additionalProperties": false
       }
+    },
+    {
+      "name": "get_history",
+      "description": "Get the deployment history of one Argo CD application, newest first: the history ID, the revision, when it was deployed, who started it (a user, or automated), the source, and for each of the newest 10 the commit message, author and date of its revision. The entry marked current is what runs now. Argo CD keeps as many entries as the application's revisionHistoryLimit, 10 by default, so do not look for older ones.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "application": {
+            "type": "string",
+            "description": "The application as project/name, for example shop/checkout. Take it from the application field of list_applications."
+          }
+        },
+        "required": [
+          "application"
+        ],
+        "additionalProperties": false
+      }
     }
   ]
 }
