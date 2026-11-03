@@ -1,16 +1,16 @@
+import { Link } from "react-router";
 import { useBenchComparison, useBenchRuns, type BenchComparison, type BenchRunSummary } from "../../api/stats";
-import { StatusBadge } from "../../components/Badge";
 import { Card } from "../../components/Card";
 import { Select } from "../../components/Select";
 import { Table } from "../../components/Table";
 import { QueryError } from "../../components/QueryError";
-import { formatCost, formatDuration, formatTime } from "../../format";
+import { formatCost, formatDuration, MICROS_PER_DOLLAR } from "../../format";
+import { nameOf, RunsTable } from "../benchmarks/RunsTable";
 import { VERDICT_OPTIONS, type DashboardFilters } from "./params";
 import { formatShare } from "./words";
 import "./Dashboard.css";
 
 const NONE = "";
-const MICROS_PER_DOLLAR = 1_000_000;
 const PERCENT = 100;
 
 interface BenchRunsProps {
@@ -37,7 +37,10 @@ export function BenchRuns({ filters, onChange }: BenchRunsProps) {
       {runs.isSuccess && runs.data.runs.length === 0 && <p className="sk-chart__empty">No benchmark runs yet. Runs appear here when sidekick bench run stores its results with --db.</p>}
       {runs.isSuccess && runs.data.runs.length > 0 && (
         <>
-          <RunsTable runs={runs.data.runs} />
+          <RunsTable label="Recent benchmark runs" runs={runs.data.runs} />
+          <p>
+            <Link to="/benchmarks">All benchmark runs</Link>
+          </p>
           <div className="sk-dashboard__compare">
             <RunSelect label="Compare run" value={filters.compareA} runs={runs.data.runs} onChange={(id) => onChange({ ...filters, compareA: id })} />
             <RunSelect label="With run" value={filters.compareB} runs={runs.data.runs} onChange={(id) => onChange({ ...filters, compareB: id })} />
@@ -55,11 +58,6 @@ export function BenchRuns({ filters, onChange }: BenchRunsProps) {
   );
 }
 
-/** How a run is named in a list: its label, or its start when it has none. */
-function nameOf(run: BenchRunSummary): string {
-  return run.label ? `${run.label}, ${formatTime(run.startedAt)}` : `Run of ${formatTime(run.startedAt)}`;
-}
-
 function RunSelect({ label, value, runs, onChange }: { label: string; value: string | undefined; runs: BenchRunSummary[]; onChange(id: string | undefined): void }) {
   return (
     <Select
@@ -69,47 +67,6 @@ function RunSelect({ label, value, runs, onChange }: { label: string; value: str
       onChange={(event) => onChange(event.target.value || undefined)}
     />
   );
-}
-
-function RunsTable({ runs }: { runs: BenchRunSummary[] }) {
-  return (
-    <Table label="Recent benchmark runs" className="sk-numbers">
-      <thead>
-        <tr>
-          <th scope="col">Run</th>
-          <th scope="col">Result</th>
-          <th scope="col">Overall score</th>
-          <th scope="col">Verdict accuracy</th>
-          <th scope="col">Mean cost per run</th>
-          <th scope="col">Mean time per run</th>
-          <th scope="col">Scenarios</th>
-        </tr>
-      </thead>
-      <tbody>
-        {runs.map((run) => (
-          <tr key={run.id}>
-            <th scope="row">
-              {nameOf(run)}
-              <span className="sk-table__secondary">{[run.sidekickVersion, modelsOf(run)].filter(Boolean).join(", ")}</span>
-            </th>
-            <td>
-              <StatusBadge status={run.status === "passed" ? "success" : "danger"}>{run.status === "passed" ? "Passed" : "Failed"}</StatusBadge>
-            </td>
-            <td>{formatShare(run.metrics.overall)}</td>
-            <td>{formatShare(run.metrics.verdictAccuracy)}</td>
-            <td>{run.metrics.meanCostPerRunUsd === undefined ? "none yet" : formatCost(run.metrics.meanCostPerRunUsd * MICROS_PER_DOLLAR)}</td>
-            <td>{run.metrics.meanDurationMs === undefined ? "none yet" : formatDuration(run.metrics.meanDurationMs)}</td>
-            <td>{`${run.scenarioSet}, ${run.metrics.runs} runs`}</td>
-          </tr>
-        ))}
-      </tbody>
-    </Table>
-  );
-}
-
-/** The models of the roles of a run, such as "big-model". */
-function modelsOf(run: BenchRunSummary): string {
-  return [...new Set(Object.values(run.connectors).map((c) => c.model ?? c.connector))].join(", ");
 }
 
 const DIFFERENCE_WORDS: Record<string, string> = {

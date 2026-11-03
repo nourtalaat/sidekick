@@ -201,16 +201,16 @@ func (e FeedbackTargetKind) Valid() bool {
 
 // Defines values for InvestigationGroupStatus.
 const (
-	Closed InvestigationGroupStatus = "closed"
-	Open   InvestigationGroupStatus = "open"
+	InvestigationGroupStatusClosed InvestigationGroupStatus = "closed"
+	InvestigationGroupStatusOpen   InvestigationGroupStatus = "open"
 )
 
 // Valid indicates whether the value is a known member of the InvestigationGroupStatus enum.
 func (e InvestigationGroupStatus) Valid() bool {
 	switch e {
-	case Closed:
+	case InvestigationGroupStatusClosed:
 		return true
-	case Open:
+	case InvestigationGroupStatusOpen:
 		return true
 	default:
 		return false
@@ -442,6 +442,27 @@ func (e ProposalFileDiffStatus) Valid() bool {
 	case ProposalFileDiffStatusChanged:
 		return true
 	case ProposalFileDiffStatusDeleted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProposalPullRequestState.
+const (
+	ProposalPullRequestStateClosed ProposalPullRequestState = "closed"
+	ProposalPullRequestStateMerged ProposalPullRequestState = "merged"
+	ProposalPullRequestStateOpen   ProposalPullRequestState = "open"
+)
+
+// Valid indicates whether the value is a known member of the ProposalPullRequestState enum.
+func (e ProposalPullRequestState) Valid() bool {
+	switch e {
+	case ProposalPullRequestStateClosed:
+		return true
+	case ProposalPullRequestStateMerged:
+		return true
+	case ProposalPullRequestStateOpen:
 		return true
 	default:
 		return false
@@ -2235,10 +2256,16 @@ type Proposal struct {
 	Params map[string]interface{} `json:"params"`
 
 	// ParamsText The parameters as the approver reads them. Characters that could hide something are written as \u escapes, and nothing is cut.
-	ParamsText string        `json:"paramsText"`
-	ProposedAt time.Time     `json:"proposedAt"`
-	Reason     string        `json:"reason"`
-	Result     *ActionResult `json:"result,omitempty"`
+	ParamsText string    `json:"paramsText"`
+	ProposedAt time.Time `json:"proposedAt"`
+
+	// PullRequest The pull request or merge request that a succeeded proposal opened, as
+	// Sidekick last read it from the host. Sidekick reads it once a day, so
+	// it can be a day old. Absent for a proposal that opened none, and until
+	// the first check has run.
+	PullRequest *ProposalPullRequest `json:"pullRequest,omitempty"`
+	Reason      string               `json:"reason"`
+	Result      *ActionResult        `json:"result,omitempty"`
 
 	// Revisions The two revisions of a rollback. Present when the action is a
 	// rollback: it replaces the field-by-field `changes` on a screen, and
@@ -2337,6 +2364,32 @@ type ProposalList struct {
 	NextCursor *string    `json:"nextCursor,omitempty"`
 	Proposals  []Proposal `json:"proposals"`
 }
+
+// ProposalPullRequest The pull request or merge request that a succeeded proposal opened, as
+// Sidekick last read it from the host. Sidekick reads it once a day, so
+// it can be a day old. Absent for a proposal that opened none, and until
+// the first check has run.
+type ProposalPullRequest struct {
+	// CheckedAt When Sidekick last read it from the host. A merged or closed pull request is not read again, so this stays at the time the check found it merged or closed.
+	CheckedAt time.Time `json:"checkedAt"`
+
+	// ClosedAt When it was closed without a merge. Set only when the state is closed.
+	ClosedAt *time.Time `json:"closedAt,omitempty"`
+
+	// MergedAt When it was merged. Set only when the state is merged.
+	MergedAt *time.Time `json:"mergedAt,omitempty"`
+	Number   int64      `json:"number"`
+
+	// Repo The repository or project, as the host names it, such as acme/monitors.
+	Repo  string                   `json:"repo"`
+	State ProposalPullRequestState `json:"state"`
+
+	// Url The address of the pull request on the host. A screen links it only when it is an http or https address.
+	Url string `json:"url"`
+}
+
+// ProposalPullRequestState defines model for ProposalPullRequest.State.
+type ProposalPullRequestState string
 
 // ProposalRevision One revision of a workload on its platform. The text fields come
 // from the platform, like an image tag or the name of who deployed,
