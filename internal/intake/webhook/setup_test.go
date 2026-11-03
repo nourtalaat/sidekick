@@ -52,7 +52,10 @@ func TestMain(m *testing.M) {
 // harness is a webhook handler on a database of its own, served over HTTP
 // with the config in fixture/sidekick.yaml.
 type harness struct {
-	url     string
+	url string
+	// client sends to url. It is the test server's own client, so another
+	// test's server closing its idle connections cannot break its requests.
+	client  *http.Client
 	pool    *pgxpool.Pool
 	handler *Handler
 	reg     *prometheus.Registry
@@ -128,7 +131,7 @@ func setup(t *testing.T, seeds ...string) *harness {
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
-	return &harness{url: server.URL, pool: pool, handler: h, reg: reg, spans: spans}
+	return &harness{url: server.URL, client: server.Client(), pool: pool, handler: h, reg: reg, spans: spans}
 }
 
 // send posts d and returns the status and the body of the answer.
@@ -142,7 +145,7 @@ func (h *harness) send(t *testing.T, d delivery) (int, []byte) {
 		req.Header[name] = values
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := h.client.Do(req)
 	require.NoError(t, err)
 
 	defer func() { require.NoError(t, resp.Body.Close()) }()

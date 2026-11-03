@@ -547,7 +547,7 @@ func postAlert(t *testing.T, started logLine, endpoint, token string, wantStatus
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := newClient(t).Do(req)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	require.Equal(t, wantStatus, resp.StatusCode)
@@ -595,7 +595,7 @@ func getURL(t *testing.T, url string) (int, string) {
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
 	require.NoError(t, err)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := newClient(t).Do(req)
 	require.NoError(t, err)
 
 	defer func() { require.NoError(t, resp.Body.Close()) }()
@@ -644,4 +644,16 @@ func waitForLog(t *testing.T, lines <-chan logLine, msg string) logLine {
 			t.Fatalf("serve did not log %q", msg)
 		}
 	}
+}
+
+// newClient returns an HTTP client with a transport of its own, so that
+// another test closing idle connections on http.DefaultTransport, as every
+// httptest server does when it closes, cannot break its requests.
+func newClient(t *testing.T) *http.Client {
+	t.Helper()
+
+	client := &http.Client{Transport: &http.Transport{}}
+	t.Cleanup(client.CloseIdleConnections)
+
+	return client
 }

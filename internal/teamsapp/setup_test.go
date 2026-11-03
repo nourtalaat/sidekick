@@ -87,6 +87,9 @@ type harness struct {
 	spans     *tracetest.SpanRecorder
 	// url serves the handler at MessagesPattern.
 	url string
+	// client sends to url. It is the test server's own client, so another
+	// test's server closing its idle connections cannot break its requests.
+	client *http.Client
 
 	mu sync.Mutex
 	// keysDown makes the fake login service fail.
@@ -142,6 +145,7 @@ func setup(t *testing.T) *harness {
 	t.Cleanup(server.Close)
 
 	h.url = server.URL + "/teams/messages"
+	h.client = server.Client()
 
 	return h
 }
@@ -206,7 +210,7 @@ func (h *harness) post(t *testing.T, authorization string, body []byte) (int, st
 		req.Header.Set("Authorization", authorization)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := h.client.Do(req)
 	require.NoError(t, err)
 
 	defer func() { require.NoError(t, resp.Body.Close()) }()

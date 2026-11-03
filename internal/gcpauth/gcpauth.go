@@ -1,4 +1,10 @@
-package gcp
+// Package gcpauth finds Google credentials for the plugins that call Google
+// Cloud: the Google Cloud source and the actions that change Google Cloud.
+//
+// A plugin gets access tokens from Application Default Credentials, which on
+// GKE come from Workload Identity, or from a credential file in a secret that
+// is read again for each new token, so a rotated file needs no restart.
+package gcpauth
 
 import (
 	"context"
@@ -18,12 +24,15 @@ import (
 )
 
 // scope is the OAuth scope of every token. The GKE and Service Health APIs
-// take no narrower scope, so the IAM roles of the identity decide what the
-// source can read.
+// take no narrower scope, so the IAM roles of the identity decide what a
+// plugin can do.
 const scope = "https://www.googleapis.com/auth/cloud-platform"
 
 // secretTimeout bounds the read of the credential file from its secret.
 const secretTimeout = 10 * time.Second
+
+// maxTypeLen bounds the credential file type that an error quotes.
+const maxTypeLen = 512
 
 // allowedTypes are the credential file types credentialsSecret may hold.
 var allowedTypes = []google.CredentialsType{google.ExternalAccount, google.ServiceAccount}
@@ -100,11 +109,11 @@ func (t *secretTokens) Token() (*oauth2.Token, error) {
 	return token, nil
 }
 
-// newTokens returns the token source of a source: one from the credential
+// NewTokens returns the token source of a plugin: one from the credential
 // file in ref when it is set, otherwise from Application Default
 // Credentials. Token exchanges go through client. Tokens are kept until
 // shortly before they expire.
-func newTokens(ref *registry.SecretRef, secrets registry.Secrets, client *http.Client) oauth2.TokenSource {
+func NewTokens(ref *registry.SecretRef, secrets registry.Secrets, client *http.Client) oauth2.TokenSource {
 	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, client)
 
 	if ref == nil {
@@ -131,5 +140,5 @@ func credentialsType(data []byte) (google.CredentialsType, error) {
 	}
 
 	return "", fmt.Errorf("the file has type %q; use %q (workload identity federation) or %q",
-		source.CutText(string(file.Type), maxNameLen), google.ExternalAccount, google.ServiceAccount)
+		source.CutText(string(file.Type), maxTypeLen), google.ExternalAccount, google.ServiceAccount)
 }

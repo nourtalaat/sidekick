@@ -121,7 +121,7 @@ func get(t *testing.T, url string) (int, string) {
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
 	require.NoError(t, err)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := newClient(t).Do(req)
 	require.NoError(t, err)
 
 	defer func() { require.NoError(t, resp.Body.Close()) }()
@@ -218,4 +218,16 @@ func (b *syncBuffer) String() string {
 	defer b.mu.Unlock()
 
 	return b.buf.String()
+}
+
+// newClient returns an HTTP client with a transport of its own, so that
+// another test closing idle connections on http.DefaultTransport, as every
+// httptest server does when it closes, cannot break its requests.
+func newClient(t *testing.T) *http.Client {
+	t.Helper()
+
+	client := &http.Client{Transport: &http.Transport{}}
+	t.Cleanup(client.CloseIdleConnections)
+
+	return client
 }

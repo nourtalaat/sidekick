@@ -33,7 +33,7 @@ teams:
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://"+started.Listen+"/teams/messages", strings.NewReader(`{"type": "message"}`))
 	require.NoError(t, err)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := newClient(t).Do(req)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)

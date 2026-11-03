@@ -892,6 +892,30 @@ func (e Theme) Valid() bool {
 	}
 }
 
+// Defines values for UsedMemoryMatch.
+const (
+	UsedMemoryFingerprint  UsedMemoryMatch = "fingerprint"
+	UsedMemoryServiceAlert UsedMemoryMatch = "service_alert"
+	UsedMemorySimilar      UsedMemoryMatch = "similar"
+	UsedMemoryText         UsedMemoryMatch = "text"
+)
+
+// Valid indicates whether the value is a known member of the UsedMemoryMatch enum.
+func (e UsedMemoryMatch) Valid() bool {
+	switch e {
+	case UsedMemoryFingerprint:
+		return true
+	case UsedMemoryServiceAlert:
+		return true
+	case UsedMemorySimilar:
+		return true
+	case UsedMemoryText:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for Verdict.
 const (
 	Duplicate     Verdict = "duplicate"
@@ -1549,6 +1573,12 @@ type Investigation struct {
 	// used, with their text and status as they are now. A lesson that
 	// was deleted is not listed.
 	Lessons *[]UsedLesson `json:"lessons,omitempty"`
+
+	// MemoryExamples The past investigations that the prompt of the current run showed
+	// as examples, in the order of the prompt. The text is as it is now,
+	// not as the prompt had it. It came from alerts and the model: show
+	// it as plain text.
+	MemoryExamples *[]UsedMemory `json:"memoryExamples,omitempty"`
 
 	// Mode The action mode in effect, such as read-only.
 	Mode string `json:"mode"`
@@ -3529,6 +3559,39 @@ type UsedLesson struct {
 	Status LessonStatus `json:"status"`
 	Text   string       `json:"text"`
 }
+
+// UsedMemory A memory example that the prompt of an investigation showed, as it is now.
+type UsedMemory struct {
+	// Cause Absent when the entry is gone or has no cause.
+	Cause *string `json:"cause,omitempty"`
+
+	// Disabled Whether the entry is disabled now. Always false when present is false.
+	Disabled bool `json:"disabled"`
+
+	// InvestigationId The investigation the example came from.
+	InvestigationId openapi_types.UUID `json:"investigationId"`
+
+	// Match Why the example was chosen: the same alert fingerprint, the same
+	// service and alert name, similar words, or a similar description.
+	Match UsedMemoryMatch `json:"match"`
+
+	// Present Whether the memory entry still exists.
+	Present bool `json:"present"`
+
+	// Rank The example's position in the prompt, from 1.
+	Rank int `json:"rank"`
+
+	// Summary Absent when the entry is gone.
+	Summary *string `json:"summary,omitempty"`
+
+	// Title Its alert title. Absent when the investigation is gone or had none.
+	Title   *string  `json:"title,omitempty"`
+	Verdict *Verdict `json:"verdict,omitempty"`
+}
+
+// UsedMemoryMatch Why the example was chosen: the same alert fingerprint, the same
+// service and alert name, similar words, or a similar description.
+type UsedMemoryMatch string
 
 // Verdict defines model for Verdict.
 type Verdict string

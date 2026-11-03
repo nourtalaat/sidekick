@@ -8,7 +8,9 @@ import (
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/argocdrollback"
 	"github.com/nourtalaat/sidekick/internal/action/awsecs"
+	"github.com/nourtalaat/sidekick/internal/action/azurecontainerapp"
 	"github.com/nourtalaat/sidekick/internal/action/datadog"
+	"github.com/nourtalaat/sidekick/internal/action/gcprun"
 	"github.com/nourtalaat/sidekick/internal/action/githubcode"
 	"github.com/nourtalaat/sidekick/internal/action/githubpr"
 	"github.com/nourtalaat/sidekick/internal/action/githubrevert"
@@ -36,6 +38,7 @@ func TestMonitorFixers(t *testing.T) {
 		{name: "grafana.alert_rule", action: &grafana.Rule{}, want: action.FixAPI},
 		{name: "prometheus.rule", action: &prometheusrule.Rule{}, want: action.FixAPI},
 		{name: "github.pull_request", action: &githubpr.PR{}, want: action.FixPullRequest},
+		{name: "gcp.cloud_run_rollback fixes nothing", action: &gcprun.Rollback{}},
 		{name: "github.revert fixes nothing", action: &githubrevert.Revert{}},
 		{name: "github.code_change fixes nothing", action: &githubcode.Code{}},
 		{name: "gitlab.merge_request", action: &gitlabmr.MR{}, want: action.FixPullRequest},
@@ -46,6 +49,7 @@ func TestMonitorFixers(t *testing.T) {
 		{name: "aws.ecs_rollback fixes nothing", action: &awsecs.Rollback{}},
 		{name: "argocd.rollback fixes nothing", action: &argocdrollback.Rollback{}},
 		{name: "kubernetes.rollback fixes nothing", action: &kubernetesrollback.Rollback{}},
+		{name: "azure.container_app_rollback fixes nothing", action: &azurecontainerapp.Rollback{}},
 	}
 
 	for _, tt := range tests {
