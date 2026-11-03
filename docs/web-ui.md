@@ -589,6 +589,17 @@ person who asked, and the original becomes undone. The undo shows **Undoes**
 with a link to the proposal it restores, which opens its investigation and
 moves focus to that proposal.
 
+A proposal that opened a pull request also shows a **Pull request**
+section after its result. It has the repository and number as a link to the
+pull request, its state (**Open**, **Merged** or **Closed**, each with an icon
+and the word), when it was merged or closed, and when Sidekick last read it
+from the Git host. Sidekick reads the state once a day, so what the card
+shows can be a day old; a pull request that was merged or closed is not read
+again, so its checked time stays at the last time it was seen open or
+merged. A proposal with no pull request, or one that was not checked yet,
+has no section. The link opens only when the address is an `http` or `https`
+one; otherwise the repository and number are plain text.
+
 - `GET /api/v1/proposals` (approver) lists proposals a page at a time, with
   `status` (repeat it for several, default `proposed`), `cursor` and
   `limit`.
@@ -607,6 +618,10 @@ moves focus to that proposal.
   `not_undoable`, `not_allowed`, `undo_running` and `undo_failed`. A proposal
   has `changes` (field, before and after), `target`, `undoable` and `undoOf`.
 - `GET /api/v1/investigations/{id}` has a `proposals` list.
+- A proposal in the queue and in that list has a `pullRequest` object when a
+  check has recorded one: `repo`, `number`, `url`, `state` (`open`, `merged`
+  or `closed`), `mergedAt`, `closedAt` and `checkedAt`. The answers to
+  approving, rejecting and undoing do not have it.
 
 Every proposal, approval, rejection, expiry and result is in the audit log
 as `action.proposed`, `action.approved`, `action.rejected`,
