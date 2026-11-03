@@ -5,10 +5,11 @@ import { ApiError } from "./api/client";
 import { QueryError } from "./components/QueryError";
 import { NAV_ITEMS } from "./shell/Nav";
 import { problem, renderApp } from "./test/helpers";
+import { ADMIN } from "./test/rules";
 
 describe("the signed-in app", () => {
   it("shows the shell with its navigation, and the empty state of a page that is not built yet", async () => {
-    renderApp({ route: "/benchmarks" });
+    renderApp({ me: ADMIN, route: "/benchmarks" });
 
     expect(await screen.findByRole("heading", { name: "Benchmarks", level: 1 })).toBeInTheDocument();
     expect(screen.getByText("Comes in a later release.")).toBeInTheDocument();
