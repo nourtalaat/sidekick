@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nourtalaat/sidekick/internal/gitlabapi"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
 
@@ -114,8 +115,8 @@ func structured(v any, evidence []source.Evidence, truncated, empty bool) (sourc
 // rate limits, server errors and redirects the client does not follow are
 // failures of the source.
 func failure(tool string, err error) (source.Result, error) {
-	if se, ok := errors.AsType[*statusError](err); ok {
-		switch code := se.code; {
+	if se, ok := errors.AsType[*gitlabapi.StatusError](err); ok {
+		switch code := se.Code; {
 		case code == http.StatusNotFound:
 			return source.Result{NoData: true, Text: notFoundText}, nil
 		case code >= http.StatusBadRequest && code < http.StatusInternalServerError &&

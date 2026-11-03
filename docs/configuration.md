@@ -2355,6 +2355,166 @@ Prometheus v3.15.0; the comments in `internal/action/prometheusrule` name the
 files. With `networkPolicy.restrictEgress` on, allow egress to the Kubernetes
 API server.
 
+##### `kubernetes.rollback`
+
+Puts a Deployment, StatefulSet or DaemonSet of the cluster Sidekick runs in
+back on an earlier revision, through the Kubernetes API, as `kubectl rollout
+undo` does. It is approval-only: a route in `read-write` mode may list it only
+when the action sets `allowReadWrite: true`, so use it on routes with
+`mode: approved`. The approver sees both revisions, with their images, when
+they were created and, for the running one, who deployed it as far as the
+cluster knows. The action does not wait for the rollout to become healthy;
+the watcher reports the recovery.
+
+```yaml
+actions:
+  rollback-shop:
+    type: kubernetes.rollback
+    serviceAccount: sidekick-kubernetes-rollback   # default; the account the tokens are for
+    allowReadWrite: false                          # default; see the note below
+    maxRevisionsBack: 1                            # default 1, from 1 to 10
+    limits:
+      namespaces: [shop]                           # namespaces it may write in
+      kinds: [Deployment, StatefulSet]             # default: all three kinds
+      names: [checkout, ledger]                    # workload names, exact
+
+routes:
+  - name: shop
+    mode: approved
+    actions: [rollback-shop]
+```
+
+- `limits.namespaces` and `limits.names` are exact names, and each needs at
+  least one. A workload is allowed when its namespace is in `namespaces`, its
+  kind is in `kinds` and its name is in `names`. There are no patterns,
+  because the Roles that the chart makes list the names as `resourceNames`.
+- `limits.kinds` lists `Deployment`, `StatefulSet` and `DaemonSet`. Empty
+  means all three.
+- `maxRevisionsBack` is how many revisions back the model may ask to go. The
+  model proposes `kind`, `namespace`, `name` and `revisionsBack` (default 1).
+  A request for more than the limit is refused and the model reads why.
+- `serviceAccount` is the name of a service account in Sidekick's own
+  namespace. The action asks the API server for a token for it
+  (`TokenRequest`) each time it proposes, runs or undoes a rollback, and the
+  token lives 10 minutes. Sidekick's own account can only ask for tokens of
+  the accounts that actions use, and this account can only `get` and `patch`
+  the workloads of the limits. Sidekick must mount its service account
+  token, which the chart does when it finds such an action. The default
+  differs from the account of `prometheus.rule`, so the two types do not
+  share rights unless you point both at one account.
+- The action works on the cluster Sidekick runs in only. Other clusters are
+  not supported.
+- `allowReadWrite: true` lets a `read-write` route list the action, which
+  then rolls back without a person. Leave it off unless you understand that
+  a rollback goes live at once.
+
+**What the chart creates.** For each `kubernetes.rollback` action in `config`
+(turn this off with `rbac.actions: false` and make these yourself), the chart
+makes the service account, adds it to the Role in Sidekick's namespace that
+lets Sidekick's own account create tokens, and in each listed namespace makes
+a Role and a RoleBinding. For the config above, the Role in `shop` is:
+
+```yaml
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: ["checkout", "ledger"]
+    verbs: [get, patch]
+  - apiGroups: [apps]
+    resources: [statefulsets]
+    resourceNames: ["checkout", "ledger"]
+    verbs: [get, patch]
+  - apiGroups: [apps]
+    resources: [replicasets]       # only with Deployment in kinds
+    verbs: [list]
+  - apiGroups: [apps]
+    resources: [controllerrevisions]   # only with StatefulSet or DaemonSet in kinds
+    verbs: [list]
+```
+
+The `get` and `patch` rules name the workloads. The `list` rules cannot: the
+API server limits a `list` by name only when the request has a
+`metadata.name` field selector, and the action lists revisions by label.
+So the account can read the ReplicaSets or ControllerRevisions of the whole
+namespace, and nothing else. It has no `update`, `delete` or `create`, and no
+access to pods, Secrets or ConfigMaps.
+
+**What it refuses.** When the model proposes, Sidekick reads the workload
+and its revisions and refuses, with a message the model can act on:
+
+- a workload with no earlier revision, or fewer than `revisionsBack`:
+  Kubernetes keeps old ReplicaSets and ControllerRevisions only up to
+  `revisionHistoryLimit`, so with `0`, or after one deploy, there is nothing
+  to go back to;
+- a paused Deployment, because the rollback would not roll out until someone
+  resumes it;
+- a workload managed by Argo CD or Flux, because their controllers would undo
+  the change. It is recognised by the annotation
+  `argocd.argoproj.io/tracking-id` or the label `argocd.argoproj.io/instance`
+  (Argo CD), or the labels `kustomize.toolkit.fluxcd.io/name` or
+  `helm.toolkit.fluxcd.io/name` (Flux). The message tells the model to
+  propose `argocd.rollback`, if it is offered, or a pull request that reverts
+  the change in Git. Argo CD 3.x tracks by that annotation by default, so the
+  default case is detected. An installation that switched to label tracking
+  with `app.kubernetes.io/instance` is not, because other tools, Helm among
+  them, use that label too;
+- a workload that has a change its controller has not processed yet, or whose
+  current pod template no revision has yet. Read it again in a minute.
+
+A workload that has only the labels of Helm itself is allowed. Helm will not
+know about the rollback, and its next `helm upgrade` writes its own values
+again; use `helm.rollback`, if it is offered, when Helm owns the release.
+
+**Which revision.** The running revision is the one whose pod template the
+workload has now. "N back" is the Nth earlier revision with a different pod
+template, newest first, so a revision that Kubernetes recorded twice with the
+same template counts once. A Deployment's revisions are its ReplicaSets, in
+the order of the annotation `deployment.kubernetes.io/revision`; a
+StatefulSet's and a DaemonSet's are their ControllerRevisions, in the order of
+`revision`. The rollback replaces `spec.template` only, as `kubectl` does. It
+does not touch replicas, the strategy or the annotations, so the
+`kubernetes.io/change-cause` of the Deployment is not restored to the older
+one. A StatefulSet or DaemonSet with `updateStrategy` `OnDelete`, or a
+`partition`, does not replace its pods by itself after a rollback.
+
+**What the approver sees.** For each of the two revisions: its kind (a
+ReplicaSet or a ControllerRevision), its name and number, the image of every
+container (`name=image` when there are several), when it was created, and its
+notes (init containers, and the change cause when one was recorded). The
+running revision also shows who last changed the pod template, from the
+managed fields of the workload: the manager and the time. The cluster keeps no
+such record for an earlier revision, so it shows as unknown, and so does the
+running one when the managed fields say nothing.
+
+**Conflicts.** Before it writes, the action reads the workload again. If it
+has the pod template of the earlier revision already, which happens after a
+crash and a retry, it writes nothing and succeeds. If its pod template is no
+longer the one the approver read as running (someone deployed or edited it
+since), or the earlier revision is gone or has other images, the proposal
+fails as a conflict and a new one is needed. The patch holds the
+`resourceVersion` of that read, so the API server answers 409 if the workload
+changes between the read and the write, which also fails as a conflict.
+Scaling the workload is not a conflict.
+
+**Undo.** Undo puts back the revision that ran before the rollback. It finds
+the revisions by name and pod template, never by number alone, because
+Kubernetes gives a revision a new number when a rollback goes back to it. If
+the workload does not run the revision the rollback wrote, Undo shows what it
+runs now and asks before it restores anyway. If the revision to restore has
+been deleted from the history, it cannot be restored.
+
+**What it relies on.** A rollback is a strategic merge patch that replaces
+`spec.template`. For a Deployment the template is the one of the ReplicaSet
+without the `pod-template-hash` label, and for a StatefulSet or DaemonSet it
+is the stored data of the ControllerRevision, as `kubectl` does. The patch
+carries `metadata.resourceVersion`, and the API server refuses it with 409
+when that is not the stored one. After the patch, the controllers give the
+older revision the next number. These come from the public source of
+Kubernetes v1.37.1, Argo CD v3.5.7, Flux kustomize-controller v1.10.1 and
+helm-controller v1.7.1; the comments in `internal/action/kubernetesrollback`
+name the files. With `networkPolicy.restrictEgress` on, allow egress to the
+Kubernetes API server.
+
 ##### `alertmanager.silence`
 
 Silences alerts in a Prometheus Alertmanager for a limited time, for planned
@@ -3000,6 +3160,320 @@ an undo, or `error`), the validations in `sidekick_githubpr_validations_total`
 `sidekick_githubpr_status_checks_total` (by `state`: `open`, `merged`,
 `closed`, `missing` or `error`).
 
+##### `github.code_change`
+
+Opens a draft pull request that changes application code, in a repository you
+allow. Use it when an investigation finds a bug in code that a small change
+fixes. The model reads the current files with the [GitHub
+source](sources/github.md) and proposes the whole new content of each file it
+changes. It is not for monitors: [`github.pull_request`](#githubpull_request)
+changes monitor definitions, with its own limits and its own app, so a team
+can allow one without the other. Use it on a route in `approved` mode: a
+person reads the change before anything is pushed.
+
+The pull request is always a draft, and Sidekick never merges it, turns on
+auto-merge, asks for a review or assigns anyone. The repository's own checks
+run on it, and a person reviews and merges it. There is no `draft` key, so a
+config that sets `draft` is an unknown key error. The action has no validator;
+the repository's own checks are the validator. It is not approval-only, as
+`github.pull_request` is not, but a draft pull request that nobody merges
+changes nothing, and the examples use `mode: approved`.
+
+```yaml
+actions:
+  code-change:
+    type: github.code_change
+    app:                              # a GitHub App of its own, not the source's
+      appID: 123456
+      installationID: 7890123
+      privateKeySecret: { name: sidekick-github-code, key: private-key.pem }
+    # baseURL: https://github.example.com/api/v3/   # GitHub Enterprise Server
+    limits:
+      repos: [acme/checkout]          # owner/name, no wildcards
+      paths: ["src/**", "internal/**/*.go"]   # globs of the files that may change
+      # refusedPaths: ["src/legacy/**"]       # added to the built-in refused paths
+      maxFiles: 3                     # 1 to 25
+      maxChangedLines: 60             # lines added plus lines removed, 1 to 1000
+      baseBranch: main                # the only branch a pull request may target
+      allowDelete: false              # default false
+
+routes:
+  - name: checkout
+    mode: approved
+    actions: [code-change]
+```
+
+- **Credentials.** Give the app its own installation on the repositories in
+  `limits.repos` only, with these repository permissions: Contents (read and
+  write), Pull requests (read and write) and Metadata (read). Do not give the
+  app the Workflows permission. Sidekick asks GitHub for installation tokens
+  with just the three permissions above, so its token never carries Workflows
+  either way. Use an app that no other action or source shares. Sidekick reads
+  the private key from its secret on each token exchange, so a rotated key
+  needs no restart. `baseURL` must be https, except for a loopback host.
+- **Paths.** Every file the model changes must match a glob of `paths`, and
+  none of the refused paths. In a glob, `*` and `?` do not match a slash, and a
+  segment of `**` matches any number of segments. A path that matches a
+  refused path is refused even when a glob of `paths` allows it, for example
+  with `paths: ["**"]`. Paths are compared as they are, except that refused
+  paths ignore case. The path is checked when the model proposes and again
+  when the proposal runs, so a change to the config in between applies.
+- **Built-in refused paths.** These are always on. You can add to them with
+  `refusedPaths`, but you cannot remove any:
+  - CI and build automation: `.github/**`, `.gitlab/**`, `.circleci/**`,
+    `.buildkite/**`, `.tekton/**`, `.gitea/**`, `.forgejo/**`,
+    `.woodpecker/**`, `.semaphore/**`, `.azure-pipelines/**`, `.drone.yml`,
+    `.travis.yml`, `.woodpecker.yml`, `.appveyor.yml`, `.cirrus.yml`,
+    `appveyor.yml`, `bitbucket-pipelines.yml`, `buildspec.yml`,
+    `**/.gitlab-ci.yml`, `**/Jenkinsfile*`, `**/azure-pipelines*.yml`,
+    `**/cloudbuild.y*ml`;
+  - ownership and review rules: `CODEOWNERS`, `**/CODEOWNERS`,
+    `renovate.json*`, `.renovaterc*`;
+  - Git settings and hooks: `.gitmodules`, `**/.gitattributes`, `.husky/**`,
+    `.githooks/**`, `.pre-commit-config.yaml`, `lefthook.y*ml`;
+  - secrets and keys: `**/.env`, `**/.env.*`, `**/*.env`, `**/.envrc`,
+    `**/*.pem`, `**/*.key`, `**/*.p12`, `**/*.pfx`, `**/*.p8`, `**/*.jks`,
+    `**/*.keystore`, `**/id_rsa*`, `**/id_ed25519*`, `**/id_ecdsa*`,
+    `**/id_dsa*`, `**/.npmrc`, `**/.pypirc`, `**/.netrc`,
+    `**/.git-credentials`, `**/.htpasswd`, `**/.aws/credentials`,
+    `**/.docker/config.json`, `**/.kube/config`, `**/*.tfvars`,
+    `**/*.tfvars.json`, `**/*.tfstate`, `**/*.tfstate.*`, `**/secrets/**`.
+- **What the model may send.** The whole new content of each file, or a
+  delete. A delete is refused unless `allowDelete` is true. A file must be at
+  most 256 KiB, at the base branch and in the new content, and must be UTF-8
+  text. Sidekick refuses a file that is binary, a symlink, a submodule or a
+  directory, and a file the model sends unchanged. A file that exists keeps its
+  mode (`100644` or `100755`), and a new file is written as `100644`.
+- **What it checks.** When the model proposes, Sidekick reads the head of the
+  base branch and each changed file at it, counts the lines that differ from the
+  base branch in all files together, and applies every limit above. The
+  errors go back to the model, which can propose again. The same checks run
+  again when the proposal runs, against the base branch as it is then. A file
+  is read through the Git trees API, which says what each entry is.
+- **What it does.** On approval it makes the branch `sidekick/<proposal id>`
+  from the head of the base branch with one commit, and opens the draft pull
+  request. The description is what the model wrote, with `@mentions` and issue
+  references after words such as "fixes" put in code spans so the pull
+  request notifies nobody and closes nothing, and a line that names the
+  proposal. If a worker dies half way, the retry finds the branch, and the
+  pull request if it was made, and does not make a second one. If GitHub does
+  not open the pull request as a draft, which can happen for a private
+  repository on a plan without drafts, Sidekick closes it, deletes the branch
+  and fails the proposal with that reason. A retry that finds a pull request
+  of its own that is not a draft does the same, so it never leaves one that
+  could be merged as it is, unless a person merged it. The proposal's result holds the
+  number and the head SHA of the pull request.
+- **What the approver reads.** The proposal shows each file with what happens
+  to it (`changed`, `added` or `deleted`) and how many lines it adds and
+  removes, and the line diff of each file in the web UI (see [action
+  proposals](web-ui.md#action-proposals)). Sidekick stores the blob SHAs of
+  the files before and after, and the SHA of the base commit, never the file
+  contents.
+- **Files that changed meanwhile.** When the proposal runs, the action
+  compares each file on the base branch with the blob it had when the model
+  proposed. A file that someone changed meanwhile fails the proposal with a
+  conflict that names the file, so the pull request never overwrites their
+  edit; propose again from the new content. A file that already has the new
+  content is left out, and if every file does, the proposal succeeds without a
+  pull request.
+- **Undo.** An approver can undo a succeeded proposal. If its pull request is
+  still open or was closed, Sidekick closes it and deletes its branch. If it
+  was merged, Sidekick opens a draft revert pull request from the branch
+  `sidekick/<undo proposal id>` that restores the earlier content of the
+  files, by blob. A file the pull request added is deleted, and a file it
+  deleted comes back with the mode it had. The revert pull request still needs
+  review and merging; the undo is done once it is opened. If a file on the base
+  branch is not as the merged pull request left it, nothing is restored until
+  the approver confirms, and then the earlier content overwrites it. A file
+  that is a symlink, a submodule or a directory by then is never overwritten,
+  and a path that a refused path matches by then is refused.
+
+Once a day, Sidekick reads from GitHub whether the pull requests it opened are
+still open, were merged or were closed, as it does for `github.pull_request`
+(see there). Sidekick counts the pull requests it opens in
+`sidekick_githubcode_pull_requests_total` (by `result`: `opened`, `existing`,
+`applied` for a change already on the base branch, `closed` or `reverted` for
+an undo, or `error`), and the daily checks in
+`sidekick_githubcode_status_checks_total` (by `state`: `open`, `merged`,
+`closed`, `missing` or `error`). A pull request of this action does not count
+as a noisy alert fixed.
+
+##### `gitlab.merge_request`
+
+Opens a merge request that changes monitor definitions kept in Git on
+gitlab.com or a self-managed GitLab: thresholds, durations, filters,
+exclusions, or the deletion of a monitor. It does for GitLab what
+[`github.pull_request`](#githubpull_request) does for GitHub, with the same
+limits, formats, validation, snapshot and Undo. The model reads the current
+files with the [GitLab source](sources/gitlab.md) and proposes the whole new
+content of each file it changes. Use it on a route in `approved` mode: a
+person reads the files before anything is pushed.
+
+```yaml
+actions:
+  monitor-mr:
+    type: gitlab.merge_request
+    tokenSecret: { name: sidekick-gitlab-actions, key: token }   # a token of its own, not the source's
+    # baseURL: https://gitlab.example.com   # self-managed GitLab; default https://gitlab.com
+    limits:
+      projects: [acme/platform/monitors]    # full paths, no wildcards
+      paths:                                # the first glob that matches decides the format
+        - { glob: "prometheus/rules/**", format: prometheus_rules }
+        - { glob: "datadog/**",          format: terraform }
+        - { glob: "grafana/alerting/**", format: grafana_alert_file }
+      maxFiles: 3                           # 1 to 25
+      maxChangedLines: 40                   # lines added plus lines removed, 1 to 1000
+      baseBranch: main                      # the only branch a merge request may target
+      draft: true                           # default true
+```
+
+A self-managed GitLab with a project in a subgroup, and merge requests that
+are ready for review:
+
+```yaml
+actions:
+  monitor-mr:
+    type: gitlab.merge_request
+    baseURL: https://gitlab.example.com
+    tokenSecret: { name: sidekick-gitlab-actions, key: token }
+    limits:
+      projects: [platform/observability/monitors]
+      paths:
+        - { glob: "rules/**", format: prometheus_rules }
+      maxFiles: 5
+      maxChangedLines: 100
+      baseBranch: main
+      draft: false
+
+routes:
+  - name: checkout
+    mode: approved
+    actions: [monitor-mr]
+```
+
+- **Credentials.** `tokenSecret` is the `{ name, key }` of the Secret that
+  holds an access token with the `api` scope and the Developer role on the
+  monitors projects only: a project access token is the simplest, and a group
+  or personal access token works too. `api` is the only scope of a project or
+  group token that allows the Commits and Merge Requests APIs, so the token
+  can do everything the Developer role can do in that project. From GitLab
+  19.2 a fine-grained personal access token can be limited to what the action
+  calls, which is Branch (create, delete, read), Commit (create), Merge
+  Request (create, read, update), and Repository (read, for files, the tree
+  and blobs); it belongs to a user, so make a user for Sidekick. Give the
+  action a token of its own, apart from the one of any GitLab source (that one
+  needs only `read_api` and the Reporter role). The token is read on every
+  call, so a rotated token needs no restart. `baseURL` is the root of your
+  GitLab, without `/api/v4`; it must be https, except for a loopback host. A
+  reverse proxy in front of GitLab must pass the encoded `%2F` in a path on as
+  it is.
+- **Protect the base branch.** Unlike a GitHub App, a token is not narrowed
+  for each run, so the token's role and the protected base branch are the
+  hard limit of what this action can do. Protect `baseBranch` (Settings,
+  Repository, Branch rules), set **Allowed to push and merge** to **No one**
+  and **Allowed to merge** to **Maintainers**. Then a Developer token cannot
+  push to the branch or merge into it, whatever a merge request says. Set
+  **Allowed to push and merge** explicitly: a value that is not set does not
+  stop pushes. Branches named `sidekick/*` need no protection. A push rule of
+  the project, such as one for commit messages or signed commits, applies to
+  the commit Sidekick makes and may refuse it; the message of GitLab then
+  goes into the error of the proposal.
+- **Paths and formats.** Every file the model changes must match a `glob`,
+  and the glob names its format. A path that matches none is refused. In a
+  glob, `*` and `?` do not match a slash, and a segment of `**` matches any
+  number of segments. The formats are `prometheus_rules`, `terraform` and
+  `grafana_alert_file`, as for [`github.pull_request`](#githubpull_request).
+- **Validation.** Before the branch is made, the files go to the
+  [validator](validator.md), set up with the [`validator`](#validator)
+  section and the chart. It runs when the model proposes, and again right
+  before the merge request opens, against the base branch as it is then. For
+  `terraform`, Sidekick reads the module directory of each changed file with
+  the repository tree API at the head of the base branch, and the local
+  modules it uses (`source = "../modules/x"`, up to 3 levels), applies the
+  changes and validates the directory. If a file fails, the errors go back to
+  the model as an error and nothing is stored; if they are found when the
+  proposal runs, the proposal fails with them. No branch is made in either
+  case. If the validator cannot be reached, the proposal is refused when the
+  model proposes, and the action is tried again when it runs.
+- **What it does.** On approval it makes the branch `sidekick/<proposal id>`
+  and one commit with all files in one call of the Commits API, starting from
+  the commit the files were read at, and opens the merge request from it. The
+  title has the `Draft:` prefix unless `draft: false`, because GitLab marks a
+  draft by its title; a draft prefix that the model wrote itself is removed
+  first, so `draft: false` gives a merge request that is not a draft. Sidekick
+  never sets an assignee, reviewers, labels, a milestone, auto-merge ("merge
+  when the pipeline succeeds") or squash, and never approves or merges.
+- **The description.** It is what the model wrote, cleaned, and a line that
+  names the proposal. `@mentions`, `#12` and `!34` references (also with a
+  project path, as `group/project#12`), and the target of a closing word such
+  as "fixes" or "closes" (an issue, a URL or a Jira key) go in code spans, so
+  the merge request notifies nobody, writes a note on nothing and closes
+  nothing. GitLab runs a line that starts with a slash and a command name, such
+  as `/merge`, `/approve`, `/assign`, `/label`, `/close`, `/draft` or `/ready`,
+  as a quick action when it saves a description, with the rights of the
+  token's user. So no line of the description, the title or the commit message
+  starts with a slash: such a line is put in a code span too.
+- **Retry after a crash.** The branch is named by the proposal, so a repeat
+  looks for the merge request from that branch, in any state, and returns the
+  one it finds without changing anything, even when its branch is gone after a
+  merge. A branch with no merge request gets one; the commit exists with the
+  branch, so it is not made twice. Two attempts at once end the same way.
+- **Limits.** `maxChangedLines` counts the lines that differ from the base
+  branch in all files together. A file the model sends unchanged is refused,
+  and so is a file larger than 256 KiB at the base, a file that is not UTF-8
+  text, and a path that is a directory. A request to change something outside
+  the limits is refused when the model proposes, and again when the proposal
+  runs. `maxFiles` is at most 25 because an approver reads up to 4 fields for
+  each file (its blob, its status and its two line counts), and a change may
+  differ in at most 100 fields in all. Repositories that use SHA-256 for their
+  objects are not supported.
+- **What the approver reads.** The proposal shows each file with what happens
+  to it (`changed`, `added` or `deleted`) and how many lines it adds and
+  removes, and the line diff of each file, read from GitLab by blob ID when a
+  person opens it. Sidekick stores the blob IDs of the files before and after,
+  and the SHA of the base commit, never the file contents.
+- **Files that changed meanwhile.** When the proposal runs, the action
+  compares each file on the base branch with the blob it had when the model
+  proposed. A file that someone changed meanwhile fails the proposal with a
+  conflict that names the file, so the merge request never overwrites their
+  edit; propose again from the new content. A file that already has the new
+  content is left out, and if every file does, the proposal succeeds without a
+  merge request.
+- **Undo.** An approver can undo a succeeded proposal. If its merge request is
+  still open or was closed, Sidekick closes it and deletes its branch. If it
+  was merged, Sidekick opens a revert merge request from the branch
+  `sidekick/<undo proposal id>`, as a draft unless `draft: false`. It restores
+  the earlier content of the files with the Commits API, not with GitLab's
+  revert call, so GitLab and GitHub behave alike, and with no format
+  validation, because the files only go back to what they were. The revert
+  merge request still needs review and merging; the undo is done once it is
+  opened. If a file on the base branch is not as the merged merge request left
+  it, nothing is restored until the approver confirms, and then the earlier
+  content overwrites it. The revert merge request is tracked like any other.
+
+Once a day, Sidekick reads from GitLab whether the merge requests it opened
+are still open, were merged or were closed, and records it in
+`pull_request_states`, in the same job as for `github.pull_request`. A merge
+request that GitLab is merging counts as open. The project of the proposal
+must still be one of `limits.projects`; one that is not is skipped. The merged
+ones feed the count of noisy alerts fixed. See `github.pull_request` for the
+window, the limit and the retention of the records.
+
+Sidekick counts the merge requests it opens in
+`sidekick_gitlabmr_merge_requests_total` (by `result`: `opened`, `existing`,
+`applied` for a change already on the base branch, `closed` or `reverted` for
+an undo, or `error`), the validations in `sidekick_gitlabmr_validations_total`
+(by `format` and `result`), and the daily checks in
+`sidekick_gitlabmr_status_checks_total` (by `state`: `open`, `merged`,
+`closed`, `missing` or `error`).
+
+**What it relies on.** The facts come from the public source and API
+documentation of GitLab at the tag `v19.5.1-ee`, and of Gitaly at `v19.5.1`,
+as the comments in `internal/action/gitlabmr` say. Nothing was tried against a
+GitLab instance. The action sends only these calls: read a branch, a file, a
+directory and a blob; list merge requests; make a commit; open a merge
+request; close a merge request; delete a branch.
+
 ##### `unleash.flag`
 
 Changes a feature flag in one environment of an Unleash project through the
@@ -3121,6 +3595,155 @@ Undo takes the strategy that is new since the change; if there are several
 new ones and Sidekick cannot tell which is it, Undo fails and says so.
 
 The calls were checked against the source of Unleash 8.2.1.
+
+##### `helm.rollback`
+
+Puts a Helm release back on an earlier revision, with Helm's own Go library
+(the code that `helm rollback` runs, not the `helm` program), in the cluster
+Sidekick runs in. Helm makes a new revision that holds the chart, values and
+manifests of the earlier one. Use it for a release that Helm manages and that
+no GitOps controller owns: Argo CD or Flux would undo the change at their next
+sync. It is approval-only: a route in `read-write` mode may list it only when
+the action sets `allowReadWrite: true`. Use it on routes with `mode: approved`.
+It does not wait for the alert to recover: the watcher reports that.
+
+```yaml
+actions:
+  helm-checkout:
+    type: helm.rollback
+    serviceAccount: sidekick-helm-rollback   # default; the account the tokens are for
+    maxRevisionsBack: 1                      # default 1; from 1 to 10
+    wait: true                               # default; wait until the objects are ready
+    waitTimeout: 3m                          # default; above 0 and at most 4m
+    driver: secret                           # default; or configmap
+    limits:
+      namespaces: [shop]                     # namespaces it may roll back in
+      releases: [checkout, "web-*"]          # release names; * stands for any run of characters
+
+routes:
+  - name: checkout
+    mode: approved
+    actions: [helm-checkout]
+```
+
+- `limits.namespaces` and `limits.releases` are required. A release is
+  allowed when its namespace is in `namespaces` and its name matches an entry
+  of `releases`. An entry is an exact name or a pattern in which `*` is the
+  only wildcard.
+- `maxRevisionsBack` is how far back the model may ask to go, and the
+  parameter `revisionsBack` (default 1) may not be larger. It sits next to
+  `allowReadWrite` and not under `limits`, as in the other rollback actions.
+- `wait` and `waitTimeout`: with `wait: true` Helm waits until the objects are
+  ready, for at most `waitTimeout`. Helm uses the timeout for the hooks and for
+  the wait one after the other, and Sidekick cuts a run off after 5 minutes,
+  so `waitTimeout` is at most 4 minutes. If the wait fails or times out, Helm
+  records the new revision as `failed` and the proposal fails. With
+  `wait: false` only the hooks are waited for. An Undo never waits for the
+  objects, because the person who asked for it waits for the answer for at
+  most a minute.
+- `driver` is where Helm keeps the release records of your releases: `secret`
+  (Helm's default) or `configmap`. It must match how the releases were made.
+- There are no keys for `force`, `recreate` or the control of hooks. They keep
+  Helm's defaults, so the hooks of the chart run (`pre-rollback` and
+  `post-rollback`), and a rollback never replaces objects by force.
+- Sidekick removes no revision. Helm's own history limit applies when you
+  upgrade.
+- The action works on the cluster Sidekick runs in only.
+
+**Which revision.** Sidekick reads the history of the release.
+
+- The revision that runs is the newest one, when its status is `deployed` or
+  `failed`. A failed upgrade leaves the revision before it as `deployed` in
+  Helm's records, although the objects in the cluster are the failed
+  revision's, so Sidekick counts from the newest revision, as `helm rollback`
+  does.
+- "N back" counts the earlier revisions with status `superseded` or
+  `deployed`. Revisions that are `failed` or `pending-*` are skipped.
+- It is refused, with a message the model can read, when the release is not
+  found, when its newest revision is `pending-*` (another operation runs on it
+  or was interrupted), when its newest revision has another status such as
+  `uninstalled`, and when fewer earlier revisions than `revisionsBack` can be
+  rolled back to.
+
+**What the approver sees.** Both revisions: the Helm revision number, the
+chart name and version and the app version, the time Helm last deployed it, and
+the description Helm kept. Helm does not record who deployed a revision, so that
+shows as "unknown" and the notes say so.
+
+**The credential is broad, and Sidekick does not grant it.** A Helm rollback
+re-applies the manifests of the target revision, so the account needs rights
+on every kind of object in the chart, in the namespace of the release, and
+on the release records. Kubernetes RBAC cannot narrow that to one release. The
+chart makes the service account (with `serviceAccount` of the action, and
+`sidekick-helm-rollback` when it is not set), and a Role in Sidekick's namespace
+that lets Sidekick's own account ask for tokens of it and of no other account.
+It makes no Role or binding for the account in the namespaces of the releases.
+You bind one yourself, in each namespace of `limits.namespaces`. The simplest is
+the built-in `edit` ClusterRole:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sidekick-helm-rollback
+  namespace: shop
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edit
+subjects:
+  - kind: ServiceAccount
+    name: sidekick-helm-rollback
+    namespace: sidekick   # the namespace Sidekick runs in
+```
+
+Read what this allows before you apply it. `edit` lets the account create,
+change and delete most objects in that namespace (workloads, Services,
+ConfigMaps, Secrets, Ingresses and more) and read every Secret in it. The
+`limits` of the action are a second layer that stops the model; they do not
+change what the account may do, so anyone who can get a token for it can do all
+of that. The `edit` role does not cover Roles and RoleBindings (that is
+`admin`), custom resources, or objects that are not in a namespace. A chart
+that has any of those needs a Role of your own.
+If you write your own Role, a rollback needs, in the namespace of the release:
+
+- `get`, `create`, `patch` and `delete` on every kind of object that the old or
+  the new revision has, because Helm reads each object, creates the missing
+  ones, patches the others and deletes those the target revision does not have;
+- `list`, `get`, `create` and `update` on `secrets` (with `driver: configmap`,
+  on `configmaps`), for the release records, which are named
+  `sh.helm.release.v1.<release>.v<revision>`; the list is by label, so it
+  cannot be limited by name;
+- `list` and `watch` on every kind of object in the chart, when `wait` is on;
+- `create` and `delete` on the objects of the hooks of the chart.
+
+**Conflicts and retries.** The snapshot holds the revision that runs. When the
+proposal runs, Sidekick reads the history again. If the newest revision is not
+the one of the proposal (someone deployed, rolled back, or an upgrade failed),
+it fails as a conflict and a new proposal is needed. Helm stores each revision
+under its own key and refuses to write one that exists, so two operations that
+start at the same revision cannot both make the next one. If the rollback is in
+place already (a worker died after Helm made it), the proposal succeeds and
+changes nothing, so running it twice makes one new revision. A rollback that
+Helm started and that did not end as `deployed` is not repeated, because that
+would make more revisions: the proposal fails and the message says what the
+newest revision is. If Helm was interrupted, for example by a restart, the new
+revision stays `pending-rollback` and Helm refuses other operations on the
+release until a person checks it. Look at the release with Helm's tools, and when
+no operation runs, delete the `Secret` (or `ConfigMap`) named in the message,
+`sh.helm.release.v1.<release>.v<revision>`, then propose again if it is still
+needed.
+
+**Undo.** Undo rolls back to the revision that ran before the rollback, which
+Helm makes a new revision again. The proposal shows the two revisions the other
+way round. If someone deployed or rolled back since, Undo shows the revision that
+runs now and asks before it rolls back anyway. Undo that is repeated changes
+nothing once the release is restored.
+
+**What it relies on.** Helm v4.3.1 (the `pkg/action` functions `History` and
+`Rollback`) and the built-in `edit` role of Kubernetes v1.37.1. The comments in
+`internal/action/helmrollback` name the files. With `networkPolicy.restrictEgress`
+on, allow egress to the Kubernetes API server.
 
 ### `validator`
 

@@ -4,7 +4,7 @@ import { toolCallTarget } from "../../api/feedback";
 import type { Step, StepPart } from "../../api/investigations";
 import { Button } from "../../components/Button";
 import { CopyButton } from "../../components/CopyButton";
-import { formatDuration, formatTokens } from "../../format";
+import { formatCost, formatDuration, formatTokens } from "../../format";
 import { PartFeedback } from "./PartFeedback";
 import { StepLessons } from "./StepLessons";
 import "./StepTimeline.css";
@@ -64,6 +64,7 @@ export function StepTimeline({ steps, live, hasMore, loadingMore, onLoadMore }: 
 
 function StepRow({ step }: { step: Step }) {
   const [open, setOpen] = useState(false);
+  const modelLine = modelLineOf(step);
   const panelId = useId();
   const Chevron = open ? ChevronDown : ChevronRight;
 
@@ -76,6 +77,7 @@ function StepRow({ step }: { step: Step }) {
       </button>
       {open && (
         <div id={panelId} className="sk-step__body">
+          {modelLine && <p className="sk-step__model">{modelLine}</p>}
           {step.error && <p className="sk-step__error">{step.error}</p>}
           {step.lessons && <StepLessons lessons={step.lessons} />}
           {step.parts.map((part, i) => (
@@ -132,10 +134,21 @@ function summaryOf(step: Step): string {
   return label;
 }
 
+/** The time, tokens, cost and model of a step; the cost shows only above zero. */
 function metaOf(step: Step): string {
   const tokens = step.tokens ? `${formatTokens(step.tokens.input)} in, ${formatTokens(step.tokens.output)} out` : "";
+  const cost = step.costMicros ? formatCost(step.costMicros) : "";
 
-  return [formatDuration(step.durationMs), tokens].filter(Boolean).join(" · ");
+  return [formatDuration(step.durationMs), tokens, cost, step.model].filter(Boolean).join(" · ");
+}
+
+/** The line of an opened step that says which model ran it and through which connector. */
+function modelLineOf(step: Step): string {
+  if (step.model) {
+    return step.connector ? `Model: ${step.model} through ${step.connector}` : `Model: ${step.model}`;
+  }
+
+  return step.connector ? `Connector: ${step.connector}` : "";
 }
 
 const SUMMARY_CHARS = 80;
