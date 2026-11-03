@@ -1040,6 +1040,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/proposals/{id}/files/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The line diff of one file of a pull request proposal
+         * @description The unified line diff of the file at `path`, from the file on the
+         *     base branch of the host to the content in the proposal's
+         *     parameters. A person opens one file at a time, so the base is read
+         *     from the host through the action when this is asked and is never
+         *     stored. The proposal can have any status, so a person can read what
+         *     was proposed after it expired or was rejected.
+         *
+         *     Without `full` the answer holds the lines that changed with three
+         *     unchanged lines on each side, cut at 400 lines (`truncated` true);
+         *     a jump in the line numbers between two lines means lines were left
+         *     out. With `full` true it holds every line of the file, uncut. A
+         *     deleted file has only removed lines and a new file only added ones.
+         *     `text` is one line of the file, with characters that could hide
+         *     something written as \u escapes, and is plain text: show it as
+         *     such.
+         *
+         *     The answer is 400 without `path`, 404 when the proposal does not
+         *     exist or does not change a file with that path, 409 with `code`
+         *     diff_unavailable when the action that made the proposal is gone from
+         *     the config or cannot read files from its host, and 502 when the host
+         *     did not give the base of the file (it does not have the blob, or the
+         *     file is too large or not text).
+         */
+        get: operations["GetProposalFileDiff"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/investigations/{id}/fix-applied": {
         parameters: {
             query?: never;
@@ -2125,6 +2166,30 @@ export interface components {
             status: "added" | "changed" | "deleted";
             linesAdded: number;
             linesRemoved: number;
+        };
+        /** @description The line diff of one file of a proposal. The lines are plain text. */
+        ProposalFileDiff: {
+            path: string;
+            /** @enum {string} */
+            status: "added" | "changed" | "deleted";
+            lines: components["schemas"]["ProposalDiffLine"][];
+            /** @description True when more lines follow than the ones returned. Ask again with `full` true to get them. */
+            truncated: boolean;
+            /**
+             * @description Set when the change adds a newline at the end of the file, or removes the one it had.
+             * @enum {string}
+             */
+            finalNewline?: "added" | "removed";
+        };
+        ProposalDiffLine: {
+            /** @enum {string} */
+            kind: "context" | "added" | "removed";
+            /** @description The number of the line in the file on the base branch. Absent for an added line. */
+            oldLine?: number;
+            /** @description The number of the line in the new file. Absent for a removed line. */
+            newLine?: number;
+            /** @description The line without its line break, with characters that could hide something written as \u escapes. */
+            text: string;
         };
         UndoProposalRequest: {
             /**
@@ -4672,6 +4737,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Proposal"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetProposalFileDiff: {
+        parameters: {
+            query: {
+                /** @description The path of a file in the `files` of the proposal. */
+                path: string;
+                /** @description Return every line of the file, with no cut. */
+                full?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description The ID of an action proposal. */
+                id: components["parameters"]["ProposalID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The diff. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalFileDiff"];
                 };
             };
             default: components["responses"]["Problem"];
