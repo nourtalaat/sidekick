@@ -1801,6 +1801,125 @@ Sidekick changed and leaves every other field as it is. If someone changed one
 of those fields since, Undo shows what a restore would overwrite and asks
 before it restores it.
 
+##### `datadog.downtime`
+
+Mutes the notifications of a Datadog monitor for a limited time, for planned
+work or a known noisy period, by making a downtime. A downtime is not a
+change to the monitor: the monitor keeps evaluating and keeps its state, and
+Datadog only holds back its notifications. Use it on routes with
+`mode: approved`: the downtime starts as soon as it is approved. It needs no
+`allowReadWrite`.
+
+```yaml
+actions:
+  mute-payments:
+    type: datadog.downtime
+    site: datadoghq.com                # default; the API is at api.<site>
+    apiKeySecret: { name: sidekick-datadog-downtime, key: apiKey }
+    appKeySecret: { name: sidekick-datadog-downtime, key: appKey }
+    limits:
+      monitorIds: [12345]              # monitors it may mute ...
+      monitorTags: ["team:payments"]   # ... and monitors that have one of these tags
+      scopes:                          # at least one, written exactly as Datadog reads them
+        - "env:prod"
+        - "env:staging AND service:checkout"
+      maxDuration: 2h                  # default 2h, at most 24h
+
+routes:
+  - name: payments-alerts
+    match: { intake: [datadog], service: "payments-*" }
+    mode: approved
+    actions: [mute-payments]
+```
+
+- `site` is the Datadog site, such as `datadoghq.eu` or `us3.datadoghq.com`.
+  `url` replaces it with the full address of the API, for a proxy; it must
+  be https, except for a loopback host. They cannot be set together.
+- `apiKeySecret` and `appKeySecret` are the API key and the application key
+  of a service account. Use keys of their own, apart from the keys of any
+  Datadog source and of `datadog.monitor`. Both are read on every call, so a
+  rotated key needs no restart.
+- `limits.monitorIds` and `limits.monitorTags` say which monitors it may
+  mute: at least one of them is required. A monitor is allowed when its ID is
+  listed, or when it has one of the tags. A tag may not be `*`, which would
+  mute every monitor.
+- `limits.scopes` lists the downtime scopes the model may use, and is
+  required. A Datadog scope is a query, such as `env:prod` or
+  `env:staging AND service:checkout`, so a scope the model proposes must be
+  one of these, character for character; it is never matched by a pattern.
+  `*` mutes every group of a monitor, and is allowed only when it is listed.
+- `limits.maxDuration` is the longest downtime: from `5m` to `24h`, `2h` when
+  not set. The shortest downtime is 5 minutes.
+
+**Permissions.** The service account needs the Monitors Downtime
+(`monitors_downtime`) and Monitors Read (`monitors_read`) permissions, and no
+others. If you use application keys with scopes, give the application key
+the scopes `monitors_downtime` and `monitors_read`. The downtime calls need
+`monitors_downtime`, and Sidekick reads a monitor with `monitors_read`. The
+Monitors Write permission is not needed, because a downtime does not change
+the monitor. Datadog describes `monitors_downtime` as the permission to set
+downtimes for any monitor in the organization, so the limits of this action
+are the only thing that keeps the model to the monitors and scopes you chose.
+
+**The rule for a downtime.** The model proposes exactly one of `monitorId` (an
+integer) and `monitorTag` (one of `limits.monitorTags`, exactly), a `scope`, a
+`duration` such as `30m` or `2h`, and a `message` that says why. A monitor
+that is not listed in `monitorIds` is read, and is allowed only if it has one
+of the tags; the check is made again right before the downtime is made. A
+downtime by tag mutes every monitor that has the tag. The message is at most 500 characters, and line breaks and tabs
+become spaces; text with other control characters is refused. The message
+may not hold an `@`, because Datadog notifies the handle after an `@` in the
+message of a downtime (a person, a channel or a webhook), and the model must
+not choose who is notified. It may not hold the text `[sidekick proposal`
+either, which Sidekick keeps for its marker. A downtime is one-time: there is
+no recurrence.
+
+**What the approver sees.** The proposal shows the downtime as it will be
+made: the monitor or the tag, the scope, the duration and the message. For a
+monitor it shows its name, type and current state. For a tag it shows how
+many monitors have the tag (at least 100 when the answer is full) and the
+first five names. That is information and not a limit. The downtime starts
+when it is approved, not when it was proposed, and lasts the duration the
+approver read.
+
+**The marker.** Datadog has no way to recognise a repeated request, so
+Sidekick adds a line to the message, `[sidekick proposal <id>]`. It shows
+people who made the downtime, and a retry after a crash and Undo find the
+downtime by it, by reading the whole list of downtimes, since Datadog's list
+cannot be filtered by message. The line is found again when the message ends
+with it, after a line break or any other white space. Before it makes a
+downtime, Sidekick looks for one with the marker, in any state the list
+shows, so a crash makes one downtime, and a downtime that a person canceled
+in the meantime is not made again. Do not remove the line when you edit a
+downtime in Datadog: Undo could not find it then, and would report that the
+downtime is gone while it keeps running.
+
+**Undo.** An approver can cancel a downtime early. Undo cancels the downtime
+that has the marker, with `DELETE /api/v2/downtime/{id}`, which cancels it:
+Datadog keeps a canceled downtime for about two days with the status
+`canceled`. A downtime that has ended or was canceled already counts as
+success. If someone edited the downtime since, so that its scope, its monitor
+or tags, or its length are not what was written, or it became recurring,
+Undo cancels nothing and shows the downtime as it is now; the approver then
+confirms to cancel it anyway. Undo does not check the limits again, because
+canceling a downtime is the safe direction.
+
+**What it relies on.** The calls and fields come from the public API
+specification of the `datadog-api-client-go` release v2.67.0, and the
+comments in `internal/action/datadogdowntime` name the files. These points
+are not stated there or in Datadog's documentation, and the action does not
+depend on them for safety:
+
+- What happens to a downtime when its monitor is deleted. Undo and the search
+  for the marker never read the monitor.
+- Whether the list of downtimes keeps showing canceled and ended downtimes,
+  and for how long. A downtime that a person canceled is not made again only
+  while Datadog still lists it.
+- Whether Datadog keeps a line break in the message. If it does not, the
+  marker is still found, as long as white space of some kind comes before it.
+- Whether the list shows a downtime right after it was made. A retry within a
+  moment of a lost answer might not see it and could make a second one.
+
 ##### `grafana.alert_rule`
 
 Changes a Grafana-managed alert rule in place through Grafana's alerting
