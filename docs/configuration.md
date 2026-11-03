@@ -3474,6 +3474,127 @@ GitLab instance. The action sends only these calls: read a branch, a file, a
 directory and a blob; list merge requests; make a commit; open a merge
 request; close a merge request; delete a branch.
 
+##### `gitlab.code_change`
+
+Opens a draft merge request that changes application code, in a project you
+allow, on gitlab.com or a self-managed GitLab. It does for GitLab what
+[`github.code_change`](#githubcode_change) does for GitHub, with the same
+limits, refused paths, checks, snapshot and Undo, and that section has the
+full text of the shared rules. The model reads the current files with the
+[GitLab source](sources/gitlab.md) and proposes the whole new content of each
+file it changes. It is not for monitors: [`gitlab.merge_request`](#gitlabmerge_request)
+changes monitor definitions, with its own limits and its own token. Use it on
+a route in `approved` mode: a person reads the change before anything is
+pushed.
+
+The merge request is always a draft, and Sidekick never merges it, turns on
+auto-merge or squash, asks for a review or assigns anyone. The project's own
+pipeline runs on it, and a person reviews and merges it. There is no `draft`
+key, so a config that sets `draft` is an unknown key error. The action has no
+validator; the project's own pipeline is the validator.
+
+```yaml
+actions:
+  code-change:
+    type: gitlab.code_change
+    tokenSecret: { name: sidekick-gitlab-code, key: token }   # a token of its own
+    # baseURL: https://gitlab.example.com   # self-managed GitLab; default https://gitlab.com
+    limits:
+      projects: [acme/platform/checkout]    # full paths, no wildcards
+      paths: ["src/**", "internal/**/*.go"] # globs of the files that may change
+      # refusedPaths: ["src/legacy/**"]     # added to the built-in refused paths
+      maxFiles: 3                           # 1 to 25
+      maxChangedLines: 60                   # lines added plus lines removed, 1 to 1000
+      baseBranch: main                      # the only branch a merge request may target
+      allowDelete: false                    # default false
+
+routes:
+  - name: checkout
+    mode: approved
+    actions: [code-change]
+```
+
+- **Credentials.** `tokenSecret` is the `{ name, key }` of the Secret that
+  holds an access token with the `api` scope and the Developer role on the
+  projects in `limits.projects` only. It is the same kind of token as for
+  `gitlab.merge_request` (see there for the fine-grained option from GitLab
+  19.2 and for the reverse proxy note), and it must be a token of its own,
+  apart from the one of the GitLab source and of `gitlab.merge_request`. The
+  token is read on every call. `baseURL` is the root of your GitLab, without
+  `/api/v4`; it must be https, except for a loopback host.
+- **Protect the base branch.** As for `gitlab.merge_request`, the token's role
+  and the protected base branch are the hard limit of what this action can do.
+  Protect `baseBranch`, set **Allowed to push and merge** to **No one** and
+  **Allowed to merge** to **Maintainers**. Then a Developer token cannot push
+  to the branch or merge into it, whatever a merge request says.
+- **Paths, refused paths and the rest of the limits.** Every file the model
+  changes must match a glob of `paths` and none of the refused paths, the same
+  built-in list as for `github.code_change`, which includes `.gitlab-ci.yml`,
+  `.gitlab/**`, `CODEOWNERS` and `.env` files. A path that a refused path
+  matches is refused even when a glob of `paths` allows it. A delete is
+  refused unless `allowDelete` is true. A file must be at most 256 KiB, at the
+  base branch and in the new content, and must be UTF-8 text. Sidekick
+  refuses a file that is binary, a symlink, a submodule or a directory, and a
+  file the model sends unchanged. Every refusal reaches the model with its
+  reason, so it can propose again. The checks run when the model proposes and
+  again when the proposal runs.
+- **How a file is read.** GitLab's Files API does not say what kind of entry a
+  path is, so Sidekick lists each directory above the path and reads a file
+  only when it is a regular file (mode `100644` or `100755`). A name that
+  differs from an existing entry only in case is refused. A file that exists
+  keeps its mode, and a new file is a regular file.
+- **What it does.** On approval it makes the branch `sidekick/<proposal id>`
+  and one commit with all files in one call of the Commits API, starting from
+  the commit the files were read at, and opens the merge request from it with
+  a title that starts with `Draft:`. The description is what the model wrote,
+  with `@mentions`, issue references, words such as "closes" and every line
+  that starts with a slash (GitLab runs it as a quick action) put in code
+  spans, so the merge request notifies nobody, closes nothing and runs no
+  command, and a line that names the proposal. If a worker dies half way, the
+  retry finds the branch, and the merge request if it was made, and does not
+  make a second one.
+- **Drafts only.** GitLab makes a merge request a draft through its title, so
+  Sidekick checks the answer. A merge request of its own that is not a draft,
+  whether it was just opened or a retry found it, is closed and its branch is
+  deleted, and the proposal fails for good with that reason, unless a person
+  merged it. One that GitLab is merging is left as it is, and the proposal
+  fails the same way. The proposal's result holds the project, the IID of the
+  merge request and its head SHA.
+- **What the approver reads, and files that changed meanwhile.** Both are as for
+  `github.code_change`: each file with what happens to it and the line diff in
+  the web UI, from blob IDs and never file contents, and a conflict that names
+  a file someone changed since the model proposed.
+- **Undo.** An approver can undo a succeeded proposal. If its merge request is
+  still open or was closed, Sidekick closes it and deletes its branch. If it
+  was merged, Sidekick opens a draft revert merge request from the branch
+  `sidekick/<undo proposal id>` that restores the earlier content of the
+  files. A file the merge request added is deleted, and a file it deleted
+  comes back as a regular file: if it was executable, it loses that mode,
+  because the Commits API creates a file with the default mode. The revert
+  merge request still needs review and merging. If a file on the base branch
+  is not as the merged merge request left it, nothing is restored until the
+  approver confirms, and then the earlier content overwrites it. A file that
+  is a symlink, a submodule or a directory by then is never overwritten, and a
+  path that a refused path matches by then is refused.
+
+Once a day, Sidekick reads from GitLab whether the merge requests it opened
+are still open, were merged or were closed, as it does for
+`gitlab.merge_request` (see there). The project of the proposal must still be
+one of `limits.projects`; one that is not is skipped. Sidekick counts the merge
+requests it opens in `sidekick_gitlabcode_merge_requests_total` (by `result`:
+`opened`, `existing`, `applied` for a change already on the base branch,
+`closed` or `reverted` for an undo, or `error`), and the daily checks in
+`sidekick_gitlabcode_status_checks_total` (by `state`: `open`, `merged`,
+`closed`, `missing` or `error`). A merge request of this action does not count
+as a noisy alert fixed.
+
+**What it relies on.** The facts come from the public source and API
+documentation of GitLab at the tag `v19.5.1-ee`, as the comments in
+`internal/action/gitlabgit` and `internal/action/gitlabcode` say. Nothing was
+tried against a GitLab instance. The action sends only these calls: read a
+branch, a file, a directory and a blob; list merge requests; make a commit;
+open a merge request; close a merge request; delete a branch.
+
 ##### `github.revert`
 
 Opens a draft pull request that reverts one commit, or one merged pull
