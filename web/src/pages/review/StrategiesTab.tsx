@@ -1,8 +1,11 @@
 import { useState } from "react";
+import { ApiError } from "../../api/client";
 import { useStrategyProposals, type ProposalFilter } from "../../api/strategyProposals";
 import { EmptyState } from "../../components/EmptyState";
 import { QueryError } from "../../components/QueryError";
 import { Select, type SelectOption } from "../../components/Select";
+import { hasRole } from "../../roles";
+import { useCurrentUser } from "../../session";
 import { ProposalCard } from "./ProposalCard";
 import "./StrategiesTab.css";
 
@@ -25,9 +28,20 @@ const FILTERS: readonly SelectOption[] = [
  * current version and the change run on the scenarios that cover the
  * strategy, and the change passes only when it is not clearly worse. An admin
  * reads the change, the model's reason, the feedback and the gate result,
- * then approves, edits or rejects.
+ * then approves, edits or rejects. Strategy changes are for admins.
  */
 export function StrategiesTab() {
+  const me = useCurrentUser();
+
+  if (!hasRole(me.role, "admin")) {
+    return <QueryError error={new ApiError(403, "This needs the admin role.")} />;
+  }
+
+  return <Proposals />;
+}
+
+/** The filter and the proposals, for someone who may see them. */
+function Proposals() {
   const [filter, setFilter] = useState<ProposalFilter>("all");
   const [openId, setOpenId] = useState<string>();
   const proposals = useStrategyProposals(filter);
