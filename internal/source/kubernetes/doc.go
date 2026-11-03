@@ -1,4 +1,4 @@
-// Package kubernetes is the native Kubernetes source (SRC-3). It registers
+// Package kubernetes is the native Kubernetes source. It registers
 // itself as the source type "kubernetes".
 //
 // A source reads one cluster through client-go, with the pod's service

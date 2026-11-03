@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Settings are the shared settings every connector instance accepts (MC-5).
+// Settings are the shared settings every connector instance accepts.
 // Each connector embeds Settings in its own config struct next to its
 // provider-specific fields, which gives the config the ModelSettings method.
 type Settings struct {
@@ -31,7 +31,7 @@ func (s Settings) ModelSettings() Settings {
 }
 
 // Validate checks the settings against what the configured model supports.
-// Errors name the field so config validation can point at it (CFG-5).
+// Errors name the field so config validation can point at it.
 func (s Settings) Validate(caps Capabilities) error {
 	var errs []error
 	if s.Model == "" {

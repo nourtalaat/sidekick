@@ -17,7 +17,7 @@ import (
 type Action interface {
 	// Spec describes the action to the model.
 	Spec() Spec
-	// Validate checks the parameters against the schema and the configured limits (ACT-2).
+	// Validate checks the parameters against the schema and the configured limits.
 	// It runs when the model proposes the action and again right before Execute.
 	Validate(ctx context.Context, params json.RawMessage) error
 	// Execute performs the action. It must be safe to repeat with the same
@@ -36,7 +36,7 @@ type ProposalChecker interface {
 }
 
 // Snapshotter is implemented by actions that change a definition in place,
-// such as a monitor or an alert rule (ACT-7, ACT-9). Snapshot reads the
+// such as a monitor or an alert rule. Snapshot reads the
 // current definition and computes the new one without changing anything.
 //
 // Sidekick calls it when the model proposes, after Validate, and stores the
@@ -141,7 +141,7 @@ type Result struct {
 	Links   []Link `json:"links"`
 }
 
-// Mode is a route's action mode (ACT-1).
+// Mode is a route's action mode.
 type Mode string
 
 // Action modes. ReadOnly is the default.
@@ -154,7 +154,7 @@ const (
 // ErrLimit is wrapped by every limit violation, so callers can tell it from other errors.
 var ErrLimit = errors.New("outside configured limits")
 
-// ErrUntrustedWrite is returned when read + write meets an untrusted sender (ACT-6).
+// ErrUntrustedWrite is returned when read + write meets an untrusted sender.
 var ErrUntrustedWrite = errors.New("read-write mode needs a trusted sender")
 
 // EffectiveMode returns the mode an investigation runs with. A read-write route
