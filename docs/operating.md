@@ -36,9 +36,11 @@ Sidekick, and for the tools you use once it runs.
 ## Web UI and API
 
 - [Web UI and API](web-ui.md): OIDC login, roles, sessions and the pages of the UI.
+- [The pages of the web UI](web-ui.md#the-pages-of-the-web-ui): every page and tab, with the lowest role for each.
 - [Roles](web-ui.md#roles): who may read, answer, approve and administer.
 - [API tokens](web-ui.md#api-tokens): access for automation, such as a CI job.
 - [The dashboard](web-ui.md#the-dashboard): its filters and the numbers it shows.
+- [The review queue](web-ui.md#the-review-queue), [Lessons and memory](web-ui.md#the-lessons-and-memory-page), [Settings](web-ui.md#settings) and [Benchmarks](web-ui.md#the-benchmarks-page): the other pages of the UI.
 - [The JSON API](web-ui.md#the-json-api): the operations under `/api/v1`.
 
 ## The validator
