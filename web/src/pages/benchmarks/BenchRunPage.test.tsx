@@ -273,9 +273,9 @@ describe("the page of one benchmark run, states", () => {
     expect(screen.getByRole("link", { name: "Back to the benchmark runs" })).toHaveAttribute("href", "/benchmarks");
   });
 
-  it("does not read compare, or any other word, as a run ID: it is a page that does not exist, and no run is asked for", async () => {
+  it("does not read a word such as latest as a run ID: it is a page that does not exist, and no run is asked for", async () => {
     const { handler, seen } = recording(() => problem(400, "not an ID"));
-    renderApp({ route: `/benchmarks/compare?a=${benchRunId(1)}`, handler });
+    renderApp({ route: "/benchmarks/latest", handler });
 
     expect(await screen.findByRole("heading", { name: "Page not found" })).toBeInTheDocument();
     expect(seen.filter((r) => r.path.startsWith("/api/v1/bench"))).toHaveLength(0);

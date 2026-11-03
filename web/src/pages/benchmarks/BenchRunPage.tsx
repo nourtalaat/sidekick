@@ -19,7 +19,7 @@ const NOT_FOUND = 404;
  * One benchmark run: its settings, scores with their intervals, thresholds,
  * cost and time, and each scenario with the result of each repeat. Every role
  * from viewer up sees it. An address that is not a run ID, such as
- * /benchmarks/compare, is a page that does not exist and sends no request.
+ * /benchmarks/latest, is a page that does not exist and sends no request.
  */
 export function BenchRunPage() {
   const { id = "" } = useParams();

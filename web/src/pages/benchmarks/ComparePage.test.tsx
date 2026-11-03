@@ -215,7 +215,9 @@ describe("the compare page, settings", () => {
 
     expect(await screen.findByRole("region", { name: /^Metrics of / })).toBeInTheDocument();
 
-    expect(rowOf(/^Prompt version/)).toHaveTextContent("Loadingp-3Not compared yet");
+    await waitFor(() => expect(rowOf(/^Prompt version/)).toHaveTextContent("Loadingp-3Not compared yet"));
+
+
     expect(rowOf(/^Config hash/)).toHaveTextContent("Loading");
     expect(rowOf(/^Sidekick version/)).toHaveTextContent("v0.9.0v0.9.1Differs");
     expect(screen.getByRole("region", { name: /^Scenarios of / })).toBeInTheDocument();
