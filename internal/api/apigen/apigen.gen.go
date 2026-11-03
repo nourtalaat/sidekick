@@ -1934,7 +1934,7 @@ type OperationsBucket struct {
 	// Investigations Investigations created.
 	Investigations int64 `json:"investigations"`
 
-	// NoisyFixed False positives whose fix a responder marked as applied.
+	// NoisyFixed False positives that count as fixed. A responder marked the fix as applied, or the monitor pull request that Sidekick opened was merged, or the monitor change that Sidekick made through the tool's API succeeded and was not undone. An investigation counts once.
 	NoisyFixed int64 `json:"noisyFixed"`
 
 	// Recoveries Groups whose watchers all recovered.
@@ -1971,7 +1971,7 @@ type OperationsFigures struct {
 	// Investigations Investigations created.
 	Investigations int64 `json:"investigations"`
 
-	// NoisyFixed False positives whose fix a responder marked as applied.
+	// NoisyFixed False positives that count as fixed. A responder marked the fix as applied, or the monitor pull request that Sidekick opened was merged, or the monitor change that Sidekick made through the tool's API succeeded and was not undone. An investigation counts once.
 	NoisyFixed int64 `json:"noisyFixed"`
 
 	// Recoveries Groups whose watchers all recovered.
@@ -2038,7 +2038,7 @@ type OperationsTotals struct {
 	// MedianFirstFindingMs About the median time from creation to the first finding; left out when there is none.
 	MedianFirstFindingMs *float64 `json:"medianFirstFindingMs,omitempty"`
 
-	// NoisyFixed False positives whose fix a responder marked as applied.
+	// NoisyFixed False positives that count as fixed. A responder marked the fix as applied, or the monitor pull request that Sidekick opened was merged, or the monitor change that Sidekick made through the tool's API succeeded and was not undone. An investigation counts once.
 	NoisyFixed int64 `json:"noisyFixed"`
 
 	// Recoveries Groups whose watchers all recovered.

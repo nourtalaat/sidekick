@@ -821,9 +821,14 @@ would refuse is ignored, so every link opens. Days are UTC days.
 
 Every chart has a text summary, a legend, a tooltip and a **Show as table**
 button for the same numbers. A chart with nothing to draw says "No data
-for this range" and links to the filters. A responder marks the fix of a
-false positive as applied on the investigation page; that is what "noisy
-alerts fixed" counts.
+for this range" and links to the filters. "Noisy alerts fixed" counts the
+false alarms that were fixed, in one of three ways: a responder marked the
+fix as applied on the investigation page, or the monitor pull request that
+Sidekick opened was merged, or the monitor change that Sidekick made through
+the tool's API ran and was not undone. A false alarm counts once, however
+many of the three apply. Pull requests are read once a day, so a merge can
+show on the chart up to a day late, and **Undo** takes a change out of the
+count.
 
 ## Dashboard numbers and benchmark runs
 
@@ -858,9 +863,8 @@ for the range of equal length before it, for showing the change.
 - `GET /api/v1/stats/operations` returns, by day or by hour (`interval`,
   hours for a range of at most 7 days), the investigations by verdict, the
   time to the first finding, the duration, tool calls, false positives,
-  noisy alerts fixed (false positives whose fix a responder
-  [marked as applied](#actions-on-investigations)), and the recoveries,
-  downtime and timed out watchers. A median is worked out from counts in
+  noisy alerts fixed (see below), and the recoveries, downtime and timed
+  out watchers. A median is worked out from counts in
   buckets of growing width, so it is about right, within a third, and not
   exact. The actions of an investigation count in its hour. Proposed is
   every proposal. Approved is the proposals that a person or the policy
@@ -868,6 +872,21 @@ for the range of equal length before it, for showing the change.
   those that failed after a decision; not the rejected or expired ones.
   Executed is the proposals that ran and succeeded, including the undone
   ones, which ran before they were undone.
+
+  Noisy alerts fixed counts, in the hour the investigation was created,
+  each investigation whose verdict is `false_positive` and that has at
+  least one of these: a responder
+  [marked the fix as applied](#actions-on-investigations); an action
+  proposal that opened a pull request that changes a monitor, whose status
+  is `succeeded` and whose pull request is merged; or an action proposal
+  that changed a monitor through the tool's API and whose status is
+  `succeeded`. An investigation counts once however many apply. Undo gives
+  the proposal the status `undone`, which takes it out of the count, and a
+  pull request that was closed without a merge does not count. Mutes,
+  rollbacks, flags, tickets and code changes never count. The state of a
+  pull request is read once a day (see
+  [the pull request check](configuration.md#actions)), so a merge shows up
+  to a day late, and a recount of the hour then counts it.
 - `GET /api/v1/stats/filters` lists the routes, services and models of the
   last 400 days, for the filter menus.
 - `GET /api/v1/bench/runs` lists the benchmark runs that
