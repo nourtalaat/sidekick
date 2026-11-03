@@ -54,7 +54,11 @@ func TestPlanRevert(t *testing.T) {
 		},
 		{name: "a file the change added and someone deleted needs nothing", missing: true, sides: sides("a.go", nil)},
 		{
-			name: "a file the change deleted is created again", missing: true, sides: sides("a.go", beforeRef),
+			name: "a file the change deleted is created again", missing: true,
+			sides: gitchange.SnapshotFiles{
+				Before: map[string]*gitchange.BlobRef{"a.go": beforeRef},
+				After:  map[string]gitchange.AfterEntry{"a.go": {Status: gitchange.FileDeleted}},
+			},
 			wantRestores: []Restore{{Path: "a.go", Blob: gitchange.BlobSHA(before)}},
 		},
 		{
