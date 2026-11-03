@@ -89,17 +89,13 @@ on pods/log for get_pod_logs, and "namespaced", which leaves out nodes.
 
 {{/*
 What the actions in config ask of the cluster Sidekick runs in, as JSON.
-Only actions of type prometheus.rule and helm.rollback count. "any" says
-whether there is one. "accounts" maps each service account the
-prometheus.rule actions use (serviceAccount, sidekick-actions when it is
-not set) to the namespaces its actions list, and each namespace to the
-sorted PrometheusRule names listed for it. "helmAccounts" lists, sorted, the
-service accounts the helm.rollback actions use (serviceAccount,
-sidekick-helm-rollback when it is not set). A helm.rollback account gets no
-rights from the chart, so it has no namespaces here.
+Only actions of type prometheus.rule count. "any" says whether there is
+one. "accounts" maps each service account the actions use (serviceAccount,
+sidekick-actions when it is not set) to the namespaces its actions list, and
+each namespace to the sorted PrometheusRule names listed for it.
 */}}
 {{- define "sidekick.actions.access" -}}
-{{- $access := dict "any" false "accounts" dict "helmAccounts" list }}
+{{- $access := dict "any" false "accounts" dict }}
 {{- range $name, $act := dig "actions" dict (default dict .Values.config) }}
 {{- if and (kindIs "map" $act) (eq (toString (get $act "type")) "prometheus.rule") }}
 {{- $_ := set $access "any" true }}
@@ -114,22 +110,81 @@ rights from the chart, so it has no namespaces here.
 {{- $known := default list (get $namespaces .) }}
 {{- $_ = set $namespaces . (concat $known $names | uniq | sortAlpha) }}
 {{- end }}
-{{- else if and (kindIs "map" $act) (eq (toString (get $act "type")) "helm.rollback") }}
-{{- $_ := set $access "any" true }}
-{{- $helmAccount := default "sidekick-helm-rollback" (get $act "serviceAccount") }}
-{{- $_ = set $access "helmAccounts" (append $access.helmAccounts $helmAccount | uniq | sortAlpha) }}
 {{- end }}
 {{- end }}
 {{- toJson $access }}
 {{- end }}
 
 {{/*
-Every service account the actions use, sorted: the accounts of the
-prometheus.rule actions and of the helm.rollback actions. Takes the result
-of sidekick.actions.access, as a dict, and returns JSON.
+What the actions in config of type kubernetes.rollback ask of the cluster
+Sidekick runs in, as JSON. "any" says whether there is one. "accounts" maps
+each service account they use (serviceAccount, sidekick-kubernetes-rollback
+when it is not set) to the namespaces its actions list, each namespace to
+the workload resources of their kinds (deployments, statefulsets,
+daemonsets; all three when limits.kinds is not set), and each resource to
+the sorted names listed for it.
 */}}
-{{- define "sidekick.actions.allAccounts" -}}
-{{- concat (keys .accounts) .helmAccounts | uniq | sortAlpha | toJson }}
+{{- define "sidekick.actions.rollback.access" -}}
+{{- $access := dict "any" false "accounts" dict }}
+{{- $resourceOf := dict "Deployment" "deployments" "StatefulSet" "statefulsets" "DaemonSet" "daemonsets" }}
+{{- range $name, $act := dig "actions" dict (default dict .Values.config) }}
+{{- if and (kindIs "map" $act) (eq (toString (get $act "type")) "kubernetes.rollback") }}
+{{- $_ := set $access "any" true }}
+{{- $account := default "sidekick-kubernetes-rollback" (get $act "serviceAccount") }}
+{{- if not (hasKey $access.accounts $account) }}
+{{- $_ = set $access.accounts $account dict }}
+{{- end }}
+{{- $namespaces := get $access.accounts $account }}
+{{- $limits := default dict (get $act "limits") }}
+{{- $names := default list (get $limits "names") | compact }}
+{{- $kinds := default (list "Deployment" "StatefulSet" "DaemonSet") (get $limits "kinds") }}
+{{- range $namespace := (default list (get $limits "namespaces") | compact) }}
+{{- $resources := default dict (get $namespaces $namespace) }}
+{{- range $kind := $kinds }}
+{{- $resource := get $resourceOf $kind }}
+{{- if $resource }}
+{{- $_ = set $resources $resource (concat (default list (get $resources $resource)) $names | uniq | sortAlpha) }}
+{{- end }}
+{{- end }}
+{{- $_ = set $namespaces $namespace $resources }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- toJson $access }}
+{{- end }}
+
+{{/*
+What the actions in config of type helm.rollback ask of the cluster Sidekick
+runs in, as JSON. "any" says whether there is one. "accounts" lists, sorted,
+the service accounts they use (serviceAccount, sidekick-helm-rollback when it
+is not set). The chart gives these accounts no rights, because a Helm
+rollback re-applies every object of a release and Kubernetes RBAC cannot
+narrow that to one release, so there are no namespaces here: the operator
+binds a Role of their choice.
+*/}}
+{{- define "sidekick.actions.helm.access" -}}
+{{- $access := dict "any" false "accounts" list }}
+{{- range $name, $act := dig "actions" dict (default dict .Values.config) }}
+{{- if and (kindIs "map" $act) (eq (toString (get $act "type")) "helm.rollback") }}
+{{- $_ := set $access "any" true }}
+{{- $account := default "sidekick-helm-rollback" (get $act "serviceAccount") }}
+{{- $_ = set $access "accounts" (append $access.accounts $account | uniq | sortAlpha) }}
+{{- end }}
+{{- end }}
+{{- toJson $access }}
+{{- end }}
+
+{{/*
+The service accounts of the actions of every type, as JSON: "accounts" is
+their sorted names, and "any" says whether there is one. Each type has an
+access template of its own; this one joins them.
+*/}}
+{{- define "sidekick.actions.accounts" -}}
+{{- $rules := include "sidekick.actions.access" . | fromJson }}
+{{- $rollbacks := include "sidekick.actions.rollback.access" . | fromJson }}
+{{- $helm := include "sidekick.actions.helm.access" . | fromJson }}
+{{- $accounts := concat (keys $rules.accounts) (keys $rollbacks.accounts) $helm.accounts | uniq | sortAlpha }}
+{{- dict "any" (or $rules.any $rollbacks.any $helm.any) "accounts" $accounts | toJson }}
 {{- end }}
 
 {{/*
@@ -151,6 +206,6 @@ validator's Jobs.
 */}}
 {{- define "sidekick.automountToken" -}}
 {{- $access := include "sidekick.kubernetesSource.access" . | fromJson }}
-{{- $actions := include "sidekick.actions.access" . | fromJson }}
+{{- $actions := include "sidekick.actions.accounts" . | fromJson }}
 {{- or .Values.serviceAccount.automountToken $access.any $actions.any (eq (include "sidekick.validator.job" .) "true") }}
 {{- end }}

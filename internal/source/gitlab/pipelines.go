@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/nourtalaat/sidekick/internal/gitlabapi"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
 
@@ -87,10 +88,10 @@ func (s *Source) listPipelines(ctx context.Context, input json.RawMessage) (sour
 		}
 	}
 
-	path := projectPath(project, "pipelines")
+	path := gitlabapi.ProjectPath(project, "pipelines")
 
 	pipelines, more, err := collect(ctx, limit, func(ctx context.Context, page int) ([]apiPipeline, int, error) {
-		return listPage[apiPipeline](ctx, s.client, path, query, page, min(s.pageSize, limit))
+		return gitlabapi.ListPage[apiPipeline](ctx, s.client, path, query, page, min(s.pageSize, limit))
 	}, keep)
 	if err != nil {
 		return source.Result{}, fmt.Errorf("list the pipelines of %s: %w", project, err)

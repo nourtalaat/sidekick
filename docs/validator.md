@@ -5,8 +5,9 @@ checks every changed file with the validator. A file that fails is not
 committed: the errors go back to the model, which can fix the change, and
 no pull request is opened.
 
-The [`github.pull_request` action](configuration.md#githubpull_request)
-sends files to the validator, in sidecar mode or in job mode, where
+The [`github.pull_request`](configuration.md#githubpull_request) and
+[`gitlab.merge_request`](configuration.md#gitlabmerge_request) actions
+send files to the validator, in sidecar mode or in job mode, where
 Sidekick creates a Kubernetes Job for each validation.
 
 The validator is `sidekick-validate`, in its own image,

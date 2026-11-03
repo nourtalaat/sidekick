@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nourtalaat/sidekick/internal/gitlabapi"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
 
@@ -170,10 +171,10 @@ func (s *Source) listCommits(ctx context.Context, input json.RawMessage) (source
 	setIf(query, "path", in.Path)
 	setIf(query, "ref_name", in.Ref)
 
-	path := projectPath(project, "repository", "commits")
+	path := gitlabapi.ProjectPath(project, "repository", "commits")
 
 	commits, more, err := collect(ctx, limit, func(ctx context.Context, page int) ([]apiCommit, int, error) {
-		return listPage[apiCommit](ctx, s.client, path, query, page, min(s.pageSize, limit))
+		return gitlabapi.ListPage[apiCommit](ctx, s.client, path, query, page, min(s.pageSize, limit))
 	}, nil)
 	if err != nil {
 		return source.Result{}, fmt.Errorf("list the commits of %s: %w", project, err)
@@ -215,16 +216,16 @@ func (s *Source) getCommit(ctx context.Context, input json.RawMessage) (source.R
 		return source.Result{}, fmt.Errorf("read the input: %w", err)
 	}
 
-	base := projectPath(project, "repository", "commits", url.PathEscape(in.Ref))
+	base := gitlabapi.ProjectPath(project, "repository", "commits", url.PathEscape(in.Ref))
 
 	var c apiCommitDetail
 
-	if _, err := s.client.get(ctx, base, nil, &c); err != nil {
+	if _, err := s.client.Get(ctx, base, nil, &c); err != nil {
 		return source.Result{}, fmt.Errorf("get commit %s of %s: %w", in.Ref, project, err)
 	}
 
 	diffs, more, err := collect(ctx, maxChangedFiles, func(ctx context.Context, page int) ([]apiDiff, int, error) {
-		return listPage[apiDiff](ctx, s.client, base+"/diff", nil, page, s.pageSize)
+		return gitlabapi.ListPage[apiDiff](ctx, s.client, base+"/diff", nil, page, s.pageSize)
 	}, nil)
 	if err != nil {
 		return source.Result{}, fmt.Errorf("get the diff of commit %s of %s: %w", in.Ref, project, err)
@@ -280,7 +281,7 @@ func (s *Source) compare(ctx context.Context, input json.RawMessage) (source.Res
 	var c apiCompare
 
 	query := url.Values{"from": {in.Base}, "to": {in.Head}}
-	if _, err := s.client.get(ctx, projectPath(project, "repository", "compare"), query, &c); err != nil {
+	if _, err := s.client.Get(ctx, gitlabapi.ProjectPath(project, "repository", "compare"), query, &c); err != nil {
 		return source.Result{}, fmt.Errorf("compare %s...%s of %s: %w", in.Base, in.Head, project, err)
 	}
 

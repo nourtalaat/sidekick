@@ -9,10 +9,12 @@ import (
 	_ "github.com/nourtalaat/sidekick/internal/action/datadog"             // Action type "datadog.monitor".
 	_ "github.com/nourtalaat/sidekick/internal/action/datadogdowntime"     // Action type "datadog.downtime".
 	_ "github.com/nourtalaat/sidekick/internal/action/githubpr"            // Action type "github.pull_request".
+	_ "github.com/nourtalaat/sidekick/internal/action/gitlabmr"            // Action type "gitlab.merge_request".
 	_ "github.com/nourtalaat/sidekick/internal/action/grafana"             // Action type "grafana.alert_rule".
 	_ "github.com/nourtalaat/sidekick/internal/action/grafanasilence"      // Action type "grafana.silence".
 	_ "github.com/nourtalaat/sidekick/internal/action/helmrollback"        // Action type "helm.rollback".
 	_ "github.com/nourtalaat/sidekick/internal/action/jira"                // Action types "jira.comment" and "jira.issue".
+	_ "github.com/nourtalaat/sidekick/internal/action/kubernetesrollback"  // Action type "kubernetes.rollback".
 	_ "github.com/nourtalaat/sidekick/internal/action/launchdarklyflag"    // Action type "launchdarkly.flag".
 	_ "github.com/nourtalaat/sidekick/internal/action/linear"              // Action types "linear.comment" and "linear.issue".
 	_ "github.com/nourtalaat/sidekick/internal/action/prometheusrule"      // Action type "prometheus.rule".

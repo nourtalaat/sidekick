@@ -1,0 +1,47 @@
+# Three kubernetes.rollback actions: two share the default service account,
+# sidekick-kubernetes-rollback, and both list the namespace shop, so its Role
+# there lists the names of both for each kind (the first has all three kinds,
+# the second only Deployments); the third has an account of its own and rolls
+# back DaemonSets only. The chart makes the accounts, one Role that lets
+# Sidekick ask for tokens of those two accounts and no others, and a Role and
+# binding for each account in each namespace. A Role lists ReplicaSets only
+# with Deployments in its kinds, and ControllerRevisions only with
+# StatefulSets or DaemonSets.
+validator:
+  enabled: false
+secrets:
+  - sidekick-anthropic
+  - sidekick-slack
+  - sidekick-webhook
+  - sidekick-staging-cluster
+config:
+  sources:
+    # The quick-start source, pointed at another cluster, so no source reads this one.
+    k8s:
+      kubeconfigSecret: { name: sidekick-staging-cluster, key: kubeconfig }
+  actions:
+    rb-checkout:
+      type: kubernetes.rollback
+      limits:
+        namespaces: [shop, staging]
+        names: [checkout, ledger]
+    rb-cart:
+      type: kubernetes.rollback
+      maxRevisionsBack: 2
+      limits:
+        namespaces: [shop]
+        kinds: [Deployment]
+        names: [cart, checkout]
+    rb-platform:
+      type: kubernetes.rollback
+      serviceAccount: platform-rollback
+      limits:
+        namespaces: [platform]
+        kinds: [DaemonSet]
+        names: [node-agent]
+  routes:
+    - name: default
+      sources: [k8s]
+      outputs: [slack]
+      mode: approved
+      actions: [rb-checkout, rb-cart, rb-platform]
