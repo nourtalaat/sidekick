@@ -89,12 +89,12 @@ func (l *loaded) pending() ([]file, error) {
 			pending = append(pending, f)
 		case f.parent:
 		default:
-			return nil, fmt.Errorf("%w: %q changed on the base branch after %s, so reverting it would overwrite later work; use github.code_change to fix it, or revert it by hand", action.ErrPermanent, f.path, l.target.what)
+			return nil, refuse("%q changed on the base branch after %s, so reverting it would overwrite later work; use github.code_change to fix it, or revert it by hand", f.path, l.target.what)
 		}
 	}
 
 	if len(pending) == 0 {
-		return nil, fmt.Errorf("%w: every file %s changed is back to what it was before already", action.ErrPermanent, l.target.what)
+		return nil, refuse("every file %s changed is back to what it was before already", l.target.what)
 	}
 
 	return pending, nil

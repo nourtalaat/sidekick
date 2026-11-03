@@ -3,6 +3,7 @@ package githubrevert
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -78,7 +79,7 @@ func (r *Revert) resolveCommit(ctx context.Context, owner, name string, p Params
 
 	c, _, err := r.client.Git.GetCommit(ctx, owner, name, p.Commit)
 	if err != nil {
-		return nil, githubgit.Classify("read "+what, err)
+		return nil, readFailure("read "+what, what, err)
 	}
 
 	if !undo {
@@ -107,16 +108,16 @@ func (r *Revert) resolvePullRequest(ctx context.Context, owner, name string, p P
 
 	pr, _, err := r.client.PullRequests.Get(ctx, owner, name, p.PullRequest)
 	if err != nil {
-		return nil, githubgit.Classify("read "+what, err)
+		return nil, readFailure("read "+what, what, err)
 	}
 
 	switch {
 	case !pr.GetMerged() || pr.MergedAt == nil:
-		return nil, fmt.Errorf("%w: %s is not merged, so there is nothing to revert", action.ErrPermanent, what)
+		return nil, refuse("%s is not merged, so there is nothing to revert", what)
 	case pr.GetBase().GetRef() != p.BaseBranch:
-		return nil, fmt.Errorf("%w: %s was merged into %q, not into the base branch %q", action.ErrPermanent, what, pr.GetBase().GetRef(), p.BaseBranch)
+		return nil, refuse("%s was merged into %q, not into the base branch %q", what, pr.GetBase().GetRef(), p.BaseBranch)
 	case pr.GetMergeCommitSHA() == "":
-		return nil, fmt.Errorf("%w: GitHub gives no merge commit for %s", action.ErrPermanent, what)
+		return nil, refuse("GitHub gives no merge commit for %s", what)
 	}
 
 	if !undo {
@@ -179,9 +180,9 @@ func (r *Revert) fillParent(ctx context.Context, owner, name string, t *target, 
 	switch len(c.Parents) {
 	case 1, 2:
 	case 0:
-		return fmt.Errorf("%w: %s has no parent commit, so there is nothing to go back to", action.ErrPermanent, t.what)
+		return refuse("%s has no parent commit, so there is nothing to go back to", t.what)
 	default:
-		return fmt.Errorf("%w: %s has %d parents; revert its commits one at a time", action.ErrPermanent, t.what, len(c.Parents))
+		return refuse("%s has %d parents; revert its commits one at a time", t.what, len(c.Parents))
 	}
 
 	t.parent = c.Parents[0].GetSHA()
@@ -209,11 +210,11 @@ func (r *Revert) fillParent(ctx context.Context, owner, name string, t *target, 
 func (r *Revert) onBase(ctx context.Context, owner, name, sha, branch, what string) error {
 	cmp, _, err := r.client.Repositories.CompareCommits(ctx, owner, name, sha, branch, onePerPage)
 	if err != nil {
-		return githubgit.Classify(fmt.Sprintf("compare %s with %s", what, branch), err)
+		return readFailure(fmt.Sprintf("compare %s with %s", what, branch), what, err)
 	}
 
 	if status := cmp.GetStatus(); status != statusAhead && status != statusIdentical {
-		return fmt.Errorf("%w: %s is not on the base branch %q (the branch is %s it)", action.ErrPermanent, what, branch, cmp.GetStatus())
+		return refuse("%s is not on the base branch %q (the branch is %s it)", what, branch, cmp.GetStatus())
 	}
 
 	return nil
@@ -223,7 +224,7 @@ func (r *Revert) onBase(ctx context.Context, owner, name, sha, branch, what stri
 // than limits.maxAge, or that GitHub gave no date for.
 func (r *Revert) checkLanded(what string, landed time.Time) error {
 	if landed.IsZero() {
-		return fmt.Errorf("%w: GitHub gave no date for %s", action.ErrPermanent, what)
+		return refuse("GitHub gave no date for %s", what)
 	}
 
 	return checkAge(what, landed, r.now(), r.limits.maxAge())
@@ -231,7 +232,7 @@ func (r *Revert) checkLanded(what string, landed time.Time) error {
 
 // errRevertOfRevert is the refusal to revert a revert made by this action.
 func errRevertOfRevert(what string) error {
-	return fmt.Errorf("%w: %s is a revert made by this action; do not revert a revert, use github.code_change instead", action.ErrPermanent, what)
+	return refuse("%s is a revert made by this action; do not revert a revert, use github.code_change instead", what)
 }
 
 // firstLine returns the first line of a commit message.
@@ -239,4 +240,15 @@ func firstLine(message string) string {
 	line, _, _ := strings.Cut(message, "\n")
 
 	return strings.TrimSpace(line)
+}
+
+// readFailure turns a failed read into an error. A commit or pull request
+// that GitHub does not know is the model's mistake and is refused, so it
+// reads why; anything else is classified as a failure of the call.
+func readFailure(doing, what string, err error) error {
+	if githubgit.IsStatus(err, http.StatusNotFound) {
+		return refuse("%s was not found in the repository", what)
+	}
+
+	return githubgit.Classify(doing, err)
 }

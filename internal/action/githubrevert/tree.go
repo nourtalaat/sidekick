@@ -174,7 +174,7 @@ func (w *walker) step(ctx context.Context, path string, a, b *gh.TreeEntry) erro
 	case isTree(b) && a == nil:
 		return w.walk(ctx, "", b.GetSHA(), path+"/")
 	case isTree(a) || isTree(b):
-		return fmt.Errorf("%w: %q became a directory or stopped being one in this change; revert it by hand", action.ErrPermanent, path)
+		return refuse("%q became a directory or stopped being one in this change; revert it by hand", path)
 	}
 
 	c := change{path: path, parent: entryOf(a), commit: entryOf(b)}
@@ -200,16 +200,16 @@ func checkChange(c change) error {
 		switch e.mode {
 		case "", modeFile, modeExecutable:
 		case modeSymlink:
-			return fmt.Errorf("%w: %q is a symbolic link; revert it by hand", action.ErrPermanent, c.path)
+			return refuse("%q is a symbolic link; revert it by hand", c.path)
 		case modeSubmodule:
-			return fmt.Errorf("%w: %q is a submodule; revert it by hand", action.ErrPermanent, c.path)
+			return refuse("%q is a submodule; revert it by hand", c.path)
 		default:
-			return fmt.Errorf("%w: %q has the file mode %s, which a revert cannot write; revert it by hand", action.ErrPermanent, c.path, e.mode)
+			return refuse("%q has the file mode %s, which a revert cannot write; revert it by hand", c.path, e.mode)
 		}
 	}
 
 	if c.parent.exists() && c.commit.exists() && c.parent.mode != c.commit.mode {
-		return fmt.Errorf("%w: the change gives %q another file mode; revert it by hand", action.ErrPermanent, c.path)
+		return refuse("the change gives %q another file mode; revert it by hand", c.path)
 	}
 
 	return nil

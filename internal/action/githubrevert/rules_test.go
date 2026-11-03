@@ -145,3 +145,16 @@ func TestHoldsWholeChange(t *testing.T) {
 		})
 	}
 }
+
+func TestRefuse(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("blob is not text")
+	err := refuse("%q: %w; revert it by hand", "a.bin", cause)
+
+	require.EqualError(t, err, `"a.bin": blob is not text; revert it by hand`, "the text the model reads has no sentinel text in it")
+	require.ErrorIs(t, err, action.ErrLimit, "shown to the model as a refusal")
+	require.ErrorIs(t, err, action.ErrPermanent, "Execute and Undo fail for good")
+	require.ErrorIs(t, err, cause)
+	require.NotErrorIs(t, err, action.ErrConflict)
+}

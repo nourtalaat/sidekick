@@ -133,8 +133,6 @@ func TestSnapshotByPullRequestRefusals(t *testing.T) {
 		setup     prSetup
 		wantErr   string
 		wantWhole bool
-		wantLimit bool
-		wantPerm  bool
 	}{
 		{
 			name: "a pull request that is not merged",
@@ -145,8 +143,7 @@ func TestSnapshotByPullRequestRefusals(t *testing.T) {
 
 				return p
 			},
-			wantErr:  "is not merged",
-			wantPerm: true,
+			wantErr: "is not merged",
 		},
 		{
 			name: "a pull request merged into another branch",
@@ -157,8 +154,7 @@ func TestSnapshotByPullRequestRefusals(t *testing.T) {
 
 				return p
 			},
-			wantErr:  `was merged into "release"`,
-			wantPerm: true,
+			wantErr: `was merged into "release"`,
 		},
 		{
 			name: "merged just over maxAge, whatever the date of the commit",
@@ -169,8 +165,7 @@ func TestSnapshotByPullRequestRefusals(t *testing.T) {
 
 				return p
 			},
-			wantErr:   "longer than limits.maxAge",
-			wantLimit: true,
+			wantErr: "longer than limits.maxAge",
 		},
 		{
 			name: "a pull request that is a revert of this action",
@@ -181,8 +176,7 @@ func TestSnapshotByPullRequestRefusals(t *testing.T) {
 
 				return p
 			},
-			wantErr:  "is a revert made by this action",
-			wantPerm: true,
+			wantErr: "is a revert made by this action",
 		},
 		{
 			name: "a merge commit that is a revert of this action",
@@ -193,8 +187,7 @@ func TestSnapshotByPullRequestRefusals(t *testing.T) {
 
 				return merged(squash, 1)
 			},
-			wantErr:  "is a revert made by this action",
-			wantPerm: true,
+			wantErr: "is a revert made by this action",
 		},
 		{
 			name: "a rebase whose commits touch different files",
@@ -245,8 +238,7 @@ func TestSnapshotByPullRequestRefusals(t *testing.T) {
 
 				return merged(h.bad, 3, "a", "b", "c", "d", "e", "f")
 			},
-			wantErr:   "more than the 5 files",
-			wantLimit: true,
+			wantErr: "more than the 5 files",
 		},
 	}
 
@@ -262,8 +254,7 @@ func TestSnapshotByPullRequestRefusals(t *testing.T) {
 			_, err := b.rev.Snapshot(t.Context(), marshal(t, byPullRequest(p.number)))
 			require.ErrorContains(t, err, tt.wantErr)
 			require.Equal(t, tt.wantWhole, errors.Is(err, errNotWholeChange))
-			require.Equal(t, tt.wantLimit, errors.Is(err, action.ErrLimit))
-			require.Equal(t, tt.wantPerm || tt.wantWhole, errors.Is(err, action.ErrPermanent))
+			require.ErrorIs(t, err, action.ErrLimit, "the model reads a refusal, not a request to try later")
 		})
 	}
 }
@@ -280,6 +271,6 @@ func TestSnapshotOfAPullRequestThatDoesNotExist(t *testing.T) {
 	b.w.serve()
 
 	_, err := b.rev.Snapshot(t.Context(), marshal(t, byPullRequest(99)))
-	require.ErrorIs(t, err, action.ErrPermanent)
-	require.ErrorContains(t, err, "read pull request #99")
+	require.ErrorIs(t, err, action.ErrLimit, "the model reads that it named a pull request that is not there")
+	require.ErrorContains(t, err, "pull request #99 was not found")
 }

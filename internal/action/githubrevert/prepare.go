@@ -86,7 +86,7 @@ func (r *Revert) load(ctx context.Context, raw json.RawMessage, undo bool) (*loa
 // and a file too large to read.
 func (r *Revert) checkChanges(changes []change, t *target) error {
 	if len(changes) == 0 {
-		return fmt.Errorf("%w: %s changes no file, so there is nothing to revert", action.ErrPermanent, t.what)
+		return refuse("%s changes no file, so there is nothing to revert", t.what)
 	}
 
 	for _, c := range changes {
@@ -95,7 +95,7 @@ func (r *Revert) checkChanges(changes []change, t *target) error {
 		}
 
 		if c.parent.size > githubgit.MaxFileBytes || c.commit.size > githubgit.MaxFileBytes {
-			return fmt.Errorf("%w: %q is larger than %d bytes; revert it by hand", action.ErrPermanent, c.path, githubgit.MaxFileBytes)
+			return refuse("%q is larger than %d bytes; revert it by hand", c.path, githubgit.MaxFileBytes)
 		}
 	}
 
@@ -225,7 +225,7 @@ func (r *Revert) textOf(ctx context.Context, l *loaded, path string, e entry) (s
 	text, err := githubgit.ReadBlob(ctx, r.client, l.owner, l.name, e.blob)
 	if err != nil {
 		if errors.Is(err, githubgit.ErrNotText) || errors.Is(err, githubgit.ErrTooBig) {
-			return "", fmt.Errorf("%w: %q: %w; revert it by hand", action.ErrPermanent, path, err)
+			return "", refuse("%q: %w; revert it by hand", path, err)
 		}
 
 		return "", fmt.Errorf("read %q: %w", path, err)

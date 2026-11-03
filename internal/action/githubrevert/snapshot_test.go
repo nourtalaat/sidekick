@@ -1,7 +1,6 @@
 package githubrevert
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -89,12 +88,10 @@ func TestSnapshotRefusals(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name      string
-		limits    func(l *Limits)
-		setup     func(b *bed) Params
-		wantErr   string
-		wantLimit bool
-		wantPerm  bool
+		name    string
+		limits  func(l *Limits)
+		setup   func(b *bed) Params
+		wantErr string
 	}{
 		{
 			name: "a file changed since the commit",
@@ -108,8 +105,7 @@ func TestSnapshotRefusals(t *testing.T) {
 
 				return byCommit(h.bad)
 			},
-			wantErr:  `"svc/config.yaml" changed on the base branch after commit`,
-			wantPerm: true,
+			wantErr: `"svc/config.yaml" changed on the base branch after commit`,
 		},
 		{
 			name: "every file is back already",
@@ -123,8 +119,7 @@ func TestSnapshotRefusals(t *testing.T) {
 
 				return byCommit(h.bad)
 			},
-			wantErr:  "back to what it was before already",
-			wantPerm: true,
+			wantErr: "back to what it was before already",
 		},
 		{
 			name: "landed just over maxAge ago",
@@ -134,8 +129,7 @@ func TestSnapshotRefusals(t *testing.T) {
 
 				return byCommit(h.bad)
 			},
-			wantErr:   "longer than limits.maxAge (72h0m0s)",
-			wantLimit: true,
+			wantErr: "longer than limits.maxAge (72h0m0s)",
 		},
 		{
 			name:   "landed just inside a smaller maxAge",
@@ -156,8 +150,7 @@ func TestSnapshotRefusals(t *testing.T) {
 
 				return byCommit(h.bad)
 			},
-			wantErr:   "longer than limits.maxAge (2h0m0s)",
-			wantLimit: true,
+			wantErr: "longer than limits.maxAge (2h0m0s)",
 		},
 		{
 			name: "a commit that is not on the base branch",
@@ -167,8 +160,7 @@ func TestSnapshotRefusals(t *testing.T) {
 
 				return byCommit(h.bad)
 			},
-			wantErr:  "is not on the base branch",
-			wantPerm: true,
+			wantErr: "is not on the base branch",
 		},
 		{
 			name: "a path of the built-in refused list",
@@ -180,8 +172,7 @@ func TestSnapshotRefusals(t *testing.T) {
 
 				return byCommit(bad)
 			},
-			wantErr:   "built-in refused path",
-			wantLimit: true,
+			wantErr: "built-in refused path",
 		},
 		{
 			name:   "a path the operator refuses",
@@ -192,8 +183,7 @@ func TestSnapshotRefusals(t *testing.T) {
 
 				return byCommit(h.bad)
 			},
-			wantErr:   `limits.refusedPaths "svc/**"`,
-			wantLimit: true,
+			wantErr: `limits.refusedPaths "svc/**"`,
 		},
 		{
 			name:   "one file over maxFiles",
@@ -204,8 +194,7 @@ func TestSnapshotRefusals(t *testing.T) {
 
 				return byCommit(h.bad)
 			},
-			wantErr:   "more than the 2 files",
-			wantLimit: true,
+			wantErr: "more than the 2 files",
 		},
 		{
 			name:   "exactly maxFiles",
@@ -226,8 +215,7 @@ func TestSnapshotRefusals(t *testing.T) {
 
 				return byCommit(h.bad)
 			},
-			wantErr:   "more than the 3 lines",
-			wantLimit: true,
+			wantErr: "more than the 3 lines",
 		},
 		{
 			name:   "exactly maxChangedLines",
@@ -249,8 +237,7 @@ func TestSnapshotRefusals(t *testing.T) {
 
 				return byCommit(bad)
 			},
-			wantErr:  "is a revert made by this action",
-			wantPerm: true,
+			wantErr: "is a revert made by this action",
 		},
 		{
 			name: "a commit with no parent",
@@ -261,8 +248,7 @@ func TestSnapshotRefusals(t *testing.T) {
 
 				return byCommit(root)
 			},
-			wantErr:  "has no parent commit",
-			wantPerm: true,
+			wantErr: "has no parent commit",
 		},
 		{
 			name: "a commit with three parents",
@@ -274,8 +260,7 @@ func TestSnapshotRefusals(t *testing.T) {
 
 				return byCommit(octopus)
 			},
-			wantErr:  "has 3 parents",
-			wantPerm: true,
+			wantErr: "has 3 parents",
 		},
 		{
 			name: "a symbolic link",
@@ -287,8 +272,7 @@ func TestSnapshotRefusals(t *testing.T) {
 
 				return byCommit(bad)
 			},
-			wantErr:  "is a symbolic link",
-			wantPerm: true,
+			wantErr: "is a symbolic link",
 		},
 		{
 			name: "a submodule",
@@ -300,8 +284,7 @@ func TestSnapshotRefusals(t *testing.T) {
 
 				return byCommit(bad)
 			},
-			wantErr:  "is a submodule",
-			wantPerm: true,
+			wantErr: "is a submodule",
 		},
 		{
 			name: "a change of the file mode",
@@ -313,8 +296,7 @@ func TestSnapshotRefusals(t *testing.T) {
 
 				return byCommit(bad)
 			},
-			wantErr:  "another file mode",
-			wantPerm: true,
+			wantErr: "another file mode",
 		},
 		{
 			name: "a file that became a directory",
@@ -326,8 +308,7 @@ func TestSnapshotRefusals(t *testing.T) {
 
 				return byCommit(bad)
 			},
-			wantErr:  "became a directory",
-			wantPerm: true,
+			wantErr: "became a directory",
 		},
 		{
 			name: "a file that is not text",
@@ -339,8 +320,7 @@ func TestSnapshotRefusals(t *testing.T) {
 
 				return byCommit(bad)
 			},
-			wantErr:  `"logo.png": blob`,
-			wantPerm: true,
+			wantErr: `"logo.png": blob`,
 		},
 		{
 			name: "a file over the size limit",
@@ -352,8 +332,7 @@ func TestSnapshotRefusals(t *testing.T) {
 
 				return byCommit(bad)
 			},
-			wantErr:  "is larger than",
-			wantPerm: true,
+			wantErr: "is larger than",
 		},
 		{
 			name: "a directory too large for GitHub to list",
@@ -366,8 +345,7 @@ func TestSnapshotRefusals(t *testing.T) {
 
 				return byCommit(h.bad)
 			},
-			wantErr:   "too many entries",
-			wantLimit: true,
+			wantErr: "too many entries",
 		},
 	}
 
@@ -387,8 +365,7 @@ func TestSnapshotRefusals(t *testing.T) {
 			}
 
 			require.ErrorContains(t, err, tt.wantErr)
-			require.Equal(t, tt.wantLimit, errors.Is(err, action.ErrLimit), "ErrLimit")
-			require.Equal(t, tt.wantPerm, errors.Is(err, action.ErrPermanent), "ErrPermanent")
+			require.ErrorIs(t, err, action.ErrLimit, "the model reads a refusal, not a request to try later")
 		})
 	}
 }

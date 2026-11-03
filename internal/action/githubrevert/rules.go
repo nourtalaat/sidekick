@@ -26,9 +26,38 @@ func (e entry) exists() bool {
 	return e.blob != ""
 }
 
+// refusal is an error for something the action will not do. The model reads
+// it as a refusal, which names the reason, because it wraps action.ErrLimit,
+// and Execute and Undo fail for good on it, because it wraps
+// action.ErrPermanent. Without the first, Sidekick would tell the model to
+// try again later, and it would propose the same revert again.
+type refusal struct {
+	err error
+}
+
+// Error implements error.
+func (r *refusal) Error() string {
+	return r.err.Error()
+}
+
+// Unwrap returns the reason, which may wrap a cause.
+func (r *refusal) Unwrap() error {
+	return r.err
+}
+
+// Is makes the refusal match action.ErrLimit and action.ErrPermanent.
+func (*refusal) Is(target error) bool {
+	return target == action.ErrLimit || target == action.ErrPermanent
+}
+
+// refuse returns a refusal with the message, which may use %w for a cause.
+func refuse(format string, args ...any) error {
+	return &refusal{err: fmt.Errorf(format, args...)}
+}
+
 // errNotWholeChange is returned for a pull request that may not be reverted
 // by its merge commit alone.
-var errNotWholeChange = fmt.Errorf("%w: the merge commit may not hold the whole change of the pull request, because it was merged by rebase or other commits changed the same files since it was opened; name the commits with commit instead, one revert for each", action.ErrPermanent)
+var errNotWholeChange = refuse("the merge commit may not hold the whole change of the pull request, because it was merged by rebase or other commits changed the same files since it was opened; name the commits with commit instead, one revert for each")
 
 // checkAge refuses what landed on the base branch longer ago than max. A
 // time in the future counts as just now. what names the thing for the error.
