@@ -8,6 +8,7 @@ import (
 	_ "github.com/nourtalaat/sidekick/internal/action/alertmanagersilence" // Action type "alertmanager.silence".
 	_ "github.com/nourtalaat/sidekick/internal/action/argocdrollback"      // Action type "argocd.rollback".
 	_ "github.com/nourtalaat/sidekick/internal/action/awsecs"              // Action type "aws.ecs_rollback".
+	_ "github.com/nourtalaat/sidekick/internal/action/awslambda"           // Action type "aws.lambda_rollback".
 	_ "github.com/nourtalaat/sidekick/internal/action/azurecontainerapp"   // Action type "azure.container_app_rollback".
 	_ "github.com/nourtalaat/sidekick/internal/action/datadog"             // Action type "datadog.monitor".
 	_ "github.com/nourtalaat/sidekick/internal/action/datadogdowntime"     // Action type "datadog.downtime".

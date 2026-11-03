@@ -8,6 +8,7 @@ import (
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/argocdrollback"
 	"github.com/nourtalaat/sidekick/internal/action/awsecs"
+	"github.com/nourtalaat/sidekick/internal/action/awslambda"
 	"github.com/nourtalaat/sidekick/internal/action/azurecontainerapp"
 	"github.com/nourtalaat/sidekick/internal/action/datadog"
 	"github.com/nourtalaat/sidekick/internal/action/gcprun"
@@ -47,6 +48,7 @@ func TestMonitorFixers(t *testing.T) {
 		{name: "slack.reply fixes nothing", action: &slack.Reply{}},
 		{name: "unleash.flag fixes nothing", action: &unleashflag.Flag{}},
 		{name: "aws.ecs_rollback fixes nothing", action: &awsecs.Rollback{}},
+		{name: "aws.lambda_rollback fixes nothing", action: &awslambda.Rollback{}},
 		{name: "argocd.rollback fixes nothing", action: &argocdrollback.Rollback{}},
 		{name: "kubernetes.rollback fixes nothing", action: &kubernetesrollback.Rollback{}},
 		{name: "azure.container_app_rollback fixes nothing", action: &azurecontainerapp.Rollback{}},

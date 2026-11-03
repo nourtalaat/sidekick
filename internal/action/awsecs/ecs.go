@@ -36,31 +36,6 @@ type state struct {
 	taskDefinition string
 }
 
-// refusal is an error that says, for the model or a person to read, why the
-// action will not do something, and its text is only the reason. It matches
-// action.ErrLimit, because Sidekick shows the model only a Snapshot error that
-// wraps it as a refusal with its reason, and anything else as a failure to read
-// the service, to try again later. ErrLimit counts as permanent, as does
-// action.ErrPermanent, which it also matches, so Execute and Undo fail for good.
-type refusal struct {
-	text string
-}
-
-// Error implements error.
-func (e *refusal) Error() string {
-	return e.text
-}
-
-// Is makes the error match action.ErrLimit and action.ErrPermanent.
-func (e *refusal) Is(target error) bool {
-	return target == action.ErrLimit || target == action.ErrPermanent
-}
-
-// refuse makes a refusal from format and args.
-func refuse(format string, args ...any) error {
-	return &refusal{text: fmt.Sprintf(format, args...)}
-}
-
 // client returns the ECS client for the position, after getting the
 // credentials of its account.
 func (r *Rollback) client(ctx context.Context, pos position) (*ecs.Client, error) {
@@ -81,7 +56,7 @@ func (r *Rollback) client(ctx context.Context, pos position) (*ecs.Client, error
 func readService(ctx context.Context, client *ecs.Client, pos position) (state, error) {
 	out, err := client.DescribeServices(ctx, &ecs.DescribeServicesInput{Cluster: aws.String(pos.cluster), Services: []string{pos.service}})
 	if _, ok := errors.AsType[*types.ClusterNotFoundException](err); ok {
-		return state{}, refuse("ECS cluster %s does not exist in account %s, Region %s", pos.cluster, pos.target.Account, pos.target.Region)
+		return state{}, awsaction.Refuse("ECS cluster %s does not exist in account %s, Region %s", pos.cluster, pos.target.Account, pos.target.Region)
 	}
 
 	if err != nil {
@@ -89,7 +64,7 @@ func readService(ctx context.Context, client *ecs.Client, pos position) (state, 
 	}
 
 	if len(out.Services) == 0 {
-		return state{}, refuse("ECS cluster %s in account %s, Region %s has no service %s", pos.cluster, pos.target.Account, pos.target.Region, pos.service)
+		return state{}, awsaction.Refuse("ECS cluster %s in account %s, Region %s has no service %s", pos.cluster, pos.target.Account, pos.target.Region, pos.service)
 	}
 
 	return stateOf(out.Services[0], pos)
@@ -99,13 +74,13 @@ func readService(ctx context.Context, client *ecs.Client, pos position) (state, 
 // deployment.
 func stateOf(svc types.Service, pos position) (state, error) {
 	if status := aws.ToString(svc.Status); status != "ACTIVE" {
-		return state{}, refuse("service %s is %s, not ACTIVE, so ECS cannot update it", pos.service, status)
+		return state{}, awsaction.Refuse("service %s is %s, not ACTIVE, so ECS cannot update it", pos.service, status)
 	}
 
 	// ECS leaves deploymentController out for a service that uses the ECS
 	// controller, so none means ECS.
 	if c := svc.DeploymentController; c != nil && c.Type != types.DeploymentControllerTypeEcs {
-		return state{}, refuse("service %s uses the %s deployment controller; this action rolls back only services that use the ECS deployment controller",
+		return state{}, awsaction.Refuse("service %s uses the %s deployment controller; this action rolls back only services that use the ECS deployment controller",
 			pos.service, c.Type)
 	}
 
@@ -118,14 +93,14 @@ func stateOf(svc types.Service, pos position) (state, error) {
 
 		family, revision, ok := parseTaskDefinition(arn)
 		if !ok {
-			return state{}, refuse("the PRIMARY deployment of service %s names task definition %q, which is not a task definition ARN",
+			return state{}, awsaction.Refuse("the PRIMARY deployment of service %s names task definition %q, which is not a task definition ARN",
 				pos.service, source.CutText(arn, maxShownLen))
 		}
 
 		return state{deploymentID: aws.ToString(d.Id), taskDefinition: taskDefinitionID(family, revision)}, nil
 	}
 
-	return state{}, refuse("service %s has no PRIMARY deployment, so Sidekick cannot tell which task definition it runs", pos.service)
+	return state{}, awsaction.Refuse("service %s has no PRIMARY deployment, so Sidekick cannot tell which task definition it runs", pos.service)
 }
 
 // earlier returns the target of a rollback: the revision that is back
@@ -170,7 +145,7 @@ func earlier(ctx context.Context, client *ecs.Client, family string, running, ba
 		token = out.NextToken
 	}
 
-	return 0, refuse("looked through the newest %d task definitions that start with %q and did not find %d ACTIVE revision%s of family %s below %s; "+
+	return 0, awsaction.Refuse("looked through the newest %d task definitions that start with %q and did not find %d ACTIVE revision%s of family %s below %s; "+
 		"ask for fewer revisions back, or roll back in the ECS console", examined, family, back, plural(back), family, taskDefinitionID(family, running))
 }
 
@@ -180,10 +155,10 @@ func tooFew(family string, running, back, have int) error {
 	id := taskDefinitionID(family, running)
 
 	if have == 0 {
-		return refuse("task definition family %s has no ACTIVE revision below %s, so there is nothing to go back to", family, id)
+		return awsaction.Refuse("task definition family %s has no ACTIVE revision below %s, so there is nothing to go back to", family, id)
 	}
 
-	return refuse("task definition family %s has only %d ACTIVE revision%s below %s, so the service cannot go %d back", family, have, plural(have), id, back)
+	return awsaction.Refuse("task definition family %s has only %d ACTIVE revision%s below %s, so the service cannot go %d back", family, have, plural(have), id, back)
 }
 
 // plural is "s" for a count other than one.
@@ -201,7 +176,7 @@ func plural(n int) string {
 func activeTaskDefinition(ctx context.Context, client *ecs.Client, id, forWhat string) (types.TaskDefinition, error) {
 	td, err := describeTaskDefinition(ctx, client, id)
 	if _, ok := errors.AsType[*types.ClientException](err); ok {
-		return types.TaskDefinition{}, refuse("task definition %s cannot be read from ECS, so %s", id, forWhat)
+		return types.TaskDefinition{}, awsaction.Refuse("task definition %s cannot be read from ECS, so %s", id, forWhat)
 	}
 
 	if err != nil {
@@ -209,7 +184,7 @@ func activeTaskDefinition(ctx context.Context, client *ecs.Client, id, forWhat s
 	}
 
 	if td.Status != types.TaskDefinitionStatusActive {
-		return types.TaskDefinition{}, refuse("task definition %s is %s, so %s", id, td.Status, forWhat)
+		return types.TaskDefinition{}, awsaction.Refuse("task definition %s is %s, so %s", id, td.Status, forWhat)
 	}
 
 	return td, nil
@@ -224,7 +199,7 @@ func describeTaskDefinition(ctx context.Context, client *ecs.Client, id string) 
 	}
 
 	if out.TaskDefinition == nil {
-		return types.TaskDefinition{}, refuse("ECS gave no description of task definition %s", id)
+		return types.TaskDefinition{}, awsaction.Refuse("ECS gave no description of task definition %s", id)
 	}
 
 	return *out.TaskDefinition, nil
