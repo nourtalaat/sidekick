@@ -13,6 +13,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
+	"github.com/nourtalaat/sidekick/internal/action/gitlabgit"
 	"github.com/nourtalaat/sidekick/internal/gitlabapi"
 	"github.com/nourtalaat/sidekick/internal/source"
 	"github.com/nourtalaat/sidekick/internal/weblink"
@@ -97,7 +98,7 @@ func (m *MR) closeOriginal(ctx context.Context, inv action.Invocation, params Pa
 
 		err := m.client.Send(ctx, http.MethodPut, mergeRequestPath(params.Project, orig.IID), updateRequest{StateEvent: "close"}, &updated)
 		if err != nil {
-			return action.Result{}, classify("close the merge request", err)
+			return action.Result{}, gitlabgit.Classify("close the merge request", err)
 		}
 
 		closed, summary = &updated, "Closed the merge request "+title+" and deleted its branch."
@@ -134,7 +135,7 @@ func (m *MR) deleteBranch(ctx context.Context, project, branch string) error {
 	}
 
 	if err != nil {
-		return classify("delete the branch "+branch, err)
+		return gitlabgit.Classify("delete the branch "+branch, err)
 	}
 
 	return nil
@@ -200,12 +201,12 @@ func (m *MR) pushRevert(ctx context.Context, inv action.Invocation, params Param
 		return action.Result{}, false, fmt.Errorf("read the snapshot: %w", err)
 	}
 
-	head, err := baseOf(ctx, m.client, params.Project, params.BaseBranch)
+	head, err := gitlabgit.BaseOf(ctx, m.client, params.Project, params.BaseBranch)
 	if err != nil {
 		return action.Result{}, false, fmt.Errorf("read the base branch: %w", err)
 	}
 
-	plan, err := m.planRevert(ctx, newReader(m.client, params.Project, head.commit), sides)
+	plan, err := m.planRevert(ctx, gitlabgit.NewReader(m.client, params.Project, head.Commit), sides)
 	if err != nil {
 		return action.Result{}, false, fmt.Errorf("plan the revert: %w", err)
 	}
@@ -233,7 +234,7 @@ func (m *MR) pushRevert(ctx context.Context, inv action.Invocation, params Param
 
 	_, err = m.commitTo(ctx, params.Project, commitRequest{
 		Branch:        inv.IdempotencyKey,
-		StartSHA:      head.commit,
+		StartSHA:      head.Commit,
 		CommitMessage: message,
 		Actions:       actions,
 	})
@@ -270,31 +271,31 @@ type restore struct {
 // nothing. A file that was added is deleted. Any other file gets the blob it
 // had before. Nothing is written, and no earlier content is read yet, so a
 // conflict that stops the revert costs no more reads.
-func (m *MR) planRevert(ctx context.Context, r *reader, sides gitchange.SnapshotFiles) (revertPlan, error) {
+func (m *MR) planRevert(ctx context.Context, r *gitlabgit.Reader, sides gitchange.SnapshotFiles) (revertPlan, error) {
 	plan := revertPlan{live: make(map[string]*gitchange.BlobRef, len(sides.After))}
 
 	for _, path := range slices.Sorted(maps.Keys(sides.After)) {
-		f, err := r.file(ctx, path)
+		f, err := r.File(ctx, path)
 		if err != nil {
 			return revertPlan{}, fmt.Errorf("read the file at the base: %w", err)
 		}
 
-		if f.exists {
-			plan.live[path] = &gitchange.BlobRef{Blob: f.sha}
+		if f.Exists {
+			plan.live[path] = &gitchange.BlobRef{Blob: f.SHA}
 		} else {
 			plan.live[path] = nil
 		}
 
 		before := gitchange.BlobOf(sides.Before[path])
-		if f.sha == before {
+		if f.SHA == before {
 			continue
 		}
 
-		if f.sha != sides.After[path].Blob {
+		if f.SHA != sides.After[path].Blob {
 			plan.conflicts = append(plan.conflicts, path)
 		}
 
-		plan.restores = append(plan.restores, restore{path: path, blob: before, exists: f.exists})
+		plan.restores = append(plan.restores, restore{path: path, blob: before, exists: f.Exists})
 	}
 
 	return plan, nil
@@ -313,7 +314,7 @@ func (m *MR) restoreActions(ctx context.Context, project string, restores []rest
 			continue
 		}
 
-		content, err := readBlobText(ctx, m.client, project, r.blob, r.path+" as it was")
+		content, err := gitlabgit.ReadBlobText(ctx, m.client, project, r.blob, r.path+" as it was")
 		if err != nil {
 			return nil, fmt.Errorf("read %s: %w", r.path, err)
 		}

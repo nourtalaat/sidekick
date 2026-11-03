@@ -7,6 +7,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
+	"github.com/nourtalaat/sidekick/internal/action/gitlabgit"
 )
 
 // snapshotTarget starts the target of a snapshot, followed by the project.
@@ -38,15 +39,15 @@ func (m *MR) Snapshot(ctx context.Context, raw json.RawMessage) (action.Snapshot
 			updated = *c.Content
 		}
 
-		added, removed, within := gitchange.LineCounts(f.text, updated, left)
+		added, removed, within := gitchange.LineCounts(f.Text, updated, left)
 		if !within {
 			return action.Snapshot{}, fmt.Errorf("the changes add and remove more than the %d lines one merge request may change: %w", m.limits.MaxChangedLines, action.ErrLimit)
 		}
 
 		left -= added + removed
 
-		if f.exists {
-			before[c.Path] = gitchange.BlobRef{Blob: f.sha}
+		if f.Exists {
+			before[c.Path] = gitchange.BlobRef{Blob: f.SHA}
 		} else {
 			before[c.Path] = nil
 		}
@@ -68,16 +69,16 @@ func (m *MR) Snapshot(ctx context.Context, raw json.RawMessage) (action.Snapshot
 		Target:  snapshotTarget + l.params.Project,
 		Before:  beforeRaw,
 		After:   afterRaw,
-		Version: l.base.commit,
+		Version: l.base.Commit,
 	}, nil
 }
 
 // afterOf describes the file as the change leaves it.
-func afterOf(c gitchange.PlannedFile, f readFile, added, removed int) gitchange.AfterEntry {
+func afterOf(c gitchange.PlannedFile, f gitlabgit.ReadFile, added, removed int) gitchange.AfterEntry {
 	switch {
 	case c.Deleted():
 		return gitchange.AfterEntry{Status: gitchange.FileDeleted, LinesRemoved: &removed}
-	case !f.exists:
+	case !f.Exists:
 		return gitchange.AfterEntry{Blob: gitchange.BlobSHA(*c.Content), Status: gitchange.FileAdded, LinesAdded: &added, LinesRemoved: &removed}
 	default:
 		return gitchange.AfterEntry{Blob: gitchange.BlobSHA(*c.Content), Status: gitchange.FileChanged, LinesAdded: &added, LinesRemoved: &removed}
@@ -107,7 +108,7 @@ func (l *loaded) applySnapshot(snap action.Snapshot) error {
 			return fmt.Errorf("%w: the content of %q is not the content the snapshot describes", action.ErrPermanent, c.Path)
 		}
 
-		live := l.files[c.Path].sha
+		live := l.files[c.Path].SHA
 
 		switch {
 		case live == gitchange.BlobOf(sides.Before[c.Path]):

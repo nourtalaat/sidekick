@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
+	"github.com/nourtalaat/sidekick/internal/action/gitlabgit"
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
 )
 
@@ -20,12 +21,12 @@ func TestReaderFile(t *testing.T) {
 		b := newBed(t, nil)
 		b.expectFile(testRulesPath, testRulesBefore)
 
-		r := newReader(b.mr.client, testProject, testBaseSHA)
+		r := gitlabgit.NewReader(b.mr.client, testProject, testBaseSHA)
 
 		for range 2 {
-			f, err := r.file(t.Context(), testRulesPath)
+			f, err := r.File(t.Context(), testRulesPath)
 			require.NoError(t, err)
-			require.Equal(t, readFile{text: testRulesBefore, sha: gitchange.BlobSHA(testRulesBefore), exists: true}, f)
+			require.Equal(t, gitlabgit.ReadFile{Text: testRulesBefore, SHA: gitchange.BlobSHA(testRulesBefore), Exists: true}, f)
 		}
 
 		require.Equal(t, []string{"GET repository/files/" + testRulesPath}, sent(b.gitlab))
@@ -45,7 +46,7 @@ func TestReaderFile(t *testing.T) {
 			_, _ = w.Write([]byte(fileBody("prometheus/my rules.yaml", "a\n")))
 		})
 
-		_, err := newReader(b.mr.client, testProject, testBaseSHA).file(t.Context(), "prometheus/my rules.yaml")
+		_, err := gitlabgit.NewReader(b.mr.client, testProject, testBaseSHA).File(t.Context(), "prometheus/my rules.yaml")
 		require.NoError(t, err)
 		require.Equal(t, "/api/v4/projects/acme%2Fplatform%2Fmonitors/repository/files/prometheus%2Fmy%20rules.yaml", <-raw)
 	})
@@ -54,13 +55,13 @@ func TestReaderFile(t *testing.T) {
 		t.Parallel()
 
 		b := newBed(t, nil)
-		b.expectNoFile("prometheus/rules/new.yaml", treeEntry(testRulesPath, entryBlob, "100644"))
+		b.expectNoFile("prometheus/rules/new.yaml", treeEntry(testRulesPath, gitlabgit.EntryBlob, "100644"))
 
-		r := newReader(b.mr.client, testProject, testBaseSHA)
+		r := gitlabgit.NewReader(b.mr.client, testProject, testBaseSHA)
 
-		f, err := r.file(t.Context(), "prometheus/rules/new.yaml")
+		f, err := r.File(t.Context(), "prometheus/rules/new.yaml")
 		require.NoError(t, err)
-		require.Equal(t, readFile{}, f)
+		require.Equal(t, gitlabgit.ReadFile{}, f)
 		require.Equal(t, "prometheus/rules", queryOf(t, b.gitlab, http.MethodGet, apiPath("repository/tree")).Get("path"))
 	})
 
@@ -71,9 +72,9 @@ func TestReaderFile(t *testing.T) {
 		b.gitlab.Handle(http.MethodGet, apiPath("repository/files/new/a.yaml"), notFound)
 		b.gitlab.Handle(http.MethodGet, apiPath("repository/tree"), notFound)
 
-		f, err := newReader(b.mr.client, testProject, testBaseSHA).file(t.Context(), "new/a.yaml")
+		f, err := gitlabgit.NewReader(b.mr.client, testProject, testBaseSHA).File(t.Context(), "new/a.yaml")
 		require.NoError(t, err)
-		require.False(t, f.exists)
+		require.False(t, f.Exists)
 	})
 
 	t.Run("a file in the root has no path in the listing query", func(t *testing.T) {
@@ -82,7 +83,7 @@ func TestReaderFile(t *testing.T) {
 		b := newBed(t, nil)
 		b.expectNoFile("a.yaml")
 
-		_, err := newReader(b.mr.client, testProject, testBaseSHA).file(t.Context(), "a.yaml")
+		_, err := gitlabgit.NewReader(b.mr.client, testProject, testBaseSHA).File(t.Context(), "a.yaml")
 		require.NoError(t, err)
 		require.False(t, queryOf(t, b.gitlab, http.MethodGet, apiPath("repository/tree")).Has("path"))
 	})
@@ -93,28 +94,28 @@ func TestReaderFile(t *testing.T) {
 		b := newBed(t, nil)
 		b.expectNoFile("prometheus/rules", treeEntry("prometheus/rules", "tree", "040000"))
 
-		_, err := newReader(b.mr.client, testProject, testBaseSHA).file(t.Context(), "prometheus/rules")
-		require.ErrorIs(t, err, errNotFile)
+		_, err := gitlabgit.NewReader(b.mr.client, testProject, testBaseSHA).File(t.Context(), "prometheus/rules")
+		require.ErrorIs(t, err, gitlabgit.ErrNotFile)
 	})
 
 	t.Run("a file that is too large", func(t *testing.T) {
 		t.Parallel()
 
 		b := newBed(t, nil)
-		b.gitlab.Handle(http.MethodGet, apiPath("repository/files/big.yaml"), reply(fileBody("big.yaml", strings.Repeat("x", maxBaseFileBytes+1))))
+		b.gitlab.Handle(http.MethodGet, apiPath("repository/files/big.yaml"), reply(fileBody("big.yaml", strings.Repeat("x", gitlabgit.MaxFileBytes+1))))
 
-		_, err := newReader(b.mr.client, testProject, testBaseSHA).file(t.Context(), "big.yaml")
-		require.ErrorIs(t, err, errTooBig)
+		_, err := gitlabgit.NewReader(b.mr.client, testProject, testBaseSHA).File(t.Context(), "big.yaml")
+		require.ErrorIs(t, err, gitlabgit.ErrTooBig)
 	})
 
 	t.Run("an answer that is far too large", func(t *testing.T) {
 		t.Parallel()
 
 		b := newBed(t, nil)
-		b.gitlab.Handle(http.MethodGet, apiPath("repository/files/big.yaml"), reply(`{"content":"`+strings.Repeat("A", maxBodyBytes)+`"}`))
+		b.gitlab.Handle(http.MethodGet, apiPath("repository/files/big.yaml"), reply(`{"content":"`+strings.Repeat("A", 2*gitlabgit.MaxFileBytes)+`"}`))
 
-		_, err := newReader(b.mr.client, testProject, testBaseSHA).file(t.Context(), "big.yaml")
-		require.ErrorIs(t, err, errTooBig)
+		_, err := gitlabgit.NewReader(b.mr.client, testProject, testBaseSHA).File(t.Context(), "big.yaml")
+		require.ErrorIs(t, err, gitlabgit.ErrTooBig)
 	})
 
 	t.Run("a file that is not text", func(t *testing.T) {
@@ -123,8 +124,8 @@ func TestReaderFile(t *testing.T) {
 		b := newBed(t, nil)
 		b.gitlab.Handle(http.MethodGet, apiPath("repository/files/a.bin"), reply(fileBody("a.bin", "a\x00b")))
 
-		_, err := newReader(b.mr.client, testProject, testBaseSHA).file(t.Context(), "a.bin")
-		require.ErrorIs(t, err, errNotText)
+		_, err := gitlabgit.NewReader(b.mr.client, testProject, testBaseSHA).File(t.Context(), "a.bin")
+		require.ErrorIs(t, err, gitlabgit.ErrNotText)
 	})
 
 	t.Run("a blob ID of a SHA-256 repository", func(t *testing.T) {
@@ -133,8 +134,8 @@ func TestReaderFile(t *testing.T) {
 		b := newBed(t, nil)
 		b.gitlab.Handle(http.MethodGet, apiPath("repository/files/a.yaml"), reply(fileBodyWithSHA("a.yaml", "a\n", strings.Repeat("a", 64))))
 
-		_, err := newReader(b.mr.client, testProject, testBaseSHA).file(t.Context(), "a.yaml")
-		require.ErrorIs(t, err, errUnsupportedHash)
+		_, err := gitlabgit.NewReader(b.mr.client, testProject, testBaseSHA).File(t.Context(), "a.yaml")
+		require.ErrorIs(t, err, gitlabgit.ErrUnsupportedHash)
 	})
 }
 
@@ -148,13 +149,13 @@ func TestReaderDir(t *testing.T) {
 		b.gitlab.Handle(http.MethodGet, apiPath("repository/tree"),
 			fakehttp.Response{
 				Headers: map[string]string{"Content-Type": "application/json", "X-Next-Page": "2"},
-				Body:    []byte("[" + treeEntry("datadog/prod/main.tf", entryBlob, "100644") + "," + treeEntry("datadog/prod/modules", "tree", "040000") + "]"),
+				Body:    []byte("[" + treeEntry("datadog/prod/main.tf", gitlabgit.EntryBlob, "100644") + "," + treeEntry("datadog/prod/modules", "tree", "040000") + "]"),
 			},
-			reply("["+treeEntry("datadog/prod/link.tf", entryBlob, symlinkMode)+","+treeEntry("datadog/prod/sub", "commit", "160000")+","+treeEntry("datadog/prod/vars.tf", entryBlob, "100755")+"]"),
+			reply("["+treeEntry("datadog/prod/link.tf", gitlabgit.EntryBlob, gitlabgit.ModeSymlink)+","+treeEntry("datadog/prod/sub", "commit", "160000")+","+treeEntry("datadog/prod/vars.tf", gitlabgit.EntryBlob, "100755")+"]"),
 		)
 		b.gitlab.ExpectAllCalled()
 
-		r := newReader(b.mr.client, testProject, testBaseSHA)
+		r := gitlabgit.NewReader(b.mr.client, testProject, testBaseSHA)
 
 		got, err := r.Dir(t.Context(), "datadog/prod")
 		require.NoError(t, err)
@@ -181,7 +182,7 @@ func TestReaderDir(t *testing.T) {
 		b := newBed(t, nil)
 		b.gitlab.Handle(http.MethodGet, apiPath("repository/tree"), reply("[]"), notFound)
 
-		r := newReader(b.mr.client, testProject, testBaseSHA)
+		r := gitlabgit.NewReader(b.mr.client, testProject, testBaseSHA)
 
 		root, err := r.Dir(t.Context(), ".")
 		require.NoError(t, err)
@@ -203,8 +204,8 @@ func TestReaderDir(t *testing.T) {
 			_, _ = w.Write([]byte("[]"))
 		})
 
-		_, err := newReader(b.mr.client, testProject, testBaseSHA).Dir(t.Context(), "big")
-		require.ErrorIs(t, err, errTooManyEntries)
+		_, err := gitlabgit.NewReader(b.mr.client, testProject, testBaseSHA).Dir(t.Context(), "big")
+		require.ErrorIs(t, err, gitlabgit.ErrTooManyEntries)
 	})
 }
 
@@ -214,7 +215,7 @@ func TestReaderBlob(t *testing.T) {
 	b := newBed(t, nil)
 	b.gitlab.Handle(http.MethodGet, apiPath("repository/blobs/"+testBlobSHA), reply(blobBody(testBlobSHA, "hello\n")))
 
-	r := newReader(b.mr.client, testProject, testBaseSHA)
+	r := gitlabgit.NewReader(b.mr.client, testProject, testBaseSHA)
 	entry := gitchange.DirEntry{Name: "a.tf", Path: "m/a.tf", SHA: testBlobSHA}
 
 	for range 2 {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
+	"github.com/nourtalaat/sidekick/internal/action/gitlabgit"
 	"github.com/nourtalaat/sidekick/internal/gitlabapi"
 	"github.com/nourtalaat/sidekick/internal/weblink"
 )
@@ -164,7 +165,7 @@ func (m *MR) mergeRequestFrom(ctx context.Context, project, branch string) (*api
 	var found []apiMergeRequest
 
 	if _, err := m.client.Get(ctx, gitlabapi.ProjectPath(project, "merge_requests"), query, &found); err != nil {
-		return nil, classify("look for the merge request from "+branch, err)
+		return nil, gitlabgit.Classify("look for the merge request from "+branch, err)
 	}
 
 	if len(found) == 0 {
@@ -199,7 +200,7 @@ func (m *MR) branchExists(ctx context.Context, project, branch string) (bool, er
 	case gitlabapi.IsStatus(err, http.StatusNotFound):
 		return false, nil
 	case err != nil:
-		return false, classify("look for the branch "+branch, err)
+		return false, gitlabgit.Classify("look for the branch "+branch, err)
 	default:
 		return true, nil
 	}
@@ -218,7 +219,7 @@ func (m *MR) push(ctx context.Context, pre *prepared, branch string, inv action.
 		switch {
 		case c.Deleted():
 			actions = append(actions, commitAction{Action: commitDelete, FilePath: c.Path})
-		case pre.files[c.Path].exists:
+		case pre.files[c.Path].Exists:
 			actions = append(actions, commitAction{Action: commitUpdate, FilePath: c.Path, Content: c.Content})
 		default:
 			actions = append(actions, commitAction{Action: commitCreate, FilePath: c.Path, Content: c.Content})
@@ -227,7 +228,7 @@ func (m *MR) push(ctx context.Context, pre *prepared, branch string, inv action.
 
 	return m.commitTo(ctx, pre.params.Project, commitRequest{
 		Branch:        branch,
-		StartSHA:      pre.base.commit,
+		StartSHA:      pre.base.Commit,
 		CommitMessage: commitMessage(pre.params.Title, inv.ProposalID),
 		Actions:       actions,
 	})
@@ -250,7 +251,7 @@ func (m *MR) commitTo(ctx context.Context, project string, req commitRequest) (s
 		return "", nil
 	}
 
-	return "", classify("make the commit on "+req.Branch, err)
+	return "", gitlabgit.Classify("make the commit on "+req.Branch, err)
 }
 
 // open makes the merge request of a proposal from the branch.
@@ -282,7 +283,7 @@ func (m *MR) openMergeRequest(ctx context.Context, project string, req createReq
 	}
 
 	if err != nil {
-		return nil, classify("open the merge request", err)
+		return nil, gitlabgit.Classify("open the merge request", err)
 	}
 
 	if mr.IID == 0 {
@@ -348,4 +349,16 @@ func (m *MR) result(project string, mr *apiMergeRequest, how, pushed string) act
 // and the proposal it is for.
 func commitMessage(title, proposalID string) string {
 	return commitTitle(title) + "\n\nSidekick proposal " + proposalID + "\n"
+}
+
+// apiBranch is a branch as GitLab's branches endpoint answers.
+type apiBranch struct {
+	Commit struct {
+		ID string `json:"id"`
+	} `json:"commit"`
+}
+
+// branchPath returns the API path of a branch of a project.
+func branchPath(project, branch string) string {
+	return gitlabapi.ProjectPath(project, "repository", "branches", url.PathEscape(branch))
 }
