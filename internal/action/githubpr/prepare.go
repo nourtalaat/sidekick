@@ -109,7 +109,7 @@ func (p *PR) checkLines(l *loaded) error {
 		f := l.files[c.Path]
 
 		if c.Deleted() && !f.exists {
-			return fmt.Errorf("%w: path %q does not exist on the base branch, so it cannot be deleted", action.ErrPermanent, c.Path)
+			return gitchange.Refuse(fmt.Errorf("%w: path %q does not exist on the base branch, so it cannot be deleted", action.ErrPermanent, c.Path))
 		}
 
 		updated := ""
@@ -118,7 +118,7 @@ func (p *PR) checkLines(l *loaded) error {
 		}
 
 		if f.exists && !c.Deleted() && f.text == updated {
-			return fmt.Errorf("%w: path %q already has this content; leave it out of the files", action.ErrPermanent, c.Path)
+			return gitchange.Refuse(fmt.Errorf("%w: path %q already has this content; leave it out of the files", action.ErrPermanent, c.Path))
 		}
 
 		n, within := gitchange.ChangedLines(f.text, updated, left)

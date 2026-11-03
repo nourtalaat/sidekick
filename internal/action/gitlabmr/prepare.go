@@ -52,7 +52,7 @@ func (m *MR) load(ctx context.Context, raw json.RawMessage) (*loaded, error) {
 	for _, c := range changes {
 		f, err := r.File(ctx, c.Path)
 		if err != nil {
-			return nil, fmt.Errorf("read the file at the base: %w", err)
+			return nil, readError("read the file at the base", err)
 		}
 
 		files[c.Path] = f
@@ -104,7 +104,7 @@ func (m *MR) checkLines(l *loaded) error {
 		f := l.files[c.Path]
 
 		if c.Deleted() && !f.Exists {
-			return fmt.Errorf("%w: path %q does not exist on the base branch, so it cannot be deleted", action.ErrPermanent, c.Path)
+			return gitchange.Refuse(fmt.Errorf("%w: path %q does not exist on the base branch, so it cannot be deleted", action.ErrPermanent, c.Path))
 		}
 
 		updated := ""
@@ -113,7 +113,7 @@ func (m *MR) checkLines(l *loaded) error {
 		}
 
 		if f.Exists && !c.Deleted() && f.Text == updated {
-			return fmt.Errorf("%w: path %q already has this content; leave it out of the files", action.ErrPermanent, c.Path)
+			return gitchange.Refuse(fmt.Errorf("%w: path %q already has this content; leave it out of the files", action.ErrPermanent, c.Path))
 		}
 
 		n, within := gitchange.ChangedLines(f.Text, updated, left)

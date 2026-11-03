@@ -42,11 +42,26 @@ var minVersion = release{major: 0, minor: 134, patch: 0}
 var releaseOf = regexp.MustCompile(`^v?(\d+)\.(\d+)\.(\d+)`)
 
 var (
-	errTooLarge = errors.New("the answer from SigNoz is larger than the action reads")
-	errEmptyKey = errors.New("the key secret is empty")
-	errNoBody   = errors.New("the answer from SigNoz is not something this action can read")
-	errTooOld   = errors.New("this SigNoz is older than the action supports")
+	errTooLarge       = errors.New("the answer from SigNoz is larger than the action reads")
+	errEmptyKey       = errors.New("the key secret is empty")
+	errNoBody         = errors.New("the answer from SigNoz is not something this action can read")
+	errTooOld   error = refusal("this SigNoz is older than the action supports")
 )
+
+// refusal is an error for a SigNoz the action will not work with. It matches
+// action.ErrLimit, so the model reads it as a refusal with its reason and not
+// as a failure to read the rule.
+type refusal string
+
+// Error implements error.
+func (r refusal) Error() string {
+	return string(r)
+}
+
+// Is makes the refusal match action.ErrLimit.
+func (refusal) Is(target error) bool {
+	return target == action.ErrLimit
+}
 
 // release is a SigNoz version number.
 type release struct {

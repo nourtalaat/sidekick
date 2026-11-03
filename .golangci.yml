@@ -147,7 +147,9 @@ linters:
       # githubgit.Classify and kubeaccess.Redact. Refuse builds a new error at
       # its origin; the others build an error that wraps the cause with what
       # was being done, or return the error they are given with the tokens cut
-      # out of its text; they are the wrapping itself.
+      # out of its text; they are the wrapping itself. The same goes for
+      # gitchange.Refuse, which builds a new error with the text of the one it
+      # is given.
       ignore-sigs:
         - .Errorf(
         - errors.New(
@@ -162,6 +164,7 @@ linters:
         - awsaction.Refuse(
         - githubgit.Classify(
         - kubeaccess.Redact(
+        - gitchange.Refuse(
 
     # Only the "blank line after a block" rule, not the rest of wsl.
     wsl_v5:

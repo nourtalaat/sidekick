@@ -1,12 +1,14 @@
 package githubcode
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
+	"github.com/nourtalaat/sidekick/internal/action/githubgit"
 )
 
 func TestSnapshot(t *testing.T) {
@@ -58,6 +60,40 @@ func TestSnapshotOfTooManyLines(t *testing.T) {
 
 	_, err := b.code.Snapshot(t.Context(), rawParams(t, p))
 	require.ErrorIs(t, err, action.ErrLimit)
+}
+
+func TestSnapshotRefusals(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		files     repoFiles
+		truncated []string
+		wantErr   string
+	}{
+		{name: "a symlink", files: repoFiles{testGoPath: {mode: modeSymlink, typ: typeBlob, content: "../other.go"}}, wantErr: "is a symlink"},
+		{name: "a submodule", files: repoFiles{testGoPath: {mode: modeSubmodule, typ: typeCommit, content: "abc"}}, wantErr: "is a submodule"},
+		{name: "a directory", files: repoFiles{testGoPath + "/inner.go": regular("x")}, wantErr: "is a directory"},
+		{name: "a path through a file", files: repoFiles{"internal/billing": regular("x")}, wantErr: "goes through a path that is a file"},
+		{name: "a path that differs only in case", files: repoFiles{"internal/billing/Invoice.go": regular(testGoBefore)}, wantErr: "differs only in case"},
+		{name: "a file that is too big", files: repoFiles{testGoPath: regular(strings.Repeat("x", githubgit.MaxFileBytes+1))}, wantErr: "is larger than"},
+		{name: "a file that is not text", files: repoFiles{testGoPath: regular("a\x00b")}, wantErr: "is not a UTF-8 text file"},
+		{name: "a directory that GitHub lists in part", files: repoFiles{testGoPath: regular(testGoBefore)}, truncated: []string{"internal/billing"}, wantErr: "lists only in part"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			b := newBed(t, nil)
+			b.serveBase(tt.files, tt.truncated...)
+
+			_, err := b.code.Snapshot(t.Context(), rawParams(t, validParams()))
+			require.ErrorContains(t, err, tt.wantErr)
+			require.ErrorIs(t, err, action.ErrLimit)
+			require.ErrorIs(t, err, action.ErrPermanent)
+		})
+	}
 }
 
 func TestExecuteComparesWithTheSnapshot(t *testing.T) {

@@ -2,7 +2,6 @@ package githubpr
 
 import (
 	"encoding/json"
-	"errors"
 	"strings"
 	"testing"
 
@@ -36,12 +35,11 @@ func TestLimitsPlan(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name      string
-		change    func(p *Params)
-		limits    func(l *Limits)
-		wantErr   string
-		wantLimit bool
-		want      []gitchange.PlannedFile
+		name    string
+		change  func(p *Params)
+		limits  func(l *Limits)
+		wantErr string
+		want    []gitchange.PlannedFile
 	}{
 		{
 			name: "one file",
@@ -63,9 +61,9 @@ func TestLimitsPlan(t *testing.T) {
 			},
 		},
 		{name: "the repository in other case", change: func(p *Params) { p.Repo = "Acme/Monitors" }, want: []gitchange.PlannedFile{{Path: "prometheus/rules/checkout.yaml", Format: validateclient.FormatPrometheusRules, Content: text("groups: []\n")}}},
-		{name: "another repository", change: func(p *Params) { p.Repo = "acme/other" }, wantErr: `repo "acme/other" is not one of limits.repos (acme/monitors)`, wantLimit: true},
-		{name: "a repository that only starts the same", change: func(p *Params) { p.Repo = "acme/monitors-old" }, wantErr: "is not one of limits.repos", wantLimit: true},
-		{name: "another base branch", change: func(p *Params) { p.BaseBranch = "develop" }, wantErr: `baseBranch "develop" is not the allowed base branch "main"`, wantLimit: true},
+		{name: "another repository", change: func(p *Params) { p.Repo = "acme/other" }, wantErr: `repo "acme/other" is not one of limits.repos (acme/monitors)`},
+		{name: "a repository that only starts the same", change: func(p *Params) { p.Repo = "acme/monitors-old" }, wantErr: "is not one of limits.repos"},
+		{name: "another base branch", change: func(p *Params) { p.BaseBranch = "develop" }, wantErr: `baseBranch "develop" is not the allowed base branch "main"`},
 		{name: "no title", change: func(p *Params) { p.Title = "  " }, wantErr: "title: required"},
 		{name: "a title that is too long", change: func(p *Params) { p.Title = strings.Repeat("t", 121) }, wantErr: "title: longer than 120 characters"},
 		{name: "a title of the longest size", change: func(p *Params) { p.Title = strings.Repeat("t", 120) }, want: []gitchange.PlannedFile{{Path: "prometheus/rules/checkout.yaml", Format: validateclient.FormatPrometheusRules, Content: text("groups: []\n")}}},
@@ -80,7 +78,7 @@ func TestLimitsPlan(t *testing.T) {
 					{Path: "prometheus/rules/c.yaml", Content: text("c")}, {Path: "prometheus/rules/d.yaml", Content: text("d")},
 				}
 			},
-			wantErr: "4 files, the most one pull request may change is 3", wantLimit: true,
+			wantErr: "4 files, the most one pull request may change is 3",
 		},
 		{
 			name: "as many files as the limit",
@@ -95,8 +93,8 @@ func TestLimitsPlan(t *testing.T) {
 				{Path: "prometheus/rules/c.yaml", Format: validateclient.FormatPrometheusRules, Content: text("c")},
 			},
 		},
-		{name: "a path outside every glob", change: func(p *Params) { p.Files[0].Path = "src/main.go" }, wantErr: `path "src/main.go" matches none of the limits.paths globs`, wantLimit: true},
-		{name: "a path that only starts like a glob", change: func(p *Params) { p.Files[0].Path = "prometheus/rules-old/a.yaml" }, wantErr: "matches none of the limits.paths globs", wantLimit: true},
+		{name: "a path outside every glob", change: func(p *Params) { p.Files[0].Path = "src/main.go" }, wantErr: `path "src/main.go" matches none of the limits.paths globs`},
+		{name: "a path that only starts like a glob", change: func(p *Params) { p.Files[0].Path = "prometheus/rules-old/a.yaml" }, wantErr: "matches none of the limits.paths globs"},
 		{name: "a path that climbs out", change: func(p *Params) { p.Files[0].Path = "prometheus/rules/../../secrets.yaml" }, wantErr: "not a clean path"},
 		{name: "an absolute path", change: func(p *Params) { p.Files[0].Path = "/prometheus/rules/a.yaml" }, wantErr: "not a clean path"},
 		{name: "a path with a backslash", change: func(p *Params) { p.Files[0].Path = `prometheus\rules\a.yaml` }, wantErr: "not a clean path"},
@@ -132,7 +130,7 @@ func TestLimitsPlan(t *testing.T) {
 			got, err := l.plan(p)
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
-				require.Equal(t, tt.wantLimit, errors.Is(err, action.ErrLimit))
+				require.ErrorIs(t, err, action.ErrLimit)
 
 				return
 			}

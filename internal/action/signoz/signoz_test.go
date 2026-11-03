@@ -290,7 +290,7 @@ func TestSnapshotRefusals(t *testing.T) {
 		{
 			name: "a SigNoz that is too old", params: raiseTarget,
 			change:   func(sz *fakeSigNoz) { sz.release = "v0.100.0" },
-			wantPerm: true, wantErr: "SigNoz v0.100.0 is older than v0.134.0",
+			wantPerm: true, wantLimit: true, wantErr: "SigNoz v0.100.0 is older than v0.134.0",
 		},
 	}
 

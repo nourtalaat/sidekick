@@ -146,7 +146,7 @@ func Plan(e Edit, b Bounds, formatOf func(path string) (validateclient.Format, e
 	}
 
 	if len(e.Files) == 0 {
-		return nil, errors.New("files: give at least one file")
+		return nil, Refuse(errors.New("files: give at least one file"))
 	}
 
 	if len(e.Files) > b.MaxFiles {
@@ -164,7 +164,7 @@ func Plan(e Edit, b Bounds, formatOf func(path string) (validateclient.Format, e
 
 		key := strings.ToLower(planned.Path)
 		if seen[key] {
-			return nil, fmt.Errorf("path %q is given twice", planned.Path)
+			return nil, Refuse(fmt.Errorf("path %q is given twice", planned.Path))
 		}
 
 		seen[key] = true
@@ -178,7 +178,7 @@ func Plan(e Edit, b Bounds, formatOf func(path string) (validateclient.Format, e
 // planFile checks one file.
 func planFile(f FileChange, formatOf func(path string) (validateclient.Format, error)) (PlannedFile, error) {
 	if err := checkPath(f.Path); err != nil {
-		return PlannedFile{}, fmt.Errorf("path %q: %w", f.Path, err)
+		return PlannedFile{}, Refuse(fmt.Errorf("path %q: %w", f.Path, err))
 	}
 
 	format, err := formatOf(f.Path)
@@ -187,11 +187,11 @@ func planFile(f FileChange, formatOf func(path string) (validateclient.Format, e
 	}
 
 	if hasContent := f.Content != nil; hasContent == f.Delete {
-		return PlannedFile{}, fmt.Errorf("path %q: %w", f.Path, errBothOrNone)
+		return PlannedFile{}, Refuse(fmt.Errorf("path %q: %w", f.Path, errBothOrNone))
 	}
 
 	if f.Content != nil && !ValidContent(*f.Content) {
-		return PlannedFile{}, fmt.Errorf("path %q: content must be valid UTF-8 text without NUL characters", f.Path)
+		return PlannedFile{}, Refuse(fmt.Errorf("path %q: content must be valid UTF-8 text without NUL characters", f.Path))
 	}
 
 	return PlannedFile{Path: f.Path, Format: format, Content: f.Content}, nil
@@ -201,13 +201,13 @@ func planFile(f FileChange, formatOf func(path string) (validateclient.Format, e
 func CheckText(title, body string) error {
 	switch {
 	case strings.TrimSpace(title) == "":
-		return errors.New("title: required")
+		return Refuse(errors.New("title: required"))
 	case len([]rune(title)) > MaxTitleChars:
-		return fmt.Errorf("title: longer than %d characters", MaxTitleChars)
+		return Refuse(fmt.Errorf("title: longer than %d characters", MaxTitleChars))
 	case len([]rune(body)) > maxBodyChars:
-		return fmt.Errorf("body: longer than %d characters", maxBodyChars)
+		return Refuse(fmt.Errorf("body: longer than %d characters", maxBodyChars))
 	case !ValidContent(title) || !ValidContent(body):
-		return errors.New("title and body must be valid UTF-8 text without NUL characters")
+		return Refuse(errors.New("title and body must be valid UTF-8 text without NUL characters"))
 	}
 
 	return nil

@@ -60,9 +60,10 @@ func (e *validationError) Error() string {
 	return b.String()
 }
 
-// Unwrap lets callers see that repeating the call cannot help.
-func (*validationError) Unwrap() error {
-	return action.ErrPermanent
+// Unwrap lets callers see that repeating the call cannot help, and that the
+// action refused the files.
+func (*validationError) Unwrap() []error {
+	return []error{action.ErrPermanent, action.ErrLimit}
 }
 
 // ValidateFiles checks the changes with the validator: files of the rule
@@ -91,7 +92,11 @@ func ValidateFiles(ctx context.Context, v validateclient.Validator, r Reader, ch
 		if err != nil {
 			observe(string(req.Format), resultUnavailable)
 
-			if errors.Is(err, validateclient.ErrBadRequest) || errors.Is(err, validateclient.ErrTooLarge) {
+			if errors.Is(err, validateclient.ErrTooLarge) {
+				return Refuse(fmt.Errorf("validate the %s files: %w: %w", req.Format, action.ErrPermanent, err))
+			}
+
+			if errors.Is(err, validateclient.ErrBadRequest) {
 				return fmt.Errorf("validate the %s files: %w: %w", req.Format, action.ErrPermanent, err)
 			}
 
