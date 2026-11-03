@@ -3864,9 +3864,8 @@ back on the task definition it ran before the rollback. If the service does
 not run the task definition the rollback set, Undo writes nothing and shows the
 task definition it runs now, and asks again with `force`. If the service
 already runs the old task definition, Undo writes nothing and succeeds. Undo
-fails when the old task definition is not ACTIVE any more, and when you have
-lowered `maxRevisionsBack` below the number of revisions the rollback went
-back.
+fails when the old task definition is not ACTIVE any more. Lowering
+`maxRevisionsBack` does not stop an Undo.
 
 **The role.** Create a role for the action in each account, separate from the
 read-only role of the AWS source, and attach this policy and nothing else. It
