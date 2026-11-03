@@ -269,7 +269,7 @@ func (r RunResult) report() RunReport {
 		out.ProposalCorrect = &p.Correct
 
 		for _, o := range p.Proposed {
-			out.Proposals = append(out.Proposals, ProposalReport{Action: o.Action, Outcome: o.Outcome})
+			out.Proposals = append(out.Proposals, ProposalReport(o))
 		}
 
 		for _, e := range p.Expected {

@@ -14,16 +14,17 @@ import (
 const prHead = `{"repo": "acme/monitors", "baseBranch": "main", "title": "Add a traffic floor",
 	"files": [{"path": "prometheus/rules/search.yml", "content": "alert: SearchLatency"}]}`
 
-// proposed returns a run that gave a verdict and made the proposals, each
-// given as an action and its params JSON.
-func proposed(pairs ...string) RunResult {
+// proposed returns a run that gave a verdict and made the proposals.
+func proposed(proposals ...Proposal) RunResult {
 	run := verdictRun(report.FalsePositive)
-
-	for i := 0; i < len(pairs); i += 2 {
-		run.Proposals = append(run.Proposals, Proposal{Action: pairs[i], Params: json.RawMessage(pairs[i+1])})
-	}
+	run.Proposals = proposals
 
 	return run
+}
+
+// made returns a proposal of action with the params JSON.
+func made(action, params string) Proposal {
+	return Proposal{Action: action, Params: json.RawMessage(params)}
 }
 
 // want is a monitor-pr expected proposal with checks.
@@ -48,12 +49,12 @@ func TestScoreProposals(t *testing.T) {
 	}{
 		{
 			name: "the scenario does not score proposals",
-			run:  proposed("monitor-pr", prHead),
+			run:  proposed(made("monitor-pr", prHead)),
 		},
 		{
 			name:     "the expected proposal is made",
 			expected: Expected{Proposals: []ExpectedProposal{want(prChecks)}},
-			run:      proposed("monitor-pr", prHead),
+			run:      proposed(made("monitor-pr", prHead)),
 			want: &ProposalResult{
 				Correct:  true,
 				Expected: []ExpectedOutcome{{Action: "monitor-pr", Matched: true}},
@@ -63,7 +64,7 @@ func TestScoreProposals(t *testing.T) {
 		{
 			name:     "another action is proposed",
 			expected: Expected{Proposals: []ExpectedProposal{want(prChecks)}},
-			run:      proposed("restart", prHead),
+			run:      proposed(made("restart", prHead)),
 			want: &ProposalResult{
 				Expected: []ExpectedOutcome{{Action: "monitor-pr"}},
 				Proposed: []ProposedOutcome{{Action: "restart", Outcome: ProposalUnexpected}},
@@ -72,7 +73,7 @@ func TestScoreProposals(t *testing.T) {
 		{
 			name:     "the right action with other parameters",
 			expected: Expected{Proposals: []ExpectedProposal{want(prChecks)}},
-			run:      proposed("monitor-pr", `{"repo": "acme/other", "files": [{"path": "prometheus/rules/a.yml"}]}`),
+			run:      proposed(made("monitor-pr", `{"repo": "acme/other", "files": [{"path": "prometheus/rules/a.yml"}]}`)),
 			want: &ProposalResult{
 				Expected: []ExpectedOutcome{{Action: "monitor-pr"}},
 				Proposed: []ProposedOutcome{{Action: "monitor-pr", Outcome: ProposalUnexpected}},
@@ -87,7 +88,7 @@ func TestScoreProposals(t *testing.T) {
 		{
 			name:     "an extra proposal is wrong",
 			expected: Expected{Proposals: []ExpectedProposal{want(prChecks)}},
-			run:      proposed("monitor-pr", prHead, "restart", `{}`),
+			run:      proposed(made("monitor-pr", prHead), made("restart", `{}`)),
 			want: &ProposalResult{
 				Expected: []ExpectedOutcome{{Action: "monitor-pr", Matched: true}},
 				Proposed: []ProposedOutcome{{Action: "monitor-pr", Outcome: ProposalExpected}, {Action: "restart", Outcome: ProposalUnexpected}},
@@ -99,7 +100,7 @@ func TestScoreProposals(t *testing.T) {
 				Proposals:           []ExpectedProposal{want(prChecks)},
 				AcceptableProposals: []ExpectedProposal{{Action: "restart"}},
 			},
-			run: proposed("monitor-pr", prHead, "restart", `{"service": "search"}`),
+			run: proposed(made("monitor-pr", prHead), made("restart", `{"service": "search"}`)),
 			want: &ProposalResult{
 				Correct:  true,
 				Expected: []ExpectedOutcome{{Action: "monitor-pr", Matched: true}},
@@ -109,7 +110,7 @@ func TestScoreProposals(t *testing.T) {
 		{
 			name:     "the same proposal twice matches one expected proposal once",
 			expected: Expected{Proposals: []ExpectedProposal{want(prChecks)}},
-			run:      proposed("monitor-pr", prHead, "monitor-pr", prHead),
+			run:      proposed(made("monitor-pr", prHead), made("monitor-pr", prHead)),
 			want: &ProposalResult{
 				Expected: []ExpectedOutcome{{Action: "monitor-pr", Matched: true}},
 				Proposed: []ProposedOutcome{{Action: "monitor-pr", Outcome: ProposalExpected}, {Action: "monitor-pr", Outcome: ProposalUnexpected}},
@@ -121,7 +122,7 @@ func TestScoreProposals(t *testing.T) {
 				want(map[string]mock.Matcher{"repo": {Equals: "acme/monitors"}}),
 				want(map[string]mock.Matcher{"repo": {Equals: "acme/dashboards"}}),
 			}},
-			run: proposed("monitor-pr", `{"repo": "acme/monitors"}`),
+			run: proposed(made("monitor-pr", `{"repo": "acme/monitors"}`)),
 			want: &ProposalResult{
 				Expected: []ExpectedOutcome{{Action: "monitor-pr", Matched: true}, {Action: "monitor-pr"}},
 				Proposed: []ProposedOutcome{{Action: "monitor-pr", Outcome: ProposalExpected}},
@@ -133,7 +134,7 @@ func TestScoreProposals(t *testing.T) {
 				want(nil),
 				want(map[string]mock.Matcher{"repo": {Equals: "acme/monitors"}}),
 			}},
-			run: proposed("monitor-pr", `{"repo": "acme/monitors"}`, "monitor-pr", `{"repo": "acme/dashboards"}`),
+			run: proposed(made("monitor-pr", `{"repo": "acme/monitors"}`), made("monitor-pr", `{"repo": "acme/dashboards"}`)),
 			want: &ProposalResult{
 				Correct:  true,
 				Expected: []ExpectedOutcome{{Action: "monitor-pr", Matched: true}, {Action: "monitor-pr", Matched: true}},
@@ -149,7 +150,7 @@ func TestScoreProposals(t *testing.T) {
 		{
 			name:     "noProposal and something proposed",
 			expected: Expected{NoProposal: true},
-			run:      proposed("monitor-pr", prHead),
+			run:      proposed(made("monitor-pr", prHead)),
 			want: &ProposalResult{
 				Expected: []ExpectedOutcome{},
 				Proposed: []ProposedOutcome{{Action: "monitor-pr", Outcome: ProposalUnexpected}},
@@ -158,7 +159,7 @@ func TestScoreProposals(t *testing.T) {
 		{
 			name:     "a run that ended without a verdict is never correct",
 			expected: Expected{Proposals: []ExpectedProposal{want(nil)}},
-			run:      withVerdict(proposed("monitor-pr", prHead), ""),
+			run:      withVerdict(proposed(made("monitor-pr", prHead)), ""),
 			want: &ProposalResult{
 				Expected: []ExpectedOutcome{{Action: "monitor-pr", Matched: true}},
 				Proposed: []ProposedOutcome{{Action: "monitor-pr", Outcome: ProposalExpected}},
@@ -262,11 +263,11 @@ func TestScoreRunSetsProposal(t *testing.T) {
 	results := &Results{Scenarios: []ScenarioResult{{
 		ID:       "proposals",
 		Expected: Expected{Verdict: report.FalsePositive, Proposals: []ExpectedProposal{want(nil)}},
-		Runs:     []RunResult{proposed("monitor-pr", prHead), proposed()},
+		Runs:     []RunResult{proposed(made("monitor-pr", prHead)), proposed()},
 	}, {
 		ID:       "no-proposals",
 		Expected: Expected{Verdict: report.FalsePositive},
-		Runs:     []RunResult{proposed("monitor-pr", prHead)},
+		Runs:     []RunResult{proposed(made("monitor-pr", prHead))},
 	}}}
 
 	require.NoError(t, Score(t.Context(), results, ScoreOptions{}))

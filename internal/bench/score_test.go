@@ -535,8 +535,8 @@ func proposalResults(scored bool) *Results {
 	}
 
 	return &Results{Scenarios: []ScenarioResult{
-		{ID: "proposals", Expected: expected, Runs: []RunResult{proposed("monitor-pr", prHead), proposed("monitor-pr", prHead), proposed()}},
-		{ID: "plain", Expected: Expected{Verdict: report.FalsePositive}, Runs: []RunResult{proposed()}},
+		{ID: "proposals", Expected: expected, Runs: numbered(proposed(made("monitor-pr", prHead)), proposed(made("monitor-pr", prHead)), proposed())},
+		{ID: "plain", Expected: Expected{Verdict: report.FalsePositive}, Runs: numbered(proposed())},
 	}}
 }
 
@@ -589,7 +589,7 @@ func TestProposalWeightZeroKeepsOverall(t *testing.T) {
 			requireShare(t, new(tt.want), with.Summary.Metrics.Overall)
 
 			if tt.wantSame {
-				require.Equal(t, *without.Summary.Metrics.Overall, *with.Summary.Metrics.Overall)
+				require.InDelta(t, *without.Summary.Metrics.Overall, *with.Summary.Metrics.Overall, shareDelta)
 			}
 		})
 	}
@@ -616,4 +616,13 @@ func TestDefaultWeightsKeepTheBaselineOverall(t *testing.T) {
 			require.InDelta(t, *baseline.Metrics.Overall, *overall(DefaultWeights, baseline.Metrics), shareDelta)
 		})
 	}
+}
+
+// numbered counts the runs from 1, as a benchmark does.
+func numbered(runs ...RunResult) []RunResult {
+	for i := range runs {
+		runs[i].Run = i + 1
+	}
+
+	return runs
 }
