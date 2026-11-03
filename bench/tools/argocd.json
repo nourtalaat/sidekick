@@ -1,0 +1,38 @@
+{
+  "tools": [
+    {
+      "name": "list_applications",
+      "description": "List the Argo CD applications Sidekick may read: name, project, destination (cluster and namespace), sync status, health, whether auto-sync is on, the revision deployed now, the revision the application was last compared with, when it last synced, and a link. Use it to find the application of a service, or to see which applications are out of sync or not healthy. Pass the application field of a result, as project/name, to the other tools.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "The most applications to return, 1 to 200. Default 50.",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "name": {
+            "type": "string",
+            "description": "Only applications whose name matches this pattern, for example checkout-*. * matches any run of characters and ? one character."
+          },
+          "project": {
+            "type": "string",
+            "description": "Only applications of this project."
+          },
+          "state": {
+            "type": "string",
+            "description": "Only applications in this state: out_of_sync, not_healthy (health is not Healthy), problem (out of sync or not healthy), or any. Default any.",
+            "enum": [
+              "any",
+              "out_of_sync",
+              "not_healthy",
+              "problem"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}

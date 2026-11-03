@@ -29,6 +29,7 @@ import (
 	_ "github.com/nourtalaat/sidekick/internal/output/slack"          // Output type "slack".
 	_ "github.com/nourtalaat/sidekick/internal/output/teams"          // Output type "teams".
 	_ "github.com/nourtalaat/sidekick/internal/output/webhook"        // Output type "webhook".
+	_ "github.com/nourtalaat/sidekick/internal/source/argocd"         // Source type "argocd".
 	_ "github.com/nourtalaat/sidekick/internal/source/aws"            // Source type "aws".
 	_ "github.com/nourtalaat/sidekick/internal/source/azure"          // Source type "azure".
 	_ "github.com/nourtalaat/sidekick/internal/source/backstage"      // Source type "backstage".
