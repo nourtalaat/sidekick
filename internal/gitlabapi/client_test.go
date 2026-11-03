@@ -1,4 +1,4 @@
-package gitlab
+package gitlabapi
 
 import (
 	"net/http"
@@ -77,7 +77,7 @@ func TestProjectPath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			require.Equal(t, tt.want, projectPath(tt.project, tt.parts...))
+			require.Equal(t, tt.want, ProjectPath(tt.project, tt.parts...))
 		})
 	}
 }
@@ -95,13 +95,13 @@ func TestClientRequest(t *testing.T) {
 	}{
 		{
 			name:    "a project in a subgroup",
-			path:    projectPath("acme/platform/checkout", "repository", "commits"),
+			path:    ProjectPath("acme/platform/checkout", "repository", "commits"),
 			wantRaw: "/api/v4/projects/acme%2Fplatform%2Fcheckout/repository/commits",
 			route:   "/api/v4/projects/acme/platform/checkout/repository/commits",
 		},
 		{
 			name:    "a file path with slashes and a space",
-			path:    projectPath("acme/checkout", "repository", "files", url.PathEscape("deploy/my values.yaml")),
+			path:    ProjectPath("acme/checkout", "repository", "files", url.PathEscape("deploy/my values.yaml")),
 			wantRaw: "/api/v4/projects/acme%2Fcheckout/repository/files/deploy%2Fmy%20values.yaml",
 			route:   "/api/v4/projects/acme/checkout/repository/files/deploy/my values.yaml",
 		},
@@ -121,11 +121,11 @@ func TestClientRequest(t *testing.T) {
 				_, _ = w.Write([]byte(`{}`))
 			})
 
-			s := newTestSource(t, api, 0)
+			c := newTestClient(t, api, tokenSecrets(t))
 
 			var out map[string]any
 
-			_, err := s.client.get(t.Context(), tt.path, nil, &out)
+			_, err := c.Get(t.Context(), tt.path, nil, &out)
 			require.NoError(t, err)
 			require.Equal(t, tt.wantRaw, <-raw)
 
@@ -152,14 +152,14 @@ func TestClientReadsTheTokenOnEveryCall(t *testing.T) {
 	api.Handle(http.MethodGet, apiRoot+"/version", body(`{}`), body(`{}`))
 	api.ExpectAllCalled()
 
-	s := newTestSourceWith(t, api, secrets, 0)
+	c := newTestClient(t, api, secrets)
 
 	var out map[string]any
 
-	_, err := s.client.get(t.Context(), "/version", nil, &out)
+	_, err := c.Get(t.Context(), "/version", nil, &out)
 	require.NoError(t, err)
 
-	_, err = s.client.get(t.Context(), "/version", nil, &out)
+	_, err = c.Get(t.Context(), "/version", nil, &out)
 	require.NoError(t, err)
 
 	requests := api.Requests()
@@ -177,7 +177,7 @@ func TestClientTokenErrors(t *testing.T) {
 		err     error
 		wantErr string
 	}{
-		{name: "an empty token", secret: []byte(" \n"), wantErr: errEmptyToken.Error()},
+		{name: "an empty token", secret: []byte(" \n"), wantErr: ErrEmptyToken.Error()},
 		{name: "a secret that cannot be read", err: errNoSecrets, wantErr: "resolve secret sidekick-gitlab/token"},
 	}
 
@@ -189,11 +189,11 @@ func TestClientTokenErrors(t *testing.T) {
 			secrets.EXPECT().Resolve(gomock.Any(), testTokenRef).Return(tt.secret, tt.err)
 
 			api := fakehttp.New(t)
-			s := newTestSourceWith(t, api, secrets, 0)
+			c := newTestClient(t, api, secrets)
 
 			var out map[string]any
 
-			_, err := s.client.get(t.Context(), "/version", nil, &out)
+			_, err := c.Get(t.Context(), "/version", nil, &out)
 			require.ErrorContains(t, err, tt.wantErr)
 			require.Empty(t, api.Requests(), "no request goes out without a token")
 		})
@@ -215,13 +215,13 @@ func TestClientRedirects(t *testing.T) {
 			movedTo(w, "http://"+r.Host+apiRoot+"/projects/81")
 		})
 
-		s := newTestSource(t, api, 0)
+		c := newTestClient(t, api, tokenSecrets(t))
 
 		var out struct {
 			ID int `json:"id"`
 		}
 
-		_, err := s.client.get(t.Context(), projectPath("acme/moved"), nil, &out)
+		_, err := c.Get(t.Context(), ProjectPath("acme/moved"), nil, &out)
 		require.NoError(t, err)
 		require.Equal(t, 81, out.ID)
 	})
@@ -236,12 +236,12 @@ func TestClientRedirects(t *testing.T) {
 			movedTo(w, other.URL()+apiRoot+"/projects/81")
 		})
 
-		s := newTestSource(t, api, 0)
+		c := newTestClient(t, api, tokenSecrets(t))
 
 		var out map[string]any
 
-		_, err := s.client.get(t.Context(), projectPath("acme/moved"), nil, &out)
-		require.ErrorIs(t, err, errRedirect)
+		_, err := c.Get(t.Context(), ProjectPath("acme/moved"), nil, &out)
+		require.ErrorIs(t, err, ErrRedirect)
 		require.Empty(t, other.Requests(), "the token never goes to the other host")
 	})
 
@@ -253,12 +253,12 @@ func TestClientRedirects(t *testing.T) {
 			movedTo(w, "http://"+r.Host+apiRoot+"/projects/acme/loop")
 		})
 
-		s := newTestSource(t, api, 0)
+		c := newTestClient(t, api, tokenSecrets(t))
 
 		var out map[string]any
 
-		_, err := s.client.get(t.Context(), projectPath("acme/loop"), nil, &out)
-		require.ErrorIs(t, err, errRedirect)
+		_, err := c.Get(t.Context(), ProjectPath("acme/loop"), nil, &out)
+		require.ErrorIs(t, err, ErrRedirect)
 		require.Len(t, api.Requests(), maxRedirects+1)
 	})
 }
@@ -269,12 +269,12 @@ func TestClientResponseLimit(t *testing.T) {
 	api := fakehttp.New(t)
 	api.Handle(http.MethodGet, apiRoot+"/big", body(`{"text":"`+strings.Repeat("x", 100)+`"}`))
 
-	s := newTestSource(t, api, 0)
+	c := newTestClient(t, api, tokenSecrets(t))
 
 	var out map[string]any
 
-	_, err := s.client.getLimited(t.Context(), "/big", nil, &out, 50)
-	require.ErrorIs(t, err, errResponseTooLarge)
+	_, err := c.GetLimited(t.Context(), "/big", nil, &out, 50)
+	require.ErrorIs(t, err, ErrResponseTooLarge)
 }
 
 // movedTo answers a request with a permanent redirect to location.

@@ -3,26 +3,14 @@ package gitlab
 import (
 	"errors"
 	"fmt"
-	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 
+	"github.com/nourtalaat/sidekick/internal/gitlabapi"
 	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
-
-// defaultBaseURL is the root of gitlab.com.
-const defaultBaseURL = "https://gitlab.com"
-
-// apiSuffix is the path of the REST API under the root of a GitLab.
-const apiSuffix = "/api/v4"
-
-// projectPattern is the shape of a project's full path, group/project or
-// group/subgroup/project: two or more parts of the characters GitLab allows
-// in a path.
-var projectPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)+$`)
 
 // Config is the config section of one GitLab source.
 type Config struct {
@@ -55,7 +43,7 @@ func (c *Config) Validate() error {
 		errs = append(errs, errors.New("tokenSecret: required, as { name, key }"))
 	}
 
-	if err := c.checkBaseURL(); err != nil {
+	if err := gitlabapi.CheckBaseURL(c.BaseURL); err != nil {
 		errs = append(errs, err)
 	}
 
@@ -68,29 +56,6 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.checkServiceProjects()...)
 
 	return errors.Join(errs...)
-}
-
-// checkBaseURL checks that the base URL, when set, is an absolute https URL
-// for the root of a GitLab, so the token never crosses the network
-// unencrypted. Plain http is allowed only for a loopback host, such as a
-// local test server.
-func (c *Config) checkBaseURL() error {
-	if c.BaseURL == "" {
-		return nil
-	}
-
-	u, err := url.Parse(c.BaseURL)
-
-	switch {
-	case err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.RawQuery != "" || u.Fragment != "" || u.User != nil:
-		return fmt.Errorf("baseURL: %q must be an absolute https URL, such as https://gitlab.example.com", c.BaseURL)
-	case u.Scheme == "http" && !httpclient.IsLoopbackHost(u.Hostname()):
-		return fmt.Errorf("baseURL: %q must use https; plain http is only allowed for localhost", c.BaseURL)
-	case strings.HasSuffix(strings.TrimSuffix(u.Path, "/"), apiSuffix):
-		return fmt.Errorf("baseURL: %q must be the root of the GitLab, without %s", c.BaseURL, apiSuffix)
-	default:
-		return nil
-	}
 }
 
 // checkProjects checks that projects has at least one entry and that each
@@ -130,7 +95,7 @@ func (c *Config) checkServiceProjects() []error {
 		switch {
 		case strings.TrimSpace(service) == "":
 			errs = append(errs, errors.New("serviceProjects: a service name must not be empty"))
-		case !validProject(project):
+		case !gitlabapi.ValidProject(project):
 			errs = append(errs, fmt.Errorf("%s: %q must be a full project path such as group/project", key, project))
 		case !c.allows(project):
 			errs = append(errs, fmt.Errorf("%s: %q is not in projects", key, project))
@@ -155,32 +120,7 @@ func (c *Config) allows(project string) bool {
 }
 
 // baseURL returns the root of the GitLab, without a trailing slash, or
-// defaultBaseURL.
+// gitlab.com.
 func (c *Config) baseURL() string {
-	if c.BaseURL == "" {
-		return defaultBaseURL
-	}
-
-	return strings.TrimSuffix(c.BaseURL, "/")
-}
-
-// validProject reports whether s is a project's full path. No part may be
-// "." or "..", which would change the meaning of an API path.
-func validProject(s string) bool {
-	if !projectPattern.MatchString(s) {
-		return false
-	}
-
-	for part := range strings.SplitSeq(s, "/") {
-		if dots(part) {
-			return false
-		}
-	}
-
-	return true
-}
-
-// dots reports whether s is "." or "..".
-func dots(s string) bool {
-	return s == "." || s == ".."
+	return gitlabapi.BaseURL(c.BaseURL)
 }
