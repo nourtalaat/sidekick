@@ -62,10 +62,13 @@ func TestMain(m *testing.M) {
 // harness serves POST /slack/commands on a database of its own, seeded
 // with fixture/rules.sql, with Slack Web API calls sent to a fake Slack.
 type harness struct {
-	pool    *pgxpool.Pool
-	slack   *fakehttp.Server
-	cache   *rules.Cache
-	url     string
+	pool  *pgxpool.Pool
+	slack *fakehttp.Server
+	cache *rules.Cache
+	url   string
+	// client sends to url. It is the test server's own client, so another
+	// test's server closing its idle connections cannot break its requests.
+	client  *http.Client
 	secret  []byte
 	trigger atomic.Int64
 }
@@ -121,7 +124,7 @@ func setup(t *testing.T) *harness {
 	secret, err := resolver.Resolve(ctx, cfg.Slack.SigningSecret)
 	require.NoError(t, err)
 
-	return &harness{pool: pool, slack: fake, cache: cache, url: server.URL + "/slack/commands", secret: []byte(strings.TrimSpace(string(secret)))}
+	return &harness{pool: pool, slack: fake, cache: cache, url: server.URL + "/slack/commands", client: server.Client(), secret: []byte(strings.TrimSpace(string(secret)))}
 }
 
 // command sends /sidekick text as user, signed, and returns the status and
@@ -183,7 +186,7 @@ func (h *harness) post(t *testing.T, header http.Header, body []byte) (int, stri
 
 	req.Header = header
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := h.client.Do(req)
 	require.NoError(t, err)
 
 	defer func() { require.NoError(t, resp.Body.Close()) }()

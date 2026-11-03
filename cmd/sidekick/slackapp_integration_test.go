@@ -289,7 +289,7 @@ func postSlackEvent(t *testing.T, started logLine, payload string) {
 	req.Header.Set("X-Slack-Request-Timestamp", ts)
 	req.Header.Set("X-Slack-Signature", "v0="+hex.EncodeToString(mac.Sum(nil)))
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := newClient(t).Do(req)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	require.Equal(t, http.StatusOK, resp.StatusCode)

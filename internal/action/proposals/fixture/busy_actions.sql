@@ -38,4 +38,23 @@ SELECT md5('proposal' || i || '-' || n)::uuid, md5('investigation' || i)::uuid,
 FROM (SELECT i, n, abs(hashtext(i || '-' || n)) % 1000 AS h
       FROM generate_series(5001, 10000) AS i, generate_series(1, 10) AS n) AS s;
 
+-- Pull requests for the succeeded proposals n = 2, 6 and 10 of every
+-- investigation, 30,000 in all with those of busy.sql. A table this size
+-- makes a sequential scan of it dearer than an index lookup for each of the
+-- few dozen proposals an action filter finds, whatever the estimate of that
+-- number is.
+INSERT INTO pull_request_states (proposal_id, repo, number, url, state, merged_at, closed_at, checked_at)
+SELECT md5('proposal' || i || '-' || n)::uuid, 'acme/monitors', i, 'https://github.com/acme/monitors/pull/' || i,
+       CASE i % 3 WHEN 0 THEN 'open' WHEN 1 THEN 'merged' ELSE 'closed' END,
+       CASE WHEN i % 3 = 1 THEN now() - make_interval(secs => i * 60 - 20) END,
+       CASE WHEN i % 3 = 2 THEN now() - make_interval(secs => i * 60 - 20) END,
+       now() - make_interval(secs => i * 60 - 30)
+FROM generate_series(1, 10000) AS i, (VALUES (2), (6), (10)) AS v(n)
+WHERE i > 5000 OR n > 2;
+
+-- ANALYZE samples 30,000 rows by default, so the estimate of how many rows
+-- a rare action has changed from run to run. A statistics target of 1,000
+-- makes it read every row of the table, and the estimate the same each time.
+ALTER TABLE action_proposals ALTER COLUMN action SET STATISTICS 1000;
+
 ANALYZE;
