@@ -1,0 +1,73 @@
+.sk-tokens__note {
+  margin: 0;
+  color: var(--sk-text-secondary);
+}
+
+.sk-tokens__create {
+  max-width: 48rem;
+}
+
+.sk-tokens__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-4);
+}
+
+.sk-tokens__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: var(--sk-space-4);
+  align-items: start;
+}
+
+.sk-tokens__help {
+  margin: 0;
+  color: var(--sk-text-secondary);
+}
+
+.sk-tokens__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-3);
+}
+
+.sk-tokens__heading {
+  margin: 0;
+  font: var(--sk-type-h2);
+}
+
+.sk-tokens__secret {
+  display: block;
+  max-width: 100%;
+  padding: var(--sk-space-2) var(--sk-space-3);
+  background: var(--sk-bg-surface);
+  color: var(--sk-text-primary);
+  border: 1px solid var(--sk-border-strong);
+  border-radius: var(--sk-radius-md);
+  font: var(--sk-type-mono);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.sk-tokens__secret-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sk-space-2);
+}
+
+.sk-tokens__role {
+  font: var(--sk-type-label);
+}
+
+/* Expired and revoked rows use the secondary text color. Their status word says why. */
+.sk-tokens__row--inactive th,
+.sk-tokens__row--inactive td {
+  color: var(--sk-text-secondary);
+}
+
+@media (forced-colors: active) {
+  .sk-tokens__secret {
+    border-color: CanvasText;
+  }
+}
