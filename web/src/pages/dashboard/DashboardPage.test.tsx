@@ -321,6 +321,44 @@ describe("the dashboard", () => {
     expect(within(card).queryByRole("button", { name: "Show as table" })).not.toBeInTheDocument();
   });
 
+  it("draws precision only and says why when the page filters by verdict", async () => {
+    const user = userEvent.setup();
+    const filtered = quality({
+      days: quality().days.map((d) => ({ ...d, scores: d.scores.filter((s) => s.verdict === "false_positive") })),
+      perVerdict: quality().perVerdict.filter((s) => s.verdict === "false_positive"),
+    });
+    renderApp({ route: "/dashboard?verdict=false_positive&scoreVerdict=true_positive", handler: dashboard({ quality: () => json(200, filtered) }).handler });
+
+    const card = await cardOf("Precision and recall over time");
+    const note = "Recall needs every verdict. Clear the verdict filter to see it.";
+
+    expect(within(card).getByText(note)).toBeInTheDocument();
+    expect(within(card).queryByRole("combobox", { name: "Verdict" })).not.toBeInTheDocument();
+    expect(within(card).getByText("False alarm: precision 80% over the range, from 10 verdicts given.")).toBeInTheDocument();
+
+    await user.click(within(card).getByRole("button", { name: "Show as table" }));
+
+    expect(within(within(card).getByRole("table")).getAllByRole("columnheader").map((header) => header.textContent)).toEqual(["Day (UTC)", "Precision", "Given", "Agreed"]);
+    expect(cellsOf(card, "Oct 20")).toEqual(["80%", "10", "8"]);
+
+    const scores = await screen.findByRole("region", { name: "Precision and recall of each verdict" });
+
+    expect(screen.getAllByText(note)).toHaveLength(2);
+    expect(within(scores).getByRole("columnheader", { name: "Precision" })).toBeInTheDocument();
+    expect(within(scores).queryByRole("columnheader", { name: "Recall" })).not.toBeInTheDocument();
+  });
+
+  it("has no note and shows the recall series and column without the verdict filter", async () => {
+    renderApp({ route: "/dashboard", handler: dashboard().handler });
+
+    const card = await cardOf("Precision and recall over time");
+    const scores = await screen.findByRole("region", { name: "Precision and recall of each verdict" });
+
+    expect(screen.queryByText(/Recall needs every verdict/)).not.toBeInTheDocument();
+    expect(within(card).getByText("Recall")).toBeInTheDocument();
+    expect(within(scores).getByRole("columnheader", { name: "Recall" })).toBeInTheDocument();
+  });
+
   it("shows the empty state when the whole dashboard is empty", async () => {
     renderApp({
       route: "/dashboard",

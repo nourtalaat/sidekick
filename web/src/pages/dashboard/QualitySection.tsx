@@ -17,6 +17,9 @@ import "./Dashboard.css";
 const PERCENT = 100;
 const UNKNOWN = "unknown";
 
+/** Said where recall is left out, because the page's Verdict filter keeps only the investigations where Sidekick gave that verdict. */
+const RECALL_NEEDS_EVERY_VERDICT = "Recall needs every verdict. Clear the verdict filter to see it.";
+
 interface QualitySectionProps {
   quality: UseQueryResult<QualityStats>;
   /** Every UTC day of the range, as YYYY-MM-DD. */
@@ -28,7 +31,8 @@ interface QualitySectionProps {
 /** Quality: verdict accuracy over time, precision and recall over time, the confusion matrix, precision and recall by verdict, model comparisons and benchmark runs. */
 export function QualitySection({ quality, days, filters, onChange }: QualitySectionProps) {
   const headingId = useId();
-  const scoreVerdict = filters.scoreVerdict ?? DEFAULT_SCORE_VERDICT;
+  const filtered = filters.verdict !== undefined;
+  const scoreVerdict = filters.verdict ?? filters.scoreVerdict ?? DEFAULT_SCORE_VERDICT;
 
   return (
     <section aria-labelledby={headingId} className="sk-dashboard__section">
@@ -41,12 +45,13 @@ export function QualitySection({ quality, days, filters, onChange }: QualitySect
             <ChartCard title="Verdict accuracy over time" summary={accuracySummary(stats)} spec={accuracySpec(stats, days)} />
             <ChartCard
               title="Precision and recall over time"
-              summary={scoresSummary(stats, scoreVerdict)}
-              spec={scoresSpec(stats, days, scoreVerdict)}
-              aside={<ScoreVerdictMenu verdict={scoreVerdict} filters={filters} onChange={onChange} />}
+              summary={scoresSummary(stats, scoreVerdict, filtered)}
+              spec={scoresSpec(stats, days, scoreVerdict, filtered)}
+              note={filtered ? RECALL_NEEDS_EVERY_VERDICT : undefined}
+              aside={filtered ? undefined : <ScoreVerdictMenu verdict={scoreVerdict} filters={filters} onChange={onChange} />}
             />
             <ConfusionMatrix stats={stats} />
-            <VerdictScores stats={stats} />
+            <VerdictScores stats={stats} filtered={filtered} />
             <ChartCard title="Accuracy by model and strategy" summary={comparisonSummary(stats)} spec={comparisonSpec(stats)} />
           </div>
         )}
@@ -82,28 +87,26 @@ function accuracySummary(stats: QualityStats): string {
   return `From ${stats.from} to ${stats.to}, people rated ${formatCount(rated)} investigations and confirmed the verdict of ${formatCount(correct)} of them: an accuracy of ${formatShare(accuracy)}.`;
 }
 
-function scoresSpec(stats: QualityStats, days: string[], verdict: Verdict): ChartSpec {
+/** With `precisionOnly`, recall and the count of confirmed verdicts are left out: the page's verdict filter makes them too high. */
+function scoresSpec(stats: QualityStats, days: string[], verdict: Verdict, precisionOnly: boolean): ChartSpec {
+  const precision = { key: "precision", label: "Precision" };
+  const recall = { key: "recall", label: "Recall" };
+  const given = { key: "given", label: "Given", format: formatCount };
+  const confirmed = { key: "confirmed", label: "Confirmed", format: formatCount };
+  const agreed = { key: "agreed", label: "Agreed", format: formatCount };
+
   return {
     kind: "line",
     data: scoreRows(stats, days, verdict),
-    series: [
-      { key: "precision", label: "Precision", color: categoryColor(0) },
-      { key: "recall", label: "Recall", color: categoryColor(1) },
-    ],
+    series: precisionOnly ? [{ ...precision, color: categoryColor(0) }] : [{ ...precision, color: categoryColor(0) }, { ...recall, color: categoryColor(1) }],
     xLabel: "Day (UTC)",
     format: percent,
     domain: [0, PERCENT],
-    tableColumns: [
-      { key: "precision", label: "Precision" },
-      { key: "recall", label: "Recall" },
-      { key: "given", label: "Given", format: formatCount },
-      { key: "confirmed", label: "Confirmed", format: formatCount },
-      { key: "agreed", label: "Agreed", format: formatCount },
-    ],
+    tableColumns: precisionOnly ? [precision, given, agreed] : [precision, recall, given, confirmed, agreed],
   };
 }
 
-function scoresSummary(stats: QualityStats, verdict: Verdict): string {
+function scoresSummary(stats: QualityStats, verdict: Verdict, precisionOnly: boolean): string {
   const label = labelOf(verdict);
   const score = stats.perVerdict.find((s) => s.verdict === verdict);
 
@@ -113,6 +116,10 @@ function scoresSummary(stats: QualityStats, verdict: Verdict): string {
 
   const precision = score.precision === undefined ? "no precision yet" : `precision ${formatShare(score.precision)}`;
   const recall = score.recall === undefined ? "no recall yet" : `recall ${formatShare(score.recall)}`;
+
+  if (precisionOnly) {
+    return `${label}: ${precision} over the range, from ${verdictCount(score.predicted)} given.`;
+  }
 
   return `${label}: ${precision} and ${recall} over the range, from ${verdictCount(score.predicted)} given and ${formatCount(score.actual)} confirmed.`;
 }
@@ -236,8 +243,8 @@ function MatrixCell({ n, kind }: { n: number; kind: "agrees" | "differs" | "unkn
   );
 }
 
-/** Precision and recall of each verdict that was given or confirmed. */
-function VerdictScores({ stats }: { stats: QualityStats }) {
+/** Precision and recall of each verdict that was given or confirmed. With the page's verdict filter set, recall is left out and the card says why. */
+function VerdictScores({ stats, filtered }: { stats: QualityStats; filtered: boolean }) {
   if (stats.perVerdict.length === 0) {
     return (
       <Card title="Precision and recall by verdict" level={3}>
@@ -253,6 +260,7 @@ function VerdictScores({ stats }: { stats: QualityStats }) {
       <p className="sk-chart__summary">
         Precision is how often a verdict Sidekick gave was confirmed. Recall is how often a verdict people confirmed was the one Sidekick gave.
       </p>
+      {filtered && <p className="sk-chart__note">{RECALL_NEEDS_EVERY_VERDICT}</p>}
       <Table label="Precision and recall of each verdict" className="sk-numbers">
         <thead>
           <tr>
@@ -261,7 +269,7 @@ function VerdictScores({ stats }: { stats: QualityStats }) {
             <th scope="col">Confirmed</th>
             <th scope="col">Both</th>
             <th scope="col">Precision</th>
-            <th scope="col">Recall</th>
+            {!filtered && <th scope="col">Recall</th>}
           </tr>
         </thead>
         <tbody>
@@ -274,7 +282,7 @@ function VerdictScores({ stats }: { stats: QualityStats }) {
               <td>{formatCount(s.actual)}</td>
               <td>{formatCount(s.hits)}</td>
               <td>{s.precision === undefined ? "none yet" : formatShare(s.precision)}</td>
-              <td>{s.recall === undefined ? "none yet" : formatShare(s.recall)}</td>
+              {!filtered && <td>{s.recall === undefined ? "none yet" : formatShare(s.recall)}</td>}
             </tr>
           ))}
         </tbody>
