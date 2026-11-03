@@ -98,6 +98,9 @@ type RunResult struct {
 	// MissingSources are the ones that are not.
 	SourcesReported *bool
 	MissingSources  []string
+	// Proposal is the score of the run's proposals, or nil when the
+	// scenario does not score them.
+	Proposal *ProposalResult
 }
 
 // Proposal is one action the model proposed in a run.
