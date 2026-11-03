@@ -115,7 +115,16 @@ jobs:
           until docker exec "$container" pg_isready -U sidekick -d sidekick_test; do sleep 1; done
           docker exec "$container" psql -U sidekick -d sidekick_test -tAc "SHOW max_connections"
 
+      - name: Prove the SK-172 tests
+        if: matrix.group == 'integration'
+        run: |
+          go test -race -tags integration -count=20 -v -run 'TestQueryPlans' ./internal/action/proposals/ 2>&1 | tee plans.log | grep -E '^(--- |\s+--- FAIL|FAIL|ok)|Hash Right Join|Seq Scan on pull_request_states|Bitmap Heap Scan on action_proposals p ' || true
+          go test -race -tags integration -count=20 -run 'TestEventsAPI|TestButtons' ./internal/slackapp/ || true
+          go test -race -tags integration -count=20 -run 'TestQueryPlans' ./internal/action/proposals/
+          go test -race -tags integration -count=20 -run 'TestEventsAPI|TestButtons' ./internal/slackapp/
+
       - run: make ci-${{ matrix.group }}
+        if: matrix.group != 'integration'
         env:
           SIDEKICK_PLANS_DIR: ${{ runner.temp }}/query-plans
           SIDEKICK_VALIDATE_TOOLS: ${{ github.workspace }}/bin/validator-tools
