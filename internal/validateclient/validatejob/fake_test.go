@@ -50,6 +50,9 @@ type fakeAPI struct {
 	steps  []step
 	faults faults
 
+	// onJobRead, when set, runs at each read of a Job, before the answer.
+	onJobRead func()
+
 	mu      sync.Mutex
 	created []*batchv1.Job
 	maps    []*corev1.ConfigMap
@@ -189,6 +192,10 @@ func (a *fakeAPI) getJob(name string) http.HandlerFunc {
 		n := a.reads[name]
 		a.reads[name]++
 		a.mu.Unlock()
+
+		if a.onJobRead != nil {
+			a.onJobRead()
+		}
 
 		job := batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: testNamespace}, Status: a.stepAt(n).status}
 

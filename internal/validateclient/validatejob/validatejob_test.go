@@ -273,11 +273,13 @@ func TestValidateCleansUpWhenTheCallerGivesUp(t *testing.T) {
 	api := newFakeAPI(t, []step{running()}, faults{})
 	c := api.client(Options{}, nil)
 
-	ctx, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
+	api.onJobRead = cancel
+
 	_, err := c.Validate(ctx, requestOf())
-	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorIs(t, err, context.Canceled)
 	require.NotErrorIs(t, err, validateclient.ErrUnavailable)
 	require.Equal(t, bothDeleted, api.deleted())
 }
