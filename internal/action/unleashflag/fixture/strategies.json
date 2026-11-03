@@ -1,0 +1,16 @@
+[
+  {
+    "id": "s1", "name": "flexibleRollout", "title": "Gradual rollout", "disabled": false, "sortOrder": 0,
+    "constraints": [{"contextName": "userId", "operator": "IN", "values": ["a", "b"], "inverted": false, "caseInsensitive": false}],
+    "parameters": {"rollout": "10", "stickiness": "default", "groupId": "checkout-v2"},
+    "variants": [], "segments": [3], "milestoneId": null
+  },
+  {
+    "id": "s2", "name": "default", "title": null, "disabled": false, "sortOrder": 1,
+    "constraints": [], "parameters": {}, "variants": [], "segments": [], "milestoneId": null
+  },
+  {
+    "id": "s3", "name": "userWithId", "title": "Testers", "disabled": true, "sortOrder": 2,
+    "constraints": [], "parameters": {"userIds": "a,b"}, "variants": [], "segments": [], "milestoneId": null
+  }
+]
