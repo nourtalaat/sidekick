@@ -75,6 +75,7 @@ var (
 	_ action.Action          = (*Code)(nil)
 	_ action.ProposalChecker = (*Code)(nil)
 	_ action.Snapshotter     = (*Code)(nil)
+	_ action.Undoer          = (*Code)(nil)
 )
 
 // newCode builds the action from its validated config. It makes no network
