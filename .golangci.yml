@@ -146,7 +146,10 @@ linters:
       # The default list, plus action.LimitError, githubgit.Classify and
       # kubeaccess.Redact, which build an error that wraps the cause with what
       # was being done, or return the error they are given with the tokens cut
-      # out of its text; they are the wrapping itself.
+      # out of its text; they are the wrapping itself. The same goes for
+      # gitchange.Refuse, which keeps the text of the error it is given, and
+      # for the helpers of githubgit and gitlabgit that open a request and
+      # check that it is a draft, whose errors say what was being done.
       ignore-sigs:
         - .Errorf(
         - errors.New(
@@ -160,6 +163,13 @@ linters:
         - action.LimitError(
         - githubgit.Classify(
         - kubeaccess.Redact(
+        - gitchange.Refuse(
+        - githubgit.OpenPullRequest(
+        - githubgit.OpenDraft(
+        - githubgit.RequireDraft(
+        - gitlabgit.OpenMergeRequest(
+        - gitlabgit.OpenDraft(
+        - gitlabgit.RequireDraft(
 
     # Only the "blank line after a block" rule, not the rest of wsl.
     wsl_v5:
