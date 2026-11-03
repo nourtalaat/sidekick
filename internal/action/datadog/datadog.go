@@ -178,6 +178,11 @@ func (m *Monitor) Spec() action.Spec {
 	return action.Spec{Name: m.name, Description: b.String(), ParamsSchema: paramsSchema}
 }
 
+// FixKind implements action.MonitorFixer.
+func (*Monitor) FixKind() action.FixKind {
+	return action.FixAPI
+}
+
 // Validate implements action.Action. It runs without calling Datadog, so it
 // checks what the parameters alone show: the monitor ID against
 // limits.monitorIds, and each field of set against limits.fields. A monitor

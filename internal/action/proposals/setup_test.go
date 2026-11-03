@@ -34,6 +34,13 @@ var (
 // raises the threshold from 80 to 90.
 const monitorInput = `{"action": "monitor", "params": {"threshold": 90}, "reason": "The alert fires on normal load."}`
 
+// fixAPIInput and fixPullRequestInput are valid propose_action calls for
+// the fake monitor under the names that report each kind of fix.
+const (
+	fixAPIInput         = `{"action": "monitor-fix", "params": {"threshold": 90}, "reason": "The alert fires on normal load."}`
+	fixPullRequestInput = `{"action": "monitor-pr", "params": {"threshold": 90}, "reason": "The alert fires on normal load."}`
+)
+
 // noteInput is a valid propose_action call.
 const noteInput = `{"action": "monitor-note", "params": {"board": "ops", "title": "Slow checkout"}, "reason": "p99 doubled after the deploy."}`
 
@@ -50,7 +57,9 @@ type harness struct {
 	pool *pgxpool.Pool
 	svc  *Service
 	note *fakeNote
-	// monitor is the fake monitor action, a Snapshotter and Undoer.
+	// monitor is the fake monitor action, a Snapshotter and Undoer that fixes
+	// nothing. monitor-fix and monitor-pr are the same action reporting each
+	// kind of fix.
 	monitor *fakeMonitor
 	policy  *movablePolicy
 	clock   *clock
@@ -112,7 +121,7 @@ func setup(t *testing.T) *harness {
 		monitor: newFakeMonitor("monitor"),
 		clock:   &clock{now: time.Now().UTC().Truncate(time.Second)},
 		policy: &movablePolicy{routes: action.StaticPolicy{
-			"payments": {Mode: action.Approved, Actions: []string{"monitor-note", "monitor"}},
+			"payments": {Mode: action.Approved, Actions: []string{"monitor-note", "monitor", "monitor-fix", "monitor-pr"}},
 			"default":  {Mode: action.ReadOnly},
 		}},
 	}
@@ -128,7 +137,12 @@ func (h *harness) service(t *testing.T, opts Options) *Service {
 	t.Helper()
 
 	opts.Pool, opts.Policy, opts.Now = h.pool, h.policy, h.clock.Now
-	opts.Actions = map[string]action.Action{"monitor-note": h.note, "monitor": h.monitor}
+	opts.Actions = map[string]action.Action{
+		"monitor-note": h.note,
+		"monitor":      h.monitor,
+		"monitor-fix":  fixingMonitor{fakeMonitor: newFakeMonitor("monitor-fix"), kind: action.FixAPI},
+		"monitor-pr":   fixingMonitor{fakeMonitor: newFakeMonitor("monitor-pr"), kind: action.FixPullRequest},
+	}
 
 	s, err := New(opts)
 	require.NoError(t, err)

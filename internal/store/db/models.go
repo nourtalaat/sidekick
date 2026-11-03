@@ -32,6 +32,7 @@ type ActionProposal struct {
 	Snapshot           []byte
 	UndoOf             *uuid.UUID
 	Undoable           bool
+	FixKind            *string
 }
 
 type ApiToken struct {

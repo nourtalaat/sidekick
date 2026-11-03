@@ -136,6 +136,11 @@ func (p *PR) Spec() action.Spec {
 	return action.Spec{Name: p.name, Description: b.String(), ParamsSchema: paramsSchema}
 }
 
+// FixKind implements action.MonitorFixer.
+func (*PR) FixKind() action.FixKind {
+	return action.FixPullRequest
+}
+
 // Validate implements action.Action. It checks the parameters against the
 // limits that need no network: the repository, the base branch, the number
 // of files and their paths. The changed lines, and the files themselves,
