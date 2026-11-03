@@ -95,6 +95,10 @@ type validator struct {
 	// extraIntakes are intake names a route's match may name besides the
 	// file's: the runtime listeners, when a runtime route is checked.
 	extraIntakes []string
+	// actionConfigs are the decoded configs of the actions, by name. A
+	// runtime route is checked without checkActions, so they are decoded
+	// when a route first needs one.
+	actionConfigs map[string]any
 }
 
 // run runs every check, recording the problems in v.errs.
@@ -334,7 +338,10 @@ func (v *validator) checkActions() {
 	for _, name := range sortedKeys(a.Definitions) {
 		s := a.Definitions[name]
 		v.checkName(s.Path(), name)
-		checkPlugin(v, v.regs.Actions, "action type", typeKey, name, s)
+
+		if decoded, ok := checkPlugin(v, v.regs.Actions, "action type", typeKey, name, s); ok {
+			v.actionConfigs[name] = decoded
+		}
 
 		if slices.Contains(slackActionTypes, s.Type) && v.cfg.Slack == nil {
 			v.errs.add(s.Path(), "type %s needs slack.botTokenSecret", s.Type)
@@ -415,8 +422,9 @@ func (v *validator) checkRouteDetails(path string, details map[string]string) {
 // checkRouteActions checks a route's action mode and its list of actions:
 // the mode is known, a read-only route lists none, an approved or
 // read-write route lists at least one, a read-write route can select only
-// trusted senders unless it sets allowUntrustedWrite, and each action is
-// defined once in the actions section.
+// trusted senders unless it sets allowUntrustedWrite, a read-write route
+// lists no approval-only action that lacks allowReadWrite, and each action
+// is defined once in the actions section.
 func (v *validator) checkRouteActions(path string, r Route) {
 	if !slices.Contains(knownModes, r.Mode) {
 		v.errs.add(path+".mode", "unknown mode %q%s", r.Mode, didYouMean(string(r.Mode), asStrings(knownModes)))
@@ -431,6 +439,7 @@ func (v *validator) checkRouteActions(path string, r Route) {
 
 	if r.Mode == action.ReadWrite {
 		v.checkTrust(path, r)
+		v.checkApprovalOnly(path, r)
 	}
 
 	v.references(path+".actions", "action", r.Actions, slices.Collect(maps.Keys(v.cfg.Actions.Definitions)))
@@ -444,6 +453,44 @@ func (v *validator) checkRouteActions(path string, r Route) {
 
 		seen[name] = true
 	}
+}
+
+// checkApprovalOnly refuses a read-write route that lists an approval-only
+// action whose config does not set allowReadWrite: true.
+func (v *validator) checkApprovalOnly(path string, r Route) {
+	for i, name := range r.Actions {
+		if !action.ReadWriteBlocked(v.actionConfig(name)) {
+			continue
+		}
+
+		v.errs.add(fmt.Sprintf("%s.actions[%d]", path, i),
+			"action %q (type %s) is approval-only, so a read-write route may not list it as it is; "+
+				"use mode: approved on this route, or set allowReadWrite: true on the action in the config file",
+			name, v.cfg.Actions.Definitions[name].Type)
+	}
+}
+
+// actionConfig returns the decoded config of the action called name, or nil
+// when the action is not defined or its section does not decode; those
+// problems are reported where the action is defined.
+func (v *validator) actionConfig(name string) any {
+	if decoded, ok := v.actionConfigs[name]; ok {
+		return decoded
+	}
+
+	s, ok := v.cfg.Actions.Definitions[name]
+	if !ok || s.Node == nil {
+		return nil
+	}
+
+	decoded, err := v.regs.Actions.Check(v.ctx, s.Type, name, s)
+	if err != nil {
+		decoded = nil
+	}
+
+	v.actionConfigs[name] = decoded
+
+	return decoded
 }
 
 // checkTrust applies the trusted-sender rule (ACT-6) to a read-write
@@ -980,6 +1027,8 @@ func newValidator(ctx context.Context, cfg *Config, opts LoadOptions) *validator
 		regs: opts.Registries.WithDefaults(),
 		caps: map[string]model.Capabilities{},
 		errs: &errorList{},
+
+		actionConfigs: map[string]any{},
 	}
 }
 

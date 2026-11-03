@@ -725,6 +725,65 @@ func TestReadWriteRoutes(t *testing.T) {
 	}
 }
 
+func TestReadWriteRoutesRefuseApprovalOnlyActions(t *testing.T) {
+	t.Parallel()
+
+	const wantMessage = `action "rollback" (type gated.note) is approval-only, so a read-write route may not list it as it is; ` +
+		"use mode: approved on this route, or set allowReadWrite: true on the action in the config file"
+
+	route := func(mode string, actions ...string) map[string]any {
+		return map[string]any{
+			"name": "write", "match": map[string]any{"intake": []string{"alertmanager"}}, "outputs": []string{"slack-thread"},
+			"mode": mode, "actions": actions,
+		}
+	}
+
+	tests := []struct {
+		name       string
+		body       map[string]any
+		wantStatus int
+	}{
+		{name: "read-write without the opt-in", body: route("read-write", "rollback"), wantStatus: http.StatusUnprocessableEntity},
+		{name: "read-write with the opt-in", body: route("read-write", "rollback-ok"), wantStatus: http.StatusCreated},
+		{name: "approved mode", body: route("approved", "rollback"), wantStatus: http.StatusCreated},
+		{name: "read-write with an action that is not approval-only", body: route("read-write", "monitor-note"), wantStatus: http.StatusCreated},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := setupRules(t)
+
+			rec := s.sendRule(t, adminCaller, http.MethodPost, "/api/v1/routes", tt.body)
+			require.Equal(t, tt.wantStatus, rec.Code, rec.Body.String())
+
+			if tt.wantStatus == http.StatusCreated {
+				return
+			}
+
+			require.Equal(t, wantMessage, ruleProblemOf(t, rec).fieldMessages()["actions[0]"])
+			require.Empty(t, s.ruleAudits(t))
+			require.Len(t, s.listRoutes(t, adminCaller), 5, "a refused change stores nothing")
+		})
+	}
+
+	t.Run("an update to read-write", func(t *testing.T) {
+		t.Parallel()
+
+		s := setupRules(t)
+
+		body := route("read-write", "rollback")
+		body["enabled"], body["version"], body["match"] = true, 1, map[string]any{"intake": []string{"alertmanager"}}
+		delete(body, "name")
+
+		rec := s.sendRule(t, adminCaller, http.MethodPut, "/api/v1/routes/checkout", body)
+		require.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
+		require.Equal(t, wantMessage, ruleProblemOf(t, rec).fieldMessages()["actions[0]"])
+		require.Empty(t, s.ruleAudits(t))
+	})
+}
+
 func TestUpdateRouteToReadWrite(t *testing.T) {
 	t.Parallel()
 

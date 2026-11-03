@@ -2684,6 +2684,58 @@ The mode is fixed when the investigation is created, like the other
 settings above. The route's `actions` are read again when the model
 proposes and when a proposal runs; see [`actions`](#actions).
 
+Some actions change a running system, for example a rollback. Such an
+action is approval-only: a `read-write` route may list it only when its
+definition in `actions` sets `allowReadWrite: true`. Without the key, the
+file is refused, and so is a route that an admin saves in the web UI or the
+API. Use `mode: approved` for the route, so a person approves each
+proposal, or set the key to let the policy approve them. The key is an
+unknown-key error for an action type that is not approval-only. Which
+action types are approval-only is said in their own section.
+
+```yaml
+actions:
+  fix-api:                          # an approval-only action type (an example)
+    type: example.rollback
+    tokenSecret: { name: rollbacks, key: token }
+
+routes:
+  - name: api-fixes
+    match: { intake: [alertmanager] }
+    mode: read-write
+    actions: [fix-api]              # refused
+```
+
+```text
+routes[0].actions[0]: action "fix-api" (type example.rollback) is approval-only, so a read-write route may not list it as it is; use mode: approved on this route, or set allowReadWrite: true on the action in the config file
+```
+
+Either fix makes the file load:
+
+```yaml
+actions:
+  fix-api:
+    type: example.rollback
+    tokenSecret: { name: rollbacks, key: token }
+    allowReadWrite: true            # the policy approves its proposals with no person
+
+routes:
+  - name: api-fixes
+    match: { intake: [alertmanager] }
+    mode: read-write
+    actions: [fix-api]
+```
+
+or keep the action as it is and set `mode: approved` on the route.
+
+Sidekick logs a warning for each `read-write` route and action with
+`allowReadWrite: true`, every time it starts. If the key is missing when
+the model proposes, for example because the config changed after the route
+was loaded, the proposal is not approved by the policy: it waits for a
+person, and the model is told so. A proposal that the policy approved is
+refused when it runs if the action has become approval-only without the
+key since. A proposal that a person approved is not affected by the key.
+
 #### Read + write mode and trusted senders
 
 Read + write mode runs changes on the strength of an alert, and the text of
