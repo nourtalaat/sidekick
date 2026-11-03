@@ -86,7 +86,7 @@ export function OperationsSection({ operations, days }: OperationsSectionProps) 
               />
               <ChartCard
                 title="Noisy alerts fixed"
-                summary={`False alarms whose fix a responder marked as applied, by ${per}: ${formatCount(total.noisyFixed)} in all.`}
+                summary={`False alarms that count as fixed, by ${per}: the fix was marked as applied, the monitor pull request that Sidekick opened was merged, or the monitor change that Sidekick made through the tool's API ran and was not undone. A false alarm counts once even when more than one applies. ${formatCount(total.noisyFixed)} in all.`}
                 spec={countSpec(noisyFixedRows(stats, days), "Noisy alerts fixed", xLabel, categoryColor(0))}
               />
               <ChartCard

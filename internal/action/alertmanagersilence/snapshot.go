@@ -76,7 +76,7 @@ func (s *silencer) Snapshot(ctx context.Context, raw json.RawMessage) (action.Sn
 		return action.Snapshot{}, fmt.Errorf("encode the silence: %w", err)
 	}
 
-	return action.Snapshot{Target: target(req.matchers), After: doc}, nil
+	return action.Snapshot{Target: s.target(req.matchers), After: doc}, nil
 }
 
 // preview reads the firing alerts that match the matchers.
@@ -97,6 +97,38 @@ func (s *silencer) preview(ctx context.Context, matchers []mute.Matcher) any {
 	return out
 }
 
+// target names the silence, as Snapshot.Target: the matchers as filters.
+func (s *silencer) target(matchers []mute.Matcher) string {
+	exprs := make([]string, 0, len(matchers))
+	for _, m := range matchers {
+		exprs = append(exprs, m.Expression())
+	}
+
+	return source.CutText(s.backend.TargetPrefix+":silence{"+strings.Join(exprs, ",")+"}", targetBytes)
+}
+
+// readAfter reads the After of a snapshot and checks that it is the
+// snapshot of these parameters, which Execute has just checked against the
+// limits as they are now: the same matchers, duration and comment, and a
+// creator name that is fit to send. Anything else is a permanent failure.
+func (s *silencer) readAfter(snap *action.Snapshot, req request) (afterDoc, error) {
+	var doc afterDoc
+	if err := json.Unmarshal(snap.After, &doc); err != nil {
+		return afterDoc{}, fmt.Errorf("%w: %w: %w", action.ErrPermanent, errBadSnapshot, err)
+	}
+
+	if !mute.SameMatchers(doc.Matchers, req.matchers) || snap.Target != s.target(req.matchers) ||
+		doc.Duration != mute.FormatDuration(req.duration) || doc.Comment != req.comment {
+		return afterDoc{}, fmt.Errorf("%w: %w", action.ErrPermanent, errTargetDiffer)
+	}
+
+	if doc.CreatedBy == "" || CheckCreatedBy(doc.CreatedBy) != nil {
+		return afterDoc{}, fmt.Errorf("%w: %w: the creator name is not usable", action.ErrPermanent, errBadSnapshot)
+	}
+
+	return doc, nil
+}
+
 // describeAlert writes an alert as its labels and its state, for the
 // preview. The label values are text from alerts, so they are cut.
 func describeAlert(a alert) string {
@@ -107,36 +139,4 @@ func describeAlert(a alert) string {
 	}
 
 	return source.CutText(strings.Join(parts, " "), previewLabelBytes) + " (" + source.CutText(a.State, 20) + ")"
-}
-
-// target names the silence, as Snapshot.Target: the matchers as filters.
-func target(matchers []mute.Matcher) string {
-	exprs := make([]string, 0, len(matchers))
-	for _, m := range matchers {
-		exprs = append(exprs, m.Expression())
-	}
-
-	return source.CutText("alertmanager:silence{"+strings.Join(exprs, ",")+"}", targetBytes)
-}
-
-// readAfter reads the After of a snapshot and checks that it is the
-// snapshot of these parameters, which Execute has just checked against the
-// limits as they are now: the same matchers, duration and comment, and a
-// creator name that is fit to send. Anything else is a permanent failure.
-func readAfter(snap *action.Snapshot, req request) (afterDoc, error) {
-	var doc afterDoc
-	if err := json.Unmarshal(snap.After, &doc); err != nil {
-		return afterDoc{}, fmt.Errorf("%w: %w: %w", action.ErrPermanent, errBadSnapshot, err)
-	}
-
-	if !mute.SameMatchers(doc.Matchers, req.matchers) || snap.Target != target(req.matchers) ||
-		doc.Duration != mute.FormatDuration(req.duration) || doc.Comment != req.comment {
-		return afterDoc{}, fmt.Errorf("%w: %w", action.ErrPermanent, errTargetDiffer)
-	}
-
-	if doc.CreatedBy == "" || checkCreatedBy(doc.CreatedBy) != nil {
-		return afterDoc{}, fmt.Errorf("%w: %w: the creator name is not usable", action.ErrPermanent, errBadSnapshot)
-	}
-
-	return doc, nil
 }
