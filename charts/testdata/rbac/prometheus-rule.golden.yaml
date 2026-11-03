@@ -1,6 +1,6 @@
 ---
 # Source: sidekick/templates/rbac.yaml
-# The service account of the prometheus.rule actions. Nothing runs as it:
+# A service account of the actions. Nothing runs as it:
 # Sidekick asks the API server for short-lived tokens of it.
 apiVersion: v1
 kind: ServiceAccount
@@ -18,7 +18,7 @@ automountServiceAccountToken: false
 
 ---
 # Source: sidekick/templates/rbac.yaml
-# The service account of the prometheus.rule actions. Nothing runs as it:
+# A service account of the actions. Nothing runs as it:
 # Sidekick asks the API server for short-lived tokens of it.
 apiVersion: v1
 kind: ServiceAccount

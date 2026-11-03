@@ -1,7 +1,7 @@
 import type { Watcher } from "../../api/investigations";
 import { Button } from "../../components/Button";
 import { watcherIcon, watcherLabel, watcherTone } from "../../components/WatcherBadge";
-import { formatClock, formatDuration, formatTime } from "../../format";
+import { watcherDetail } from "./watcherWords";
 import "./WatcherBox.css";
 
 interface WatcherBoxProps {
@@ -36,7 +36,7 @@ export function WatcherBox({ watchers, canStop, onStop, stopping }: WatcherBoxPr
               <p className="sk-watcher__title">
                 {watcherLabel(watcher.status)}: {watcher.name}
               </p>
-              <p className="sk-watcher__detail">{detailOf(watcher)}</p>
+              <p className="sk-watcher__detail">{watcherDetail(watcher)}</p>
             </div>
             {canStop && watcher.status === "running" && (
               <Button onClick={() => onStop(watcher)} disabled={stopping === watcher.id}>
@@ -48,45 +48,4 @@ export function WatcherBox({ watchers, canStop, onStop, stopping }: WatcherBoxPr
       })}
     </div>
   );
-}
-
-/** The detail line of a watcher: what it does now, or how it ended. */
-function detailOf(w: Watcher): string {
-  switch (w.status) {
-    case "running":
-      return [
-        `${w.passesInARow} of ${w.passesToRecover} passes`,
-        `every ${w.intervalSeconds}s`,
-        w.lastCheckAt ? `last check ${formatClock(w.lastCheckAt)}` : "no check yet",
-        w.lastResult,
-      ]
-        .filter(Boolean)
-        .join(" · ");
-    case "recovered":
-      return `Back up at ${formatTime(w.endedAt)} after ${duration(w)}`;
-    case "timed_out":
-      return `Stopped after ${duration(w)}, still down`;
-    case "stopped":
-      return `${stoppedBy(w)} at ${formatTime(w.endedAt)} after ${duration(w)}`;
-  }
-}
-
-function duration(w: Watcher): string {
-  if (!w.endedAt) {
-    return "";
-  }
-
-  return formatDuration(new Date(w.endedAt).getTime() - new Date(w.startedAt).getTime());
-}
-
-function stoppedBy(w: Watcher): string {
-  if (w.stopReason === "group_resolved") {
-    return "Stopped because the group was resolved";
-  }
-
-  if (w.stopReason === "config_changed") {
-    return "Stopped because the config changed";
-  }
-
-  return `Stopped by ${w.stoppedBy?.name ?? (w.stoppedBy?.slackUserId ? "a Slack user" : "a responder")}`;
 }

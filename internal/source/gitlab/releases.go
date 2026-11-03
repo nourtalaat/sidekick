@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/nourtalaat/sidekick/internal/gitlabapi"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
 
@@ -99,10 +100,10 @@ func (s *Source) listReleases(ctx context.Context, input json.RawMessage) (sourc
 		}
 	}
 
-	path := projectPath(project, "releases")
+	path := gitlabapi.ProjectPath(project, "releases")
 
 	list, more, err := collect(ctx, limit, func(ctx context.Context, page int) ([]apiRelease, int, error) {
-		return listPage[apiRelease](ctx, s.client, path, nil, page, min(s.pageSize, limit))
+		return gitlabapi.ListPage[apiRelease](ctx, s.client, path, nil, page, min(s.pageSize, limit))
 	}, keep)
 	if err != nil {
 		return source.Result{}, fmt.Errorf("list the releases of %s: %w", project, err)
@@ -149,7 +150,7 @@ func (s *Source) listTags(ctx context.Context, project string, limit int) ([]tag
 	var tags []apiTag
 
 	query := url.Values{"per_page": {strconv.Itoa(limit)}}
-	if _, err := s.client.get(ctx, projectPath(project, "repository", "tags"), query, &tags); err != nil {
+	if _, err := s.client.Get(ctx, gitlabapi.ProjectPath(project, "repository", "tags"), query, &tags); err != nil {
 		return nil, fmt.Errorf("get the tags: %w", err)
 	}
 

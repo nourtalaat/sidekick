@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/nourtalaat/sidekick/internal/gitlabapi"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
 
@@ -89,10 +90,10 @@ func (s *Source) listMergeRequests(ctx context.Context, input json.RawMessage) (
 	setTime(query, "updated_after", since)
 	setIf(query, "target_branch", in.Base)
 
-	path := projectPath(project, "merge_requests")
+	path := gitlabapi.ProjectPath(project, "merge_requests")
 
 	requests, more, err := collect(ctx, limit, func(ctx context.Context, page int) ([]apiMergeRequest, int, error) {
-		return listPage[apiMergeRequest](ctx, s.client, path, query, page, min(s.pageSize, limit, mergeRequestPageSize))
+		return gitlabapi.ListPage[apiMergeRequest](ctx, s.client, path, query, page, min(s.pageSize, limit, mergeRequestPageSize))
 	}, func(m apiMergeRequest) (bool, bool) {
 		if m.UpdatedAt.Before(since) {
 			return false, true

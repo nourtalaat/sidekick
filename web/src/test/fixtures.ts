@@ -135,3 +135,13 @@ export function watcher(overrides: Partial<Watcher> = {}): Watcher {
     ...overrides,
   };
 }
+
+/** One check of a watcher, newest first when numbered from the highest seq down. */
+export function check(seq: number, overrides: Partial<Watcher["recentChecks"][number]> = {}): Watcher["recentChecks"][number] {
+  return { seq, at: new Date(Date.UTC(2026, 9, 26, 14, 20, seq)).toISOString(), result: "pass", detail: `HTTP 200 on try ${seq}`, durationMs: 120, ...overrides };
+}
+
+/** The last `count` checks of a watcher, newest first, as the API sends them. */
+export function checksOf(count: number): Watcher["recentChecks"] {
+  return Array.from({ length: count }, (_, i) => check(count - i));
+}

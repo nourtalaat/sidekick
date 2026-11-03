@@ -1,0 +1,30 @@
+# A kubernetes.rollback action and no Kubernetes source that reads this
+# cluster: the pods mount the service account token anyway, so Sidekick can
+# ask for tokens of the actions' service account. It is so with rbac.actions
+# off too.
+rbac:
+  actions: false
+validator:
+  enabled: false
+secrets:
+  - sidekick-anthropic
+  - sidekick-slack
+  - sidekick-webhook
+  - sidekick-staging-cluster
+config:
+  sources:
+    # The quick-start source, pointed at another cluster, so no source reads this one.
+    k8s:
+      kubeconfigSecret: { name: sidekick-staging-cluster, key: kubeconfig }
+  actions:
+    rb-checkout:
+      type: kubernetes.rollback
+      limits:
+        namespaces: [shop]
+        names: [checkout]
+  routes:
+    - name: default
+      sources: [k8s]
+      outputs: [slack]
+      mode: approved
+      actions: [rb-checkout]

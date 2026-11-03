@@ -71,11 +71,12 @@ subjects:
 {{- end }}
 {{- end }}
 {{- $actions := include "sidekick.actions.access" . | fromJson }}
-{{- if and .Values.rbac.actions $actions.any }}
-{{- $accounts := keys $actions.accounts | sortAlpha }}
+{{- $everyAction := include "sidekick.actions.accounts" . | fromJson }}
+{{- if and .Values.rbac.actions $everyAction.any }}
+{{- $accounts := $everyAction.accounts }}
 {{- range $account := $accounts }}
 ---
-# The service account of the prometheus.rule actions. Nothing runs as it:
+# A service account of the actions. Nothing runs as it:
 # Sidekick asks the API server for short-lived tokens of it.
 apiVersion: v1
 kind: ServiceAccount
@@ -116,7 +117,7 @@ roleRef:
 subjects:
   {{- include "sidekick.kubernetesSource.subjects" . | nindent 2 }}
 {{- range $account := $accounts }}
-{{- range $namespace, $names := get $actions.accounts $account }}
+{{- range $namespace, $names := default dict (get $actions.accounts $account) }}
 ---
 # The actions' service account may get and patch the PrometheusRules the
 # actions list for this namespace, and nothing else.
@@ -146,6 +147,60 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: {{ include "sidekick.actions.rbacName" (dict "context" $ "suffix" (printf "for-%s" $account)) }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $account }}
+    namespace: {{ $.Release.Namespace }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- $rollbacks := include "sidekick.actions.rollback.access" . | fromJson }}
+{{- if and .Values.rbac.actions $rollbacks.any }}
+{{- range $account := keys $rollbacks.accounts | sortAlpha }}
+{{- range $namespace, $resources := get $rollbacks.accounts $account }}
+---
+# The actions' service account may get and patch the workloads the
+# kubernetes.rollback actions list for this namespace, by name, and list
+# their revisions. A list cannot be limited by name, so it reads the
+# ReplicaSets or ControllerRevisions of the whole namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "sidekick.actions.rbacName" (dict "context" $ "suffix" (printf "kubernetes-rollback-for-%s" $account)) }}
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "sidekick.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: actions
+rules:
+  {{- range $resource, $names := $resources }}
+  - apiGroups: [apps]
+    resources: [{{ $resource }}]
+    resourceNames: {{ $names | toJson }}
+    verbs: [get, patch]
+  {{- end }}
+  {{- if hasKey $resources "deployments" }}
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [list]
+  {{- end }}
+  {{- if or (hasKey $resources "statefulsets") (hasKey $resources "daemonsets") }}
+  - apiGroups: [apps]
+    resources: [controllerrevisions]
+    verbs: [list]
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "sidekick.actions.rbacName" (dict "context" $ "suffix" (printf "kubernetes-rollback-for-%s" $account)) }}
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "sidekick.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: actions
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "sidekick.actions.rbacName" (dict "context" $ "suffix" (printf "kubernetes-rollback-for-%s" $account)) }}
 subjects:
   - kind: ServiceAccount
     name: {{ $account }}
