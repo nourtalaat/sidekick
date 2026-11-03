@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
 
+	"github.com/nourtalaat/sidekick/internal/awsauth"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
 
@@ -209,5 +210,5 @@ func ecsURL(region, cluster, service string) string {
 		path += "/services/" + url.PathEscape(service) + "/health"
 	}
 
-	return consoleRoot(region) + "/" + path + "?region=" + region
+	return awsauth.ConsoleRoot(region) + "/" + path + "?region=" + region
 }
