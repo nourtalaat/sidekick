@@ -380,7 +380,10 @@ describe("the investigation page", () => {
 
   describe("a link to a proposal", () => {
     const UNDONE = "0192d3a4-0000-7000-8000-0000000000f9";
-    const proposals = [proposal({ id: UNDONE, status: "undone" }), proposal({ status: "succeeded", undoOf: UNDONE })];
+    const proposals = [
+      proposal({ id: UNDONE, investigationId: INVESTIGATION_ID, status: "undone" }),
+      proposal({ investigationId: INVESTIGATION_ID, status: "succeeded", undoOf: UNDONE }),
+    ];
 
     /** jsdom has no layout and no scrollIntoView. */
     function stubScroll() {
@@ -411,11 +414,11 @@ describe("the investigation page", () => {
       stubScroll();
       renderApp({ route: ROUTE, handler: pageServer({ inv: detail({ proposals }) }).handler });
 
-      const cards = await screen.findAllByRole("article", { name: "Proposed action monitor-note" });
+      await screen.findAllByRole("article", { name: "Proposed action monitor-note" });
 
       await user.click(screen.getByRole("link", { name: "monitor-note proposal" }));
 
-      await waitFor(() => expect(cards.find((c) => c.id === `proposal-${UNDONE}`)).toHaveFocus());
+      await waitFor(() => expect(document.getElementById(`proposal-${UNDONE}`)).toHaveFocus());
     });
 
     it("does nothing for an address that names no proposal on the page", async () => {
