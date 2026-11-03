@@ -1,0 +1,41 @@
+[
+  {
+    "id": 1002,
+    "iid": 12,
+    "project_id": 3,
+    "status": "running",
+    "source": "push",
+    "ref": "main",
+    "sha": "abc1234def5678abc1234def5678abc1234def56",
+    "name": "Build pipeline",
+    "web_url": "https://gitlab.example.com/acme/checkout/-/pipelines/1002",
+    "created_at": "2026-05-04T10:06:00.000Z",
+    "updated_at": "2026-05-04T10:08:00.000Z"
+  },
+  {
+    "id": 1001,
+    "iid": 11,
+    "project_id": 3,
+    "status": "success",
+    "source": "web",
+    "ref": "main",
+    "sha": "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c",
+    "name": "Deploy pipeline",
+    "web_url": "https://gitlab.example.com/acme/checkout/-/pipelines/1001",
+    "created_at": "2026-05-04T11:31:00.000+02:00",
+    "updated_at": "2026-05-04T11:40:00.000+02:00"
+  },
+  {
+    "id": 1000,
+    "iid": 10,
+    "project_id": 3,
+    "status": "failed",
+    "source": "schedule",
+    "ref": "main",
+    "sha": "9988776655443322110099887766554433221100",
+    "name": null,
+    "web_url": "https://gitlab.example.com/acme/checkout/-/pipelines/1000",
+    "created_at": "2026-05-04T08:00:00.000Z",
+    "updated_at": "2026-05-04T08:10:00.000Z"
+  }
+]

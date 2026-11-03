@@ -70,7 +70,7 @@ func (h *history) inconclusive(stop report.StopReason, reason, detail string) re
 	}
 }
 
-// checked returns what the run checked (VR-6): one entry per source called
+// checked returns what the run checked: one entry per source called
 // in any run of the investigation, from the saved results, and the entries
 // of start for sources that failed when this run started and were not
 // called. A source's status is the best of its calls: ok, then no_data,

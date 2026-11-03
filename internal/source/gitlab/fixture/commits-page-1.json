@@ -1,0 +1,36 @@
+[
+  {
+    "id": "abc1234def5678abc1234def5678abc1234def56",
+    "short_id": "abc1234d",
+    "title": "Lower DB pool size to 5 to save connections",
+    "message": "Lower DB pool size to 5 to save connections\n\nThe pool was too large for the new database.\n",
+    "author_name": "Ada Lovelace",
+    "author_email": "ada@example.com",
+    "authored_date": "2026-05-04T10:04:00.000+00:00",
+    "committer_name": "Ada Lovelace",
+    "committer_email": "ada@example.com",
+    "committed_date": "2026-05-04T10:05:00.000+00:00",
+    "created_at": "2026-05-04T10:05:00.000+00:00",
+    "parent_ids": ["0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c"],
+    "web_url": "https://gitlab.example.com/acme/checkout/-/commit/abc1234def5678abc1234def5678abc1234def56",
+    "trailers": {},
+    "extended_trailers": {}
+  },
+  {
+    "id": "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c",
+    "short_id": "0f1e2d3c",
+    "title": "Bump the image tag",
+    "message": "Bump the image tag",
+    "author_name": "Deploy Bot",
+    "author_email": "bot@example.com",
+    "authored_date": "2026-05-04T11:29:00.000+02:00",
+    "committer_name": "Deploy Bot",
+    "committer_email": "bot@example.com",
+    "committed_date": "2026-05-04T11:30:00.000+02:00",
+    "created_at": "2026-05-04T11:30:00.000+02:00",
+    "parent_ids": ["9988776655443322110099887766554433221100"],
+    "web_url": "https://gitlab.example.com/acme/checkout/-/commit/0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c",
+    "trailers": {},
+    "extended_trailers": {}
+  }
+]
