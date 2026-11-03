@@ -170,7 +170,7 @@ func TestModeOf(t *testing.T) {
 		{version: "latest abc", want: "latest", ok: true},
 		{version: "pinned abc", want: "pinned", ok: true},
 		{version: "unknown abc", want: "unknown"},
-		{version: "abc"},
+		{version: "abc", want: "abc"},
 		{version: ""},
 	}
 
