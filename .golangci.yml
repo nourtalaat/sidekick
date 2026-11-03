@@ -143,8 +143,9 @@ linters:
               desc: intake may import only event
 
     wrapcheck:
-      # The default list, plus action.LimitError, which builds an error that
-      # wraps action.ErrLimit and the cause; it is the wrapping itself.
+      # The default list, plus action.LimitError and githubgit.Classify, which
+      # build an error that wraps the cause with what was being done; they
+      # are the wrapping itself.
       ignore-sigs:
         - .Errorf(
         - errors.New(
@@ -156,6 +157,7 @@ linters:
         - .WithMessagef(
         - .WithStack(
         - action.LimitError(
+        - githubgit.Classify(
 
     # Only the "blank line after a block" rule, not the rest of wsl.
     wsl_v5:

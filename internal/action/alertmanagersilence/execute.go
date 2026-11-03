@@ -3,7 +3,6 @@ package alertmanagersilence
 import (
 	"context"
 	"fmt"
-	"net/url"
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/mute"
@@ -25,7 +24,7 @@ func (s *silencer) Execute(ctx context.Context, inv action.Invocation) (action.R
 		return action.Result{}, fmt.Errorf("%w: %w", action.ErrPermanent, errNoSnapshot)
 	}
 
-	doc, err := readAfter(inv.Snapshot, req)
+	doc, err := s.readAfter(inv.Snapshot, req)
 	if err != nil {
 		return action.Result{}, fmt.Errorf("read the snapshot: %w", err)
 	}
@@ -57,10 +56,10 @@ func (s *silencer) Execute(ctx context.Context, inv action.Invocation) (action.R
 	return s.result(fmt.Sprintf("Silenced for %s (silence %s).", mute.FormatDuration(req.duration), id), id), nil
 }
 
-// result is a result that links to the silence in the Alertmanager UI.
+// result is a result that links to the silence in the web UI of the service.
 func (s *silencer) result(summary, id string) action.Result {
 	return action.Result{
 		Summary: summary,
-		Links:   []action.Link{{Title: "Silence " + id, URL: s.client.root + "/#/silences/" + url.PathEscape(id)}},
+		Links:   []action.Link{{Title: "Silence " + id, URL: s.backend.SilenceURL(s.client.root, id)}},
 	}
 }

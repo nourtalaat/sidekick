@@ -233,6 +233,15 @@ describe("the dashboard", () => {
     expect(within(screen.getByRole("search", { name: "Filter the dashboard" })).getByRole("combobox", { name: "Verdict" })).toHaveValue("");
   });
 
+  it("says what the noisy alerts fixed chart counts", async () => {
+    renderApp({ route: "/dashboard", handler: dashboard().handler });
+
+    const card = (await screen.findByRole("heading", { name: "Noisy alerts fixed", level: 3 }, { timeout: LOAD_TIMEOUT })).closest("section") as HTMLElement;
+
+    expect(within(card).getByText(/the fix was marked as applied, the monitor pull request that Sidekick opened was merged, or the monitor change that Sidekick made through the tool's API ran and was not undone/)).toBeInTheDocument();
+    expect(within(card).getByText(/A false alarm counts once even when more than one applies\. 3 in all\./)).toBeInTheDocument();
+  });
+
   it("says so, with a link to the filters, for a chart with nothing to draw", async () => {
     renderApp({ route: "/dashboard", handler: dashboard({ operations: () => json(200, operations({ series: operations().series.map((b) => ({ ...b, noisyFixed: 0 })), totals: { ...operations().totals, noisyFixed: 0 } })) }).handler });
 

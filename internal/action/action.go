@@ -157,6 +157,14 @@ type Link struct {
 type Result struct {
 	Summary string `json:"summary"`
 	Links   []Link `json:"links"`
+	// PullRequest is set by an action that opened a pull request or a merge request.
+	PullRequest *PullRequestRef `json:"pullRequest,omitempty"`
+}
+
+// PullRequestRef names the pull request or merge request an action opened.
+type PullRequestRef struct {
+	Number  int64  `json:"number"`
+	HeadSHA string `json:"headSHA"`
 }
 
 // Mode is a route's action mode.

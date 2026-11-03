@@ -1,7 +1,10 @@
 -- A year of investigations for the query plan tests: 20,000 investigations
 -- in 20,000 groups, one event each, a watcher for every 10th, a rating for
--- every 5th, a proposal for every 4th, their rollup rows, in 3 routes, 20 services, 3 models and 6 verdicts, and one
--- dirty mark for every hour and day of the year.
+-- every 5th, a proposal for every 4th, two proposals that fix a monitor for
+-- every false positive (about 6,700) with a pull request state for each of
+-- the pull request ones, their rollup rows, in 3 routes, 20 services, 3
+-- models and 6 verdicts, and one dirty mark for every hour and day of the
+-- year.
 INSERT INTO event_groups (id, fingerprint, route, status, event_count, opened_at, last_event_at, closed_reason, investigation_id)
 SELECT md5('group' || i)::uuid, 'fp-' || i, 'route-' || (i % 3), 'closed', 1,
        now() - make_interval(secs => i * 1577), now() - make_interval(secs => i * 1577), 'window_ended',
@@ -49,6 +52,28 @@ SELECT md5('proposal' || i)::uuid, md5('investigation' || i)::uuid, 'note', '{}'
        now() - make_interval(secs => i * 1577 - 20), now() + interval '1 day',
        now() - make_interval(secs => i * 1577 - 40), now() - make_interval(secs => i * 1577 - 60)
 FROM generate_series(4, 20000, 4) AS i;
+
+-- The false positives are the investigations with i % 6 = 1. Each gets an
+-- API fix and a pull request fix, in a mix of statuses.
+INSERT INTO action_proposals (id, investigation_id, action, params, mode, status, idempotency_key,
+                              proposed_at, expires_at, decided_at, executed_at, fix_kind)
+SELECT md5('fixproposal' || k.kind || i)::uuid, md5('investigation' || i)::uuid,
+       CASE k.kind WHEN 'api' THEN 'datadog.update_monitor' ELSE 'github.pull_request' END, '{}', 'approved',
+       (ARRAY['succeeded', 'succeeded', 'undone', 'failed', 'proposed'])[1 + (i / 6 + CASE k.kind WHEN 'api' THEN 0 ELSE 2 END) % 5],
+       'fixproposal-' || k.kind || '-' || i,
+       now() - make_interval(secs => i * 1577 - 20), now() + interval '1 day',
+       now() - make_interval(secs => i * 1577 - 40), now() - make_interval(secs => i * 1577 - 60),
+       k.kind
+FROM generate_series(1, 20000, 6) AS i
+CROSS JOIN (VALUES ('api'), ('pull_request')) AS k(kind);
+
+INSERT INTO pull_request_states (proposal_id, repo, number, url, state, merged_at, closed_at, checked_at)
+SELECT md5('fixproposalpull_request' || i)::uuid, 'acme/monitors', i, 'https://github.com/acme/monitors/pull/' || i,
+       (ARRAY['open', 'merged', 'closed'])[1 + (i / 6) % 3],
+       CASE WHEN (i / 6) % 3 = 1 THEN now() - make_interval(secs => i * 1577 - 3600) END,
+       CASE WHEN (i / 6) % 3 = 2 THEN now() - make_interval(secs => i * 1577 - 3600) END,
+       now() - make_interval(secs => i * 1577 - 7200)
+FROM generate_series(1, 20000, 6) AS i;
 
 DELETE FROM rollup_dirty;
 
