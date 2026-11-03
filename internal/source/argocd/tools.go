@@ -15,6 +15,7 @@ import (
 // source prefix, for example argocd__list_applications.
 const (
 	toolListApplications = "list_applications"
+	toolGetApplication   = "get_application"
 )
 
 // Limits on how many applications list_applications returns.
@@ -59,6 +60,18 @@ var toolList = []source.Tool{
 		}),
 		ReadOnly: true,
 	},
+	{
+		Name: toolGetApplication,
+		Description: fmt.Sprintf("Get one Argo CD application: where its manifests come from (repository, path, target "+
+			"revision, chart or Kustomize settings), where it deploys to, its project, its sync policy and so whether "+
+			"auto-sync is on, its sync status and health, the revision deployed now and the one it was last compared "+
+			"with, the last operation (phase, message, times, who started it), its conditions, the images it runs, and "+
+			"up to %d resources that are not synced or not healthy.", maxResources),
+		InputSchema: schema(map[string]*jsonschema.Schema{
+			"application": applicationProperty(),
+		}, "application"),
+		ReadOnly: true,
+	},
 }
 
 // schema returns the JSON Schema of a tool's input: the tool's own
@@ -84,6 +97,12 @@ func schema(props map[string]*jsonschema.Schema, required ...string) json.RawMes
 // stringProperty returns a string property.
 func stringProperty(description string) *jsonschema.Schema {
 	return &jsonschema.Schema{Type: "string", Description: description}
+}
+
+// applicationProperty returns the property that names an application.
+func applicationProperty() *jsonschema.Schema {
+	return stringProperty("The application as project/name, for example shop/checkout. Take it from the application " +
+		"field of list_applications.")
 }
 
 // ptr returns a pointer to n as a float64, for schema bounds.

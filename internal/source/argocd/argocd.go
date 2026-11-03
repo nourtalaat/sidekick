@@ -75,6 +75,8 @@ func (s *Source) run(ctx context.Context, call source.Call) (source.Result, erro
 	switch call.Tool {
 	case toolListApplications:
 		return s.listApplications(ctx, call.Input)
+	case toolGetApplication:
+		return s.getApplication(ctx, call.Input)
 	default:
 		return source.Result{}, fmt.Errorf("tool %q: %w", call.Tool, errUnknownTool)
 	}
