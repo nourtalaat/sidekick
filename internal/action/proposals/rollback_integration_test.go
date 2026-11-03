@@ -81,7 +81,7 @@ func TestARollbackProposalCarriesBothRevisions(t *testing.T) {
 	require.NotNil(t, running.DeployedAt)
 
 	require.Equal(t, "5", goesBackTo.ID)
-	require.Equal(t, `checkout:1.4.5​`, goesBackTo.Version, "a hidden character is spelled out")
+	require.Equal(t, "checkout:1.4.5\\u200b", goesBackTo.Version, "a hidden character is spelled out")
 
 	require.NotEmpty(t, view.Changes, "the field-by-field difference is still computed for older clients")
 

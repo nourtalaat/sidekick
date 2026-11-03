@@ -91,7 +91,7 @@ func TestProposalShowsTheRevisionsOfARollback(t *testing.T) {
 
 	running, back := rollback.Revisions.Running, rollback.Revisions.GoesBackTo
 	require.Equal(t, revisionBody{
-		Kind: "ReplicaSet revision", ID: "7", Version: `checkout:1.4.7​`, DeployedAt: "2026-11-03T09:30:00Z", DeployedBy: "ana",
+		Kind: "ReplicaSet revision", ID: "7", Version: "checkout:1.4.7\\u200b", DeployedAt: "2026-11-03T09:30:00Z", DeployedBy: "ana",
 	}, running, "a hidden character is spelled out")
 	require.Equal(t, revisionBody{Kind: "ReplicaSet revision", ID: "6", Version: "checkout:1.4.6"}, back, "what the platform does not say is left out")
 
