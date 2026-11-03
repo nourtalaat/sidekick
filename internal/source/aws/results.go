@@ -11,6 +11,7 @@ import (
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/smithy-go"
 
+	"github.com/nourtalaat/sidekick/internal/awsauth"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
 
@@ -163,20 +164,7 @@ func apiMessage(status int, apiErr smithy.APIError) string {
 // consoleURL returns the link to a page of the AWS console of service in
 // region, with fragment after the #.
 func consoleURL(region, service, fragment string) string {
-	return consoleRoot(region) + "/" + service + "/home?region=" + region + "#" + fragment
-}
-
-// consoleRoot returns the address of the AWS console of region, in its
-// partition.
-func consoleRoot(region string) string {
-	switch {
-	case strings.HasPrefix(region, "cn-"):
-		return "https://" + region + ".console.amazonaws.cn"
-	case strings.HasPrefix(region, "us-gov-"):
-		return "https://" + region + ".console.amazonaws-us-gov.com"
-	default:
-		return "https://" + region + ".console.aws.amazon.com"
-	}
+	return awsauth.ConsoleRoot(region) + "/" + service + "/home?region=" + region + "#" + fragment
 }
 
 // jsurl encodes s as a string in the JSURL form the CloudWatch console
