@@ -8,6 +8,7 @@ import (
 	_ "github.com/nourtalaat/sidekick/internal/action/alertmanagersilence" // Action type "alertmanager.silence".
 	_ "github.com/nourtalaat/sidekick/internal/action/datadog"             // Action type "datadog.monitor".
 	_ "github.com/nourtalaat/sidekick/internal/action/datadogdowntime"     // Action type "datadog.downtime".
+	_ "github.com/nourtalaat/sidekick/internal/action/gcprun"              // Action type "gcp.cloud_run_rollback".
 	_ "github.com/nourtalaat/sidekick/internal/action/githubpr"            // Action type "github.pull_request".
 	_ "github.com/nourtalaat/sidekick/internal/action/grafana"             // Action type "grafana.alert_rule".
 	_ "github.com/nourtalaat/sidekick/internal/action/jira"                // Action types "jira.comment" and "jira.issue".
