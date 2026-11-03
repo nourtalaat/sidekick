@@ -74,9 +74,9 @@ import (
 const Type = "aws.ecs_rollback"
 
 var (
-	errNoSnapshot   = refuse("the proposal has no snapshot")
-	errTargetDiffer = refuse("the snapshot is of another service")
-	errNotRollback  = refuse("the proposal has no task definition revisions to restore")
+	errNoSnapshot   = awsaction.Refuse("the proposal has no snapshot")
+	errTargetDiffer = awsaction.Refuse("the snapshot is of another service")
+	errNotRollback  = awsaction.Refuse("the proposal has no task definition revisions to restore")
 )
 
 // init registers the action when the package is linked in.
@@ -326,7 +326,7 @@ func rollbackOf(snap *action.Snapshot, pos position) (*action.Revisions, error) 
 
 	revs, err := snap.Revisions()
 	if err != nil {
-		return nil, refuse("the snapshot cannot be read as two task definitions: %v", err)
+		return nil, awsaction.Refuse("the snapshot cannot be read as two task definitions: %v", err)
 	}
 
 	if revs == nil {

@@ -123,7 +123,8 @@ What the source can read is what this policy allows:
 The AWS actions, which do change things in AWS, never use this role. Each
 account of an action names a role of its own, with a policy limited to what
 the action may change, for example
-[`aws.ecs_rollback`](../configuration.md#awsecs_rollback). Keep the two roles
+[`aws.ecs_rollback`](../configuration.md#awsecs_rollback) and
+[`aws.lambda_rollback`](../configuration.md#awslambda_rollback). Keep the two roles
 apart, so that the read-only role of the source stays read-only.
 
 Logs Insights bills by the data a query scans. The 7-day limit on the time

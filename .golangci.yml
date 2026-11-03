@@ -143,8 +143,9 @@ linters:
               desc: intake may import only event
 
     wrapcheck:
-      # The default list, plus action.LimitError, githubgit.Classify and
-      # kubeaccess.Redact, which build an error that wraps the cause with what
+      # The default list, plus action.LimitError, awsaction.Refuse,
+      # githubgit.Classify and kubeaccess.Redact. Refuse builds a new error at
+      # its origin; the others build an error that wraps the cause with what
       # was being done, or return the error they are given with the tokens cut
       # out of its text; they are the wrapping itself. The same goes for
       # gitchange.Refuse, which builds a new error with the text of the one it
@@ -160,6 +161,7 @@ linters:
         - .WithMessagef(
         - .WithStack(
         - action.LimitError(
+        - awsaction.Refuse(
         - githubgit.Classify(
         - kubeaccess.Redact(
         - gitchange.Refuse(
