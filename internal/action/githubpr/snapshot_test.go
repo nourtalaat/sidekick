@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 )
 
 func TestBlobSHA(t *testing.T) {
@@ -28,7 +29,7 @@ func TestSnapshot(t *testing.T) {
 	b.github.ExpectAllCalled()
 
 	params := validParams()
-	params.Files = []FileChange{
+	params.Files = []gitchange.FileChange{
 		{Path: testRulesPath, Content: text(testRulesAfter)},
 		{Path: "prometheus/rules/new.yaml", Content: text("groups: []\nx: 1\n")},
 		{Path: "prometheus/rules/old.yaml", Delete: true},
@@ -62,7 +63,7 @@ func TestSnapshotOfALargestChangeFitsTheDifferenceLimit(t *testing.T) {
 	before := map[string]any{}
 	after := map[string]any{}
 
-	for i := range maxFilesCeiling {
+	for i := range gitchange.MaxFilesCeiling {
 		path := "prometheus/rules/" + string(rune('a'+i)) + ".yaml"
 		added, removed := 1, 1
 		before[path] = blobRef{Blob: "old"}

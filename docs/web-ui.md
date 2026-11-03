@@ -575,17 +575,19 @@ route is read-only now or no longer lists the action, answers 409 and can
 only be rejected. The investigation page lists its proposals too, with the
 same buttons for approvers.
 
-A proposal that changes a definition in place, such as a monitor, also
-shows **Changes, field by field**: each field with its value before and
-after, as plain text with hidden characters written as `\u` escapes. A
-proposal that deletes something says so, and Approve repeats that Sidekick
-cannot undo a delete. When the change worked and the action can undo it, an
-approver sees **Undo**, which asks once. Undo puts back only the fields
-Sidekick changed and leaves every other field as it is. If someone changed
-one of those fields since, nothing is restored: the card shows what a
-restore would overwrite, and **Restore anyway** restores it. The undo is a
-proposal of its own, approved by the person who asked, and the original
-becomes undone.
+A proposal that changes a definition in place, such as a monitor, also shows
+**Changes, field by field**: each field with its value before and after, in
+two labelled blocks that scroll and take focus, as plain text with hidden
+characters written as `\u` escapes. A proposal that deletes something says
+so, and Approve repeats that Sidekick cannot undo a delete. When the change
+worked and the action can undo it, an approver sees **Undo**, which asks
+once. Undo puts back only the fields Sidekick changed and leaves every other
+field as it is. If someone changed one of those fields since, nothing is
+restored: the card shows what a restore would overwrite, and **Restore
+anyway** restores it. The undo is a proposal of its own, approved by the
+person who asked, and the original becomes undone. The undo shows **Undoes**
+with a link to the proposal it restores, which opens its investigation and
+moves focus to that proposal.
 
 - `GET /api/v1/proposals` (approver) lists proposals a page at a time, with
   `status` (repeat it for several, default `proposed`), `cursor` and
@@ -749,6 +751,16 @@ An investigation's page links its `runtime:N` version to that version.
   `revision` answers 409, and a file that is not a valid scenario or still
   holds an email, a host name or an IP address answers 422. See
   [Exporting a real investigation](benchmark.md#exporting-a-real-investigation).
+
+## The menu
+
+The left menu shows only the items the signed-in role can use. A viewer, a
+responder and an approver see Investigations, Dashboard, Review queue,
+Lessons, Routes, Strategies, Listeners and Benchmarks; an admin also sees
+Audit log and Settings. Someone who opens the address of a page their role
+cannot use, for example from a shared link, sees the page title and a
+message that names the role it needs; the page sends no request. The menu is
+a convenience, not a guard: the server checks the role on every request.
 
 ## Listeners, routes and the audit log in the UI
 

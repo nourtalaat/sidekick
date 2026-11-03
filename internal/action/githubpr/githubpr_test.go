@@ -11,7 +11,11 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+<<<<<<< HEAD
 	"github.com/nourtalaat/sidekick/internal/action/actiontest"
+=======
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
+>>>>>>> origin/main
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/validateclient"
@@ -159,6 +163,7 @@ func TestSpec(t *testing.T) {
 	require.NoError(t, err)
 }
 
+<<<<<<< HEAD
 func TestSpecSnapshot(t *testing.T) {
 	t.Parallel()
 
@@ -180,6 +185,8 @@ func TestValidationErrorText(t *testing.T) {
 	require.NotContains(t, text, strings.Repeat("m", maxProblemBytes+1))
 }
 
+=======
+>>>>>>> origin/main
 func TestRegistered(t *testing.T) {
 	t.Parallel()
 
@@ -216,7 +223,7 @@ limits:
 func TestValidatorOfDeps(t *testing.T) {
 	t.Parallel()
 
-	changes := []change{{path: "prometheus/rules/a.yaml", format: validateclient.FormatPrometheusRules, content: text("groups: []\n")}}
+	changes := []gitchange.PlannedFile{{Path: "prometheus/rules/a.yaml", Format: validateclient.FormatPrometheusRules, Content: text("groups: []\n")}}
 
 	t.Run("a validator in the deps is used instead of the URL", func(t *testing.T) {
 		t.Parallel()

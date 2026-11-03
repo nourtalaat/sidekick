@@ -1,4 +1,4 @@
-package githubpr
+package gitchange
 
 import (
 	"context"

@@ -3,6 +3,7 @@
 package githubpr
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
@@ -59,7 +61,7 @@ func TestUndoRecordsTheStateOfAClosedPullRequest(t *testing.T) {
 
 	st := s.state(t, orig)
 	require.NotNil(t, st)
-	require.Equal(t, StateClosed, st.State)
+	require.Equal(t, gitchange.StateClosed, st.State)
 	require.Equal(t, int64(12), st.Number)
 	require.NotNil(t, st.ClosedAt)
 	require.Equal(t, time.Date(2026, 11, 3, 11, 0, 0, 0, time.UTC), st.ClosedAt.UTC())
@@ -88,22 +90,29 @@ func TestUndoRecordsTheStatesOfAMergedPullRequestAndItsRevert(t *testing.T) {
 
 	o := s.state(t, orig)
 	require.NotNil(t, o)
-	require.Equal(t, StateMerged, o.State)
+	require.Equal(t, gitchange.StateMerged, o.State)
 	require.NotNil(t, o.MergedAt)
 
 	r := s.state(t, undoID)
 	require.NotNil(t, r)
-	require.Equal(t, StateOpen, r.State)
+	require.Equal(t, gitchange.StateOpen, r.State)
 	require.Equal(t, int64(30), r.Number)
 
 	rows, err := db.New(s.pool).ListPullRequestsToCheck(t.Context(), db.ListPullRequestsToCheckParams{
-		Actions: []string{"monitor-pr"}, Since: time.Now().Add(-trackedFor), Before: time.Now().Add(time.Hour), Batch: maxChecksPerRun,
+		Actions: []string{"monitor-pr"}, Since: time.Now().Add(-gitchange.TrackedFor), Before: time.Now().Add(time.Hour), Batch: gitchange.MaxChecksPerRun,
 	})
 	require.NoError(t, err)
 
 	got := map[uuid.UUID]string{}
 	for _, row := range rows {
-		got[row.ID] = row.Repo
+
+		var target struct {
+			Repo string `json:"repo"`
+		}
+
+		require.NoError(t, json.Unmarshal(row.Params, &target))
+
+		got[row.ID] = target.Repo
 	}
 
 	require.Equal(t, testRepo, got[undoID], "the revert pull request is checked, with the repository of the proposal it undoes")

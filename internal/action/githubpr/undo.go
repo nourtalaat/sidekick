@@ -11,11 +11,10 @@ import (
 	"time"
 
 	gh "github.com/google/go-github/v93/github"
-	"github.com/google/uuid"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/source"
-	"github.com/nourtalaat/sidekick/internal/store/db"
 	"github.com/nourtalaat/sidekick/internal/weblink"
 )
 
@@ -59,7 +58,7 @@ func (p *PR) Undo(ctx context.Context, inv action.Invocation, snap action.Snapsh
 		return action.Result{}, fmt.Errorf("%w: no pull request was made from the branch %s", action.ErrPermanent, branch)
 	}
 
-	if stateOf(orig) == StateMerged {
+	if stateOf(orig) == gitchange.StateMerged {
 		return p.revert(ctx, inv, params, orig, snap, force)
 	}
 
@@ -88,7 +87,7 @@ func (p *PR) closeOriginal(ctx context.Context, inv action.Invocation, params Pa
 	title := fmt.Sprintf("%s#%d", params.Repo, orig.GetNumber())
 	closed, summary := orig, "The pull request "+title+" was closed already; its branch is deleted."
 
-	if stateOf(orig) == StateOpen {
+	if stateOf(orig) == gitchange.StateOpen {
 		updated, _, err := p.client.PullRequests.Edit(ctx, owner, name, orig.GetNumber(), &gh.PullRequest{State: new(stateOfClosed)})
 		if err != nil {
 			return action.Result{}, classify("close the pull request", err)
@@ -102,8 +101,8 @@ func (p *PR) closeOriginal(ctx context.Context, inv action.Invocation, params Pa
 	}
 
 	st := statusOf(closed)
-	if st.State == StateOpen {
-		st.State, st.ClosedAt = StateClosed, new(time.Now())
+	if st.State == gitchange.StateOpen {
+		st.State, st.ClosedAt = gitchange.StateClosed, new(time.Now())
 	}
 
 	if err := p.record(ctx, inv.UndoOf, params.Repo, st); err != nil {
@@ -211,7 +210,7 @@ func (p *PR) pushRevert(ctx context.Context, inv action.Invocation, params Param
 		return action.Result{Summary: "Nothing to revert: the files are as they were before the pull request."}, true, nil
 	}
 
-	message := revertPrefix + source.CutText(oneLine(plainText(params.Title)), maxCommitTitleBytes-len(revertPrefix)) +
+	message := revertPrefix + source.CutText(gitchange.OneLine(gitchange.PlainText(params.Title)), maxCommitTitleBytes-len(revertPrefix)) +
 		"\n\nSidekick proposal " + inv.ProposalID + ", which undoes " + inv.UndoOf + "\n"
 
 	if err := p.commitTo(ctx, owner, name, head, plan.entries, message, inv.IdempotencyKey); err != nil {
@@ -288,7 +287,7 @@ func (p *PR) revertRequest(inv action.Invocation, params Params, orig *gh.PullRe
 		fmt.Fprintf(&b, " [The investigation](%s).", link)
 	}
 
-	title := revertPrefix + source.CutText(oneLine(plainText(params.Title)), maxTitleChars-len(revertPrefix))
+	title := revertPrefix + source.CutText(gitchange.OneLine(gitchange.PlainText(params.Title)), gitchange.MaxTitleChars-len(revertPrefix))
 
 	return gh.CreatePullRequest{
 		Title: new(title),
@@ -302,22 +301,13 @@ func (p *PR) revertRequest(inv action.Invocation, params Params, orig *gh.PullRe
 // record keeps the state of a pull request for the proposal with the ID, for
 // the count of merged pull requests. Where there is no database, it does
 // nothing.
-func (p *PR) record(ctx context.Context, proposalID, repo string, st *Status) error {
+func (p *PR) record(ctx context.Context, proposalID, repo string, st *gitchange.Status) error {
 	if p.db == nil {
 		return nil
 	}
 
-	id, err := uuid.Parse(proposalID)
-	if err != nil {
-		return fmt.Errorf("%w: the proposal ID %q is not an ID: %w", action.ErrPermanent, proposalID, err)
-	}
-
-	err = db.New(p.db).RecordPullRequestState(ctx, db.RecordPullRequestStateParams{
-		ProposalID: id, Repo: repo, Number: int64(st.Number), Url: st.URL, State: st.State,
-		MergedAt: st.MergedAt, ClosedAt: st.ClosedAt, Now: time.Now(),
-	})
-	if err != nil {
-		return fmt.Errorf("record the state of the pull request of proposal %s: %w", id, err)
+	if err := gitchange.RecordState(ctx, p.db, proposalID, repo, st); err != nil {
+		return fmt.Errorf("record the pull request state: %w", err)
 	}
 
 	return nil

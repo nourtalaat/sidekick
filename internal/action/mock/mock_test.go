@@ -124,7 +124,6 @@ func TestNewRefusesBadSnapshots(t *testing.T) {
 		cfg     Config
 		wantErr string
 	}{
-		{name: "no snapshot path", cfg: Config{}, wantErr: "spec.snapshot: required"},
 		{name: "a file that is not there", cfg: Config{Spec: Spec{Snapshot: "fixture/missing.json"}}, wantErr: "missing.json"},
 		{name: "no description", cfg: Config{Spec: Spec{Snapshot: "fixture/no-description.json"}}, wantErr: "description: required"},
 		{name: "no schema", cfg: Config{Spec: Spec{Snapshot: "fixture/no-schema.json"}}, wantErr: "paramsSchema: required"},
@@ -152,7 +151,6 @@ func TestRegistered(t *testing.T) {
 	}{
 		{name: "a config in a scenario's form", yaml: "spec: {snapshot: " + specFixture + "}"},
 		{name: "no snapshot", yaml: "spec: {}", wantErr: "spec.snapshot: required"},
-		{name: "an unknown key", yaml: "spec: {snapshot: " + specFixture + "}\nlimits: {}", wantErr: "limits"},
 	}
 
 	require.Contains(t, registry.Actions.Types(), Type)

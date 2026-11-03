@@ -1,4 +1,4 @@
-package githubpr
+package gitchange
 
 import (
 	"errors"
@@ -10,10 +10,10 @@ import (
 // anyDepth is the glob segment that matches any number of path segments.
 const anyDepth = "**"
 
-// checkGlob checks that pattern is a glob matchGlob can use: not empty, not
+// CheckGlob checks that pattern is a glob matchGlob can use: not empty, not
 // absolute, with valid path.Match segments, and with ** only as a whole
 // segment.
-func checkGlob(pattern string) error {
+func CheckGlob(pattern string) error {
 	if pattern == "" {
 		return errors.New("required")
 	}
@@ -42,7 +42,7 @@ func checkGlob(pattern string) error {
 // matchGlob reports whether name matches pattern. The segments of both are
 // compared one by one with path.Match, so * and ? never match a slash, and a
 // pattern segment of ** matches zero or more segments of name. A pattern
-// that checkGlob refuses matches nothing.
+// that CheckGlob refuses matches nothing.
 func matchGlob(pattern, name string) bool {
 	return matchSegments(strings.Split(pattern, "/"), strings.Split(name, "/"))
 }

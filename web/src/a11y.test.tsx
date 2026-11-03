@@ -11,6 +11,7 @@ import { ApiError } from "./api/client";
 import { LoginPage } from "./pages/LoginPage";
 import { THEME_STORAGE_KEY } from "./theme";
 import { renderApp, renderWithProviders, stubMedia, wcagViolations } from "./test/helpers";
+import { ADMIN } from "./test/rules";
 
 // The theme comes from the stored choice, or from the system when there is none.
 const THEMES = [
@@ -46,6 +47,20 @@ describe.each(THEMES)("accessibility, theme $name", (theme) => {
     it("has no WCAG 2.2 AA violations on the shell", async () => {
       const { container } = renderApp({ route: "/investigations" });
       await screen.findByRole("heading", { name: "Investigations", level: 1 });
+
+      expect(await wcagViolations(container)).toEqual([]);
+    });
+
+    it("has no WCAG 2.2 AA violations on the shell with the menu of an admin", async () => {
+      const { container } = renderApp({ me: ADMIN, route: "/investigations" });
+      await screen.findByRole("link", { name: "Audit log" });
+
+      expect(await wcagViolations(container)).toEqual([]);
+    });
+
+    it("has no WCAG 2.2 AA violations on the role message of a page that an admin only opens", async () => {
+      const { container } = renderApp({ route: "/settings" });
+      await screen.findByRole("heading", { name: "Needs the admin role" });
 
       expect(await wcagViolations(container)).toEqual([]);
     });

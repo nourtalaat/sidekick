@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/investigator/tools"
 	"github.com/nourtalaat/sidekick/internal/validateclient"
 )
@@ -21,11 +22,13 @@ func text(s string) *string {
 // validParams returns parameters that pass the limits of validLimits.
 func validParams() Params {
 	return Params{
-		Repo:       "acme/monitors",
-		BaseBranch: "main",
-		Title:      "Raise the checkout latency threshold",
-		Body:       "The alert fires on short spikes.",
-		Files:      []FileChange{{Path: "prometheus/rules/checkout.yaml", Content: text("groups: []\n")}},
+		Repo: "acme/monitors",
+		Edit: gitchange.Edit{
+			BaseBranch: "main",
+			Title:      "Raise the checkout latency threshold",
+			Body:       "The alert fires on short spikes.",
+			Files:      []gitchange.FileChange{{Path: "prometheus/rules/checkout.yaml", Content: text("groups: []\n")}},
+		},
 	}
 }
 
@@ -38,41 +41,41 @@ func TestLimitsPlan(t *testing.T) {
 		limits    func(l *Limits)
 		wantErr   string
 		wantLimit bool
-		want      []change
+		want      []gitchange.PlannedFile
 	}{
 		{
 			name: "one file",
-			want: []change{{path: "prometheus/rules/checkout.yaml", format: validateclient.FormatPrometheusRules, content: text("groups: []\n")}},
+			want: []gitchange.PlannedFile{{Path: "prometheus/rules/checkout.yaml", Format: validateclient.FormatPrometheusRules, Content: text("groups: []\n")}},
 		},
 		{
 			name: "files of every format and a delete",
 			change: func(p *Params) {
-				p.Files = []FileChange{
+				p.Files = []gitchange.FileChange{
 					{Path: "prometheus/rules/a.yaml", Content: text("a")},
 					{Path: "datadog/prod/main.tf", Content: text("b")},
 					{Path: "grafana/alerting/g.yaml", Delete: true},
 				}
 			},
-			want: []change{
-				{path: "prometheus/rules/a.yaml", format: validateclient.FormatPrometheusRules, content: text("a")},
-				{path: "datadog/prod/main.tf", format: validateclient.FormatTerraform, content: text("b")},
-				{path: "grafana/alerting/g.yaml", format: validateclient.FormatGrafanaAlertFile},
+			want: []gitchange.PlannedFile{
+				{Path: "prometheus/rules/a.yaml", Format: validateclient.FormatPrometheusRules, Content: text("a")},
+				{Path: "datadog/prod/main.tf", Format: validateclient.FormatTerraform, Content: text("b")},
+				{Path: "grafana/alerting/g.yaml", Format: validateclient.FormatGrafanaAlertFile},
 			},
 		},
-		{name: "the repository in other case", change: func(p *Params) { p.Repo = "Acme/Monitors" }, want: []change{{path: "prometheus/rules/checkout.yaml", format: validateclient.FormatPrometheusRules, content: text("groups: []\n")}}},
+		{name: "the repository in other case", change: func(p *Params) { p.Repo = "Acme/Monitors" }, want: []gitchange.PlannedFile{{Path: "prometheus/rules/checkout.yaml", Format: validateclient.FormatPrometheusRules, Content: text("groups: []\n")}}},
 		{name: "another repository", change: func(p *Params) { p.Repo = "acme/other" }, wantErr: `repo "acme/other" is not one of limits.repos (acme/monitors)`, wantLimit: true},
 		{name: "a repository that only starts the same", change: func(p *Params) { p.Repo = "acme/monitors-old" }, wantErr: "is not one of limits.repos", wantLimit: true},
 		{name: "another base branch", change: func(p *Params) { p.BaseBranch = "develop" }, wantErr: `baseBranch "develop" is not the allowed base branch "main"`, wantLimit: true},
 		{name: "no title", change: func(p *Params) { p.Title = "  " }, wantErr: "title: required"},
 		{name: "a title that is too long", change: func(p *Params) { p.Title = strings.Repeat("t", 121) }, wantErr: "title: longer than 120 characters"},
-		{name: "a title of the longest size", change: func(p *Params) { p.Title = strings.Repeat("t", 120) }, want: []change{{path: "prometheus/rules/checkout.yaml", format: validateclient.FormatPrometheusRules, content: text("groups: []\n")}}},
+		{name: "a title of the longest size", change: func(p *Params) { p.Title = strings.Repeat("t", 120) }, want: []gitchange.PlannedFile{{Path: "prometheus/rules/checkout.yaml", Format: validateclient.FormatPrometheusRules, Content: text("groups: []\n")}}},
 		{name: "a body that is too long", change: func(p *Params) { p.Body = strings.Repeat("b", 8001) }, wantErr: "body: longer than 8000 characters"},
 		{name: "a NUL in the body", change: func(p *Params) { p.Body = "a\x00b" }, wantErr: "valid UTF-8 text without NUL"},
 		{name: "no files", change: func(p *Params) { p.Files = nil }, wantErr: "files: give at least one file"},
 		{
 			name: "more files than the limit",
 			change: func(p *Params) {
-				p.Files = []FileChange{
+				p.Files = []gitchange.FileChange{
 					{Path: "prometheus/rules/a.yaml", Content: text("a")}, {Path: "prometheus/rules/b.yaml", Content: text("b")},
 					{Path: "prometheus/rules/c.yaml", Content: text("c")}, {Path: "prometheus/rules/d.yaml", Content: text("d")},
 				}
@@ -82,14 +85,14 @@ func TestLimitsPlan(t *testing.T) {
 		{
 			name: "as many files as the limit",
 			change: func(p *Params) {
-				p.Files = []FileChange{
+				p.Files = []gitchange.FileChange{
 					{Path: "prometheus/rules/a.yaml", Content: text("a")}, {Path: "prometheus/rules/b.yaml", Content: text("b")}, {Path: "prometheus/rules/c.yaml", Content: text("c")},
 				}
 			},
-			want: []change{
-				{path: "prometheus/rules/a.yaml", format: validateclient.FormatPrometheusRules, content: text("a")},
-				{path: "prometheus/rules/b.yaml", format: validateclient.FormatPrometheusRules, content: text("b")},
-				{path: "prometheus/rules/c.yaml", format: validateclient.FormatPrometheusRules, content: text("c")},
+			want: []gitchange.PlannedFile{
+				{Path: "prometheus/rules/a.yaml", Format: validateclient.FormatPrometheusRules, Content: text("a")},
+				{Path: "prometheus/rules/b.yaml", Format: validateclient.FormatPrometheusRules, Content: text("b")},
+				{Path: "prometheus/rules/c.yaml", Format: validateclient.FormatPrometheusRules, Content: text("c")},
 			},
 		},
 		{name: "a path outside every glob", change: func(p *Params) { p.Files[0].Path = "src/main.go" }, wantErr: `path "src/main.go" matches none of the limits.paths globs`, wantLimit: true},
@@ -104,12 +107,12 @@ func TestLimitsPlan(t *testing.T) {
 		{
 			name: "a path given twice",
 			change: func(p *Params) {
-				p.Files = []FileChange{{Path: "prometheus/rules/a.yaml", Content: text("a")}, {Path: "prometheus/rules/A.yaml", Content: text("b")}}
+				p.Files = []gitchange.FileChange{{Path: "prometheus/rules/a.yaml", Content: text("a")}, {Path: "prometheus/rules/A.yaml", Content: text("b")}}
 			},
 			wantErr: "is given twice",
 		},
-		{name: "content and delete", change: func(p *Params) { p.Files[0].Delete = true }, wantErr: errBothOrNone.Error()},
-		{name: "neither content nor delete", change: func(p *Params) { p.Files[0].Content = nil }, wantErr: errBothOrNone.Error()},
+		{name: "content and delete", change: func(p *Params) { p.Files[0].Delete = true }, wantErr: "give either content or delete"},
+		{name: "neither content nor delete", change: func(p *Params) { p.Files[0].Content = nil }, wantErr: "give either content or delete"},
 		{name: "content that is not UTF-8", change: func(p *Params) { p.Files[0].Content = text("a\xffb") }, wantErr: "content must be valid UTF-8"},
 	}
 
@@ -179,8 +182,11 @@ func TestDecodeParams(t *testing.T) {
 	p, err := decodeParams(json.RawMessage(`{"repo":"a/b","baseBranch":"main","title":"t","body":"b","files":[{"path":"p","content":"c"},{"path":"q","delete":true}]}`))
 	require.NoError(t, err)
 	require.Equal(t, Params{
-		Repo: "a/b", BaseBranch: "main", Title: "t", Body: "b",
-		Files: []FileChange{{Path: "p", Content: text("c")}, {Path: "q", Delete: true}},
+		Repo: "a/b",
+		Edit: gitchange.Edit{
+			BaseBranch: "main", Title: "t", Body: "b",
+			Files: []gitchange.FileChange{{Path: "p", Content: text("c")}, {Path: "q", Delete: true}},
+		},
 	}, p)
 
 	_, err = decodeParams(json.RawMessage(`{"repo":"a/b","extra":1}`))
