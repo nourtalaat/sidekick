@@ -184,3 +184,31 @@ SET text = excluded.text, updated_by = excluded.updated_by, updated_at = exclude
 -- name: DeleteServiceNotes :execrows
 -- DeleteServiceNotes deletes the notes about a service.
 DELETE FROM service_notes WHERE service = @service;
+
+-- name: InsertMemoryUses :exec
+-- InsertMemoryUses records the examples that the prompt of one run of an
+-- investigation showed. example_ids are the investigations the examples came
+-- from, in the order of the prompt, which gives each its rank from 1, and
+-- matches say why each was chosen, in the same order. An example recorded for
+-- the run already is left as it is. Run it in the transaction that saves the
+-- prompt.
+INSERT INTO memory_uses (investigation_id, run, example_id, match, rank)
+SELECT @investigation_id::uuid, @run::int, u.example_id, (@matches::text[])[u.rank], u.rank::smallint
+FROM unnest(@example_ids::uuid[]) WITH ORDINALITY AS u (example_id, rank)
+ON CONFLICT (investigation_id, run, example_id) DO NOTHING;
+
+-- name: ListMemoryUsedBy :many
+-- ListMemoryUsedBy returns the examples that the prompt of one run of an
+-- investigation showed, in the order of the prompt, with what the memory
+-- entry and the investigation of each example hold now. Both are left joins,
+-- since either can be gone; present says whether the entry is still there.
+SELECT u.example_id, u.match, u.rank,
+       (m.investigation_id IS NOT NULL)::boolean AS present,
+       m.summary, m.cause, m.verdict, m.disabled,
+       i.alert_title
+FROM memory_uses AS u
+LEFT JOIN memory_entries AS m ON m.investigation_id = u.example_id
+LEFT JOIN investigations AS i ON i.id = u.example_id
+WHERE u.investigation_id = @investigation_id AND u.run = @run
+ORDER BY u.rank
+LIMIT sqlc.arg(max_rows)::int;
