@@ -65,7 +65,9 @@ Benchmarks always run on Postgres, with the same code as `serve`.
 
   Once the runs are scored, the results are stored in the database's
   default schema, the one `sidekick serve` uses, so the web UI can show
-  them: one `bench_runs` row for the run, with its settings, totals and
+  them on its [Benchmarks page](web-ui.md#the-benchmarks-page), the page of
+  [one run](web-ui.md#the-page-of-one-benchmark-run) and the page that
+  [compares two runs](web-ui.md#comparing-two-benchmark-runs): one `bench_runs` row for the run, with its settings, totals and
   thresholds, and one `bench_results` row per run of a scenario. They are
   written in one transaction, through a connection of their own, apart
   from the runs' schema. The default schema must have every migration of
@@ -181,7 +183,8 @@ the log.
 scenario `bench.gate.minRepeats` times, with the same models, in turn. The
 runs are graded by the judge as `sidekick bench run` grades them, and both are
 stored as benchmark runs with the trigger `gate`, so they show in the
-[dashboard](web-ui.md#dashboard-numbers-and-benchmark-runs).
+[dashboard](web-ui.md#dashboard-numbers-and-benchmark-runs) and on the
+[Benchmarks page](web-ui.md#the-benchmarks-page), as Strategy gate.
 
 **The pass rule.** For each scenario the gate takes the mean overall score of
 the change minus that of the current version. It resamples those differences

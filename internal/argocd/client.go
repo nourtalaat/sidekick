@@ -178,10 +178,57 @@ func (c *Client) ApplicationURL(ref AppRef) string {
 	return c.baseURL + "/applications/" + url.PathEscape(c.namespace) + "/" + url.PathEscape(ref.Name)
 }
 
+// rollbackRequest is the body of a rollback call. Only the fields Sidekick
+// sets are here: Prune stays false, so a rollback never deletes anything,
+// and no dry run is asked for.
+type rollbackRequest struct {
+	ID           int64  `json:"id"`
+	Project      string `json:"project"`
+	AppNamespace string `json:"appNamespace"`
+	Prune        bool   `json:"prune"`
+}
+
+// Rollback asks Argo CD to put the application back on the history entry
+// with the given ID, as the Argo CD rollback call does: it deploys the
+// entry's own source and revision, skips hooks, and does not prune. Argo CD
+// answers as soon as the operation is requested, with the application, so
+// the caller reads the application again to see the operation end. A
+// missing history entry, an application with auto-sync on and an operation
+// that runs already are 4xx answers, as a *StatusError.
+func (c *Client) Rollback(ctx context.Context, ref AppRef, historyID int64) (*Application, error) {
+	body := rollbackRequest{ID: historyID, Project: ref.Project, AppNamespace: c.namespace}
+
+	var app Application
+
+	if err := c.post(ctx, apiPath+"/"+url.PathEscape(ref.Name)+"/rollback", body, &app); err != nil {
+		return nil, fmt.Errorf("roll back application %s to history entry %d: %w", ref, historyID, err)
+	}
+
+	return &app, nil
+}
+
 // get sends a GET request for path, under the base URL, with query, and
 // decodes the JSON answer into out. An answer that is not a success returns
 // a *StatusError.
 func (c *Client) get(ctx context.Context, path string, query url.Values, out any) error {
+	return c.send(ctx, http.MethodGet, path, query, nil, out)
+}
+
+// post sends body as JSON in a POST request for path, under the base URL,
+// and decodes the JSON answer into out. An answer that is not a success
+// returns a *StatusError.
+func (c *Client) post(ctx context.Context, path string, body, out any) error {
+	data, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("encode the request: %w", err)
+	}
+
+	return c.send(ctx, http.MethodPost, path, nil, data, out)
+}
+
+// send sends one request with the token and decodes the JSON answer into
+// out. body is nil, or the JSON of the request.
+func (c *Client) send(ctx context.Context, method, path string, query url.Values, body []byte, out any) error {
 	token, err := c.readToken(ctx)
 	if err != nil {
 		return fmt.Errorf("read the token: %w", err)
@@ -192,7 +239,12 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, out any
 		target += "?" + query.Encode()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, target, reader)
 	if err != nil {
 		return fmt.Errorf("make the request: %w", err)
 	}
@@ -201,6 +253,10 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, out any
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("User-Agent", c.userAgent)
 
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("send the request: %w", err)
@@ -208,13 +264,13 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, out any
 
 	defer func() { _ = resp.Body.Close() }()
 
-	body := httpclient.LimitBody(resp.Body, c.maxResponse, errResponseTooLarge)
+	answer := httpclient.LimitBody(resp.Body, c.maxResponse, errResponseTooLarge)
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return readStatusError(resp.StatusCode, body)
+		return readStatusError(resp.StatusCode, answer)
 	}
 
-	if err := json.NewDecoder(body).Decode(out); err != nil {
+	if err := json.NewDecoder(answer).Decode(out); err != nil {
 		return fmt.Errorf("decode the answer: %w", err)
 	}
 
