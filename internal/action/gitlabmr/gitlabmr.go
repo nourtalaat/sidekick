@@ -94,6 +94,10 @@ import (
 // with "type: gitlab.merge_request".
 const TypeName = "gitlab.merge_request"
 
+func init() {
+	registry.Actions.Register(TypeName, registry.Typed(New))
+}
+
 // MR is one configured gitlab.merge_request action. It is safe for
 // concurrent use.
 type MR struct {

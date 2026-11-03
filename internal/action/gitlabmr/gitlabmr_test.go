@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
@@ -280,4 +281,53 @@ func TestValidatorOfDeps(t *testing.T) {
 		require.ErrorIs(t, err, validateclient.ErrTimeout)
 		require.NotErrorIs(t, err, action.ErrPermanent)
 	})
+}
+
+func TestRegistered(t *testing.T) {
+	t.Parallel()
+
+	require.Contains(t, registry.Actions.Types(), TypeName)
+
+	yamlText := `
+baseURL: https://gitlab.example.com
+tokenSecret: {name: monitor-mr, key: token}
+limits:
+  projects: [acme/platform/monitors]
+  paths:
+    - {glob: "prometheus/rules/**", format: prometheus_rules}
+  maxFiles: 2
+  maxChangedLines: 30
+  baseBranch: main
+`
+
+	var node yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte(yamlText), &node))
+
+	built, err := registry.Actions.Build(t.Context(), TypeName, "monitor-mr", node.Content[0], registry.Deps{Secrets: registrySecrets(t)})
+	require.NoError(t, err)
+	require.Equal(t, "monitor-mr", built.Spec().Name)
+
+	_, isChecker := built.(action.ProposalChecker)
+	require.True(t, isChecker)
+
+	_, isReader := built.(action.FileReader)
+	require.True(t, isReader)
+
+	_, isUndoer := built.(action.Undoer)
+	require.True(t, isUndoer)
+
+	_, isFixer := built.(action.MonitorFixer)
+	require.True(t, isFixer)
+
+	bad := strings.Replace(yamlText, "format: prometheus_rules", "format: nagios", 1)
+	require.NoError(t, yaml.Unmarshal([]byte(bad), &node))
+
+	_, err = registry.Actions.Check(t.Context(), TypeName, "monitor-mr", node.Content[0])
+	require.ErrorContains(t, err, "limits.paths[0].format")
+
+	plain := strings.Replace(yamlText, "https://gitlab.example.com", "http://gitlab.example.com", 1)
+	require.NoError(t, yaml.Unmarshal([]byte(plain), &node))
+
+	_, err = registry.Actions.Check(t.Context(), TypeName, "monitor-mr", node.Content[0])
+	require.ErrorContains(t, err, "must use https")
 }
