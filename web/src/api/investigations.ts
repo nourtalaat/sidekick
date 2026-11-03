@@ -5,6 +5,7 @@ import type { components } from "./schema";
 
 export type Investigation = components["schemas"]["Investigation"];
 export type InvestigationSummary = components["schemas"]["InvestigationSummary"];
+export type UsedMemory = components["schemas"]["UsedMemory"];
 export type Step = components["schemas"]["Step"];
 export type StepPart = components["schemas"]["StepPart"];
 export type Watcher = components["schemas"]["Watcher"];

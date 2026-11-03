@@ -1905,6 +1905,33 @@ export interface components {
             scope: components["schemas"]["LessonScope"];
             status: components["schemas"]["LessonStatus"];
         };
+        /** @description A memory example that the prompt of an investigation showed, as it is now. */
+        UsedMemory: {
+            /**
+             * Format: uuid
+             * @description The investigation the example came from.
+             */
+            investigationId: string;
+            /** @description Its alert title. Absent when the investigation is gone or had none. */
+            title?: string;
+            verdict?: components["schemas"]["Verdict"];
+            /** @description Absent when the entry is gone. */
+            summary?: string;
+            /** @description Absent when the entry is gone or has no cause. */
+            cause?: string;
+            /**
+             * @description Why the example was chosen: the same alert fingerprint, the same
+             *     service and alert name, similar words, or a similar description.
+             * @enum {string}
+             */
+            match: "fingerprint" | "service_alert" | "text" | "similar";
+            /** @description The example's position in the prompt, from 1. */
+            rank: number;
+            /** @description Whether the memory entry still exists. */
+            present: boolean;
+            /** @description Whether the entry is disabled now. Always false when present is false. */
+            disabled: boolean;
+        };
         LeftOutLesson: {
             /** Format: uuid */
             id: string;
@@ -2581,6 +2608,13 @@ export interface components {
              *     was deleted is not listed.
              */
             lessons?: components["schemas"]["UsedLesson"][];
+            /**
+             * @description The past investigations that the prompt of the current run showed
+             *     as examples, in the order of the prompt. The text is as it is now,
+             *     not as the prompt had it. It came from alerts and the model: show
+             *     it as plain text.
+             */
+            memoryExamples?: components["schemas"]["UsedMemory"][];
         };
         /** @description The verdict people agree with. */
         Confirmation: {
