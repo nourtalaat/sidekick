@@ -14,6 +14,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
+	"github.com/nourtalaat/sidekick/internal/httpauth"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/source"
 )
@@ -146,7 +147,7 @@ func TestSourceTLS(t *testing.T) {
 		{name: "a CA from its secret", caPEMs: []string{"server"}, wantErrs: []string{""}},
 		{name: "a changed CA is picked up on the next call", caPEMs: []string{"other", "server"},
 			wantErrs: []string{"certificate signed by unknown authority", ""}},
-		{name: "a CA secret without a certificate", caPEMs: []string{"not a certificate"}, wantErrs: []string{errNoCertificates.Error()}},
+		{name: "a CA secret without a certificate", caPEMs: []string{"not a certificate"}, wantErrs: []string{httpauth.ErrNoCertificates.Error()}},
 	}
 
 	for _, tt := range tests {
@@ -310,7 +311,7 @@ func TestNew(t *testing.T) {
 		{name: "a CA secret without a secrets resolver", cfg: Config{BaseURL: "https://prom.example.com", TLS: &TLS{CASecret: ref("ca")}},
 			wantErr: errNoSecrets},
 		{name: "tls with a transport whose TLS cannot be set", cfg: Config{BaseURL: "https://prom.example.com", TLS: &TLS{CASecret: ref("ca")}},
-			withSecrets: true, http: &http.Client{Transport: otherTransport{}}, wantErr: errNoTransport},
+			withSecrets: true, http: &http.Client{Transport: otherTransport{}}, wantErr: httpauth.ErrNoTransport},
 		{name: "settings that do not check", cfg: Config{BaseURL: "https://prom.example.com", Settings: source.Settings{Concurrency: -1}},
 			wantText: "concurrency: must not be negative"},
 		{name: "no credentials need no secrets resolver", cfg: Config{BaseURL: "http://prometheus-operated.monitoring:9090/"}},

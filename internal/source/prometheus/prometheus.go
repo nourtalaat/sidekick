@@ -12,6 +12,7 @@ import (
 	"github.com/prometheus/prometheus/promql/parser"
 
 	"github.com/nourtalaat/sidekick/internal/buildinfo"
+	"github.com/nourtalaat/sidekick/internal/httpauth"
 	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/source"
@@ -24,9 +25,6 @@ var (
 	// errNoSecrets is returned when the config names a secret but the
 	// source is built without a way to read it.
 	errNoSecrets = errors.New("no secrets resolver in deps")
-	// errNoTransport is returned when tls is set but the HTTP client in
-	// deps has a transport whose TLS setup cannot be changed.
-	errNoTransport = errors.New("tls needs an *http.Transport in the HTTP client of deps")
 	// errUnknownTool is returned for a call to a tool the source does not
 	// have. The guard only sends calls for tools the source listed, so this
 	// means a bug.
@@ -105,7 +103,9 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (source
 		return nil, fmt.Errorf("check settings: %w", err)
 	}
 
-	if cfg.usesSecrets() && deps.Secrets == nil {
+	creds := cfg.credentials()
+
+	if creds.UsesSecrets() && deps.Secrets == nil {
 		return nil, errNoSecrets
 	}
 
@@ -119,19 +119,15 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (source
 		next = http.DefaultTransport
 	}
 
-	if cfg.TLS != nil {
-		t, ok := next.(*http.Transport)
-		if !ok {
-			return nil, errNoTransport
-		}
-
-		next = newTLSTransport(t, *cfg.TLS, deps.Secrets)
+	next, err := httpauth.WrapTransport(next, cfg.TLS, deps.Secrets)
+	if err != nil {
+		return nil, fmt.Errorf("set up TLS: %w", err)
 	}
 
 	limited := *base
 	limited.Transport = limitTransport{next: next}
 
-	a := &auth{secrets: deps.Secrets, bearer: cfg.BearerTokenSecret, basic: cfg.BasicAuth, headers: cfg.Headers}
+	a := httpauth.NewAuth(creds, deps.Secrets)
 	userAgent := "sidekick/" + buildinfo.Version
 
 	s := &Source{

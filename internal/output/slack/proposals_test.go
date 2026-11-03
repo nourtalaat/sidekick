@@ -452,6 +452,26 @@ func TestASucceededChangeThatCanBeUndoneHasAnUndoButton(t *testing.T) {
 	require.NotContains(t, buttonsOf(mainView(u).attachment.Blocks), ActionUndoProposal)
 }
 
+func TestUndoOfSomethingTheActionCreatedSaysItEndsIt(t *testing.T) {
+	t.Parallel()
+
+	created := succeededChange()
+	created.Action = "alertmanager-silence"
+	created.Snapshot = &action.Snapshot{Target: "alertmanager:silence", After: []byte(`{"duration":"1h"}`)}
+	created.Changes = []action.Change{{Path: "", After: new(`{"duration":"1h"}`)}}
+
+	u := testUpdate(output.PhaseFinal, verdictReport(report.TruePositive))
+	u.Proposals = []action.Proposal{created}
+
+	buttons := buttonsOf(mainView(u).attachment.Blocks)
+	require.Equal(t, "Sidekick ends what it created in alertmanager:silence. If someone changed it since, you see the difference first.",
+		buttons[ActionUndoProposal].Confirm.Text.Text)
+
+	u.Proposals = []action.Proposal{succeededChange()}
+	buttons = buttonsOf(mainView(u).attachment.Blocks)
+	require.Contains(t, buttons[ActionUndoProposal].Confirm.Text.Text, "puts back the fields it changed")
+}
+
 func TestAnUndoneChangeAndItsUndoAreShown(t *testing.T) {
 	t.Parallel()
 

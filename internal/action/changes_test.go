@@ -109,6 +109,16 @@ func TestSnapshotDeletes(t *testing.T) {
 	require.False(t, Snapshot{}.Deletes())
 }
 
+func TestSnapshotCreates(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, Snapshot{After: json.RawMessage(`{"a":1}`)}.Creates())
+	require.True(t, Snapshot{Before: json.RawMessage(`null`), After: json.RawMessage(`{"a":1}`)}.Creates())
+	require.False(t, Snapshot{Before: json.RawMessage(`{"a":1}`), After: json.RawMessage(`{"a":2}`)}.Creates())
+	require.False(t, Snapshot{Before: json.RawMessage(`{"a":1}`), After: json.RawMessage(`null`)}.Creates())
+	require.False(t, Snapshot{}.Creates())
+}
+
 func TestConflictError(t *testing.T) {
 	t.Parallel()
 
