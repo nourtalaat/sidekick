@@ -43,8 +43,14 @@ WHERE day = ANY (ARRAY(SELECT (b AT TIME ZONE 'UTC')::date FROM unnest(@buckets:
 -- as approved those a person or the policy approved, which are approved,
 -- executing, succeeded and undone ones, and failed ones that have a
 -- decision; as executed those that ran and succeeded, which includes the
--- undone ones. The range on created_at uses the index on it, and
--- action_proposals_investigation finds the proposals.
+-- undone ones. A false positive counts once as a noisy alert fixed when a
+-- responder marked the fix applied, or when one of its proposals succeeded
+-- and either fixes a monitor through its tool's API, or opened a pull
+-- request that is merged. An undone proposal has the status undone, so it
+-- does not count, and nor does a proposal with no fix kind. The range on
+-- created_at uses the index on it, action_proposals_investigation finds the
+-- proposals, and the primary key of pull_request_states finds the state of
+-- a pull request.
 WITH per AS (
   SELECT b.hour,
          i.route,
@@ -60,7 +66,24 @@ WITH per AS (
          i.cost_micros,
          i.input_tokens,
          i.output_tokens,
-         (i.verdict = 'false_positive' AND i.fix_applied_at IS NOT NULL) AS noisy_fixed,
+         (i.verdict = 'false_positive' AND (
+            i.fix_applied_at IS NOT NULL
+            OR EXISTS (
+              SELECT 1 FROM action_proposals fp
+              WHERE fp.investigation_id = i.id
+                AND fp.status = 'succeeded'
+                AND fp.fix_kind = 'api'
+            )
+            OR EXISTS (
+              SELECT 1
+              FROM action_proposals fp
+              JOIN pull_request_states prs ON prs.proposal_id = fp.id
+              WHERE fp.investigation_id = i.id
+                AND fp.status = 'succeeded'
+                AND fp.fix_kind = 'pull_request'
+                AND prs.state = 'merged'
+            )
+         )) AS noisy_fixed,
          (wt.recovered > 0 AND wt.running = 0 AND wt.timed_out = 0) AS recovered,
          CASE WHEN wt.recovered > 0 AND wt.running = 0 AND wt.timed_out = 0
               THEN greatest(0, (extract(epoch FROM wt.last_recovered_at - fe.first_event_at) * 1000)::bigint) END AS downtime_ms,
