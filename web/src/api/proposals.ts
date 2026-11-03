@@ -7,6 +7,9 @@ import type { components } from "./schema";
 export type Proposal = components["schemas"]["Proposal"];
 export type ProposalStatus = components["schemas"]["ProposalStatus"];
 export type ProposalChange = components["schemas"]["ProposalChange"];
+export type ProposalFile = components["schemas"]["ProposalFile"];
+export type ProposalFileDiff = components["schemas"]["ProposalFileDiff"];
+export type ProposalDiffLine = components["schemas"]["ProposalDiffLine"];
 export type ProposalRevision = components["schemas"]["ProposalRevision"];
 
 /** How many proposals one request asks for. */
@@ -55,6 +58,31 @@ export function useProposalActions() {
       }
 
       return data.actions;
+    },
+  });
+}
+
+/**
+ * The line diff of one file of a pull request proposal. The server reads the
+ * base of the file from the host when this runs, so it only runs once enabled
+ * is true, which is when a person opens the file. With full set it asks for
+ * every line of the file instead of the cut diff. A failure is shown as it is
+ * and tried again only when the person asks.
+ */
+export function useFileDiff(id: string, path: string, full: boolean, enabled: boolean) {
+  const api = useApi();
+
+  return useQuery({
+    queryKey: ["proposal-file-diff", id, path, full],
+    enabled,
+    retry: false,
+    queryFn: async () => {
+      const { data, error, response } = await api.client.GET("/proposals/{id}/files/diff", { params: { path: { id }, query: { path, full } } });
+      if (data === undefined) {
+        throw new ApiError(response.status, detailOf(error, response.statusText));
+      }
+
+      return data;
     },
   });
 }

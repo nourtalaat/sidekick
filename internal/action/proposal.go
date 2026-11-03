@@ -81,6 +81,9 @@ type Proposal struct {
 	// Changes is the field-by-field difference of Snapshot, for people to
 	// read. Empty without a snapshot.
 	Changes []Change
+	// Files lists the files of a pull request or merge request, from the
+	// snapshot. Empty for any other proposal and for an undo.
+	Files []ProposalFile
 	// Revisions is set when Snapshot is the snapshot of a rollback: the
 	// revision running now and the one it goes back to, in the form
 	// Revisions.Display writes. The view shows it in place of Changes,
@@ -98,6 +101,16 @@ type Proposal struct {
 	// Error says why it failed. While it is retried it holds the last
 	// failed attempt.
 	Error string
+}
+
+// ProposalFile is one file a pull request or merge request changes, as the
+// snapshot of its proposal describes it.
+type ProposalFile struct {
+	Path string
+	// Status is "changed", "added" or "deleted".
+	Status       string
+	LinesAdded   int
+	LinesRemoved int
 }
 
 // PolicyApprovalText is how a screen says that a route's policy approved a

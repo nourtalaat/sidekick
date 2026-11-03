@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/store/db"
 )
 
@@ -193,6 +194,10 @@ func proposalOf(ctx context.Context, row db.ActionProposal, route, decidedByName
 		p.Snapshot, p.Changes = snap, changes
 
 		p.Revisions = revisionsOf(ctx, row.ID, snap)
+
+		if p.UndoOf == "" {
+			p.Files = gitchange.FilesOf(*snap)
+		}
 	}
 
 	p.Undoable = row.Undoable && p.Status == action.StatusSucceeded && p.UndoOf == "" && (p.Snapshot == nil || !p.Snapshot.Deletes())

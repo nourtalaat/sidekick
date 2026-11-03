@@ -49,6 +49,19 @@ type Snapshotter interface {
 	Snapshot(ctx context.Context, params json.RawMessage) (Snapshot, error)
 }
 
+// FileReader is implemented by actions that open pull requests or merge
+// requests on a Git host. ReadBlob returns the text of the file that the host
+// stores under blob, a Git blob SHA from the proposal's snapshot, in the
+// repository or project that params, the proposal's parameters, name. It
+// reads with the action's own credential, so no other package needs a client
+// of the host, and it never writes. It checks that the repository or project
+// is one the action's config allows. It fails when the file cannot be read as
+// text: the host has no such blob, the file is too large, or it is not UTF-8
+// text without NUL characters.
+type FileReader interface {
+	ReadBlob(ctx context.Context, params json.RawMessage, blob string) (string, error)
+}
+
 // Undoer is implemented by actions that can undo what Execute did. Undo
 // fails with an error wrapping ErrConflict when the target no longer matches
 // what the action wrote, unless force is set by an approver who has seen the
