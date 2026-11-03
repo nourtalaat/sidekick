@@ -66,8 +66,8 @@ func TestSnapshotOfALargestChangeFitsTheDifferenceLimit(t *testing.T) {
 	for i := range gitchange.MaxFilesCeiling {
 		path := "prometheus/rules/" + string(rune('a'+i)) + ".yaml"
 		added, removed := 1, 1
-		before[path] = blobRef{Blob: "old"}
-		after[path] = afterEntry{Blob: "new", Status: fileChanged, LinesAdded: &added, LinesRemoved: &removed}
+		before[path] = gitchange.BlobRef{Blob: "old"}
+		after[path] = gitchange.AfterEntry{Blob: "new", Status: gitchange.FileChanged, LinesAdded: &added, LinesRemoved: &removed}
 	}
 
 	beforeRaw, err := json.Marshal(before)
