@@ -99,7 +99,7 @@ var (
 	errBadSnapshot  = errors.New("the snapshot of the proposal cannot be read")
 	errTargetDiffer = errors.New("the snapshot is not of these parameters")
 
-	errNoOperation       = errors.New("Google Cloud answered the update with an operation that has no name")
+	errNoOperation       = errors.New("the update answered with an operation that has no name")
 	errTrafficNotWritten = errors.New("the traffic of the service is not what the update wrote")
 )
 
