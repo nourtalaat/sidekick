@@ -1,9 +1,10 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
-import { VIEWER, renderApp } from "../../test/helpers";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { VIEWER, renderApp, stubMedia, wcagViolations } from "../../test/helpers";
+import { APPROVER } from "../../test/actionProposals";
 import { FAILED_ID, FILE_ID, PASSED_ID, failedProposal, passedProposal, proposalApi } from "../../test/proposals";
-import { ADMIN, codedProblem } from "../../test/rules";
+import { ADMIN, RESPONDER, codedProblem } from "../../test/rules";
 
 const ROUTE = "/review?tab=strategies";
 
@@ -181,5 +182,46 @@ describe("the strategies tab of the review page", () => {
     });
 
     expect(await screen.findByText("Needs the admin role")).toBeInTheDocument();
+  });
+});
+
+describe("the strategies tab for a role below admin", () => {
+  it.each([
+    ["viewer", VIEWER],
+    ["responder", RESPONDER],
+    ["approver", APPROVER],
+  ])("asks for the admin role and loads nothing for a %s", async (_role, me) => {
+    const { handler, seen } = proposalApi({ proposals: [passedProposal()] });
+    renderApp({ me, route: ROUTE, handler });
+
+    expect(await screen.findByRole("heading", { name: "Needs the admin role" })).toBeInTheDocument();
+    expect(seen.some((r) => r.path.endsWith("/strategy-proposals"))).toBe(false);
+  });
+
+  it("shows an admin the list and no role message", async () => {
+    const { handler } = proposalApi({ proposals: [passedProposal()] });
+    renderApp({ me: ADMIN, route: ROUTE, handler });
+
+    expect(await screen.findAllByRole("article")).toHaveLength(1);
+    expect(screen.queryByRole("heading", { name: "Needs the admin role" })).not.toBeInTheDocument();
+  });
+});
+
+describe.each([false, true])("accessibility of the strategies tab with the role message, dark %s", (dark) => {
+  beforeEach(() => {
+    stubMedia({ dark, forcedColors: false });
+  });
+
+  afterEach(() => {
+    document.documentElement.removeAttribute("data-theme");
+  });
+
+  it("has no WCAG 2.2 AA violations", async () => {
+    const { handler } = proposalApi({ proposals: [] });
+    const { container } = renderApp({ me: RESPONDER, route: ROUTE, handler });
+
+    await screen.findByRole("heading", { name: "Needs the admin role" });
+
+    expect(await wcagViolations(container)).toEqual([]);
   });
 });
