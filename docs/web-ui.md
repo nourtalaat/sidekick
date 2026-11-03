@@ -655,6 +655,17 @@ or it is not text, the card says so and offers to try again. The diff
 answers also for an expired or rejected proposal. Slack keeps the field-by-field
 changes and links to the investigation, where the diff is.
 
+A proposal that rolls a workload back to an earlier revision shows
+**Revisions** instead of the field-by-field list: two labelled blocks,
+**Running now** and **Goes back to**, each with the platform's name for the
+revision and its ID, the version a person recognises (an image tag, a chart
+and app version or a git revision), when it was deployed, who deployed it and
+short notes. The platform does not always say, for example Helm and Lambda do
+not record who deployed, and the card then shows "unknown". The texts come
+from the platform, so they are plain text with hidden characters written as
+`\u` escapes, and nothing is cut. Approve repeats the two versions when it
+asks. The undo of a rollback shows the same two revisions the other way round.
+
 A proposal that opened a pull request also shows a **Pull request**
 section after its result. It has the repository and number as a link to the
 pull request, its state (**Open**, **Merged** or **Closed**, each with an icon
@@ -686,6 +697,9 @@ one; otherwise the repository and number are plain text.
   difference a restore would overwrite. The other 409 codes are
   `not_undoable`, `not_allowed`, `undo_running` and `undo_failed`. A proposal
   has `changes` (field, before and after), `target`, `undoable` and `undoOf`.
+  A rollback also has `revisions`, with `running` and `goesBackTo`; each has
+  `kind` and `id`, and `version`, `deployedAt`, `deployedBy` and `notes` when
+  the platform says them. `changes` is still sent for it.
 - `GET /api/v1/proposals/{id}/files/diff?path=...` (approver) returns the
   line diff of one file of a pull request proposal, as a list of lines, each
   `context`, `added` or `removed`, with its line number in the old and the
@@ -831,6 +845,11 @@ An investigation's page links its `runtime:N` version to that version.
   attempts reset. The retry is written to the audit log. A job that is
   not dead, or whose unique key a pending or running job holds, answers
   409.
+- `POST /api/v1/jobs/{id}/discard` deletes a dead job, so it cannot run
+  again, and answers 204. The discard is written to the audit log as
+  `job.discarded`, with the job's kind, its attempts and its last error,
+  masked, in the same transaction. A job that is not dead answers 409 and
+  stays, and an unknown ID answers 404.
 - `POST /api/v1/investigations/{id}/scenario-draft` exports a confirmed
   investigation as a benchmark scenario draft (201, or 200 with the scenario
   it has already). It answers 409 when nobody confirmed the verdict, and 422
@@ -849,8 +868,8 @@ An investigation's page links its `runtime:N` version to that version.
 ## Settings
 
 The **Settings** item of the navigation (`/settings`) is a page for the
-`admin` role, with tabs: **Config** and **API tokens**, which is described under
-[API tokens](#api-tokens). The tab is in the address (`/settings?tab=config`), so
+`admin` role, with tabs: **Config**, **API tokens**, which is described under
+[API tokens](#api-tokens), and **Failed jobs**, described below. The tab is in the address (`/settings?tab=config`), so
 a link opens the page on it. A role below `admin` that opens the address sees a
 message that names the role, and the page sends no request.
 
@@ -878,6 +897,31 @@ the Helm values. Text on the page is plain text, never HTML.
   pattern. It is kept in the address as `q`, so a view can be shared, and while
   it is set the cards that match are open.
 - Strings that the server redacted are shown as they come.
+
+The **Failed jobs** tab lists the background jobs that failed every attempt and
+are marked dead, from `GET /api/v1/jobs?status=dead`, newest first. It reads
+the list only while the tab is open, and the tab name shows no count. A job
+that is not dead is not listed.
+
+- **The table.** Each row shows the kind of the job, its route ("none" when it
+  has none), its attempts as "5 of 5", when it was created, when it died, and
+  its last error. The input of a job is never shown.
+- **Last error.** The text, masked the same way as in the audit log, is shown
+  as plain text, never HTML. A long error is cut to its first lines, and a
+  **Show all** button, which the keyboard reaches, shows the whole text and
+  **Show less** cuts it again.
+- **Retry.** Sends `POST /api/v1/jobs/{id}/retry` and removes the row. If the
+  job is not dead any more, or another job with the same unique key is
+  pending or running, the server's reason shows on the row and the list is read
+  again. A reason for a job that has left the list shows above the table.
+- **Discard.** Asks in the page, in a row below the job, what the job was and
+  says "It will not run again. This cannot be undone." **Discard** then sends
+  `POST /api/v1/jobs/{id}/discard`, which deletes the job. The audit log keeps
+  the kind, the attempts and the masked last error as `job.discarded`.
+- **Load more.** Shows the next 50 jobs. Rows already shown stay where they
+  are when a job is retried or discarded.
+- Retention also deletes dead jobs on its own once they are old enough, so
+  a job that nobody retries or discards does not stay for ever.
 
 ## The menu
 
@@ -931,11 +975,29 @@ would refuse is ignored, so every link opens. Days are UTC days.
   the median time to the first finding, and today's spend against the
   daily cap. Each shows its change against the range before it in words,
   such as "Up 4 points".
-- **Quality.** Verdict accuracy over time, the verdict Sidekick gave
-  against the verdict people confirmed, precision and recall of each
-  verdict, accuracy by model and strategy, and the newest benchmark runs.
-  Choose two runs to compare them; the two runs are in the address too
-  (`a` and `b`).
+- **Quality.** Verdict accuracy over time, precision and recall over
+  time, the verdict Sidekick gave against the verdict people confirmed,
+  precision and recall of each verdict, accuracy by model and strategy,
+  and the newest benchmark runs. Choose two runs to compare them; the two
+  runs are in the address too (`a` and `b`).
+
+  The precision and recall chart draws one verdict at a time, by day.
+  Choose the verdict with the **Verdict** menu on the card; the default
+  is False alarm, since a wrong false alarm hides a real problem. The
+  choice is in the address as `scoreVerdict`, and an unknown value is
+  ignored. It is separate from the verdict filter of the page, which
+  selects the verdict Sidekick gave. A day with no figure for the verdict
+  is a gap in the lines. The card has a text summary, such as "False
+  alarm: precision 96% and recall 88% over the range, from 120 verdicts
+  given and 110 confirmed", and a **Show as table** view that adds the
+  counts of verdicts given, confirmed and agreed for each day.
+
+  Recall needs the investigations of every verdict. With the verdict
+  filter of the page set, the API reads only the investigations where
+  Sidekick gave that verdict, so the card draws precision only, for the
+  filtered verdict, and says "Recall needs every verdict. Clear the
+  verdict filter to see it." The precision and recall by verdict table
+  leaves out its Recall column with the same note.
 - **Cost.** Spend per day by model with the daily cap as a dashed line and
   a status when today's spend is near the cap or over it, spend today by
   route, spend by route, the cost per investigation, and the tokens in and

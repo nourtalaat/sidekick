@@ -29,6 +29,9 @@ const (
 // ActionJobRetried is the audit action of a dead job an admin retried.
 const ActionJobRetried = "job.retried"
 
+// ActionJobDiscarded is the audit action of a dead job an admin discarded.
+const ActionJobDiscarded = "job.discarded"
+
 // jobStatusDead is the only status GET /jobs lists.
 const jobStatusDead = "dead"
 
@@ -151,6 +154,51 @@ func (s *server) RetryJob(ctx context.Context, req apigen.RetryJobRequestObject)
 	return apigen.RetryJob204Response{}, nil
 }
 
+// DiscardJob deletes a dead job and writes the discard to the audit log, in
+// one transaction. The delete checks the status itself, so a job that a
+// retry or a worker took meanwhile is not deleted.
+func (s *server) DiscardJob(ctx context.Context, req apigen.DiscardJobRequestObject) (apigen.DiscardJobResponseObject, error) {
+	p, _ := auth.PrincipalFrom(ctx)
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	queries := db.New(tx)
+
+	job, err := queries.DiscardDeadJob(ctx, req.Id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, discardRefused(ctx, queries, req.Id)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("discard job %d: %w", req.Id, err)
+	}
+
+	old := map[string]any{"kind": job.Kind, "attempts": job.Attempts}
+	if job.LastError != nil {
+		old["lastError"] = s.mask(*job.LastError)
+	}
+
+	err = s.audit.Write(ctx, tx, audit.Entry{
+		ActorKind: actorKindOf(p), ActorID: p.ID.String(), Action: ActionJobDiscarded,
+		TargetKind: "job", TargetID: strconv.FormatInt(req.Id, 10),
+		Old: old,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("audit the discard of job %d: %w", req.Id, err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit the discard of job %d: %w", req.Id, err)
+	}
+
+	return apigen.DiscardJob204Response{}, nil
+}
+
 // jobOf is the API's view of a dead job, with its last error masked.
 func (s *server) jobOf(row db.ListDeadJobsRow) apigen.Job {
 	j := apigen.Job{
@@ -194,6 +242,21 @@ func parsePageCursor(s string) (pageCursor, error) {
 	}
 
 	return pageCursor{at: time.Unix(0, nanos).UTC(), id: n}, nil
+}
+
+// discardRefused is the answer for a discard that deleted nothing: 404 when
+// no job has the ID, 409 when the job is not dead.
+func discardRefused(ctx context.Context, queries *db.Queries, id int64) error {
+	job, err := queries.GetJob(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return problemf(http.StatusNotFound, "No job has this ID.")
+	}
+
+	if err != nil {
+		return fmt.Errorf("read job %d: %w", id, err)
+	}
+
+	return problemf(http.StatusConflict, "The job is %s, not dead; only dead jobs can be discarded.", job.Status)
 }
 
 // actorKindOf is the audit actor kind of a caller.

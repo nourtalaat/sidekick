@@ -1,10 +1,12 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient } from "@tanstack/react-query";
+import { useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { benchComparison, benchRuns, cost, emptyCost, emptyOperations, emptyQuality, FILTER_OPTIONS, operations, quality, RUN_A_ID, RUN_B_ID } from "../../test/stats";
-import { json, problem, renderApp, type Handler } from "../../test/helpers";
+import { fakeServer, json, problem, renderApp, renderWithProviders, type Handler } from "../../test/helpers";
 import { routes } from "../../test/streams";
+import { DashboardPage } from "./DashboardPage";
 
 type Answer = () => Response;
 
@@ -36,6 +38,32 @@ function dashboard(answers: Answers = {}): { handler: Handler; urls: string[] } 
 }
 
 const LOAD_TIMEOUT = 10_000;
+
+/** Renders the dashboard with the query string of the address on screen, to check what a choice writes to it. */
+function renderDashboard(route: string, handler: Handler) {
+  const Address = () => <output data-testid="address">{useLocation().search}</output>;
+
+  return renderWithProviders(
+    <>
+      <DashboardPage />
+      <Address />
+    </>,
+    { api: fakeServer(undefined, handler).api, route },
+  );
+}
+
+async function cardOf(name: string): Promise<HTMLElement> {
+  return (await screen.findByRole("heading", { name, level: 3 }, { timeout: LOAD_TIMEOUT })).closest("section") as HTMLElement;
+}
+
+/** The cells of the row of a day in the table view of a card. */
+function cellsOf(card: HTMLElement, day: string): (string | null)[] {
+  const row = within(card).getByRole("rowheader", { name: day }).closest("tr") as HTMLElement;
+
+  return within(row)
+    .getAllByRole("cell")
+    .map((cell) => cell.textContent);
+}
 
 // The page counts its ranges from the day it opens, and the fixtures are of late October 2026.
 beforeEach(() => {
@@ -128,6 +156,10 @@ describe("the dashboard", () => {
     // One row for each day of the range, 30 in all, and the header.
     expect(within(table).getAllByRole("row")).toHaveLength(31);
 
+    // The counts are written as counts and only the accuracy as a percentage.
+    const day = within(within(table).getByRole("rowheader", { name: "Oct 20" }).closest("tr") as HTMLElement);
+    expect(day.getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["85%", "13", "11"]);
+
     await user.click(within(card).getByRole("button", { name: "Show as chart" }));
 
     expect(within(card).queryByRole("table")).not.toBeInTheDocument();
@@ -198,7 +230,7 @@ describe("the dashboard", () => {
     renderApp({ route: "/dashboard?range=custom&from=nonsense&to=2026-10-01&verdict=maybe", handler: dashboard().handler });
 
     expect(await screen.findByRole("combobox", { name: "Time range" })).toHaveValue("30d");
-    expect(screen.getByRole("combobox", { name: "Verdict" })).toHaveValue("");
+    expect(within(screen.getByRole("search", { name: "Filter the dashboard" })).getByRole("combobox", { name: "Verdict" })).toHaveValue("");
   });
 
   it("says so, with a link to the filters, for a chart with nothing to draw", async () => {
@@ -208,6 +240,123 @@ describe("the dashboard", () => {
 
     expect(within(card).getByText(/No data for this range/)).toBeInTheDocument();
     expect(within(card).getByRole("link", { name: "Change the range" })).toHaveAttribute("href", "#dashboard-filters");
+  });
+
+  it("charts the precision and recall of false alarms by day, with a summary and a table", async () => {
+    const user = userEvent.setup();
+    renderApp({ route: "/dashboard", handler: dashboard().handler });
+
+    const card = await cardOf("Precision and recall over time");
+
+    expect(within(card).getByRole("combobox", { name: "Verdict" })).toHaveValue("false_positive");
+    expect(within(within(card).getByRole("list", { name: "Series" })).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["Precision", "Recall"]);
+    expect(within(card).getByText("False alarm: precision 80% and recall 89% over the range, from 10 verdicts given and 9 confirmed.")).toBeInTheDocument();
+
+    await user.click(within(card).getByRole("button", { name: "Show as table" }));
+
+    const table = within(card).getByRole("table", { name: "Precision and recall over time, as a table" });
+
+    expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual(["Day (UTC)", "Precision", "Recall", "Given", "Confirmed", "Agreed"]);
+    expect(within(table).getAllByRole("row")).toHaveLength(31);
+    expect(cellsOf(card, "Oct 20")).toEqual(["80%", "100%", "10", "8", "8"]);
+    // A day with only one of the two numbers keeps it, and a day without the verdict has none.
+    expect(cellsOf(card, "Oct 21")).toEqual(["none", "0%", "0", "1", "0"]);
+    expect(cellsOf(card, "Oct 19")).toEqual(["none", "none", "0", "0", "0"]);
+  });
+
+  it("scores another verdict when it is chosen and keeps the choice in the address", async () => {
+    const user = userEvent.setup();
+    renderDashboard("/dashboard", dashboard().handler);
+
+    const card = await cardOf("Precision and recall over time");
+
+    expect(screen.getByTestId("address").textContent).toBe("");
+
+    await user.selectOptions(within(card).getByRole("combobox", { name: "Verdict" }), "true_positive");
+
+    expect(within(card).getByText("Real issue: precision 83% and recall 71% over the range, from 6 verdicts given and 7 confirmed.")).toBeInTheDocument();
+    expect(screen.getByTestId("address")).toHaveTextContent("?scoreVerdict=true_positive");
+
+    await user.click(within(card).getByRole("button", { name: "Show as table" }));
+
+    expect(cellsOf(card, "Oct 20")).toEqual(["100%", "60%", "3", "5", "3"]);
+
+    await user.selectOptions(within(card).getByRole("combobox", { name: "Verdict" }), "false_positive");
+
+    expect(screen.getByTestId("address").textContent).toBe("");
+  });
+
+  it("starts from the verdict in the address and ignores one that is not a verdict", async () => {
+    const { unmount } = renderApp({ route: "/dashboard?scoreVerdict=true_positive", handler: dashboard().handler });
+
+    expect(within(await cardOf("Precision and recall over time")).getByRole("combobox", { name: "Verdict" })).toHaveValue("true_positive");
+
+    unmount();
+    renderApp({ route: "/dashboard?scoreVerdict=maybe", handler: dashboard().handler });
+
+    expect(within(await cardOf("Precision and recall over time")).getByRole("combobox", { name: "Verdict" })).toHaveValue("false_positive");
+  });
+
+  it("keeps the score verdict apart from the verdict filter of the page", async () => {
+    renderApp({ route: "/dashboard?scoreVerdict=flapping", handler: dashboard().handler });
+
+    const card = await cardOf("Precision and recall over time");
+
+    expect(within(card).getByRole("combobox", { name: "Verdict" })).toHaveValue("flapping");
+    expect(within(screen.getByRole("search", { name: "Filter the dashboard" })).getByRole("combobox", { name: "Verdict" })).toHaveValue("");
+  });
+
+  it("says so, with a link to the filters, when no day has the verdict, and still offers the menu", async () => {
+    const stats = quality({
+      days: [{ day: "2026-10-20", rated: 3, correct: 3, scores: [{ verdict: "true_positive", predicted: 3, actual: 3, hits: 3, precision: 1, recall: 1 }] }],
+      perVerdict: [{ verdict: "true_positive", predicted: 3, actual: 3, hits: 3, precision: 1, recall: 1 }],
+    });
+    renderApp({ route: "/dashboard", handler: dashboard({ quality: () => json(200, stats) }).handler });
+
+    const card = await cardOf("Precision and recall over time");
+
+    expect(within(card).getByText(/No data for this range/)).toBeInTheDocument();
+    expect(within(card).getByRole("link", { name: "Change the range" })).toHaveAttribute("href", "#dashboard-filters");
+    expect(within(card).getByRole("combobox", { name: "Verdict" })).toHaveValue("false_positive");
+    expect(within(card).queryByRole("button", { name: "Show as table" })).not.toBeInTheDocument();
+  });
+
+  it("draws precision only and says why when the page filters by verdict", async () => {
+    const user = userEvent.setup();
+    const filtered = quality({
+      days: quality().days.map((d) => ({ ...d, scores: d.scores.filter((s) => s.verdict === "false_positive") })),
+      perVerdict: quality().perVerdict.filter((s) => s.verdict === "false_positive"),
+    });
+    renderApp({ route: "/dashboard?verdict=false_positive&scoreVerdict=true_positive", handler: dashboard({ quality: () => json(200, filtered) }).handler });
+
+    const card = await cardOf("Precision and recall over time");
+    const note = "Recall needs every verdict. Clear the verdict filter to see it.";
+
+    expect(within(card).getByText(note)).toBeInTheDocument();
+    expect(within(card).queryByRole("combobox", { name: "Verdict" })).not.toBeInTheDocument();
+    expect(within(card).getByText("False alarm: precision 80% over the range, from 10 verdicts given.")).toBeInTheDocument();
+
+    await user.click(within(card).getByRole("button", { name: "Show as table" }));
+
+    expect(within(within(card).getByRole("table")).getAllByRole("columnheader").map((header) => header.textContent)).toEqual(["Day (UTC)", "Precision", "Given", "Agreed"]);
+    expect(cellsOf(card, "Oct 20")).toEqual(["80%", "10", "8"]);
+
+    const scores = await screen.findByRole("region", { name: "Precision and recall of each verdict" });
+
+    expect(screen.getAllByText(note)).toHaveLength(2);
+    expect(within(scores).getByRole("columnheader", { name: "Precision" })).toBeInTheDocument();
+    expect(within(scores).queryByRole("columnheader", { name: "Recall" })).not.toBeInTheDocument();
+  });
+
+  it("has no note and shows the recall series and column without the verdict filter", async () => {
+    renderApp({ route: "/dashboard", handler: dashboard().handler });
+
+    const card = await cardOf("Precision and recall over time");
+    const scores = await screen.findByRole("region", { name: "Precision and recall of each verdict" });
+
+    expect(screen.queryByText(/Recall needs every verdict/)).not.toBeInTheDocument();
+    expect(within(card).getByText("Recall")).toBeInTheDocument();
+    expect(within(scores).getByRole("columnheader", { name: "Recall" })).toBeInTheDocument();
   });
 
   it("shows the empty state when the whole dashboard is empty", async () => {

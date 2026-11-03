@@ -1,0 +1,41 @@
+{
+  "metadata": {"name": "checkout", "namespace": "argocd"},
+  "spec": {
+    "project": "shop",
+    "source": {
+      "repoURL": "https://git.example.com/shop/deploy.git",
+      "path": "apps/checkout",
+      "targetRevision": "main",
+      "helm": {"releaseName": "checkout", "valueFiles": ["values-prod.yaml"], "parameters": [{"name": "image.tag", "value": "v1.4.2"}], "values": "password: hunter2"}
+    },
+    "destination": {"name": "prod", "namespace": "shop"},
+    "syncPolicy": {"automated": {"prune": true, "selfHeal": true}, "syncOptions": ["CreateNamespace=true"]},
+    "revisionHistoryLimit": 5
+  },
+  "status": {
+    "sync": {"status": "OutOfSync", "revision": "ffff0000"},
+    "health": {"status": "Degraded"},
+    "history": [
+      {"id": 4, "revision": "aaaa1111", "deployedAt": "2026-11-01T09:00:00Z", "initiatedBy": {"username": "ada"}},
+      {"id": 5, "revision": "bbbb2222", "deployedAt": "2026-11-02T09:00:00Z", "initiatedBy": {"automated": true}}
+    ],
+    "conditions": [
+      {"type": "SyncError", "message": "one or more objects failed to apply", "lastTransitionTime": "2026-11-03T09:00:00Z"}
+    ],
+    "operationState": {
+      "operation": {"initiatedBy": {"username": "ada"}},
+      "phase": "Failed",
+      "message": "one or more objects failed to apply, reason: Deployment.apps \"checkout\" is invalid",
+      "startedAt": "2026-11-03T08:59:30Z",
+      "finishedAt": "2026-11-03T09:00:00Z",
+      "retryCount": 2,
+      "syncResult": {"revision": "cccc3333"}
+    },
+    "summary": {"images": ["registry.example.com/shop/checkout:v1.4.2"]},
+    "resources": [
+      {"group": "apps", "kind": "Deployment", "namespace": "shop", "name": "checkout", "status": "OutOfSync", "health": {"status": "Degraded"}},
+      {"kind": "Service", "namespace": "shop", "name": "checkout", "status": "Synced", "health": {"status": "Healthy"}},
+      {"kind": "ConfigMap", "namespace": "shop", "name": "checkout-config", "status": "OutOfSync", "health": {"status": "Healthy"}, "requiresPruning": true}
+    ]
+  }
+}

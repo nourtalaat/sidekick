@@ -68,13 +68,14 @@ func (s Settings) validate() []string {
 			{"verdict", w.Verdict},
 			{"rootCause", w.RootCause},
 			{"evidence", w.Evidence},
+			{"proposals", w.Proposals},
 		} {
 			if part.weight < 0 {
 				problems = append(problems, fmt.Sprintf("weights.%s: must not be negative", part.key))
 			}
 		}
 
-		if w.Verdict+w.RootCause+w.Evidence <= 0 {
+		if w.Verdict+w.RootCause+w.Evidence+w.Proposals <= 0 {
 			problems = append(problems, "weights: at least one weight must be more than 0")
 		}
 	}

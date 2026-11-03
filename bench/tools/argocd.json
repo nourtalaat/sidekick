@@ -1,0 +1,72 @@
+{
+  "tools": [
+    {
+      "name": "list_applications",
+      "description": "List the Argo CD applications Sidekick may read: name, project, destination (cluster and namespace), sync status, health, whether auto-sync is on, the revision deployed now, the revision the application was last compared with, when it last synced, and a link. Use it to find the application of a service, or to see which applications are out of sync or not healthy. Pass the application field of a result, as project/name, to the other tools.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "The most applications to return, 1 to 200. Default 50.",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "name": {
+            "type": "string",
+            "description": "Only applications whose name matches this pattern, for example checkout-*. * matches any run of characters and ? one character."
+          },
+          "project": {
+            "type": "string",
+            "description": "Only applications of this project."
+          },
+          "state": {
+            "type": "string",
+            "description": "Only applications in this state: out_of_sync, not_healthy (health is not Healthy), problem (out of sync or not healthy), or any. Default any.",
+            "enum": [
+              "any",
+              "out_of_sync",
+              "not_healthy",
+              "problem"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_application",
+      "description": "Get one Argo CD application: where its manifests come from (repository, path, target revision, chart or Kustomize settings), where it deploys to, its project, its sync policy and so whether auto-sync is on, its sync status and health, the revision deployed now and the one it was last compared with, the last operation (phase, message, times, who started it), its conditions, the images it runs, and up to 20 resources that are not synced or not healthy. Helm parameters whose names look like secrets are shown without their values.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "application": {
+            "type": "string",
+            "description": "The application as project/name, for example shop/checkout. Take it from the application field of list_applications."
+          }
+        },
+        "required": [
+          "application"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_history",
+      "description": "Get the deployment history of one Argo CD application, newest first: the history ID, the revision, when it was deployed, who started it (a user, or automated), the source, and for each of the newest 10 the commit message, author and date of its revision. The entry marked current is what runs now. Argo CD keeps as many entries as the application's revisionHistoryLimit, 10 by default, so do not look for older ones.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "application": {
+            "type": "string",
+            "description": "The application as project/name, for example shop/checkout. Take it from the application field of list_applications."
+          }
+        },
+        "required": [
+          "application"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

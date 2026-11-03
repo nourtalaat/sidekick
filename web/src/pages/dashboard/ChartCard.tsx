@@ -84,7 +84,7 @@ function Legend({ spec }: { spec: ChartSpec }) {
 /** The numbers of a chart as a table, one row for each point. */
 function ChartTable({ title, spec }: { title: string; spec: ChartSpec }) {
   const captionId = useId();
-  const columns = spec.tableColumns ?? spec.series.map((s) => ({ key: s.key, label: s.label }));
+  const columns: NonNullable<ChartSpec["tableColumns"]> = spec.tableColumns ?? spec.series.map((s) => ({ key: s.key, label: s.label }));
 
   return (
     <div className="sk-chart__table-wrap" role="region" aria-labelledby={captionId} tabIndex={0}>
@@ -105,7 +105,7 @@ function ChartTable({ title, spec }: { title: string; spec: ChartSpec }) {
             <tr key={row.x}>
               <th scope="row">{row.x}</th>
               {columns.map((c) => (
-                <td key={c.key}>{typeof row[c.key] === "number" ? spec.format(row[c.key] as number) : "none"}</td>
+                <td key={c.key}>{typeof row[c.key] === "number" ? (c.format ?? spec.format)(row[c.key] as number) : "none"}</td>
               ))}
             </tr>
           ))}

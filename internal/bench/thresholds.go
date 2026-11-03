@@ -15,6 +15,7 @@ const (
 	thresholdVerdictAccuracy = "verdictAccuracy"
 	thresholdFPPrecision     = "fpPrecision"
 	thresholdRootCauseMatch  = "rootCauseMatch"
+	thresholdProposalCorrect = "proposalCorrect"
 	thresholdMaxCostPerRun   = "maxCostPerRunUSD"
 	thresholdBaseline        = "baseline"
 )
@@ -25,11 +26,12 @@ const nothingToCount = "nothing to count, so it passes"
 // Thresholds are the scores a run must reach, in bench.yaml. A zero
 // threshold is not checked.
 type Thresholds struct {
-	// VerdictAccuracy, FPPrecision and RootCauseMatch are the lowest
-	// shares allowed.
+	// VerdictAccuracy, FPPrecision, RootCauseMatch and ProposalCorrect are
+	// the lowest shares allowed.
 	VerdictAccuracy float64 `yaml:"verdictAccuracy"`
 	FPPrecision     float64 `yaml:"fpPrecision"`
 	RootCauseMatch  float64 `yaml:"rootCauseMatch"`
+	ProposalCorrect float64 `yaml:"proposalCorrect"`
 	// MaxCostPerRunUSD is the highest mean cost of a run allowed.
 	MaxCostPerRunUSD float64 `yaml:"maxCostPerRunUSD"`
 	// Baseline is a report.json the overall score is compared with.
@@ -66,6 +68,7 @@ func (t Thresholds) Check(summary Summary, baseline *JSONReport) []ThresholdResu
 		{thresholdVerdictAccuracy, t.VerdictAccuracy, m.VerdictAccuracy},
 		{thresholdFPPrecision, t.FPPrecision, m.FalsePositive.Precision},
 		{thresholdRootCauseMatch, t.RootCauseMatch, m.RootCauseMatch},
+		{thresholdProposalCorrect, t.ProposalCorrect, m.ProposalCorrect},
 	} {
 		if share.limit > 0 {
 			out = append(out, atLeast(share.name, share.limit, share.value))
@@ -130,6 +133,7 @@ func (t Thresholds) validate() []string {
 		{"thresholds.verdictAccuracy", t.VerdictAccuracy},
 		{"thresholds.fpPrecision", t.FPPrecision},
 		{"thresholds.rootCauseMatch", t.RootCauseMatch},
+		{"thresholds.proposalCorrect", t.ProposalCorrect},
 	} {
 		if share.value < 0 || share.value > 1 {
 			problems = append(problems, fmt.Sprintf("%s: must be from 0 to 1, not %g", share.key, share.value))

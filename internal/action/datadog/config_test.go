@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
 
+	"github.com/nourtalaat/sidekick/internal/action/datadogapi"
 	"github.com/nourtalaat/sidekick/internal/registry"
 )
 
@@ -104,7 +105,7 @@ func TestAddresses(t *testing.T) {
 	require.Equal(t, "https://api.us3.datadoghq.com", (&Config{Site: "us3.datadoghq.com"}).apiURL())
 	require.Equal(t, "http://127.0.0.1:9", (&Config{URL: "http://127.0.0.1:9/"}).apiURL(), "a url replaces the site")
 
-	require.Equal(t, "app.datadoghq.com", appHost("datadoghq.com"))
-	require.Equal(t, "app.datadoghq.eu", appHost("datadoghq.eu"))
-	require.Equal(t, "us3.datadoghq.com", appHost("us3.datadoghq.com"))
+	require.Equal(t, "app.datadoghq.com", datadogapi.AppHost("datadoghq.com"))
+	require.Equal(t, "app.datadoghq.eu", datadogapi.AppHost("datadoghq.eu"))
+	require.Equal(t, "us3.datadoghq.com", datadogapi.AppHost("us3.datadoghq.com"))
 }

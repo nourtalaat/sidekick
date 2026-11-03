@@ -15,6 +15,9 @@ type Weights struct {
 	Verdict   float64 `yaml:"verdict" json:"verdict"`
 	RootCause float64 `yaml:"rootCause" json:"rootCause"`
 	Evidence  float64 `yaml:"evidence" json:"evidence"`
+	// Proposals weighs the share of runs whose proposals are correct. It
+	// is 0 by default, so a team opts in.
+	Proposals float64 `yaml:"proposals" json:"proposals"`
 }
 
 // DefaultWeights are the weights of the overall score when bench.yaml sets
@@ -52,6 +55,9 @@ type Metrics struct {
 	RootCauseScore *float64 `json:"rootCauseScore"`
 	// Evidence is the mean evidence score of the runs with evidence checks.
 	Evidence *float64 `json:"evidence"`
+	// ProposalCorrect is the share of the runs with scored proposals whose
+	// proposals are correct.
+	ProposalCorrect *float64 `json:"proposalCorrect"`
 	// SourceFailuresReported is the share of runs with unavailable sources
 	// to report that reported all of them.
 	SourceFailuresReported *float64 `json:"sourceFailuresReported"`
@@ -94,8 +100,11 @@ type Spread struct {
 	// deviation of the root-cause score of the graded runs.
 	RootCauseMean *float64 `json:"rootCauseMean"`
 	RootCauseSD   *float64 `json:"rootCauseSD"`
-	CostUSD       Range    `json:"costUSD"`
-	DurationMs    Range    `json:"durationMs"`
+	// ProposalCorrect counts the runs whose proposals are correct. It is
+	// nil when the scenario does not score proposals.
+	ProposalCorrect *int  `json:"proposalCorrect"`
+	CostUSD         Range `json:"costUSD"`
+	DurationMs      Range `json:"durationMs"`
 }
 
 // Range is the smallest, middle and largest of a set of values.
@@ -126,6 +135,7 @@ var rateMetrics = []rateMetric{
 	{key: "rootCauseMatch", label: "root cause match", value: func(m Metrics) *float64 { return m.RootCauseMatch }},
 	{key: "rootCauseScore", label: "root cause score", value: func(m Metrics) *float64 { return m.RootCauseScore }},
 	{key: "evidence", label: "evidence", value: func(m Metrics) *float64 { return m.Evidence }},
+	{key: "proposalCorrect", label: "proposal correct", value: func(m Metrics) *float64 { return m.ProposalCorrect }},
 	{key: "sourceFailuresReported", label: "source failures reported", value: func(m Metrics) *float64 { return m.SourceFailuresReported }},
 }
 
@@ -156,6 +166,7 @@ func metricsOf(scenarios []ScenarioResult, weights Weights) Metrics {
 		m                                          Metrics
 		correct, graded, matched, evidenceRuns     int
 		sourceRuns, sourcesReported                int
+		proposalRuns, proposalsCorrect             int
 		rootCauseTotal, evidenceTotal, durationSum float64
 	)
 
@@ -194,6 +205,14 @@ func metricsOf(scenarios []ScenarioResult, weights Weights) Metrics {
 				evidenceTotal += *run.EvidenceScore
 			}
 
+			if run.Proposal != nil {
+				proposalRuns++
+
+				if run.Proposal.Correct {
+					proposalsCorrect++
+				}
+			}
+
 			if run.SourcesReported != nil {
 				sourceRuns++
 
@@ -210,6 +229,7 @@ func metricsOf(scenarios []ScenarioResult, weights Weights) Metrics {
 	m.RootCauseMatch = ratio(matched, graded)
 	m.RootCauseScore = mean(rootCauseTotal, graded)
 	m.Evidence = mean(evidenceTotal, evidenceRuns)
+	m.ProposalCorrect = ratio(proposalsCorrect, proposalRuns)
 	m.SourceFailuresReported = ratio(sourcesReported, sourceRuns)
 	m.Overall = overall(weights, m)
 	m.MeanCostPerRunUSD = mean(float64(m.CostMicros)/microsPerUSD, m.Runs)
@@ -251,6 +271,7 @@ func overall(w Weights, m Metrics) *float64 {
 		{w.Verdict, m.VerdictAccuracy},
 		{w.RootCause, m.RootCauseMatch},
 		{w.Evidence, m.Evidence},
+		{w.Proposals, m.ProposalCorrect},
 	} {
 		if part.value == nil || part.weight == 0 {
 			continue
@@ -275,9 +296,19 @@ func spreadOf(runs []RunResult) Spread {
 
 	var scores, costs, durations []float64
 
+	proposalRuns, proposalsCorrect := 0, 0
+
 	for _, run := range runs {
 		if run.VerdictCorrect {
 			s.Correct++
+		}
+
+		if run.Proposal != nil {
+			proposalRuns++
+
+			if run.Proposal.Correct {
+				proposalsCorrect++
+			}
 		}
 
 		if run.RootCause != nil {
@@ -291,6 +322,10 @@ func spreadOf(runs []RunResult) Spread {
 	if len(scores) > 0 {
 		m, sd := meanSD(scores)
 		s.RootCauseMean, s.RootCauseSD = &m, &sd
+	}
+
+	if proposalRuns > 0 {
+		s.ProposalCorrect = &proposalsCorrect
 	}
 
 	s.CostUSD = rangeOf(costs)

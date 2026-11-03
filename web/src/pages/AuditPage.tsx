@@ -21,6 +21,7 @@ const KNOWN_ACTIONS = [
   "route.updated",
   "route.deleted",
   "job.retried",
+  "job.discarded",
   "token.created",
   "token.revoked",
   "user.created",

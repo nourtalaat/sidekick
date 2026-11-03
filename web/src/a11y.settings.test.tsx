@@ -1,9 +1,17 @@
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { sampleConfig } from "./test/config";
-import { json, renderApp, stubMedia, wcagViolations } from "./test/helpers";
+import type { Job } from "./api/jobs";
+import { json, problem, renderApp, stubMedia, wcagViolations } from "./test/helpers";
 import { ADMIN, recording } from "./test/rules";
 import { THEME_STORAGE_KEY } from "./theme";
+
+const LONG_ERROR = ["slack: not allowed to post", "second line", "third line", "fourth line"].join("\n");
+
+function deadJob(id: number, over: Partial<Job> = {}): Job {
+  return { id, kind: "publish", route: "default", attempts: 5, maxAttempts: 5, lastError: LONG_ERROR, createdAt: "2026-10-27T08:00:00Z", finishedAt: "2026-10-27T09:00:00Z", ...over };
+}
 
 // The same four ways to get a theme as the other accessibility tests.
 const THEMES = [
@@ -54,6 +62,47 @@ describe.each(THEMES)("accessibility of the Settings page, theme $name", (theme)
       const { handler } = recording(() => json(200, sampleConfig()));
       const { container } = renderApp({ me: ADMIN, route: "/settings?q=zzz", handler });
       await screen.findByRole("heading", { name: "Nothing matches" });
+
+      expect(await wcagViolations(container)).toEqual([]);
+    });
+
+    it("has no WCAG 2.2 AA violations on the Failed jobs tab", async () => {
+      const { handler } = recording(() => json(200, { jobs: [deadJob(2), deadJob(1, { route: undefined, lastError: undefined })], nextCursor: "after-1" }));
+      const { container } = renderApp({ me: ADMIN, route: "/settings?tab=failed-jobs", handler });
+      await screen.findByRole("region", { name: "Failed jobs" });
+
+      expect(await wcagViolations(container)).toEqual([]);
+    });
+
+    it("has no WCAG 2.2 AA violations on the Failed jobs tab with a whole error shown and a refused change", async () => {
+      const { handler } = recording((request) =>
+        request.method === "POST" ? problem(409, "Another job with the same unique key is pending or running.") : json(200, { jobs: [deadJob(2), deadJob(1)] }),
+      );
+      const { container } = renderApp({ me: ADMIN, route: "/settings?tab=failed-jobs", handler });
+      await screen.findByRole("region", { name: "Failed jobs" });
+
+      await userEvent.click(screen.getByRole("button", { name: "Show all of the last error of job 2" }));
+      await userEvent.click(screen.getByRole("button", { name: "Retry publish job 2" }));
+      await screen.findByText(/Not retried\./);
+
+      expect(await wcagViolations(container)).toEqual([]);
+    });
+
+    it("has no WCAG 2.2 AA violations on the Failed jobs tab with the Discard question open", async () => {
+      const { handler } = recording(() => json(200, { jobs: [deadJob(2), deadJob(1)] }));
+      const { container } = renderApp({ me: ADMIN, route: "/settings?tab=failed-jobs", handler });
+      await screen.findByRole("region", { name: "Failed jobs" });
+
+      await userEvent.click(screen.getByRole("button", { name: "Discard publish job 2" }));
+      await screen.findByRole("group", { name: "Discard this publish job" });
+
+      expect(await wcagViolations(container)).toEqual([]);
+    });
+
+    it("has no WCAG 2.2 AA violations on the Failed jobs tab with no jobs", async () => {
+      const { handler } = recording(() => json(200, { jobs: [] }));
+      const { container } = renderApp({ me: ADMIN, route: "/settings?tab=failed-jobs", handler });
+      await screen.findByRole("heading", { name: "No failed jobs." });
 
       expect(await wcagViolations(container)).toEqual([]);
     });
