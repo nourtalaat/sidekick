@@ -1137,6 +1137,60 @@ How it behaves:
   stops waiting for response headers after 60 seconds; `sidekick config
   validate` rejects a longer one.
 
+#### Argo CD sources (`type: argocd`)
+
+An Argo CD source reads the applications Argo CD deploys, with an API token:
+their sync status, health, whether auto-sync is on, and their deployment
+history, so investigations can see what was deployed, when and by whom. Its
+tools only read. [The Argo CD source](sources/argocd.md) lists its limits and
+the exact access the token needs, as an Argo CD RBAC policy.
+
+| Key | Meaning |
+|---|---|
+| `baseURL` | The address of your Argo CD server, with its sub-path when it is served from one. Required. It must use `https`; plain `http` is accepted only for `localhost` and loopback addresses. |
+| `tokenSecret` | `{ name, key }` of the Secret that holds the API token. Required. |
+| `applications` | The applications the tools may read, as `project/name` globs such as `shop/*`, which is how Argo CD RBAC names them. Required; a call for any other application fails before anything is sent. |
+| `namespace` | The namespace Argo CD runs in, and so the namespace of the applications the tools read. Default: `argocd`. Applications of other namespaces are not read. |
+
+```yaml
+sources:
+  argocd:
+    type: argocd
+    baseURL: https://argocd.example.com
+    tokenSecret: { name: sidekick-argocd, key: token }
+    applications:
+      - shop/*
+      - platform/ingress-*
+```
+
+The tools, as the model sees them with the source name `argocd`:
+
+| Tool | Returns |
+|---|---|
+| `argocd__list_applications` | The applications the config allows: project, destination, sync status, health, whether auto-sync is on, the revision deployed now and the one last compared, when it last synced, and a link. It can filter by project, name pattern and state (out of sync, not healthy). |
+| `argocd__get_application` | One application: its source, destination, sync policy with a sentence that says whether auto-sync is on, status, last operation, conditions, images and up to 20 resources that are not synced or not healthy. |
+| `argocd__get_history` | The deployment history of one application, newest first: revision, time, who started each deploy, and the commit message, author and date of each of the newest 10. Argo CD keeps as many entries as the application's `revisionHistoryLimit`, 10 by default. |
+
+How it behaves:
+
+- **Start-up never waits for Argo CD.** The token is read from its Secret
+  for each request, so a rotated token needs no restart.
+- **Scope.** Both tools that read one application take it as
+  `project/name`. One that no `applications` glob allows, or a name without
+  its project, is a tool error, and nothing is sent.
+- **Results** are JSON with links to the applications' pages in the Argo CD
+  UI, which become evidence links in the report. Lists are capped as
+  [The Argo CD source](sources/argocd.md#limits) describes, and say when
+  they were cut.
+- **No data.** An application Argo CD does not have, a list without matches
+  and an application without history are reported as no data.
+- **Errors.** A refused request, such as a `403` for an application the
+  token may not get, goes to the model as a tool error. A refused or expired
+  token, rate limits and server errors count as failures of the source.
+- **Timeout.** `timeout` may be at most `60s`, because the HTTP client
+  stops waiting for response headers after 60 seconds; `sidekick config
+  validate` rejects a longer one.
+
 #### LaunchDarkly sources (`type: launchdarkly`)
 
 A LaunchDarkly source reads feature flag changes from the LaunchDarkly
