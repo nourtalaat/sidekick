@@ -505,7 +505,7 @@ func TestExecuteFailures(t *testing.T) {
 
 		_, err := b.mr.Execute(t.Context(), inv)
 		require.ErrorIs(t, err, action.ErrPermanent)
-		require.ErrorIs(t, err, errNoBranch)
+		require.ErrorIs(t, err, gitlabgit.ErrNoBranch)
 		require.Empty(t, b.gitlab.Requests())
 	})
 
@@ -518,7 +518,7 @@ func TestExecuteFailures(t *testing.T) {
 		b.gitlab.Handle(http.MethodPost, apiPath("merge_requests"), replyStatus(http.StatusCreated, `{}`))
 
 		_, err := b.mr.Execute(t.Context(), invocation(rulesParams()))
-		require.ErrorIs(t, err, errNoIID)
+		require.ErrorIs(t, err, gitlabgit.ErrNoIID)
 	})
 }
 

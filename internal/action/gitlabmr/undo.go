@@ -5,24 +5,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"net/http"
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/action/gitlabgit"
-	"github.com/nourtalaat/sidekick/internal/gitlabapi"
 	"github.com/nourtalaat/sidekick/internal/source"
 	"github.com/nourtalaat/sidekick/internal/weblink"
 )
 
 // revertPrefix starts the title of a revert merge request.
 const revertPrefix = "Revert: "
-
-var errNoUndoOf = fmt.Errorf("%w: the call does not say which proposal it undoes", action.ErrPermanent)
 
 // Undo implements action.Undoer. It undoes the merge request that the
 // proposal inv.UndoOf made.
@@ -42,7 +37,7 @@ var errNoUndoOf = fmt.Errorf("%w: the call does not say which proposal it undoes
 // branch, of an earlier attempt, and closing a closed merge request changes
 // nothing.
 func (m *MR) Undo(ctx context.Context, inv action.Invocation, snap action.Snapshot, force bool) (action.Result, error) {
-	branch, err := undoBranches(inv)
+	branch, err := gitlabgit.UndoBranch(inv)
 	if err != nil {
 		return action.Result{}, fmt.Errorf("check the call to undo: %w", err)
 	}
@@ -56,7 +51,7 @@ func (m *MR) Undo(ctx context.Context, inv action.Invocation, snap action.Snapsh
 		return action.Result{}, fmt.Errorf("project %q is not one of limits.projects (%s): %w", params.Project, strings.Join(m.limits.Projects, ", "), action.ErrLimit)
 	}
 
-	orig, err := m.mergeRequestFrom(ctx, params.Project, branch)
+	orig, err := gitlabgit.MergeRequestFrom(ctx, m.client, params.Project, branch)
 	if err != nil {
 		return action.Result{}, fmt.Errorf("look for the merge request to undo: %w", err)
 	}
@@ -65,102 +60,33 @@ func (m *MR) Undo(ctx context.Context, inv action.Invocation, snap action.Snapsh
 		return action.Result{}, fmt.Errorf("%w: no merge request was made from the branch %s", action.ErrPermanent, branch)
 	}
 
-	if stateOf(orig) == gitchange.StateMerged {
+	if gitlabgit.StateOf(orig) == gitchange.StateMerged {
 		return m.revert(ctx, inv, params, orig, snap, force)
 	}
 
-	return m.closeOriginal(ctx, inv, params, orig, branch)
-}
-
-// undoBranches checks the invocation of an undo and returns the branch of the
-// proposal that is undone.
-func undoBranches(inv action.Invocation) (string, error) {
-	if inv.UndoOf == "" {
-		return "", errNoUndoOf
-	}
-
-	branch := action.IdempotencyKey(inv.UndoOf)
-	if !branchOfProposal.MatchString(branch) || !branchOfProposal.MatchString(inv.IdempotencyKey) {
-		return "", fmt.Errorf("%w: %w", action.ErrPermanent, errNoBranch)
-	}
-
-	return branch, nil
-}
-
-// closeOriginal closes the merge request, if it is open, deletes its branch
-// and records it as closed.
-func (m *MR) closeOriginal(ctx context.Context, inv action.Invocation, params Params, orig *apiMergeRequest, branch string) (action.Result, error) {
-	title := params.Project + "!" + strconv.Itoa(orig.IID)
-	closed, summary := orig, "The merge request "+title+" was closed already; its branch is deleted."
-
-	if stateOf(orig) == gitchange.StateOpen {
-		var updated apiMergeRequest
-
-		err := m.client.Send(ctx, http.MethodPut, mergeRequestPath(params.Project, orig.IID), updateRequest{StateEvent: "close"}, &updated)
-		if err != nil {
-			return action.Result{}, gitlabgit.Classify("close the merge request", err)
-		}
-
-		closed, summary = &updated, "Closed the merge request "+title+" and deleted its branch."
-	}
-
-	if err := m.deleteBranch(ctx, params.Project, branch); err != nil {
-		return action.Result{}, fmt.Errorf("remove the branch of the closed merge request: %w", err)
-	}
-
-	st := statusOf(closed)
-	if st.State == gitchange.StateOpen {
-		st.State, st.ClosedAt = gitchange.StateClosed, new(time.Now())
-	}
-
-	if st.Number == 0 {
-		st.Number, st.URL = orig.IID, orig.WebURL
-	}
-
-	if err := m.record(ctx, inv.UndoOf, params.Project, st); err != nil {
-		return action.Result{}, fmt.Errorf("record the original as %s: %w", st.State, err)
-	}
-
-	m.metrics.mergeRequest(resultClosed)
-
-	return action.Result{Summary: summary, Links: []action.Link{{Title: title, URL: orig.WebURL}}}, nil
-}
-
-// deleteBranch deletes a branch. A branch that is gone already is not an
-// error.
-func (m *MR) deleteBranch(ctx context.Context, project, branch string) error {
-	err := m.client.Send(ctx, http.MethodDelete, branchPath(project, branch), nil, nil)
-	if gitlabapi.IsStatus(err, http.StatusNotFound) {
-		return nil
-	}
-
+	res, err := gitlabgit.CloseOriginal(ctx, m.client, m.db, m.metrics.Metrics, inv, params.Project, orig, branch)
 	if err != nil {
-		return gitlabgit.Classify("delete the branch "+branch, err)
+		return action.Result{}, fmt.Errorf("close the merge request to undo: %w", err)
 	}
 
-	return nil
+	return res, nil
 }
 
 // revert opens a merge request that restores the files of a merged merge
 // request to their earlier content.
-func (m *MR) revert(ctx context.Context, inv action.Invocation, params Params, orig *apiMergeRequest, snap action.Snapshot, force bool) (action.Result, error) {
+func (m *MR) revert(ctx context.Context, inv action.Invocation, params Params, orig *gitlabgit.MergeRequest, snap action.Snapshot, force bool) (action.Result, error) {
 	branch := inv.IdempotencyKey
 
-	if err := m.record(ctx, inv.UndoOf, params.Project, statusOf(orig)); err != nil {
+	if err := gitlabgit.Record(ctx, m.db, inv.UndoOf, params.Project, gitlabgit.StatusOf(orig)); err != nil {
 		return action.Result{}, fmt.Errorf("record the original as merged: %w", err)
 	}
 
-	mr, err := m.mergeRequestFrom(ctx, params.Project, branch)
+	mr, branchExists, err := gitlabgit.Existing(ctx, m.client, params.Project, branch)
 	if err != nil {
 		return action.Result{}, fmt.Errorf("look for an earlier attempt: %w", err)
 	}
 
 	if mr == nil {
-		branchExists, err := m.branchExists(ctx, params.Project, branch)
-		if err != nil {
-			return action.Result{}, fmt.Errorf("look for the branch of an earlier attempt: %w", err)
-		}
-
 		if !branchExists {
 			res, done, err := m.pushRevert(ctx, inv, params, snap, force)
 			if err != nil {
@@ -172,17 +98,17 @@ func (m *MR) revert(ctx context.Context, inv action.Invocation, params Params, o
 			}
 		}
 
-		mr, err = m.openMergeRequest(ctx, params.Project, m.revertRequest(inv, params, orig, branch))
+		mr, err = gitlabgit.OpenMergeRequest(ctx, m.client, params.Project, m.revertRequest(inv, params, orig, branch))
 		if err != nil {
 			return action.Result{}, fmt.Errorf("make the revert merge request: %w", err)
 		}
 	}
 
-	if err := m.record(ctx, inv.ProposalID, params.Project, statusOf(mr)); err != nil {
+	if err := gitlabgit.Record(ctx, m.db, inv.ProposalID, params.Project, gitlabgit.StatusOf(mr)); err != nil {
 		return action.Result{}, fmt.Errorf("record the revert merge request: %w", err)
 	}
 
-	m.metrics.mergeRequest(resultReverted)
+	m.metrics.MergeRequest(gitlabgit.ResultReverted)
 
 	title := params.Project + "!" + strconv.Itoa(mr.IID)
 
@@ -232,7 +158,7 @@ func (m *MR) pushRevert(ctx context.Context, inv action.Invocation, params Param
 	message := revertPrefix + source.CutText(gitlabgit.CommitTitle(params.Title), gitlabgit.MaxCommitTitleBytes-len(revertPrefix)) +
 		"\n\nSidekick proposal " + inv.ProposalID + ", which undoes " + inv.UndoOf + "\n"
 
-	_, err = m.commitTo(ctx, params.Project, commitRequest{
+	_, err = gitlabgit.CommitTo(ctx, m.client, params.Project, gitlabgit.CommitRequest{
 		Branch:        inv.IdempotencyKey,
 		StartSHA:      head.Commit,
 		CommitMessage: message,
@@ -304,12 +230,12 @@ func (m *MR) planRevert(ctx context.Context, r *gitlabgit.Reader, sides gitchang
 // restoreActions turns the restores into the actions of a commit. The
 // Commits API takes content and not a blob, so the earlier content of each
 // file is read by its blob ID.
-func (m *MR) restoreActions(ctx context.Context, project string, restores []restore) ([]commitAction, error) {
-	actions := make([]commitAction, 0, len(restores))
+func (m *MR) restoreActions(ctx context.Context, project string, restores []restore) ([]gitlabgit.CommitAction, error) {
+	actions := make([]gitlabgit.CommitAction, 0, len(restores))
 
 	for _, r := range restores {
 		if r.blob == "" {
-			actions = append(actions, commitAction{Action: commitDelete, FilePath: r.path})
+			actions = append(actions, gitlabgit.CommitAction{Action: gitlabgit.CommitDelete, FilePath: r.path})
 
 			continue
 		}
@@ -319,12 +245,12 @@ func (m *MR) restoreActions(ctx context.Context, project string, restores []rest
 			return nil, fmt.Errorf("read %s: %w", r.path, err)
 		}
 
-		kind := commitCreate
+		kind := gitlabgit.CommitCreate
 		if r.exists {
-			kind = commitUpdate
+			kind = gitlabgit.CommitUpdate
 		}
 
-		actions = append(actions, commitAction{Action: kind, FilePath: r.path, Content: &content})
+		actions = append(actions, gitlabgit.CommitAction{Action: kind, FilePath: r.path, Content: &content})
 	}
 
 	return actions, nil
@@ -332,7 +258,7 @@ func (m *MR) restoreActions(ctx context.Context, project string, restores []rest
 
 // revertRequest is the merge request that reverts orig. Its text is the
 // action's own, apart from the title of the original, so only that is cleaned.
-func (m *MR) revertRequest(inv action.Invocation, params Params, orig *apiMergeRequest, branch string) createRequest {
+func (m *MR) revertRequest(inv action.Invocation, params Params, orig *gitlabgit.MergeRequest, branch string) gitlabgit.CreateRequest {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "Reverts the merge request `%s!%d`, which Sidekick opened for proposal `%s`.\n\n", params.Project, orig.IID, inv.UndoOf)
@@ -343,30 +269,10 @@ func (m *MR) revertRequest(inv action.Invocation, params Params, orig *apiMergeR
 		fmt.Fprintf(&b, " [The investigation](%s).", link)
 	}
 
-	return createRequest{
+	return gitlabgit.CreateRequest{
 		SourceBranch: branch,
 		TargetBranch: params.BaseBranch,
 		Title:        gitlabgit.MergeRequestTitle(revertPrefix+params.Title, m.limits.draft(), fallbackTitle),
 		Description:  b.String(),
 	}
-}
-
-// record keeps the state of a merge request for the proposal with the ID, for
-// the count of merged merge requests. Where there is no database, it does
-// nothing.
-func (m *MR) record(ctx context.Context, proposalID, project string, st *gitchange.Status) error {
-	if m.db == nil {
-		return nil
-	}
-
-	if err := gitchange.RecordState(ctx, m.db, proposalID, project, st); err != nil {
-		return fmt.Errorf("record the merge request state: %w", err)
-	}
-
-	return nil
-}
-
-// mergeRequestPath returns the API path of a merge request of a project.
-func mergeRequestPath(project string, iid int) string {
-	return gitlabapi.ProjectPath(project, "merge_requests", strconv.Itoa(iid))
 }
