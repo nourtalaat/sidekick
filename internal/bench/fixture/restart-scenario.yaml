@@ -33,3 +33,8 @@ expected:
   verdict: true_positive
   rootCause:
     summary: The DB pool ran out after abc123.
+  proposals:
+    - action: restart
+      params:
+        service: { equals: checkout-api }
+        graceSeconds: { lte: 10 }
