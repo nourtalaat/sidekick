@@ -1,8 +1,8 @@
 // Package argocd is a small client for Argo CD's REST API, with Bearer token
 // authentication on the plain HTTP client of internal/httpclient. It does
 // not import the Argo CD module, which is very large. The Argo CD source
-// uses it to read applications; the Argo CD rollback action adds its write
-// calls to it.
+// uses it to read applications; the Argo CD rollback action also uses its
+// rollback call.
 //
 // The client reads applications of one namespace, named by project and
 // name, "project/name", as Argo CD's RBAC policies name them.
@@ -57,6 +57,41 @@
 //     reads the revision from the repository of that history entry.
 //   - The UI page of an application is <base>/applications/<namespace>/<name>
 //     (getAppUrl in ui/src/app/applications/components/utils.tsx).
+//
+// What the rollback call relies on, from the same tag:
+//
+//   - POST /api/v1/applications/{name}/rollback takes a body with id (int64,
+//     the history ID), dryRun, prune, appNamespace, project and name, and
+//     answers 200 with the application (assets/swagger.json,
+//     applicationApplicationRollbackRequest). It needs the RBAC action
+//     "applications, sync" on the application, and not "get"
+//     (Rollback in server/application/application.go).
+//   - It refuses with the gRPC code FailedPrecondition and the message
+//     "rollback cannot be initiated when auto-sync is enabled" while
+//     auto-sync is on, and with InvalidArgument when the application has no
+//     history entry with that ID (same function). The client reads any 4xx
+//     answer as a *StatusError with Argo CD's message, and does not depend on
+//     the exact status code, which the gRPC gateway chooses.
+//   - It sets an operation that syncs the entry's own revision, source and
+//     sources, with the apply strategy, which skips hooks, with the prune
+//     setting of the request and the caller as initiatedBy (same function;
+//     SyncOperation.IsApplyStrategy in pkg/apis/application/v1alpha1/types.go
+//     and the skip-hooks argument of sync.WithOperationSettings in
+//     controller/sync.go). It does not check sync windows; the controller
+//     leaves a blocked operation in the phase Running with the message "Sync
+//     operation blocked by sync window" (SyncAppState in controller/sync.go).
+//   - Setting an operation clears status.operationState, and fails with
+//     FailedPrecondition "another operation is already in progress" while
+//     another operation is set (SetAppOperation in util/argo/argo.go).
+//   - When the operation ends, the controller sets status.operationState.phase
+//     to Succeeded, Failed or Error and clears the operation in one patch
+//     (setOperationState in controller/appcontroller.go; the phases are in
+//     gitops-engine/pkg/sync/common/types.go).
+//   - A successful sync that is not a dry run and not of some resources adds a
+//     history entry with the ID of the newest entry plus one, or 0 for the
+//     first, and cuts the list to the revision history limit
+//     (persistRevisionHistory in controller/state.go, and the call in
+//     controller/sync.go).
 //   - An error answer is JSON with a message field (the gRPC gateway's error
 //     body). The gRPC codes Unauthenticated (invalid session, server/server.go),
 //     PermissionDenied (common/common.go) and NotFound become the HTTP
