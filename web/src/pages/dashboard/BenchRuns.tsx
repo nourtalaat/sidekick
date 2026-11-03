@@ -4,14 +4,13 @@ import { Card } from "../../components/Card";
 import { Select } from "../../components/Select";
 import { Table } from "../../components/Table";
 import { QueryError } from "../../components/QueryError";
-import { formatCost, formatDuration } from "../../format";
+import { formatCost, formatDuration, MICROS_PER_DOLLAR } from "../../format";
 import { nameOf, RunsTable } from "../benchmarks/RunsTable";
 import { VERDICT_OPTIONS, type DashboardFilters } from "./params";
 import { formatShare } from "./words";
 import "./Dashboard.css";
 
 const NONE = "";
-const MICROS_PER_DOLLAR = 1_000_000;
 const PERCENT = 100;
 
 interface BenchRunsProps {

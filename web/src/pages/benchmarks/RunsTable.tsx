@@ -2,10 +2,8 @@ import { Link } from "react-router";
 import type { BenchRunSummary } from "../../api/bench";
 import { StatusBadge } from "../../components/Badge";
 import { Table } from "../../components/Table";
-import { formatCost, formatDuration, formatTime } from "../../format";
+import { formatCost, formatDuration, formatTime, MICROS_PER_DOLLAR } from "../../format";
 import { formatShare } from "../dashboard/words";
-
-const MICROS_PER_DOLLAR = 1_000_000;
 
 const STARTED_BY_WORDS: Record<string, string> = {
   cli: "Command line",
