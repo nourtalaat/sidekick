@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
 
+	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/report"
 	"github.com/nourtalaat/sidekick/internal/source/mock"
 )
@@ -118,7 +119,7 @@ func TestLoadScenariosProblems(t *testing.T) {
 			files: map[string]string{"a.yaml": badValues},
 			want: []string{
 				`a.yaml: id: "Bad ID" must be lower-case`,
-				`a.yaml: route.mode: mode "approved" is not available yet`,
+				"a.yaml: route.mode: read-write is not allowed in a scenario",
 				"a.yaml: sources.K8s: the name must be lower-case",
 				"a.yaml: sources.github.tools.snapshot: required unless unavailable is true",
 				"a.yaml: sources.github.fixtures[0].match.args.q: regex:",
@@ -219,7 +220,7 @@ func TestLoadScenariosPath(t *testing.T) {
 const badValues = `
 id: Bad ID
 now: 2026-05-04T10:20:00Z
-route: { mode: approved }
+route: { mode: read-write }
 event:
   adapter: alertmanager
   payload: { version: "4" }
@@ -279,6 +280,125 @@ func TestParseScenario(t *testing.T) {
 	}
 }
 
+// approvedScenario is minimal with approved mode and one mock action.
+const approvedScenario = minimal + `
+route: { mode: approved, actions: [rollback] }
+actions:
+  rollback:
+    spec: { snapshot: bench/actions/kubernetes.rollback.json }
+`
+
+func TestParseScenarioActions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		in   string
+		// wantErr are the lines the error must hold. Empty means valid.
+		wantErr []string
+	}{
+		{name: "approved mode with a mock action", in: approvedScenario},
+		{name: "read-only mode with no actions", in: minimal + "route: { mode: read-only }\n"},
+		{
+			name:    "read-write is refused",
+			in:      minimal + "route: { mode: read-write }\n",
+			wantErr: []string{"route.mode: read-write is not allowed in a scenario"},
+		},
+		{
+			name:    "an unknown mode",
+			in:      minimal + "route: { mode: auto }\n",
+			wantErr: []string{`route.mode: unknown mode "auto"`},
+		},
+		{
+			name:    "approved mode with no actions",
+			in:      minimal + "route: { mode: approved }\n",
+			wantErr: []string{"route.actions: list at least one action"},
+		},
+		{
+			name: "actions without approved mode",
+			in:   minimal + "route: { actions: [rollback] }\nactions:\n  rollback: { spec: { snapshot: s.json } }\n",
+			wantErr: []string{
+				"route.actions: must be empty unless route.mode is approved",
+				"actions: need route.mode approved",
+			},
+		},
+		{
+			name: "a route action that is not an action of the scenario",
+			in:   minimal + "route: { mode: approved, actions: [rollback, restart, restart] }\nactions:\n  rollback: { spec: { snapshot: s.json } }\n",
+			wantErr: []string{
+				`route.actions[1]: "restart" is not an action of the scenario`,
+				`route.actions[2]: "restart" is listed twice`,
+			},
+		},
+		{
+			name:    "an action the route does not list",
+			in:      minimal + "route: { mode: approved, actions: [rollback] }\nactions:\n  rollback: { spec: { snapshot: s.json } }\n  restart: { spec: { snapshot: s.json } }\n",
+			wantErr: []string{"actions.restart: not listed in route.actions"},
+		},
+		{
+			name: "a bad action name and a missing snapshot",
+			in:   minimal + "route: { mode: approved, actions: [Roll_Back] }\nactions:\n  Roll_Back: { spec: {} }\n",
+			wantErr: []string{
+				"actions.Roll_Back: the name must start with a lower-case letter",
+				"actions.Roll_Back.spec.snapshot: required",
+			},
+		},
+		{
+			name:    "an unknown key of an action",
+			in:      minimal + "route: { mode: approved, actions: [rollback] }\nactions:\n  rollback: { spec: { snapshot: s.json }, colour: red }\n",
+			wantErr: []string{"colour"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := ParseScenario([]byte(tt.in))
+			if len(tt.wantErr) == 0 {
+				require.NoError(t, err)
+
+				return
+			}
+
+			require.ErrorIs(t, err, ErrInvalidScenario)
+
+			for _, want := range tt.wantErr {
+				require.ErrorContains(t, err, want)
+			}
+
+			require.Empty(t, got.ID)
+		})
+	}
+}
+
+func TestParseScenarioKeepsActions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		in   string
+	}{
+		{name: "the route's list and the action's snapshot", in: approvedScenario},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			sc, err := ParseScenario([]byte(tt.in))
+			require.NoError(t, err)
+			require.Equal(t, action.Approved, sc.Route.Mode)
+			require.Equal(t, []string{"rollback"}, sc.Route.Actions)
+			require.Equal(t, []string{"rollback"}, sc.ActionNames())
+			require.Equal(t, "bench/actions/kubernetes.rollback.json", sc.Actions["rollback"].Spec.Snapshot)
+
+			sc.ResolveSnapshots("/repo")
+			require.Equal(t, filepath.Join("/repo", "bench", "actions", "kubernetes.rollback.json"), sc.Actions["rollback"].Spec.Snapshot)
+		})
+	}
+}
+
 func TestScenarioMarshalRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -305,7 +425,7 @@ func TestScenarioMarshalLeavesOutEmptyFields(t *testing.T) {
 	raw, err := yaml.Marshal(sc)
 	require.NoError(t, err)
 
-	for _, key := range []string{"tags:", "strategy:", "route:", "default:", "limits:", "config:", "acceptable:", "rubric:", "evidence:"} {
+	for _, key := range []string{"tags:", "strategy:", "route:", "default:", "limits:", "config:", "actions:", "acceptable:", "rubric:", "evidence:"} {
 		require.NotContains(t, string(raw), key)
 	}
 }
