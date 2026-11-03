@@ -62,6 +62,14 @@ describe.each(THEMES)("accessibility, theme $name", (theme) => {
       expect(await wcagViolations(container)).toEqual([]);
     });
 
+    it("has no WCAG 2.2 AA violations on the shell with a search in the header", async () => {
+      const { container } = renderApp({ route: "/investigations?q=checkout" });
+      await screen.findByRole("heading", { name: "Investigations", level: 1 });
+
+      expect(screen.getByRole("searchbox", { name: "Search investigations" })).toHaveValue("checkout");
+      expect(await wcagViolations(container)).toEqual([]);
+    });
+
     it("has no WCAG 2.2 AA violations on the shell with the menu of an admin", async () => {
       const { container } = renderApp({ me: ADMIN, route: "/investigations" });
       await screen.findByRole("link", { name: "Audit log" });
