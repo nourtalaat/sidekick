@@ -9,13 +9,11 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/action/gitlabgit"
 	"github.com/nourtalaat/sidekick/internal/gitlabapi"
-	"github.com/nourtalaat/sidekick/internal/weblink"
 )
 
 // The actions of a commit, as the Commits API names them.
@@ -24,6 +22,10 @@ const (
 	commitUpdate = "update"
 	commitDelete = "delete"
 )
+
+// fallbackTitle is the title of a merge request whose given title is nothing
+// but a draft prefix.
+const fallbackTitle = "Update monitor definitions"
 
 // listPageSize is how many merge requests the lookup by source branch asks
 // for. A branch has one merge request, or a few when its earlier ones were
@@ -229,7 +231,7 @@ func (m *MR) push(ctx context.Context, pre *prepared, branch string, inv action.
 	return m.commitTo(ctx, pre.params.Project, commitRequest{
 		Branch:        branch,
 		StartSHA:      pre.base.Commit,
-		CommitMessage: commitMessage(pre.params.Title, inv.ProposalID),
+		CommitMessage: gitlabgit.CommitMessage(pre.params.Title, inv.ProposalID),
 		Actions:       actions,
 	})
 }
@@ -259,8 +261,8 @@ func (m *MR) open(ctx context.Context, params Params, branch string, inv action.
 	return m.openMergeRequest(ctx, params.Project, createRequest{
 		SourceBranch: branch,
 		TargetBranch: params.BaseBranch,
-		Title:        mergeRequestTitle(params.Title, m.limits.draft()),
-		Description:  m.description(params.Body, inv),
+		Title:        gitlabgit.MergeRequestTitle(params.Title, m.limits.draft(), fallbackTitle),
+		Description:  gitlabgit.Description(params.Body, inv.ProposalID, inv.InvestigationID, m.publicURL),
 	})
 }
 
@@ -291,22 +293,6 @@ func (m *MR) openMergeRequest(ctx context.Context, project string, req createReq
 	}
 
 	return &mr, nil
-}
-
-// description returns the description of the merge request: the model's text,
-// made safe, and a line that says where it came from.
-func (m *MR) description(body string, inv action.Invocation) string {
-	var b strings.Builder
-
-	b.WriteString(descriptionText(body))
-	b.WriteString("\n\n---\n")
-	fmt.Fprintf(&b, "Opened by Sidekick for proposal `%s`.", inv.ProposalID)
-
-	if link := weblink.Investigation(m.publicURL, inv.InvestigationID); link != "" {
-		fmt.Fprintf(&b, " [The investigation](%s).", link)
-	}
-
-	return b.String()
 }
 
 // result describes the merge request for people and for the proposal. Its
@@ -343,12 +329,6 @@ func (m *MR) result(project string, mr *apiMergeRequest, how, pushed string) act
 		Links:       []action.Link{{Title: title, URL: mr.WebURL}},
 		PullRequest: &action.PullRequestRef{Number: int64(mr.IID), HeadSHA: head},
 	}
-}
-
-// commitMessage returns the message of the commit: the title on one line,
-// and the proposal it is for.
-func commitMessage(title, proposalID string) string {
-	return commitTitle(title) + "\n\nSidekick proposal " + proposalID + "\n"
 }
 
 // apiBranch is a branch as GitLab's branches endpoint answers.

@@ -1,4 +1,4 @@
-package gitlabmr
+package gitlabgit
 
 import (
 	"strings"
@@ -6,6 +6,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+// testFallback is the title of a merge request whose given title is nothing
+// but a draft prefix.
+const testFallback = "Update the thing"
 
 // noSlashLines requires that no line of s, once carriage returns are gone as
 // GitLab removes them, starts with a slash after spaces or tabs.
@@ -114,7 +118,7 @@ func TestMergeRequestTitle(t *testing.T) {
 		{name: "a parenthesis prefix", in: "(draft) Raise", want: "Raise"},
 		{name: "several prefixes in any case", in: "DRAFT: [draft] (Draft) Raise", want: "Raise"},
 		{name: "several prefixes and a draft", in: "DRAFT: [draft] Raise", draft: true, want: "Draft: Raise"},
-		{name: "a prefix with no title", in: "Draft:", want: fallbackTitle},
+		{name: "a prefix with no title", in: "Draft:", want: testFallback},
 		{name: "a word that only starts like a prefix", in: "Drafting rules", want: "Drafting rules"},
 		{name: "one line", in: "Raise\nthe\tthreshold", want: "Raise the threshold"},
 		{name: "a slash after a draft prefix", in: "Draft: /merge now", want: "`/merge now`"},
@@ -126,7 +130,7 @@ func TestMergeRequestTitle(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := mergeRequestTitle(tt.in, tt.draft)
+			got := MergeRequestTitle(tt.in, tt.draft, testFallback)
 			require.Equal(t, tt.want, got)
 			noSlashLines(t, got)
 		})
@@ -141,17 +145,17 @@ func TestMergeRequestTitleStaysShort(t *testing.T) {
 	// 255 characters.
 	const gitlabTitleLimit = 255
 
-	got := mergeRequestTitle(strings.Repeat("@a ", 40), true)
+	got := MergeRequestTitle(strings.Repeat("@a ", 40), true, testFallback)
 	require.LessOrEqual(t, len([]rune(got)), gitlabTitleLimit)
 }
 
 func TestCommitTitle(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "Raise the threshold", commitTitle("Raise\nthe threshold"))
-	require.Equal(t, "`/merge`", commitTitle("/merge"))
-	require.Equal(t, "Fixes `#3`", commitTitle("Fixes #3"))
-	require.Len(t, commitTitle(strings.Repeat("x", 200)), maxCommitTitleBytes)
+	require.Equal(t, "Raise the threshold", CommitTitle("Raise\nthe threshold"))
+	require.Equal(t, "`/merge`", CommitTitle("/merge"))
+	require.Equal(t, "Fixes `#3`", CommitTitle("Fixes #3"))
+	require.Len(t, CommitTitle(strings.Repeat("x", 200)), MaxCommitTitleBytes)
 }
 
 func TestDescriptionText(t *testing.T) {
@@ -184,4 +188,20 @@ func TestDescriptionText(t *testing.T) {
 
 		require.Len(t, descriptionText(strings.Repeat("x", 2*maxDescriptionBytes)), maxDescriptionBytes)
 	})
+}
+
+func TestCommitMessage(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "Raise `#3`\n\nSidekick proposal p-1\n", CommitMessage("Raise #3", "p-1"))
+}
+
+func TestDescription(t *testing.T) {
+	t.Parallel()
+
+	got := Description("Why.\n/merge", "p-1", "i-1", "https://sidekick.example.com")
+	require.Equal(t, "Why.\n`/merge`\n\n---\nOpened by Sidekick for proposal `p-1`. [The investigation](https://sidekick.example.com/investigations/i-1).", got)
+	noSlashLines(t, got)
+
+	require.NotContains(t, Description("x", "p-1", "i-1", ""), "investigation")
 }

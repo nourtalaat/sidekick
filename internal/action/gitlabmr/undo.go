@@ -229,7 +229,7 @@ func (m *MR) pushRevert(ctx context.Context, inv action.Invocation, params Param
 		return action.Result{}, false, fmt.Errorf("read the earlier content of the files: %w", err)
 	}
 
-	message := revertPrefix + source.CutText(commitTitle(params.Title), maxCommitTitleBytes-len(revertPrefix)) +
+	message := revertPrefix + source.CutText(gitlabgit.CommitTitle(params.Title), gitlabgit.MaxCommitTitleBytes-len(revertPrefix)) +
 		"\n\nSidekick proposal " + inv.ProposalID + ", which undoes " + inv.UndoOf + "\n"
 
 	_, err = m.commitTo(ctx, params.Project, commitRequest{
@@ -346,7 +346,7 @@ func (m *MR) revertRequest(inv action.Invocation, params Params, orig *apiMergeR
 	return createRequest{
 		SourceBranch: branch,
 		TargetBranch: params.BaseBranch,
-		Title:        mergeRequestTitle(revertPrefix+params.Title, m.limits.draft()),
+		Title:        gitlabgit.MergeRequestTitle(revertPrefix+params.Title, m.limits.draft(), fallbackTitle),
 		Description:  b.String(),
 	}
 }
