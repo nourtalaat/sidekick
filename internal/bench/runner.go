@@ -17,6 +17,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	actionmock "github.com/nourtalaat/sidekick/internal/action/mock"
+	"github.com/nourtalaat/sidekick/internal/action/proposals"
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/httpclient"
@@ -90,8 +92,10 @@ var (
 type Options struct {
 	// Config is the loaded sidekick.yaml. A run uses its model
 	// connectors, roles and prices, its strategies, its report rules, its
-	// redaction settings and its per-investigation limits. It does not use
-	// its sources, outputs, webhooks, routes, rate limits or daily caps.
+	// redaction settings, its per-investigation limits and its action
+	// settings (proposalTTL and maxPerInvestigation). It does not use its
+	// sources, actions, outputs, webhooks, routes, rate limits or daily
+	// caps.
 	Config *config.Config
 	// Registries are where plugin types are looked up. The zero value
 	// means the global ones.
@@ -331,6 +335,10 @@ func New(ctx context.Context, scenarios []Scenario, opts Options) (*Runner, erro
 		r.regs.Intakes = registry.Intakes
 	}
 
+	if r.regs.Actions == nil {
+		r.regs.Actions = registry.Actions
+	}
+
 	r.deps = registry.Deps{Secrets: secrets.NewDir(r.cfg.Secrets.Dir), HTTP: httpclient.New(), Logger: r.compLog}
 
 	if err := r.buildModels(ctx); err != nil {
@@ -431,6 +439,12 @@ func (r *Runner) checkScenario(ctx context.Context, sc Scenario) []string {
 		}
 	}
 
+	for _, name := range sc.ActionNames() {
+		if _, err := r.buildAction(ctx, sc, name); err != nil {
+			problems = append(problems, fmt.Sprintf("actions.%s: %v", name, err))
+		}
+	}
+
 	return problems
 }
 
@@ -488,12 +502,17 @@ func (r *Runner) runOnce(ctx context.Context, database *Database, sc Scenario, n
 
 	defer closeSources()
 
+	actions, err := r.actions(ctx, sc)
+	if err != nil {
+		return RunResult{}, fmt.Errorf("set up the actions: %w", err)
+	}
+
 	hooks, err := r.webhooks(ctx, database.Pool, sc, endpoint)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("set up the webhook endpoint: %w", err)
 	}
 
-	routeJobs, investigateJobs, jobs, err := r.jobQueue(database, sc, guard, runID)
+	routeJobs, investigateJobs, jobs, err := r.jobQueue(database, sc, guard, actions, runID)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("set up the job queue: %w", err)
 	}
@@ -540,7 +559,24 @@ func (r *Runner) runOnce(ctx context.Context, database *Database, sc Scenario, n
 		return RunResult{}, fmt.Errorf("close the run's group: %w", err)
 	}
 
-	return r.result(ctx, database.Pool, inv, n, took)
+	return r.result(ctx, database.Pool, sc, inv, n, took)
+}
+
+// actions builds the scenario's mock actions, by name. A scenario without
+// actions gives none.
+func (r *Runner) actions(ctx context.Context, sc Scenario) (map[string]action.Action, error) {
+	out := make(map[string]action.Action, len(sc.Actions))
+
+	for _, name := range sc.ActionNames() {
+		a, err := r.buildAction(ctx, sc, name)
+		if err != nil {
+			return nil, fmt.Errorf("action %s: %w", name, err)
+		}
+
+		out[name] = a
+	}
+
+	return out, nil
 }
 
 // guard builds the scenario's mock sources behind a tool guard of the
@@ -603,8 +639,10 @@ func (r *Runner) webhooks(ctx context.Context, pool *pgxpool.Pool, sc Scenario, 
 
 // jobQueue builds a job queue that runs the route_event and investigate jobs
 // with a router and an investigator for the scenario's route. It returns
-// the two handlers, which remember the last error of their jobs.
-func (r *Runner) jobQueue(database *Database, sc Scenario, guard *tools.Guard, runID uuid.UUID) (routeJobs, investigateJobs *watched, jobs *queue.Runner, err error) {
+// the two handlers, which remember the last error of their jobs. The
+// queue has no handler for the jobs that run or expire a proposal, so a
+// proposal stays as the model made it.
+func (r *Runner) jobQueue(database *Database, sc Scenario, guard *tools.Guard, actions map[string]action.Action, runID uuid.UUID) (routeJobs, investigateJobs *watched, jobs *queue.Runner, err error) {
 	cfg := r.cfg
 	cfg.Routes = []config.Route{r.route(sc)}
 
@@ -619,6 +657,15 @@ func (r *Runner) jobQueue(database *Database, sc Scenario, guard *tools.Guard, r
 		return nil, nil, nil, fmt.Errorf("build the router: %w", err)
 	}
 
+	var proposalService *proposals.Service
+
+	if len(actions) > 0 {
+		proposalService, err = r.proposals(database, sc, actions)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("set up the proposals: %w", err)
+		}
+	}
+
 	inv, err := investigator.New(investigator.Options{
 		Pool:       database.Pool,
 		Guard:      guard,
@@ -628,6 +675,7 @@ func (r *Runner) jobQueue(database *Database, sc Scenario, guard *tools.Guard, r
 		Routes:     investigator.StaticRoutes{RouteName: {Sources: sc.SourceNames(), Details: sc.Route.Details}},
 		Rules:      cfg.Report.Rules(),
 		Daily:      investigator.DailyCaps{Location: time.UTC},
+		Actions:    proposalService,
 		Logger:     r.compLog,
 	})
 	if err != nil {
@@ -656,6 +704,25 @@ func (r *Runner) jobQueue(database *Database, sc Scenario, guard *tools.Guard, r
 	}
 
 	return routeJobs, investigateJobs, jobs, nil
+}
+
+// proposals builds the service that stores the proposals of the scenario's
+// run, with a static policy of the bench route and the mock actions.
+func (r *Runner) proposals(database *Database, sc Scenario, actions map[string]action.Action) (*proposals.Service, error) {
+	svc, err := proposals.New(proposals.Options{
+		Pool:                database.Pool,
+		Actions:             actions,
+		Policy:              action.StaticPolicy{RouteName: {Mode: action.Approved, Actions: sc.Route.Actions}},
+		TTL:                 r.cfg.Actions.ProposalTTL,
+		MaxPerInvestigation: r.cfg.Actions.MaxPerInvestigation,
+		Redactor:            r.redactor,
+		Logger:              r.compLog,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build the proposals service: %w", err)
+	}
+
+	return svc, nil
 }
 
 // wait waits until the investigation of the event with eventID ends, and
@@ -710,8 +777,9 @@ func (r *Runner) wait(ctx context.Context, pool *pgxpool.Pool, eventID uuid.UUID
 	}
 }
 
-// result reads the outcome of a run from its investigation and steps.
-func (r *Runner) result(ctx context.Context, pool *pgxpool.Pool, inv db.Investigation, n int, took time.Duration) (RunResult, error) {
+// result reads the outcome of a run from its investigation, its steps and,
+// when the scenario has actions, its proposals.
+func (r *Runner) result(ctx context.Context, pool *pgxpool.Pool, sc Scenario, inv db.Investigation, n int, took time.Duration) (RunResult, error) {
 	var rep report.Report
 	if err := json.Unmarshal(inv.Report, &rep); err != nil {
 		return RunResult{}, fmt.Errorf("decode the report of investigation %s: %w", inv.ID, err)
@@ -742,6 +810,11 @@ func (r *Runner) result(ctx context.Context, pool *pgxpool.Pool, inv db.Investig
 		results = append(results, ToolResult{Tool: name, Status: s.Status, Content: s.Content})
 	}
 
+	proposed, err := listProposals(ctx, pool, sc, inv.ID)
+	if err != nil {
+		return RunResult{}, fmt.Errorf("investigation %s: %w", inv.ID, err)
+	}
+
 	return RunResult{
 		Run:             n,
 		InvestigationID: inv.ID,
@@ -753,12 +826,14 @@ func (r *Runner) result(ctx context.Context, pool *pgxpool.Pool, inv db.Investig
 		CostMicros:      inv.CostMicros,
 		Duration:        took,
 		ToolResults:     results,
+		Proposals:       proposed,
 	}, nil
 }
 
 // route returns the route of the scenario's runs: its strategy, its mock
-// sources, read-only mode, and its limits, with the config's
-// per-investigation limits where it sets none.
+// sources, its mode (read-only unless the scenario sets approved) and mock
+// actions, and its limits, with the config's per-investigation limits where
+// it sets none.
 func (r *Runner) route(sc Scenario) config.Route {
 	global := r.cfg.Budgets.PerInvestigation
 
@@ -768,7 +843,8 @@ func (r *Runner) route(sc Scenario) config.Route {
 		Strategy: r.strategy(sc),
 		Sources:  sc.SourceNames(),
 		Details:  sc.Route.Details,
-		Mode:     action.ReadOnly,
+		Mode:     cmp.Or(sc.Route.Mode, action.ReadOnly),
+		Actions:  sc.Route.Actions,
 		Budgets: config.RouteBudgets{Limits: config.Limits{
 			MaxTokens:    cmp.Or(sc.Limits.MaxTokens, global.MaxTokens),
 			MaxToolCalls: cmp.Or(sc.Limits.MaxToolCalls, global.MaxToolCalls),
@@ -793,6 +869,17 @@ func (r *Runner) buildSource(ctx context.Context, sc Scenario, name string) (sou
 	}
 
 	return src, nil
+}
+
+// buildAction builds the scenario's mock action called name through the
+// action registry, as serve builds a configured action.
+func (r *Runner) buildAction(ctx context.Context, sc Scenario, name string) (action.Action, error) {
+	a, err := r.regs.Actions.Build(ctx, actionmock.Type, name, configDecoder[actionmock.Config]{cfg: sc.Actions[name]}, r.deps)
+	if err != nil {
+		return nil, fmt.Errorf("build: %w", err)
+	}
+
+	return a, nil
 }
 
 // buildAdapter builds the scenario's intake adapter for the endpoint
@@ -871,6 +958,26 @@ func benchConfig(cfg *config.Config) config.Config {
 	out.Watch.AllowModel = false
 
 	return out
+}
+
+// listProposals returns the proposals the investigation made, oldest
+// first, or none for a scenario without actions.
+func listProposals(ctx context.Context, pool *pgxpool.Pool, sc Scenario, investigationID uuid.UUID) ([]Proposal, error) {
+	if len(sc.Actions) == 0 {
+		return nil, nil
+	}
+
+	rows, err := db.New(pool).ListInvestigationActionProposals(ctx, investigationID)
+	if err != nil {
+		return nil, fmt.Errorf("load the proposals: %w", err)
+	}
+
+	out := make([]Proposal, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, Proposal{Action: row.ActionProposal.Action, Params: row.ActionProposal.Params, Reason: row.ActionProposal.Reason})
+	}
+
+	return out, nil
 }
 
 // orDiscard returns log, or a logger that discards everything when log is

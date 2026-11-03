@@ -359,6 +359,13 @@ that removes its target (`After` is `null`) cannot be undone, and Sidekick
 does not offer Undo for it. An `Undoer` that has no snapshot gets the zero
 `Snapshot`.
 
+An action that creates something, such as a mute, has a snapshot whose
+`Before` is `null`. Slack and the web UI show the whole `After` as the new
+definition, and the Undo button says that Sidekick ends what it created. Its
+`Undo` removes what `Execute` made. If someone changed it since and `force`
+is false, return `&action.ConflictError{Live: live}`: the approver is shown
+the live definition that a forced Undo removes.
+
 ### Tests
 
 Add to the tests of step 8, with `internal/fakehttp`: propose a change

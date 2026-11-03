@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/config"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/model/modeltest"
@@ -426,6 +427,97 @@ func TestNewTakesTheStrategiesOfTheOptions(t *testing.T) {
 
 			require.NoError(t, err)
 			require.Equal(t, "runtime:3", runner.Info().Strategies["proposal-only"])
+		})
+	}
+}
+
+// actionScenario is checkedScenario with approved mode and one mock action
+// whose snapshot is SNAPSHOT.
+const actionScenario = `
+id: with-action
+now: 2026-05-04T10:20:00Z
+route: { mode: approved, actions: [fix-pr] }
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    groupKey: g
+    alerts: [` + firing + `]
+sources:
+  github:
+    tools: { snapshot: bench/tools/github.json }
+actions:
+  fix-pr: { spec: { snapshot: SNAPSHOT } }
+expected:
+  verdict: true_positive
+`
+
+func TestNewChecksActions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		snapshot string
+		// wantErr is a part of the error; empty means the scenario passes.
+		wantErr string
+	}{
+		{name: "a snapshot of a real action", snapshot: "bench/actions/github.pull_request.json"},
+		{name: "a snapshot that does not exist", snapshot: "bench/actions/missing.json", wantErr: "actions.fix-pr: build:"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			file := filepath.Join(t.TempDir(), "with-action.yaml")
+			require.NoError(t, os.WriteFile(file, []byte(strings.ReplaceAll(actionScenario, "SNAPSHOT", tt.snapshot)), 0o600))
+
+			scenarios, err := LoadScenarios(file, LoadOptions{BaseDir: repoRoot})
+			require.NoError(t, err)
+
+			cfg, regs := loadTestConfig(t, modeltest.New(t, model.Capabilities{ToolCalling: true}))
+
+			_, err = New(t.Context(), scenarios, Options{Config: cfg, Registries: regs})
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+
+				return
+			}
+
+			require.ErrorIs(t, err, ErrInvalidScenario)
+			require.ErrorContains(t, err, file+": "+tt.wantErr)
+		})
+	}
+}
+
+func TestRoute(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		scenario    string
+		wantMode    action.Mode
+		wantActions []string
+	}{
+		{name: "a scenario without a mode is read-only", scenario: minimal, wantMode: action.ReadOnly},
+		{
+			name:        "an approved scenario lists its actions",
+			scenario:    approvedScenario,
+			wantMode:    action.Approved,
+			wantActions: []string{"rollback"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			sc, err := ParseScenario([]byte(tt.scenario))
+			require.NoError(t, err)
+
+			got := (&Runner{}).route(sc)
+			require.Equal(t, tt.wantMode, got.Mode)
+			require.Equal(t, tt.wantActions, got.Actions)
 		})
 	}
 }
