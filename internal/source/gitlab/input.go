@@ -118,6 +118,24 @@ func checkRef(key, ref string) error {
 	return nil
 }
 
+// cleanPath returns a path inside a project without slashes at either end;
+// the empty path is the root of the project. It refuses empty, "." and ".."
+// parts, which would change the API path.
+func cleanPath(key, p string) (string, error) {
+	p = strings.Trim(p, "/")
+	if p == "" {
+		return "", nil
+	}
+
+	for part := range strings.SplitSeq(p, "/") {
+		if part == "" || dots(part) {
+			return "", &source.ToolError{Message: fmt.Sprintf("%s: %q is not a path inside the project", key, p)}
+		}
+	}
+
+	return p, nil
+}
+
 // limitOf returns the limit a call gives, or defaultLimit, within 1 and
 // maxLimit.
 func limitOf(limit int) int {

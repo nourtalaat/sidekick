@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -18,6 +20,9 @@ import (
 const (
 	abcSHA = "abc1234def5678abc1234def5678abc1234def56"
 	botSHA = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c"
+
+	filePath = apiRoot + "/projects/acme/checkout/repository/files/deploy/values.yaml"
+	treePath = apiRoot + "/projects/acme/checkout/repository/tree"
 
 	commitPath  = apiRoot + "/projects/acme/checkout/repository/commits/" + abcSHA
 	comparePath = apiRoot + "/projects/acme/checkout/repository/compare"
@@ -200,6 +205,123 @@ func TestSourceCall(t *testing.T) {
 			wantText:    notFoundText,
 		},
 		{
+			name:  "get_file reads a file at a ref and links to the commit it read",
+			tool:  toolGetFile,
+			input: `{"project":"acme/checkout","path":"/deploy/values.yaml/","ref":"main"}`,
+			routes: []route{{http.MethodGet, filePath, []fakehttp.Response{
+				fixture("file.json"),
+			}}},
+			wantQueries: []string{"ref=main"},
+			want: `{"project":"acme/checkout","path":"deploy/values.yaml","ref":"main","type":"file",
+				"sha":"79f7bbd25901e8334750839545a9bd021f0e4c83","size":30,"content":"replicas: 3\nimage: shop:1.4.0\n",
+				"url":"{base}/acme/checkout/-/blob/d5a3ff139356ce33e37e73add446f16869741b50/deploy/values.yaml"}`,
+			wantEvidence: []source.Evidence{{
+				Kind:  source.EvidenceResource,
+				Title: "acme/checkout:deploy/values.yaml@main",
+				URL:   "{base}/acme/checkout/-/blob/d5a3ff139356ce33e37e73add446f16869741b50/deploy/values.yaml",
+			}},
+		},
+		{
+			name:  "get_file without a ref reads the default branch",
+			tool:  toolGetFile,
+			input: `{"service":"checkout-api","path":"deploy/values.yaml"}`,
+			routes: []route{{http.MethodGet, filePath, []fakehttp.Response{
+				fixture("file.json"),
+			}}},
+			wantQueries: []string{"ref=HEAD"},
+			want: `{"project":"acme/checkout","path":"deploy/values.yaml","type":"file",
+				"sha":"79f7bbd25901e8334750839545a9bd021f0e4c83","size":30,"content":"replicas: 3\nimage: shop:1.4.0\n",
+				"url":"{base}/acme/checkout/-/blob/d5a3ff139356ce33e37e73add446f16869741b50/deploy/values.yaml"}`,
+			wantEvidence: []source.Evidence{{
+				Kind:  source.EvidenceResource,
+				Title: "acme/checkout:deploy/values.yaml",
+				URL:   "{base}/acme/checkout/-/blob/d5a3ff139356ce33e37e73add446f16869741b50/deploy/values.yaml",
+			}},
+		},
+		{
+			name:  "get_file lists a directory when the path is not a file",
+			tool:  toolGetFile,
+			input: `{"project":"acme/checkout","path":"deploy","ref":"main"}`,
+			routes: []route{
+				{http.MethodGet, apiRoot + "/projects/acme/checkout/repository/files/deploy", []fakehttp.Response{failed(http.StatusNotFound, "404 File Not Found")}},
+				{http.MethodGet, treePath, []fakehttp.Response{fixture("directory.json")}},
+			},
+			wantQueries: []string{"ref=main", "page=1&path=deploy&per_page=100&ref=main"},
+			want: `{"project":"acme/checkout","path":"deploy","ref":"main","type":"dir","entries":[
+				{"name":"templates","type":"dir"},{"name":"values.yaml","type":"file"},{"name":"vendor","type":"submodule"}]}`,
+		},
+		{
+			name:  "get_file lists the root of the project for an empty path",
+			tool:  toolGetFile,
+			input: `{"project":"acme/checkout","path":"/"}`,
+			routes: []route{
+				{http.MethodGet, treePath, []fakehttp.Response{fixture("directory.json")}},
+			},
+			wantQueries: []string{"page=1&per_page=100"},
+			want: `{"project":"acme/checkout","path":"","type":"dir","entries":[
+				{"name":"templates","type":"dir"},{"name":"values.yaml","type":"file"},{"name":"vendor","type":"submodule"}]}`,
+		},
+		{
+			name:  "get_file finds nothing for a path that is neither a file nor a directory",
+			tool:  toolGetFile,
+			input: `{"project":"acme/checkout","path":"deploy/values.yaml","ref":"main"}`,
+			routes: []route{
+				{http.MethodGet, filePath, []fakehttp.Response{failed(http.StatusNotFound, "404 File Not Found")}},
+				{http.MethodGet, treePath, []fakehttp.Response{failed(http.StatusNotFound, "404 Tree Not Found")}},
+			},
+			wantQueries: []string{"ref=main", "page=1&path=deploy%2Fvalues.yaml&per_page=100&ref=main"},
+			wantNoData:  true,
+			wantText:    notFoundText,
+		},
+		{
+			name:  "get_file finds nothing in an empty directory",
+			tool:  toolGetFile,
+			input: `{"project":"acme/checkout","path":"deploy/values.yaml"}`,
+			routes: []route{
+				{http.MethodGet, filePath, []fakehttp.Response{failed(http.StatusNotFound, "404 File Not Found")}},
+				{http.MethodGet, treePath, []fakehttp.Response{body("[]")}},
+			},
+			wantQueries: []string{"ref=HEAD", "page=1&path=deploy%2Fvalues.yaml&per_page=100"},
+			wantNoData:  true,
+		},
+		{
+			name:  "get_file does not show a binary file",
+			tool:  toolGetFile,
+			input: `{"project":"acme/checkout","path":"deploy/values.yaml","ref":"main"}`,
+			routes: []route{{http.MethodGet, filePath, []fakehttp.Response{
+				body(`{"file_path":"deploy/values.yaml","size":3,"encoding":"base64","content":"AAEC","blob_id":"b1","commit_id":"c1"}`),
+			}}},
+			wantQueries: []string{"ref=main"},
+			want:        `{"project":"acme/checkout","path":"deploy/values.yaml","ref":"main","type":"file","sha":"b1","size":3,"omitted":"binary file","url":"{base}/acme/checkout/-/blob/c1/deploy/values.yaml"}`,
+			wantEvidence: []source.Evidence{{
+				Kind: source.EvidenceResource, Title: "acme/checkout:deploy/values.yaml@main", URL: "{base}/acme/checkout/-/blob/c1/deploy/values.yaml",
+			}},
+		},
+		{
+			name:  "get_file leaves out a file over 1 MB",
+			tool:  toolGetFile,
+			input: `{"project":"acme/checkout","path":"deploy/values.yaml","ref":"main"}`,
+			routes: []route{{http.MethodGet, filePath, []fakehttp.Response{
+				body(`{"file_path":"deploy/values.yaml","size":2000000,"encoding":"base64","content":"","blob_id":"b2","commit_id":"c2"}`),
+			}}},
+			wantQueries: []string{"ref=main"},
+			want:        `{"project":"acme/checkout","path":"deploy/values.yaml","ref":"main","type":"file","sha":"b2","size":2000000,"omitted":"file over 1 MB","url":"{base}/acme/checkout/-/blob/c2/deploy/values.yaml"}`,
+			wantEvidence: []source.Evidence{{
+				Kind: source.EvidenceResource, Title: "acme/checkout:deploy/values.yaml@main", URL: "{base}/acme/checkout/-/blob/c2/deploy/values.yaml",
+			}},
+			wantTruncated: true,
+		},
+		{
+			name:  "get_file passes on a ref GitLab refuses",
+			tool:  toolGetFile,
+			input: `{"project":"acme/checkout","path":"deploy/values.yaml","ref":"nope"}`,
+			routes: []route{{http.MethodGet, filePath, []fakehttp.Response{
+				failed(http.StatusBadRequest, "400 Bad request - invalid ref"),
+			}}},
+			wantQueries:   []string{"ref=nope"},
+			wantToolError: "GitLab answered 400: 400 Bad request - invalid ref",
+		},
+		{
 			name:  "compare lists the newest commits first and the files, and says what GitLab left out",
 			tool:  toolCompare,
 			input: `{"project":"acme/checkout","base":"v1.3.2","head":"v1.4.0"}`,
@@ -292,7 +414,13 @@ func TestSourceCall(t *testing.T) {
 			require.Equal(t, tt.wantNoData, got.NoData)
 			require.Equal(t, tt.wantText, got.Text)
 			require.Equal(t, tt.wantTruncated, got.Truncated)
-			require.Equal(t, tt.wantEvidence, got.Evidence)
+
+			wantEvidence := slices.Clone(tt.wantEvidence)
+			for i := range wantEvidence {
+				wantEvidence[i].URL = strings.ReplaceAll(wantEvidence[i].URL, "{base}", api.URL())
+			}
+
+			require.Equal(t, wantEvidence, got.Evidence)
 
 			if tt.want == "" {
 				require.Empty(t, got.Structured)
@@ -300,7 +428,7 @@ func TestSourceCall(t *testing.T) {
 				return
 			}
 
-			require.JSONEq(t, tt.want, string(got.Structured))
+			require.JSONEq(t, strings.ReplaceAll(tt.want, "{base}", api.URL()), string(got.Structured))
 		})
 	}
 }
@@ -371,6 +499,18 @@ func TestSourceCallInput(t *testing.T) {
 			want:  `ref: "main?x=1" is not a valid branch, tag or commit SHA`,
 		},
 		{name: "no ref", tool: toolGetCommit, input: `{"project":"acme/checkout"}`, want: "give ref, the commit SHA"},
+		{
+			name:  "a path that climbs out",
+			tool:  toolGetFile,
+			input: `{"project":"acme/checkout","path":"config/../../x"}`,
+			want:  `path: "config/../../x" is not a path inside the project`,
+		},
+		{
+			name:  "a ref with a query for get_file",
+			tool:  toolGetFile,
+			input: `{"project":"acme/checkout","path":"a","ref":"main?x=1"}`,
+			want:  `ref: "main?x=1" is not a valid branch, tag or commit SHA`,
+		},
 		{name: "compare without head", tool: toolCompare, input: `{"project":"acme/checkout","base":"main"}`, want: "give both base and head"},
 		{name: "compare with a ref that climbs out", tool: toolCompare, input: `{"project":"acme/checkout","base":"a/../b","head":"main"}`, want: `base: "a/../b" is not a valid branch, tag or commit SHA`},
 		{name: "input that does not decode", tool: toolListCommits, input: `{"limit":"ten"}`, want: "the input does not decode"},

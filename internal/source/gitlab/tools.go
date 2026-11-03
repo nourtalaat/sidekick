@@ -17,6 +17,7 @@ import (
 const (
 	toolListCommits = "list_commits"
 	toolGetCommit   = "get_commit"
+	toolGetFile     = "get_file"
 	toolCompare     = "compare"
 )
 
@@ -51,6 +52,16 @@ var toolList = []source.Tool{
 		InputSchema: schema(map[string]*jsonschema.Schema{
 			"ref": stringProperty("The commit SHA, or a branch or tag to get its latest commit."),
 		}, "ref"),
+		ReadOnly: true,
+	},
+	{
+		Name: toolGetFile,
+		Description: "Read a file of a GitLab project at a ref, or list a directory. Files over 256 KiB are " +
+			"cut, and binary files are not shown.",
+		InputSchema: schema(map[string]*jsonschema.Schema{
+			"path": stringProperty("The file or directory, relative to the project root, for example deploy/values.yaml."),
+			"ref":  stringProperty("The branch, tag or commit SHA to read at. Default: the default branch."),
+		}, "path"),
 		ReadOnly: true,
 	},
 	{
