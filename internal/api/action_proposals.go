@@ -37,6 +37,8 @@ const (
 	codeDecided    = "decided"
 	codeNotAllowed = "not_allowed"
 
+	codeDiffUnavailable = "diff_unavailable"
+
 	codeNotUndoable = "not_undoable"
 	codeUndoRunning = "undo_running"
 	codeUndoFailed  = "undo_failed"
@@ -48,6 +50,8 @@ const (
 	detailNoProp    = "No action proposal has this ID."
 	detailExpired   = "This proposal expired before anyone decided it."
 	detailLongNote  = "note must be at most 500 characters."
+	detailNoFile    = "This proposal does not change a file with this path."
+	detailNoDiff    = "The action that made this proposal cannot read files from its host."
 
 	detailNoActionNames = "No actions are configured, so no action can be filtered."
 
@@ -233,6 +237,71 @@ func (s *server) UndoProposal(ctx context.Context, req apigen.UndoProposalReques
 	return apigen.UndoProposal200JSONResponse(s.proposalOf(got, "")), nil
 }
 
+// GetProposalFileDiff returns the line diff of one file of a pull request
+// proposal. The proposal can have any status.
+func (s *server) GetProposalFileDiff(ctx context.Context, req apigen.GetProposalFileDiffRequestObject) (apigen.GetProposalFileDiffResponseObject, error) {
+	if s.actions == nil {
+		return nil, problemf(http.StatusServiceUnavailable, detailNoActions)
+	}
+
+	if req.Params.Path == "" {
+		return nil, problemf(http.StatusBadRequest, "path is required.")
+	}
+
+	diff, err := s.actions.FileDiff(ctx, req.Id, req.Params.Path, valueOf(req.Params.Full))
+	if err != nil {
+		return nil, fmt.Errorf("diff %q of proposal %s: %w", req.Params.Path, req.Id, s.fileDiffProblem(err))
+	}
+
+	out := apigen.GetProposalFileDiff200JSONResponse{
+		Path: diff.Path, Status: apigen.ProposalFileDiffStatus(diff.Status), Truncated: diff.Truncated,
+		Lines: make([]apigen.ProposalDiffLine, 0, len(diff.Lines)),
+	}
+
+	if diff.FinalNewline != "" {
+		newline := apigen.ProposalFileDiffFinalNewline(diff.FinalNewline)
+		out.FinalNewline = &newline
+	}
+
+	for _, l := range diff.Lines {
+		out.Lines = append(out.Lines, apigen.ProposalDiffLine{Kind: apigen.ProposalDiffLineKind(l.Kind), OldLine: lineNumber(l.Old), NewLine: lineNumber(l.New), Text: l.Text})
+	}
+
+	return out, nil
+}
+
+// fileDiffProblem turns the error of a file diff into the answer to give: 404
+// for a proposal or a file that does not exist, 409 for an action that cannot
+// read files, 502 when the host did not give the base of the file, and the
+// error itself otherwise. The message of a failed read is masked, because it
+// comes from the host.
+func (s *server) fileDiffProblem(err error) error {
+	var unreadable *actionproposals.UnreadableError
+
+	switch {
+	case errors.Is(err, actionproposals.ErrNotFound):
+		return problemf(http.StatusNotFound, detailNoProp)
+	case errors.Is(err, actionproposals.ErrNoSuchFile):
+		return problemf(http.StatusNotFound, detailNoFile)
+	case errors.Is(err, actionproposals.ErrDiffUnavailable):
+		return withCode(problemf(http.StatusConflict, detailNoDiff), codeDiffUnavailable)
+	case errors.As(err, &unreadable):
+		return problemf(http.StatusBadGateway, "Sidekick could not read the file on the base branch from the host: %s", s.mask(unreadable.Err.Error()))
+	default:
+		return err
+	}
+}
+
+// lineNumber is the number of a line, or nil for a line that is not in that
+// version of the file.
+func lineNumber(n int) *int {
+	if n == 0 {
+		return nil
+	}
+
+	return &n
+}
+
 // undoProblem turns the error of an undo into the answer to give: 403 for
 // a token, 404 for a proposal that does not exist, 409 with a code for one
 // that cannot be undone or whose definition changed, and the error itself
@@ -381,6 +450,19 @@ func (s *server) proposalOf(p action.Proposal, alertTitle string) apigen.Proposa
 		}
 
 		out.Changes = &changes
+	}
+
+	if len(p.Files) > 0 {
+		diffAvailable := s.actions != nil && s.actions.ReadsFiles(p.Action)
+		files := make([]apigen.ProposalFile, 0, len(p.Files))
+
+		for _, f := range p.Files {
+			files = append(files, apigen.ProposalFile{
+				Path: f.Path, Status: apigen.ProposalFileStatus(f.Status), LinesAdded: f.LinesAdded, LinesRemoved: f.LinesRemoved, DiffAvailable: diffAvailable,
+			})
+		}
+
+		out.Files = &files
 	}
 
 	if p.Result != nil {

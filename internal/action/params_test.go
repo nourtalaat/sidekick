@@ -53,6 +53,29 @@ func TestCanonicalParams(t *testing.T) {
 	}
 }
 
+func TestDisplayText(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		text string
+		want string
+	}{
+		{name: "plain text is kept", text: "expr: rate(x[1m]) > 5", want: "expr: rate(x[1m]) > 5"},
+		{name: "a carriage return at the end of a line", text: "a\r", want: "a\\u000d"},
+		{name: "a right-to-left override and a backtick", text: "a\u202eb`", want: "a\\u202eb\\u0060"},
+		{name: "text in other scripts is kept", text: "Grüße 日本", want: "Grüße 日本"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tt.want, DisplayText(tt.text))
+		})
+	}
+}
+
 func TestDisplayParams(t *testing.T) {
 	t.Parallel()
 

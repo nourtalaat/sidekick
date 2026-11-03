@@ -182,7 +182,7 @@ func (p *PR) revert(ctx context.Context, inv action.Invocation, params Params, o
 func (p *PR) pushRevert(ctx context.Context, inv action.Invocation, params Params, snap action.Snapshot, force bool) (res action.Result, done bool, err error) {
 	owner, name, _ := strings.Cut(params.Repo, "/")
 
-	sides, err := readSnapshot(snap)
+	sides, err := gitchange.ReadSnapshot(snap)
 	if err != nil {
 		return action.Result{}, false, fmt.Errorf("read the snapshot: %w", err)
 	}
@@ -228,34 +228,34 @@ type revertPlan struct {
 	// nor as they were before it.
 	conflicts []string
 	// live maps every file of the change to the blob it has now, or nil.
-	live map[string]*blobRef
+	live map[string]*gitchange.BlobRef
 }
 
 // planRevert reads the files of the change on the base branch and decides
 // what restores them. A file that is at its earlier content already needs
 // nothing. A file that was added is deleted. Any other file gets the blob it
 // had before, which is in the repository already, so no content is read.
-func (p *PR) planRevert(ctx context.Context, r *reader, sides snapshotFiles) (revertPlan, error) {
-	plan := revertPlan{live: make(map[string]*blobRef, len(sides.after))}
+func (p *PR) planRevert(ctx context.Context, r *reader, sides gitchange.SnapshotFiles) (revertPlan, error) {
+	plan := revertPlan{live: make(map[string]*gitchange.BlobRef, len(sides.After))}
 
-	for _, path := range slices.Sorted(maps.Keys(sides.after)) {
+	for _, path := range slices.Sorted(maps.Keys(sides.After)) {
 		f, err := r.file(ctx, path)
 		if err != nil {
 			return revertPlan{}, fmt.Errorf("read the file at the base: %w", err)
 		}
 
 		if f.exists {
-			plan.live[path] = &blobRef{Blob: f.sha}
+			plan.live[path] = &gitchange.BlobRef{Blob: f.sha}
 		} else {
 			plan.live[path] = nil
 		}
 
-		before := blobOf(sides.before[path])
+		before := gitchange.BlobOf(sides.Before[path])
 		if f.sha == before {
 			continue
 		}
 
-		if f.sha != sides.after[path].Blob {
+		if f.sha != sides.After[path].Blob {
 			plan.conflicts = append(plan.conflicts, path)
 		}
 

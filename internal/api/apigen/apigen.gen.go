@@ -367,6 +367,87 @@ func (e OperationsStatsInterval) Valid() bool {
 	}
 }
 
+// Defines values for ProposalDiffLineKind.
+const (
+	ProposalDiffLineKindAdded   ProposalDiffLineKind = "added"
+	ProposalDiffLineKindContext ProposalDiffLineKind = "context"
+	ProposalDiffLineKindRemoved ProposalDiffLineKind = "removed"
+)
+
+// Valid indicates whether the value is a known member of the ProposalDiffLineKind enum.
+func (e ProposalDiffLineKind) Valid() bool {
+	switch e {
+	case ProposalDiffLineKindAdded:
+		return true
+	case ProposalDiffLineKindContext:
+		return true
+	case ProposalDiffLineKindRemoved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProposalFileStatus.
+const (
+	ProposalFileStatusAdded   ProposalFileStatus = "added"
+	ProposalFileStatusChanged ProposalFileStatus = "changed"
+	ProposalFileStatusDeleted ProposalFileStatus = "deleted"
+)
+
+// Valid indicates whether the value is a known member of the ProposalFileStatus enum.
+func (e ProposalFileStatus) Valid() bool {
+	switch e {
+	case ProposalFileStatusAdded:
+		return true
+	case ProposalFileStatusChanged:
+		return true
+	case ProposalFileStatusDeleted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProposalFileDiffFinalNewline.
+const (
+	ProposalFileDiffFinalNewlineAdded   ProposalFileDiffFinalNewline = "added"
+	ProposalFileDiffFinalNewlineRemoved ProposalFileDiffFinalNewline = "removed"
+)
+
+// Valid indicates whether the value is a known member of the ProposalFileDiffFinalNewline enum.
+func (e ProposalFileDiffFinalNewline) Valid() bool {
+	switch e {
+	case ProposalFileDiffFinalNewlineAdded:
+		return true
+	case ProposalFileDiffFinalNewlineRemoved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProposalFileDiffStatus.
+const (
+	ProposalFileDiffStatusAdded   ProposalFileDiffStatus = "added"
+	ProposalFileDiffStatusChanged ProposalFileDiffStatus = "changed"
+	ProposalFileDiffStatusDeleted ProposalFileDiffStatus = "deleted"
+)
+
+// Valid indicates whether the value is a known member of the ProposalFileDiffStatus enum.
+func (e ProposalFileDiffStatus) Valid() bool {
+	switch e {
+	case ProposalFileDiffStatusAdded:
+		return true
+	case ProposalFileDiffStatusChanged:
+		return true
+	case ProposalFileDiffStatusDeleted:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ProposalPullRequestState.
 const (
 	ProposalPullRequestStateClosed ProposalPullRequestState = "closed"
@@ -2154,8 +2235,13 @@ type Proposal struct {
 	DecidedBySlackUser *string `json:"decidedBySlackUser,omitempty"`
 
 	// Error Why it failed. While it is tried again, the last failed attempt.
-	Error           *string            `json:"error,omitempty"`
-	ExpiresAt       time.Time          `json:"expiresAt"`
+	Error     *string   `json:"error,omitempty"`
+	ExpiresAt time.Time `json:"expiresAt"`
+
+	// Files The files of a proposal that opens a pull request or a merge
+	// request, sorted by path, read from the snapshot with no call to
+	// the host. Absent for any other proposal and for an undo.
+	Files           *[]ProposalFile    `json:"files,omitempty"`
 	Id              openapi_types.UUID `json:"id"`
 	InvestigationId openapi_types.UUID `json:"investigationId"`
 	Mode            string             `json:"mode"`
@@ -2206,6 +2292,59 @@ type ProposalChange struct {
 	// Path The field, such as options.thresholds.critical or rules[0].expr.
 	Path string `json:"path"`
 }
+
+// ProposalDiffLine defines model for ProposalDiffLine.
+type ProposalDiffLine struct {
+	Kind ProposalDiffLineKind `json:"kind"`
+
+	// NewLine The number of the line in the new file. Absent for a removed line.
+	NewLine *int `json:"newLine,omitempty"`
+
+	// OldLine The number of the line in the file on the base branch. Absent for an added line.
+	OldLine *int `json:"oldLine,omitempty"`
+
+	// Text The line without its line break, with characters that could hide something written as \u escapes.
+	Text string `json:"text"`
+}
+
+// ProposalDiffLineKind defines model for ProposalDiffLine.Kind.
+type ProposalDiffLineKind string
+
+// ProposalFile One file of a pull request or merge request. `path` comes from the
+// model, so a screen shows it as plain text.
+type ProposalFile struct {
+	// DiffAvailable Whether the line diff of the file can be asked for: the action
+	// that made the proposal is still in the config and can read files
+	// from its host.
+	DiffAvailable bool `json:"diffAvailable"`
+	LinesAdded    int  `json:"linesAdded"`
+	LinesRemoved  int  `json:"linesRemoved"`
+
+	// Path The path from the root of the repository.
+	Path   string             `json:"path"`
+	Status ProposalFileStatus `json:"status"`
+}
+
+// ProposalFileStatus defines model for ProposalFile.Status.
+type ProposalFileStatus string
+
+// ProposalFileDiff The line diff of one file of a proposal. The lines are plain text.
+type ProposalFileDiff struct {
+	// FinalNewline Set when the change adds a newline at the end of the file, or removes the one it had.
+	FinalNewline *ProposalFileDiffFinalNewline `json:"finalNewline,omitempty"`
+	Lines        []ProposalDiffLine            `json:"lines"`
+	Path         string                        `json:"path"`
+	Status       ProposalFileDiffStatus        `json:"status"`
+
+	// Truncated True when more lines follow than the ones returned. Ask again with `full` true to get them.
+	Truncated bool `json:"truncated"`
+}
+
+// ProposalFileDiffFinalNewline Set when the change adds a newline at the end of the file, or removes the one it had.
+type ProposalFileDiffFinalNewline string
+
+// ProposalFileDiffStatus defines model for ProposalFileDiff.Status.
+type ProposalFileDiffStatus string
 
 // ProposalList defines model for ProposalList.
 type ProposalList struct {
@@ -3583,6 +3722,15 @@ type ListProposalsParams struct {
 	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// GetProposalFileDiffParams defines parameters for GetProposalFileDiff.
+type GetProposalFileDiffParams struct {
+	// Path The path of a file in the `files` of the proposal.
+	Path string `form:"path" json:"path"`
+
+	// Full Return every line of the file, with no cut.
+	Full *bool `form:"full,omitempty" json:"full,omitempty"`
+}
+
 // ListScenariosParams defines parameters for ListScenarios.
 type ListScenariosParams struct {
 	// Status Only scenarios with this status.
@@ -3859,6 +4007,9 @@ type ServerInterface interface {
 	// ApproveProposal Approve an action proposal
 	// (POST /proposals/{id}/approve)
 	ApproveProposal(w http.ResponseWriter, r *http.Request, id ProposalID)
+	// GetProposalFileDiff The line diff of one file of a pull request proposal
+	// (GET /proposals/{id}/files/diff)
+	GetProposalFileDiff(w http.ResponseWriter, r *http.Request, id ProposalID, params GetProposalFileDiffParams)
 	// RejectProposal Reject an action proposal
 	// (POST /proposals/{id}/reject)
 	RejectProposal(w http.ResponseWriter, r *http.Request, id ProposalID)
@@ -5394,6 +5545,61 @@ func (siw *ServerInterfaceWrapper) ApproveProposal(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// GetProposalFileDiff operation middleware
+func (siw *ServerInterfaceWrapper) GetProposalFileDiff(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ProposalID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetProposalFileDiffParams
+
+	// ------------- Required query parameter "path" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "path", r.URL.Query(), &params.Path, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "path"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "path", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "full" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "full", r.URL.Query(), &params.Full, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "full"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "full", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetProposalFileDiff(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // RejectProposal operation middleware
 func (siw *ServerInterfaceWrapper) RejectProposal(w http.ResponseWriter, r *http.Request) {
 
@@ -6694,6 +6900,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/proposals/{id}/approve", wrapper.ApproveProposal)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/proposals/{id}/reject", wrapper.RejectProposal)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/proposals/{id}/undo", wrapper.UndoProposal)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/proposals/{id}/files/diff", wrapper.GetProposalFileDiff)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/investigations/{id}/fix-applied", wrapper.UnmarkFixApplied)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/investigations/{id}/fix-applied", wrapper.MarkFixApplied)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/investigations/{id}/scenario-draft", wrapper.CreateScenarioDraft)
@@ -8181,6 +8388,46 @@ func (response ApproveProposaldefaultApplicationProblemPlusJSONResponse) VisitAp
 	return err
 }
 
+type GetProposalFileDiffRequestObject struct {
+	Id     ProposalID `json:"id"`
+	Params GetProposalFileDiffParams
+}
+
+type GetProposalFileDiffResponseObject interface {
+	VisitGetProposalFileDiffResponse(w http.ResponseWriter) error
+}
+
+type GetProposalFileDiff200JSONResponse ProposalFileDiff
+
+func (response GetProposalFileDiff200JSONResponse) VisitGetProposalFileDiffResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetProposalFileDiffdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetProposalFileDiffdefaultApplicationProblemPlusJSONResponse) VisitGetProposalFileDiffResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type RejectProposalRequestObject struct {
 	Id   ProposalID `json:"id"`
 	Body *RejectProposalJSONRequestBody
@@ -9543,6 +9790,9 @@ type StrictServerInterface interface {
 	// ApproveProposal Approve an action proposal
 	// (POST /proposals/{id}/approve)
 	ApproveProposal(ctx context.Context, request ApproveProposalRequestObject) (ApproveProposalResponseObject, error)
+	// GetProposalFileDiff The line diff of one file of a pull request proposal
+	// (GET /proposals/{id}/files/diff)
+	GetProposalFileDiff(ctx context.Context, request GetProposalFileDiffRequestObject) (GetProposalFileDiffResponseObject, error)
 	// RejectProposal Reject an action proposal
 	// (POST /proposals/{id}/reject)
 	RejectProposal(ctx context.Context, request RejectProposalRequestObject) (RejectProposalResponseObject, error)
@@ -10681,6 +10931,33 @@ func (sh *strictHandler) ApproveProposal(w http.ResponseWriter, r *http.Request,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ApproveProposalResponseObject); ok {
 		if err := validResponse.VisitApproveProposalResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetProposalFileDiff operation middleware
+func (sh *strictHandler) GetProposalFileDiff(w http.ResponseWriter, r *http.Request, id ProposalID, params GetProposalFileDiffParams) {
+	var request GetProposalFileDiffRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetProposalFileDiff(ctx, request.(GetProposalFileDiffRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetProposalFileDiff")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetProposalFileDiffResponseObject); ok {
+		if err := validResponse.VisitGetProposalFileDiffResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

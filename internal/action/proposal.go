@@ -81,6 +81,9 @@ type Proposal struct {
 	// Changes is the field-by-field difference of Snapshot, for people to
 	// read. Empty without a snapshot.
 	Changes []Change
+	// Files lists the files of a pull request or merge request, from the
+	// snapshot. Empty for any other proposal and for an undo.
+	Files []ProposalFile
 	// Undoable says an approver may undo it: it succeeded, the action can
 	// undo it, and it is not an undo itself.
 	Undoable bool
@@ -96,6 +99,16 @@ type Proposal struct {
 	// Error says why it failed. While it is retried it holds the last
 	// failed attempt.
 	Error string
+}
+
+// ProposalFile is one file a pull request or merge request changes, as the
+// snapshot of its proposal describes it.
+type ProposalFile struct {
+	Path string
+	// Status is "changed", "added" or "deleted".
+	Status       string
+	LinesAdded   int
+	LinesRemoved int
 }
 
 // PullRequest is the state of the pull request or merge request that a
