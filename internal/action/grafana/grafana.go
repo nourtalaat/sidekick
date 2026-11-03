@@ -195,6 +195,11 @@ func (r *Rule) Spec() action.Spec {
 	return action.Spec{Name: r.name, Description: b.String(), ParamsSchema: paramsSchema}
 }
 
+// FixKind implements action.MonitorFixer.
+func (*Rule) FixKind() action.FixKind {
+	return action.FixAPI
+}
+
 // Validate implements action.Action. It runs without calling Grafana, so it
 // checks what the parameters alone show: the rule UID against
 // limits.ruleUids when no title pattern can allow another rule, and each

@@ -4,11 +4,11 @@
 -- from the tool call, so a repeated call finds its proposal.
 INSERT INTO action_proposals (
   id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at,
-  snapshot, undoable
+  snapshot, undoable, fix_kind
 )
 VALUES (
   @id, @investigation_id, @action, @params, @reason, @mode, 'proposed', @idempotency_key, @proposed_at, @expires_at,
-  sqlc.narg(snapshot), @undoable
+  sqlc.narg(snapshot), @undoable, sqlc.narg(fix_kind)
 )
 ON CONFLICT (id) DO NOTHING
 RETURNING *;
