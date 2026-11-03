@@ -13,6 +13,9 @@ import (
 	"github.com/nourtalaat/sidekick/internal/source"
 )
 
+// defaultBaseURL is the root of gitlab.com.
+const defaultBaseURL = "https://gitlab.com"
+
 // apiSuffix is the path of the REST API under the root of a GitLab.
 const apiSuffix = "/api/v4"
 
@@ -149,6 +152,16 @@ func (c *Config) allows(project string) bool {
 	}
 
 	return false
+}
+
+// baseURL returns the root of the GitLab, without a trailing slash, or
+// defaultBaseURL.
+func (c *Config) baseURL() string {
+	if c.BaseURL == "" {
+		return defaultBaseURL
+	}
+
+	return strings.TrimSuffix(c.BaseURL, "/")
 }
 
 // validProject reports whether s is a project's full path. No part may be
