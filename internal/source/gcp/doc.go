@@ -6,8 +6,8 @@
 // and Personalized Service Health. It gets access tokens from Application
 // Default Credentials, which on GKE come from Workload Identity, or from a
 // credential file in a secret that it reads again for each new token.
-// golang.org/x/oauth2 is used only for those tokens; the API calls are
-// plain HTTP, so the source needs no gRPC client libraries.
+// internal/gcpauth makes those tokens; the API calls are plain HTTP, so the
+// source needs no gRPC client libraries.
 //
 // Every tool only reads. A call for a project the config does not list is
 // a tool error before anything is sent, and every result links to the
