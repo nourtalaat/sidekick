@@ -137,3 +137,4 @@ proposals](web-ui.md#action-proposals) for how people approve them.
 - `aws.ecs_rollback`: puts an Amazon ECS service back on an earlier task definition revision, with an IAM role of its own. See [its keys](configuration.md#awsecs_rollback).
 - `helm.rollback`: puts a Helm release back on an earlier revision, with Helm's Go library. See [its keys](configuration.md#helmrollback).
 - `azure.container_app_rollback`: moves all the traffic of an Azure Container App back to an earlier revision, and puts the traffic back on Undo. See [its keys](configuration.md#azurecontainer_app_rollback).
+- `argocd.rollback`: puts an Argo CD application back on an earlier deployed revision, and can undo it. It refuses an application with auto-sync on. See [its keys](configuration.md#argocdrollback).
