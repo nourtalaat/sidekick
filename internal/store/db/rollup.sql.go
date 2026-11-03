@@ -100,24 +100,7 @@ WITH per AS (
          i.cost_micros,
          i.input_tokens,
          i.output_tokens,
-         (i.verdict = 'false_positive' AND (
-            i.fix_applied_at IS NOT NULL
-            OR EXISTS (
-              SELECT 1 FROM action_proposals fp
-              WHERE fp.investigation_id = i.id
-                AND fp.status = 'succeeded'
-                AND fp.fix_kind = 'api'
-            )
-            OR EXISTS (
-              SELECT 1
-              FROM action_proposals fp
-              JOIN pull_request_states prs ON prs.proposal_id = fp.id
-              WHERE fp.investigation_id = i.id
-                AND fp.status = 'succeeded'
-                AND fp.fix_kind = 'pull_request'
-                AND prs.state = 'merged'
-            )
-         )) AS noisy_fixed,
+         (i.verdict = 'false_positive' AND (i.fix_applied_at IS NOT NULL OR ap.fixes > 0)) AS noisy_fixed,
          (wt.recovered > 0 AND wt.running = 0 AND wt.timed_out = 0) AS recovered,
          CASE WHEN wt.recovered > 0 AND wt.running = 0 AND wt.timed_out = 0
               THEN greatest(0, (extract(epoch FROM wt.last_recovered_at - fe.first_event_at) * 1000)::bigint) END AS downtime_ms,
@@ -146,8 +129,13 @@ WITH per AS (
              WHERE p.status IN ('approved', 'executing', 'succeeded', 'undone')
                 OR (p.status = 'failed' AND p.decided_at IS NOT NULL)
            ) AS approved,
-           count(*) FILTER (WHERE p.status IN ('succeeded', 'undone')) AS executed
+           count(*) FILTER (WHERE p.status IN ('succeeded', 'undone')) AS executed,
+           count(*) FILTER (
+             WHERE p.status = 'succeeded'
+               AND (p.fix_kind = 'api' OR (p.fix_kind = 'pull_request' AND prs.state = 'merged'))
+           ) AS fixes
     FROM action_proposals p
+    LEFT JOIN pull_request_states prs ON prs.proposal_id = p.id
     WHERE p.investigation_id = i.id AND p.undo_of IS NULL
   ) ap ON true
 )
@@ -201,10 +189,12 @@ GROUP BY hour, route, service, model, verdict
 // responder marked the fix applied, or when one of its proposals succeeded
 // and either fixes a monitor through its tool's API, or opened a pull
 // request that is merged. An undone proposal has the status undone, so it
-// does not count, and nor does a proposal with no fix kind. The range on
-// created_at uses the index on it, action_proposals_investigation finds the
-// proposals, and the primary key of pull_request_states finds the state of
-// a pull request.
+// does not count, and nor does a proposal with no fix kind. That is counted
+// with the proposals themselves, which are read through
+// action_proposals_investigation and the primary key of
+// pull_request_states for each investigation. Separate EXISTS tests in the
+// select list made the planner read every proposal of the table once for
+// the whole run. The range on created_at uses the index on it.
 func (q *Queries) RecountStatsHourly(ctx context.Context, buckets []time.Time) error {
 	_, err := q.db.Exec(ctx, recountStatsHourly, buckets)
 	return err
