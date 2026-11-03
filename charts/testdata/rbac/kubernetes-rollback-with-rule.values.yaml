@@ -1,0 +1,37 @@
+# A prometheus.rule action and a kubernetes.rollback action that an operator
+# pointed at the same service account on purpose. The chart makes the account
+# once, lets Sidekick ask for its token once, and makes a Role for each type,
+# with names that do not clash, in the namespace they share.
+validator:
+  enabled: false
+secrets:
+  - sidekick-anthropic
+  - sidekick-slack
+  - sidekick-webhook
+  - sidekick-staging-cluster
+config:
+  sources:
+    # The quick-start source, pointed at another cluster, so no source reads this one.
+    k8s:
+      kubeconfigSecret: { name: sidekick-staging-cluster, key: kubeconfig }
+  actions:
+    prom-checkout:
+      type: prometheus.rule
+      serviceAccount: shared-actions
+      limits:
+        namespaces: [shop]
+        names: [checkout-alerts]
+        groups: [checkout.rules]
+        fields: [expr]
+    rb-checkout:
+      type: kubernetes.rollback
+      serviceAccount: shared-actions
+      limits:
+        namespaces: [shop]
+        names: [checkout]
+  routes:
+    - name: default
+      sources: [k8s]
+      outputs: [slack]
+      mode: approved
+      actions: [prom-checkout, rb-checkout]

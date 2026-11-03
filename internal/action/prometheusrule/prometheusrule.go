@@ -60,6 +60,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/kubeaccess"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/validateclient"
 )
@@ -154,7 +155,7 @@ type Rule struct {
 	name      string
 	limits    Limits
 	allowed   []action.Path
-	cluster   *cluster
+	cluster   *kubeaccess.Cluster
 	validator validator
 }
 
@@ -191,7 +192,7 @@ type plan struct {
 // API server, but it fails outside a cluster, because the action uses the
 // pod's service account to ask for tokens.
 func New(_ context.Context, name string, cfg Config, deps registry.Deps) (action.Action, error) {
-	cl, err := inCluster(cfg.serviceAccount())
+	cl, err := kubeaccess.InCluster(cfg.serviceAccount())
 	if err != nil {
 		return nil, fmt.Errorf("prepare the Kubernetes client: %w", err)
 	}
@@ -211,7 +212,7 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (action
 
 // newRule builds the action around a way to reach the cluster and the
 // validator.
-func newRule(name string, cfg Config, cl *cluster, checker validator) (*Rule, error) {
+func newRule(name string, cfg Config, cl *kubeaccess.Cluster, checker validator) (*Rule, error) {
 	allowed, err := action.ParsePaths(cfg.Limits.Fields)
 	if err != nil {
 		return nil, fmt.Errorf("limits.fields: %w", err)
@@ -550,7 +551,7 @@ func (r *Rule) edits(ref ruleRef, set map[string]json.RawMessage) ([]action.Edit
 
 // read asks for a token and reads the resource.
 func (r *Rule) read(ctx context.Context, req request) (*session, resource, error) {
-	sess, err := r.cluster.open(ctx)
+	sess, err := openSession(ctx, r.cluster)
 	if err != nil {
 		return nil, resource{}, fmt.Errorf("get access: %w", err)
 	}
