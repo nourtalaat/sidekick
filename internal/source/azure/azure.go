@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/nourtalaat/sidekick/internal/azureauth"
 	"github.com/nourtalaat/sidekick/internal/buildinfo"
 	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/registry"
@@ -146,9 +147,11 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (source
 	limited := *base
 	limited.Transport = limitTransport{next: next}
 
+	identity := azureauth.Identity{TenantID: cfg.TenantID, ClientID: cfg.ClientID, ClientSecret: cfg.ClientSecret}
+
 	c := &client{
 		http:      &limited,
-		tokens:    newTokens(newCredential(cfg, deps.Secrets, &limited)),
+		tokens:    newTokens(azureauth.NewCredential(identity, deps.Secrets, &limited)),
 		userAgent: "sidekick/" + buildinfo.Version,
 	}
 
