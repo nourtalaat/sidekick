@@ -214,7 +214,9 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey"},
+			// A rare action is found through the index on the action, which the
+			// daily count made; the planner may take either index.
+			wantIndex: []string{"Index Scan using action_proposals_", "investigations_pkey"},
 		},
 		{
 			name: "ListActionProposalsGeneric",
