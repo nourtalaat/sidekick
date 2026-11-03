@@ -196,9 +196,12 @@ func TestASnapshotThatCannotBeReadAsRevisionsShowsItsChanges(t *testing.T) {
 			t.Parallel()
 
 			h, _ := setupRollback(t, nil)
-			id := h.propose(t, "call-1", monitorInput)
+			id := uuid.New()
 
-			_, err := h.pool.Exec(t.Context(), "UPDATE action_proposals SET snapshot = $2::jsonb WHERE id = $1", id, tt.snapshot)
+			_, err := h.pool.Exec(t.Context(), `
+				INSERT INTO action_proposals (id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, snapshot)
+				VALUES ($1, $2, 'monitor', '{"threshold": 90}', 'x', 'approved', 'proposed', 'sidekick/' || $1::uuid::text, now(), now() + interval '1 day', $3::jsonb)`,
+				id, checkoutInvestigation, tt.snapshot)
 			require.NoError(t, err)
 
 			view, err := Get(t.Context(), h.pool, id)
