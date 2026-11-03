@@ -46,4 +46,17 @@ describe("DeleteConfirm", () => {
 
     expect(screen.getByRole("button", { name: "Delete lesson" })).toBeDisabled();
   });
+
+  it("can use another verb in the question, the group name and the button", async () => {
+    const onConfirm = vi.fn();
+
+    render(<DeleteConfirm subject="token" verb="Revoke" onConfirm={onConfirm} onCancel={() => undefined} />);
+
+    expect(screen.getByRole("group", { name: "Revoke this token" })).toBeInTheDocument();
+    expect(screen.getByText("Revoke this token?")).toBeInTheDocument();
+    expect(screen.queryByText(/Delete/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Revoke token" }));
+    expect(onConfirm).toHaveBeenCalledOnce();
+  });
 });

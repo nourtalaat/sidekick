@@ -108,8 +108,30 @@ API with an API token instead of a session:
 curl -H "Authorization: Bearer $SIDEKICK_TOKEN" https://sidekick.example.com/api/v1/me
 ```
 
-An admin signed in to the web UI creates tokens with
-`POST /api/v1/tokens`, giving a name, a role and an expiry:
+An admin makes and revokes tokens on the **API tokens** tab of Settings
+(`/settings?tab=tokens`):
+
+1. Enter a name for what the token is for, 1 to 100 characters.
+2. Choose a role. The list holds your own role and every role below it, so an
+   admin can choose any of the four.
+3. Choose when it expires: in 30, 90, 180 or 365 days, or on a date you pick.
+   The token works until the end of that day. The latest date is a year from
+   today; a later date is refused before anything is sent.
+4. Press **Create token**. The page shows the token, which starts with `skt_`,
+   with a **Copy** button. Copy it now: it is not shown again. It is held only
+   on the page, never in the browser's storage or the address, and it is gone
+   when you press **Done**, create another token or leave the tab.
+5. To stop a token, press **Revoke** on its row and confirm. Anything that uses
+   it stops working at once. The button is gone once a token is revoked.
+
+The list shows each token's name, role, when it was created and the ID of the
+user who created it, when it expires, when it was last used (to the minute, or
+"Never") and its status. Tokens that work come first, then expired and revoked
+ones, each group with the newest first. Expired and revoked rows are dimmed and
+say **Expired** or **Revoked** in words; a revoked row also shows when.
+
+The form calls `POST /api/v1/tokens` as the signed-in admin, with a name, a
+role and an expiry:
 
 ```json
 {"name": "nightly bench", "role": "viewer", "expiresAt": "2027-04-01T00:00:00Z"}
@@ -786,7 +808,8 @@ An investigation's page links its `runtime:N` version to that version.
 ## Settings
 
 The **Settings** item of the navigation (`/settings`) is a page for the
-`admin` role, with tabs. The tab is in the address (`/settings?tab=config`), so
+`admin` role, with tabs: **Config** and **API tokens**, which is described under
+[API tokens](#api-tokens). The tab is in the address (`/settings?tab=config`), so
 a link opens the page on it. A role below `admin` that opens the address sees a
 message that names the role, and the page sends no request.
 
