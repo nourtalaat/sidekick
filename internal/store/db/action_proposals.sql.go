@@ -319,11 +319,11 @@ func (q *Queries) GetActionProposalView(ctx context.Context, id uuid.UUID) (GetA
 const insertActionProposal = `-- name: InsertActionProposal :one
 INSERT INTO action_proposals (
   id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at,
-  snapshot, undoable
+  snapshot, undoable, fix_kind
 )
 VALUES (
   $1, $2, $3, $4, $5, $6, 'proposed', $7, $8, $9,
-  $10, $11
+  $10, $11, $12
 )
 ON CONFLICT (id) DO NOTHING
 RETURNING id, investigation_id, action, params, reason, mode, status, idempotency_key, proposed_at, expires_at, decided_by, decided_by_slack_user, decided_at, executed_at, result, error, snapshot, undo_of, undoable, fix_kind
@@ -341,6 +341,7 @@ type InsertActionProposalParams struct {
 	ExpiresAt       time.Time
 	Snapshot        []byte
 	Undoable        bool
+	FixKind         *string
 }
 
 // InsertActionProposal stores a proposal as proposed. It returns no row,
@@ -359,6 +360,7 @@ func (q *Queries) InsertActionProposal(ctx context.Context, arg InsertActionProp
 		arg.ExpiresAt,
 		arg.Snapshot,
 		arg.Undoable,
+		arg.FixKind,
 	)
 	var i ActionProposal
 	err := row.Scan(
