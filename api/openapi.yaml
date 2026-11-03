@@ -103,6 +103,27 @@ paths:
           description: The job is pending again.
         default:
           $ref: "#/components/responses/Problem"
+  /jobs/{id}/discard:
+    post:
+      operationId: DiscardJob
+      summary: Discard a dead job
+      description: |
+        Deletes the dead job, so it cannot run again, and writes the discard
+        to the audit log with the job's kind, attempts and masked last error.
+        A job that is not dead answers 409.
+      x-sidekick-role: admin
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "204":
+          description: The job is deleted.
+        default:
+          $ref: "#/components/responses/Problem"
   /tokens:
     get:
       operationId: ListTokens

@@ -205,6 +205,28 @@ func (q *Queries) CountJobs(ctx context.Context) ([]CountJobsRow, error) {
 	return items, nil
 }
 
+const discardDeadJob = `-- name: DiscardDeadJob :one
+DELETE FROM jobs
+WHERE id = $1 AND status = 'dead'
+RETURNING kind, attempts, last_error
+`
+
+type DiscardDeadJobRow struct {
+	Kind      string
+	Attempts  int32
+	LastError *string
+}
+
+// DiscardDeadJob deletes a dead job and returns what the audit entry of the
+// discard records. It deletes nothing when the job has another status, so a
+// job that a worker or a retry took meanwhile stays.
+func (q *Queries) DiscardDeadJob(ctx context.Context, id int64) (DiscardDeadJobRow, error) {
+	row := q.db.QueryRow(ctx, discardDeadJob, id)
+	var i DiscardDeadJobRow
+	err := row.Scan(&i.Kind, &i.Attempts, &i.LastError)
+	return i, err
+}
+
 const enqueueJob = `-- name: EnqueueJob :one
 INSERT INTO jobs (kind, route, payload, unique_key, priority, run_at, max_attempts, traceparent)
 VALUES (

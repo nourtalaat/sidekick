@@ -830,6 +830,11 @@ An investigation's page links its `runtime:N` version to that version.
   attempts reset. The retry is written to the audit log. A job that is
   not dead, or whose unique key a pending or running job holds, answers
   409.
+- `POST /api/v1/jobs/{id}/discard` deletes a dead job, so it cannot run
+  again, and answers 204. The discard is written to the audit log as
+  `job.discarded`, with the job's kind, its attempts and its last error,
+  masked, in the same transaction. A job that is not dead answers 409 and
+  stays, and an unknown ID answers 404.
 - `POST /api/v1/investigations/{id}/scenario-draft` exports a confirmed
   investigation as a benchmark scenario draft (201, or 200 with the scenario
   it has already). It answers 409 when nobody confirmed the verdict, and 422
@@ -848,8 +853,8 @@ An investigation's page links its `runtime:N` version to that version.
 ## Settings
 
 The **Settings** item of the navigation (`/settings`) is a page for the
-`admin` role, with tabs: **Config** and **API tokens**, which is described under
-[API tokens](#api-tokens). The tab is in the address (`/settings?tab=config`), so
+`admin` role, with tabs: **Config**, **API tokens**, which is described under
+[API tokens](#api-tokens), and **Failed jobs**, described below. The tab is in the address (`/settings?tab=config`), so
 a link opens the page on it. A role below `admin` that opens the address sees a
 message that names the role, and the page sends no request.
 
@@ -877,6 +882,31 @@ the Helm values. Text on the page is plain text, never HTML.
   pattern. It is kept in the address as `q`, so a view can be shared, and while
   it is set the cards that match are open.
 - Strings that the server redacted are shown as they come.
+
+The **Failed jobs** tab lists the background jobs that failed every attempt and
+are marked dead, from `GET /api/v1/jobs?status=dead`, newest first. It reads
+the list only while the tab is open, and the tab name shows no count. A job
+that is not dead is not listed.
+
+- **The table.** Each row shows the kind of the job, its route ("none" when it
+  has none), its attempts as "5 of 5", when it was created, when it died, and
+  its last error. The input of a job is never shown.
+- **Last error.** The text, masked the same way as in the audit log, is shown
+  as plain text, never HTML. A long error is cut to its first lines, and a
+  **Show all** button, which the keyboard reaches, shows the whole text and
+  **Show less** cuts it again.
+- **Retry.** Sends `POST /api/v1/jobs/{id}/retry` and removes the row. If the
+  job is not dead any more, or another job with the same unique key is
+  pending or running, the server's reason shows on the row and the list is read
+  again. A reason for a job that has left the list shows above the table.
+- **Discard.** Asks in the page, in a row below the job, what the job was and
+  says "It will not run again. This cannot be undone." **Discard** then sends
+  `POST /api/v1/jobs/{id}/discard`, which deletes the job. The audit log keeps
+  the kind, the attempts and the masked last error as `job.discarded`.
+- **Load more.** Shows the next 50 jobs. Rows already shown stay where they
+  are when a job is retried or discarded.
+- Retention also deletes dead jobs on its own once they are old enough, so
+  a job that nobody retries or discards does not stay for ever.
 
 ## The menu
 

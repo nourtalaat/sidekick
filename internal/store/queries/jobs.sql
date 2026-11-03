@@ -145,6 +145,14 @@ SET status = 'pending', attempts = 0, run_at = now(), finished_at = NULL,
 WHERE id = @id AND status = 'dead'
 RETURNING kind;
 
+-- name: DiscardDeadJob :one
+-- DiscardDeadJob deletes a dead job and returns what the audit entry of the
+-- discard records. It deletes nothing when the job has another status, so a
+-- job that a worker or a retry took meanwhile stays.
+DELETE FROM jobs
+WHERE id = @id AND status = 'dead'
+RETURNING kind, attempts, last_error;
+
 -- name: ListDeadJobs :many
 -- ListDeadJobs returns up to page_size dead jobs that died before the job
 -- (before_finished_at, before_id), newest first. The finished_at bound is
