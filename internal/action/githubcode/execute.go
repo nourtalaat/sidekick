@@ -42,7 +42,7 @@ func (c *Code) Execute(ctx context.Context, inv action.Invocation) (action.Resul
 	}
 
 	if pr != nil {
-		if err := c.requireDraft(ctx, owner, name, branch, pr); err != nil {
+		if err := githubgit.RequireDraft(ctx, c.client, owner, name, branch, pr); err != nil {
 			c.metrics.PullRequest(githubgit.ResultError)
 
 			return action.Result{}, fmt.Errorf("check the pull request of an earlier attempt: %w", err)
@@ -76,7 +76,7 @@ func (c *Code) Execute(ctx context.Context, inv action.Invocation) (action.Resul
 		}
 	}
 
-	pr, err = c.openDraft(ctx, owner, name, branch, c.pullRequestRequest(params, branch, inv))
+	pr, err = githubgit.OpenDraft(ctx, c.client, owner, name, branch, c.pullRequestRequest(params, branch, inv))
 	if err != nil {
 		c.metrics.PullRequest(githubgit.ResultError)
 
@@ -87,49 +87,6 @@ func (c *Code) Execute(ctx context.Context, inv action.Invocation) (action.Resul
 	c.log.InfoContext(ctx, "pull request opened", "proposal_id", inv.ProposalID, "repo", params.Repo, "number", pr.GetNumber())
 
 	return c.result(owner, name, pr, githubgit.ResultOpened), nil
-}
-
-// openDraft makes a pull request and checks that it is a draft, as
-// requireDraft does.
-func (c *Code) openDraft(ctx context.Context, owner, name, branch string, req gh.CreatePullRequest) (*gh.PullRequest, error) {
-	pr, err := githubgit.OpenPullRequest(ctx, c.client, owner, name, req)
-	if err != nil {
-		return nil, fmt.Errorf("open the pull request: %w", err)
-	}
-
-	if err := c.requireDraft(ctx, owner, name, branch, pr); err != nil {
-		return nil, fmt.Errorf("check that the pull request is a draft: %w", err)
-	}
-
-	return pr, nil
-}
-
-// requireDraft makes sure Sidekick never leaves a pull request that is not a
-// draft, whether it just made it or found it from an earlier attempt, for
-// example when GitHub does not make drafts for a private repository on its
-// plan. A pull request that is open and not a draft is closed. Then the branch
-// of a closed pull request that is not a draft is deleted if it is still
-// there, and the error wraps action.ErrPermanent. A pull request that was
-// merged is left alone: a person did that. A draft passes.
-func (c *Code) requireDraft(ctx context.Context, owner, name, branch string, pr *gh.PullRequest) error {
-	state := githubgit.StateOf(pr)
-	if pr.GetDraft() || state == gitchange.StateMerged {
-		return nil
-	}
-
-	title := fmt.Sprintf("%s/%s#%d", owner, name, pr.GetNumber())
-
-	if state == gitchange.StateOpen {
-		if _, err := githubgit.ClosePullRequest(ctx, c.client, owner, name, pr.GetNumber()); err != nil {
-			return fmt.Errorf("close the pull request %s that is not a draft: %w", title, err)
-		}
-	}
-
-	if err := githubgit.DeleteBranch(ctx, c.client, owner, name, branch); err != nil {
-		return fmt.Errorf("delete the branch of the pull request %s that is not a draft: %w", title, err)
-	}
-
-	return fmt.Errorf("%w: GitHub did not open %s as a draft (draft pull requests may need another plan for private repositories), so Sidekick closed it and deleted its branch", action.ErrPermanent, title)
 }
 
 // pullRequestRequest is the request that makes the draft pull request of a
