@@ -4,15 +4,15 @@ import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "./api/client";
 import { QueryError } from "./components/QueryError";
 import { NAV_ITEMS } from "./shell/Nav";
-import { problem, renderApp } from "./test/helpers";
+import { json, problem, renderApp } from "./test/helpers";
 import { ADMIN } from "./test/rules";
 
 describe("the signed-in app", () => {
-  it("shows the shell with its navigation, and the empty state of a page that is not built yet", async () => {
-    renderApp({ me: ADMIN, route: "/benchmarks" });
+  it("shows the shell with its navigation, and the page of the route", async () => {
+    renderApp({ me: ADMIN, route: "/benchmarks", handler: () => json(200, { runs: [] }) });
 
     expect(await screen.findByRole("heading", { name: "Benchmarks", level: 1 })).toBeInTheDocument();
-    expect(screen.getByText("Comes in a later release.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "No benchmark runs yet" })).toBeInTheDocument();
 
     const nav = screen.getByRole("navigation", { name: "Main" });
     for (const { label } of NAV_ITEMS) {
@@ -58,7 +58,7 @@ describe("a missing session", () => {
   it("sends the browser to the login page when a later API call answers 401", async () => {
     const { api } = renderApp({
       route: "/benchmarks",
-      handler: () => problem(401, "Sign in to continue."),
+      handler: (request) => (new URL(request.url).pathname === "/api/v1/bench/runs" ? json(200, { runs: [] }) : problem(401, "Sign in to continue.")),
     });
     await screen.findByRole("heading", { name: "Benchmarks", level: 1 });
 
