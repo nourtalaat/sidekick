@@ -41,7 +41,7 @@ func TestMatchGlob(t *testing.T) {
 		t.Run(tt.pattern+" "+tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			require.Equal(t, tt.want, MatchGlob(tt.pattern, tt.name))
+			require.Equal(t, tt.want, matchGlob(tt.pattern, tt.name))
 		})
 	}
 }

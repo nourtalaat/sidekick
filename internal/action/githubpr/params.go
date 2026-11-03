@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/validateclient"
 )
 
@@ -105,7 +106,7 @@ var paramsSchema = json.RawMessage(fmt.Sprintf(`{
       }
     }
   }
-}`, maxFilesCeiling))
+}`, gitchange.MaxFilesCeiling))
 
 // decodeParams decodes the parameters, refusing unknown fields.
 func decodeParams(raw json.RawMessage) (Params, error) {
@@ -173,9 +174,9 @@ func (l *Limits) planFile(f FileChange) (change, error) {
 		return change{}, fmt.Errorf("path %q: %w", f.Path, err)
 	}
 
-	format, ok := l.formatFor(f.Path)
-	if !ok {
-		return change{}, fmt.Errorf("path %q matches none of the limits.paths globs: %w", f.Path, action.ErrLimit)
+	format, err := l.Paths.FormatOf(f.Path)
+	if err != nil {
+		return change{}, fmt.Errorf("path %q %w", f.Path, err)
 	}
 
 	if hasContent := f.Content != nil; hasContent == f.Delete {

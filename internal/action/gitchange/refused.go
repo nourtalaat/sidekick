@@ -124,7 +124,7 @@ func CheckCodePath(p string, allowed, extra []string) error {
 	}
 
 	for _, glob := range allowed {
-		if MatchGlob(glob, p) {
+		if matchGlob(glob, p) {
 			return nil
 		}
 	}
@@ -139,14 +139,14 @@ func refusedBy(p string, extra []string) (match string, ok bool) {
 
 	for _, group := range builtinRefused {
 		for _, glob := range group.globs {
-			if MatchGlob(strings.ToLower(glob), lower) {
+			if matchGlob(strings.ToLower(glob), lower) {
 				return fmt.Sprintf("the built-in refused path %q (%s)", glob, group.why), true
 			}
 		}
 	}
 
 	for _, glob := range extra {
-		if MatchGlob(strings.ToLower(glob), lower) {
+		if matchGlob(strings.ToLower(glob), lower) {
 			return fmt.Sprintf("limits.refusedPaths %q", glob), true
 		}
 	}

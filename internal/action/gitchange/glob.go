@@ -10,7 +10,7 @@ import (
 // anyDepth is the glob segment that matches any number of path segments.
 const anyDepth = "**"
 
-// CheckGlob checks that pattern is a glob MatchGlob can use: not empty, not
+// CheckGlob checks that pattern is a glob matchGlob can use: not empty, not
 // absolute, with valid path.Match segments, and with ** only as a whole
 // segment.
 func CheckGlob(pattern string) error {
@@ -39,11 +39,11 @@ func CheckGlob(pattern string) error {
 	return nil
 }
 
-// MatchGlob reports whether name matches pattern. The segments of both are
+// matchGlob reports whether name matches pattern. The segments of both are
 // compared one by one with path.Match, so * and ? never match a slash, and a
 // pattern segment of ** matches zero or more segments of name. A pattern
 // that CheckGlob refuses matches nothing.
-func MatchGlob(pattern, name string) bool {
+func matchGlob(pattern, name string) bool {
 	return matchSegments(strings.Split(pattern, "/"), strings.Split(name, "/"))
 }
 
