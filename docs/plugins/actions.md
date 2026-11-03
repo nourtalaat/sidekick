@@ -419,15 +419,26 @@ snap, err := action.RevisionSnapshot("kubernetes:deployment/shop/checkout", "7",
 - The third argument is the provider's version of the running revision, or
   its ID, which Execute compares to notice a deploy since the proposal.
 
+`RevisionSnapshot` sets `Snapshot.Revision` to true, and that flag alone makes
+a snapshot a rollback. What `Before` and `After` hold never does, because
+they are text from outside tools: a monitor that has the keys of a revision
+is still a monitor. Do not build a rollback `Snapshot` by hand, and do not set
+the flag on anything else.
+
 `Before` of the snapshot is the revision running now and `After` the one it
 goes back to. Sidekick shows both in Slack and the web UI in place of the
 field-by-field list, and the proposal in the API has a `revisions` object. All
 the text is from outside, such as an image tag or the name of who deployed,
 and screens show it as plain text with hidden characters written as `\u`
-escapes. In `Undo`, read the revision to restore with `snap.Revisions()`: it
-returns the revision that ran before the rollback as `Running`. Sidekick's
-undo proposal has the snapshot the other way round, so its screens show the
-two revisions swapped with no code of yours.
+escapes.
+
+In `Undo`, read the revision to restore with `snap.Revisions()`: it returns
+the revision that ran before the rollback as `Running`. It fails when the flag
+is set and a side is not a revision with a `Kind` and an `ID`. A snapshot that
+cannot be read this way is logged, and its proposal shows its changes field by
+field instead. Sidekick's undo proposal has the snapshot the other way round,
+with the flag copied, so its screens show the two revisions swapped with no
+code of yours.
 
 ## Actions that fix noisy monitors
 
