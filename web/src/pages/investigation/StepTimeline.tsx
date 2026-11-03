@@ -4,7 +4,7 @@ import { toolCallTarget } from "../../api/feedback";
 import type { Step, StepPart } from "../../api/investigations";
 import { Button } from "../../components/Button";
 import { CopyButton } from "../../components/CopyButton";
-import { formatDuration, formatTokens } from "../../format";
+import { formatCost, formatDuration, formatTokens } from "../../format";
 import { PartFeedback } from "./PartFeedback";
 import { StepLessons } from "./StepLessons";
 import "./StepTimeline.css";
@@ -132,10 +132,12 @@ function summaryOf(step: Step): string {
   return label;
 }
 
+/** The time, tokens, cost and model of a step; the cost shows only above zero. */
 function metaOf(step: Step): string {
   const tokens = step.tokens ? `${formatTokens(step.tokens.input)} in, ${formatTokens(step.tokens.output)} out` : "";
+  const cost = step.costMicros ? formatCost(step.costMicros) : "";
 
-  return [formatDuration(step.durationMs), tokens].filter(Boolean).join(" · ");
+  return [formatDuration(step.durationMs), tokens, cost, step.model].filter(Boolean).join(" · ");
 }
 
 const SUMMARY_CHARS = 80;

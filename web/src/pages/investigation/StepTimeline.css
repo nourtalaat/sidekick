@@ -58,7 +58,9 @@
 }
 
 .sk-step__meta {
-  flex: none;
+  flex: 0 1 auto;
+  max-width: 60%;
+  text-align: right;
   color: var(--sk-text-secondary);
   font: var(--sk-type-caption);
 }
