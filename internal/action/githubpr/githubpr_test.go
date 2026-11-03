@@ -50,6 +50,7 @@ func TestCheckProposal(t *testing.T) {
 
 		err := b.pr.CheckProposal(t.Context(), invocation(rulesParams()).Params)
 		require.ErrorIs(t, err, action.ErrPermanent)
+		require.ErrorIs(t, err, action.ErrLimit)
 		require.ErrorContains(t, err, "no pull request is opened until they are fixed:\n- "+testRulesPath+":6: bad duration\n- "+testRulesPath+": line one line two")
 	})
 

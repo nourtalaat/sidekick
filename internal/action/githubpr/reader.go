@@ -76,11 +76,11 @@ func (r *reader) file(ctx context.Context, path string) (readFile, error) {
 	}
 
 	if content == nil || dir != nil || content.GetType() != typeFile {
-		return readFile{}, fmt.Errorf("%s %w", path, errNotFile)
+		return readFile{}, gitchange.Refuse(fmt.Errorf("%s %w", path, errNotFile))
 	}
 
 	if content.GetSize() > maxBaseFileBytes {
-		return readFile{}, fmt.Errorf("%s %w", path, errTooBig)
+		return readFile{}, gitchange.Refuse(fmt.Errorf("%s %w", path, errTooBig))
 	}
 
 	text, err := content.GetContent()
@@ -89,7 +89,7 @@ func (r *reader) file(ctx context.Context, path string) (readFile, error) {
 	}
 
 	if !gitchange.ValidContent(text) {
-		return readFile{}, fmt.Errorf("%s %w", path, errNotText)
+		return readFile{}, gitchange.Refuse(fmt.Errorf("%s %w", path, errNotText))
 	}
 
 	f := &readFile{text: text, sha: content.GetSHA(), exists: true}
@@ -122,7 +122,7 @@ func (r *reader) Dir(ctx context.Context, path string) ([]gitchange.DirEntry, er
 	}
 
 	if content != nil {
-		return nil, fmt.Errorf("%s is a file, not a directory", path)
+		return nil, gitchange.Refuse(fmt.Errorf("%s is a file, not a directory", path))
 	}
 
 	var entries []gitchange.DirEntry
@@ -147,7 +147,7 @@ func (r *reader) Blob(ctx context.Context, e gitchange.DirEntry) (string, error)
 	}
 
 	if e.Size > maxBaseFileBytes {
-		return "", fmt.Errorf("%s %w", e.Path, errTooBig)
+		return "", gitchange.Refuse(fmt.Errorf("%s %w", e.Path, errTooBig))
 	}
 
 	raw, _, err := r.client.Git.GetBlobRaw(ctx, r.owner, r.repo, e.SHA)
@@ -157,7 +157,7 @@ func (r *reader) Blob(ctx context.Context, e gitchange.DirEntry) (string, error)
 
 	text := string(raw)
 	if !gitchange.ValidContent(text) {
-		return "", fmt.Errorf("%s %w", e.Path, errNotText)
+		return "", gitchange.Refuse(fmt.Errorf("%s %w", e.Path, errNotText))
 	}
 
 	r.files[e.Path] = &readFile{text: text, sha: e.SHA, exists: true}

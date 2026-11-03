@@ -291,7 +291,7 @@ func TestExecuteErrors(t *testing.T) {
 			name:    "a file that has the new content already",
 			inv:     func() action.Invocation { return invocation(validParams()) },
 			setup:   func(b *bed) { b.expectNoBranch(); b.serveBase(repoFiles{testGoPath: regular(testGoAfter)}) },
-			wantErr: "already has this content", wantPermanent: true,
+			wantErr: "already has this content", wantPermanent: true, wantLimit: true,
 		},
 		{
 			name: "GitHub refuses the tree",

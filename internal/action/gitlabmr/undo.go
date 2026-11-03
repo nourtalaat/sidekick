@@ -96,10 +96,12 @@ func (m *MR) revert(ctx context.Context, inv action.Invocation, params Params, o
 			}
 		}
 
-		mr, err = gitlabgit.OpenMergeRequest(ctx, m.client, params.Project, m.revertRequest(inv, params, orig, branch))
+		mr, err = m.openRevert(ctx, params.Project, branch, m.revertRequest(inv, params, orig, branch))
 		if err != nil {
 			return action.Result{}, fmt.Errorf("make the revert merge request: %w", err)
 		}
+	} else if err := m.requireDraft(ctx, params.Project, branch, mr); err != nil {
+		return action.Result{}, fmt.Errorf("check the revert merge request of an earlier attempt: %w", err)
 	}
 
 	if err := gitlabgit.Record(ctx, m.db, inv.ProposalID, params.Project, gitlabgit.StatusOf(mr)); err != nil {

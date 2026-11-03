@@ -124,10 +124,12 @@ func (p *PR) revert(ctx context.Context, inv action.Invocation, params Params, o
 	}
 
 	if pr == nil {
-		pr, err = githubgit.OpenPullRequest(ctx, p.client, owner, name, p.revertRequest(inv, params, orig, branch))
+		pr, err = p.open(ctx, owner, name, branch, p.revertRequest(inv, params, orig, branch))
 		if err != nil {
 			return action.Result{}, fmt.Errorf("make the revert pull request: %w", err)
 		}
+	} else if err := p.requireDraft(ctx, owner, name, branch, pr); err != nil {
+		return action.Result{}, fmt.Errorf("check the revert pull request of an earlier attempt: %w", err)
 	}
 
 	if err := p.record(ctx, inv.ProposalID, params.Repo, githubgit.StatusOf(pr)); err != nil {

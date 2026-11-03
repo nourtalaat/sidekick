@@ -257,6 +257,7 @@ func TestCheckProposal(t *testing.T) {
 			}
 
 			require.ErrorContains(t, err, tt.wantErr)
+			require.ErrorIs(t, err, action.ErrLimit)
 
 			if tt.wantIs != nil {
 				require.ErrorIs(t, err, tt.wantIs)
