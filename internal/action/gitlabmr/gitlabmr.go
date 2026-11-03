@@ -115,6 +115,7 @@ var (
 	_ action.ProposalChecker = (*MR)(nil)
 	_ action.Snapshotter     = (*MR)(nil)
 	_ action.FileReader      = (*MR)(nil)
+	_ action.Undoer          = (*MR)(nil)
 	_ action.MonitorFixer    = (*MR)(nil)
 )
 
