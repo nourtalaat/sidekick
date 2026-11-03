@@ -343,3 +343,89 @@ func TestExecuteErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestExecuteClosesAFoundPullRequestThatIsNotADraft(t *testing.T) {
+	t.Parallel()
+
+	b := newBed(t, nil)
+	b.github.Handle(http.MethodGet, repoPath("git/ref/heads/"+testBranch), reply(refBody("refs/heads/"+testBranch, testCommitSHA)))
+	b.handlePulls(map[string]string{"acme:" + testBranch: "[" + pullInState(12, false, "open") + "]"})
+	b.github.Handle(http.MethodPatch, repoPath("pulls/12"), reply(pullInState(12, false, "closed")))
+	b.github.Handle(http.MethodDelete, repoPath("git/refs/heads/"+testBranch), fakeNoContent())
+
+	_, err := b.code.Execute(t.Context(), invocation(validParams()))
+	require.ErrorIs(t, err, action.ErrPermanent)
+	require.ErrorContains(t, err, "did not open acme/app#12 as a draft")
+
+	require.Equal(t, "closed", bodyOf(t, b.github, http.MethodPatch, repoPath("pulls/12"))["state"])
+
+	sentList := sent(b.github)
+	require.Equal(t, "DELETE "+repoPath("git/refs/heads/"+testBranch), sentList[len(sentList)-1])
+}
+
+func TestExecuteRetriesNeverEndInSuccessForAPullRequestThatIsNotADraft(t *testing.T) {
+	t.Parallel()
+
+	t.Run("after a close that failed", func(t *testing.T) {
+		t.Parallel()
+
+		b := newBed(t, nil)
+		b.github.Handle(http.MethodGet, repoPath("git/ref/heads/"+testBranch), notFound, reply(refBody("refs/heads/"+testBranch, testCommitSHA)))
+		b.serveBase(repoFiles{testGoPath: regular(testGoBefore)})
+		b.expectPush()
+		b.github.Handle(http.MethodPost, repoPath("pulls"), replyStatus(http.StatusCreated, pullBody(40, false)))
+		b.handlePulls(map[string]string{"acme:" + testBranch: "[" + pullInState(40, false, "open") + "]"})
+		b.github.Handle(http.MethodPatch, repoPath("pulls/40"),
+			replyStatus(http.StatusBadGateway, `{"message":"bad gateway"}`), reply(pullInState(40, false, "closed")))
+		b.github.Handle(http.MethodDelete, repoPath("git/refs/heads/"+testBranch), fakeNoContent())
+
+		inv := invocation(validParams())
+
+		_, err := b.code.Execute(t.Context(), inv)
+		require.Error(t, err)
+		require.False(t, isPermanent(err), "a failed close is tried again")
+
+		_, err = b.code.Execute(t.Context(), inv)
+		require.ErrorIs(t, err, action.ErrPermanent)
+		require.ErrorContains(t, err, "did not open acme/app#40 as a draft")
+	})
+
+	t.Run("after a branch delete that failed", func(t *testing.T) {
+		t.Parallel()
+
+		b := newBed(t, nil)
+		b.github.Handle(http.MethodGet, repoPath("git/ref/heads/"+testBranch), notFound, reply(refBody("refs/heads/"+testBranch, testCommitSHA)))
+		b.serveBase(repoFiles{testGoPath: regular(testGoBefore)})
+		b.expectPush()
+		b.github.Handle(http.MethodPost, repoPath("pulls"), replyStatus(http.StatusCreated, pullBody(41, false)))
+		b.handlePulls(map[string]string{"acme:" + testBranch: "[" + pullInState(41, false, "closed") + "]"})
+		b.github.Handle(http.MethodPatch, repoPath("pulls/41"), reply(pullInState(41, false, "closed")))
+		b.github.Handle(http.MethodDelete, repoPath("git/refs/heads/"+testBranch),
+			replyStatus(http.StatusBadGateway, `{"message":"bad gateway"}`), fakeNoContent())
+
+		inv := invocation(validParams())
+
+		_, err := b.code.Execute(t.Context(), inv)
+		require.Error(t, err)
+		require.False(t, isPermanent(err), "a failed delete is tried again")
+
+		_, err = b.code.Execute(t.Context(), inv)
+		require.ErrorIs(t, err, action.ErrPermanent)
+
+		for _, r := range sent(b.github)[len(sent(b.github))-2:] {
+			require.NotContains(t, r, "PATCH", "a closed pull request is not closed again")
+		}
+	})
+
+	t.Run("a merged pull request is left as it is", func(t *testing.T) {
+		t.Parallel()
+
+		b := newBed(t, nil)
+		b.github.Handle(http.MethodGet, repoPath("git/ref/heads/"+testBranch), reply(refBody("refs/heads/"+testBranch, testCommitSHA)))
+		b.handlePulls(map[string]string{"acme:" + testBranch: `[{"number":42,"draft":false,"state":"closed","merged_at":"2026-11-03T10:00:00Z","html_url":"https://github.com/acme/app/pull/42","head":{"sha":"` + testCommitSHA + `"}}]`})
+
+		res, err := b.code.Execute(t.Context(), invocation(validParams()))
+		require.NoError(t, err)
+		require.Contains(t, res.Summary, "which has been merged since it was opened")
+	})
+}

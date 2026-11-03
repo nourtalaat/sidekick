@@ -320,3 +320,54 @@ func TestUndoRefusals(t *testing.T) {
 		})
 	}
 }
+
+func TestUndoNeverLeavesARevertPullRequestThatIsNotADraft(t *testing.T) {
+	t.Parallel()
+
+	t.Run("an open one is closed", func(t *testing.T) {
+		t.Parallel()
+
+		b := newBed(t, nil)
+		b.handlePulls(map[string]string{origHead: "[" + mergedPull(21) + "]", revertHead: "[" + pullInState(22, false, "open") + "]"})
+		b.github.Handle(http.MethodGet, repoPath("git/ref/heads/"+undoBranch), reply(refBody("refs/heads/"+undoBranch, testCommitSHA)))
+		b.github.Handle(http.MethodPatch, repoPath("pulls/22"), reply(pullInState(22, false, "closed")))
+		b.github.Handle(http.MethodDelete, repoPath("git/refs/heads/"+undoBranch), fakeNoContent())
+
+		_, err := b.code.Undo(t.Context(), undoInvocation(), undoSnapshot(testEarlierSHA), false)
+		require.ErrorIs(t, err, action.ErrPermanent)
+		require.ErrorContains(t, err, "did not open acme/app#22 as a draft")
+		require.Equal(t, "closed", bodyOf(t, b.github, http.MethodPatch, repoPath("pulls/22"))["state"])
+	})
+
+	t.Run("a closed one after a branch delete that failed", func(t *testing.T) {
+		t.Parallel()
+
+		b := newBed(t, nil)
+		b.handlePulls(map[string]string{origHead: "[" + mergedPull(21) + "]", revertHead: "[" + pullInState(22, false, "closed") + "]"})
+		b.github.Handle(http.MethodGet, repoPath("git/ref/heads/"+undoBranch), reply(refBody("refs/heads/"+undoBranch, testCommitSHA)))
+		b.github.Handle(http.MethodDelete, repoPath("git/refs/heads/"+undoBranch), fakeNoContent())
+
+		_, err := b.code.Undo(t.Context(), undoInvocation(), undoSnapshot(testEarlierSHA), false)
+		require.ErrorIs(t, err, action.ErrPermanent)
+
+		for _, r := range sent(b.github) {
+			require.NotContains(t, r, "PATCH", "a closed pull request is not closed again")
+		}
+	})
+
+	t.Run("a failed delete is tried again", func(t *testing.T) {
+		t.Parallel()
+
+		b := newBed(t, nil)
+		b.handlePulls(map[string]string{origHead: "[" + mergedPull(21) + "]", revertHead: "[" + pullInState(22, false, "closed") + "]"})
+		b.github.Handle(http.MethodGet, repoPath("git/ref/heads/"+undoBranch), reply(refBody("refs/heads/"+undoBranch, testCommitSHA)))
+		b.github.Handle(http.MethodDelete, repoPath("git/refs/heads/"+undoBranch), replyStatus(http.StatusBadGateway, `{"message":"bad gateway"}`), fakeNoContent())
+
+		_, err := b.code.Undo(t.Context(), undoInvocation(), undoSnapshot(testEarlierSHA), false)
+		require.Error(t, err)
+		require.False(t, isPermanent(err))
+
+		_, err = b.code.Undo(t.Context(), undoInvocation(), undoSnapshot(testEarlierSHA), false)
+		require.ErrorIs(t, err, action.ErrPermanent)
+	})
+}

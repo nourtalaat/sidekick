@@ -2976,7 +2976,9 @@ routes:
   pull request if it was made, and does not make a second one. If GitHub does
   not open the pull request as a draft, which can happen for a private
   repository on a plan without drafts, Sidekick closes it, deletes the branch
-  and fails the proposal with that reason. The proposal's result holds the
+  and fails the proposal with that reason. A retry that finds a pull request
+  of its own that is not a draft does the same, so it never leaves one that
+  could be merged as it is, unless a person merged it. The proposal's result holds the
   number and the head SHA of the pull request.
 - **What the approver reads.** The proposal shows each file with what happens
   to it (`changed`, `added` or `deleted`) and how many lines it adds and

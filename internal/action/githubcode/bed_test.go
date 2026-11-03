@@ -334,3 +334,9 @@ func isPermanent(err error) bool {
 func isLimit(err error) bool {
 	return errors.Is(err, action.ErrLimit)
 }
+
+// pullInState is a pull request with the state and draft setting given.
+func pullInState(number int, draft bool, state string) string {
+	return fmt.Sprintf(`{"number":%d,"draft":%t,"state":%q,"html_url":"https://github.com/%s/pull/%d","head":{"sha":%q}}`,
+		number, draft, state, testRepo, number, testCommitSHA)
+}
