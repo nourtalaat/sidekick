@@ -18,6 +18,9 @@ import (
 const (
 	abcSHA = "abc1234def5678abc1234def5678abc1234def56"
 	botSHA = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c"
+
+	commitPath  = apiRoot + "/projects/acme/checkout/repository/commits/" + abcSHA
+	comparePath = apiRoot + "/projects/acme/checkout/repository/compare"
 )
 
 func TestSourceCall(t *testing.T) {
@@ -163,6 +166,91 @@ func TestSourceCall(t *testing.T) {
 			},
 			wantErr: "read page 2",
 		},
+		{
+			name:     "get_commit reads the commit and pages through its diff",
+			tool:     toolGetCommit,
+			input:    `{"project":"acme/checkout","ref":"` + abcSHA + `"}`,
+			pageSize: 2,
+			routes: []route{
+				{http.MethodGet, commitPath, []fakehttp.Response{fixture("commit.json")}},
+				{http.MethodGet, commitPath + "/diff", []fakehttp.Response{page("commit-diff-page-1.json", 2), page("commit-diff-page-2.json", 0)}},
+			},
+			wantQueries: []string{"", "page=1&per_page=2", "page=2&per_page=2"},
+			want: `{"project":"acme/checkout","sha":"abc1234def5678abc1234def5678abc1234def56",
+				"message":"Lower DB pool size to 5 to save connections\n\nThe pool was too large for the new database.",
+				"author":"Ada Lovelace","committer":"Ada Lovelace","date":"2026-05-04T10:05:00Z",
+				"parents":["0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c"],"additions":3,"deletions":1,
+				"files":[
+					{"filename":"config/db.yaml","status":"modified","additions":1,"deletions":1,"patch":"@@ -1,3 +1,3 @@\n pool:\n-  size: 20\n+  size: 5\n   timeout: 30\n"},
+					{"filename":"docs/new.md","previousFilename":"docs/old.md","status":"renamed","additions":0,"deletions":0},
+					{"filename":"scripts/new.sh","status":"added","additions":2,"deletions":0,"patch":"@@ -0,0 +1,2 @@\n+#!/bin/sh\n+echo hi\n"}
+				],
+				"url":"https://gitlab.example.com/acme/checkout/-/commit/abc1234def5678abc1234def5678abc1234def56"}`,
+			wantEvidence: []source.Evidence{commitLink("abc1234d", abcSHA, at(10, 5))},
+		},
+		{
+			name:  "get_commit sends a branch with a slash as one path part and finds nothing for a missing one",
+			tool:  toolGetCommit,
+			input: `{"project":"acme/checkout","ref":"feature/x"}`,
+			routes: []route{{http.MethodGet, apiRoot + "/projects/acme/checkout/repository/commits/feature/x", []fakehttp.Response{
+				failed(http.StatusNotFound, "404 Commit Not Found"),
+			}}},
+			wantQueries: []string{""},
+			wantNoData:  true,
+			wantText:    notFoundText,
+		},
+		{
+			name:  "compare lists the newest commits first and the files, and says what GitLab left out",
+			tool:  toolCompare,
+			input: `{"project":"acme/checkout","base":"v1.3.2","head":"v1.4.0"}`,
+			routes: []route{{http.MethodGet, comparePath, []fakehttp.Response{
+				fixture("compare.json"),
+			}}},
+			wantQueries: []string{"from=v1.3.2&to=v1.4.0"},
+			want: `{"project":"acme/checkout","base":"v1.3.2","head":"v1.4.0","totalCommits":2,
+				"commits":[
+					{"sha":"abc1234def5678abc1234def5678abc1234def56","message":"Lower DB pool size to 5 to save connections","author":"Ada Lovelace","date":"2026-05-04T10:05:00Z","url":"https://gitlab.example.com/acme/checkout/-/commit/abc1234def5678abc1234def5678abc1234def56"},
+					{"sha":"9988776655443322110099887766554433221100","message":"Add a retry to the payment client","author":"Grace Hopper","date":"2026-05-04T09:10:00Z","url":"https://gitlab.example.com/acme/checkout/-/commit/9988776655443322110099887766554433221100"}
+				],
+				"files":[
+					{"filename":"config/db.yaml","status":"modified","additions":1,"deletions":1},
+					{"filename":"vendor/big.json","status":"modified","additions":0,"deletions":0,"omitted":"diff too large for GitLab to send"}
+				],
+				"url":"https://gitlab.example.com/acme/checkout/-/compare/v1.3.2...v1.4.0"}`,
+			wantEvidence: []source.Evidence{{
+				Kind: source.EvidenceCommit, Title: "acme/checkout v1.3.2...v1.4.0", URL: "https://gitlab.example.com/acme/checkout/-/compare/v1.3.2...v1.4.0",
+			}},
+			wantTruncated: true,
+		},
+		{
+			name:  "compare keeps only the newest commits up to the limit",
+			tool:  toolCompare,
+			input: `{"service":"checkout-api","base":"v1.3.2","head":"v1.4.0","limit":1}`,
+			routes: []route{{http.MethodGet, comparePath, []fakehttp.Response{
+				body(`{"commits":[
+						{"id":"9988776655443322110099887766554433221100","title":"Add a retry to the payment client","author_name":"Grace Hopper","created_at":"2026-05-04T09:10:00Z"},
+						{"id":"abc1234def5678abc1234def5678abc1234def56","title":"Lower DB pool size","author_name":"Ada Lovelace","created_at":"2026-05-04T10:05:00Z"}],
+					"diffs":[],"compare_timeout":true,"web_url":"https://gitlab.example.com/acme/checkout/-/compare/v1.3.2...v1.4.0"}`),
+			}}},
+			wantQueries: []string{"from=v1.3.2&to=v1.4.0"},
+			want: `{"project":"acme/checkout","base":"v1.3.2","head":"v1.4.0","totalCommits":2,
+				"commits":[{"sha":"abc1234def5678abc1234def5678abc1234def56","message":"Lower DB pool size","author":"Ada Lovelace","date":"2026-05-04T10:05:00Z"}],
+				"files":[],"timedOut":true,"url":"https://gitlab.example.com/acme/checkout/-/compare/v1.3.2...v1.4.0"}`,
+			wantEvidence: []source.Evidence{{
+				Kind: source.EvidenceCommit, Title: "acme/checkout v1.3.2...v1.4.0", URL: "https://gitlab.example.com/acme/checkout/-/compare/v1.3.2...v1.4.0",
+			}},
+			wantTruncated: true,
+		},
+		{
+			name:  "compare of identical refs is no data",
+			tool:  toolCompare,
+			input: `{"project":"acme/checkout","base":"main","head":"main"}`,
+			routes: []route{{http.MethodGet, comparePath, []fakehttp.Response{
+				body(`{"commits":[],"diffs":[],"compare_timeout":false,"compare_same_ref":true,"web_url":""}`),
+			}}},
+			wantQueries: []string{"from=main&to=main"},
+			wantNoData:  true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -282,6 +370,9 @@ func TestSourceCallInput(t *testing.T) {
 			input: `{"project":"acme/checkout","since":"2026-05-04T09:00:00Z","ref":"main?x=1"}`,
 			want:  `ref: "main?x=1" is not a valid branch, tag or commit SHA`,
 		},
+		{name: "no ref", tool: toolGetCommit, input: `{"project":"acme/checkout"}`, want: "give ref, the commit SHA"},
+		{name: "compare without head", tool: toolCompare, input: `{"project":"acme/checkout","base":"main"}`, want: "give both base and head"},
+		{name: "compare with a ref that climbs out", tool: toolCompare, input: `{"project":"acme/checkout","base":"a/../b","head":"main"}`, want: `base: "a/../b" is not a valid branch, tag or commit SHA`},
 		{name: "input that does not decode", tool: toolListCommits, input: `{"limit":"ten"}`, want: "the input does not decode"},
 	}
 

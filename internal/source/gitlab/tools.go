@@ -16,6 +16,8 @@ import (
 // source prefix, for example gitlab__list_commits.
 const (
 	toolListCommits = "list_commits"
+	toolGetCommit   = "get_commit"
+	toolCompare     = "compare"
 )
 
 // Limits on how many items a list tool returns.
@@ -40,6 +42,26 @@ var toolList = []source.Tool{
 			"ref":   stringProperty("The branch, tag or SHA to list from. Default: the default branch."),
 			"limit": limitProperty(),
 		}, "since"),
+		ReadOnly: true,
+	},
+	{
+		Name: toolGetCommit,
+		Description: "Get one commit of a GitLab project: its message, author, date, parents, the files it " +
+			"changed with line counts, and the patch of each file, cut when the commit is large.",
+		InputSchema: schema(map[string]*jsonschema.Schema{
+			"ref": stringProperty("The commit SHA, or a branch or tag to get its latest commit."),
+		}, "ref"),
+		ReadOnly: true,
+	},
+	{
+		Name: toolCompare,
+		Description: "Compare two refs of a GitLab project, base...head: the newest commits of head that base " +
+			"lacks, and the files changed with line counts.",
+		InputSchema: schema(map[string]*jsonschema.Schema{
+			"base":  stringProperty("The older branch, tag or SHA, for example the tag of the last good release."),
+			"head":  stringProperty("The newer branch, tag or SHA."),
+			"limit": limitProperty(),
+		}, "base", "head"),
 		ReadOnly: true,
 	},
 }

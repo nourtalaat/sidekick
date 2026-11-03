@@ -70,6 +70,10 @@ func (s *Source) run(ctx context.Context, call source.Call) (source.Result, erro
 	switch call.Tool {
 	case toolListCommits:
 		return s.listCommits(ctx, call.Input)
+	case toolGetCommit:
+		return s.getCommit(ctx, call.Input)
+	case toolCompare:
+		return s.compare(ctx, call.Input)
 	default:
 		return source.Result{}, fmt.Errorf("tool %q: %w", call.Tool, errUnknownTool)
 	}
