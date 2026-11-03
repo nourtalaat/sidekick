@@ -104,6 +104,11 @@ type Config struct {
 
 	// strategySet holds the built-in and file strategies, loaded by Parse.
 	strategySet *strategy.Set
+
+	// registries are the plugin registries Parse checked the file with, so
+	// that routes saved at runtime are checked against the same plugin
+	// types. The zero value means the global registries.
+	registries Registries
 }
 
 // Server holds the HTTP listen addresses.
@@ -715,6 +720,7 @@ func Parse(ctx context.Context, data []byte, opts LoadOptions) (*Config, error) 
 	cfg.resolveBudgets()
 	cfg.Watch.Defaults = watch.Complete(cfg.Watch.Defaults)
 	cfg.strategySet = v.strategies
+	cfg.registries = v.regs
 
 	return cfg, nil
 }

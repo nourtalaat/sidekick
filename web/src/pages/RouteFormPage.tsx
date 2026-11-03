@@ -361,7 +361,7 @@ function RouteForm({ mode, initial, version }: RouteFormProps) {
           onChange={(e) => set({ mode: e.target.value })}
           options={MODES}
           error={byField.mode}
-          help="In approved mode the model may propose the actions below, and a person approves each one. In read + write mode a proposal runs at once, but only for events from trusted senders: a route may select only intakes and listeners marked trusted in the config file."
+          help="In approved mode the model may propose the actions below, and a person approves each one. In read + write mode a proposal runs at once, but only for events from trusted senders: a route may select only intakes and listeners marked trusted in the config file. An action that changes a running system, such as a rollback, is refused in this mode unless the config file sets allowReadWrite: true on it."
         />
         {values.mode === "read-write" && (
           <Checkbox

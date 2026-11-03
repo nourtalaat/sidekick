@@ -333,6 +333,26 @@ describe("the route form", () => {
     expect(alert).toHaveFocus();
   });
 
+  it("shows the refusal of an approval-only action in read + write mode under the actions", async () => {
+    const user = userEvent.setup();
+    const message =
+      'action "rollback" (type gated.note) is approval-only, so a read-write route may not list it as it is; use mode: approved on this route, or set allowReadWrite: true on the action in the config file';
+
+    const { handler } = recording((request) =>
+      request.method === "POST" ? validationProblem([{ field: "actions[0]", message }]) : json(200, { routes: [] }),
+    );
+
+    renderApp({ me: ADMIN, route: "/routes/new", handler });
+
+    await user.type(await screen.findByLabelText("Name"), "ops");
+    await user.selectOptions(screen.getByLabelText("Mode"), "read-write");
+    await user.click(screen.getByLabelText("Actions"));
+    await user.paste("rollback");
+    await user.click(screen.getByRole("button", { name: "Add route" }));
+
+    expect(await screen.findByLabelText("Actions")).toHaveAccessibleDescription(expect.stringContaining(message));
+  });
+
   it("changes a runtime route, and sends back the version it read", async () => {
     const user = userEvent.setup();
 

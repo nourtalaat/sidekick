@@ -42,6 +42,11 @@ const proposeActionNowDescription = "Propose one change. In this investigation a
 	"If the proposal fails its checks you get the errors back and can propose again. The actions this route " +
 	"may propose are:"
 
+// approvalOnlyNote is added to an action in the description of
+// propose_action when the action is approval-only and the config does not
+// allow it in read-write mode.
+const approvalOnlyNote = "This action is approval-only: a proposal for it waits for a person to approve it, even in this investigation."
+
 // proposalNamespace makes the IDs of proposals from the IDs of tool calls.
 var proposalNamespace = uuid.MustParse("6f0f6a2e-3c1b-4d3a-9a7e-2b0e0c4f9d11")
 
@@ -79,6 +84,10 @@ type ProposeResult struct {
 	// investigation, so it was approved as it was stored and its job is
 	// queued.
 	ApprovedByPolicy bool
+	// HeldForPerson is true when the call belongs to a read-write
+	// investigation but the action is approval-only and the config does
+	// not allow it in read-write mode, so the proposal waits for a person.
+	HeldForPerson bool
 }
 
 // prepared is a checked proposal, ready to store.
@@ -135,6 +144,10 @@ func (s *Service) Spec(route string, mode action.Mode) (model.ToolSpec, bool) {
 		}
 
 		fmt.Fprintf(&desc, "\n- %s: %s Parameters, as a JSON Schema: %s", name, strings.TrimSpace(spec.Description), schema.String())
+
+		if mode == action.ReadWrite && rp.Mode == action.ReadWrite && s.readWriteBlocked(name) {
+			desc.WriteString(" " + approvalOnlyNote)
+		}
 	}
 
 	if len(names) == 0 {
@@ -196,6 +209,8 @@ func (s *Service) Propose(ctx context.Context, req ProposeRequest) (ProposeResul
 	if err != nil {
 		return ProposeResult{}, fmt.Errorf("propose action %s: %w", p.action, err)
 	}
+
+	res.HeldForPerson = res.Refusal == "" && req.Mode == action.ReadWrite && !res.ApprovedByPolicy && s.readWriteBlocked(p.action)
 
 	if created {
 		s.opts.Metrics.reached(p.action, action.StatusProposed)
@@ -385,7 +400,7 @@ func (s *Service) store(ctx context.Context, tx pgx.Tx, req ProposeRequest, p pr
 		return ProposeResult{Action: p.action, Refusal: fmt.Sprintf("this investigation has made %d proposals, the most it may make", count)}, false, nil
 	}
 
-	mode, err := s.currentMode(ctx, queries, req)
+	mode, err := s.currentMode(ctx, queries, req, p.action)
 	if err != nil {
 		return ProposeResult{}, false, fmt.Errorf("read the mode of the investigation: %w", err)
 	}
@@ -439,11 +454,17 @@ func (s *Service) store(ctx context.Context, tx pgx.Tx, req ProposeRequest, p pr
 
 // currentMode returns the mode a new proposal of the call is stored with:
 // the call's, except that a read-write call is approved-mode when the
-// investigation is not read-write any more. An event that is not trusted
-// that joined the investigation after the model started made it so.
-func (s *Service) currentMode(ctx context.Context, queries *db.Queries, req ProposeRequest) (action.Mode, error) {
+// investigation is not read-write any more, or when the action is
+// approval-only and the config does not allow it in read-write mode. An
+// event that is not trusted that joined the investigation after the model
+// started made the first so.
+func (s *Service) currentMode(ctx context.Context, queries *db.Queries, req ProposeRequest, actionName string) (action.Mode, error) {
 	if req.Mode != action.ReadWrite {
 		return req.Mode, nil
+	}
+
+	if s.readWriteBlocked(actionName) {
+		return action.Approved, nil
 	}
 
 	current, err := queries.GetInvestigationMode(ctx, req.InvestigationID)

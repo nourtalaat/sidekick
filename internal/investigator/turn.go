@@ -176,6 +176,12 @@ func (r *run) builtin(ctx context.Context, call model.ToolCall) (newStep, error)
 				"Go on with the investigation, and do not propose the same change again.", res.Action, res.ID)
 		}
 
+		if res.HeldForPerson {
+			content = fmt.Sprintf("Proposed %s as proposal %s. Nothing has run: %s is approval-only, so even in this investigation a person must approve it, "+
+				"and it expires at %s. Go on with the investigation, and do not propose the same change again.",
+				res.Action, res.ID, res.Action, res.ExpiresAt.UTC().Format(time.RFC3339))
+		}
+
 		if res.Refusal != "" {
 			problems = []string{res.Refusal}
 			content = rejectedText("proposal", problems) + "\nNothing was proposed."
