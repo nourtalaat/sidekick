@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -17,6 +18,10 @@ import (
 // actionChoiceTag marks the public scenarios where the model must pick one
 // of several actions, or none.
 const actionChoiceTag = "action-choice"
+
+// minDistractors is how many actions the route of the no-proposal scenario
+// lists, so that proposing nothing is a choice among several.
+const minDistractors = 3
 
 // actionTypes are the types of the real actions that the action-choice
 // scenarios use, and the one parameter value that names a change.
@@ -37,6 +42,33 @@ func TestActionChoiceScenariosOfferAChoice(t *testing.T) {
 			require.True(t, sc.Expected.NoProposal || len(sc.Expected.Proposals) > 0, "the scenario states its expected proposals or noProposal")
 		})
 	}
+}
+
+func TestActionChoiceScenariosCoverTheActions(t *testing.T) {
+	t.Parallel()
+
+	expecting := map[string]int{}
+
+	var noProposal []Scenario
+
+	for _, sc := range loadActionChoice(t) {
+		if sc.Expected.NoProposal {
+			noProposal = append(noProposal, sc)
+		}
+
+		for _, p := range sc.Expected.Proposals {
+			expecting[filepath.Base(sc.Actions[p.Action].Spec.Snapshot)]++
+		}
+	}
+
+	for _, snapshot := range []string{
+		"kubernetes.rollback.json", "helm.rollback.json", "argocd.rollback.json", "aws.ecs_rollback.json", "launchdarkly.flag.json",
+	} {
+		require.Equal(t, 1, expecting[snapshot], "one scenario expects a proposal of %s", snapshot)
+	}
+
+	require.Len(t, noProposal, 1, "one scenario expects no proposal")
+	require.GreaterOrEqual(t, len(noProposal[0].Route.Actions), minDistractors, "its route lists rollback actions")
 }
 
 func TestActionChoiceProposalsFitTheirActions(t *testing.T) {
