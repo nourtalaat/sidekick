@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/awsecs"
 	"github.com/nourtalaat/sidekick/internal/action/datadog"
 	"github.com/nourtalaat/sidekick/internal/action/githubpr"
 	"github.com/nourtalaat/sidekick/internal/action/grafana"
@@ -32,6 +33,7 @@ func TestMonitorFixers(t *testing.T) {
 		{name: "jira.issue fixes nothing", action: &jira.Issue{}},
 		{name: "slack.reply fixes nothing", action: &slack.Reply{}},
 		{name: "unleash.flag fixes nothing", action: &unleashflag.Flag{}},
+		{name: "aws.ecs_rollback fixes nothing", action: &awsecs.Rollback{}},
 	}
 
 	for _, tt := range tests {
