@@ -1,6 +1,7 @@
 package gcprun
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -145,11 +146,7 @@ func TestRegistryCheck(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			var doc yaml.Node
-
-			require.NoError(t, yaml.Unmarshal([]byte(tt.section), &doc))
-
-			decoded, err := registry.Actions.Check(t.Context(), Type, "cloud-run-rollback", doc.Content[0])
+			decoded, err := registry.Actions.Check(t.Context(), Type, "cloud-run-rollback", strictDecoder(tt.section))
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
 
@@ -160,4 +157,19 @@ func TestRegistryCheck(t *testing.T) {
 			require.Equal(t, tt.wantBlocked, action.ReadWriteBlocked(decoded))
 		})
 	}
+}
+
+// strictDecoder reads a config section the way the config loader does, so a
+// key the action does not have is an error.
+type strictDecoder string
+
+func (s strictDecoder) Decode(target any) error {
+	dec := yaml.NewDecoder(strings.NewReader(string(s)))
+	dec.KnownFields(true)
+
+	if err := dec.Decode(target); err != nil {
+		return fmt.Errorf("decode the section: %w", err)
+	}
+
+	return nil
 }
