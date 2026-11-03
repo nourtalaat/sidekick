@@ -827,6 +827,67 @@ func (q *Queries) QualityMatrix(ctx context.Context, arg QualityMatrixParams) ([
 	return items, nil
 }
 
+const qualityMatrixByDay = `-- name: QualityMatrixByDay :many
+SELECT day, predicted, confirmed, sum(n)::bigint AS n
+FROM quality_daily
+WHERE day >= $1::date AND day <= $2::date
+  AND ($3::text IS NULL OR route = $3)
+  AND ($4::text IS NULL OR service = $4)
+  AND ($5::text IS NULL OR model = $5)
+  AND ($6::text IS NULL OR predicted = $6)
+GROUP BY day, predicted, confirmed
+ORDER BY day, predicted, confirmed
+`
+
+type QualityMatrixByDayParams struct {
+	FromDay pgtype.Date
+	ToDay   pgtype.Date
+	Route   *string
+	Service *string
+	Model   *string
+	Verdict *string
+}
+
+type QualityMatrixByDayRow struct {
+	Day       pgtype.Date
+	Predicted string
+	Confirmed string
+	N         int64
+}
+
+// QualityMatrixByDay is QualityMatrix for each day of the range.
+func (q *Queries) QualityMatrixByDay(ctx context.Context, arg QualityMatrixByDayParams) ([]QualityMatrixByDayRow, error) {
+	rows, err := q.db.Query(ctx, qualityMatrixByDay,
+		arg.FromDay,
+		arg.ToDay,
+		arg.Route,
+		arg.Service,
+		arg.Model,
+		arg.Verdict,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []QualityMatrixByDayRow
+	for rows.Next() {
+		var i QualityMatrixByDayRow
+		if err := rows.Scan(
+			&i.Day,
+			&i.Predicted,
+			&i.Confirmed,
+			&i.N,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const qualityTotals = `-- name: QualityTotals :one
 SELECT coalesce(sum(n), 0)::bigint AS rated,
        coalesce(sum(n) FILTER (WHERE predicted = confirmed), 0)::bigint AS correct
