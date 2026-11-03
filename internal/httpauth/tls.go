@@ -1,4 +1,8 @@
-package prometheus
+// Package httpauth holds what actions and sources share when they call an
+// HTTP API with a bearer token, basic auth, extra headers or a client
+// certificate: the config keys, their checks without a network call, the
+// request headers, and the TLS transport.
+package httpauth
 
 import (
 	"bytes"
@@ -13,9 +17,41 @@ import (
 	"github.com/nourtalaat/sidekick/internal/registry"
 )
 
-// errNoCertificates is returned when the CA secret holds no PEM
-// certificate.
-var errNoCertificates = errors.New("the CA secret holds no PEM certificate")
+var (
+	// ErrNoCertificates is returned when the CA secret holds no PEM
+	// certificate.
+	ErrNoCertificates = errors.New("the CA secret holds no PEM certificate")
+	// ErrNoTransport is returned when tls is set but the HTTP client does
+	// not have an *http.Transport whose TLS setup can be changed.
+	ErrNoTransport = errors.New("tls needs an *http.Transport in the HTTP client of deps")
+)
+
+// TLS is the TLS setup of the connections.
+type TLS struct {
+	// CertSecret holds a PEM client certificate, sent for mutual TLS.
+	CertSecret *registry.SecretRef `yaml:"certSecret"`
+	// KeySecret holds the PEM private key of the client certificate.
+	KeySecret *registry.SecretRef `yaml:"keySecret"`
+	// CASecret holds PEM CA certificates to trust instead of the system
+	// ones, for a server with a private CA.
+	CASecret *registry.SecretRef `yaml:"caSecret"`
+}
+
+// WrapTransport returns next with the TLS setup of cfg, or next itself when
+// cfg is nil. It fails with ErrNoTransport when cfg is set and next is not
+// an *http.Transport.
+func WrapTransport(next http.RoundTripper, cfg *TLS, secrets registry.Secrets) (http.RoundTripper, error) {
+	if cfg == nil {
+		return next, nil
+	}
+
+	t, ok := next.(*http.Transport)
+	if !ok {
+		return nil, ErrNoTransport
+	}
+
+	return newTLSTransport(t, *cfg, secrets), nil
+}
 
 // tlsTransport sends requests with the TLS setup of the config. The client
 // certificate is read from its secrets for each new connection, and the CA
@@ -84,7 +120,7 @@ func (t *tlsTransport) transport(ctx context.Context) (*http.Transport, error) {
 	if ca != nil {
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(ca) {
-			return nil, errNoCertificates
+			return nil, ErrNoCertificates
 		}
 
 		config.RootCAs = pool

@@ -413,7 +413,9 @@ func (s *Service) restoreChanges(ctx context.Context, undo db.ActionProposal, co
 }
 
 // overwrites works out the difference between live and live with the
-// fields of the proposal that undo undoes put back.
+// fields of the proposal that undo undoes put back. When that proposal made
+// the definition, a restore removes all of it, and the difference is the
+// whole live definition going away.
 func (s *Service) overwrites(ctx context.Context, undo db.ActionProposal, live json.RawMessage) ([]action.Change, error) {
 	var p undoParams
 	if err := json.Unmarshal(undo.Params, &p); err != nil {
@@ -432,6 +434,15 @@ func (s *Service) overwrites(ctx context.Context, undo db.ActionProposal, live j
 
 	if snap == nil {
 		return nil, nil
+	}
+
+	if snap.Creates() {
+		removal, err := action.Diff(live, nil)
+		if err != nil {
+			return nil, fmt.Errorf("compare with a removed definition: %w", err)
+		}
+
+		return action.Display(removal), nil
 	}
 
 	deltas, err := action.Diff(snap.Before, snap.After)
