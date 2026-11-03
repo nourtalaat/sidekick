@@ -7,7 +7,6 @@ import (
 	"maps"
 	"slices"
 	"strings"
-	"time"
 
 	gh "github.com/google/go-github/v93/github"
 
@@ -61,41 +60,12 @@ func (r *Revert) Undo(ctx context.Context, inv action.Invocation, snap action.Sn
 		return r.putBack(ctx, inv, params, orig, snap, force)
 	}
 
-	return r.closeOriginal(ctx, inv, params, orig, branch)
-}
-
-// closeOriginal closes the pull request, if it is open, deletes its branch and
-// records it as closed.
-func (r *Revert) closeOriginal(ctx context.Context, inv action.Invocation, params Params, orig *gh.PullRequest, branch string) (action.Result, error) {
-	owner, name, _ := strings.Cut(params.Repo, "/")
-	title := fmt.Sprintf("%s#%d", params.Repo, orig.GetNumber())
-	closed, summary := orig, "The pull request "+title+" was closed already; its branch is deleted."
-
-	if githubgit.StateOf(orig) == gitchange.StateOpen {
-		updated, err := githubgit.ClosePullRequest(ctx, r.client, owner, name, orig.GetNumber())
-		if err != nil {
-			return action.Result{}, fmt.Errorf("close the original: %w", err)
-		}
-
-		closed, summary = updated, "Closed the pull request "+title+" and deleted its branch."
+	res, err := githubgit.CloseOriginal(ctx, r.client, r.db, r.metrics, inv, params.Repo, orig, branch)
+	if err != nil {
+		return action.Result{}, fmt.Errorf("close the pull request to undo: %w", err)
 	}
 
-	if err := githubgit.DeleteBranch(ctx, r.client, owner, name, branch); err != nil {
-		return action.Result{}, fmt.Errorf("remove the branch of the closed pull request: %w", err)
-	}
-
-	st := githubgit.StatusOf(closed)
-	if st.State == gitchange.StateOpen {
-		st.State, st.ClosedAt = gitchange.StateClosed, new(time.Now())
-	}
-
-	if err := r.record(ctx, inv.UndoOf, params.Repo, st); err != nil {
-		return action.Result{}, fmt.Errorf("record the original as %s: %w", st.State, err)
-	}
-
-	r.metrics.PullRequest(githubgit.ResultClosed)
-
-	return action.Result{Summary: summary, Links: []action.Link{{Title: title, URL: orig.GetHTMLURL()}}}, nil
+	return res, nil
 }
 
 // putBack opens a draft pull request that puts back what the commit wrote in
@@ -104,7 +74,7 @@ func (r *Revert) putBack(ctx context.Context, inv action.Invocation, params Para
 	owner, name, _ := strings.Cut(params.Repo, "/")
 	branch := inv.IdempotencyKey
 
-	if err := r.record(ctx, inv.UndoOf, params.Repo, githubgit.StatusOf(orig)); err != nil {
+	if err := githubgit.Record(ctx, r.db, inv.UndoOf, params.Repo, githubgit.StatusOf(orig)); err != nil {
 		return action.Result{}, fmt.Errorf("record the original as merged: %w", err)
 	}
 
@@ -125,13 +95,15 @@ func (r *Revert) putBack(ctx context.Context, inv action.Invocation, params Para
 	}
 
 	if pr == nil {
-		pr, err = githubgit.OpenPullRequest(ctx, r.client, owner, name, r.undoRequest(inv, params, branch))
+		pr, err = githubgit.OpenDraft(ctx, r.client, owner, name, branch, r.undoRequest(inv, params, branch))
 		if err != nil {
 			return action.Result{}, fmt.Errorf("make the pull request that undoes the revert: %w", err)
 		}
+	} else if err := githubgit.RequireDraft(ctx, r.client, owner, name, branch, pr); err != nil {
+		return action.Result{}, fmt.Errorf("check the pull request of an earlier attempt: %w", err)
 	}
 
-	if err := r.record(ctx, inv.ProposalID, params.Repo, githubgit.StatusOf(pr)); err != nil {
+	if err := githubgit.Record(ctx, r.db, inv.ProposalID, params.Repo, githubgit.StatusOf(pr)); err != nil {
 		return action.Result{}, fmt.Errorf("record the pull request that undoes the revert: %w", err)
 	}
 
@@ -259,19 +231,4 @@ func undoMessage(t *target, inv action.Invocation) string {
 	title := source.CutText("Undo the revert of "+t.what, githubgit.MaxCommitTitleBytes)
 
 	return title + "\n\nSidekick proposal " + inv.ProposalID + ", which undoes " + inv.UndoOf + ".\n\n" + revertTrailer + " " + inv.ProposalID + "\n"
-}
-
-// record keeps the state of a pull request for the proposal with the ID, for
-// the count of merged pull requests. Where there is no database, it does
-// nothing.
-func (r *Revert) record(ctx context.Context, proposalID, repo string, st *gitchange.Status) error {
-	if r.db == nil {
-		return nil
-	}
-
-	if err := gitchange.RecordState(ctx, r.db, proposalID, repo, st); err != nil {
-		return fmt.Errorf("record the pull request state: %w", err)
-	}
-
-	return nil
 }

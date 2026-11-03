@@ -3412,6 +3412,9 @@ routes:
   mode. The result is one commit on the branch `sidekick/<proposal id>` and
   a pull request. It is always a draft: there is no `draft` key. Sidekick
   never merges, turns on auto-merge, requests reviewers or assigns anyone.
+  If GitHub does not make the pull request a draft, for example in a private
+  repository on a plan without drafts, Sidekick closes it, deletes its branch
+  and fails the proposal, so a revert is never left open for review.
   There is no three-way merge. If a repeat after a crash finds the branch, and
   the pull request if it was made, it does not make a second one. (GitHub's
   GraphQL API has a `revertPullRequest` mutation that takes a `draft` input,

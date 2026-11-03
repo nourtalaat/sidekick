@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/fakehttp"
 )
 
 // count returns how many requests the fake GitHub got for the call.
@@ -330,4 +331,66 @@ func keys(m map[string]any) []string {
 	}
 
 	return out
+}
+
+func TestExecuteNeverLeavesAPullRequestThatIsNotADraft(t *testing.T) {
+	t.Parallel()
+
+	t.Run("one GitHub just opened", func(t *testing.T) {
+		t.Parallel()
+
+		b := newBed(t, nil)
+		h := b.standard()
+		b.onMain(h.bad)
+		b.w.makeNotDrafts()
+		closePull(b, createdNumber)
+		b.w.gh.Handle(http.MethodDelete, repoPath("git/refs/heads/"+testBranch), fakehttp.Response{Status: http.StatusNoContent})
+		b.w.serve()
+
+		params := byCommit(h.bad)
+		snap := b.snapshotOf(t, params)
+
+		_, err := b.rev.Execute(t.Context(), invocation(t, params, &snap))
+		require.ErrorIs(t, err, action.ErrPermanent)
+		require.ErrorContains(t, err, "did not open acme/api#100 as a draft")
+		require.Equal(t, 1, count(b, "PATCH /repos/acme/api/pulls/100"), "the pull request is closed")
+		require.Equal(t, 1, count(b, "DELETE /repos/acme/api/git/refs/heads/"+testBranch), "and its branch deleted")
+	})
+
+	t.Run("one an earlier attempt opened", func(t *testing.T) {
+		t.Parallel()
+
+		b := newBed(t, nil)
+		h := b.standard()
+		b.onMain(h.bad)
+		b.w.setBranch(testBranch, testCommitSHA)
+		b.w.ownPull(createdNumber, testBranch, "open", false)
+		b.w.setOwnDraft(testBranch, false)
+		closePull(b, createdNumber)
+		b.w.gh.Handle(http.MethodDelete, repoPath("git/refs/heads/"+testBranch), fakehttp.Response{Status: http.StatusNoContent})
+		b.w.serve()
+
+		_, err := b.rev.Execute(t.Context(), invocation(t, byCommit(h.bad), nil))
+		require.ErrorIs(t, err, action.ErrPermanent)
+		require.ErrorContains(t, err, "check the pull request of an earlier attempt")
+		require.Equal(t, 1, count(b, "PATCH /repos/acme/api/pulls/100"))
+		require.Equal(t, 1, count(b, "DELETE /repos/acme/api/git/refs/heads/"+testBranch))
+	})
+
+	t.Run("a merged one is left alone", func(t *testing.T) {
+		t.Parallel()
+
+		b := newBed(t, nil)
+		h := b.standard()
+		b.onMain(h.bad)
+		b.w.setBranch(testBranch, testCommitSHA)
+		b.w.ownPull(createdNumber, testBranch, "closed", true)
+		b.w.setOwnDraft(testBranch, false)
+		b.w.serve()
+
+		res, err := b.rev.Execute(t.Context(), invocation(t, byCommit(h.bad), nil))
+		require.NoError(t, err)
+		require.Contains(t, res.Summary, "which has been merged since it was opened")
+		require.Empty(t, writes(b))
+	})
 }

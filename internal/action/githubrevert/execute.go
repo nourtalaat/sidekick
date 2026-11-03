@@ -49,6 +49,12 @@ func (r *Revert) Execute(ctx context.Context, inv action.Invocation) (action.Res
 	}
 
 	if pr != nil {
+		if err := githubgit.RequireDraft(ctx, r.client, owner, name, branch, pr); err != nil {
+			r.metrics.PullRequest(githubgit.ResultError)
+
+			return action.Result{}, fmt.Errorf("check the pull request of an earlier attempt: %w", err)
+		}
+
 		r.metrics.PullRequest(githubgit.ResultExisting)
 
 		return r.result(owner, name, pr, githubgit.ResultExisting), nil
@@ -69,7 +75,7 @@ func (r *Revert) Execute(ctx context.Context, inv action.Invocation) (action.Res
 		}
 	}
 
-	pr, err = githubgit.OpenPullRequest(ctx, r.client, owner, name, r.pullRequestRequest(params, branch, inv))
+	pr, err = githubgit.OpenDraft(ctx, r.client, owner, name, branch, r.pullRequestRequest(params, branch, inv))
 	if err != nil {
 		r.metrics.PullRequest(githubgit.ResultError)
 

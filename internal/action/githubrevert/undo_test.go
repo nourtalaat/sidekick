@@ -245,3 +245,39 @@ func TestUndoRefusals(t *testing.T) {
 		require.ErrorIs(t, err, action.ErrPermanent)
 	})
 }
+
+func TestUndoNeverLeavesAPullRequestThatIsNotADraft(t *testing.T) {
+	t.Parallel()
+
+	t.Run("one GitHub just opened", func(t *testing.T) {
+		t.Parallel()
+
+		b := newBed(t, nil)
+		h, snap := afterMergedRevert(t, b)
+		b.w.makeNotDrafts()
+		closePull(b, createdNumber)
+		b.w.gh.Handle(http.MethodDelete, repoPath("git/refs/heads/"+testUndoBranch), fakehttp.Response{Status: http.StatusNoContent})
+
+		_, err := b.rev.Undo(t.Context(), undoInvocation(t, byCommit(h.bad)), snap, false)
+		require.ErrorIs(t, err, action.ErrPermanent)
+		require.ErrorContains(t, err, "did not open acme/api#100 as a draft")
+		require.Equal(t, 1, count(b, "PATCH /repos/acme/api/pulls/100"))
+	})
+
+	t.Run("one an earlier attempt opened", func(t *testing.T) {
+		t.Parallel()
+
+		b := newBed(t, nil)
+		h, snap := afterMergedRevert(t, b)
+		b.w.setBranch(testUndoBranch, testCommitSHA)
+		b.w.ownPull(createdNumber, testUndoBranch, "open", false)
+		b.w.setOwnDraft(testUndoBranch, false)
+		closePull(b, createdNumber)
+		b.w.gh.Handle(http.MethodDelete, repoPath("git/refs/heads/"+testUndoBranch), fakehttp.Response{Status: http.StatusNoContent})
+
+		_, err := b.rev.Undo(t.Context(), undoInvocation(t, byCommit(h.bad)), snap, false)
+		require.ErrorIs(t, err, action.ErrPermanent)
+		require.ErrorContains(t, err, "check the pull request of an earlier attempt")
+		require.Equal(t, 1, count(b, "DELETE /repos/acme/api/git/refs/heads/"+testUndoBranch))
+	})
+}

@@ -121,6 +121,7 @@ type own struct {
 	branch  string
 	state   string
 	merged  bool
+	draft   bool
 	headSHA string
 }
 
@@ -137,6 +138,9 @@ type world struct {
 	truncated map[string]bool
 	branches  map[string]string
 	owns      []*own
+	// notDrafts makes the pull requests the action opens come back as
+	// not drafts, as GitHub does on a plan without them.
+	notDrafts bool
 }
 
 // newWorld returns an empty repository that already answers the token
@@ -264,7 +268,28 @@ func (w *world) ownPull(number int, branch, state string, merged bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	w.owns = append(w.owns, &own{number: number, branch: branch, state: state, merged: merged, headSHA: testCommitSHA})
+	w.owns = append(w.owns, &own{number: number, branch: branch, state: state, merged: merged, draft: true, headSHA: testCommitSHA})
+}
+
+// makeNotDrafts makes the fake GitHub answer a new pull request as one that
+// is not a draft.
+func (w *world) makeNotDrafts() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.notDrafts = true
+}
+
+// setOwnDraft sets whether the pull request made from a branch is a draft.
+func (w *world) setOwnDraft(branch string, draft bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	for _, o := range w.owns {
+		if o.branch == branch {
+			o.draft = draft
+		}
+	}
 }
 
 // setOwnState changes the state of the pull request made from a branch, for
@@ -387,7 +412,7 @@ func (w *world) serveWrites() {
 		w.mu.Lock()
 		defer w.mu.Unlock()
 
-		created := &own{number: createdNumber, branch: req.Head, state: "open", headSHA: testCommitSHA}
+		created := &own{number: createdNumber, branch: req.Head, state: "open", draft: !w.notDrafts, headSHA: testCommitSHA}
 		w.owns = append(w.owns, created)
 
 		write(rw, http.StatusCreated, ownJSON(created))
@@ -451,7 +476,7 @@ func commitJSON(c *wcommit) map[string]any {
 // ownJSON is a pull request made from a branch, as GitHub describes it.
 func ownJSON(o *own) map[string]any {
 	body := map[string]any{
-		"number": o.number, "state": o.state, "draft": true, "head": map[string]string{"sha": o.headSHA},
+		"number": o.number, "state": o.state, "draft": o.draft, "head": map[string]string{"sha": o.headSHA},
 		"html_url": fmt.Sprintf("https://github.com/%s/pull/%d", testRepo, o.number),
 	}
 
