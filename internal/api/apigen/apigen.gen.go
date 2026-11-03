@@ -2207,6 +2207,9 @@ type QualityDay struct {
 	Correct int64              `json:"correct"`
 	Day     openapi_types.Date `json:"day"`
 	Rated   int64              `json:"rated"`
+
+	// Scores Precision and recall of each verdict that was given or confirmed on the day, worked out from that day's confusion matrix in the same way as `perVerdict` for the range, with the same filters. Verdicts come in the order of a report. Empty when every rating of the day was wrong without a real verdict. A single day has few ratings, so the numbers move a lot.
+	Scores []VerdictScore `json:"scores"`
 }
 
 // QualityStats defines model for QualityStats.
