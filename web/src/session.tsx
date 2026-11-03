@@ -5,6 +5,7 @@ import { useApi } from "./api/ApiContext";
 import { ApiError, detailOf } from "./api/client";
 import type { components } from "./api/schema";
 import { QueryError } from "./components/QueryError";
+import { ThemeSync } from "./themeSync";
 
 export type Me = components["schemas"]["Me"];
 
@@ -63,6 +64,7 @@ export function RequireSession() {
 
   return (
     <MeContext value={me.data}>
+      <ThemeSync serverTheme={me.data.theme} />
       <Outlet />
     </MeContext>
   );

@@ -34,8 +34,12 @@ export function problem(status: number, detail: string): Response {
   });
 }
 
-/** A fake Sidekick server: GET /me answers with me (401 when null), a sign-out with 204, and everything else with handler. */
-export function fakeServer(me: Me | null = VIEWER, handler?: Handler) {
+/**
+ * A fake Sidekick server: GET /me answers with me (401 when null), a sign-out
+ * with 204, PUT /me/theme with saveTheme (204 when not given), and everything
+ * else with handler.
+ */
+export function fakeServer(me: Me | null = VIEWER, handler?: Handler, saveTheme?: Handler) {
   const seen: Seen[] = [];
 
   const fetch = async (request: Request) => {
@@ -44,6 +48,10 @@ export function fakeServer(me: Me | null = VIEWER, handler?: Handler) {
 
     if (path === "/api/v1/me") {
       return me ? json(200, me) : problem(401, "Sign in to continue.");
+    }
+
+    if (path === "/api/v1/me/theme") {
+      return saveTheme ? saveTheme(request) : new Response(null, { status: 204 });
     }
 
     if (path === "/auth/logout") {
@@ -76,8 +84,8 @@ export function renderWithProviders(ui: ReactElement, options: { api?: Api; rout
 }
 
 /** Renders the whole app at route, with a fake server that knows me (no session when null). */
-export function renderApp(options: { me?: Me | null; route?: string; handler?: Handler; queryClient?: QueryClient } = {}) {
-  const server = fakeServer(options.me, options.handler);
+export function renderApp(options: { me?: Me | null; route?: string; handler?: Handler; saveTheme?: Handler; queryClient?: QueryClient } = {}) {
+  const server = fakeServer(options.me, options.handler, options.saveTheme);
 
   return { ...server, ...renderWithProviders(<App />, { api: server.api, route: options.route, queryClient: options.queryClient }) };
 }
