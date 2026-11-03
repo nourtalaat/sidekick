@@ -28,15 +28,6 @@ describe("the signed-in app", () => {
     expect(await screen.findByRole("heading", { name: "Investigations", level: 1 })).toBeInTheDocument();
   });
 
-  it("has a search box that is off until the investigation list lands", async () => {
-    renderApp({ route: "/investigations" });
-
-    const search = await screen.findByRole("searchbox", { name: "Search investigations" });
-
-    expect(search).toBeDisabled();
-    expect(search).toHaveAccessibleDescription("Search comes with the investigation list.");
-  });
-
   it("shows who is signed in, and their role, in the user menu", async () => {
     const user = userEvent.setup();
     renderApp({ route: "/investigations" });

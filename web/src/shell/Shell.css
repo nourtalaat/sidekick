@@ -92,9 +92,21 @@
   max-width: 28rem;
   padding: 0 var(--sk-space-3);
   background: var(--sk-bg-sunken);
-  color: var(--sk-text-disabled);
+  color: var(--sk-text-secondary);
   border: 1px solid var(--sk-border-subtle);
   border-radius: var(--sk-radius-full);
+}
+
+/* The ring goes around the whole pill, not the bare input inside it. */
+.sk-search:focus-within {
+  outline: 2px solid var(--sk-border-focus);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  .sk-search:focus-within {
+    outline-color: Highlight;
+  }
 }
 
 .sk-search input {
@@ -103,8 +115,12 @@
   min-height: var(--sk-size-control-md);
   background: none;
   border: 0;
+  color: var(--sk-text-primary);
   font: var(--sk-type-body);
-  cursor: not-allowed;
+}
+
+.sk-search input:focus-visible {
+  outline: none;
 }
 
 .sk-theme {

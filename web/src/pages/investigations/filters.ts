@@ -30,6 +30,12 @@ export const RANGE_OPTIONS: readonly { value: string; label: string }[] = [
 /** The name of the URL parameter that turns compact rows on. */
 export const COMPACT_PARAM = "compact";
 
+/** The path of the investigation list. */
+export const INVESTIGATIONS_PATH = "/investigations";
+
+/** The most characters the search accepts, in the header box and in the list's alert title field. */
+export const SEARCH_MAX_LENGTH = 200;
+
 const TEXT_PARAMS = ["q", "route", "service", "model"] as const;
 
 /** The filters in a URL's query. Values that are not ones the API takes are left out. */
@@ -76,4 +82,12 @@ export function paramsFromFilters(filters: ListFilters, compact: boolean): URLSe
   }
 
   return params;
+}
+
+/** The address of the list for a search text: trimmed, cut to SEARCH_MAX_LENGTH, with no other filter. */
+export function searchPath(text: string): string {
+  const q = text.trim().slice(0, SEARCH_MAX_LENGTH).trim();
+  const query = paramsFromFilters({ q }, false).toString();
+
+  return query ? `${INVESTIGATIONS_PATH}?${query}` : INVESTIGATIONS_PATH;
 }

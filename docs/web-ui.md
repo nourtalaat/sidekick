@@ -287,6 +287,13 @@ The web UI shows the investigations in two pages, which every role from
   `range`, `route`, `service` and `model`), so a view can be shared.
   **Load more** adds the next page. **Compact rows** (`compact=1`) makes
   the rows shorter.
+- **The search box** in the header searches the words of the alert title,
+  with the same forms as the `q` filter: `"quotes"` for a phrase and
+  `-word` to leave a word out. Press Enter to open the list with `q` set
+  (at most 200 characters); the other filters of the list are dropped, and
+  an empty box opens the list with no filters. Typing changes nothing
+  until Enter. While the list is open, the box shows the same text as the
+  list's **Alert title** field.
 - **The investigation page** (`/investigations/<id>`, the address the
   Slack link opens) shows the verdict, how sure Sidekick is, the reason,
   the state of the watchers, the report, what was checked, the cost and
