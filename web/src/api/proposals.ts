@@ -10,6 +10,7 @@ export type ProposalChange = components["schemas"]["ProposalChange"];
 export type ProposalFile = components["schemas"]["ProposalFile"];
 export type ProposalFileDiff = components["schemas"]["ProposalFileDiff"];
 export type ProposalDiffLine = components["schemas"]["ProposalDiffLine"];
+export type ProposalRevision = components["schemas"]["ProposalRevision"];
 
 /** How many proposals one request asks for. */
 export const PROPOSALS_PAGE_SIZE = 25;

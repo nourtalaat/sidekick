@@ -452,6 +452,10 @@ func (s *server) proposalOf(p action.Proposal, alertTitle string) apigen.Proposa
 		out.Changes = &changes
 	}
 
+	if p.Revisions != nil {
+		out.Revisions = &apigen.ProposalRevisions{Running: revisionOf(p.Revisions.Running), GoesBackTo: revisionOf(p.Revisions.GoesBackTo)}
+	}
+
 	if len(p.Files) > 0 {
 		diffAvailable := s.actions != nil && s.actions.ReadsFiles(p.Action)
 		files := make([]apigen.ProposalFile, 0, len(p.Files))
@@ -476,6 +480,15 @@ func (s *server) proposalOf(p action.Proposal, alertTitle string) apigen.Proposa
 	}
 
 	return out
+}
+
+// revisionOf is the API's view of a revision, which is in the form a
+// person reads already.
+func revisionOf(r action.Revision) apigen.ProposalRevision {
+	return apigen.ProposalRevision{
+		Kind: r.Kind, Id: r.ID, Version: nonEmptyText(r.Version), DeployedAt: r.DeployedAt,
+		DeployedBy: nonEmptyText(r.DeployedBy), Notes: nonEmptyText(r.Notes),
+	}
 }
 
 // proposalsOf is the API's view of the proposals of an investigation.

@@ -319,8 +319,9 @@ func (s *Service) notUndoable(orig db.ActionProposal) string {
 }
 
 // restoreSnapshot is the snapshot of the undo of orig: the same target,
-// with the definition before the undo and the one after it swapped. It is
-// nil for a proposal that has no snapshot.
+// with the definition before the undo and the one after it swapped, and the
+// same Revision flag, so the undo of a rollback shows its revisions the other
+// way round. It is nil for a proposal that has no snapshot.
 func restoreSnapshot(orig db.ActionProposal) (json.RawMessage, error) {
 	snap, err := snapshotOf(orig)
 	if err != nil {
@@ -331,7 +332,7 @@ func restoreSnapshot(orig db.ActionProposal) (json.RawMessage, error) {
 		return nil, nil
 	}
 
-	raw, err := json.Marshal(action.Snapshot{Target: snap.Target, Before: snap.After, After: snap.Before})
+	raw, err := json.Marshal(action.Snapshot{Target: snap.Target, Before: snap.After, After: snap.Before, Revision: snap.Revision})
 	if err != nil {
 		return nil, fmt.Errorf("encode the snapshot: %w", err)
 	}
