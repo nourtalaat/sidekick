@@ -572,6 +572,12 @@ github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.7
 LICENSE.txt: Apache License, Version 2.0 (text in LICENSE)
 
 ================================================================================
+github.com/aws/aws-sdk-go-v2/service/lambda v1.113.3
+================================================================================
+
+LICENSE.txt: Apache License, Version 2.0 (text in LICENSE)
+
+================================================================================
 github.com/aws/aws-sdk-go-v2/service/signin v1.11.0
 ================================================================================
 
