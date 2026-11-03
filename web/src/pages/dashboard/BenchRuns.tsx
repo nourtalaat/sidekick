@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import { useBenchComparison, useBenchRuns, type BenchComparison, type BenchRunSummary } from "../../api/stats";
 import { Card } from "../../components/Card";
 import { Select } from "../../components/Select";
@@ -38,6 +39,9 @@ export function BenchRuns({ filters, onChange }: BenchRunsProps) {
       {runs.isSuccess && runs.data.runs.length > 0 && (
         <>
           <RunsTable label="Recent benchmark runs" runs={runs.data.runs} />
+          <p>
+            <Link to="/benchmarks">All benchmark runs</Link>
+          </p>
           <div className="sk-dashboard__compare">
             <RunSelect label="Compare run" value={filters.compareA} runs={runs.data.runs} onChange={(id) => onChange({ ...filters, compareA: id })} />
             <RunSelect label="With run" value={filters.compareB} runs={runs.data.runs} onChange={(id) => onChange({ ...filters, compareB: id })} />

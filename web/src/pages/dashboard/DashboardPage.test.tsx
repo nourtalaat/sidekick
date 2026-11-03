@@ -253,6 +253,8 @@ describe("the dashboard", () => {
     expect(within(runs).getByText("Command line")).toBeInTheDocument();
     expect(within(runs).getByText("CI")).toBeInTheDocument();
 
+    expect(screen.getByRole("link", { name: "All benchmark runs" })).toHaveAttribute("href", "/benchmarks");
+
     await user.selectOptions(screen.getByRole("combobox", { name: "Compare run" }), RUN_A_ID);
     await user.selectOptions(screen.getByRole("combobox", { name: "With run" }), RUN_B_ID);
 
