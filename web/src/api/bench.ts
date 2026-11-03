@@ -5,6 +5,7 @@ import type { components } from "./schema";
 
 export type BenchRunSummary = components["schemas"]["BenchRunSummary"];
 export type BenchComparison = components["schemas"]["BenchComparison"];
+export type BenchScenarioRow = components["schemas"]["BenchScenarioRow"];
 export type BenchRun = components["schemas"]["BenchRun"];
 export type BenchResult = components["schemas"]["BenchResult"];
 export type BenchThreshold = components["schemas"]["BenchThreshold"];

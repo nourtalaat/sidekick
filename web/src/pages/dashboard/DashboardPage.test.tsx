@@ -426,7 +426,8 @@ describe("the dashboard", () => {
     const scenarios = screen.getByRole("region", { name: /^Scenarios of / });
 
     expect(within(scenarios).getByText("2 of 2")).toBeInTheDocument();
-    expect(within(scenarios).getAllByText("not run")).toHaveLength(2);
+    expect(within(scenarios).getAllByText("not run")).toHaveLength(4);
+    expect(within(scenarios).getByText("Right to wrong")).toBeInTheDocument();
 
     const compare = urls.filter((url) => url.includes("/bench/compare")).at(-1) as string;
     expect(new URL(compare).searchParams.get("a")).toBe(RUN_A_ID);

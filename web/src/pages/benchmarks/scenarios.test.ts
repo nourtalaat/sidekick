@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { benchResult, benchRunDetail } from "../../test/bench";
-import { groupScenarios } from "./scenarios";
+import type { BenchScenarioRow } from "../../api/bench";
+import { compareScenarios, groupScenarios, scenarioChange } from "./scenarios";
 
 describe("groupScenarios", () => {
   it("groups the flat results and lists wrong scenarios first, then partly wrong, then right", () => {
@@ -55,5 +56,55 @@ describe("groupScenarios", () => {
   it("has no mean root cause score when no repeat was graded, and no groups without results", () => {
     expect(groupScenarios([benchResult("s", 1)])[0]?.meanRootCauseScore).toBeUndefined();
     expect(groupScenarios([])).toEqual([]);
+  });
+});
+
+function row(scenarioId: string, a: [number, number] | undefined, b: [number, number] | undefined): BenchScenarioRow {
+  return {
+    scenarioId,
+    expectedVerdict: "true_positive",
+    a: a && { correct: a[0], runs: a[1] },
+    b: b && { correct: b[0], runs: b[1] },
+  };
+}
+
+describe("scenarioChange", () => {
+  it.each([
+    ["every repeat right, then none", row("s", [2, 2], [0, 2]), "right-to-wrong"],
+    ["none right, then every repeat", row("s", [0, 2], [1, 1]), "wrong-to-right"],
+    ["every repeat right, then some", row("s", [2, 2], [1, 2]), "other"],
+    ["some right, then none", row("s", [1, 2], [0, 2]), "other"],
+    ["some right, then another share", row("s", [1, 2], [1, 3]), "other"],
+    ["the same share of some right with other counts", row("s", [1, 2], [2, 4]), "same"],
+    ["every repeat right in both", row("s", [2, 2], [1, 1]), "same"],
+    ["none right in both", row("s", [0, 2], [0, 3]), "same"],
+    ["only in run A", row("s", [1, 1], undefined), "missing"],
+    ["only in run B", row("s", undefined, [1, 1]), "missing"],
+  ])("tells %s", (_name, scenario, want) => {
+    expect(scenarioChange(scenario)).toBe(want);
+  });
+});
+
+describe("compareScenarios", () => {
+  it("lists right to wrong first, then wrong to right, then the rest, each by scenario ID", () => {
+    const rows = [
+      row("a-same", [1, 1], [1, 1]),
+      row("z-worse", [1, 1], [0, 1]),
+      row("b-better", [0, 1], [1, 1]),
+      row("a-worse", [2, 2], [0, 2]),
+      row("a-better", [0, 2], [2, 2]),
+      row("c-only-b", undefined, [1, 1]),
+      row("b-partly", [1, 2], [0, 2]),
+    ];
+
+    expect(compareScenarios(rows).map((r) => r.scenarioId)).toEqual(["a-worse", "z-worse", "a-better", "b-better", "a-same", "b-partly", "c-only-b"]);
+  });
+
+  it("leaves the rows it was given in their order", () => {
+    const rows = [row("b", [1, 1], [1, 1]), row("a", [1, 1], [0, 1])];
+
+    compareScenarios(rows);
+
+    expect(rows.map((r) => r.scenarioId)).toEqual(["b", "a"]);
   });
 });
