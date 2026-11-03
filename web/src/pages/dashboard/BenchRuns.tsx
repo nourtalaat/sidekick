@@ -1,17 +1,14 @@
 import { Link } from "react-router";
-import { useBenchComparison, useBenchRuns, type BenchComparison, type BenchRunSummary } from "../../api/stats";
+import { useBenchComparison, useBenchRuns, type BenchRunSummary } from "../../api/stats";
 import { Card } from "../../components/Card";
 import { Select } from "../../components/Select";
-import { Table } from "../../components/Table";
 import { QueryError } from "../../components/QueryError";
-import { formatCost, formatDuration, MICROS_PER_DOLLAR } from "../../format";
+import { ComparisonTables } from "../benchmarks/ComparisonTables";
 import { nameOf, RunsTable } from "../benchmarks/RunsTable";
-import { VERDICT_OPTIONS, type DashboardFilters } from "./params";
-import { formatShare } from "./words";
+import type { DashboardFilters } from "./params";
 import "./Dashboard.css";
 
 const NONE = "";
-const PERCENT = 100;
 
 interface BenchRunsProps {
   filters: DashboardFilters;
@@ -45,6 +42,11 @@ export function BenchRuns({ filters, onChange }: BenchRunsProps) {
             <RunSelect label="Compare run" value={filters.compareA} runs={runs.data.runs} onChange={(id) => onChange({ ...filters, compareA: id })} />
             <RunSelect label="With run" value={filters.compareB} runs={runs.data.runs} onChange={(id) => onChange({ ...filters, compareB: id })} />
           </div>
+          {filters.compareA && filters.compareB && (
+            <p>
+              <Link to={`/benchmarks/compare?a=${encodeURIComponent(filters.compareA)}&b=${encodeURIComponent(filters.compareB)}`}>Open this comparison in Benchmarks</Link>
+            </p>
+          )}
           {comparison.isPending && comparison.fetchStatus !== "idle" && (
             <p role="status" className="sk-loading">
               Loading
@@ -66,101 +68,5 @@ function RunSelect({ label, value, runs, onChange }: { label: string; value: str
       options={[{ value: NONE, label: "Choose a run" }, ...runs.map((run) => ({ value: run.id, label: nameOf(run) }))]}
       onChange={(event) => onChange(event.target.value || undefined)}
     />
-  );
-}
-
-const DIFFERENCE_WORDS: Record<string, string> = {
-  clear: "Clear difference",
-  none: "No clear difference",
-  unknown: "Not compared",
-};
-
-/** The value of a metric as the table shows it: shares as percentages, the mean cost and time in their units. */
-function metricCell(key: string, value: number | undefined): string {
-  if (value === undefined) {
-    return "none yet";
-  }
-
-  switch (key) {
-    case "meanCostPerRunUSD":
-      return formatCost(value * MICROS_PER_DOLLAR);
-    case "meanDurationMs":
-      return formatDuration(value);
-    default:
-      return formatShare(value);
-  }
-}
-
-/** The change of a metric, with its sign and its unit. */
-function changeCell(key: string, change: number | undefined): string {
-  if (change === undefined) {
-    return "none";
-  }
-
-  const sign = change > 0 ? "+" : change < 0 ? "-" : "";
-  const size = Math.abs(change);
-
-  switch (key) {
-    case "meanCostPerRunUSD":
-      return `${sign}${formatCost(size * MICROS_PER_DOLLAR)}`;
-    case "meanDurationMs":
-      return `${sign}${formatDuration(size)}`;
-    default:
-      return `${sign}${Math.round(size * PERCENT)} points`;
-  }
-}
-
-/** The comparison of two runs: each metric with its change, and each scenario's correct runs. */
-function ComparisonTables({ comparison }: { comparison: BenchComparison }) {
-  const a = nameOf(comparison.a);
-  const b = nameOf(comparison.b);
-  const verdictLabel = (verdict: string) => VERDICT_OPTIONS.find((o) => o.value === verdict)?.label ?? verdict;
-
-  return (
-    <>
-      <Table label={`Metrics of ${a} and ${b}`} className="sk-numbers">
-        <caption className="sk-table__caption">{`Comparison of ${a} with ${b}. A difference is clear when the confidence intervals of the two runs do not overlap.`}</caption>
-        <thead>
-          <tr>
-            <th scope="col">Metric</th>
-            <th scope="col">{a}</th>
-            <th scope="col">{b}</th>
-            <th scope="col">Change</th>
-            <th scope="col">Difference</th>
-          </tr>
-        </thead>
-        <tbody>
-          {comparison.metrics.map((m) => (
-            <tr key={m.key}>
-              <th scope="row">{m.label}</th>
-              <td>{metricCell(m.key, m.a)}</td>
-              <td>{metricCell(m.key, m.b)}</td>
-              <td>{changeCell(m.key, m.change)}</td>
-              <td>{DIFFERENCE_WORDS[m.difference] ?? m.difference}</td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
-      <Table label={`Scenarios of ${a} and ${b}`} className="sk-numbers">
-        <thead>
-          <tr>
-            <th scope="col">Scenario</th>
-            <th scope="col">Expected verdict</th>
-            <th scope="col">{`${a}: correct`}</th>
-            <th scope="col">{`${b}: correct`}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {comparison.scenarios.map((s) => (
-            <tr key={s.scenarioId}>
-              <th scope="row">{s.scenarioId}</th>
-              <td>{verdictLabel(s.expectedVerdict)}</td>
-              <td>{s.a ? `${s.a.correct} of ${s.a.runs}` : "not run"}</td>
-              <td>{s.b ? `${s.b.correct} of ${s.b.runs}` : "not run"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
-    </>
   );
 }

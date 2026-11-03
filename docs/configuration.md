@@ -3351,6 +3351,158 @@ GitLab instance. The action sends only these calls: read a branch, a file, a
 directory and a blob; list merge requests; make a commit; open a merge
 request; close a merge request; delete a branch.
 
+##### `github.revert`
+
+Opens a draft pull request that reverts one commit, or one merged pull
+request, when a recent change caused the alert. It is narrower than a code
+change: the model names what to revert and why, never the new content of a
+file, so a team can allow reverts without allowing arbitrary edits. It is
+also how to roll back what Flux, or Argo CD with auto-sync, deploys, since
+those put back any change made to the cluster by hand. Use it on a route in
+`approved` mode: a person reads the files before anything is pushed.
+
+```yaml
+actions:
+  revert-api:
+    type: github.revert
+    app:                              # a GitHub App of its own, not the source's
+      appID: 123456
+      installationID: 7890123
+      privateKeySecret: { name: sidekick-github-revert, key: private-key.pem }
+    # baseURL: https://github.example.com/api/v3/   # GitHub Enterprise Server
+    limits:
+      repos: [acme/api]               # owner/name, no wildcards
+      baseBranch: main                # the only branch a revert may target
+      maxAge: 72h                     # default 72h, at most 720h
+      maxFiles: 10                    # 1 to 25
+      maxChangedLines: 300            # lines added plus lines removed, 1 to 1000
+      refusedPaths: ["deploy/prod/**"] # added to the built-in list
+
+routes:
+  - name: api-errors
+    match: { intake: [alertmanager] }
+    mode: approved
+    actions: [revert-api]
+```
+
+- **Credentials.** Give the app its own installation on the repositories in
+  `limits.repos`, with these repository permissions: Contents (read and
+  write), Pull requests (read and write) and Metadata (read). Do not give it
+  Workflows: with that permission missing, GitHub itself refuses a change to
+  a workflow file, as a second wall behind the refused paths below. Sidekick
+  asks GitHub for installation tokens with just those permissions, and reads
+  the private key from its secret on each token exchange, so a rotated key
+  needs no restart. `baseURL` must be https, except for a loopback host.
+- **Parameters.** `repo`, `baseBranch`, exactly one of `commit` (the full
+  40-character SHA, never a branch, a tag or a short SHA) or `pullRequest`
+  (the number of a merged pull request), a `title` (the title of the pull
+  request) and a `body` (the reason). The description is the model's text,
+  with `@mentions` and issue references after words such as "fixes" put in
+  code spans so the pull request notifies nobody and closes nothing, then
+  the line `Reverts <commit or pull request>` (which GitHub turns into a
+  link), a line that marks it as a Sidekick revert, and a line that names the
+  proposal and links the investigation. Several commits at once, and
+  cherry-picks, are not supported: name one commit, or one pull request.
+- **How the revert is made.** GitHub's REST API has no call that reverts a
+  commit, so Sidekick makes the revert with the Git data API. It compares the
+  tree of the commit with the tree of its first parent (the way `git revert
+  -m 1` treats a merge commit). For each file that differs, if the head of
+  the base branch still has what the commit wrote, the revert writes what the
+  parent had, or deletes the file the commit added, and keeps the file's
+  mode. The result is one commit on the branch `sidekick/<proposal id>` and
+  a pull request. It is always a draft: there is no `draft` key. Sidekick
+  never merges, turns on auto-merge, requests reviewers or assigns anyone.
+  If GitHub does not make the pull request a draft, for example in a private
+  repository on a plan without drafts, Sidekick closes it, deletes its branch
+  and fails the proposal, so a revert is never left open for review.
+  There is no three-way merge. If a repeat after a crash finds the branch, and
+  the pull request if it was made, it does not make a second one. (GitHub's
+  GraphQL API has a `revertPullRequest` mutation that takes a `draft` input,
+  but its public schema does not say that an installation token may call it,
+  so it is not used.)
+- **A pull request by name.** Sidekick finds its merge commit and reverts
+  that. A pull request merged with a merge commit is reverted against the
+  first parent. A squashed pull request is reverted by its squash commit. A
+  pull request merged by rebase has several commits, and GitHub says only
+  that its `merge_commit_sha` is the last of them, so it is reverted only
+  if Sidekick can show that the commit holds the whole change: the files of
+  the pull request must be exactly the files the commit changes, and each of
+  them must be the same in the commit's parent as where the pull request
+  branched off. A rebase fails this, and so does a squash whose files other
+  commits changed on the base branch after the pull request began. The
+  refusal tells the model to name the commits one at a time instead.
+- **When it is refused.** Each refusal is an error the model reads, and
+  nothing is stored. It is refused when the commit is not on the base branch;
+  when it is a root commit or has more than two parents; when it landed on
+  the base branch longer ago than `maxAge`; when it is a revert made by this
+  action (there is no revert of a revert); when it touches a refused path;
+  when it changes more than `maxFiles` files or more than `maxChangedLines`
+  lines (added plus removed, counted for the revert); and when a file it
+  touched is not what the commit wrote any more because someone changed it
+  since, with the name of the file and a pointer to `github.code_change` or to
+  reverting by hand. It is also refused for what a revert cannot write back:
+  a symbolic link, a submodule, a change of file mode, a file that became a
+  directory or the reverse, a file larger than 256 KiB, and a file that is
+  not UTF-8 text. These checks run when the model proposes and again when
+  the proposal runs.
+- **Age.** Git does not record when a commit reached a branch, so `maxAge`
+  is measured from the time GitHub gives: for a pull request, when it was
+  merged; for a commit, its committer date, which GitHub sets when it
+  merges, squashes or rebases. A commit pushed long after it was written is
+  therefore refused as too old, which is the safe direction. Undo is not
+  subject to the age.
+- **Refused paths.** The built-in list is always on and cannot be shortened:
+  CI and build automation (`.github/**` and the like), ownership and review
+  rules (`CODEOWNERS`, Renovate settings), Git settings and hooks
+  (`.gitmodules`, `.gitattributes`, hook directories) and secrets and keys
+  (`.env` files, private keys, Terraform state and variable files). Paths
+  are compared in lower case. `refusedPaths` adds globs to it; `*` and `?`
+  do not match a slash, and a segment of `**` matches any number of
+  segments. A revert of a commit that touches any of them is refused.
+- **What the approver reads.** The proposal shows each file with what
+  happens to it (`changed`, `added` or `deleted`) and how many lines the
+  revert adds and removes, and the line diff of each file is read from
+  GitHub when the approver opens it. Sidekick stores the blob SHAs of the
+  files before and after, and the SHA of the base commit, never the file
+  contents.
+- **Files that changed meanwhile.** When the proposal runs, the action
+  compares each file on the base branch with the blob it had when the model
+  proposed. A file that someone changed meanwhile fails the proposal with a
+  conflict that names the file; propose again. A file that is back to what
+  the parent had already is left out, and if every file is, the proposal
+  succeeds without a pull request.
+- **Result.** The result links the pull request and carries its number and
+  the SHA of its head commit.
+- **Undo.** An approver can undo a succeeded proposal. If its pull request
+  is still open or was closed, Sidekick closes it and deletes its branch. If
+  it was merged, Sidekick opens a draft pull request from the branch
+  `sidekick/<undo proposal id>` that puts back what the commit wrote, so the
+  change the revert took out comes back. It still needs review and merging;
+  the undo is done once it is opened. If a file on the base branch is not as
+  the revert left it, nothing is written until the approver confirms, and
+  then the file is overwritten. This pull request is marked as a revert too,
+  so Sidekick will not revert it.
+- **It does not fix a noisy monitor.** A revert undoes the cause of an
+  alert, so it never counts toward the noisy alerts fixed.
+
+**When to use which.** Use `github.revert` for what Flux, or Argo CD with
+auto-sync, deploys: put the earlier files back in Git and the controller
+rolls the cluster back. Use [`github.pull_request`](#githubpull_request) to
+change a monitor definition, and `github.code_change` to fix forward when
+reverting is not enough or a file changed since. Use the rollback actions
+for platforms that keep revisions of what they run, such as a Kubernetes
+Deployment, a Helm release or an ECS service, where no change in Git is
+needed.
+
+Once a day, the same job as for `github.pull_request` reads whether the pull
+requests of succeeded proposals are still open, were merged or were closed,
+and records it. Sidekick counts the pull requests it opens in
+`sidekick_githubrevert_pull_requests_total` (by `result`: `opened`,
+`existing`, `applied` for a revert that is on the base branch already,
+`closed` or `reverted` for an undo, or `error`) and the daily checks in
+`sidekick_githubrevert_status_checks_total` (by `state`: `open`, `merged`,
+`closed`, `missing` or `error`).
+
 ##### `unleash.flag`
 
 Changes a feature flag in one environment of an Unleash project through the

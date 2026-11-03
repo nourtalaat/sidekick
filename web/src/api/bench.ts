@@ -5,10 +5,12 @@ import type { components } from "./schema";
 
 export type BenchRunSummary = components["schemas"]["BenchRunSummary"];
 export type BenchComparison = components["schemas"]["BenchComparison"];
+export type BenchScenarioRow = components["schemas"]["BenchScenarioRow"];
 export type BenchRun = components["schemas"]["BenchRun"];
 export type BenchResult = components["schemas"]["BenchResult"];
 export type BenchThreshold = components["schemas"]["BenchThreshold"];
 export type BenchInterval = components["schemas"]["BenchInterval"];
+export type BenchConnector = components["schemas"]["BenchConnector"];
 
 /** How many benchmark runs the dashboard lists. */
 export const BENCH_RUNS_SHOWN = 10;
@@ -16,13 +18,16 @@ export const BENCH_RUNS_SHOWN = 10;
 /** How many runs the Benchmarks page asks for at a time. */
 export const BENCH_PAGE_SIZE = 25;
 
-/** The newest benchmark runs. */
-export function useBenchRuns() {
+/** How many runs the compare page offers in its menus. */
+export const BENCH_COMPARE_CHOICES = 50;
+
+/** The newest benchmark runs, the dashboard's number of them unless limit says otherwise. */
+export function useBenchRuns(limit = BENCH_RUNS_SHOWN) {
   const api = useApi();
 
   return useQuery({
-    queryKey: ["bench", "runs"],
-    queryFn: async () => unwrap(await api.client.GET("/bench/runs", { params: { query: { limit: BENCH_RUNS_SHOWN } } })),
+    queryKey: ["bench", "runs", limit],
+    queryFn: async () => unwrap(await api.client.GET("/bench/runs", { params: { query: { limit } } })),
     staleTime: STALE_MS,
   });
 }
