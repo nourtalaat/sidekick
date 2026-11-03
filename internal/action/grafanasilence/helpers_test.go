@@ -46,7 +46,7 @@ var scopes = []mute.Scope{
 // fakeSecrets resolves each secret to "fake-" and its key, and counts the
 // calls.
 type fakeSecrets struct {
-	calls atomic.Int32
+	calls atomic.Int64
 }
 
 func (f *fakeSecrets) Resolve(_ context.Context, ref registry.SecretRef) ([]byte, error) {

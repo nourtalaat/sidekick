@@ -385,7 +385,7 @@ func TestTheTokenIsReadOnEveryCall(t *testing.T) {
 
 	snapshotAndRun(t, s, checkoutParams(t))
 
-	require.Equal(t, int32(len(api.Requests())), secrets.calls.Load(), "a rotated token is used without a restart")
+	require.Equal(t, int64(len(api.Requests())), secrets.calls.Load(), "a rotated token is used without a restart")
 }
 
 func TestUndoEndsTheSilence(t *testing.T) {
