@@ -8,6 +8,11 @@
 // confirmation, so an investigation nobody confirmed never appears in
 // memory. An admin can disable an entry; a disabled entry never matches.
 //
+// The examples that the prompt of each run showed are recorded as memory
+// uses, with their rank and why they matched, in the transaction that saves
+// the prompt. A use outlives the entry it names, and goes with its
+// investigation.
+//
 // With vector memory (memory.vector.enabled), each entry is also embedded,
 // by a job outside that transaction, and a search merges the entries
 // nearest in meaning with the full-text matches by reciprocal rank fusion.

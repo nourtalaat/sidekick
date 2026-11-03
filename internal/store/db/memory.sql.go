@@ -138,6 +138,36 @@ func (q *Queries) GetServiceNotesDetail(ctx context.Context, service string) (Ge
 	return i, err
 }
 
+const insertMemoryUses = `-- name: InsertMemoryUses :exec
+INSERT INTO memory_uses (investigation_id, run, example_id, match, rank)
+SELECT $1::uuid, $2::int, u.example_id, ($3::text[])[u.rank], u.rank::smallint
+FROM unnest($4::uuid[]) WITH ORDINALITY AS u (example_id, rank)
+ON CONFLICT (investigation_id, run, example_id) DO NOTHING
+`
+
+type InsertMemoryUsesParams struct {
+	InvestigationID uuid.UUID
+	Run             int32
+	Matches         []string
+	ExampleIds      []uuid.UUID
+}
+
+// InsertMemoryUses records the examples that the prompt of one run of an
+// investigation showed. example_ids are the investigations the examples came
+// from, in the order of the prompt, which gives each its rank from 1, and
+// matches say why each was chosen, in the same order. An example recorded for
+// the run already is left as it is. Run it in the transaction that saves the
+// prompt.
+func (q *Queries) InsertMemoryUses(ctx context.Context, arg InsertMemoryUsesParams) error {
+	_, err := q.db.Exec(ctx, insertMemoryUses,
+		arg.InvestigationID,
+		arg.Run,
+		arg.Matches,
+		arg.ExampleIds,
+	)
+	return err
+}
+
 const listMemoryByFingerprint = `-- name: ListMemoryByFingerprint :many
 SELECT investigation_id, service, alert_name, verdict, summary, cause, confirmed_at
 FROM memory_entries
@@ -324,6 +354,71 @@ func (q *Queries) ListMemoryEntries(ctx context.Context, arg ListMemoryEntriesPa
 			&i.Cause,
 			&i.ConfirmedAt,
 			&i.Disabled,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMemoryUsedBy = `-- name: ListMemoryUsedBy :many
+SELECT u.example_id, u.match, u.rank,
+       (m.investigation_id IS NOT NULL)::boolean AS present,
+       m.summary, m.cause, m.verdict, m.disabled,
+       i.alert_title
+FROM memory_uses AS u
+LEFT JOIN memory_entries AS m ON m.investigation_id = u.example_id
+LEFT JOIN investigations AS i ON i.id = u.example_id
+WHERE u.investigation_id = $1 AND u.run = $2
+ORDER BY u.rank
+LIMIT $3::int
+`
+
+type ListMemoryUsedByParams struct {
+	InvestigationID uuid.UUID
+	Run             int32
+	MaxRows         int32
+}
+
+type ListMemoryUsedByRow struct {
+	ExampleID  uuid.UUID
+	Match      string
+	Rank       int16
+	Present    bool
+	Summary    *string
+	Cause      *string
+	Verdict    *string
+	Disabled   *bool
+	AlertTitle *string
+}
+
+// ListMemoryUsedBy returns the examples that the prompt of one run of an
+// investigation showed, in the order of the prompt, with what the memory
+// entry and the investigation of each example hold now. Both are left joins,
+// since either can be gone; present says whether the entry is still there.
+func (q *Queries) ListMemoryUsedBy(ctx context.Context, arg ListMemoryUsedByParams) ([]ListMemoryUsedByRow, error) {
+	rows, err := q.db.Query(ctx, listMemoryUsedBy, arg.InvestigationID, arg.Run, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMemoryUsedByRow
+	for rows.Next() {
+		var i ListMemoryUsedByRow
+		if err := rows.Scan(
+			&i.ExampleID,
+			&i.Match,
+			&i.Rank,
+			&i.Present,
+			&i.Summary,
+			&i.Cause,
+			&i.Verdict,
+			&i.Disabled,
+			&i.AlertTitle,
 		); err != nil {
 			return nil, err
 		}

@@ -13,8 +13,10 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nourtalaat/sidekick/internal/lessons"
+	"github.com/nourtalaat/sidekick/internal/memory"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/output"
+	"github.com/nourtalaat/sidekick/internal/prompt"
 	"github.com/nourtalaat/sidekick/internal/publish"
 	"github.com/nourtalaat/sidekick/internal/queue"
 	"github.com/nourtalaat/sidekick/internal/report"
@@ -57,6 +59,11 @@ type newStep struct {
 	// prompt step carries. The step records them, and the investigation's
 	// use of them, in its transaction.
 	lessons *lessons.Selection
+
+	// memory are the memory examples the prompt a prompt step carries
+	// shows. The step records them as the investigation's use of them in
+	// its transaction.
+	memory []prompt.Example
 
 	startedAt time.Time
 	duration  time.Duration
@@ -126,6 +133,10 @@ func (r *run) save(ctx context.Context, s newStep) (db.Step, error) {
 			if err := lessons.Record(ctx, tx, r.inv.ID, *s.lessons); err != nil {
 				return fmt.Errorf("step %d: %w", step.Seq, err)
 			}
+		}
+
+		if err := memory.Record(ctx, tx, r.inv.ID, step.Run, s.memory); err != nil {
+			return fmt.Errorf("step %d: %w", step.Seq, err)
 		}
 
 		// A follow-up run leaves the report on show while it runs.

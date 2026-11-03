@@ -249,7 +249,7 @@ func (r *run) savePrompt(ctx context.Context) error {
 		Lessons:  promptLessons(chosen),
 	})
 
-	step := newStep{kind: kindPrompt, prompt: &req, status: statusOK, startedAt: time.Now(), lessons: lessonsOf(chosen, r.h.opts.Lessons)}
+	step := newStep{kind: kindPrompt, prompt: &req, status: statusOK, startedAt: time.Now(), lessons: lessonsOf(chosen, r.h.opts.Lessons), memory: examples}
 	if _, err := r.save(ctx, step); err != nil {
 		return fmt.Errorf("save the prompt: %w", err)
 	}
