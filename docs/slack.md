@@ -75,9 +75,18 @@ Sidekick link to the investigation in the web UI.
   while it watches, green when the service is back up, yellow when it
   timed out and gray when it was stopped.
 
+- **A pull request or merge request that an approved action opened gets
+  one reply with its CI result**, when the checks have finished or the wait
+  has ended: passed, failed (with the failed checks by name and a link to
+  each), no CI ran, the CI could not be read, or not finished in time. See
+  [the CI report](configuration.md#ci-report-of-a-pull-request-or-merge-request).
+  The bar is green for passed, red for failed and yellow when the CI could
+  not be read or did not finish.
+
 Text from the alert and from the model is escaped, so it cannot mention
 `@channel` or a person, or add links. The only links are to evidence that
-the sources returned.
+the sources returned, and to the failed checks of a CI report, whose names
+are plain text.
 
 ## Buttons
 
