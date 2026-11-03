@@ -72,6 +72,12 @@
   padding: var(--sk-space-2) var(--sk-space-3) var(--sk-space-4);
 }
 
+.sk-step__model {
+  margin: 0;
+  color: var(--sk-text-secondary);
+  font: var(--sk-type-caption);
+}
+
 .sk-step__error {
   margin: 0;
   color: var(--sk-status-danger-fg);

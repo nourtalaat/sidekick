@@ -64,6 +64,7 @@ export function StepTimeline({ steps, live, hasMore, loadingMore, onLoadMore }: 
 
 function StepRow({ step }: { step: Step }) {
   const [open, setOpen] = useState(false);
+  const modelLine = modelLineOf(step);
   const panelId = useId();
   const Chevron = open ? ChevronDown : ChevronRight;
 
@@ -76,6 +77,7 @@ function StepRow({ step }: { step: Step }) {
       </button>
       {open && (
         <div id={panelId} className="sk-step__body">
+          {modelLine && <p className="sk-step__model">{modelLine}</p>}
           {step.error && <p className="sk-step__error">{step.error}</p>}
           {step.lessons && <StepLessons lessons={step.lessons} />}
           {step.parts.map((part, i) => (
@@ -138,6 +140,15 @@ function metaOf(step: Step): string {
   const cost = step.costMicros ? formatCost(step.costMicros) : "";
 
   return [formatDuration(step.durationMs), tokens, cost, step.model].filter(Boolean).join(" · ");
+}
+
+/** The line of an opened step that says which model ran it and through which connector. */
+function modelLineOf(step: Step): string {
+  if (step.model) {
+    return step.connector ? `Model: ${step.model} through ${step.connector}` : `Model: ${step.model}`;
+  }
+
+  return step.connector ? `Connector: ${step.connector}` : "";
 }
 
 const SUMMARY_CHARS = 80;
