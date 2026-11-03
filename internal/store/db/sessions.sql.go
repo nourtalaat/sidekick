@@ -58,7 +58,7 @@ func (q *Queries) DeleteSession(ctx context.Context, idHash []byte) error {
 }
 
 const getSession = `-- name: GetSession :one
-SELECT s.csrf_token, s.expires_at, u.id AS user_id, u.name, u.email, u.role
+SELECT s.csrf_token, s.expires_at, u.id AS user_id, u.name, u.email, u.role, u.theme
 FROM sessions s
 JOIN users u ON u.id = s.user_id
 WHERE s.id_hash = $1 AND s.expires_at > $2
@@ -76,6 +76,7 @@ type GetSessionRow struct {
 	Name      string
 	Email     *string
 	Role      string
+	Theme     *string
 }
 
 // GetSession returns the session with this ID hash, with its user, when
@@ -90,6 +91,7 @@ func (q *Queries) GetSession(ctx context.Context, arg GetSessionParams) (GetSess
 		&i.Name,
 		&i.Email,
 		&i.Role,
+		&i.Theme,
 	)
 	return i, err
 }

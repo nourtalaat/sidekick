@@ -39,3 +39,7 @@ SELECT
 -- ListUserNames returns the name of each user with one of ids. An ID that
 -- is not a user is left out.
 SELECT id, name FROM users WHERE id = ANY (@ids::uuid[]);
+
+-- name: SetUserTheme :exec
+-- SetUserTheme stores the theme the user chose: system, light or dark.
+UPDATE users SET theme = @theme WHERE id = @id;

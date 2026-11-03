@@ -10,6 +10,14 @@ Every prompt already shows up to 3 similar confirmed investigations, as
 [`memory`](../configuration.md#memory) describes; the source adds tools
 the model can use to look further on its own.
 
+Sidekick also records which examples the prompt of each run showed, with
+the order they came in and why each matched (same fingerprint, same
+service and alert name, similar words, or similar meaning). The record
+stays when an entry is later disabled or deleted, and is deleted with its
+investigation. It does not keep the text the prompt had; that is read from
+the entry as it is now. The examples the model finds with the `search` tool
+are not part of this record.
+
 ## Config
 
 ```yaml

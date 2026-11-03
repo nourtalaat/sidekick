@@ -6,11 +6,13 @@ package plugins
 
 import (
 	_ "github.com/nourtalaat/sidekick/internal/action/alertmanagersilence" // Action type "alertmanager.silence".
+	_ "github.com/nourtalaat/sidekick/internal/action/awsecs"              // Action type "aws.ecs_rollback".
 	_ "github.com/nourtalaat/sidekick/internal/action/azurecontainerapp"   // Action type "azure.container_app_rollback".
 	_ "github.com/nourtalaat/sidekick/internal/action/datadog"             // Action type "datadog.monitor".
 	_ "github.com/nourtalaat/sidekick/internal/action/datadogdowntime"     // Action type "datadog.downtime".
 	_ "github.com/nourtalaat/sidekick/internal/action/githubcode"          // Action type "github.code_change".
 	_ "github.com/nourtalaat/sidekick/internal/action/githubpr"            // Action type "github.pull_request".
+	_ "github.com/nourtalaat/sidekick/internal/action/githubrevert"        // Action type "github.revert".
 	_ "github.com/nourtalaat/sidekick/internal/action/gitlabmr"            // Action type "gitlab.merge_request".
 	_ "github.com/nourtalaat/sidekick/internal/action/grafana"             // Action type "grafana.alert_rule".
 	_ "github.com/nourtalaat/sidekick/internal/action/grafanasilence"      // Action type "grafana.silence".

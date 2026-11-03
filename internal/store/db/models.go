@@ -286,6 +286,14 @@ type MemoryEntry struct {
 	Search          interface{}
 }
 
+type MemoryUse struct {
+	InvestigationID uuid.UUID
+	Run             int32
+	ExampleID       uuid.UUID
+	Match           string
+	Rank            int16
+}
+
 type Notice struct {
 	Key    string
 	SentAt time.Time
@@ -517,6 +525,7 @@ type User struct {
 	Role        string
 	CreatedAt   time.Time
 	LastLoginAt time.Time
+	Theme       *string
 }
 
 type Watcher struct {

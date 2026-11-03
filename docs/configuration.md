@@ -3351,6 +3351,158 @@ GitLab instance. The action sends only these calls: read a branch, a file, a
 directory and a blob; list merge requests; make a commit; open a merge
 request; close a merge request; delete a branch.
 
+##### `github.revert`
+
+Opens a draft pull request that reverts one commit, or one merged pull
+request, when a recent change caused the alert. It is narrower than a code
+change: the model names what to revert and why, never the new content of a
+file, so a team can allow reverts without allowing arbitrary edits. It is
+also how to roll back what Flux, or Argo CD with auto-sync, deploys, since
+those put back any change made to the cluster by hand. Use it on a route in
+`approved` mode: a person reads the files before anything is pushed.
+
+```yaml
+actions:
+  revert-api:
+    type: github.revert
+    app:                              # a GitHub App of its own, not the source's
+      appID: 123456
+      installationID: 7890123
+      privateKeySecret: { name: sidekick-github-revert, key: private-key.pem }
+    # baseURL: https://github.example.com/api/v3/   # GitHub Enterprise Server
+    limits:
+      repos: [acme/api]               # owner/name, no wildcards
+      baseBranch: main                # the only branch a revert may target
+      maxAge: 72h                     # default 72h, at most 720h
+      maxFiles: 10                    # 1 to 25
+      maxChangedLines: 300            # lines added plus lines removed, 1 to 1000
+      refusedPaths: ["deploy/prod/**"] # added to the built-in list
+
+routes:
+  - name: api-errors
+    match: { intake: [alertmanager] }
+    mode: approved
+    actions: [revert-api]
+```
+
+- **Credentials.** Give the app its own installation on the repositories in
+  `limits.repos`, with these repository permissions: Contents (read and
+  write), Pull requests (read and write) and Metadata (read). Do not give it
+  Workflows: with that permission missing, GitHub itself refuses a change to
+  a workflow file, as a second wall behind the refused paths below. Sidekick
+  asks GitHub for installation tokens with just those permissions, and reads
+  the private key from its secret on each token exchange, so a rotated key
+  needs no restart. `baseURL` must be https, except for a loopback host.
+- **Parameters.** `repo`, `baseBranch`, exactly one of `commit` (the full
+  40-character SHA, never a branch, a tag or a short SHA) or `pullRequest`
+  (the number of a merged pull request), a `title` (the title of the pull
+  request) and a `body` (the reason). The description is the model's text,
+  with `@mentions` and issue references after words such as "fixes" put in
+  code spans so the pull request notifies nobody and closes nothing, then
+  the line `Reverts <commit or pull request>` (which GitHub turns into a
+  link), a line that marks it as a Sidekick revert, and a line that names the
+  proposal and links the investigation. Several commits at once, and
+  cherry-picks, are not supported: name one commit, or one pull request.
+- **How the revert is made.** GitHub's REST API has no call that reverts a
+  commit, so Sidekick makes the revert with the Git data API. It compares the
+  tree of the commit with the tree of its first parent (the way `git revert
+  -m 1` treats a merge commit). For each file that differs, if the head of
+  the base branch still has what the commit wrote, the revert writes what the
+  parent had, or deletes the file the commit added, and keeps the file's
+  mode. The result is one commit on the branch `sidekick/<proposal id>` and
+  a pull request. It is always a draft: there is no `draft` key. Sidekick
+  never merges, turns on auto-merge, requests reviewers or assigns anyone.
+  If GitHub does not make the pull request a draft, for example in a private
+  repository on a plan without drafts, Sidekick closes it, deletes its branch
+  and fails the proposal, so a revert is never left open for review.
+  There is no three-way merge. If a repeat after a crash finds the branch, and
+  the pull request if it was made, it does not make a second one. (GitHub's
+  GraphQL API has a `revertPullRequest` mutation that takes a `draft` input,
+  but its public schema does not say that an installation token may call it,
+  so it is not used.)
+- **A pull request by name.** Sidekick finds its merge commit and reverts
+  that. A pull request merged with a merge commit is reverted against the
+  first parent. A squashed pull request is reverted by its squash commit. A
+  pull request merged by rebase has several commits, and GitHub says only
+  that its `merge_commit_sha` is the last of them, so it is reverted only
+  if Sidekick can show that the commit holds the whole change: the files of
+  the pull request must be exactly the files the commit changes, and each of
+  them must be the same in the commit's parent as where the pull request
+  branched off. A rebase fails this, and so does a squash whose files other
+  commits changed on the base branch after the pull request began. The
+  refusal tells the model to name the commits one at a time instead.
+- **When it is refused.** Each refusal is an error the model reads, and
+  nothing is stored. It is refused when the commit is not on the base branch;
+  when it is a root commit or has more than two parents; when it landed on
+  the base branch longer ago than `maxAge`; when it is a revert made by this
+  action (there is no revert of a revert); when it touches a refused path;
+  when it changes more than `maxFiles` files or more than `maxChangedLines`
+  lines (added plus removed, counted for the revert); and when a file it
+  touched is not what the commit wrote any more because someone changed it
+  since, with the name of the file and a pointer to `github.code_change` or to
+  reverting by hand. It is also refused for what a revert cannot write back:
+  a symbolic link, a submodule, a change of file mode, a file that became a
+  directory or the reverse, a file larger than 256 KiB, and a file that is
+  not UTF-8 text. These checks run when the model proposes and again when
+  the proposal runs.
+- **Age.** Git does not record when a commit reached a branch, so `maxAge`
+  is measured from the time GitHub gives: for a pull request, when it was
+  merged; for a commit, its committer date, which GitHub sets when it
+  merges, squashes or rebases. A commit pushed long after it was written is
+  therefore refused as too old, which is the safe direction. Undo is not
+  subject to the age.
+- **Refused paths.** The built-in list is always on and cannot be shortened:
+  CI and build automation (`.github/**` and the like), ownership and review
+  rules (`CODEOWNERS`, Renovate settings), Git settings and hooks
+  (`.gitmodules`, `.gitattributes`, hook directories) and secrets and keys
+  (`.env` files, private keys, Terraform state and variable files). Paths
+  are compared in lower case. `refusedPaths` adds globs to it; `*` and `?`
+  do not match a slash, and a segment of `**` matches any number of
+  segments. A revert of a commit that touches any of them is refused.
+- **What the approver reads.** The proposal shows each file with what
+  happens to it (`changed`, `added` or `deleted`) and how many lines the
+  revert adds and removes, and the line diff of each file is read from
+  GitHub when the approver opens it. Sidekick stores the blob SHAs of the
+  files before and after, and the SHA of the base commit, never the file
+  contents.
+- **Files that changed meanwhile.** When the proposal runs, the action
+  compares each file on the base branch with the blob it had when the model
+  proposed. A file that someone changed meanwhile fails the proposal with a
+  conflict that names the file; propose again. A file that is back to what
+  the parent had already is left out, and if every file is, the proposal
+  succeeds without a pull request.
+- **Result.** The result links the pull request and carries its number and
+  the SHA of its head commit.
+- **Undo.** An approver can undo a succeeded proposal. If its pull request
+  is still open or was closed, Sidekick closes it and deletes its branch. If
+  it was merged, Sidekick opens a draft pull request from the branch
+  `sidekick/<undo proposal id>` that puts back what the commit wrote, so the
+  change the revert took out comes back. It still needs review and merging;
+  the undo is done once it is opened. If a file on the base branch is not as
+  the revert left it, nothing is written until the approver confirms, and
+  then the file is overwritten. This pull request is marked as a revert too,
+  so Sidekick will not revert it.
+- **It does not fix a noisy monitor.** A revert undoes the cause of an
+  alert, so it never counts toward the noisy alerts fixed.
+
+**When to use which.** Use `github.revert` for what Flux, or Argo CD with
+auto-sync, deploys: put the earlier files back in Git and the controller
+rolls the cluster back. Use [`github.pull_request`](#githubpull_request) to
+change a monitor definition, and `github.code_change` to fix forward when
+reverting is not enough or a file changed since. Use the rollback actions
+for platforms that keep revisions of what they run, such as a Kubernetes
+Deployment, a Helm release or an ECS service, where no change in Git is
+needed.
+
+Once a day, the same job as for `github.pull_request` reads whether the pull
+requests of succeeded proposals are still open, were merged or were closed,
+and records it. Sidekick counts the pull requests it opens in
+`sidekick_githubrevert_pull_requests_total` (by `result`: `opened`,
+`existing`, `applied` for a revert that is on the base branch already,
+`closed` or `reverted` for an undo, or `error`) and the daily checks in
+`sidekick_githubrevert_status_checks_total` (by `state`: `open`, `merged`,
+`closed`, `missing` or `error`).
+
 ##### `unleash.flag`
 
 Changes a feature flag in one environment of an Unleash project through the
@@ -3754,6 +3906,176 @@ latest one that is ready (otherwise it is set by name). If the traffic is not
 all on the revision the rollback moved it to, Undo writes nothing and shows
 what runs now, and asks again with `force`. If the traffic is on the
 earlier revision already, Undo succeeds without a change.
+
+##### `aws.ecs_rollback`
+
+Puts an Amazon ECS service back on an earlier revision of its task definition
+through the ECS API. It changes the task definition and nothing else: not the
+number of tasks, and it does not force a new deployment. ECS then starts a new
+deployment of the older revision. It is approval-only, so a `read-write` route
+may list it only when the action sets `allowReadWrite: true`. Use it on routes
+with `mode: approved`: the change is live as soon as it is approved. Sidekick
+does not wait for the rollout to finish; the watcher reports whether the alert
+recovers.
+
+```yaml
+actions:
+  ecs-rollback:
+    type: aws.ecs_rollback
+    accounts:
+      - id: "111122223333"
+        roleARN: arn:aws:iam::111122223333:role/sidekick-ecs-rollback
+        externalID: sidekick-prod        # only if the role's trust policy asks for it
+    regions: [us-east-1]
+    maxRevisionsBack: 1                  # default 1, at most 10
+    limits:
+      clusters: [shop]
+      services: ["checkout", "cart-*"]
+
+routes:
+  - name: checkout
+    mode: approved
+    actions: [ecs-rollback]
+```
+
+- `accounts` are the accounts the action may change. Each has an `id` (12
+  digits; quote it in YAML), a `roleARN` in that account, and optionally the
+  `externalID` the role's trust policy asks for. The role is required for
+  every account: it is the action's own role, apart from the role of the
+  [AWS source](sources/aws.md), and its policy is the hard limit on what the
+  action can change. Sidekick assumes it with the session name `sidekick` and
+  keeps its credentials until shortly before they expire. Required.
+- `regions` are the Regions the action may change, in every account. Required.
+- `maxRevisionsBack` is how many revisions back the model may ask to go. The
+  default is 1. A value written in the file must be from 1 to 10.
+- `allowReadWrite` is false unless you set it. See [Action
+  modes](#action-modes).
+- `limits.clusters` lists the names of the clusters the action may change, and
+  `limits.services` the names of the services, or patterns in which `*` stands
+  for any run of characters, such as `cart-*`. Both are required, and they
+  take names only, not ARNs, since an ARN can name another account.
+
+The model proposes a `cluster`, a `service` and, optionally, `revisionsBack`
+(default 1, at most `maxRevisionsBack`). It also gives the `account` and
+`region`, which may be left out when the config lists only one of each. Before
+anything is sent, Sidekick checks them against the config.
+
+**Which task definition.** The running one is the task definition of the
+service's primary deployment. The one it goes back to is the highest ACTIVE
+revision of the same task definition family that is lower than the running
+one, and with `revisionsBack` above 1, the one that many ACTIVE revisions
+down. Revisions that are INACTIVE or were deleted are skipped. ECS numbers
+revisions in the order they were registered, so this is the order of
+registration, not the order of deployment: a revision that a build registered
+and nobody deployed can be the one it goes back to. The proposal shows both
+task definitions with their container images, when they were registered, and
+who registered them (ECS does not record who updated the service, so the
+screens show "registered by" in that place). Read the image before you approve.
+
+**Refused when the model proposes**, with a message it can act on: a cluster,
+service, account, Region or number of revisions outside the limits; a service
+that does not exist, or is not ACTIVE; a service on the CodeDeploy or an
+external deployment controller (only the ECS controller is supported); a
+service with no primary deployment; no ACTIVE revision, or fewer than asked,
+below the running one; and a target that is not ACTIVE. The search for earlier
+revisions reads the newest 1000 task definitions whose family name starts with
+the family's name, and refuses with a message to that effect when it does not
+find enough.
+
+**When it runs.** Right before it writes, Sidekick reads the service again. If
+the service already runs the task definition it was to go back to, which
+happens when a worker died after the write, it writes nothing and succeeds.
+If the primary deployment or its task definition is not what it was when the
+change was proposed, the proposal fails with a conflict, and the model or a
+person must propose again. `UpdateService` has no precondition, so a deploy in
+the moment between that read and the write is not noticed. The write is tried
+once by the AWS SDK; if it fails in a way that may pass, Sidekick tries again
+from a new read of the service, so the change is made once.
+
+**Undo.** An approver can undo a rollback that worked. Undo puts the service
+back on the task definition it ran before the rollback. If the service does
+not run the task definition the rollback set, Undo writes nothing and shows the
+task definition it runs now, and asks again with `force`. If the service
+already runs the old task definition, Undo writes nothing and succeeds. Undo
+fails when the old task definition is not ACTIVE any more, and when you have
+lowered `maxRevisionsBack` below the number of revisions the rollback went
+back.
+
+**The role.** Create a role for the action in each account, separate from the
+read-only role of the AWS source, and attach this policy and nothing else. It
+limits `ecs:DescribeServices` and `ecs:UpdateService` to the allowed services,
+one line per cluster and service (wildcards are fine, for example
+`service/shop/cart-*`). `ecs:DescribeTaskDefinition` and
+`ecs:ListTaskDefinitions` cannot be limited to resources. Use `arn:aws-us-gov:`
+or `arn:aws-cn:` in GovCloud or China.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ChangeAllowedServices",
+      "Effect": "Allow",
+      "Action": ["ecs:DescribeServices", "ecs:UpdateService"],
+      "Resource": [
+        "arn:aws:ecs:us-east-1:111122223333:service/shop/checkout",
+        "arn:aws:ecs:us-east-1:111122223333:service/shop/cart-*"
+      ]
+    },
+    {
+      "Sid": "ReadTaskDefinitions",
+      "Effect": "Allow",
+      "Action": ["ecs:DescribeTaskDefinition", "ecs:ListTaskDefinitions"],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+AWS lists `iam:PassRole` among the permissions `UpdateService` may need, but
+does not say when it is enforced, and Sidekick could not confirm it. Leave it
+out at first. If AWS refuses the update with an error that names
+`iam:PassRole`, add this statement, with the task role and the task execution
+role of the task definitions the action may go back to:
+
+```json
+{
+  "Sid": "PassTaskRoles",
+  "Effect": "Allow",
+  "Action": "iam:PassRole",
+  "Resource": [
+    "arn:aws:iam::111122223333:role/checkout-task",
+    "arn:aws:iam::111122223333:role/ecsTaskExecutionRole"
+  ],
+  "Condition": { "StringEquals": { "iam:PassedToService": "ecs-tasks.amazonaws.com" } }
+}
+```
+
+The role's trust policy names Sidekick's own role and, if you want one, an
+external ID, as for the source:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": { "AWS": "arn:aws:iam::<sidekick account id>:role/<sidekick role>" },
+      "Action": "sts:AssumeRole",
+      "Condition": { "StringEquals": { "sts:ExternalId": "<external id>" } }
+    }
+  ]
+}
+```
+
+Sidekick's own role needs `sts:AssumeRole` on this role and gets no ECS
+permission of its own. With `networkPolicy.restrictEgress`, allow
+`ecs.<region>.amazonaws.com` and `sts.<region>.amazonaws.com` on port 443 for
+each Region in `regions`.
+
+The calls were checked against the source of the AWS SDK for Go v2 at the tag
+`service/ecs/v1.102.0`, and the permissions against the model of the ECS API
+in the same tag and AWS's published list of ECS permissions.
 
 ### `validator`
 
@@ -4706,7 +5028,8 @@ day, and dead jobs after 30 days. `sidekick_retention_deleted_rows_total`
 counts what it deleted, by table.
 
 Deleting an investigation also deletes its steps, its inbox, its
-published message references, its feedback, its watchers with their
+published message references, its feedback, its record of the
+[memory](#memory) examples its prompts showed, its watchers with their
 checks, and its event group. An investigation whose event group is
 still open is kept until the group closes.
 

@@ -192,6 +192,15 @@ func TestQueryPlans(t *testing.T) {
 			wantIndex: "users_pkey",
 		},
 		{
+			name: "SetUserTheme",
+			run: func(ctx context.Context, q *db.Queries) error {
+				err := q.SetUserTheme(ctx, db.SetUserThemeParams{ID: userID, Theme: new("dark")})
+
+				return fmt.Errorf("run query: %w", err)
+			},
+			wantIndex: "users_pkey",
+		},
+		{
 			name: "CreateSession",
 			run: func(ctx context.Context, q *db.Queries) error {
 				err := q.CreateSession(ctx, db.CreateSessionParams{IDHash: hash, UserID: userID, CsrfToken: "csrf", CreatedAt: now, ExpiresAt: now.Add(time.Hour)})

@@ -1,9 +1,11 @@
 -- 20,000 confirmed investigations, each with its group, its event and its
--- memory entry, and 1,000 services with notes, for the query plan tests.
+-- memory entry, 60,000 memory uses, and 1,000 services with notes, for the
+-- query plan tests.
 -- Investigation i has the ID md5('inv' || i). Entries share a fingerprint
 -- in groups of 10, a service in groups of 200 and a service and alert name
 -- in groups of 200, and each summary has a word, w<n>, that 40 entries
--- share. Every tenth entry is disabled.
+-- share. Every tenth entry is disabled. The prompt of run 1 of investigation
+-- i showed three examples: two other investigations and one that is gone.
 INSERT INTO event_groups (id, fingerprint, route, service, status, event_count, opened_at, last_event_at, investigation_id)
 SELECT md5('grp' || i)::uuid, 'fp-' || (i % 2000), 'payments', 'svc-' || (i % 100), 'closed', 1,
        '2026-10-26 00:00:00+00'::timestamptz + i * interval '1 minute',
@@ -39,6 +41,14 @@ SELECT md5('inv' || i)::uuid, 'svc-' || (i % 100), 'Alert' || (i % 50), 'fp-' ||
        i % 10 = 0
 FROM generate_series(1, 20000) AS i;
 
+INSERT INTO memory_uses (investigation_id, run, example_id, match, rank)
+SELECT md5('inv' || i)::uuid, 1,
+       CASE r WHEN 1 THEN md5('inv' || (i % 20000 + 1))::uuid
+              WHEN 2 THEN md5('inv' || ((i + 7) % 20000 + 1))::uuid
+              ELSE md5('gone' || i)::uuid END,
+       (ARRAY['fingerprint', 'service_alert', 'text'])[r], r
+FROM generate_series(1, 20000) AS i, generate_series(1, 3) AS r;
+
 INSERT INTO users (id, oidc_issuer, oidc_subject, name, role, created_at, last_login_at)
 SELECT md5('user' || i)::uuid, 'https://idp.example.com', 'sub-' || i, 'User ' || i, 'admin',
        '2026-10-01 00:00:00+00', '2026-10-01 00:00:00+00'
@@ -49,4 +59,4 @@ INSERT INTO service_notes (service, text, updated_by, updated_at)
 SELECT 'svc-' || i, 'Notes about svc-' || i, CASE WHEN i % 2 = 0 THEN md5('user' || i)::uuid END, '2026-10-26 00:00:00+00'
 FROM generate_series(1, 1000) AS i;
 
-ANALYZE event_groups, events, investigations, memory_entries, service_notes, users;
+ANALYZE event_groups, events, investigations, memory_entries, memory_uses, service_notes, users;

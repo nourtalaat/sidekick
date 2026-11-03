@@ -112,3 +112,36 @@ func TestValidContent(t *testing.T) {
 	require.False(t, ValidContent("a\xffb"))
 	require.False(t, ValidContent("a\x00b"))
 }
+
+func TestCheckText(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		title   string
+		body    string
+		wantErr string
+	}{
+		{name: "title and body at the limits", title: strings.Repeat("t", MaxTitleChars), body: strings.Repeat("b", maxBodyChars)},
+		{name: "an empty body", title: "t"},
+		{name: "a blank title", title: " \t", wantErr: "title: required"},
+		{name: "a title over the limit", title: strings.Repeat("t", MaxTitleChars+1), wantErr: "title: longer than"},
+		{name: "a body over the limit", title: "t", body: strings.Repeat("b", maxBodyChars+1), wantErr: "body: longer than"},
+		{name: "a NUL in the body", title: "t", body: "a\x00b", wantErr: "valid UTF-8"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := CheckText(tt.title, tt.body)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+
+				return
+			}
+
+			require.NoError(t, err)
+		})
+	}
+}
