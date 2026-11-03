@@ -133,8 +133,6 @@ func testName(i int) string {
 }
 
 func (a *fakeAPI) createJob(w http.ResponseWriter, r *http.Request) {
-	time.Sleep(300 * time.Millisecond)
-
 	if a.faults.createJob != 0 {
 		writeStatus(w, a.faults.createJob)
 
