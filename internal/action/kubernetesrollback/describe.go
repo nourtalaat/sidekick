@@ -116,11 +116,11 @@ func (w workload) deployer() string {
 	)
 
 	for _, entry := range w.managed {
-		if entry.Subresource != "" || entry.Time == nil || entry.FieldsV1 == nil || !ownsTemplate(entry.FieldsV1.Raw) {
+		if entry.Subresource != "" || entry.Time == nil || entry.FieldsV1 == nil || !ownsTemplate(entry.FieldsV1.GetRawBytes()) {
 			continue
 		}
 
-		if entry.Time.Time.After(at) {
+		if entry.Time.After(at) {
 			manager, at = entry.Manager, entry.Time.Time
 		}
 	}

@@ -69,7 +69,7 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	if err := c.RevisionLimit.CheckConfig(); err != nil {
+	if err := c.CheckConfig(); err != nil {
 		errs = append(errs, err)
 	}
 

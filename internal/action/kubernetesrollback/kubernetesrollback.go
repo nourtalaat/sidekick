@@ -315,7 +315,7 @@ func (r *Rollback) Undo(ctx context.Context, inv action.Invocation, snap action.
 	}
 
 	wrote, found := find(history, nameOf(revs.GoesBackTo.ID))
-	if !force && !(found && sameTemplate(wrote.template, w.template)) {
+	if !force && (!found || !sameTemplate(wrote.template, w.template)) {
 		return action.Result{}, r.conflictWith(w, history)
 	}
 

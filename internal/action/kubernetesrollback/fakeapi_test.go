@@ -416,7 +416,7 @@ func (f *fakeAPI) patch(resource string) http.HandlerFunc {
 		})
 
 		if f.writeStatus != 0 {
-			writeStatus(w, f.writeStatus, "Forbidden", "refused")
+			writeStatus(w, f.writeStatus, statusReasons[f.writeStatus], "refused")
 
 			return
 		}
@@ -596,6 +596,14 @@ func (f *fakeAPI) authorised(w http.ResponseWriter, r *http.Request) bool {
 	}
 
 	return true
+}
+
+// statusReasons are the reasons the API server gives with the statuses the
+// tests use.
+var statusReasons = map[int]string{
+	http.StatusForbidden:           "Forbidden",
+	http.StatusUnprocessableEntity: "Invalid",
+	http.StatusInternalServerError: "InternalError",
 }
 
 // writeJSON sends v as JSON.
