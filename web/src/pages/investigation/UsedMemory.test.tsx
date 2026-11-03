@@ -40,7 +40,7 @@ async function show(examples: readonly UsedMemoryExample[] | undefined, me = VIE
   return rendered;
 }
 
-describe("the memory used card", async () => {
+describe("the memory used card", () => {
   it.each([
     ["fingerprint", "Chosen for the same alert fingerprint"],
     ["service_alert", "Chosen for the same service and alert name"],
