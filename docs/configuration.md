@@ -2355,6 +2355,166 @@ Prometheus v3.15.0; the comments in `internal/action/prometheusrule` name the
 files. With `networkPolicy.restrictEgress` on, allow egress to the Kubernetes
 API server.
 
+##### `kubernetes.rollback`
+
+Puts a Deployment, StatefulSet or DaemonSet of the cluster Sidekick runs in
+back on an earlier revision, through the Kubernetes API, as `kubectl rollout
+undo` does. It is approval-only: a route in `read-write` mode may list it only
+when the action sets `allowReadWrite: true`, so use it on routes with
+`mode: approved`. The approver sees both revisions, with their images, when
+they were created and, for the running one, who deployed it as far as the
+cluster knows. The action does not wait for the rollout to become healthy;
+the watcher reports the recovery.
+
+```yaml
+actions:
+  rollback-shop:
+    type: kubernetes.rollback
+    serviceAccount: sidekick-kubernetes-rollback   # default; the account the tokens are for
+    allowReadWrite: false                          # default; see the note below
+    maxRevisionsBack: 1                            # default 1, from 1 to 10
+    limits:
+      namespaces: [shop]                           # namespaces it may write in
+      kinds: [Deployment, StatefulSet]             # default: all three kinds
+      names: [checkout, ledger]                    # workload names, exact
+
+routes:
+  - name: shop
+    mode: approved
+    actions: [rollback-shop]
+```
+
+- `limits.namespaces` and `limits.names` are exact names, and each needs at
+  least one. A workload is allowed when its namespace is in `namespaces`, its
+  kind is in `kinds` and its name is in `names`. There are no patterns,
+  because the Roles that the chart makes list the names as `resourceNames`.
+- `limits.kinds` lists `Deployment`, `StatefulSet` and `DaemonSet`. Empty
+  means all three.
+- `maxRevisionsBack` is how many revisions back the model may ask to go. The
+  model proposes `kind`, `namespace`, `name` and `revisionsBack` (default 1).
+  A request for more than the limit is refused and the model reads why.
+- `serviceAccount` is the name of a service account in Sidekick's own
+  namespace. The action asks the API server for a token for it
+  (`TokenRequest`) each time it proposes, runs or undoes a rollback, and the
+  token lives 10 minutes. Sidekick's own account can only ask for tokens of
+  the accounts that actions use, and this account can only `get` and `patch`
+  the workloads of the limits. Sidekick must mount its service account
+  token, which the chart does when it finds such an action. The default
+  differs from the account of `prometheus.rule`, so the two types do not
+  share rights unless you point both at one account.
+- The action works on the cluster Sidekick runs in only. Other clusters are
+  not supported.
+- `allowReadWrite: true` lets a `read-write` route list the action, which
+  then rolls back without a person. Leave it off unless you understand that
+  a rollback goes live at once.
+
+**What the chart creates.** For each `kubernetes.rollback` action in `config`
+(turn this off with `rbac.actions: false` and make these yourself), the chart
+makes the service account, adds it to the Role in Sidekick's namespace that
+lets Sidekick's own account create tokens, and in each listed namespace makes
+a Role and a RoleBinding. For the config above, the Role in `shop` is:
+
+```yaml
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: ["checkout", "ledger"]
+    verbs: [get, patch]
+  - apiGroups: [apps]
+    resources: [statefulsets]
+    resourceNames: ["checkout", "ledger"]
+    verbs: [get, patch]
+  - apiGroups: [apps]
+    resources: [replicasets]       # only with Deployment in kinds
+    verbs: [list]
+  - apiGroups: [apps]
+    resources: [controllerrevisions]   # only with StatefulSet or DaemonSet in kinds
+    verbs: [list]
+```
+
+The `get` and `patch` rules name the workloads. The `list` rules cannot: the
+API server limits a `list` by name only when the request has a
+`metadata.name` field selector, and the action lists revisions by label.
+So the account can read the ReplicaSets or ControllerRevisions of the whole
+namespace, and nothing else. It has no `update`, `delete` or `create`, and no
+access to pods, Secrets or ConfigMaps.
+
+**What it refuses.** When the model proposes, Sidekick reads the workload
+and its revisions and refuses, with a message the model can act on:
+
+- a workload with no earlier revision, or fewer than `revisionsBack`:
+  Kubernetes keeps old ReplicaSets and ControllerRevisions only up to
+  `revisionHistoryLimit`, so with `0`, or after one deploy, there is nothing
+  to go back to;
+- a paused Deployment, because the rollback would not roll out until someone
+  resumes it;
+- a workload managed by Argo CD or Flux, because their controllers would undo
+  the change. It is recognised by the annotation
+  `argocd.argoproj.io/tracking-id` or the label `argocd.argoproj.io/instance`
+  (Argo CD), or the labels `kustomize.toolkit.fluxcd.io/name` or
+  `helm.toolkit.fluxcd.io/name` (Flux). The message tells the model to
+  propose `argocd.rollback`, if it is offered, or a pull request that reverts
+  the change in Git. Argo CD 3.x tracks by that annotation by default, so the
+  default case is detected. An installation that switched to label tracking
+  with `app.kubernetes.io/instance` is not, because other tools, Helm among
+  them, use that label too;
+- a workload that has a change its controller has not processed yet, or whose
+  current pod template no revision has yet. Read it again in a minute.
+
+A workload that has only the labels of Helm itself is allowed. Helm will not
+know about the rollback, and its next `helm upgrade` writes its own values
+again; use `helm.rollback`, if it is offered, when Helm owns the release.
+
+**Which revision.** The running revision is the one whose pod template the
+workload has now. "N back" is the Nth earlier revision with a different pod
+template, newest first, so a revision that Kubernetes recorded twice with the
+same template counts once. A Deployment's revisions are its ReplicaSets, in
+the order of the annotation `deployment.kubernetes.io/revision`; a
+StatefulSet's and a DaemonSet's are their ControllerRevisions, in the order of
+`revision`. The rollback replaces `spec.template` only, as `kubectl` does. It
+does not touch replicas, the strategy or the annotations, so the
+`kubernetes.io/change-cause` of the Deployment is not restored to the older
+one. A StatefulSet or DaemonSet with `updateStrategy` `OnDelete`, or a
+`partition`, does not replace its pods by itself after a rollback.
+
+**What the approver sees.** For each of the two revisions: its kind (a
+ReplicaSet or a ControllerRevision), its name and number, the image of every
+container (`name=image` when there are several), when it was created, and its
+notes (init containers, and the change cause when one was recorded). The
+running revision also shows who last changed the pod template, from the
+managed fields of the workload: the manager and the time. The cluster keeps no
+such record for an earlier revision, so it shows as unknown, and so does the
+running one when the managed fields say nothing.
+
+**Conflicts.** Before it writes, the action reads the workload again. If it
+has the pod template of the earlier revision already, which happens after a
+crash and a retry, it writes nothing and succeeds. If its pod template is no
+longer the one the approver read as running (someone deployed or edited it
+since), or the earlier revision is gone or has other images, the proposal
+fails as a conflict and a new one is needed. The patch holds the
+`resourceVersion` of that read, so the API server answers 409 if the workload
+changes between the read and the write, which also fails as a conflict.
+Scaling the workload is not a conflict.
+
+**Undo.** Undo puts back the revision that ran before the rollback. It finds
+the revisions by name and pod template, never by number alone, because
+Kubernetes gives a revision a new number when a rollback goes back to it. If
+the workload does not run the revision the rollback wrote, Undo shows what it
+runs now and asks before it restores anyway. If the revision to restore has
+been deleted from the history, it cannot be restored.
+
+**What it relies on.** A rollback is a strategic merge patch that replaces
+`spec.template`. For a Deployment the template is the one of the ReplicaSet
+without the `pod-template-hash` label, and for a StatefulSet or DaemonSet it
+is the stored data of the ControllerRevision, as `kubectl` does. The patch
+carries `metadata.resourceVersion`, and the API server refuses it with 409
+when that is not the stored one. After the patch, the controllers give the
+older revision the next number. These come from the public source of
+Kubernetes v1.37.1, Argo CD v3.5.7, Flux kustomize-controller v1.10.1 and
+helm-controller v1.7.1; the comments in `internal/action/kubernetesrollback`
+name the files. With `networkPolicy.restrictEgress` on, allow egress to the
+Kubernetes API server.
+
 ##### `alertmanager.silence`
 
 Silences alerts in a Prometheus Alertmanager for a limited time, for planned
