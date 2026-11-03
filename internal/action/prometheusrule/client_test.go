@@ -2,19 +2,20 @@ package prometheusrule
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/rest"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/kubeaccess"
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
 )
 
 // testCluster returns the cluster for the fake API server.
-func testCluster(api *fakehttp.Server) *cluster {
-	return &cluster{own: restConfig(api), account: DefaultServiceAccount, namespace: podNamespace}
+func testCluster(api *fakehttp.Server) *kubeaccess.Cluster {
+	return kubeaccess.NewCluster(restConfig(api), DefaultServiceAccount, podNamespace)
 }
 
 func TestSessionAsksForATokenAndUsesIt(t *testing.T) {
@@ -22,7 +23,7 @@ func TestSessionAsksForATokenAndUsesIt(t *testing.T) {
 
 	api, fake := newFakeAPI(t)
 
-	sess, err := testCluster(api).open(context.Background())
+	sess, err := openSession(context.Background(), testCluster(api))
 	require.NoError(t, err)
 
 	res, err := sess.get(context.Background(), testNamespace, testName)
@@ -50,7 +51,7 @@ func TestPatch(t *testing.T) {
 	ctx := context.Background()
 	ref := []ruleRef{{group: "checkout.rules", name: "HighLatency"}}
 
-	sess, err := testCluster(api).open(ctx)
+	sess, err := openSession(ctx, testCluster(api))
 	require.NoError(t, err)
 
 	res, err := sess.get(ctx, testNamespace, testName)
@@ -102,7 +103,7 @@ func TestPatchOfAnInvalidRuleIsRejected(t *testing.T) {
 
 	api, _ := newFakeAPI(t)
 
-	sess, err := testCluster(api).open(context.Background())
+	sess, err := openSession(context.Background(), testCluster(api))
 	require.NoError(t, err)
 
 	res, err := sess.get(context.Background(), testNamespace, testName)
@@ -125,10 +126,10 @@ func TestOpenErrorsHoldNoToken(t *testing.T) {
 	fake.tokenStatus = http.StatusForbidden
 	fake.tokenEcho = ownToken
 
-	_, err := testCluster(api).open(context.Background())
+	_, err := openSession(context.Background(), testCluster(api))
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), ownToken, "the server echoed the token, and the error cuts it out")
-	require.Contains(t, err.Error(), redacted)
+	require.Contains(t, err.Error(), "[redacted]")
 	require.True(t, isRejected(err), "the error still says that the API server refused it")
 }
 
@@ -137,23 +138,10 @@ func TestOpenWithAWrongOwnToken(t *testing.T) {
 
 	api, _ := newFakeAPI(t)
 
-	c := testCluster(api)
-	c.own.BearerToken = "another"
+	c := kubeaccess.NewCluster(&rest.Config{Host: api.URL(), BearerToken: "another"}, DefaultServiceAccount, podNamespace)
 
-	_, err := c.open(context.Background())
+	_, err := openSession(context.Background(), c)
 	require.Error(t, err)
 	require.True(t, isRejected(err))
 	require.NotContains(t, err.Error(), "another")
-}
-
-func TestRedact(t *testing.T) {
-	t.Parallel()
-
-	cause := errors.New("failed with token abc and token def")
-
-	got := redact(cause, []string{"abc", "def", ""})
-	require.EqualError(t, got, "failed with token [redacted] and token [redacted]")
-	require.ErrorIs(t, got, cause)
-
-	require.EqualError(t, redact(cause, []string{"zzz"}), cause.Error(), "an error with no secret reads the same")
 }

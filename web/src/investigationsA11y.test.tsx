@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { detail, INVESTIGATION_ID, RESPONDER, step, summary, watcher } from "./test/fixtures";
+import { check, checksOf, detail, INVESTIGATION_ID, RESPONDER, step, summary, watcher } from "./test/fixtures";
 import { json, renderApp, stubMedia, wcagViolations } from "./test/helpers";
 import { FakeEventSource, routes } from "./test/streams";
 import { THEME_STORAGE_KEY } from "./theme";
@@ -13,6 +13,8 @@ const THEMES = [
   { name: "light chosen", stored: "light", dark: true },
   { name: "dark chosen", stored: "dark", dark: false },
 ] as const;
+
+const LONG_DETAIL = "Connection refused by the checked service. ".repeat(8);
 
 const PATH = `/api/v1/investigations/${INVESTIGATION_ID}`;
 
@@ -30,7 +32,12 @@ const handler = routes({
   [`GET ${PATH}/steps`]: () =>
     json(200, {
       steps: [
-        step(1, { parts: [{ type: "tool_call", id: "c1", name: "search_logs", input: { query: "errors" } }] }),
+        step(1, {
+          costMicros: 12_300,
+          model: "big-model",
+          connector: "anthropic",
+          parts: [{ type: "tool_call", id: "c1", name: "search_logs", input: { query: "errors" } }],
+        }),
         step(2, { kind: "tool_result", tool: "search_logs", source: "signoz", parts: [{ type: "tool_result", callId: "c1", content: "3 errors" }] }),
       ],
     }),
@@ -44,10 +51,10 @@ const handler = routes({
   [`GET ${PATH}/watchers`]: () =>
     json(200, {
       watchers: [
-        watcher(),
-        watcher({ id: "w2", name: "disk", status: "recovered", endedAt: "2026-10-26T14:30:00Z" }),
-        watcher({ id: "w3", name: "queue", status: "timed_out", endedAt: "2026-10-26T15:30:00Z" }),
-        watcher({ id: "w4", name: "cache", status: "stopped", stopReason: "responder", endedAt: "2026-10-26T14:26:00Z", stoppedBy: { name: "Grace Hopper" } }),
+        watcher({ checks: 3, recentChecks: [check(3, { result: "fail", detail: "HTTP 503" }), check(2, { result: "error", detail: LONG_DETAIL }), check(1)] }),
+        watcher({ id: "w2", name: "disk", status: "recovered", endedAt: "2026-10-26T14:30:00Z", checks: 60, recentChecks: checksOf(50) }),
+        watcher({ id: "w3", name: "queue", status: "timed_out", endedAt: "2026-10-26T15:30:00Z", checks: 1, recentChecks: [check(1, { result: "fail", detail: "HTTP 500" })] }),
+        watcher({ id: "w4", name: "cache", status: "stopped", stopReason: "responder", endedAt: "2026-10-26T14:26:00Z", stoppedBy: { name: "Grace Hopper" }, checks: 2, recentChecks: checksOf(2) }),
       ],
     }),
 });
@@ -88,6 +95,7 @@ describe.each(THEMES)("accessibility of the investigation pages, theme $name", (
       const { container } = renderApp({ me: RESPONDER, route: `/investigations/${INVESTIGATION_ID}`, handler });
       await user.click(await screen.findByRole("button", { name: /Model turn: called search_logs/ }));
       await screen.findByText(/Checking: health/);
+      expect(screen.getByText("Model: big-model through anthropic")).toBeInTheDocument();
       expect(screen.getByRole("form", { name: "Ask a follow-up" })).toBeInTheDocument();
 
       expect(await wcagViolations(container)).toEqual([]);
@@ -102,6 +110,26 @@ describe.each(THEMES)("accessibility of the investigation pages, theme $name", (
       await screen.findByText(/Checking: health/);
       expect(screen.getAllByRole("form", { name: /^Feedback on/ })).toHaveLength(2);
 
+      expect(await wcagViolations(container)).toEqual([]);
+    });
+
+    it("has no WCAG 2.2 AA violations with the checks of every watcher open and a long detail shown in full", async () => {
+      const user = userEvent.setup();
+      const { container } = renderApp({ route: `/investigations/${INVESTIGATION_ID}`, handler });
+      await screen.findByText(/Checking: health/);
+
+      for (const title of screen.getAllByText(/^Checks \(/)) {
+        const details = title.closest("details") as HTMLDetailsElement;
+
+        if (!details.open) {
+          await user.click(title);
+        }
+      }
+
+      await user.click(screen.getByRole("button", { name: "Show all" }));
+
+      expect(container.querySelectorAll("details.sk-watcher-checks[open]")).toHaveLength(4);
+      expect(screen.getByRole("button", { name: "Show less" })).toBeInTheDocument();
       expect(await wcagViolations(container)).toEqual([]);
     });
 

@@ -291,11 +291,24 @@ The web UI shows the investigations in two pages, which every role from
   Slack link opens) shows the verdict, how sure Sidekick is, the reason,
   the state of the watchers, the report, what was checked, the cost and
   the model, the lessons the prompt used, the alerts of the group, and the
-  record of the run, one line for each step. A step opens to show the tool
-  call or result in a box with a copy button. The prompt step, and the
-  triage prompt step, also say how many lessons they used and which
-  lessons applied but were left out, with the reason; see
+  record of the run, one line for each step with its time, tokens, cost
+  and model. A step opens to show the model and the connector it ran
+  through, then the tool call or result in a box with a copy button. The
+  prompt step, and the triage prompt step, also say how many lessons they
+  used and which lessons applied but were left out, with the reason; see
   [Lessons](#lessons).
+
+Under the watchers, each watcher has a **Checks** list that opens to show
+how the watcher started, how it ended and when, and its last checks, newest
+first: the time with seconds, whether the check passed, failed or had an
+error, what the checked service answered, and how long the check took. The
+list is open for a watcher that is still running and closed for one that
+ended, and it shows up to 50 checks; when more ran, it says "Showing the last
+50 of N checks." A long answer is cut after a few lines until **Show all**
+is pressed. The answer comes from the checked service, so it is shown as
+plain text. The list sits outside the watcher box, so a screen reader does
+not read out every new check; it is read again every 60 seconds and when the
+stream reports that a watcher changed.
 
 Under the verdict, each finding, each fix and each tool result, the page
 says how many people rated that part correct and how many wrong, from
@@ -979,7 +992,8 @@ would refuse is ignored, so every link opens. Days are UTC days.
   time, the verdict Sidekick gave against the verdict people confirmed,
   precision and recall of each verdict, accuracy by model and strategy,
   and the newest benchmark runs. Choose two runs to compare them; the two
-  runs are in the address too (`a` and `b`).
+  runs are in the address too (`a` and `b`). The link **All benchmark
+  runs** opens the [Benchmarks page](#the-benchmarks-page).
 
   The precision and recall chart draws one verdict at a time, by day.
   Choose the verdict with the **Verdict** menu on the card; the default
@@ -1092,6 +1106,71 @@ for the range of equal length before it, for showing the change.
   scenario; the judge's reasons are left out. `GET /api/v1/bench/compare?a=<id>&b=<id>`
   lines up two runs: each metric with the change and whether the intervals
   overlap (`clear` or `none`), and the correct runs of each scenario.
+
+### The Benchmarks page
+
+`/benchmarks`, in the menu as Benchmarks, is open to every role from
+`viewer` up. It lists every run that `sidekick bench run --db` stored, newest
+first, 25 at a time; **Load more** adds the next 25. Each row has:
+
+- the run, as its label or its start time, with the Sidekick version and the
+  models under it; the name links to `/benchmarks/<id>`
+- the result, Passed or Failed, as a word with an icon
+- the overall score, the verdict accuracy, the mean cost per run and the mean
+  time per run
+- the scenario set, with its repeats and the number of runs
+- who started the run: Command line (`cli`), CI (`ci`) or Strategy gate
+  (`gate`)
+
+The dashboard card shows the same table for the newest ten runs. With no
+runs stored, the page says so and names the command that stores them.
+
+### The page of one benchmark run
+
+`/benchmarks/<id>`, which the name of a run in the list links to, is open to
+every role from `viewer` up. An ID that no run has shows "No benchmark run has
+this ID." with a link back to the list. It shows, from the top:
+
+- **The run.** Its label, or its start time when it has no label, with the
+  result Passed or Failed as a word with an icon. A button **Compare with
+  another run** opens `/benchmarks/compare?a=<id>`. Below it: when the run
+  started and finished, the Sidekick version and Git commit, who started it,
+  the scenario set and repeats, the model and connector of each role, the
+  version of each strategy the scenarios used, the prompt and judge prompt
+  versions, and the config hash, with a button that copies it.
+- **The first failed threshold.** For a failed run, a message above the
+  tables names the first threshold that failed, in the order the run checked
+  them, with its value and its limit, and says how many others also failed.
+- **Scores.** Each share metric of [Scores](benchmark.md#scores): overall
+  score, verdict accuracy, false positive and true positive precision and
+  recall, root cause match and score, evidence, proposals correct and source
+  failures reported. Each has its value and its 95% interval, written
+  "62% to 88%". A metric the run had nothing to count shows "none yet", and a
+  metric that has no interval shows "none". Two runs whose intervals of a
+  metric overlap may differ only by chance.
+- **Thresholds.** The thresholds of `bench.yaml` that the run was checked
+  against: the limit ("at least 80%", or "at most $0.0500" for the mean cost
+  of a run), the run's value, Passed or Failed as a word with an icon, and the
+  detail the check gave, for example that a metric with nothing to count
+  passes. Percentages here show one decimal, so a miss never looks equal to
+  its limit.
+- **Cost and time.** The total model cost, the judge's own cost, input and
+  output tokens, tool calls, the mean cost and time of a run, and the number
+  of judge errors. A run with many judge errors has a low root cause score
+  for that reason, so read this figure before you trust the score.
+- **Scenarios.** One row for each scenario, wrong ones first: a scenario with
+  no correct repeat is marked **Wrong**, one with some correct and some not
+  **Partly wrong**, and one with every repeat correct **Correct**. A row shows
+  the expected verdict, how many repeats were correct ("4 of 5"), the verdicts
+  given, and the mean root cause score, cost and time. A row opens to its
+  repeats: the verdict given, whether it was correct, the root cause score,
+  whether every required item of the rubric was met, the evidence score,
+  whether the proposals were correct (when the scenario scores them), the
+  cost, time, tokens and tool calls. The judge's reasons are not shown, since
+  the API leaves them out.
+
+Everything that came from the run, such as labels, scenario IDs and details,
+is shown as plain text.
 
 ## The JSON API
 

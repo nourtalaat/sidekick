@@ -1,0 +1,259 @@
+---
+# Source: sidekick/templates/rbac.yaml
+# A service account of the actions. Nothing runs as it:
+# Sidekick asks the API server for short-lived tokens of it.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: platform-rollback
+  labels:
+    helm.sh/chart: sidekick-0.2.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: actions
+automountServiceAccountToken: false
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+# A service account of the actions. Nothing runs as it:
+# Sidekick asks the API server for short-lived tokens of it.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sidekick-kubernetes-rollback
+  labels:
+    helm.sh/chart: sidekick-0.2.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: actions
+automountServiceAccountToken: false
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+# Sidekick's own service account may ask for tokens of the actions' accounts
+# and of no other account.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sidekick-sidekick-actions-tokens
+  labels:
+    helm.sh/chart: sidekick-0.2.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: actions
+rules:
+  - apiGroups: [""]
+    resources: [serviceaccounts/token]
+    resourceNames: ["platform-rollback","sidekick-kubernetes-rollback"]
+    verbs: [create]
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+# The actions' service account may get and patch the workloads the
+# kubernetes.rollback actions list for this namespace, by name, and list
+# their revisions. A list cannot be limited by name, so it reads the
+# ReplicaSets or ControllerRevisions of the whole namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sidekick-sidekick-actions-kubernetes-rollback-for-platform-rollback
+  namespace: platform
+  labels:
+    helm.sh/chart: sidekick-0.2.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: actions
+rules:
+  - apiGroups: [apps]
+    resources: [daemonsets]
+    resourceNames: ["node-agent"]
+    verbs: [get, patch]
+  - apiGroups: [apps]
+    resources: [controllerrevisions]
+    verbs: [list]
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+# The actions' service account may get and patch the workloads the
+# kubernetes.rollback actions list for this namespace, by name, and list
+# their revisions. A list cannot be limited by name, so it reads the
+# ReplicaSets or ControllerRevisions of the whole namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sidekick-sidekick-actions-kubernetes-rollback-for-sidekick-kubernetes-rollback
+  namespace: shop
+  labels:
+    helm.sh/chart: sidekick-0.2.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: actions
+rules:
+  - apiGroups: [apps]
+    resources: [daemonsets]
+    resourceNames: ["checkout","ledger"]
+    verbs: [get, patch]
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: ["cart","checkout","ledger"]
+    verbs: [get, patch]
+  - apiGroups: [apps]
+    resources: [statefulsets]
+    resourceNames: ["checkout","ledger"]
+    verbs: [get, patch]
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [list]
+  - apiGroups: [apps]
+    resources: [controllerrevisions]
+    verbs: [list]
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+# The actions' service account may get and patch the workloads the
+# kubernetes.rollback actions list for this namespace, by name, and list
+# their revisions. A list cannot be limited by name, so it reads the
+# ReplicaSets or ControllerRevisions of the whole namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sidekick-sidekick-actions-kubernetes-rollback-for-sidekick-kubernetes-rollback
+  namespace: staging
+  labels:
+    helm.sh/chart: sidekick-0.2.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: actions
+rules:
+  - apiGroups: [apps]
+    resources: [daemonsets]
+    resourceNames: ["checkout","ledger"]
+    verbs: [get, patch]
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: ["checkout","ledger"]
+    verbs: [get, patch]
+  - apiGroups: [apps]
+    resources: [statefulsets]
+    resourceNames: ["checkout","ledger"]
+    verbs: [get, patch]
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [list]
+  - apiGroups: [apps]
+    resources: [controllerrevisions]
+    verbs: [list]
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sidekick-sidekick-actions-tokens
+  labels:
+    helm.sh/chart: sidekick-0.2.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: actions
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sidekick-sidekick-actions-tokens
+subjects:
+  - kind: ServiceAccount
+    name: sidekick
+    namespace: sidekick
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sidekick-sidekick-actions-kubernetes-rollback-for-platform-rollback
+  namespace: platform
+  labels:
+    helm.sh/chart: sidekick-0.2.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: actions
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sidekick-sidekick-actions-kubernetes-rollback-for-platform-rollback
+subjects:
+  - kind: ServiceAccount
+    name: platform-rollback
+    namespace: sidekick
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sidekick-sidekick-actions-kubernetes-rollback-for-sidekick-kubernetes-rollback
+  namespace: shop
+  labels:
+    helm.sh/chart: sidekick-0.2.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: actions
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sidekick-sidekick-actions-kubernetes-rollback-for-sidekick-kubernetes-rollback
+subjects:
+  - kind: ServiceAccount
+    name: sidekick-kubernetes-rollback
+    namespace: sidekick
+
+
+---
+# Source: sidekick/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sidekick-sidekick-actions-kubernetes-rollback-for-sidekick-kubernetes-rollback
+  namespace: staging
+  labels:
+    helm.sh/chart: sidekick-0.2.0
+    app.kubernetes.io/name: sidekick
+    app.kubernetes.io/instance: sidekick
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: actions
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sidekick-sidekick-actions-kubernetes-rollback-for-sidekick-kubernetes-rollback
+subjects:
+  - kind: ServiceAccount
+    name: sidekick-kubernetes-rollback
+    namespace: sidekick
+
+

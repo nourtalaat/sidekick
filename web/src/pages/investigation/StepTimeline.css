@@ -58,7 +58,9 @@
 }
 
 .sk-step__meta {
-  flex: none;
+  flex: 0 1 auto;
+  max-width: 60%;
+  text-align: right;
   color: var(--sk-text-secondary);
   font: var(--sk-type-caption);
 }
@@ -68,6 +70,12 @@
   flex-direction: column;
   gap: var(--sk-space-3);
   padding: var(--sk-space-2) var(--sk-space-3) var(--sk-space-4);
+}
+
+.sk-step__model {
+  margin: 0;
+  color: var(--sk-text-secondary);
+  font: var(--sk-type-caption);
 }
 
 .sk-step__error {

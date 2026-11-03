@@ -381,7 +381,7 @@ The snapshot of such an action names each changed file by the blob SHA it has
 on the base branch (`before`), and holds, for each file, a status (`added`,
 `changed` or `deleted`) and the lines it adds and removes (`after`); see
 `gitchange.FilesOf`, which the proposal uses to list the files, and the
-`githubpr` action for the shape. The snapshot holds no file content. When a
+`githubpr` and `gitlabmr` actions for the shape. The snapshot holds no file content. When a
 person opens a file in the web UI, Sidekick calls `ReadBlob` with the
 proposal's parameters and the blob SHA of the file, compares the text it
 gets with the content in the parameters and shows the difference.
