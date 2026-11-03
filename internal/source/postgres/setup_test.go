@@ -396,3 +396,13 @@ func waitFor(t *testing.T, db testDB, what, sql string, args ...any) {
 		time.Sleep(pollEvery)
 	}
 }
+
+// resetStatements clears the pg_stat_statements rows of the test database,
+// which the seed file filled with its own statements, so a test reads only
+// the statements it ran. It needs the extension in the database.
+func resetStatements(t *testing.T, db testDB) {
+	t.Helper()
+
+	_, err := db.admin.Exec(t.Context(), "SELECT pg_stat_statements_reset(0, oid, 0) FROM pg_database WHERE datname = current_database()")
+	require.NoError(t, err, "reset the statement statistics")
+}

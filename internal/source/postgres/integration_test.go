@@ -213,6 +213,8 @@ func TestSlowQueries(t *testing.T) {
 			if !tt.noExtension {
 				_, err := db.admin.Exec(t.Context(), "SELECT pg_sleep(0.5), 1 AS slow_seed")
 				require.NoError(t, err)
+
+				resetStatements(t, db)
 			}
 
 			for range 2 {
