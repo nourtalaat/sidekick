@@ -39,6 +39,7 @@ import (
 	"strings"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/datadogapi"
 	"github.com/nourtalaat/sidekick/internal/httpclient"
 	"github.com/nourtalaat/sidekick/internal/registry"
 	"github.com/nourtalaat/sidekick/internal/source"
@@ -135,11 +136,11 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (action
 		name:    name,
 		limits:  cfg.Limits,
 		allowed: allowed,
-		client:  &client{http: hc, baseURL: cfg.apiURL(), apiKey: cfg.APIKeySecret, appKey: cfg.AppKeySecret, secrets: deps.Secrets},
+		client:  &client{datadogapi.NewClient(hc, cfg.apiURL(), cfg.APIKeySecret, cfg.AppKeySecret, deps.Secrets)},
 	}
 
 	if cfg.URL == "" {
-		m.appHost = appHost(cfg.site())
+		m.appHost = datadogapi.AppHost(cfg.Site)
 	}
 
 	return m, nil
@@ -405,8 +406,8 @@ func (m *Monitor) executeUpdate(ctx context.Context, id int64, snap action.Snaps
 func (m *Monitor) executeDelete(ctx context.Context, id int64, snap action.Snapshot) (action.Result, error) {
 	live, err := m.client.get(ctx, id)
 
-	var status *statusError
-	if errors.As(err, &status) && status.code == http.StatusNotFound {
+	var status *datadogapi.StatusError
+	if errors.As(err, &status) && status.Code == http.StatusNotFound {
 		return action.Result{Summary: fmt.Sprintf("Monitor %d is deleted.", id)}, nil
 	}
 
