@@ -1,4 +1,4 @@
-import type { CostStats, OperationsStats, QualityStats } from "../../api/stats";
+import type { CostStats, OperationsStats, QualityStats, Verdict } from "../../api/stats";
 import { CATEGORY_COLORS, categoryColor, OTHER_COLOR, type ChartRow, type ChartSeries } from "./chart";
 
 const MS_PER_DAY = 86_400_000;
@@ -44,6 +44,31 @@ export function accuracyRows(stats: QualityStats, days: string[]): ChartRow[] {
   const byDay = new Map(stats.days.map((d) => [d.day, { accuracy: d.rated === 0 ? undefined : (d.correct / d.rated) * PERCENT, rated: d.rated, correct: d.correct }]));
 
   return dayRows(days, byDay, { accuracy: undefined, rated: 0, correct: 0 });
+}
+
+/**
+ * The precision and recall of one verdict by day, in percent, with the counts
+ * of verdicts given, confirmed and agreed for the table. A day without a score
+ * for the verdict, and a day where one of the two numbers is not defined, has
+ * no value for it, which a line chart draws as a gap; the counts of such a day are 0.
+ */
+export function scoreRows(stats: QualityStats, days: string[], verdict: Verdict): ChartRow[] {
+  const byDay = new Map<string, Record<string, number | undefined>>();
+
+  for (const day of stats.days) {
+    const score = day.scores.find((s) => s.verdict === verdict);
+    if (score) {
+      byDay.set(day.day, {
+        precision: score.precision === undefined ? undefined : score.precision * PERCENT,
+        recall: score.recall === undefined ? undefined : score.recall * PERCENT,
+        given: score.predicted,
+        confirmed: score.actual,
+        agreed: score.hits,
+      });
+    }
+  }
+
+  return dayRows(days, byDay, { precision: undefined, recall: undefined, given: 0, confirmed: 0, agreed: 0 });
 }
 
 /** The accuracy of each model and strategy, in percent, for a bar chart. */
