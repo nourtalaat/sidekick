@@ -1,4 +1,4 @@
-package githubpr
+package gitchange
 
 import (
 	"context"
@@ -8,9 +8,31 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/validateclient"
 )
+
+// DirEntry is a regular file in a directory listing.
+type DirEntry struct {
+	Name string
+	// Path is the path from the root of the repository.
+	Path string
+	// SHA is the blob SHA of the file.
+	SHA  string
+	Size int
+}
+
+// Reader reads a repository at one commit, which is the ref the host pins
+// every read to, so the files a validation sees all come from the same state
+// of the branch.
+type Reader interface {
+	// Dir lists the regular files directly inside the directory at path;
+	// "." is the root of the repository. A directory that does not exist has
+	// none.
+	Dir(ctx context.Context, path string) ([]DirEntry, error)
+	// Blob returns the text of a file of a listing. A file that is too large
+	// or is not UTF-8 text is an error.
+	Blob(ctx context.Context, e DirEntry) (string, error)
+}
 
 // Limits on the Terraform files sent to the validator for one directory.
 const (
@@ -41,7 +63,7 @@ type moduleLoad struct {
 // terraformRequests makes one validation request for each module directory
 // that a change touches: the files of the directory at the base commit, with
 // the changes applied, and the local modules it uses.
-func terraformRequests(ctx context.Context, r *reader, changes []gitchange.PlannedFile) ([]validateclient.Request, error) {
+func terraformRequests(ctx context.Context, r Reader, changes []PlannedFile) ([]validateclient.Request, error) {
 	var requests []validateclient.Request
 
 	for _, dir := range terraformDirs(changes) {
@@ -62,7 +84,7 @@ func terraformRequests(ctx context.Context, r *reader, changes []gitchange.Plann
 // terraformDirs lists, in order, the directories of the module files that
 // changes touch. Files of other kinds in the same directory, such as a
 // README, do not make a module.
-func terraformDirs(changes []gitchange.PlannedFile) []string {
+func terraformDirs(changes []PlannedFile) []string {
 	var dirs []string
 
 	for _, c := range changes {
@@ -80,7 +102,7 @@ func terraformDirs(changes []gitchange.PlannedFile) []string {
 
 // dir reads the module files of directory dir, and then the local modules
 // that they use, down to maxModuleDepth.
-func (m *moduleLoad) dir(ctx context.Context, r *reader, dir string, depth int) error {
+func (m *moduleLoad) dir(ctx context.Context, r Reader, dir string, depth int) error {
 	if slices.Contains(m.dirs, dir) {
 		return nil
 	}
@@ -91,7 +113,7 @@ func (m *moduleLoad) dir(ctx context.Context, r *reader, dir string, depth int) 
 
 	m.dirs = append(m.dirs, dir)
 
-	entries, err := r.dir(ctx, dir)
+	entries, err := r.Dir(ctx, dir)
 	if err != nil {
 		return fmt.Errorf("list %s: %w", dir, err)
 	}
@@ -99,20 +121,20 @@ func (m *moduleLoad) dir(ctx context.Context, r *reader, dir string, depth int) 
 	var uses []string
 
 	for _, e := range entries {
-		if !isModuleFile(e.name) {
+		if !isModuleFile(e.Name) {
 			continue
 		}
 
-		text, err := r.blob(ctx, e)
+		text, err := r.Blob(ctx, e)
 		if err != nil {
-			return fmt.Errorf("read %s: %w", e.path, err)
+			return fmt.Errorf("read %s: %w", e.Path, err)
 		}
 
 		if m.bytes += len(text); m.bytes > maxModuleBytes || len(m.files) >= validateclient.MaxFiles {
 			return fmt.Errorf("the module has more than %d files or %d bytes", validateclient.MaxFiles, maxModuleBytes)
 		}
 
-		m.files[e.path] = text
+		m.files[e.Path] = text
 		uses = append(uses, localModules(dir, text)...)
 	}
 
@@ -120,7 +142,7 @@ func (m *moduleLoad) dir(ctx context.Context, r *reader, dir string, depth int) 
 }
 
 // follow reads the local modules a directory uses.
-func (m *moduleLoad) follow(ctx context.Context, r *reader, dirs []string, depth int) error {
+func (m *moduleLoad) follow(ctx context.Context, r Reader, dirs []string, depth int) error {
 	if depth >= maxModuleDepth {
 		return nil
 	}
@@ -158,7 +180,7 @@ func localModules(dir, text string) []string {
 // one at the base, and a deleted file goes away. A change to a file that
 // is not part of a module, or that is in a directory the module does not
 // use, is left out.
-func applyChanges(files map[string]string, dirs []string, changes []gitchange.PlannedFile) {
+func applyChanges(files map[string]string, dirs []string, changes []PlannedFile) {
 	for _, c := range changes {
 		if c.Format != validateclient.FormatTerraform || !isModuleFile(c.Path) || !slices.Contains(dirs, path.Dir(c.Path)) {
 			continue

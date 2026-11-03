@@ -15,13 +15,6 @@ const (
 	labelState  = "state"
 )
 
-// Results of a validation.
-const (
-	resultPassed      = "passed"
-	resultFailed      = "failed"
-	resultUnavailable = "unavailable"
-)
-
 // Results of reading the state of a pull request, besides its states.
 const (
 	resultMissing = "missing"

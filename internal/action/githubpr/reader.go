@@ -47,7 +47,7 @@ type reader struct {
 	ref string
 
 	files map[string]*readFile
-	dirs  map[string][]dirEntry
+	dirs  map[string][]gitchange.DirEntry
 }
 
 // readFile is the result of reading one path: its text and blob SHA, or
@@ -58,17 +58,9 @@ type readFile struct {
 	exists bool
 }
 
-// dirEntry is a regular file in a directory listing.
-type dirEntry struct {
-	name string
-	path string
-	sha  string
-	size int
-}
-
 // newReader returns a reader of repository owner/repo at commit ref.
 func newReader(client *gh.Client, owner, repo, ref string) *reader {
-	return &reader{client: client, owner: owner, repo: repo, ref: ref, files: map[string]*readFile{}, dirs: map[string][]dirEntry{}}
+	return &reader{client: client, owner: owner, repo: repo, ref: ref, files: map[string]*readFile{}, dirs: map[string][]gitchange.DirEntry{}}
 }
 
 // baseOf reads the head commit and tree of a branch.
@@ -139,9 +131,9 @@ func (r *reader) file(ctx context.Context, path string) (readFile, error) {
 	return *f, nil
 }
 
-// dir lists the regular files directly inside the directory at path; "." is
+// Dir lists the regular files directly inside the directory at path; "." is
 // the root of the repository. A directory that does not exist has none.
-func (r *reader) dir(ctx context.Context, path string) ([]dirEntry, error) {
+func (r *reader) Dir(ctx context.Context, path string) ([]gitchange.DirEntry, error) {
 	if entries, ok := r.dirs[path]; ok {
 		return entries, nil
 	}
@@ -166,14 +158,14 @@ func (r *reader) dir(ctx context.Context, path string) ([]dirEntry, error) {
 		return nil, fmt.Errorf("%s is a file, not a directory", path)
 	}
 
-	var entries []dirEntry
+	var entries []gitchange.DirEntry
 
 	for _, e := range listing {
 		if e.GetType() != typeFile {
 			continue
 		}
 
-		entries = append(entries, dirEntry{name: e.GetName(), path: e.GetPath(), sha: e.GetSHA(), size: e.GetSize()})
+		entries = append(entries, gitchange.DirEntry{Name: e.GetName(), Path: e.GetPath(), SHA: e.GetSHA(), Size: e.GetSize()})
 	}
 
 	r.dirs[path] = entries
@@ -181,27 +173,27 @@ func (r *reader) dir(ctx context.Context, path string) ([]dirEntry, error) {
 	return entries, nil
 }
 
-// blob returns the text of a file of a listing, by its blob SHA.
-func (r *reader) blob(ctx context.Context, e dirEntry) (string, error) {
-	if f, ok := r.files[e.path]; ok && f.exists {
+// Blob returns the text of a file of a listing, by its blob SHA.
+func (r *reader) Blob(ctx context.Context, e gitchange.DirEntry) (string, error) {
+	if f, ok := r.files[e.Path]; ok && f.exists {
 		return f.text, nil
 	}
 
-	if e.size > maxBaseFileBytes {
-		return "", fmt.Errorf("%s %w", e.path, errTooBig)
+	if e.Size > maxBaseFileBytes {
+		return "", fmt.Errorf("%s %w", e.Path, errTooBig)
 	}
 
-	raw, _, err := r.client.Git.GetBlobRaw(ctx, r.owner, r.repo, e.sha)
+	raw, _, err := r.client.Git.GetBlobRaw(ctx, r.owner, r.repo, e.SHA)
 	if err != nil {
-		return "", classify("read "+e.path, err)
+		return "", classify("read "+e.Path, err)
 	}
 
 	text := string(raw)
 	if !gitchange.ValidContent(text) {
-		return "", fmt.Errorf("%s %w", e.path, errNotText)
+		return "", fmt.Errorf("%s %w", e.Path, errNotText)
 	}
 
-	r.files[e.path] = &readFile{text: text, sha: e.sha, exists: true}
+	r.files[e.Path] = &readFile{text: text, sha: e.SHA, exists: true}
 
 	return text, nil
 }

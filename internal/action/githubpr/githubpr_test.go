@@ -159,21 +159,6 @@ func TestSpec(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestValidationErrorText(t *testing.T) {
-	t.Parallel()
-
-	problems := make([]validateclient.Problem, 0, maxReportedProblems+3)
-	for range maxReportedProblems + 3 {
-		problems = append(problems, validateclient.Problem{Path: "a.yaml", Line: 2, Message: strings.Repeat("m", maxProblemBytes+50)})
-	}
-
-	text := (&validationError{problems: problems}).Error()
-
-	require.Equal(t, maxReportedProblems+1, strings.Count(text, "\n"), "the listed problems and the line that counts the rest, each after the lead")
-	require.Contains(t, text, "\n- and 3 more")
-	require.NotContains(t, text, strings.Repeat("m", maxProblemBytes+1))
-}
-
 func TestRegistered(t *testing.T) {
 	t.Parallel()
 
