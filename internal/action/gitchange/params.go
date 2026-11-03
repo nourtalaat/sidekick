@@ -141,7 +141,7 @@ func Plan(e Edit, b Bounds, formatOf func(path string) (validateclient.Format, e
 		return nil, fmt.Errorf("baseBranch %q is not the allowed base branch %q: %w", e.BaseBranch, b.BaseBranch, action.ErrLimit)
 	}
 
-	if err := checkText(e); err != nil {
+	if err := CheckText(e.Title, e.Body); err != nil {
 		return nil, fmt.Errorf("check the title and body: %w", err)
 	}
 
@@ -197,16 +197,16 @@ func planFile(f FileChange, formatOf func(path string) (validateclient.Format, e
 	return PlannedFile{Path: f.Path, Format: format, Content: f.Content}, nil
 }
 
-// checkText checks the title and the body.
-func checkText(p Edit) error {
+// CheckText checks the title and the body of a pull request.
+func CheckText(title, body string) error {
 	switch {
-	case strings.TrimSpace(p.Title) == "":
+	case strings.TrimSpace(title) == "":
 		return errors.New("title: required")
-	case len([]rune(p.Title)) > MaxTitleChars:
+	case len([]rune(title)) > MaxTitleChars:
 		return fmt.Errorf("title: longer than %d characters", MaxTitleChars)
-	case len([]rune(p.Body)) > maxBodyChars:
+	case len([]rune(body)) > maxBodyChars:
 		return fmt.Errorf("body: longer than %d characters", maxBodyChars)
-	case !ValidContent(p.Title) || !ValidContent(p.Body):
+	case !ValidContent(title) || !ValidContent(body):
 		return errors.New("title and body must be valid UTF-8 text without NUL characters")
 	}
 
