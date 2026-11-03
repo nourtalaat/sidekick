@@ -192,7 +192,7 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey"},
+			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey", "pull_request_states_pkey"},
 		},
 		{
 			name: "ListActionProposalsByRareAction",
@@ -203,7 +203,7 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey"},
+			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey", "pull_request_states_pkey"},
 		},
 		{
 			name: "ListActionProposalsByRareActionAfterCursor",
@@ -216,7 +216,7 @@ func TestQueryPlans(t *testing.T) {
 			},
 			// A rare action is found through the index on the action, which the
 			// daily count made; the planner may take either index.
-			wantIndex: []string{"Index Scan using action_proposals_", "investigations_pkey"},
+			wantIndex: []string{"Index Scan using action_proposals_", "investigations_pkey", "pull_request_states_pkey"},
 		},
 		{
 			name: "ListActionProposalsGeneric",
@@ -227,7 +227,7 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey"},
+			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey", "pull_request_states_pkey"},
 			generic:   true,
 		},
 		{
@@ -239,7 +239,7 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey"},
+			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey", "pull_request_states_pkey"},
 			generic:   true,
 		},
 		{
@@ -251,7 +251,7 @@ func TestQueryPlans(t *testing.T) {
 
 				return fmt.Errorf("run query: %w", err)
 			},
-			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey"},
+			wantIndex: []string{"action_proposals_status_proposed", "investigations_pkey", "pull_request_states_pkey"},
 			generic:   true,
 		},
 		{
