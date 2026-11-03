@@ -19,6 +19,7 @@ func TestThresholdsCheck(t *testing.T) {
 		Metrics: Metrics{
 			VerdictAccuracy:   new(0.8),
 			RootCauseMatch:    new(0.5),
+			ProposalCorrect:   new(0.5),
 			MeanCostPerRunUSD: new(0.3),
 			Overall:           new(0.7),
 		},
@@ -46,6 +47,16 @@ func TestThresholdsCheck(t *testing.T) {
 				{Name: thresholdRootCauseMatch, Limit: 0.7, Value: new(0.5)},
 				{Name: thresholdMaxCostPerRun, Limit: 0.25, Value: new(0.3)},
 			},
+		},
+		{
+			name:       "proposal correctness met and failed",
+			thresholds: Thresholds{ProposalCorrect: 0.5},
+			want:       []ThresholdResult{{Name: thresholdProposalCorrect, Limit: 0.5, Value: new(0.5), Passed: true}},
+		},
+		{
+			name:       "proposal correctness below the limit",
+			thresholds: Thresholds{ProposalCorrect: 0.75},
+			want:       []ThresholdResult{{Name: thresholdProposalCorrect, Limit: 0.75, Value: new(0.5)}},
 		},
 		{
 			name:       "an empty class passes",
@@ -113,6 +124,16 @@ func TestLoadSettingsThresholds(t *testing.T) {
 			name: "every threshold",
 			file: "thresholds: { verdictAccuracy: 0.8, fpPrecision: 0.95, rootCauseMatch: 0.7, maxCostPerRunUSD: 0.5, baseline: bench/baseline.json, maxDrop: 0.02 }\n",
 			want: Thresholds{VerdictAccuracy: 0.8, FPPrecision: 0.95, RootCauseMatch: 0.7, MaxCostPerRunUSD: 0.5, Baseline: "bench/baseline.json", MaxDrop: new(0.02)},
+		},
+		{
+			name: "proposal correctness",
+			file: "thresholds: { proposalCorrect: 0.9 }\n",
+			want: Thresholds{ProposalCorrect: 0.9},
+		},
+		{
+			name:    "proposal correctness above 1",
+			file:    "thresholds: { proposalCorrect: 2 }\n",
+			wantErr: "thresholds.proposalCorrect: must be from 0 to 1, not 2",
 		},
 		{
 			name:    "a share above 1",
@@ -197,4 +218,39 @@ func countFailed(results []ThresholdResult) int {
 	}
 
 	return n
+}
+
+func TestShippedSettingsDoNotScoreProposals(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		file      string
+		wantNames []string
+	}{
+		{
+			name:      "bench/bench.yaml",
+			file:      filepath.Join(repoRoot, "bench", "bench.yaml"),
+			wantNames: []string{thresholdVerdictAccuracy, thresholdFPPrecision, thresholdRootCauseMatch, thresholdMaxCostPerRun},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			settings, err := LoadSettings(tt.file)
+			require.NoError(t, err)
+			require.Equal(t, DefaultWeights, settings.ScoreWeights())
+			require.Zero(t, DefaultWeights.Proposals)
+			require.Zero(t, settings.Thresholds.ProposalCorrect)
+
+			var names []string
+			for _, r := range settings.Thresholds.Check(Summary{}, nil) {
+				names = append(names, r.Name)
+			}
+
+			require.Equal(t, tt.wantNames, names)
+		})
+	}
 }
