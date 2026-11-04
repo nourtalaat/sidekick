@@ -79,6 +79,30 @@ func TestActionsPage(t *testing.T) {
 	})
 }
 
+func TestActionsPageIsLinked(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		file string
+		link string
+	}{
+		{file: "../README.md", link: "docs/actions.md"},
+		{file: "integrations.md", link: "actions.md"},
+		{file: "operating.md", link: "actions.md"},
+		{file: "configuration.md", link: "actions.md"},
+		{file: "plugins/actions.md", link: "../actions.md"},
+		{file: "actions.md", link: "plugins/actions.md"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.file, func(t *testing.T) {
+			t.Parallel()
+
+			require.Contains(t, readDoc(t, tt.file), "]("+tt.link, "%s must link to %s", tt.file, tt.link)
+		})
+	}
+}
+
 func readDoc(t *testing.T, name string) string {
 	t.Helper()
 

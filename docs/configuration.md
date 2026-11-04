@@ -1577,6 +1577,9 @@ credentials and limits, and each route lists the ones it may use in its
 actions. Nothing runs until a person with the approver role approves the
 proposal in Slack or in the web UI.
 
+The [Actions](actions.md) page lists every action type by family, with the
+credential, Undo and mode of each, and helps you choose between them.
+
 ```yaml
 actions:
   proposalTTL: 24h              # how long a proposal waits for a decision; default 24h

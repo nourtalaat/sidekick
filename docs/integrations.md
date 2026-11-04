@@ -111,32 +111,17 @@ These are the `provider` values of [the `model` section](configuration.md#model)
 ## Actions
 
 An action is a change Sidekick may make outside itself. By default it makes
-one only after a person approves the proposal. See [the `actions`
-section](configuration.md#actions) for how routes allow actions and [action
+one only after a person approves the proposal. The [Actions](actions.md) page
+lists every action type with what it does, its credential, whether it can
+undo and the mode to use, and helps you choose between them. See [the
+`actions` section](configuration.md#actions) for the keys and [action
 proposals](web-ui.md#action-proposals) for how people approve them.
 
-- `slack.reply` and `slack.reaction`: a reply or a reaction in Slack. See [their keys](configuration.md#slackreply-and-slackreaction).
-- `linear.comment` and `linear.issue`: a comment on a Linear issue, or a new one. See [their keys](configuration.md#linearcomment-and-linearissue).
-- `jira.comment` and `jira.issue`: a comment on a Jira issue, or a new one. See [their keys](configuration.md#jiracomment-and-jiraissue).
-- `datadog.monitor`: changes or deletes a Datadog monitor. See [its keys](configuration.md#datadogmonitor).
-- `datadog.downtime`: mutes a Datadog monitor for a limited time with a downtime, and cancels the downtime early on Undo. See [its keys](configuration.md#datadogdowntime).
-- `grafana.alert_rule`: changes or deletes a Grafana alert rule. See [its keys](configuration.md#grafanaalert_rule).
-- `signoz.alert_rule`: changes or deletes a SigNoz alert rule. See [its keys](configuration.md#signozalert_rule).
-- `launchdarkly.flag`: turns a LaunchDarkly feature flag off in one environment. See [its keys](configuration.md#launchdarklyflag).
-- `prometheus.rule`: changes the rules of a `PrometheusRule` resource. See [its keys](configuration.md#prometheusrule).
-- `kubernetes.rollback`: puts a Deployment, StatefulSet or DaemonSet back on an earlier revision. See [its keys](configuration.md#kubernetesrollback).
-- `alertmanager.silence`: silences alerts in Alertmanager for a limited time, and ends the silence early on Undo. See [its keys](configuration.md#alertmanagersilence).
-- `gcp.cloud_run_rollback`: sends the traffic of a Cloud Run service back to an earlier ready revision, and puts it back on Undo. See [its keys](configuration.md#gcpcloud_run_rollback).
-- `grafana.silence`: silences alerts in Grafana for a limited time, and ends the silence early on Undo. See [its keys](configuration.md#grafanasilence).
-- `github.pull_request`: opens a pull request that changes monitor definitions kept in Git. See [its keys](configuration.md#githubpull_request).
-- `github.revert`: opens a draft pull request that reverts one commit or one merged pull request. See [its keys](configuration.md#githubrevert).
-- `github.code_change`: opens a draft pull request that changes application code, which Sidekick never merges. See [its keys](configuration.md#githubcode_change).
-- `gitlab.merge_request`: opens a merge request that changes monitor definitions kept in Git, on gitlab.com or a self-managed GitLab. See [its keys](configuration.md#gitlabmerge_request).
-- `gitlab.revert`: opens a draft merge request that reverts one commit or one merged merge request, on gitlab.com or a self-managed GitLab. See [its keys](configuration.md#gitlabrevert).
-- `gitlab.code_change`: opens a draft merge request that changes application code, on gitlab.com or a self-managed GitLab, which Sidekick never merges. See [its keys](configuration.md#gitlabcode_change).
-- `unleash.flag`: turns an Unleash feature flag off in one environment, or undoes its newest change. See [its keys](configuration.md#unleashflag).
-- `aws.ecs_rollback`: puts an Amazon ECS service back on an earlier task definition revision, with an IAM role of its own. See [its keys](configuration.md#awsecs_rollback).
-- `aws.lambda_rollback`: points an AWS Lambda alias back at the published version it served before, with an IAM role of its own. See [its keys](configuration.md#awslambda_rollback).
-- `helm.rollback`: puts a Helm release back on an earlier revision, with Helm's Go library. See [its keys](configuration.md#helmrollback).
-- `azure.container_app_rollback`: moves all the traffic of an Azure Container App back to an earlier revision, and puts the traffic back on Undo. See [its keys](configuration.md#azurecontainer_app_rollback).
-- `argocd.rollback`: puts an Argo CD application back on an earlier deployed revision, and can undo it. It refuses an application with auto-sync on. See [its keys](configuration.md#argocdrollback).
+- [Chat](actions.md#chat): `slack.reply` and `slack.reaction`.
+- [Tickets](actions.md#tickets): `linear.comment`, `linear.issue`, `jira.comment` and `jira.issue`.
+- [Monitors changed in the tool](actions.md#monitors-changed-in-the-tool): `datadog.monitor`, `grafana.alert_rule`, `signoz.alert_rule` and `prometheus.rule`.
+- [Monitors kept as code](actions.md#monitors-kept-as-code): `github.pull_request` and `gitlab.merge_request`.
+- [Code changes and reverts](actions.md#code-changes-and-reverts): `github.code_change`, `gitlab.code_change`, `github.revert` and `gitlab.revert`.
+- [Mutes](actions.md#mutes): `alertmanager.silence`, `grafana.silence` and `datadog.downtime`.
+- [Rollbacks](actions.md#rollbacks): `kubernetes.rollback`, `helm.rollback`, `argocd.rollback`, `aws.ecs_rollback`, `aws.lambda_rollback`, `gcp.cloud_run_rollback` and `azure.container_app_rollback`.
+- [Feature flags](actions.md#feature-flags): `launchdarkly.flag` and `unleash.flag`.
