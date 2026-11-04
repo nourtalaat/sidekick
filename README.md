@@ -26,6 +26,7 @@ Sidekick receives alerts from webhooks or Slack, investigates them with the LLM 
 ## Documentation
 
 - [Integrations](docs/integrations.md): every alert sender, source, output, model provider and action, with its guide.
+- [Actions](docs/actions.md): every action type by family, which to use when, and the safety rules.
 - [Running and operating](docs/operating.md): install, configuration, running, the web UI and API, the validator, upgrades.
 - [Quality and cost](docs/quality-and-cost.md): how investigations run, the benchmark, free setups.
 - [Extending Sidekick](docs/plugins/README.md): write your own source, adapter, model connector, output or action.
