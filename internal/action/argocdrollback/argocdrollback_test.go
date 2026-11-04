@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/actiontest"
 	"github.com/nourtalaat/sidekick/internal/argocd"
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
 	"github.com/nourtalaat/sidekick/internal/registry"
@@ -83,6 +84,16 @@ func TestSpec(t *testing.T) {
 	require.NoError(t, json.Unmarshal(spec.ParamsSchema, &schema))
 	require.Equal(t, []string{"application"}, schema.Required)
 	require.InDelta(t, 3, schema.Properties["revisionsBack"]["maximum"], 0)
+}
+
+func TestSpecSnapshot(t *testing.T) {
+	t.Parallel()
+
+	rollback := newTestAction(t, fakehttp.New(t), func(c *Config) {
+		c.Limits = Limits{Applications: argocd.Allowlist{"storefront/*"}}
+	})
+
+	actiontest.CheckSpecSnapshot(t, Type, rollback)
 }
 
 func TestNewIsApprovalOnly(t *testing.T) {

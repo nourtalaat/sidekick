@@ -1,0 +1,32 @@
+{
+  "name": "helm-web",
+  "description": "Puts a Helm release back on an earlier revision, as helm rollback does; Helm makes a new revision with the old chart, values and manifests. The revision that runs is the newest one, and revisionsBack counts the earlier revisions with status superseded or deployed, skipping failed ones. A release with an operation that is running or was interrupted, or with no earlier revision, is refused. A person approves it, and the proposal shows both revisions. Allowed namespaces: billing, shop. Allowed releases: billing-portal, ledger-* (* stands for any run of characters). At most 1 revisions back.",
+  "paramsSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "release",
+      "namespace"
+    ],
+    "properties": {
+      "release": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 53,
+        "description": "The name of the Helm release."
+      },
+      "namespace": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 63,
+        "description": "The namespace of the Helm release."
+      },
+      "revisionsBack": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1,
+        "description": "How many revisions to go back. Counts the earlier revisions with status superseded or deployed; failed ones are skipped. Default 1."
+      }
+    }
+  }
+}

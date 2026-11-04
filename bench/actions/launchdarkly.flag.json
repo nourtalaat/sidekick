@@ -1,0 +1,38 @@
+{
+  "name": "flag-off",
+  "description": "Turns a LaunchDarkly feature flag off in one environment through the LaunchDarkly API. Only turning a flag off is supported, and no other environment of the flag changes. A flag that is already off or archived is refused, and so is an environment that requires approvals or a flag with a scheduled change or an active workflow in that environment. Allowed: project quillcart-web, environments production, staging, flags checkout-*, promo-*.",
+  "paramsSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "project",
+      "environment",
+      "flag",
+      "change"
+    ],
+    "properties": {
+      "project": {
+        "type": "string",
+        "maxLength": 256,
+        "description": "The key of the LaunchDarkly project."
+      },
+      "environment": {
+        "type": "string",
+        "maxLength": 256,
+        "description": "The key of the environment. Only this environment of the flag changes."
+      },
+      "flag": {
+        "type": "string",
+        "maxLength": 256,
+        "description": "The key of the feature flag."
+      },
+      "change": {
+        "type": "string",
+        "enum": [
+          "turn_off"
+        ],
+        "description": "turn_off turns the flag off in this environment."
+      }
+    }
+  }
+}

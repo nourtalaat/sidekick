@@ -1,0 +1,25 @@
+{
+  "name": "argocd-rollback",
+  "description": "Rolls an Argo CD application back to an earlier deployed revision, through Argo CD's rollback API. It deploys that revision's own source and does not prune. It refuses an application with auto-sync on (propose a revert pull request for that), one with several sources, and one with an operation running. Read the application's deployment history first. Allowed applications: storefront/*. Up to 1 revisions back, counting revisions that differ.",
+  "paramsSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "application"
+    ],
+    "properties": {
+      "application": {
+        "type": "string",
+        "minLength": 3,
+        "maxLength": 507,
+        "description": "The application as project/name, for example shop/checkout."
+      },
+      "revisionsBack": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1,
+        "description": "How many revisions back to go. 1, the default, is the revision deployed before the one that runs now."
+      }
+    }
+  }
+}
