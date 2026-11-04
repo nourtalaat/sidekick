@@ -31,6 +31,8 @@ type Revert struct {
 	// requests it closes or reverts. It is nil where plugins are built
 	// without one, and nothing is recorded then.
 	db db.DBTX
+	// CIReading reads the pipelines of the merge requests the action opens.
+	*gitlabgit.CIReading
 }
 
 // newRevert builds the action from its validated config. It makes no network
@@ -66,6 +68,7 @@ func newRevert(name string, cfg Config, deps registry.Deps) (*Revert, error) {
 		publicURL: deps.PublicURL,
 		now:       time.Now,
 		db:        deps.DB,
+		CIReading: gitlabgit.NewCIReading(client, cfg.Timeout()),
 	}, nil
 }
 

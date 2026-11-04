@@ -22,6 +22,10 @@ type Config struct {
 	// BaseURL is the REST API root, for GitHub Enterprise Server, for
 	// example https://github.example.com/api/v3/. Empty means github.com.
 	BaseURL string `yaml:"baseURL"`
+	// CIConfig is ciReportTimeout, how long Sidekick waits for the CI of a
+	// pull request to finish. The app also needs Checks (read) and Commit
+	// statuses (read) for that; without them the CI result is unknown.
+	gitchange.CIConfig `yaml:",inline"`
 	// Limits say what the action may touch.
 	Limits Limits `yaml:"limits"`
 }
@@ -54,6 +58,7 @@ func (c *Config) Validate() error {
 		errs = append(errs, err)
 	}
 
+	errs = append(errs, c.Check()...)
 	errs = append(errs, c.Limits.check()...)
 
 	return errors.Join(errs...)

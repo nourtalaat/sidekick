@@ -648,6 +648,81 @@ func TestPublishWatcherChange(t *testing.T) {
 	}
 }
 
+func TestPublishCIReport(t *testing.T) {
+	t.Parallel()
+
+	shown := shownRef(5, string(report.TruePositive))
+
+	tests := []struct {
+		name      string
+		previous  *output.Ref
+		ci        *output.CIReport
+		wantPaths []string
+	}{
+		{
+			name:      "a result is a reply in the thread",
+			previous:  &shown,
+			ci:        &output.CIReport{State: output.CIPassed, Passed: 3, Total: 3, Repo: "acme/monitors", Number: 12},
+			wantPaths: []string{pathPermalink, pathPost},
+		},
+		{
+			name:      "without a message, the message is posted first",
+			ci:        &output.CIReport{State: output.CIPassed, Passed: 3, Total: 3},
+			wantPaths: []string{pathPost, pathPermalink, pathPost},
+		},
+		{
+			name:     "an update without a result posts nothing",
+			previous: &shown,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			api := fakehttp.New(t)
+
+			if len(tt.wantPaths) > 0 {
+				posts := []fakehttp.Response{postedResponse("1793023399.000001")}
+				if tt.previous == nil {
+					posts = []fakehttp.Response{postedResponse(mainTS), postedResponse("1793023399.000001")}
+				}
+
+				api.Handle(http.MethodPost, pathPost, posts...)
+				api.Handle(http.MethodGet, pathPermalink, fakehttp.Response{Body: []byte(`{"ok":true,"permalink":"` + permalinkOK + `"}`)})
+			}
+
+			api.ExpectAllCalled()
+
+			s, _ := testSink(t, api)
+
+			u := testUpdate(output.PhaseCI, nil)
+			u.Seq, u.Previous, u.CI = 3, tt.previous, tt.ci
+
+			got, err := s.Publish(t.Context(), u)
+			require.NoError(t, err)
+
+			var paths []string
+			for _, req := range api.Requests() {
+				paths = append(paths, req.Path)
+			}
+
+			require.Equal(t, tt.wantPaths, paths)
+
+			if tt.ci == nil {
+				require.Equal(t, shown, got)
+
+				return
+			}
+
+			reply := decodeMessage(t, api.Requests()[len(api.Requests())-1].Body)
+			require.Equal(t, mainTS, reply.ThreadTS, "the reply goes in the thread of the main message")
+			require.Contains(t, reply.Text, "CI passed")
+			require.Contains(t, reply.Attachments[0].Blocks[1].Elements[0].Text, "<"+permalinkOK+"|See the investigation>")
+		})
+	}
+}
+
 func TestAccepts(t *testing.T) {
 	t.Parallel()
 
@@ -663,6 +738,7 @@ func TestAccepts(t *testing.T) {
 		{phase: output.PhaseResolved},
 		{phase: output.PhaseCancelled},
 		{phase: output.PhaseWatcher, want: true},
+		{phase: output.PhaseCI, want: true},
 	}
 
 	for _, tt := range tests {

@@ -3208,7 +3208,11 @@ routes:
   write), Pull requests (read and write) and Metadata (read). Do not give the
   app the Workflows permission. Sidekick asks GitHub for installation tokens
   with just the three permissions above, so its token never carries Workflows
-  either way. Use an app that no other action or source shares. Sidekick reads
+  either way. For the [CI report](#ci-report-of-a-pull-request-or-merge-request),
+  also give the app Checks (read) and Commit statuses (read); they are
+  optional, and Sidekick reads CI with two tokens of their own, so an app
+  without them still opens and undoes pull requests. Use an app that no other
+  action or source shares. Sidekick reads
   the private key from its secret on each token exchange, so a rotated key
   needs no restart. `baseURL` must be https, except for a loopback host.
 - **Paths.** Every file the model changes must match a glob of `paths`, and
@@ -3276,6 +3280,10 @@ routes:
   edit; propose again from the new content. A file that already has the new
   content is left out, and if every file does, the proposal succeeds without a
   pull request.
+- **CI report.** After the proposal succeeds, Sidekick follows the CI of the
+  pull request and says in the investigation's Slack thread whether it passed,
+  and on the proposal card. `ciReportTimeout` (default `2h`, at most `24h`) is
+  how long it waits for the checks to finish. See the [CI report](#ci-report-of-a-pull-request-or-merge-request).
 - **Undo.** An approver can undo a succeeded proposal. If its pull request is
   still open or was closed, Sidekick closes it and deletes its branch. If it
   was merged, Sidekick opens a draft revert pull request from the branch
@@ -3564,6 +3572,10 @@ routes:
   `github.code_change`: each file with what happens to it and the line diff in
   the web UI, from blob IDs and never file contents, and a conflict that names
   a file someone changed since the model proposed.
+- **CI report.** After the proposal succeeds, Sidekick follows the CI of the
+  merge request and says in the investigation's Slack thread whether it passed,
+  and on the proposal card. `ciReportTimeout` (default `2h`, at most `24h`) is
+  how long it waits for the pipeline to finish. See the [CI report](#ci-report-of-a-pull-request-or-merge-request).
 - **Undo.** An approver can undo a succeeded proposal. If its merge request is
   still open or was closed, Sidekick closes it and deletes its branch. If it
   was merged, Sidekick opens a draft revert merge request from the branch
@@ -3636,7 +3648,10 @@ routes:
   a workflow file, as a second wall behind the refused paths below. Sidekick
   asks GitHub for installation tokens with just those permissions, and reads
   the private key from its secret on each token exchange, so a rotated key
-  needs no restart. `baseURL` must be https, except for a loopback host.
+  needs no restart. For the [CI report](#ci-report-of-a-pull-request-or-merge-request),
+  also give the app Checks (read) and Commit statuses (read); they are
+  optional, and Sidekick reads CI with two tokens of their own, so an app
+  without them still opens and undoes pull requests. `baseURL` must be https, except for a loopback host.
 - **Parameters.** `repo`, `baseBranch`, exactly one of `commit` (the full
   40-character SHA, never a branch, a tag or a short SHA) or `pullRequest`
   (the number of a merged pull request), a `title` (the title of the pull
@@ -3717,6 +3732,10 @@ routes:
   succeeds without a pull request.
 - **Result.** The result links the pull request and carries its number and
   the SHA of its head commit.
+- **CI report.** After the proposal succeeds, Sidekick follows the CI of the
+  pull request and says in the investigation's Slack thread whether it passed,
+  and on the proposal card. `ciReportTimeout` (default `2h`, at most `24h`) is
+  how long it waits for the checks to finish. See the [CI report](#ci-report-of-a-pull-request-or-merge-request).
 - **Undo.** An approver can undo a succeeded proposal. If its pull request
   is still open or was closed, Sidekick closes it and deletes its branch. If
   it was merged, Sidekick opens a draft pull request from the branch
@@ -3864,6 +3883,10 @@ routes:
   conflict that carries GitLab's message, and the branch is deleted.
 - **Result.** The result links the merge request and carries its IID, its
   project and the SHA of its head commit.
+- **CI report.** After the proposal succeeds, Sidekick follows the CI of the
+  merge request and says in the investigation's Slack thread whether it passed,
+  and on the proposal card. `ciReportTimeout` (default `2h`, at most `24h`) is
+  how long it waits for the pipeline to finish. See the [CI report](#ci-report-of-a-pull-request-or-merge-request).
 - **Undo.** An approver can undo a succeeded proposal. If its merge request
   is still open or was closed, Sidekick closes it and deletes its branch. If
   it was merged, Sidekick opens a draft merge request from the branch
@@ -3895,6 +3918,60 @@ closed, and records it. Sidekick counts the merge requests it opens in
 `closed` or `reverted` for an undo, or `error`) and the daily checks in
 `sidekick_gitlabrevert_status_checks_total` (by `state`: `open`, `merged`,
 `closed`, `missing` or `error`).
+
+##### CI report of a pull request or merge request
+
+`github.code_change`, `github.revert`, `gitlab.code_change` and
+`gitlab.revert` open a draft that the repository's own CI checks. Sidekick
+cannot judge it, but it can tell you what the CI said. When a proposal of one
+of these actions succeeds, and also when an undo opens a revert, Sidekick
+follows the CI of the head commit until it reaches a final state, then posts
+once in the investigation's Slack thread and shows it on the proposal card in
+the web UI. Reporting is always on for these actions; there is no key to turn
+it off. Teams shows no proposals today, so it gets no report.
+
+| State | What it means | The thread message |
+|---|---|---|
+| Passed | Every check passed. | `:white_check_mark: CI passed` and how many checks passed. |
+| Failed | A check failed and none is still running. | `:x: CI failed`, how many failed, and the failed checks by name, each with a link, up to 10. |
+| None | No check or pipeline started within 10 minutes. The repository may have no CI for this branch. | `:grey_question: No CI ran`. |
+| Unknown | Sidekick could not read the CI, and the message says why, for example which permission is missing. | `:warning: CI could not be read`. |
+| Not finished | Checks were still running when the wait ended. | `:hourglass: CI had not finished`, with how many had passed. |
+
+- **How it reads CI.** A background job reads the CI 30 seconds after the
+  proposal succeeds, then waits longer after each read, up to 5 minutes,
+  until the state is final or the wait ends. Sidekick receives no GitHub or
+  GitLab events, so it asks. If a check fails while others still run, it
+  waits for the rest, so the message lists every failed check. At the end of
+  the wait, a failure it has already seen is reported as Failed.
+- **Waiting for something to start.** A host does not say whether a branch
+  has no CI or its CI has not started yet. So "None" is reported only after
+  10 minutes with nothing at all; a shorter `ciReportTimeout` shortens that.
+- **`ciReportTimeout`.** A key of the action itself, next to `baseURL`, not of
+  `limits`. It is how long Sidekick waits for the checks to finish. The
+  default is `2h`, the least `1m` and the most `24h`.
+- **GitHub.** Sidekick reads the check runs of the head commit (the latest of
+  each check) and its commit statuses, so both modern checks and older status
+  contexts count. A check run that was skipped or neutral counts as passed;
+  one that failed, timed out, was cancelled or needs action counts as failed.
+  The app needs two more read-only repository permissions, Checks and Commit
+  statuses. Sidekick asks for each in an installation token of its own and
+  leaves the token that opens pull requests as it is, so an app that was not
+  given them loses nothing: the CI is reported as unknown, with a message that
+  names the missing permission, and pull requests are opened and undone as
+  before.
+- **GitLab.** Sidekick reads the pipelines of the merge request and takes the
+  newest one for the head commit, then its jobs. The token's `api` scope is
+  enough. A job that is allowed to fail, was skipped or waits for a person to
+  start it is not counted.
+- **Check names are outside text.** Names of checks, jobs and pipelines come
+  from the repository. Sidekick shows them as plain text: hidden and control
+  characters are dropped, they are cut to 80 characters, and they are never
+  shown as formatting or markup. It never copies log text.
+- **One report.** The report is posted once, even with several replicas or a
+  job that is tried again.
+- **Metrics.** `sidekick_ci_reports_total{host,state}` counts the reports by
+  host (`github` or `gitlab`) and final state.
 
 ##### `unleash.flag`
 

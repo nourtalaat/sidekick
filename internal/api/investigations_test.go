@@ -54,10 +54,10 @@ func TestFeedbackSummaryOf(t *testing.T) {
 		correct, wrong int64
 		want           apigen.FeedbackSummarySummary
 	}{
-		{name: "nobody rated", want: apigen.None},
-		{name: "only correct", correct: 3, want: apigen.Correct},
-		{name: "only wrong", wrong: 1, want: apigen.Wrong},
-		{name: "both", correct: 2, wrong: 1, want: apigen.Mixed},
+		{name: "nobody rated", want: apigen.FeedbackSummarySummaryNone},
+		{name: "only correct", correct: 3, want: apigen.FeedbackSummarySummaryCorrect},
+		{name: "only wrong", wrong: 1, want: apigen.FeedbackSummarySummaryWrong},
+		{name: "both", correct: 2, wrong: 1, want: apigen.FeedbackSummarySummaryMixed},
 	}
 
 	for _, tt := range tests {

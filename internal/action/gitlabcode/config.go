@@ -23,6 +23,9 @@ type Config struct {
 	// GitLab source and of the monitor merge request action. It is read on
 	// every call.
 	TokenSecret registry.SecretRef `yaml:"tokenSecret"`
+	// CIConfig is ciReportTimeout, how long Sidekick waits for the pipeline
+	// of a merge request to finish.
+	gitchange.CIConfig `yaml:",inline"`
 	// Limits say what the action may touch.
 	Limits Limits `yaml:"limits"`
 }
@@ -58,6 +61,7 @@ func (c *Config) Validate() error {
 		errs = append(errs, err)
 	}
 
+	errs = append(errs, c.Check()...)
 	errs = append(errs, c.Limits.check()...)
 
 	return errors.Join(errs...)

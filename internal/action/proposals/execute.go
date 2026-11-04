@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/audit"
 	"github.com/nourtalaat/sidekick/internal/publish"
 	"github.com/nourtalaat/sidekick/internal/queue"
@@ -326,6 +327,12 @@ func (s *Service) finish(ctx context.Context, id uuid.UUID, status action.Propos
 			}
 		}
 
+		if status == action.StatusSucceeded && s.opensPullRequest(row.Action, result) {
+			if err := gitchange.EnqueueCIReport(ctx, tx, row.ID, s.now()); err != nil {
+				return fmt.Errorf("start the CI report: %w", err)
+			}
+		}
+
 		if err := publish.Refresh(ctx, tx, row.InvestigationID); err != nil {
 			return fmt.Errorf("show the result: %w", err)
 		}
@@ -346,6 +353,22 @@ func (s *Service) finish(ctx context.Context, id uuid.UUID, status action.Propos
 	}
 
 	return nil
+}
+
+// opensPullRequest reports whether the result of a succeeded proposal of the
+// named action is a pull request or merge request whose CI the action can
+// read. That covers an undo that opened a revert.
+func (s *Service) opensPullRequest(name string, result json.RawMessage) bool {
+	if _, ok := s.opts.Actions[name].(gitchange.CIReader); !ok {
+		return false
+	}
+
+	var res action.Result
+	if err := json.Unmarshal(result, &res); err != nil {
+		return false
+	}
+
+	return res.PullRequest != nil
 }
 
 // errorText returns the text a failed proposal keeps for err: redacted and

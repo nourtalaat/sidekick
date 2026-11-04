@@ -45,6 +45,7 @@ import (
 	"strings"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/action/gitlabgit"
 	"github.com/nourtalaat/sidekick/internal/buildinfo"
 	"github.com/nourtalaat/sidekick/internal/gitlabapi"
@@ -73,6 +74,8 @@ type Code struct {
 	// requests it closes or reverts. It is nil where plugins are built
 	// without one, and nothing is recorded then.
 	db db.DBTX
+	// CIReading reads the pipelines of the merge requests the action opens.
+	*gitlabgit.CIReading
 }
 
 var (
@@ -81,6 +84,7 @@ var (
 	_ action.Snapshotter     = (*Code)(nil)
 	_ action.FileReader      = (*Code)(nil)
 	_ action.Undoer          = (*Code)(nil)
+	_ gitchange.CIReader     = (*Code)(nil)
 )
 
 // New builds the action from its validated config. It makes no network call:
@@ -122,6 +126,7 @@ func newCode(name string, cfg Config, deps registry.Deps) (*Code, error) {
 		log:       log,
 		publicURL: deps.PublicURL,
 		db:        deps.DB,
+		CIReading: gitlabgit.NewCIReading(client, cfg.Timeout()),
 	}, nil
 }
 

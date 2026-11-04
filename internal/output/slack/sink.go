@@ -114,10 +114,10 @@ type ref struct {
 }
 
 // Accepts reports whether the sink shows updates of phase: it shows the
-// queued, running, final and follow-up phases, and watcher changes.
+// queued, running, final and follow-up phases, watcher changes and CI results.
 func (s *Sink) Accepts(phase output.Phase) bool {
 	switch phase {
-	case output.PhaseQueued, output.PhaseRunning, output.PhaseFinal, output.PhaseFollowUp, output.PhaseWatcher:
+	case output.PhaseQueued, output.PhaseRunning, output.PhaseFinal, output.PhaseFollowUp, output.PhaseWatcher, output.PhaseCI:
 		return true
 	default:
 		return false
@@ -136,6 +136,10 @@ func (s *Sink) Accepts(phase output.Phase) bool {
 func (s *Sink) Publish(ctx context.Context, u output.Update) (output.Ref, error) {
 	if u.Phase == output.PhaseWatcher {
 		return s.watcherChanged(ctx, u)
+	}
+
+	if u.Phase == output.PhaseCI {
+		return s.ciReported(ctx, u)
 	}
 
 	if u.Previous == nil {
@@ -194,22 +198,9 @@ func (s *Sink) watcherChanged(ctx context.Context, u output.Update) (output.Ref,
 		return *u.Previous, nil
 	}
 
-	var (
-		r  ref
-		ok bool
-	)
-
-	if u.Previous != nil {
-		r, ok = refOf(*u.Previous)
-	}
-
-	if !ok {
-		posted, err := s.post(ctx, u)
-		if err != nil {
-			return output.Ref{}, fmt.Errorf("post the message to reply under: %w", err)
-		}
-
-		r, _ = refOf(posted)
+	r, err := s.messageToReplyUnder(ctx, u)
+	if err != nil {
+		return output.Ref{}, fmt.Errorf("find the message to reply under: %w", err)
 	}
 
 	permalink, err := s.client.permalink(ctx, r.channel, r.ts)
@@ -223,6 +214,27 @@ func (s *Sink) watcherChanged(ctx context.Context, u output.Update) (output.Ref,
 	}
 
 	return s.outputRef(r), nil
+}
+
+// messageToReplyUnder returns the ref of the main message of u's
+// investigation, which a thread reply goes under. Without one, it posts the
+// message first, as for a queued investigation; the state that follows has a
+// higher Seq and edits it.
+func (s *Sink) messageToReplyUnder(ctx context.Context, u output.Update) (ref, error) {
+	if u.Previous != nil {
+		if r, ok := refOf(*u.Previous); ok {
+			return r, nil
+		}
+	}
+
+	posted, err := s.post(ctx, u)
+	if err != nil {
+		return ref{}, fmt.Errorf("post the message to reply under: %w", err)
+	}
+
+	r, _ := refOf(posted)
+
+	return r, nil
 }
 
 // post posts the main message: in the thread of the Slack message the

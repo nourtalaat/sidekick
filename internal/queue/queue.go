@@ -47,6 +47,7 @@ const (
 	KindNotice            = "notice"
 	KindEmbedMemory       = "embed_memory"
 	KindCheckPullRequests = "check_pull_requests"
+	KindCIReport          = "ci_report"
 )
 
 // The values of jobs.status.

@@ -29,6 +29,8 @@
 // shown like any other change, and an update after it still counts as
 // newer.
 //
+// A CI report is delivered the same way, from its ci_reports row.
+//
 // A watcher's state change is not a state: it must not replace a final
 // result that waits to be shown, and every output that takes watcher
 // changes must get each one, not only the newest. WatcherChanged stores
@@ -245,6 +247,33 @@ func WatcherChanged(ctx context.Context, q db.DBTX, investigationID uuid.UUID, s
 		State:           raw,
 	}); err != nil {
 		return fmt.Errorf("store the watcher change: %w", err)
+	}
+
+	return enqueueJobs(ctx, q, investigationID, reserved.Sinks)
+}
+
+// CIReported shows the final CI report of a proposal in the outputs of the
+// investigation with investigationID. The report is in the proposal's
+// ci_reports row already. CIReported reserves a seq for it, as WatcherChanged
+// does for a watcher change, stores the seq on the row and enqueues a
+// publish job for each sink. Each output that accepts output.PhaseCI gets
+// the report once, before the state that follows. An investigation that
+// Open was not called for changes nothing. Call it in the transaction that
+// finishes the report.
+func CIReported(ctx context.Context, q db.DBTX, investigationID, proposalID uuid.UUID) error {
+	queries := db.New(q)
+
+	reserved, err := queries.ReserveWatcherChangeSeq(ctx, investigationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("reserve a seq for the CI report: %w", err)
+	}
+
+	if err := queries.SetCIReportSeq(ctx, db.SetCIReportSeqParams{Seq: &reserved.ChangeSeq, ProposalID: proposalID}); err != nil {
+		return fmt.Errorf("store the seq of the CI report: %w", err)
 	}
 
 	return enqueueJobs(ctx, q, investigationID, reserved.Sinks)

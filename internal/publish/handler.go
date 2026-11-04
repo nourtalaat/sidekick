@@ -182,8 +182,23 @@ func (h *Handler) publish(ctx context.Context, p Payload, sink output.Sink, stat
 		}
 	}
 
+	var reports []db.ListUnsentCIReportsRow
+
+	if sink.Accepts(output.PhaseCI) {
+		var err error
+
+		reports, err = db.New(h.pool).ListUnsentCIReports(ctx, db.ListUnsentCIReportsParams{
+			InvestigationID: p.InvestigationID,
+			MaxSeq:          state.Seq,
+			Sink:            p.Sink,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list the CI reports to send: %w", err)
+		}
+	}
+
 	showState := (shown == nil || state.Seq > *shown) && sink.Accepts(phase)
-	if len(changes) == 0 && !showState {
+	if len(changes) == 0 && len(reports) == 0 && !showState {
 		return nil, nil
 	}
 
@@ -195,6 +210,11 @@ func (h *Handler) publish(ctx context.Context, p Payload, sink output.Sink, stat
 	u.Previous, shown, err = h.sendChanges(ctx, p, sink, u, changes, shown)
 	if err != nil {
 		return nil, fmt.Errorf("watcher changes: %w", err)
+	}
+
+	u.Previous, shown, err = h.sendCIReports(ctx, p, sink, u, reports, shown)
+	if err != nil {
+		return nil, fmt.Errorf("CI reports: %w", err)
 	}
 
 	if !showState || (shown != nil && state.Seq <= *shown) {
@@ -242,6 +262,81 @@ func (h *Handler) sendChanges(ctx context.Context, p Payload, sink output.Sink, 
 	}
 
 	return prev, shown, nil
+}
+
+// sendCIReports sends sink the CI reports, oldest first, each as an
+// output.PhaseCI update built on u with the report's seq. After each one it
+// stores the ref the sink returned and marks the report sent, so a retry
+// sends only the rest. It returns the newest ref and the highest seq shown,
+// or u.Previous and shown when there are no reports.
+func (h *Handler) sendCIReports(ctx context.Context, p Payload, sink output.Sink, u output.Update, reports []db.ListUnsentCIReportsRow, shown *int64) (*output.Ref, *int64, error) {
+	prev := u.Previous
+
+	for _, r := range reports {
+		var report output.CIReport
+		if err := json.Unmarshal(r.Detail, &report); err != nil {
+			return nil, nil, fmt.Errorf("decode the CI report of proposal %s: %w", r.ProposalID, err)
+		}
+
+		report.State = r.State
+
+		cu := u
+		cu.Phase = output.PhaseCI
+		cu.CI = &report
+		cu.Seq = *r.Seq
+		cu.Previous = prev
+
+		ref, err := sink.Publish(ctx, cu)
+		if err != nil {
+			return nil, nil, fmt.Errorf("send the CI report of proposal %s: %w", r.ProposalID, err)
+		}
+
+		if err := h.markCISent(ctx, p, r, ref); err != nil {
+			return nil, nil, fmt.Errorf("CI report of proposal %s: %w", r.ProposalID, err)
+		}
+
+		prev = &ref
+
+		if shown == nil || *r.Seq > *shown {
+			shown = r.Seq
+		}
+	}
+
+	return prev, shown, nil
+}
+
+// markCISent stores the ref a sink returned for CI report r and marks the
+// report sent to the sink, in one transaction.
+func (h *Handler) markCISent(ctx context.Context, p Payload, r db.ListUnsentCIReportsRow, ref output.Ref) error {
+	raw, err := json.Marshal(ref)
+	if err != nil {
+		return fmt.Errorf("encode the ref: %w", err)
+	}
+
+	err = pgx.BeginFunc(ctx, h.pool, func(tx pgx.Tx) error {
+		queries := db.New(tx)
+
+		if err := queries.SaveOutputRef(ctx, db.SaveOutputRefParams{
+			InvestigationID: p.InvestigationID,
+			Sink:            p.Sink,
+			External:        ref.External,
+			Ref:             raw,
+			LastSeq:         *r.Seq,
+		}); err != nil {
+			return fmt.Errorf("store the ref: %w", err)
+		}
+
+		if err := queries.MarkCIReportSent(ctx, db.MarkCIReportSentParams{Sink: p.Sink, ProposalID: r.ProposalID}); err != nil {
+			return fmt.Errorf("mark it sent: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("record the CI report as sent: %w", err)
+	}
+
+	return nil
 }
 
 // markSent stores the ref a sink returned for watcher change c and marks

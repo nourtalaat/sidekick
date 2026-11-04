@@ -54,6 +54,7 @@ import (
 	gh "github.com/google/go-github/v93/github"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/action/githubgit"
 	"github.com/nourtalaat/sidekick/internal/buildinfo"
 	"github.com/nourtalaat/sidekick/internal/githubapp"
@@ -84,12 +85,15 @@ type Revert struct {
 	// requests it closes or reverts. It is nil where plugins are built
 	// without one, and nothing is recorded then.
 	db db.DBTX
+	// CIReading reads the CI of the pull requests the action opens.
+	*githubgit.CIReading
 }
 
 var (
 	_ action.Action      = (*Revert)(nil)
 	_ action.Snapshotter = (*Revert)(nil)
 	_ action.FileReader  = (*Revert)(nil)
+	_ gitchange.CIReader = (*Revert)(nil)
 )
 
 // New builds the action from its validated config. It makes no network
@@ -101,16 +105,23 @@ func New(_ context.Context, name string, cfg Config, deps registry.Deps) (action
 // newRevert is New with the concrete type, for the code in this package that
 // needs more than the action interface.
 func newRevert(name string, cfg Config, deps registry.Deps) (*Revert, error) {
-	client, err := githubapp.NewClient(githubapp.Options{
+	opts := githubapp.Options{
 		App:         cfg.App,
 		BaseURL:     githubgit.BaseURL(cfg.BaseURL),
 		Secrets:     deps.Secrets,
 		HTTP:        deps.HTTP,
 		UserAgent:   "sidekick/" + buildinfo.Version,
 		Permissions: githubapp.ReadWrite(),
-	})
+	}
+
+	client, err := githubapp.NewClient(opts)
 	if err != nil {
 		return nil, fmt.Errorf("make the GitHub client: %w", err)
+	}
+
+	reading, err := githubgit.NewCIReading(client, opts, cfg.Timeout())
+	if err != nil {
+		return nil, fmt.Errorf("set up the CI reads: %w", err)
 	}
 
 	m, err := githubgit.NewMetrics(deps.Metrics, "githubrevert")
@@ -132,6 +143,7 @@ func newRevert(name string, cfg Config, deps registry.Deps) (*Revert, error) {
 		publicURL: deps.PublicURL,
 		now:       time.Now,
 		db:        deps.DB,
+		CIReading: reading,
 	}, nil
 }
 

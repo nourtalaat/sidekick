@@ -153,22 +153,22 @@ func (e FeedbackRating) Valid() bool {
 
 // Defines values for FeedbackSummarySummary.
 const (
-	Correct FeedbackSummarySummary = "correct"
-	Mixed   FeedbackSummarySummary = "mixed"
-	None    FeedbackSummarySummary = "none"
-	Wrong   FeedbackSummarySummary = "wrong"
+	FeedbackSummarySummaryCorrect FeedbackSummarySummary = "correct"
+	FeedbackSummarySummaryMixed   FeedbackSummarySummary = "mixed"
+	FeedbackSummarySummaryNone    FeedbackSummarySummary = "none"
+	FeedbackSummarySummaryWrong   FeedbackSummarySummary = "wrong"
 )
 
 // Valid indicates whether the value is a known member of the FeedbackSummarySummary enum.
 func (e FeedbackSummarySummary) Valid() bool {
 	switch e {
-	case Correct:
+	case FeedbackSummarySummaryCorrect:
 		return true
-	case Mixed:
+	case FeedbackSummarySummaryMixed:
 		return true
-	case None:
+	case FeedbackSummarySummaryNone:
 		return true
-	case Wrong:
+	case FeedbackSummarySummaryWrong:
 		return true
 	default:
 		return false
@@ -361,6 +361,36 @@ func (e OperationsStatsInterval) Valid() bool {
 	case OperationsStatsIntervalDay:
 		return true
 	case OperationsStatsIntervalHour:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProposalCIState.
+const (
+	ProposalCIStateFailed   ProposalCIState = "failed"
+	ProposalCIStateNone     ProposalCIState = "none"
+	ProposalCIStatePassed   ProposalCIState = "passed"
+	ProposalCIStatePending  ProposalCIState = "pending"
+	ProposalCIStateTimedOut ProposalCIState = "timed_out"
+	ProposalCIStateUnknown  ProposalCIState = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the ProposalCIState enum.
+func (e ProposalCIState) Valid() bool {
+	switch e {
+	case ProposalCIStateFailed:
+		return true
+	case ProposalCIStateNone:
+		return true
+	case ProposalCIStatePassed:
+		return true
+	case ProposalCIStatePending:
+		return true
+	case ProposalCIStateTimedOut:
+		return true
+	case ProposalCIStateUnknown:
 		return true
 	default:
 		return false
@@ -2346,6 +2376,57 @@ type ProposalActionList struct {
 	Actions []string `json:"actions"`
 }
 
+// ProposalCI What Sidekick found about the CI (the checks or the pipeline) of the
+// pull request or merge request. It follows the CI of the head commit
+// until a final state or the end of the wait, then reports once in the
+// investigation's thread. Absent when the proposal's action does not
+// report CI, and until Sidekick has made the pull request known to this
+// screen. The names of the failed checks come from the host: show them
+// as plain text.
+type ProposalCI struct {
+	// CheckedAt When Sidekick last read the CI.
+	CheckedAt *time.Time         `json:"checkedAt,omitempty"`
+	Failed    *[]ProposalCICheck `json:"failed,omitempty"`
+
+	// FailedCount How many checks failed. `failed` names at most the first 10 of them.
+	FailedCount int `json:"failedCount"`
+
+	// Message Sidekick's own sentence for the state `unknown`, such as which permission it needs.
+	Message *string `json:"message,omitempty"`
+
+	// Passed How many checks passed. Zero until Sidekick has read the CI.
+	Passed int `json:"passed"`
+
+	// ReportedAt When Sidekick reported the final state. Absent while the state is `pending`.
+	ReportedAt *time.Time `json:"reportedAt,omitempty"`
+
+	// State `pending` means Sidekick is still waiting and reads again soon. The
+	// others are final: `passed`, `failed`, `none` (no check or pipeline
+	// started within 10 minutes), `unknown` (Sidekick could not read the
+	// CI, and `message` says why) and `timed_out` (checks had not
+	// finished when Sidekick stopped waiting).
+	State ProposalCIState `json:"state"`
+
+	// Total How many checks Sidekick read.
+	Total int `json:"total"`
+}
+
+// ProposalCIState `pending` means Sidekick is still waiting and reads again soon. The
+// others are final: `passed`, `failed`, `none` (no check or pipeline
+// started within 10 minutes), `unknown` (Sidekick could not read the
+// CI, and `message` says why) and `timed_out` (checks had not
+// finished when Sidekick stopped waiting).
+type ProposalCIState string
+
+// ProposalCICheck One check or pipeline job that failed.
+type ProposalCICheck struct {
+	// Name The name the host gave the check, as plain text, cut to 80 characters. It is text from outside; show it as text, never as markup.
+	Name string `json:"name"`
+
+	// Url The address of the check on the host. A screen links it only when it is an http or https address.
+	Url *string `json:"url,omitempty"`
+}
+
 // ProposalChange One field that differs. `before` and `after` are the JSON values as
 // text, like `paramsText`: characters that could hide something are
 // written as \u escapes, and nothing is cut. They come from the
@@ -2427,6 +2508,15 @@ type ProposalList struct {
 type ProposalPullRequest struct {
 	// CheckedAt When Sidekick last read it from the host. A merged or closed pull request is not read again, so this stays at the time the check found it merged or closed.
 	CheckedAt time.Time `json:"checkedAt"`
+
+	// Ci What Sidekick found about the CI (the checks or the pipeline) of the
+	// pull request or merge request. It follows the CI of the head commit
+	// until a final state or the end of the wait, then reports once in the
+	// investigation's thread. Absent when the proposal's action does not
+	// report CI, and until Sidekick has made the pull request known to this
+	// screen. The names of the failed checks come from the host: show them
+	// as plain text.
+	Ci *ProposalCI `json:"ci,omitempty"`
 
 	// ClosedAt When it was closed without a merge. Set only when the state is closed.
 	ClosedAt *time.Time `json:"closedAt,omitempty"`

@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 )
 
 func TestValidate(t *testing.T) {
@@ -53,6 +55,17 @@ func TestValidate(t *testing.T) {
 			require.Empty(t, b.w.srv.Requests(), "validating makes no call")
 		})
 	}
+}
+
+func TestRevertReadsCI(t *testing.T) {
+	t.Parallel()
+
+	b := newBed(t, nil)
+
+	var reader gitchange.CIReader = b.rv
+
+	require.Equal(t, "gitlab", reader.CIHost())
+	require.Equal(t, 2*time.Hour, reader.CIReportTimeout())
 }
 
 func TestValidateUnknownField(t *testing.T) {

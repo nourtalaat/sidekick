@@ -777,6 +777,17 @@ closed. A proposal with no pull request, or one that was not checked yet,
 has no section. The link opens only when the address is an `http` or `https`
 one; otherwise the repository and number are plain text.
 
+For a pull request from `github.code_change`, `github.revert`,
+`gitlab.code_change` or `gitlab.revert`, a second line shows **CI**: a badge
+with an icon and a word (**Running**, **Passed**, **Failed**, **None**,
+**Unknown** or **Not finished**), what Sidekick found, such as "7 of 7 checks
+passed", and when it last read the CI or reported the final state. A failed
+CI lists the failed checks by name, each linked when it has an `http` or
+`https` address. Check names come from the repository, so they are always
+plain text. The line appears after Sidekick first reads the CI, a few seconds
+after the proposal succeeds. See [the CI
+report](configuration.md#ci-report-of-a-pull-request-or-merge-request).
+
 - `GET /api/v1/proposals` (approver) lists proposals a page at a time, with
   `status` (repeat it for several, default `proposed`), `action` (one name
   from the config; a name that is not there answers 400 and lists the names),
@@ -813,7 +824,11 @@ one; otherwise the repository and number are plain text.
 - `GET /api/v1/investigations/{id}` has a `proposals` list.
 - A proposal in the queue and in that list has a `pullRequest` object when a
   check has recorded one: `repo`, `number`, `url`, `state` (`open`, `merged`
-  or `closed`), `mergedAt`, `closedAt` and `checkedAt`. The answers to
+  or `closed`), `mergedAt`, `closedAt` and `checkedAt`, and a `ci` object
+  when Sidekick follows the CI of the pull request: `state` (`pending`,
+  `passed`, `failed`, `none`, `unknown` or `timed_out`), `passed`, `total`,
+  `failedCount`, `failed` (at most 10 checks, each with a plain text `name`
+  and a `url`), `message`, `checkedAt` and `reportedAt`. The answers to
   approving, rejecting and undoing do not have it.
 
 Every proposal, approval, rejection, expiry and result is in the audit log

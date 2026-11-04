@@ -33,6 +33,24 @@ const (
 // token or without its expiry time.
 var errNoToken = errors.New("GitHub returned no installation token or no expiry time")
 
+// ErrToken matches, with errors.Is, an error from a call that failed because
+// no installation token could be made, for example because the app does not
+// have a permission the client asks for. A caller tells it from an error of
+// the API call itself, which has a token.
+var ErrToken = errors.New("no installation token")
+
+// tokenError is an error from making an installation token. It reads as the
+// error it wraps and also matches ErrToken.
+type tokenError struct {
+	err error
+}
+
+func (e *tokenError) Error() string { return e.err.Error() }
+
+func (e *tokenError) Unwrap() error { return e.err }
+
+func (e *tokenError) Is(target error) bool { return target == ErrToken }
+
 // tokenSource makes and caches the installation access token of one
 // GitHub App installation. It reads the app's private key through the
 // secrets resolver on each exchange, so a rotated key is used without a
@@ -68,7 +86,7 @@ func (t *tokenSource) Token(ctx context.Context) (string, error) {
 
 	token, expires, err := t.exchange(ctx)
 	if err != nil {
-		return "", fmt.Errorf("make an installation token: %w", err)
+		return "", &tokenError{err: fmt.Errorf("make an installation token: %w", err)}
 	}
 
 	t.token, t.expires = token, expires

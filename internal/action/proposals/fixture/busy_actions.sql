@@ -52,6 +52,12 @@ SELECT md5('proposal' || i || '-' || n)::uuid, 'acme/monitors', i, 'https://gith
 FROM generate_series(1, 10000) AS i, (VALUES (2), (6), (10)) AS v(n)
 WHERE i > 5000 OR n > 2;
 
+-- A CI report for each of those pull requests, so the join with ci_reports
+-- of the proposal queries reads a table of the same size.
+INSERT INTO ci_reports (proposal_id, state, detail, checks, started_at, checked_at, reported_at)
+SELECT proposal_id, 'passed', '{"state":"passed","passed":3,"total":3}', 3, checked_at, checked_at, checked_at
+FROM pull_request_states;
+
 -- ANALYZE samples 30,000 rows by default, so the estimate of how many rows
 -- a rare action has changed from run to run. A statistics target of 1,000
 -- makes it read every row of the table, and the estimate the same each time.

@@ -124,7 +124,7 @@ func setup(t *testing.T) *harness {
 		mute:    newFakeMute("mute"),
 		clock:   &clock{now: time.Now().UTC().Truncate(time.Second)},
 		policy: &movablePolicy{routes: action.StaticPolicy{
-			"payments": {Mode: action.Approved, Actions: []string{"monitor-note", "monitor", "monitor-fix", "monitor-pr", "mute"}},
+			"payments": {Mode: action.Approved, Actions: []string{"monitor-note", "monitor", "monitor-fix", "monitor-pr", "mute", "ci-note", "pr-note"}},
 			"default":  {Mode: action.ReadOnly},
 		}},
 	}
@@ -146,6 +146,8 @@ func (h *harness) service(t *testing.T, opts Options) *Service {
 		"monitor-fix":  fixingMonitor{fakeMonitor: newFakeMonitor("monitor-fix"), kind: action.FixAPI},
 		"monitor-pr":   fixingMonitor{fakeMonitor: newFakeMonitor("monitor-pr"), kind: action.FixPullRequest},
 		"mute":         h.mute,
+		"ci-note":      newCINote("ci-note", true),
+		"pr-note":      newCINote("pr-note", false),
 	}
 
 	s, err := New(opts)

@@ -166,3 +166,28 @@ func ReadWrite() *gh.InstallationPermissions {
 		PullRequests: &write,
 	}
 }
+
+// ChecksRead returns the permissions of the client that reads the check runs
+// of a commit: read access to checks and metadata. It is a client of its own,
+// apart from the one that opens pull requests, so an app that was not given
+// Checks fails only the reads of CI, never the write token.
+func ChecksRead() *gh.InstallationPermissions {
+	read := accessRead
+
+	return &gh.InstallationPermissions{
+		Checks:   &read,
+		Metadata: &read,
+	}
+}
+
+// StatusesRead returns the permissions of the client that reads the commit
+// statuses of a commit: read access to commit statuses and metadata. Like
+// ChecksRead, it is a client of its own.
+func StatusesRead() *gh.InstallationPermissions {
+	read := accessRead
+
+	return &gh.InstallationPermissions{
+		Statuses: &read,
+		Metadata: &read,
+	}
+}

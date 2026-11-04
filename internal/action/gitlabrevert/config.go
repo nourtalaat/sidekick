@@ -27,6 +27,9 @@ type Config struct {
 	// access token with the api scope and the Developer role on the projects
 	// in limits.projects only. It is read on every call.
 	TokenSecret registry.SecretRef `yaml:"tokenSecret"`
+	// CIConfig is ciReportTimeout, how long Sidekick waits for the pipeline
+	// of a merge request to finish.
+	gitchange.CIConfig `yaml:",inline"`
 	// Limits say what the action may revert.
 	Limits Limits `yaml:"limits"`
 }
@@ -60,6 +63,7 @@ func (c *Config) Validate() error {
 		errs = append(errs, err)
 	}
 
+	errs = append(errs, c.Check()...)
 	errs = append(errs, c.Limits.check()...)
 
 	return errors.Join(errs...)
