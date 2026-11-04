@@ -76,6 +76,19 @@ sources:
         match:
           args:
             repo: { equals: acme/monitors }
+            path: { regex: "^prometheus/rules/?$" }
+        respond:
+          text: |
+            acme/monitors, prometheus/rules, main, directory
+            checkout.yml
+            ledger.yml
+            receipt-render.yml
+          evidence:
+            - { kind: resource, title: prometheus/rules, url: "https://github.example.com/acme/monitors/tree/main/prometheus/rules" }
+      - tool: get_file
+        match:
+          args:
+            repo: { equals: acme/monitors }
             path: { regex: "prometheus/rules/receipt-render\\.ya?ml$" }
         respond:
           text: |

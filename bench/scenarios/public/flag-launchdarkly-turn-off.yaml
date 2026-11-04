@@ -102,6 +102,27 @@ sources:
             min 0.1%, max 23%, last 22%
           evidence:
             - { kind: metric, title: express checkout 5xx ratio, url: "https://prometheus.quillcart.example/graph?g0.expr=web_shop_express_5xx_ratio" }
+      - tool: query
+        respond:
+          text: |
+            Instant query at 2026-10-20T15:30:00Z
+            {service="web-shop", route="/checkout/express"} 0.22
+            The value is the share of 5xx responses on that route over the last 5 minutes.
+          evidence:
+            - { kind: metric, title: express checkout 5xx ratio, url: "https://prometheus.quillcart.example/graph?g0.expr=web_shop_express_5xx_ratio" }
+      - tool: list_alerts
+        respond:
+          text: |
+            1 alert firing
+            ExpressPayErrorRateHigh, firing since 2026-10-20T15:12:00Z, labels service=web-shop namespace=shop route=/checkout/express env=prod severity=critical
+              summary: web-shop /checkout/express 5xx ratio above 5% for 5m
+            No other alert is firing or pending for web-shop or its dependencies.
+      - tool: get_rules
+        respond:
+          text: |
+            group web-shop, alert ExpressPayErrorRateHigh, for 5m
+            expr: sum(rate(http_requests_total{service="web-shop",route="/checkout/express",code=~"5.."}[5m])) / sum(rate(http_requests_total{service="web-shop",route="/checkout/express"}[5m])) > 0.05
+            health ok, last evaluation 15:29:50
   github:
     tools: { snapshot: bench/tools/github.json }
     fixtures:

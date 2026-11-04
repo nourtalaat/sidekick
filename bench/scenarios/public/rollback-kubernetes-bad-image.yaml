@@ -72,6 +72,27 @@ sources:
             min 0.1%, max 33%, last 31%
           evidence:
             - { kind: metric, title: cart-api 5xx ratio, url: "https://prometheus.quillcart.example/graph?g0.expr=cart_api_5xx_ratio" }
+      - tool: query
+        respond:
+          text: |
+            Instant query at 2026-10-14T10:30:00Z
+            {service="cart-api"} 0.31
+            The value is the share of 5xx responses of cart-api over the last 5 minutes.
+          evidence:
+            - { kind: metric, title: cart-api 5xx ratio, url: "https://prometheus.quillcart.example/graph?g0.expr=cart_api_5xx_ratio" }
+      - tool: list_alerts
+        respond:
+          text: |
+            1 alert firing
+            CartApiErrorRateHigh, firing since 2026-10-14T10:13:00Z, labels service=cart-api namespace=shop env=prod severity=critical
+              summary: cart-api 5xx ratio above 5% for 5m
+            No other alert is firing or pending for cart-api or its dependencies.
+      - tool: get_rules
+        respond:
+          text: |
+            group cart-api, alert CartApiErrorRateHigh, for 5m
+            expr: sum(rate(http_requests_total{service="cart-api",code=~"5.."}[5m])) / sum(rate(http_requests_total{service="cart-api"}[5m])) > 0.05
+            health ok, last evaluation 10:29:50
   github:
     tools: { snapshot: bench/tools/github.json }
     fixtures:
