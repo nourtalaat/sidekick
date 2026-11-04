@@ -106,7 +106,7 @@ func TestActionsPageIsLinked(t *testing.T) {
 func readDoc(t *testing.T, name string) string {
 	t.Helper()
 
-	data, err := os.ReadFile(filepath.Join(docsDir, name))
+	data, err := os.ReadFile(filepath.Join(docsDir, name)) //nolint:gosec // A docs path chosen by the test.
 	require.NoError(t, err)
 
 	return string(data)
