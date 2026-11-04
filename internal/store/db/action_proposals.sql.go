@@ -276,9 +276,14 @@ SELECT
   s.state AS pr_state,
   s.merged_at AS pr_merged_at,
   s.closed_at AS pr_closed_at,
-  s.checked_at AS pr_checked_at
+  s.checked_at AS pr_checked_at,
+  c.state AS ci_state,
+  c.detail AS ci_detail,
+  c.checked_at AS ci_checked_at,
+  c.reported_at AS ci_reported_at
 FROM action_proposals p
 LEFT JOIN pull_request_states s ON s.proposal_id = p.id
+LEFT JOIN ci_reports c ON c.proposal_id = p.id
 WHERE p.id = $1
 `
 
@@ -294,13 +299,17 @@ type GetActionProposalViewRow struct {
 	PrMergedAt     *time.Time
 	PrClosedAt     *time.Time
 	PrCheckedAt    *time.Time
+	CiState        *string
+	CiDetail       []byte
+	CiCheckedAt    *time.Time
+	CiReportedAt   *time.Time
 }
 
 // GetActionProposalView returns a proposal with the route and title of its
 // investigation, the name of who decided it and the state of its pull
-// request, if it has one. These are read by primary key for each row
+// request and of its CI, if it has them. These are read by primary key for each row
 // returned, after the page is cut, so a page costs the same however many
-// investigations, users and pull requests there are.
+// investigations, users, pull requests and CI reports there are.
 func (q *Queries) GetActionProposalView(ctx context.Context, id uuid.UUID) (GetActionProposalViewRow, error) {
 	row := q.db.QueryRow(ctx, getActionProposalView, id)
 	var i GetActionProposalViewRow
@@ -335,6 +344,10 @@ func (q *Queries) GetActionProposalView(ctx context.Context, id uuid.UUID) (GetA
 		&i.PrMergedAt,
 		&i.PrClosedAt,
 		&i.PrCheckedAt,
+		&i.CiState,
+		&i.CiDetail,
+		&i.CiCheckedAt,
+		&i.CiReportedAt,
 	)
 	return i, err
 }
@@ -496,9 +509,14 @@ SELECT
   s.state AS pr_state,
   s.merged_at AS pr_merged_at,
   s.closed_at AS pr_closed_at,
-  s.checked_at AS pr_checked_at
+  s.checked_at AS pr_checked_at,
+  c.state AS ci_state,
+  c.detail AS ci_detail,
+  c.checked_at AS ci_checked_at,
+  c.reported_at AS ci_reported_at
 FROM action_proposals p
 LEFT JOIN pull_request_states s ON s.proposal_id = p.id
+LEFT JOIN ci_reports c ON c.proposal_id = p.id
 WHERE p.status = $1
   AND ($2::text IS NULL OR p.action = $2)
   AND (p.proposed_at, p.id) < ($3::timestamptz, $4::uuid)
@@ -526,6 +544,10 @@ type ListActionProposalsRow struct {
 	PrMergedAt     *time.Time
 	PrClosedAt     *time.Time
 	PrCheckedAt    *time.Time
+	CiState        *string
+	CiDetail       []byte
+	CiCheckedAt    *time.Time
+	CiReportedAt   *time.Time
 }
 
 // ListActionProposals lists proposals with one status, newest first, from
@@ -579,6 +601,10 @@ func (q *Queries) ListActionProposals(ctx context.Context, arg ListActionProposa
 			&i.PrMergedAt,
 			&i.PrClosedAt,
 			&i.PrCheckedAt,
+			&i.CiState,
+			&i.CiDetail,
+			&i.CiCheckedAt,
+			&i.CiReportedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -605,9 +631,14 @@ SELECT
   s.state AS pr_state,
   s.merged_at AS pr_merged_at,
   s.closed_at AS pr_closed_at,
-  s.checked_at AS pr_checked_at
+  s.checked_at AS pr_checked_at,
+  c.state AS ci_state,
+  c.detail AS ci_detail,
+  c.checked_at AS ci_checked_at,
+  c.reported_at AS ci_reported_at
 FROM action_proposals p
 LEFT JOIN pull_request_states s ON s.proposal_id = p.id
+LEFT JOIN ci_reports c ON c.proposal_id = p.id
 WHERE p.investigation_id = $1
 ORDER BY p.proposed_at, p.id
 `
@@ -624,6 +655,10 @@ type ListInvestigationActionProposalsRow struct {
 	PrMergedAt     *time.Time
 	PrClosedAt     *time.Time
 	PrCheckedAt    *time.Time
+	CiState        *string
+	CiDetail       []byte
+	CiCheckedAt    *time.Time
+	CiReportedAt   *time.Time
 }
 
 // ListInvestigationActionProposals lists the proposals of an
@@ -668,6 +703,10 @@ func (q *Queries) ListInvestigationActionProposals(ctx context.Context, investig
 			&i.PrMergedAt,
 			&i.PrClosedAt,
 			&i.PrCheckedAt,
+			&i.CiState,
+			&i.CiDetail,
+			&i.CiCheckedAt,
+			&i.CiReportedAt,
 		); err != nil {
 			return nil, err
 		}

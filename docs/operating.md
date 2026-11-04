@@ -20,6 +20,7 @@ Sidekick, and for the tools you use once it runs.
 ## Configuration
 
 - [Configuration](configuration.md): every section of `sidekick.yaml`.
+- [Actions](actions.md): every action type by family, which to use when, and the safety rules.
 - [Defaults](configuration.md#defaults): the value each key takes when you leave it out.
 - [What is checked](configuration.md#what-is-checked): the checks Sidekick runs on the file.
 - [Checking a file](configuration.md#checking-a-file-with-sidekick-config-validate): `sidekick config validate`.

@@ -25,9 +25,9 @@ SELECT * FROM action_proposals WHERE id = @id;
 -- name: GetActionProposalView :one
 -- GetActionProposalView returns a proposal with the route and title of its
 -- investigation, the name of who decided it and the state of its pull
--- request, if it has one. These are read by primary key for each row
+-- request and of its CI, if it has them. These are read by primary key for each row
 -- returned, after the page is cut, so a page costs the same however many
--- investigations, users and pull requests there are.
+-- investigations, users, pull requests and CI reports there are.
 SELECT
   sqlc.embed(p),
   (SELECT i.route FROM investigations i WHERE i.id = p.investigation_id)::text AS route,
@@ -42,9 +42,14 @@ SELECT
   s.state AS pr_state,
   s.merged_at AS pr_merged_at,
   s.closed_at AS pr_closed_at,
-  s.checked_at AS pr_checked_at
+  s.checked_at AS pr_checked_at,
+  c.state AS ci_state,
+  c.detail AS ci_detail,
+  c.checked_at AS ci_checked_at,
+  c.reported_at AS ci_reported_at
 FROM action_proposals p
 LEFT JOIN pull_request_states s ON s.proposal_id = p.id
+LEFT JOIN ci_reports c ON c.proposal_id = p.id
 WHERE p.id = @id;
 
 -- name: LockActionProposal :one
@@ -158,9 +163,14 @@ SELECT
   s.state AS pr_state,
   s.merged_at AS pr_merged_at,
   s.closed_at AS pr_closed_at,
-  s.checked_at AS pr_checked_at
+  s.checked_at AS pr_checked_at,
+  c.state AS ci_state,
+  c.detail AS ci_detail,
+  c.checked_at AS ci_checked_at,
+  c.reported_at AS ci_reported_at
 FROM action_proposals p
 LEFT JOIN pull_request_states s ON s.proposal_id = p.id
+LEFT JOIN ci_reports c ON c.proposal_id = p.id
 WHERE p.status = @status
   AND (sqlc.narg(action)::text IS NULL OR p.action = sqlc.narg(action))
   AND (p.proposed_at, p.id) < (@before_at::timestamptz, @before_id::uuid)
@@ -184,8 +194,13 @@ SELECT
   s.state AS pr_state,
   s.merged_at AS pr_merged_at,
   s.closed_at AS pr_closed_at,
-  s.checked_at AS pr_checked_at
+  s.checked_at AS pr_checked_at,
+  c.state AS ci_state,
+  c.detail AS ci_detail,
+  c.checked_at AS ci_checked_at,
+  c.reported_at AS ci_reported_at
 FROM action_proposals p
 LEFT JOIN pull_request_states s ON s.proposal_id = p.id
+LEFT JOIN ci_reports c ON c.proposal_id = p.id
 WHERE p.investigation_id = @investigation_id
 ORDER BY p.proposed_at, p.id;

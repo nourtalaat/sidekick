@@ -48,6 +48,8 @@ func TestPermissions(t *testing.T) {
 	}{
 		{name: "read only", got: ReadOnly(), want: `{"actions":"read","contents":"read","metadata":"read","pull_requests":"read"}`},
 		{name: "read and write", got: ReadWrite(), want: `{"contents":"write","metadata":"read","pull_requests":"write"}`},
+		{name: "checks read", got: ChecksRead(), want: `{"checks":"read","metadata":"read"}`},
+		{name: "commit statuses read", got: StatusesRead(), want: `{"metadata":"read","statuses":"read"}`},
 	}
 
 	for _, tt := range tests {

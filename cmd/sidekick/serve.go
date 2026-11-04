@@ -145,6 +145,10 @@ func serve(ctx context.Context, cmd *cobra.Command, opts app.Options) error {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}
 
+	if err := registerCIReport(a); err != nil {
+		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
+	}
+
 	if err := registerRetention(a); err != nil {
 		return errors.Join(fmt.Errorf("start: %w", err), a.Close())
 	}

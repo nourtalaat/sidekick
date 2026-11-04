@@ -3,6 +3,7 @@ package githubcode
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
@@ -19,6 +20,10 @@ func TestConfigValidate(t *testing.T) {
 		want   []string
 	}{
 		{name: "a whole config"},
+		{name: "a CI timeout", change: func(c *Config) { c.ReportTimeout = 6 * time.Hour }},
+		{name: "a CI timeout over a day", change: func(c *Config) { c.ReportTimeout = 25 * time.Hour }, want: []string{
+			"ciReportTimeout: must be from 1m0s to 24h0m0s, got 25h0m0s",
+		}},
 		{name: "a base URL for GitHub Enterprise", change: func(c *Config) { c.BaseURL = "https://github.example.com/api/v3" }},
 		{name: "plain http on localhost", change: func(c *Config) { c.BaseURL = "http://localhost:8080/" }},
 		{name: "refused paths and deletes", change: func(c *Config) {
@@ -159,4 +164,21 @@ func TestConfigRejectsOtherUnknownKeys(t *testing.T) {
 
 	_, err = decodeSection(t, configSection+"formats: []\n")
 	require.ErrorContains(t, err, "unknown key")
+}
+
+func TestConfigReadsTheCIReportTimeout(t *testing.T) {
+	t.Parallel()
+
+	c, err := decodeSection(t, configSection+"ciReportTimeout: 6h\n")
+	require.NoError(t, err)
+	require.NoError(t, c.Validate())
+	require.Equal(t, 6*time.Hour, c.Timeout())
+
+	c, err = decodeSection(t, configSection)
+	require.NoError(t, err)
+	require.Equal(t, 2*time.Hour, c.Timeout(), "the default is 2 hours")
+
+	c, err = decodeSection(t, configSection+"ciReportTimeout: 48h\n")
+	require.NoError(t, err)
+	require.ErrorContains(t, c.Validate(), "ciReportTimeout")
 }

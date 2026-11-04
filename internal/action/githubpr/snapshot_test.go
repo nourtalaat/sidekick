@@ -2,6 +2,7 @@ package githubpr
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -55,6 +56,139 @@ func TestSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	require.LessOrEqual(t, len(changes), action.MaxChanges)
 	require.False(t, snap.Deletes(), "the snapshot never says the target is removed")
+}
+
+func TestRefusalsMatchErrLimit(t *testing.T) {
+	t.Parallel()
+
+	const baseFile = `{"type":%q,"name":"rules.yaml","path":%q,"sha":"s","size":%d,"encoding":"base64","content":""}`
+
+	tests := []struct {
+		name string
+		// serve makes the fake GitHub answer for testRulesPath.
+		serve func(b *bed)
+		// change edits the parameters.
+		change func(p *Params)
+		// wantAtSnapshot is false for a refusal that only CheckProposal makes.
+		wantAtSnapshot bool
+		wantErr        string
+	}{
+		{
+			name: "a symlink",
+			serve: func(b *bed) {
+				b.github.Handle(http.MethodGet, repoPath("contents/"+testRulesPath), reply(fmt.Sprintf(baseFile, "symlink", testRulesPath, 5)))
+			},
+			wantAtSnapshot: true,
+			wantErr:        "is not a regular file",
+		},
+		{
+			name: "a submodule",
+			serve: func(b *bed) {
+				b.github.Handle(http.MethodGet, repoPath("contents/"+testRulesPath), reply(fmt.Sprintf(baseFile, "submodule", testRulesPath, 0)))
+			},
+			wantAtSnapshot: true,
+			wantErr:        "is not a regular file",
+		},
+		{
+			name: "a directory",
+			serve: func(b *bed) {
+				b.github.Handle(http.MethodGet, repoPath("contents/"+testRulesPath), reply("["+fmt.Sprintf(baseFile, "file", testRulesPath, 0)+"]"))
+			},
+			wantAtSnapshot: true,
+			wantErr:        "is not a regular file",
+		},
+		{
+			name: "a file that is too big",
+			serve: func(b *bed) {
+				b.github.Handle(http.MethodGet, repoPath("contents/"+testRulesPath), reply(fmt.Sprintf(baseFile, "file", testRulesPath, maxBaseFileBytes+1)))
+			},
+			wantAtSnapshot: true,
+			wantErr:        "is larger than",
+		},
+		{
+			name:           "a file that is not text",
+			serve:          func(b *bed) { b.expectFile(testRulesPath, "a\x00b") },
+			wantAtSnapshot: true,
+			wantErr:        "is not a UTF-8 text file",
+		},
+		{
+			name:    "a file that has the new content already",
+			serve:   func(b *bed) { b.expectFile(testRulesPath, testRulesAfter) },
+			wantErr: "already has this content",
+		},
+		{
+			name:    "a delete of a file that is not there",
+			serve:   func(b *bed) { b.github.Handle(http.MethodGet, repoPath("contents/"+testRulesPath), notFound) },
+			change:  func(p *Params) { p.Files[0] = gitchange.FileChange{Path: testRulesPath, Delete: true} },
+			wantErr: "cannot be deleted",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name+" at CheckProposal", func(t *testing.T) {
+			t.Parallel()
+
+			b := newBed(t, nil)
+			b.expectBase()
+			tt.serve(b)
+
+			p := rulesParams()
+			if tt.change != nil {
+				tt.change(&p)
+			}
+
+			err := b.pr.CheckProposal(t.Context(), invocation(p).Params)
+			require.ErrorContains(t, err, tt.wantErr)
+			require.ErrorIs(t, err, action.ErrLimit)
+			require.ErrorIs(t, err, action.ErrPermanent)
+		})
+
+		if !tt.wantAtSnapshot {
+			continue
+		}
+
+		t.Run(tt.name+" at Snapshot", func(t *testing.T) {
+			t.Parallel()
+
+			b := newBed(t, nil)
+			b.expectBase()
+			tt.serve(b)
+
+			_, err := b.pr.Snapshot(t.Context(), invocation(rulesParams()).Params)
+			require.ErrorContains(t, err, tt.wantErr)
+			require.ErrorIs(t, err, action.ErrLimit)
+			require.ErrorIs(t, err, action.ErrPermanent)
+		})
+	}
+}
+
+func TestValidateRefusalsMatchErrLimit(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		change  func(p *Params)
+		wantErr string
+	}{
+		{name: "no files", change: func(p *Params) { p.Files = nil }, wantErr: "give at least one file"},
+		{name: "a path that is not clean", change: func(p *Params) { p.Files[0].Path = "prometheus/../rules.yaml" }, wantErr: "not a clean path"},
+		{name: "content and delete", change: func(p *Params) { p.Files[0].Delete = true }, wantErr: "give either content or delete"},
+		{name: "content that is not text", change: func(p *Params) { p.Files[0].Content = text("a\x00b") }, wantErr: "valid UTF-8"},
+		{name: "no title", change: func(p *Params) { p.Title = " " }, wantErr: "title: required"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			p := rulesParams()
+			tt.change(&p)
+
+			err := newBed(t, nil).pr.Validate(t.Context(), invocation(p).Params)
+			require.ErrorContains(t, err, tt.wantErr)
+			require.ErrorIs(t, err, action.ErrLimit)
+		})
+	}
 }
 
 func TestSnapshotOfALargestChangeFitsTheDifferenceLimit(t *testing.T) {

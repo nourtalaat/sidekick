@@ -9,6 +9,7 @@ import (
 	gh "github.com/google/go-github/v93/github"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/action/githubgit"
 )
 
@@ -79,17 +80,17 @@ func (r *reader) file(ctx context.Context, path string) (readFile, error) {
 	}
 
 	if err := checkRegular(path, entry); err != nil {
-		return readFile{}, fmt.Errorf("check the entry: %w", err)
+		return readFile{}, gitchange.Refuse(fmt.Errorf("check the entry: %w", err))
 	}
 
 	if entry.GetSize() > githubgit.MaxFileBytes {
-		return readFile{}, fmt.Errorf("%w: %s %w", action.ErrPermanent, path, githubgit.ErrTooBig)
+		return readFile{}, gitchange.Refuse(fmt.Errorf("%w: %s %w", action.ErrPermanent, path, githubgit.ErrTooBig))
 	}
 
 	text, err := githubgit.ReadBlob(ctx, r.client, r.owner, r.repo, entry.GetSHA())
 	if err != nil {
 		if errors.Is(err, githubgit.ErrTooBig) || errors.Is(err, githubgit.ErrNotText) {
-			err = fmt.Errorf("%w: %w", action.ErrPermanent, err)
+			err = gitchange.Refuse(fmt.Errorf("%w: %w", action.ErrPermanent, err))
 		}
 
 		return readFile{}, fmt.Errorf("read %s: %w", path, err)
@@ -117,7 +118,7 @@ func (r *reader) entry(ctx context.Context, path string) (*gh.TreeEntry, error) 
 
 		entry, err := childOf(tree, name)
 		if err != nil {
-			return nil, fmt.Errorf("look for %q: %w: %w", name, action.ErrPermanent, err)
+			return nil, gitchange.Refuse(fmt.Errorf("look for %q: %w: %w", name, action.ErrPermanent, err))
 		}
 
 		if entry == nil {
@@ -129,7 +130,7 @@ func (r *reader) entry(ctx context.Context, path string) (*gh.TreeEntry, error) 
 		}
 
 		if entry.GetType() != typeTree {
-			return nil, fmt.Errorf("%w: %q %w", action.ErrPermanent, name, errThroughFile)
+			return nil, gitchange.Refuse(fmt.Errorf("%w: %q %w", action.ErrPermanent, name, errThroughFile))
 		}
 
 		sha = entry.GetSHA()
@@ -150,7 +151,7 @@ func (r *reader) tree(ctx context.Context, sha string) (*gh.Tree, error) {
 	}
 
 	if t.GetTruncated() {
-		return nil, fmt.Errorf("%w: the tree %s %w", action.ErrPermanent, sha, errTreeTooBig)
+		return nil, gitchange.Refuse(fmt.Errorf("%w: the tree %s %w", action.ErrPermanent, sha, errTreeTooBig))
 	}
 
 	r.trees[sha] = t

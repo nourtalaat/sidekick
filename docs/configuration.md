@@ -1577,6 +1577,9 @@ credentials and limits, and each route lists the ones it may use in its
 actions. Nothing runs until a person with the approver role approves the
 proposal in Slack or in the web UI.
 
+The [Actions](actions.md) page lists every action type by family, with the
+credential, Undo and mode of each, and helps you choose between them.
+
 ```yaml
 actions:
   proposalTTL: 24h              # how long a proposal waits for a decision; default 24h
@@ -3208,7 +3211,11 @@ routes:
   write), Pull requests (read and write) and Metadata (read). Do not give the
   app the Workflows permission. Sidekick asks GitHub for installation tokens
   with just the three permissions above, so its token never carries Workflows
-  either way. Use an app that no other action or source shares. Sidekick reads
+  either way. For the [CI report](#ci-report-of-a-pull-request-or-merge-request),
+  also give the app Checks (read) and Commit statuses (read); they are
+  optional, and Sidekick reads CI with two tokens of their own, so an app
+  without them still opens and undoes pull requests. Use an app that no other
+  action or source shares. Sidekick reads
   the private key from its secret on each token exchange, so a rotated key
   needs no restart. `baseURL` must be https, except for a loopback host.
 - **Paths.** Every file the model changes must match a glob of `paths`, and
@@ -3276,6 +3283,10 @@ routes:
   edit; propose again from the new content. A file that already has the new
   content is left out, and if every file does, the proposal succeeds without a
   pull request.
+- **CI report.** After the proposal succeeds, Sidekick follows the CI of the
+  pull request and says in the investigation's Slack thread whether it passed,
+  and on the proposal card. `ciReportTimeout` (default `2h`, at most `24h`) is
+  how long it waits for the checks to finish. See the [CI report](#ci-report-of-a-pull-request-or-merge-request).
 - **Undo.** An approver can undo a succeeded proposal. If its pull request is
   still open or was closed, Sidekick closes it and deletes its branch. If it
   was merged, Sidekick opens a draft revert pull request from the branch
@@ -3474,6 +3485,131 @@ GitLab instance. The action sends only these calls: read a branch, a file, a
 directory and a blob; list merge requests; make a commit; open a merge
 request; close a merge request; delete a branch.
 
+##### `gitlab.code_change`
+
+Opens a draft merge request that changes application code, in a project you
+allow, on gitlab.com or a self-managed GitLab. It does for GitLab what
+[`github.code_change`](#githubcode_change) does for GitHub, with the same
+limits, refused paths, checks, snapshot and Undo, and that section has the
+full text of the shared rules. The model reads the current files with the
+[GitLab source](sources/gitlab.md) and proposes the whole new content of each
+file it changes. It is not for monitors: [`gitlab.merge_request`](#gitlabmerge_request)
+changes monitor definitions, with its own limits and its own token. Use it on
+a route in `approved` mode: a person reads the change before anything is
+pushed.
+
+The merge request is always a draft, and Sidekick never merges it, turns on
+auto-merge or squash, asks for a review or assigns anyone. The project's own
+pipeline runs on it, and a person reviews and merges it. There is no `draft`
+key, so a config that sets `draft` is an unknown key error. The action has no
+validator; the project's own pipeline is the validator.
+
+```yaml
+actions:
+  code-change:
+    type: gitlab.code_change
+    tokenSecret: { name: sidekick-gitlab-code, key: token }   # a token of its own
+    # baseURL: https://gitlab.example.com   # self-managed GitLab; default https://gitlab.com
+    limits:
+      projects: [acme/platform/checkout]    # full paths, no wildcards
+      paths: ["src/**", "internal/**/*.go"] # globs of the files that may change
+      # refusedPaths: ["src/legacy/**"]     # added to the built-in refused paths
+      maxFiles: 3                           # 1 to 25
+      maxChangedLines: 60                   # lines added plus lines removed, 1 to 1000
+      baseBranch: main                      # the only branch a merge request may target
+      allowDelete: false                    # default false
+
+routes:
+  - name: checkout
+    mode: approved
+    actions: [code-change]
+```
+
+- **Credentials.** `tokenSecret` is the `{ name, key }` of the Secret that
+  holds an access token with the `api` scope and the Developer role on the
+  projects in `limits.projects` only. It is the same kind of token as for
+  `gitlab.merge_request` (see there for the fine-grained option from GitLab
+  19.2 and for the reverse proxy note), and it must be a token of its own,
+  apart from the one of the GitLab source and of `gitlab.merge_request`. The
+  token is read on every call. `baseURL` is the root of your GitLab, without
+  `/api/v4`; it must be https, except for a loopback host.
+- **Protect the base branch.** As for `gitlab.merge_request`, the token's role
+  and the protected base branch are the hard limit of what this action can do.
+  Protect `baseBranch`, set **Allowed to push and merge** to **No one** and
+  **Allowed to merge** to **Maintainers**. Then a Developer token cannot push
+  to the branch or merge into it, whatever a merge request says.
+- **Paths, refused paths and the rest of the limits.** Every file the model
+  changes must match a glob of `paths` and none of the refused paths, the same
+  built-in list as for `github.code_change`, which includes `.gitlab-ci.yml`,
+  `.gitlab/**`, `CODEOWNERS` and `.env` files. A path that a refused path
+  matches is refused even when a glob of `paths` allows it. A delete is
+  refused unless `allowDelete` is true. A file must be at most 256 KiB, at the
+  base branch and in the new content, and must be UTF-8 text. Sidekick
+  refuses a file that is binary, a symlink, a submodule or a directory, and a
+  file the model sends unchanged. Every refusal reaches the model with its
+  reason, so it can propose again. The checks run when the model proposes and
+  again when the proposal runs.
+- **How a file is read.** GitLab's Files API does not say what kind of entry a
+  path is, so Sidekick lists each directory above the path and reads a file
+  only when it is a regular file (mode `100644` or `100755`). A name that
+  differs from an existing entry only in case is refused. A file that exists
+  keeps its mode, and a new file is a regular file.
+- **What it does.** On approval it makes the branch `sidekick/<proposal id>`
+  and one commit with all files in one call of the Commits API, starting from
+  the commit the files were read at, and opens the merge request from it with
+  a title that starts with `Draft:`. The description is what the model wrote,
+  with `@mentions`, issue references, words such as "closes" and every line
+  that starts with a slash (GitLab runs it as a quick action) put in code
+  spans, so the merge request notifies nobody, closes nothing and runs no
+  command, and a line that names the proposal. If a worker dies half way, the
+  retry finds the branch, and the merge request if it was made, and does not
+  make a second one.
+- **Drafts only.** GitLab makes a merge request a draft through its title, so
+  Sidekick checks the answer. A merge request of its own that is not a draft,
+  whether it was just opened or a retry found it, is closed and its branch is
+  deleted, and the proposal fails for good with that reason, unless a person
+  merged it. One that GitLab is merging is left as it is, and the proposal
+  fails the same way. The proposal's result holds the project, the IID of the
+  merge request and its head SHA.
+- **What the approver reads, and files that changed meanwhile.** Both are as for
+  `github.code_change`: each file with what happens to it and the line diff in
+  the web UI, from blob IDs and never file contents, and a conflict that names
+  a file someone changed since the model proposed.
+- **CI report.** After the proposal succeeds, Sidekick follows the CI of the
+  merge request and says in the investigation's Slack thread whether it passed,
+  and on the proposal card. `ciReportTimeout` (default `2h`, at most `24h`) is
+  how long it waits for the pipeline to finish. See the [CI report](#ci-report-of-a-pull-request-or-merge-request).
+- **Undo.** An approver can undo a succeeded proposal. If its merge request is
+  still open or was closed, Sidekick closes it and deletes its branch. If it
+  was merged, Sidekick opens a draft revert merge request from the branch
+  `sidekick/<undo proposal id>` that restores the earlier content of the
+  files. A file the merge request added is deleted, and a file it deleted
+  comes back as a regular file: if it was executable, it loses that mode,
+  because the Commits API creates a file with the default mode. The revert
+  merge request still needs review and merging. If a file on the base branch
+  is not as the merged merge request left it, nothing is restored until the
+  approver confirms, and then the earlier content overwrites it. A file that
+  is a symlink, a submodule or a directory by then is never overwritten, and a
+  path that a refused path matches by then is refused.
+
+Once a day, Sidekick reads from GitLab whether the merge requests it opened
+are still open, were merged or were closed, as it does for
+`gitlab.merge_request` (see there). The project of the proposal must still be
+one of `limits.projects`; one that is not is skipped. Sidekick counts the merge
+requests it opens in `sidekick_gitlabcode_merge_requests_total` (by `result`:
+`opened`, `existing`, `applied` for a change already on the base branch,
+`closed` or `reverted` for an undo, or `error`), and the daily checks in
+`sidekick_gitlabcode_status_checks_total` (by `state`: `open`, `merged`,
+`closed`, `missing` or `error`). A merge request of this action does not count
+as a noisy alert fixed.
+
+**What it relies on.** The facts come from the public source and API
+documentation of GitLab at the tag `v19.5.1-ee`, as the comments in
+`internal/action/gitlabgit` and `internal/action/gitlabcode` say. Nothing was
+tried against a GitLab instance. The action sends only these calls: read a
+branch, a file, a directory and a blob; list merge requests; make a commit;
+open a merge request; close a merge request; delete a branch.
+
 ##### `github.revert`
 
 Opens a draft pull request that reverts one commit, or one merged pull
@@ -3515,7 +3651,10 @@ routes:
   a workflow file, as a second wall behind the refused paths below. Sidekick
   asks GitHub for installation tokens with just those permissions, and reads
   the private key from its secret on each token exchange, so a rotated key
-  needs no restart. `baseURL` must be https, except for a loopback host.
+  needs no restart. For the [CI report](#ci-report-of-a-pull-request-or-merge-request),
+  also give the app Checks (read) and Commit statuses (read); they are
+  optional, and Sidekick reads CI with two tokens of their own, so an app
+  without them still opens and undoes pull requests. `baseURL` must be https, except for a loopback host.
 - **Parameters.** `repo`, `baseBranch`, exactly one of `commit` (the full
   40-character SHA, never a branch, a tag or a short SHA) or `pullRequest`
   (the number of a merged pull request), a `title` (the title of the pull
@@ -3596,6 +3735,10 @@ routes:
   succeeds without a pull request.
 - **Result.** The result links the pull request and carries its number and
   the SHA of its head commit.
+- **CI report.** After the proposal succeeds, Sidekick follows the CI of the
+  pull request and says in the investigation's Slack thread whether it passed,
+  and on the proposal card. `ciReportTimeout` (default `2h`, at most `24h`) is
+  how long it waits for the checks to finish. See the [CI report](#ci-report-of-a-pull-request-or-merge-request).
 - **Undo.** An approver can undo a succeeded proposal. If its pull request
   is still open or was closed, Sidekick closes it and deletes its branch. If
   it was merged, Sidekick opens a draft pull request from the branch
@@ -3625,6 +3768,213 @@ and records it. Sidekick counts the pull requests it opens in
 `closed` or `reverted` for an undo, or `error`) and the daily checks in
 `sidekick_githubrevert_status_checks_total` (by `state`: `open`, `merged`,
 `closed`, `missing` or `error`).
+
+##### `gitlab.revert`
+
+Opens a draft merge request that reverts one commit, or one merged merge
+request, on gitlab.com or a self-managed GitLab, when a recent change caused
+the alert. It does for GitLab what [`github.revert`](#githubrevert) does for
+GitHub. It is narrower than a code change: the model names what to revert and
+why, never the new content of a file, so a team can allow reverts without
+allowing arbitrary edits. It is also how to roll back what Flux, or Argo CD
+with auto-sync, deploys from a GitLab project. Use it on a route in `approved`
+mode: a person reads the files before anything is pushed.
+
+```yaml
+actions:
+  revert-deploy:
+    type: gitlab.revert
+    tokenSecret: { name: sidekick-gitlab-revert, key: token }   # a token of its own, not the source's
+    # baseURL: https://gitlab.example.com   # self-managed GitLab; default https://gitlab.com
+    limits:
+      projects: [acme/platform/deploy]      # full paths, no wildcards
+      baseBranch: main                      # the only branch a revert may target
+      maxAge: 72h                           # default 72h, at most 720h
+      maxFiles: 10                          # 1 to 25
+      maxChangedLines: 300                  # lines added plus lines removed, 1 to 1000
+      refusedPaths: ["deploy/prod/**"]      # added to the built-in list
+
+routes:
+  - name: api-errors
+    match: { intake: [alertmanager] }
+    mode: approved
+    actions: [revert-deploy]
+```
+
+- **Credentials.** Give the action a token of its own: a project, group or
+  personal access token with the `api` scope, whose user has the Developer
+  role on the projects in `limits.projects` and on no others. Developer is
+  enough to make a branch and to run GitLab's revert on it, as long as the
+  branches `sidekick/*` are not protected. Protect the base branch so that a
+  Developer cannot push to it; Sidekick never writes to it. The token is read
+  from its secret on every call, so a rotated token needs no restart.
+  `baseURL` must be the root of the GitLab, without `/api/v4`, and must use
+  https, except for a loopback host.
+- **Parameters.** `project` (the full path), `baseBranch`, exactly one of
+  `commit` (the full 40-character SHA, never a branch, a tag or a short SHA)
+  or `mergeRequest` (the IID of a merged merge request), a `title` (the title
+  of the merge request) and a `body` (the reason). The description is the
+  model's text, with `@mentions`, references such as `!12` and `#3`, targets
+  after words such as "fixes", and lines that start with a slash (GitLab's
+  quick actions) put in code spans, so the merge request notifies nobody,
+  closes nothing and runs no command. Then come the line `Reverts <commit or
+  merge request>`, a line that marks it as a Sidekick revert, and a line that
+  names the proposal and links the investigation. Several commits at once,
+  and cherry-picks, are not supported: name one commit, or one merge request.
+- **How the revert is made.** Sidekick makes the branch `sidekick/<proposal
+  id>` from the head of the base branch, then calls GitLab's revert on it
+  (`POST /projects/:id/repository/commits/:sha/revert`), which writes one
+  commit, and opens a merge request from the branch. GitLab reverts a merge
+  commit against its first parent, as `git revert -m 1` does. The merge
+  request is always a draft: there is no `draft` key. Sidekick never merges,
+  approves, turns on auto-merge, asks for a review or assigns anyone. If
+  GitLab does not make the merge request a draft, Sidekick closes it, deletes
+  its branch and fails the proposal, so a revert is never left open for
+  review. A repeat after a crash finds the branch, and the merge request if
+  it was made, and does not make a second one. GitLab's revert call can run
+  as a dry run, but Sidekick does not use it: proposing never writes to your
+  project, because a pushed branch can start pipelines and send events. The
+  checks below mean the revert applies cleanly, and the real call is the final
+  check.
+- **A merge request by name.** Sidekick finds the commit that holds the whole
+  change and reverts that. A merge request merged with a merge commit (also
+  with semi-linear history) is reverted by its merge commit. A squashed one is
+  reverted by its squash commit. One merged with fast-forward has no such
+  commit, so it is reverted only if it has exactly one commit; with several
+  the proposal is refused and the model is told to name the commits one at a
+  time.
+- **When it is refused.** Each refusal is an error the model reads, and
+  nothing is stored. It is refused when the commit is not on the base branch;
+  when it has no parent or more than two; when it landed on the base branch
+  longer ago than `maxAge`; when it is, or is held by, a revert made by this
+  action (there is no revert of a revert); when it touches a refused path;
+  when it changes more than `maxFiles` files or more than `maxChangedLines`
+  lines (added plus removed, counted for the revert); and when a file it
+  touched is not what the commit wrote any more because someone changed it
+  since, with the name of the file and a pointer to `gitlab.merge_request` or
+  to reverting by hand. It is also refused for what a revert cannot show or
+  write back: a symbolic link, a submodule, a change of file mode, a file
+  that GitLab did not diff in full, a file larger than 256 KiB, and a file
+  that is not UTF-8 text. These checks run when the model proposes and again
+  when the proposal runs.
+- **Age.** Git does not record when a commit reached a branch, so `maxAge`
+  is measured from the time GitLab gives: for a merge request, when it was
+  merged; for a commit, its committer date. A commit pushed long after it was
+  written is therefore refused as too old, which is the safe direction. Undo
+  is not subject to the age.
+- **Refused paths.** The built-in list is always on and cannot be shortened:
+  CI and build automation (`.gitlab-ci.yml`, `.gitlab/**` and the like),
+  ownership and review rules (`CODEOWNERS`, Renovate settings), Git settings
+  and hooks (`.gitmodules`, `.gitattributes`, hook directories) and secrets
+  and keys (`.env` files, private keys, Terraform state and variable files).
+  Paths are compared in lower case. `refusedPaths` adds globs to it; `*` and
+  `?` do not match a slash, and a segment of `**` matches any number of
+  segments. A revert of a commit that touches any of them is refused.
+- **What the approver reads.** The proposal shows each file with what
+  happens to it (`changed`, `added` or `deleted`) and how many lines the
+  revert adds and removes, and the line diff of each file is read from
+  GitLab when the approver opens it. Sidekick stores the blob IDs of the
+  files before and after, and the SHA of the base commit, never the file
+  contents.
+- **Files that changed meanwhile.** When the proposal runs, the action
+  compares each file on the base branch with the blob it had when the model
+  proposed. A file that someone changed meanwhile fails the proposal with a
+  conflict that names the file; propose again. A file that is back to what
+  the parent had already is left out, and if every file is, the proposal
+  succeeds without a merge request. If GitLab itself says the revert cannot
+  be applied (its answer is a 400 with the reason), the proposal fails with a
+  conflict that carries GitLab's message, and the branch is deleted.
+- **Result.** The result links the merge request and carries its IID, its
+  project and the SHA of its head commit.
+- **CI report.** After the proposal succeeds, Sidekick follows the CI of the
+  merge request and says in the investigation's Slack thread whether it passed,
+  and on the proposal card. `ciReportTimeout` (default `2h`, at most `24h`) is
+  how long it waits for the pipeline to finish. See the [CI report](#ci-report-of-a-pull-request-or-merge-request).
+- **Undo.** An approver can undo a succeeded proposal. If its merge request
+  is still open or was closed, Sidekick closes it and deletes its branch. If
+  it was merged, Sidekick opens a draft merge request from the branch
+  `sidekick/<undo proposal id>` that puts back what the commit wrote, so the
+  change the revert took out comes back. It still needs review and merging;
+  the undo is done once it is opened. If a file on the base branch is not as
+  the revert left it, nothing is written until the approver confirms, and
+  then the file is overwritten. This merge request is marked as a revert too,
+  so Sidekick will not revert it.
+- **It does not fix a noisy monitor.** A revert undoes the cause of an
+  alert, so it never counts toward the noisy alerts fixed.
+
+**When to use which.** Use `gitlab.revert` for what Flux, or Argo CD with
+auto-sync, deploys from a GitLab project: put the earlier files back in Git
+and the controller rolls the cluster back. For a GitHub repository use
+[`github.revert`](#githubrevert), which works the same way for the model and
+the approver, and differs in what the host offers: GitHub has no revert call,
+so Sidekick writes the revert itself, and GitLab does it. Use
+[`gitlab.merge_request`](#gitlabmerge_request) to change a monitor
+definition, and the rollback actions for platforms that keep revisions of
+what they run, such as a Kubernetes Deployment, a Helm release or an ECS
+service, where no change in Git is needed.
+
+Once a day, the same job as for `gitlab.merge_request` reads whether the
+merge requests of succeeded proposals are still open, were merged or were
+closed, and records it. Sidekick counts the merge requests it opens in
+`sidekick_gitlabrevert_merge_requests_total` (by `result`: `opened`,
+`existing`, `applied` for a revert that is on the base branch already,
+`closed` or `reverted` for an undo, or `error`) and the daily checks in
+`sidekick_gitlabrevert_status_checks_total` (by `state`: `open`, `merged`,
+`closed`, `missing` or `error`).
+
+##### CI report of a pull request or merge request
+
+`github.code_change`, `github.revert`, `gitlab.code_change` and
+`gitlab.revert` open a draft that the repository's own CI checks. Sidekick
+cannot judge it, but it can tell you what the CI said. When a proposal of one
+of these actions succeeds, and also when an undo opens a revert, Sidekick
+follows the CI of the head commit until it reaches a final state, then posts
+once in the investigation's Slack thread and shows it on the proposal card in
+the web UI. Reporting is always on for these actions; there is no key to turn
+it off. Teams shows no proposals today, so it gets no report.
+
+| State | What it means | The thread message |
+|---|---|---|
+| Passed | Every check passed. | `:white_check_mark: CI passed` and how many checks passed. |
+| Failed | A check failed and none is still running. | `:x: CI failed`, how many failed, and the failed checks by name, each with a link, up to 10. |
+| None | No check or pipeline started within 10 minutes. The repository may have no CI for this branch. | `:grey_question: No CI ran`. |
+| Unknown | Sidekick could not read the CI, and the message says why, for example which permission is missing. | `:warning: CI could not be read`. |
+| Not finished | Checks were still running when the wait ended. | `:hourglass: CI had not finished`, with how many had passed. |
+
+- **How it reads CI.** A background job reads the CI 30 seconds after the
+  proposal succeeds, then waits longer after each read, up to 5 minutes,
+  until the state is final or the wait ends. Sidekick receives no GitHub or
+  GitLab events, so it asks. If a check fails while others still run, it
+  waits for the rest, so the message lists every failed check. At the end of
+  the wait, a failure it has already seen is reported as Failed.
+- **Waiting for something to start.** A host does not say whether a branch
+  has no CI or its CI has not started yet. So "None" is reported only after
+  10 minutes with nothing at all; a shorter `ciReportTimeout` shortens that.
+- **`ciReportTimeout`.** A key of the action itself, next to `baseURL`, not of
+  `limits`. It is how long Sidekick waits for the checks to finish. The
+  default is `2h`, the least `1m` and the most `24h`.
+- **GitHub.** Sidekick reads the check runs of the head commit (the latest of
+  each check) and its commit statuses, so both modern checks and older status
+  contexts count. A check run that was skipped or neutral counts as passed;
+  one that failed, timed out, was cancelled or needs action counts as failed.
+  The app needs two more read-only repository permissions, Checks and Commit
+  statuses. Sidekick asks for each in an installation token of its own and
+  leaves the token that opens pull requests as it is, so an app that was not
+  given them loses nothing: the CI is reported as unknown, with a message that
+  names the missing permission, and pull requests are opened and undone as
+  before.
+- **GitLab.** Sidekick reads the pipelines of the merge request and takes the
+  newest one for the head commit, then its jobs. The token's `api` scope is
+  enough. A job that is allowed to fail, was skipped or waits for a person to
+  start it is not counted.
+- **Check names are outside text.** Names of checks, jobs and pipelines come
+  from the repository. Sidekick shows them as plain text: hidden and control
+  characters are dropped, they are cut to 80 characters, and they are never
+  shown as formatting or markup. It never copies log text.
+- **One report.** The report is posted once, even with several replicas or a
+  job that is tried again.
+- **Metrics.** `sidekick_ci_reports_total{host,state}` counts the reports by
+  host (`github` or `gitlab`) and final state.
 
 ##### `unleash.flag`
 
@@ -4120,9 +4470,8 @@ back on the task definition it ran before the rollback. If the service does
 not run the task definition the rollback set, Undo writes nothing and shows the
 task definition it runs now, and asks again with `force`. If the service
 already runs the old task definition, Undo writes nothing and succeeds. Undo
-fails when the old task definition is not ACTIVE any more, and when you have
-lowered `maxRevisionsBack` below the number of revisions the rollback went
-back.
+fails when the old task definition is not ACTIVE any more. Lowering
+`maxRevisionsBack` does not stop an Undo.
 
 **The role.** Create a role for the action in each account, separate from the
 read-only role of the AWS source, and attach this policy and nothing else. It
@@ -4199,6 +4548,163 @@ each Region in `regions`.
 The calls were checked against the source of the AWS SDK for Go v2 at the tag
 `service/ecs/v1.102.0`, and the permissions against the model of the ECS API
 in the same tag and AWS's published list of ECS permissions.
+
+##### `aws.lambda_rollback`
+
+Points an AWS Lambda alias back at the published version it served before,
+through the Lambda API. It changes the alias and nothing else: not the code,
+not `$LATEST`, not the alias's description. The change is live as soon as it is
+made, since Lambda sends the next request to the alias's new version. It is
+approval-only, so a `read-write` route may list it only when the action sets
+`allowReadWrite: true`. Use it on routes with `mode: approved`.
+
+```yaml
+actions:
+  lambda-rollback:
+    type: aws.lambda_rollback
+    accounts:
+      - id: "111122223333"
+        roleARN: arn:aws:iam::111122223333:role/sidekick-lambda-rollback
+        externalID: sidekick-prod        # only if the role's trust policy asks for it
+    regions: [us-east-1]
+    maxRevisionsBack: 1                  # default 1, at most 10
+    limits:
+      functions: ["checkout", "cart-*"]
+      aliases: [live]
+
+routes:
+  - name: checkout
+    mode: approved
+    actions: [lambda-rollback]
+```
+
+- `accounts` are the accounts the action may change. Each has an `id` (12
+  digits; quote it in YAML), a `roleARN` in that account, and optionally the
+  `externalID` the role's trust policy asks for. The role is required for
+  every account: it is the action's own role, apart from the role of the
+  [AWS source](sources/aws.md), and its policy is the hard limit on what the
+  action can change. Sidekick assumes it with the session name `sidekick` and
+  keeps its credentials until shortly before they expire. Required.
+- `regions` are the Regions the action may change, in every account. Required.
+- `maxRevisionsBack` is how many published versions back the model may ask to
+  go. The default is 1. A value written in the file must be from 1 to 10.
+- `allowReadWrite` is false unless you set it. See [Action
+  modes](#action-modes).
+- `limits.functions` lists the names of the functions the action may change,
+  or patterns in which `*` stands for any run of characters, such as `cart-*`.
+  `limits.aliases` lists the names of the aliases it may change, in any of
+  those functions. Both are required, and they take names only, not ARNs,
+  since an ARN can name another account. An alias name cannot be only digits,
+  and `$LATEST` is not an alias.
+
+The model proposes a `function`, an `alias` and, optionally, `revisionsBack`
+(default 1, at most `maxRevisionsBack`). It also gives the `account` and
+`region`, which may be left out when the config lists only one of each. Before
+anything is sent, Sidekick checks them against the config.
+
+**Which version.** The running version is the one the alias serves
+(`FunctionVersion`). The one it goes back to is the highest published version
+below it, and with `revisionsBack` above 1, the one that many published
+versions down. Versions that were deleted are skipped. Lambda numbers versions
+in the order they were published, so this is the order of publishing, not the
+order of deployment: a version that nobody deployed can be the one it goes
+back to. Lambda keeps no history of an alias, so Sidekick cannot know what the
+alias served before the running version. The proposal shows both versions
+with the first characters of the SHA-256 hash of their code, their runtime
+(or "container image"), their description and when they were published. Lambda
+does not record who published a version, so the screens show "unknown" in that
+place. Read the code hash and the description before you approve.
+
+**Traffic splits.** An alias can send part of its traffic to a second version
+(weighted routing). The proposal shows the split. The rollback sets the one
+version and clears the split, so all requests go to the earlier version, and
+Undo puts the split back as it was.
+
+**Refused when the model proposes**, with a message it can act on: a function,
+alias, account, Region or number of versions outside the limits; a function or
+alias that does not exist; an alias that serves `$LATEST`; no published
+version, or fewer than asked, below the running one; a target version that
+Lambda cannot read; and a function with more than 1000 versions, which
+Sidekick does not read in full.
+
+**When it runs.** Right before it writes, Sidekick reads the alias again. If
+the alias already serves the version it was to go back to, with no split,
+which happens when a worker died after the write, it writes nothing and
+succeeds. If the alias is not as it was when the change was proposed, the
+proposal fails with a conflict, and the model or a person must propose again.
+The write carries the alias's `RevisionId`, which Lambda changes with every
+update of the alias, so Lambda refuses the write too when the alias changed
+between that read and the write; that is a conflict as well. The write is tried
+once by the AWS SDK; if it fails in a way that may pass, Sidekick tries again
+from a new read of the alias, so the change is made once.
+
+**Undo.** An approver can undo a rollback that worked. Undo points the alias
+back at the version, and the traffic split, it had before the rollback. If the
+alias is not as the rollback left it, Undo writes nothing and shows the
+version it serves now, and asks again with `force`. If the alias already has
+its old version and split, Undo writes nothing and succeeds. Undo fails when
+the old version was deleted. Lowering `maxRevisionsBack` does not stop an Undo.
+
+**The role.** Create a role for the action in each account, separate from the
+read-only role of the AWS source, and attach this policy and nothing else. In
+the AWS reference for Lambda permissions, each of the four actions applies to
+the resource type `function`, so the policy limits them to the allowed
+functions, one line per function (wildcards are fine, for example
+`function:cart-*`). IAM cannot limit them to one alias, so `limits.aliases` is
+enforced by Sidekick, and the role can change every alias of the functions
+listed. Use `arn:aws-us-gov:` or `arn:aws-cn:` in GovCloud or China.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "RollBackAllowedFunctions",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:GetAlias",
+        "lambda:UpdateAlias",
+        "lambda:ListVersionsByFunction",
+        "lambda:GetFunctionConfiguration"
+      ],
+      "Resource": [
+        "arn:aws:lambda:us-east-1:111122223333:function:checkout",
+        "arn:aws:lambda:us-east-1:111122223333:function:cart-*"
+      ]
+    }
+  ]
+}
+```
+
+If AWS refuses a call and the error names a qualified ARN, such as
+`arn:aws:lambda:us-east-1:111122223333:function:checkout:41`, add the same
+ARNs with `:*` at the end to the resource list.
+
+The role's trust policy names Sidekick's own role and, if you want one, an
+external ID, as for the source:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": { "AWS": "arn:aws:iam::<sidekick account id>:role/<sidekick role>" },
+      "Action": "sts:AssumeRole",
+      "Condition": { "StringEquals": { "sts:ExternalId": "<external id>" } }
+    }
+  ]
+}
+```
+
+Sidekick's own role needs `sts:AssumeRole` on this role and gets no Lambda
+permission of its own. With `networkPolicy.restrictEgress`, allow
+`lambda.<region>.amazonaws.com` and `sts.<region>.amazonaws.com` on port 443
+for each Region in `regions`.
+
+The calls were checked against the source of the AWS SDK for Go v2 at the tag
+`service/lambda/v1.113.3`, and the permissions against the model of the Lambda
+API in the same tag and AWS's published list of Lambda permissions.
 
 ##### `argocd.rollback`
 

@@ -141,8 +141,9 @@ role, and nothing more.
   too, but Reporter works on every version.
 
 Keep this token for investigations only. The
-[`gitlab.merge_request` action](../configuration.md#gitlabmerge_request)
-needs write access, and uses a token of its own.
+[`gitlab.merge_request`](../configuration.md#gitlabmerge_request) and
+[`gitlab.code_change`](../configuration.md#gitlabcode_change) actions need
+write access, and each uses a token of its own.
 
 A token can be one of three kinds. Any of them works; choose by how widely
 the token should read. Making a project access token takes the Maintainer or

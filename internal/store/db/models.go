@@ -95,6 +95,18 @@ type BenchRun struct {
 	TriggeredBy     string
 }
 
+type CiReport struct {
+	ProposalID uuid.UUID
+	State      string
+	Detail     json.RawMessage
+	Checks     int32
+	StartedAt  time.Time
+	CheckedAt  *time.Time
+	ReportedAt *time.Time
+	Seq        *int64
+	SentTo     []string
+}
+
 type Event struct {
 	ID          uuid.UUID
 	Intake      string

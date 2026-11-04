@@ -132,6 +132,46 @@ type PullRequest struct {
 	// CheckedAt is when the check last read it. A merged or closed pull
 	// request is not read again.
 	CheckedAt time.Time
+	// CI is the state of the pull request's CI, or nil when Sidekick does
+	// not follow it.
+	CI *PullRequestCI
+}
+
+// The states of a PullRequestCI. Pending is the only one that is not final.
+const (
+	CIPending  = "pending"
+	CIPassed   = "passed"
+	CIFailed   = "failed"
+	CINone     = "none"
+	CIUnknown  = "unknown"
+	CITimedOut = "timed_out"
+)
+
+// PullRequestCI is what Sidekick found about the CI of a pull request or
+// merge request that a proposal opened. The names of checks are text from
+// outside, so a screen shows them as plain text.
+type PullRequestCI struct {
+	// State is one of the CI constants.
+	State string
+	// Passed and Total count the checks that passed and all that were read.
+	Passed int
+	Total  int
+	// FailedCount is how many checks failed, and Failed names the first of
+	// them.
+	FailedCount int
+	Failed      []CICheck
+	// Message is Sidekick's own sentence for CIUnknown.
+	Message string
+	// CheckedAt is when Sidekick last read the CI, and ReportedAt when it
+	// reported the final state; it is nil until then.
+	CheckedAt  *time.Time
+	ReportedAt *time.Time
+}
+
+// CICheck is one check that failed.
+type CICheck struct {
+	Name string
+	URL  string
 }
 
 // PolicyApprovalText is how a screen says that a route's policy approved a

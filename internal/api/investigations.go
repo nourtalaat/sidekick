@@ -408,15 +408,15 @@ func pendingFollowUpsOf(rows []db.ListPendingFollowUpsRow) ([]apigen.PendingFoll
 
 // feedbackSummaryOf counts the ratings and says what they add up to.
 func feedbackSummaryOf(correct, wrong int64) apigen.FeedbackSummary {
-	summary := apigen.None
+	summary := apigen.FeedbackSummarySummaryNone
 
 	switch {
 	case correct > 0 && wrong > 0:
-		summary = apigen.Mixed
+		summary = apigen.FeedbackSummarySummaryMixed
 	case correct > 0:
-		summary = apigen.Correct
+		summary = apigen.FeedbackSummarySummaryCorrect
 	case wrong > 0:
-		summary = apigen.Wrong
+		summary = apigen.FeedbackSummarySummaryWrong
 	}
 
 	return apigen.FeedbackSummary{Correct: int(correct), Wrong: int(wrong), Summary: summary}

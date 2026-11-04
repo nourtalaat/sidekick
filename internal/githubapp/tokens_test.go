@@ -357,3 +357,22 @@ func requireExchange(t *testing.T, r fakehttp.Request) {
 	require.JSONEq(t, `{"permissions":{"actions":"read","contents":"read","metadata":"read","pull_requests":"read"}}`, string(r.Body))
 	require.Equal(t, "sidekick-test", r.Header.Get("User-Agent"))
 }
+
+func TestAFailedTokenMatchesErrToken(t *testing.T) {
+	t.Parallel()
+
+	api := fakehttp.New(t)
+	api.Handle(http.MethodPost, testExchangePath, fakehttp.Response{
+		Status:  http.StatusUnprocessableEntity,
+		Headers: map[string]string{"Content-Type": "application/json"},
+		Body:    []byte(`{"message":"The permissions requested are not granted to this installation."}`),
+	})
+	api.ExpectAllCalled()
+
+	tokens := newTestTokens(api, keySecrets(t, 1), func() time.Time { return testStart })
+
+	_, err := tokens.Token(t.Context())
+	require.ErrorIs(t, err, ErrToken)
+	require.ErrorContains(t, err, "make an installation token: exchange the app JWT")
+	require.ErrorContains(t, err, "422")
+}

@@ -6,6 +6,8 @@ proposes one, a person approves or rejects the proposal, and only then does
 Sidekick run the action. This guide is for the code of a new action type.
 Operators who only use actions read [the `actions` section of the
 configuration](../configuration.md#actions).
+To choose between the built-in actions, read the [Actions](../actions.md)
+page.
 
 The life of a proposal:
 

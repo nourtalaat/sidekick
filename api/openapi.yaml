@@ -3413,6 +3413,65 @@ components:
           type: string
           format: date-time
           description: When Sidekick last read it from the host. A merged or closed pull request is not read again, so this stays at the time the check found it merged or closed.
+        ci:
+          $ref: "#/components/schemas/ProposalCI"
+    ProposalCI:
+      type: object
+      description: |
+        What Sidekick found about the CI (the checks or the pipeline) of the
+        pull request or merge request. It follows the CI of the head commit
+        until a final state or the end of the wait, then reports once in the
+        investigation's thread. Absent when the proposal's action does not
+        report CI, and until Sidekick has made the pull request known to this
+        screen. The names of the failed checks come from the host: show them
+        as plain text.
+      required: [state, passed, total, failedCount]
+      properties:
+        state:
+          type: string
+          enum: [pending, passed, failed, none, unknown, timed_out]
+          description: |
+            `pending` means Sidekick is still waiting and reads again soon. The
+            others are final: `passed`, `failed`, `none` (no check or pipeline
+            started within 10 minutes), `unknown` (Sidekick could not read the
+            CI, and `message` says why) and `timed_out` (checks had not
+            finished when Sidekick stopped waiting).
+        passed:
+          type: integer
+          description: How many checks passed. Zero until Sidekick has read the CI.
+        total:
+          type: integer
+          description: How many checks Sidekick read.
+        failedCount:
+          type: integer
+          description: How many checks failed. `failed` names at most the first 10 of them.
+        failed:
+          type: array
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/ProposalCICheck"
+        message:
+          type: string
+          description: Sidekick's own sentence for the state `unknown`, such as which permission it needs.
+        checkedAt:
+          type: string
+          format: date-time
+          description: When Sidekick last read the CI.
+        reportedAt:
+          type: string
+          format: date-time
+          description: When Sidekick reported the final state. Absent while the state is `pending`.
+    ProposalCICheck:
+      type: object
+      description: One check or pipeline job that failed.
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: The name the host gave the check, as plain text, cut to 80 characters. It is text from outside; show it as text, never as markup.
+        url:
+          type: string
+          description: The address of the check on the host. A screen links it only when it is an http or https address.
     ProposalChange:
       type: object
       description: |

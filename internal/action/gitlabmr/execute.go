@@ -41,6 +41,12 @@ func (m *MR) Execute(ctx context.Context, inv action.Invocation) (action.Result,
 	}
 
 	if mr != nil {
+		if err := m.requireDraft(ctx, params.Project, branch, mr); err != nil {
+			m.metrics.MergeRequest(gitlabgit.ResultError)
+
+			return action.Result{}, fmt.Errorf("check the merge request of an earlier attempt: %w", err)
+		}
+
 		m.metrics.MergeRequest(gitlabgit.ResultExisting)
 
 		return gitlabgit.Result(params.Project, mr, gitlabgit.ResultExisting, ""), nil
@@ -116,14 +122,27 @@ func (m *MR) push(ctx context.Context, pre *prepared, branch string, inv action.
 	return sha, nil
 }
 
-// open makes the merge request of a proposal from the branch.
+// open makes the merge request of a proposal from the branch. When
+// limits.draft is true it also checks that GitLab made it a draft, and closes
+// it if it did not.
 func (m *MR) open(ctx context.Context, params Params, branch string, inv action.Invocation) (*gitlabgit.MergeRequest, error) {
-	mr, err := gitlabgit.OpenMergeRequest(ctx, m.client, params.Project, gitlabgit.CreateRequest{
+	req := gitlabgit.CreateRequest{
 		SourceBranch: branch,
 		TargetBranch: params.BaseBranch,
 		Title:        gitlabgit.MergeRequestTitle(params.Title, m.limits.draft(), fallbackTitle),
 		Description:  gitlabgit.Description(params.Body, inv.ProposalID, inv.InvestigationID, m.publicURL),
-	})
+	}
+
+	if m.limits.draft() {
+		mr, err := gitlabgit.OpenDraft(ctx, m.client, params.Project, branch, req)
+		if err != nil {
+			return nil, fmt.Errorf("open the draft merge request: %w", err)
+		}
+
+		return mr, nil
+	}
+
+	mr, err := gitlabgit.OpenMergeRequest(ctx, m.client, params.Project, req)
 	if err != nil {
 		return nil, fmt.Errorf("open the merge request: %w", err)
 	}
