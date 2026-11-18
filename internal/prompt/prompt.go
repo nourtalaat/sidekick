@@ -7,6 +7,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/report"
@@ -18,14 +19,19 @@ import (
 // and the layout of the other parts. Each investigation records it, so
 // results always refer to an exact prompt. Change it whenever the prompt
 // changes; a test fails until system.tmpl and this version agree.
-const Version = "9"
+const Version = "10"
 
 //go:embed system.tmpl
 var systemTemplate string
 
-// systemPrompt is the rendered system prompt. It is the same for every
-// investigation, so providers can cache it.
-var systemPrompt = renderSystem()
+// The rendered system prompts. Each is the same for every investigation
+// that uses it, so providers can cache it. systemPromptWithActions adds the
+// rules for proposing a fix, and is used when the model has the
+// propose_action tool.
+var (
+	systemPrompt            = renderSystem("")
+	systemPromptWithActions = renderSystem(action.ProposeActionTool)
+)
 
 // Input is what one investigation's first request is built from.
 type Input struct {
@@ -35,7 +41,9 @@ type Input struct {
 	// never hold source.Separator, and source tools named
 	// <source>__<tool>. Build puts the built-in tools first and the source
 	// tools after them, each sorted by name, so the order is the same on
-	// every run and the cached prefix stays the same.
+	// every run and the cached prefix stays the same. When the tools hold
+	// action.ProposeActionTool, the system prompt also holds the rules for
+	// proposing a fix.
 	Tools []model.ToolSpec
 	// Group is the event group under investigation.
 	Group Group
@@ -91,7 +99,7 @@ type parts struct {
 // caller adds the model settings (tool choice, token limits, thinking).
 func Build(in Input) model.Request {
 	p := parts{
-		system:   systemPrompt,
+		system:   systemFor(in.Tools),
 		tools:    orderTools(in.Tools),
 		strategy: renderStrategy(in.Strategy, in.Tools),
 		lessons:  renderLessons(in.Lessons),
@@ -119,6 +127,16 @@ func (p parts) request() model.Request {
 	}
 }
 
+// systemFor returns the system prompt for an investigation with tools: the
+// one with the rules for proposing a fix when the model may propose.
+func systemFor(tools []model.ToolSpec) string {
+	if slices.ContainsFunc(tools, func(t model.ToolSpec) bool { return t.Name == action.ProposeActionTool }) {
+		return systemPromptWithActions
+	}
+
+	return systemPrompt
+}
+
 // orderTools returns a copy of tools with the built-in tools first and the
 // source tools after them, each sorted by name, and the cache breakpoint on
 // the last tool only.
@@ -139,11 +157,14 @@ func orderTools(tools []model.ToolSpec) []model.ToolSpec {
 	return out
 }
 
-// renderSystem renders system.tmpl.
-func renderSystem() string {
+// renderSystem renders system.tmpl. proposeAction is the name of the
+// propose tool, which switches on the rules for proposing a fix, or empty
+// to leave them out.
+func renderSystem(proposeAction string) string {
 	return renderTemplate("system.tmpl", systemTemplate, map[string]string{
 		"Tag":           untrustedTag,
 		"SubmitVerdict": report.SubmitVerdictTool,
+		"ProposeAction": proposeAction,
 	})
 }
 
