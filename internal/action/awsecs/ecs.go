@@ -103,15 +103,25 @@ func stateOf(svc types.Service, pos position) (state, error) {
 	return state{}, awsaction.Refuse("service %s has no PRIMARY deployment, so Sidekick cannot tell which task definition it runs", pos.service)
 }
 
-// earlier returns the target of a rollback: the revision that is back
-// ACTIVE revisions below running in the family. It reads ListTaskDefinitions
-// in descending order, and keeps the ARNs of exactly this family, since a
-// family prefix also matches other families.
-func earlier(ctx context.Context, client *ecs.Client, family string, running, back int) (int, error) {
+// activeSet is the ACTIVE revisions of a task definition family that are
+// below the running one.
+type activeSet struct {
+	// revisions are the revisions, newest first.
+	revisions []int
+	// complete is false when the search stopped at its bound with pages left.
+	complete bool
+	// examined is the number of task definitions read.
+	examined int
+}
+
+// activeBelow lists the ACTIVE revisions of the family that are below
+// running, newest first. It reads ListTaskDefinitions in descending order and
+// keeps the ARNs of exactly this family, since a family prefix also matches
+// other families.
+func activeBelow(ctx context.Context, client *ecs.Client, family string, running int) (activeSet, error) {
 	var (
-		found    []int
-		examined int
-		token    *string
+		set   activeSet
+		token *string
 	)
 
 	for range maxListPages {
@@ -123,30 +133,27 @@ func earlier(ctx context.Context, client *ecs.Client, family string, running, ba
 			NextToken:    token,
 		})
 		if err != nil {
-			return 0, fmt.Errorf("list the task definitions of family %s: %w", family, awsaction.Fail(err))
+			return activeSet{}, fmt.Errorf("list the task definitions of family %s: %w", family, awsaction.Fail(err))
 		}
 
-		examined += len(out.TaskDefinitionArns)
+		set.examined += len(out.TaskDefinitionArns)
 
 		for _, arn := range out.TaskDefinitionArns {
 			if f, revision, ok := parseTaskDefinition(arn); ok && f == family && revision < running {
-				found = append(found, revision)
-			}
-
-			if len(found) == back {
-				return found[back-1], nil
+				set.revisions = append(set.revisions, revision)
 			}
 		}
 
 		if out.NextToken == nil {
-			return 0, tooFew(family, running, back, len(found))
+			set.complete = true
+
+			return set, nil
 		}
 
 		token = out.NextToken
 	}
 
-	return 0, awsaction.Refuse("looked through the newest %d task definitions that start with %q and did not find %d ACTIVE revision%s of family %s below %s; "+
-		"ask for fewer revisions back, or roll back in the ECS console", examined, family, back, plural(back), family, taskDefinitionID(family, running))
+	return set, nil
 }
 
 // tooFew is the refusal for a family that has fewer ACTIVE revisions below

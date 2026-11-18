@@ -98,9 +98,9 @@ func TestSpec(t *testing.T) {
 	require.Equal(t, "ecs-rollback", spec.Name)
 	require.Contains(t, spec.Description, "Clusters: shop. Services: checkout, cart-*.")
 	require.Contains(t, spec.Description, "revisionsBack is at most 3.")
-	require.Contains(t, spec.Description, "may never have been deployed")
+	require.Contains(t, spec.Description, "A revision the service never deployed is not chosen")
 	require.JSONEq(t, `{"type":"integer","minimum":1,"maximum":3,"default":1,
-		"description":"How many ACTIVE task definition revisions of the service's family to go back from the one it runs. Default 1."}`,
+		"description":"How many earlier task definition revisions of the service's family, that the service deployed and are ACTIVE, to go back from the one it runs. Default 1."}`,
 		propertyOf(t, spec.ParamsSchema, "revisionsBack"))
 }
 
@@ -130,11 +130,12 @@ func propertyOf(t *testing.T, schema json.RawMessage, name string) string {
 func TestSnapshot(t *testing.T) {
 	t.Parallel()
 
-	registered := time.Date(2026, 5, 4, 9, 30, 0, 0, time.UTC)
-	revision := func(n int) action.Revision {
+	finished := time.Date(2026, 5, 4, 9, 40, 0, 0, time.UTC)
+	revision := func(t *testing.T, f *fakeECS, n int) action.Revision {
 		return action.Revision{
 			Kind: "task definition", ID: "checkout:" + strconv.Itoa(n), Version: imageFor(n),
-			DeployedAt: &registered, DeployedBy: "registered by arn:aws:iam::111122223333:user/ana", Notes: registeredNote,
+			DeployedAt: &finished, DeployedBy: "registered by arn:aws:iam::111122223333:user/ana",
+			Notes: "The time is when deployment sd-" + strconv.Itoa(f.deploymentIndex(t, n)) + " of this service, which succeeded, finished.",
 		}
 	}
 
@@ -183,10 +184,11 @@ func TestSnapshot(t *testing.T) {
 			revs, err := snap.Revisions()
 			require.NoError(t, err)
 			require.Equal(t, running, revs.Running.ID)
-			require.Equal(t, revision(tt.want), revs.GoesBackTo)
+			require.Equal(t, revision(t, f, tt.want), revs.GoesBackTo)
 			require.Equal(t, "task definition", revs.Running.Kind)
 			require.Equal(t, 1, f.count("DescribeServices"))
 			require.Equal(t, 2, f.count("DescribeTaskDefinition"))
+			require.Equal(t, 1, f.count("ListServiceDeployments"))
 		})
 	}
 }
