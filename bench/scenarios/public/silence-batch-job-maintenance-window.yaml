@@ -142,6 +142,7 @@ actions:
 default: no_data
 expected:
   verdict: false_positive
+  acceptable: [known_issue]
   rootCause:
     summary: invoice-export reads from the reporting replica, which is stopped from 01:00 to 04:00 UTC for the failover rehearsal announced in PLT-312, so its run at 01:05 cannot connect and the alert fires for planned maintenance. Nothing was deployed or changed.
     rubric:
