@@ -120,8 +120,8 @@ func TestSpecSnapshot(t *testing.T) {
 	api, _ := newFakeAPI(t)
 	rollback := testRollback(t, api, func(c *Config) {
 		c.Limits = Limits{
-			Namespaces: []string{"shop", "media", "ledger", "search", "billing"},
-			Names:      []string{"cart-api", "media-resizer", "ledger-api", "search-api", "billing-portal"},
+			Namespaces: []string{"shop", "media", "ledger", "search", "billing", "orders", "pricing"},
+			Names:      []string{"cart-api", "media-resizer", "ledger-api", "search-api", "billing-portal", "order-intake", "quote-engine"},
 		}
 	})
 

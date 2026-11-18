@@ -1,0 +1,218 @@
+# A queue depth alert that fires at the same hour every evening, because its
+# threshold is lower than the normal daily peak, and the alert rule lives in
+# Git. The right answer is a false positive and a pull request that changes the
+# rule. A code change is also on the route, but the service is healthy and the
+# problem is the threshold, not the code.
+# Generic alert strategy, approved mode, false positive.
+id: monitor-fix-queue-depth-threshold-too-tight
+title: Notifier queue depth alert fires every evening at a threshold below the normal peak
+tags: [generic, queue, threshold, false-positive, actions, action-choice]
+strategy: generic-alert
+now: 2026-11-11T18:14:00Z
+route:
+  mode: approved
+  actions: [monitor-pr, github-code-change]
+  details:
+    alert-rules: Prometheus alert rules are kept in the Git repository acme/monitors, one file per service, in prometheus/rules/<service>.yml.
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="NotifierQueueDepthHigh"}'
+    alerts:
+      - status: firing
+        labels: { alertname: NotifierQueueDepthHigh, service: notifier, namespace: messaging, env: prod, severity: warning }
+        annotations:
+          summary: notifier queue depth above 200 for 2m
+          description: The queue of notifier holds 380 messages. The threshold is 200.
+        startsAt: 2026-11-11T18:06:00Z
+        fingerprint: c61d09a4e7b25f83
+sources:
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: query_range
+        match:
+          args:
+            query: { regex: "(?i)queue|depth|backlog" }
+        respond:
+          text: |
+            Queue depth of notifier, last 7 days, 5 minute points
+            Every day from 18:00 to 18:20: 300 to 450, and under 50 again by 18:30. The rest of the day: 5 to 90.
+            Today: 18:05 260, 18:10 380, last 380 (still inside the daily rise).
+            min 5, max 450, last 380
+          evidence:
+            - { kind: metric, title: notifier queue depth, url: "https://prometheus.acme.example/graph?g0.expr=notifier_queue_depth" }
+      - tool: query_range
+        match:
+          args:
+            query: { regex: "(?i)delay|latency|age|duration|lag" }
+        respond:
+          text: |
+            Send delay of notifier (p95, seconds from queued to sent), last 7 days, 5 minute points
+            Normal: 2 to 9. Each day from 18:00 to 18:20: 12 to 27. Today at 18:10: 21.
+            The delivery target is 120 seconds. It was never reached in the last 7 days.
+          evidence:
+            - { kind: metric, title: notifier send delay, url: "https://prometheus.acme.example/graph?g0.expr=notifier_send_delay_p95" }
+      - tool: query_range
+        match:
+          args:
+            query: { regex: "(?i)consum|rate|throughput|sent|processed|requests|error|fail" }
+        respond:
+          text: |
+            Messages sent per second by notifier, last 7 days
+            Normal: 110 to 130. Each day from 18:00 to 18:20 the autoscaler adds consumers and the rate is 180 to 240.
+            Failed sends: under 0.1% on every day, today 0.05%.
+      - tool: query
+        respond:
+          text: |
+            Instant query at 2026-11-11T18:14:00Z
+            {service="notifier"} 380
+            The value is the number of queued messages.
+          evidence:
+            - { kind: metric, title: notifier queue depth, url: "https://prometheus.acme.example/graph?g0.expr=notifier_queue_depth" }
+      - tool: list_alerts
+        respond:
+          text: |
+            1 alert firing
+            NotifierQueueDepthHigh, firing since 2026-11-11T18:06:00Z, labels service=notifier namespace=messaging env=prod severity=warning
+              summary: notifier queue depth above 200 for 2m
+            No other alert is firing or pending for notifier or its dependencies.
+      - tool: get_rules
+        respond:
+          text: |
+            group notifier, alert NotifierQueueDepthHigh, for 2m
+            expr: notifier_queue_depth{service="notifier"} > 200
+            health ok, last evaluation 18:13:50
+  k8s:
+    tools: { snapshot: bench/tools/kubernetes.json }
+    fixtures:
+      - tool: get_workload
+        respond:
+          text: |
+            Deployment messaging/notifier, created 2026-02-02T11:40:09Z
+            Replicas: 8 desired, 8 ready, 8 updated, 8 available, 0 unavailable
+            Generation: 52, observed 52
+            Revision: 14
+            Update strategy: RollingUpdate
+            Containers:
+              notifier: acme/notifier:2026.11.03-1
+            Conditions:
+              Available=True MinimumReplicasAvailable: Deployment has minimum availability. (since 2026-02-02T11:40:20Z)
+              Progressing=True NewReplicaSetAvailable: ReplicaSet "notifier-5c9b7d6f84" has successfully progressed. (since 2026-11-03T10:21:30Z)
+            Pods (8, not ready first):
+              notifier-5c9b7d6f84-2bk8q Running, 1/1 ready, 0 restarts, node ip-10-1-3-9, started 2026-11-11T18:07:12Z, revision 14 (ReplicaSet notifier-5c9b7d6f84)
+              notifier-5c9b7d6f84-7wq4n Running, 1/1 ready, 0 restarts, node ip-10-1-3-14, started 2026-11-11T18:07:12Z, revision 14 (ReplicaSet notifier-5c9b7d6f84)
+              notifier-5c9b7d6f84-cm5xh Running, 1/1 ready, 0 restarts, node ip-10-1-2-30, started 2026-11-03T10:21:05Z, revision 14 (ReplicaSet notifier-5c9b7d6f84)
+              notifier-5c9b7d6f84-f6t2z Running, 1/1 ready, 0 restarts, node ip-10-1-2-41, started 2026-11-03T10:21:44Z, revision 14 (ReplicaSet notifier-5c9b7d6f84)
+              notifier-5c9b7d6f84-k8d3v Running, 1/1 ready, 0 restarts, node ip-10-1-1-8, started 2026-11-11T18:07:12Z, revision 14 (ReplicaSet notifier-5c9b7d6f84)
+              notifier-5c9b7d6f84-n4r9s Running, 1/1 ready, 0 restarts, node ip-10-1-1-23, started 2026-11-03T10:22:10Z, revision 14 (ReplicaSet notifier-5c9b7d6f84)
+              notifier-5c9b7d6f84-p7v6j Running, 1/1 ready, 0 restarts, node ip-10-1-3-27, started 2026-11-03T10:21:39Z, revision 14 (ReplicaSet notifier-5c9b7d6f84)
+              notifier-5c9b7d6f84-x3c8m Running, 1/1 ready, 0 restarts, node ip-10-1-2-12, started 2026-11-03T10:21:21Z, revision 14 (ReplicaSet notifier-5c9b7d6f84)
+            Autoscaler notifier: 4 to 10 replicas, 8 now, 8 desired
+      - tool: list_pod_problems
+        respond:
+          text: "0 pods with problems in namespace messaging (11 pods checked), most restarts first:"
+          noData: true
+      - tool: get_pod_logs
+        respond:
+          text: |
+            notifier-5c9b7d6f84-cm5xh, container notifier, last lines
+            2026-11-11T18:13:52Z INFO  sent 241 messages in the last 5s, queue 372
+            2026-11-11T18:13:57Z INFO  sent 238 messages in the last 5s, queue 361
+            2026-11-11T18:14:02Z INFO  sent 244 messages in the last 5s, queue 349
+            No errors in the last 10 minutes.
+      - tool: list_events
+        respond:
+          text: |
+            Namespace messaging, newest first
+            18:07:10 Normal SuccessfulRescale horizontalpodautoscaler notifier New size: 8; reason: external metric notifier_queue_depth above target
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: |
+            No commits since the requested time.
+            The last commit is 91d7c3a 2026-11-03T10:01:50Z "Log the queue depth every 5 seconds" by sara
+          noData: true
+      - tool: list_workflow_runs
+        respond:
+          text: 'run 3377 deploy notifier 2026-11-03T10:18:22Z success, commit 91d7c3a. No deploy since.'
+          evidence:
+            - { kind: deploy, title: deploy notifier 3377, url: "https://github.example.com/acme/notifier/actions/runs/3377" }
+      - tool: get_file
+        match:
+          args:
+            repo: { equals: acme/monitors }
+            path: { regex: "^prometheus/rules/?$" }
+        respond:
+          text: |
+            acme/monitors, prometheus/rules, main, directory
+            checkout.yml
+            ledger.yml
+            notifier.yml
+            receipt-render.yml
+          evidence:
+            - { kind: resource, title: prometheus/rules, url: "https://github.example.com/acme/monitors/tree/main/prometheus/rules" }
+      - tool: get_file
+        match:
+          args:
+            repo: { equals: acme/monitors }
+            path: { regex: "prometheus/rules/notifier\\.ya?ml$" }
+        respond:
+          text: |
+            acme/monitors, prometheus/rules/notifier.yml, main
+            groups:
+              - name: notifier
+                rules:
+                  - alert: NotifierQueueDepthHigh
+                    expr: notifier_queue_depth{service="notifier"} > 200
+                    for: 2m
+                    labels:
+                      severity: warning
+                      service: notifier
+                    annotations:
+                      summary: notifier queue depth above 200 for 2m
+          evidence:
+            - { kind: resource, title: prometheus/rules/notifier.yml, url: "https://github.example.com/acme/monitors/blob/main/prometheus/rules/notifier.yml" }
+      - tool: get_file
+        match:
+          args:
+            repo: { equals: acme/notifier }
+            path: { regex: "^(\\./)?/?$" }
+        respond:
+          text: |
+            acme/notifier, /, main, directory
+            cmd/
+            internal/
+            Dockerfile
+            go.mod
+            go.sum
+actions:
+  monitor-pr:
+    spec: { snapshot: bench/actions/github.pull_request.json }
+  github-code-change:
+    spec: { snapshot: bench/actions/github.code_change.json }
+default: no_data
+expected:
+  verdict: false_positive
+  rootCause:
+    summary: The queue of notifier rises to 300 to 450 messages every evening from 18:00 to 18:20 and is back under 50 by 18:30, with send delay far under its target and no failed sends, while the alert rule fires above 200 for 2m. The threshold is below the normal daily peak.
+    rubric:
+      - { id: peak, text: "Finds that the queue depth rises above 200 every evening around 18:00 and drains within minutes, so the threshold of 200 is below the normal daily peak", weight: 2, required: true }
+      - { id: health, text: "Finds that the service is healthy: send delay is within its target, sends do not fail, and the autoscaler adds consumers", weight: 1 }
+      - { id: fix, text: "Proposes changing the alert rule in the monitors repository, for example a higher threshold or a longer duration", weight: 2 }
+  evidence:
+    - { calledTool: prometheus__query_range }
+    - { calledTool: github__get_file }
+  proposals:
+    - action: monitor-pr
+      params:
+        repo: { equals: acme/monitors }
+        baseBranch: { equals: main }
+        files[*].path: { regex: '^prometheus/rules/notifier\.ya?ml$' }
+        files[*].content: { contains: NotifierQueueDepthHigh }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }

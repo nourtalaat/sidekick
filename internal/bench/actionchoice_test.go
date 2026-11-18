@@ -23,10 +23,14 @@ const actionChoiceTag = "action-choice"
 // lists, so that proposing nothing is a choice among several.
 const minDistractors = 3
 
+// silenceScenarioID is the scenario whose silence the duration and matcher
+// checks are tested against.
+const silenceScenarioID = "silence-batch-job-maintenance-window"
+
 // actionTypes are the types of the real actions that the action-choice
 // scenarios use, and the one parameter value that names a change.
 var actionTypes = []string{
-	"kubernetes.rollback", "helm.rollback", "argocd.rollback", "aws.ecs_rollback", "launchdarkly.flag", "github.revert", "turn_off",
+	"kubernetes.rollback", "helm.rollback", "argocd.rollback", "aws.ecs_rollback", "launchdarkly.flag", "github.revert", "gitlab.revert", "alertmanager.silence", "github.code_change", "github.pull_request", "turn_off",
 }
 
 func TestActionChoiceScenariosOfferAChoice(t *testing.T) {
@@ -63,12 +67,17 @@ func TestActionChoiceScenariosCoverTheActions(t *testing.T) {
 
 	for _, snapshot := range []string{
 		"kubernetes.rollback.json", "helm.rollback.json", "argocd.rollback.json", "aws.ecs_rollback.json", "launchdarkly.flag.json",
+		"github.revert.json", "gitlab.revert.json", "alertmanager.silence.json", "github.code_change.json",
+		"github.pull_request.json",
 	} {
 		require.Equal(t, 1, expecting[snapshot], "one scenario expects a proposal of %s", snapshot)
 	}
 
-	require.Len(t, noProposal, 1, "one scenario expects no proposal")
-	require.GreaterOrEqual(t, len(noProposal[0].Route.Actions), minDistractors, "its route lists rollback actions")
+	require.Len(t, noProposal, 2, "two scenarios expect no proposal")
+
+	for _, sc := range noProposal {
+		require.GreaterOrEqual(t, len(sc.Route.Actions), minDistractors, "the route of %s lists several actions that are wrong", sc.ID)
+	}
 }
 
 func TestActionChoiceProposalsFitTheirActions(t *testing.T) {
@@ -107,6 +116,48 @@ func TestActionChoiceScenariosDoNotNameTheAnswer(t *testing.T) {
 					require.NotContains(t, strings.ToLower(text), word, "%s names %q, which no real tool would show", place, word)
 				}
 			}
+		})
+	}
+}
+
+func TestSilenceScenarioChecksTheSilence(t *testing.T) {
+	t.Parallel()
+
+	sc := loadActionChoiceByID(t, silenceScenarioID)
+	require.Len(t, sc.Expected.Proposals, 1)
+
+	equal := func(name, value string) map[string]any {
+		return map[string]any{"name": name, "value": value, "isRegex": false, "isEqual": true}
+	}
+
+	rightMatchers := []any{equal("alertname", "BatchJobFailed"), equal("job", "invoice-export"), equal("env", "prod")}
+
+	tests := []struct {
+		name     string
+		matchers []any
+		duration string
+		want     bool
+	}{
+		{name: "covers the window", matchers: rightMatchers, duration: "3h", want: true},
+		{name: "exactly the rest of the window", matchers: rightMatchers, duration: "2h25m", want: true},
+		{name: "hours with a fraction", matchers: rightMatchers, duration: "2.5h", want: true},
+		{name: "in minutes", matchers: rightMatchers, duration: "180m", want: true},
+		{name: "the longest the action allows", matchers: rightMatchers, duration: "6h", want: true},
+		{name: "ends before the window does", matchers: rightMatchers, duration: "2h24m", want: false},
+		{name: "much too short", matchers: rightMatchers, duration: "30m", want: false},
+		{name: "above what the action allows", matchers: rightMatchers, duration: "6h1m", want: false},
+		{name: "far above what the action allows", matchers: rightMatchers, duration: "12h", want: false},
+		{name: "without the job", matchers: []any{equal("alertname", "BatchJobFailed"), equal("env", "prod")}, duration: "3h", want: false},
+		{name: "without the alert name", matchers: []any{equal("job", "invoice-export"), equal("env", "prod")}, duration: "3h", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			params := map[string]any{"matchers": tt.matchers, "duration": tt.duration, "comment": "Planned maintenance"}
+
+			require.Equal(t, tt.want, sc.Expected.Proposals[0].fits("alertmanager-silence", params))
 		})
 	}
 }
@@ -158,6 +209,21 @@ func schemaProperties(t *testing.T, snapshot string) []string {
 	require.NoError(t, json.Unmarshal(raw, &file))
 
 	return slices.Collect(maps.Keys(file.ParamsSchema.Properties))
+}
+
+// loadActionChoiceByID returns the action choice scenario with the ID.
+func loadActionChoiceByID(t *testing.T, id string) Scenario {
+	t.Helper()
+
+	for _, sc := range loadActionChoice(t) {
+		if sc.ID == id {
+			return sc
+		}
+	}
+
+	require.FailNow(t, "no action choice scenario", "ID %q", id)
+
+	return Scenario{}
 }
 
 // loadActionChoice loads the public scenarios tagged actionChoiceTag.

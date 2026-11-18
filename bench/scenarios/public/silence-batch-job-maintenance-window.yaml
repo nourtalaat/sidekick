@@ -1,0 +1,161 @@
+# A noisy alert for an hourly batch job that reads from a database replica,
+# during a maintenance window that a Linear ticket announces, with the replica
+# stopped on purpose. The right answer is a false positive and a silence of
+# this job's alert until the window ends. Rollback and revert actions are on the
+# route but nothing changed in the code or the deploy.
+# Generic alert strategy, approved mode, false positive.
+id: silence-batch-job-maintenance-window
+title: Invoice export job fails while the reporting replica is down for announced maintenance
+tags: [generic, batch-job, maintenance, linear, mcp, actions, action-choice, false-positive]
+strategy: generic-alert
+now: 2026-11-10T01:35:00Z
+route:
+  mode: approved
+  actions: [alertmanager-silence, kubernetes-rollback, github-revert]
+  details:
+    maintenance: Planned maintenance is announced in Linear, in the team Platform, with the label maintenance.
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="BatchJobFailed"}'
+    alerts:
+      - status: firing
+        labels: { alertname: BatchJobFailed, job: invoice-export, namespace: billing, env: prod, severity: warning }
+        annotations:
+          summary: invoice-export failed
+          description: The last run of the CronJob invoice-export failed and no run has succeeded since.
+        startsAt: 2026-11-10T01:12:00Z
+        fingerprint: 8b4f1e63d0a79c25
+sources:
+  linear:
+    tools: { snapshot: bench/tools/linear.json }
+    fixtures:
+      - tool: list_issues
+        respond:
+          text: |
+            1 issue matching
+            PLT-312 "Reporting replica failover rehearsal, 2026-11-10 01:00 to 04:00 UTC", status In Progress, priority High (P2), label maintenance, team Platform
+              created 2026-11-03, updated 2026-11-10, assignee Nadia
+          evidence:
+            - { kind: ticket, title: PLT-312, url: "https://linear.example.com/quillcart/issue/PLT-312" }
+      - tool: get_issue
+        respond:
+          text: |
+            PLT-312 "Reporting replica failover rehearsal, 2026-11-10 01:00 to 04:00 UTC"
+            Status In Progress, priority High (P2), label maintenance. Assignee Nadia. Created 2026-11-03.
+            Description: Window 2026-11-10 01:00 to 04:00 UTC. The reporting replica reporting-replica-1 is stopped while we rehearse the failover. Jobs that read from it, such as invoice-export (hourly at minute 5), cannot connect during the window, and their alerts are expected to fire. The primary database and the apps that use it are not affected. The replica is back at 04:00.
+          evidence:
+            - { kind: ticket, title: PLT-312, url: "https://linear.example.com/quillcart/issue/PLT-312" }
+      - tool: list_comments
+        respond:
+          text: |
+            2 comments on PLT-312
+            2026-11-09 Nadia: Announced in the platform channel. invoice-export runs against the replica, so it will fail during the window.
+            2026-11-10 01:02 Nadia: Window started, the replica is stopped.
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: query_range
+        respond:
+          text: |
+            Runs of the batch jobs of namespace billing, last 7 days, hourly
+            invoice-export: every run succeeded until 2026-11-10 00:05. The run at 01:05 failed.
+            payout-run and ledger-close: every run succeeded, including the last ones at 01:00 and 01:20.
+          evidence:
+            - { kind: metric, title: billing job runs, url: "https://prometheus.quillcart.example/graph?g0.expr=kube_job_status_failed" }
+      - tool: query
+        respond:
+          text: |
+            Instant query at 2026-11-10T01:35:00Z
+            {job="invoice-export", namespace="billing"} 1
+            The value is the number of failed runs of invoice-export in the last hour.
+      - tool: list_alerts
+        respond:
+          text: |
+            1 alert firing
+            BatchJobFailed, firing since 2026-11-10T01:12:00Z, labels job=invoice-export namespace=billing env=prod severity=warning
+              summary: invoice-export failed
+            No other alert is firing or pending in namespace billing.
+      - tool: get_rules
+        respond:
+          text: |
+            group billing-jobs, alert BatchJobFailed, for 5m
+            expr: kube_job_status_failed{namespace="billing"} > 0
+            health ok, last evaluation 01:34:50
+  k8s:
+    tools: { snapshot: bench/tools/kubernetes.json }
+    fixtures:
+      - tool: list_pod_problems
+        respond:
+          text: |
+            1 pod with problems in namespace billing (9 pods checked), most restarts first:
+            billing/invoice-export-29114705-x7k2q phase Failed on node ip-10-0-4-6, owned by Job/invoice-export-29114705, started 2026-11-10T01:05:00Z
+              Failed
+              export: terminated with exit code 1 (Error) at 2026-11-10T01:05:41Z
+      - tool: get_pod_logs
+        respond:
+          text: |
+            invoice-export-29114705-x7k2q, container export, last lines
+            2026-11-10T01:05:02Z INFO  invoice-export starting, 412 invoices to export
+            2026-11-10T01:05:03Z INFO  connecting to reporting-replica-1.quillcart.internal:5432
+            2026-11-10T01:05:41Z ERROR dial tcp 10.20.6.14:5432: connect: connection refused
+            2026-11-10T01:05:41Z ERROR export failed after 3 attempts, exiting with status 1
+      - tool: list_events
+        respond:
+          text: |
+            Namespace billing, newest first
+            01:05:44 Warning BackoffLimitExceeded job invoice-export-29114705 Job has reached the specified backoff limit
+            01:05:00 Normal SuccessfulCreate job invoice-export-29114705 Created pod: invoice-export-29114705-x7k2q
+  postgres:
+    tools: { snapshot: bench/tools/postgres.json }
+    fixtures:
+      - tool: replication_lag
+        respond:
+          text: |
+            Database reporting
+            The server reporting-replica-1 does not answer (connection refused). Its last replay was at 2026-11-10T00:59:58Z.
+            The primary lists no connected replica: pg_stat_replication has been empty since 01:00:12.
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: |
+            No commits since 2026-11-09T01:35:00Z.
+            The last commit is 3c5a7e9 2026-10-27T10:02:11Z "Export credit notes with the invoices" by tomas
+          noData: true
+      - tool: list_workflow_runs
+        respond:
+          text: 'run 5188 deploy invoice-export 2026-10-27T10:10:40Z success, commit 3c5a7e9. No deploy since.'
+          evidence:
+            - { kind: deploy, title: deploy invoice-export 5188, url: "https://github.example.com/quillcart/billing-jobs/actions/runs/5188" }
+actions:
+  alertmanager-silence:
+    spec: { snapshot: bench/actions/alertmanager.silence.json }
+  kubernetes-rollback:
+    spec: { snapshot: bench/actions/kubernetes.rollback.json }
+  github-revert:
+    spec: { snapshot: bench/actions/github.revert.json }
+default: no_data
+expected:
+  verdict: false_positive
+  acceptable: [known_issue]
+  rootCause:
+    summary: invoice-export reads from the reporting replica, which is stopped from 01:00 to 04:00 UTC for the failover rehearsal announced in PLT-312, so its run at 01:05 cannot connect and the alert fires for planned maintenance. Nothing was deployed or changed.
+    rubric:
+      - { id: window, text: "Finds that the failure comes from the planned maintenance window of PLT-312, with the reporting replica stopped from 01:00 to 04:00 UTC, and not from a fault in invoice-export", weight: 2, required: true }
+      - { id: ticket, text: "Cites the Linear issue PLT-312", weight: 1 }
+      - { id: fix, text: "Proposes silencing this job's alert until the window ends, and not rolling back or reverting anything", weight: 1 }
+  evidence:
+    - { calledTool: linear__get_issue }
+    - { citedURL: "https://linear.example.com/quillcart/issue/PLT-312" }
+  proposals:
+    - action: alertmanager-silence
+      params:
+        matchers[*].name: { equals: alertname }
+        matchers[*].value: { equals: invoice-export }
+        duration: { regex: '^(?:2h(?:2[5-9]|[3-5][0-9])m|2\.[5-9][0-9]*h|[3-5](?:\.[0-9]+)?h|[3-5]h(?:[0-5][0-9]m)?|6h|14[5-9]m|1[5-9][0-9]m|2[0-9]{2}m|3[0-5][0-9]m|360m)$' }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }

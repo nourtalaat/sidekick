@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/actiontest"
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 )
 
@@ -88,4 +89,14 @@ func TestSpec(t *testing.T) {
 	for _, want := range []string{"acme/platform/deploy, acme/web", "Base branch: main", "at most 72h0m0s ago", "at most 5 files and 100 added and removed lines"} {
 		require.Contains(t, spec.Description, want)
 	}
+}
+
+func TestSpecSnapshot(t *testing.T) {
+	t.Parallel()
+
+	b := newBed(t, func(l *Limits) {
+		l.Projects = []string{"quillcart/platform/cluster-config", "quillcart/platform/app-config", "quillcart/pricing/quote-engine"}
+	})
+
+	actiontest.CheckSpecSnapshot(t, TypeName, b.rv)
 }

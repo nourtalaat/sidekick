@@ -102,7 +102,7 @@ neither Postgres nor Docker.
 sidekick bench validate --scenarios bench/scenarios/public --config sidekick.yaml
 ```
 
-When every scenario is valid it prints `scenarios checked: 20, problems: 0`.
+When every scenario is valid it prints `scenarios checked: 26, problems: 0`.
 It takes `--scenarios` and `--config`, as `bench run` does. The config is read
 for its strategies and model connectors, so the secrets of the connectors
 must be readable; nothing is sent to a provider. It exits with `0` when every
@@ -111,11 +111,12 @@ scenario is valid and `2` for a bad flag, config file or scenario file.
 ## The public scenarios
 
 `bench/scenarios/public` is the set that the project's own benchmark runs:
-20 scenarios about invented companies, services and data, so nothing in them
+26 scenarios about invented companies, services and data, so nothing in them
 comes from a real system. Together they cover every verdict, each of the four
 built-in strategies, triage skipping a duplicate, a source that is down, the
 first MCP sources (SigNoz, Datadog, Sentry and Linear), a proposal of an
-action, and the choice between rollback and flag actions. Each has a
+action, and the choice between rollback, flag, revert, silence, code change and
+monitor change actions, or none. Each has a
 rubric for the judge and, except the triage one, checks of the run made in
 code.
 
@@ -141,6 +142,12 @@ code.
 | `rollback-ecs-bad-environment-value` | `true_positive` | `error-rate-alert` | `aws`, `github`, and the mock actions `ecs-rollback`, `kubernetes-rollback`, `github-revert` |
 | `flag-launchdarkly-turn-off` | `true_positive` | `error-rate-alert` | `launchdarkly`, `k8s`, `prometheus`, `github`, and the mock actions `launchdarkly-flag`, `kubernetes-rollback`, `github-revert` |
 | `no-action-latency-database-lock` | `true_positive` | `latency-alert` | `postgres`, `prometheus`, `k8s`, `github`, `launchdarkly`, and six mock actions |
+| `revert-argocd-auto-sync-bad-pool-size` | `true_positive` | `error-rate-alert` | `argocd`, `k8s`, `prometheus`, `github`, and the mock actions `argocd-rollback`, `github-revert`, `kubernetes-rollback` |
+| `revert-gitlab-flux-bad-merge-request` | `true_positive` | `service-down` | `k8s`, `prometheus`, `gitlab`, and the mock actions `gitlab-revert`, `kubernetes-rollback`, `github-revert` |
+| `silence-batch-job-maintenance-window` | `false_positive` (`known_issue` also counts) | `generic-alert` | `linear` (MCP), `prometheus`, `k8s`, `postgres`, `github`, and the mock actions `alertmanager-silence`, `kubernetes-rollback`, `github-revert` |
+| `no-action-batch-job-outside-maintenance` | `true_positive` | `generic-alert` | `linear` (MCP), `prometheus`, `k8s`, `postgres`, `github`, and the same three mock actions |
+| `code-change-billing-portal-empty-statement-panic` | `true_positive` | `service-down` | `k8s`, `prometheus`, `github`, and the mock actions `github-code-change`, `github-revert`, `kubernetes-rollback` |
+| `monitor-fix-queue-depth-threshold-too-tight` | `false_positive` | `generic-alert` | `prometheus`, `k8s`, `github`, and the mock actions `monitor-pr`, `github-code-change` |
 
 - Every scenario runs with the strategy it names, but when the config sets a
   `model.roles.triage` role, triage runs first and may choose another
@@ -159,18 +166,32 @@ code.
   a pull request that changes that rule, so the scenario expects one
   `monitor-pr` proposal for that repository, branch and file. Proposing
   nothing, or a change somewhere else, scores wrong.
-- The six scenarios tagged `action-choice` (`rollback-*`, `flag-launchdarkly-turn-off`
-  and `no-action-latency-database-lock`) run in approved mode and list more
-  than one mock action on the route, so the model has to choose. Their
-  snapshots in `bench/actions` come from the real `kubernetes.rollback`,
-  `helm.rollback`, `argocd.rollback`, `aws.ecs_rollback`, `launchdarkly.flag`
-  and `github.revert` actions. Five scenarios expect one proposal with its
-  parameters checked: a Kubernetes, Helm, Argo CD or ECS rollback, or turning
-  a flag off in production. Any extra proposal, such as a revert pull request
-  next to the rollback, scores wrong. The sixth expects `noProposal`: a
-  database lock causes the latency and nothing changed, so rolling back
-  anything is wrong. No fixture names an action or its parameters where a
-  real tool would not show them, and a unit test checks this.
+- The twelve scenarios tagged `action-choice` (`rollback-*`, `flag-*`,
+  `revert-*`, `silence-*`, `code-change-*`, `monitor-fix-*` and `no-action-*`)
+  run in approved mode and list more than one mock action on the route, so
+  the model has to choose. Their snapshots in `bench/actions` come from the
+  real `kubernetes.rollback`, `helm.rollback`, `argocd.rollback`,
+  `aws.ecs_rollback`, `launchdarkly.flag`, `github.revert`, `gitlab.revert`,
+  `alertmanager.silence`, `github.code_change` and `github.pull_request`
+  actions. Ten scenarios expect one proposal with its parameters checked, and
+  any extra proposal, such as a revert pull request next to a rollback, scores
+  wrong. The two others expect `noProposal`: a database lock causes the
+  latency and nothing changed, and a batch job fails on a rejected password
+  while the maintenance tickets found are for other dates, so a rollback, a
+  revert or a silence would be wrong.
+- The new scenarios check rules of the real actions. A revert pull request is
+  the right fix for an Argo CD application with auto-sync on, because a
+  rollback would be synced away, and a merge request revert for a workload that
+  Flux manages, because the Kubernetes rollback refuses it. A silence must name
+  the job as well as the alert and last from now to the end of the announced
+  window, and no longer than the action allows. A crash from old code gets a
+  code change, and an alert rule that is too tight gets a change to the monitor
+  in Git, never a code change. Each scenario puts what the model needs where
+  a real tool would show it: full commit SHAs and merge request numbers from the
+  Git tools, pod names from the workload, and the maintenance window in a
+  ticket.
+- No fixture names an action or its parameters where a real tool would not
+  show them, and a unit test checks this.
 - Each MCP source's scenario uses the tool snapshot that
   [its docs page](sources/signoz.md) describes: `bench/tools/signoz.json`,
   `datadog.json`, `sentry.json` and `linear.json`.
@@ -825,9 +846,10 @@ Markdown summary to the job summary. The run fails when a threshold in
 `bench/bench.yaml` is missed. When `bench/baseline.json` exists, the
 workflow also compares the run with it and fails when the overall score
 falls more than 0.04 below the baseline's. For the committed baseline,
-which scored 0.992, that puts the floor at about 0.95: one wrong verdict
-in the 39 runs of the public set stays above it, and two do not. The
-workflow sets `maxDrop` to 0.04 whatever the baseline is.
+which scored 0.944 over 78 runs (26 scenarios, 3 runs each), that puts the
+floor at about 0.90: one wrong verdict costs about 0.006 to 0.013, so three
+wrong verdicts stay above it, and a fourth may not. The workflow sets
+`maxDrop` to 0.04 whatever the baseline is.
 
 Every run calls a paid model for each scenario three times, so each
 run costs money; the `maxCostPerRunUSD` threshold and each scenario's

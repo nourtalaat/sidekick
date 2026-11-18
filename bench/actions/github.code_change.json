@@ -1,0 +1,81 @@
+{
+  "name": "code-change",
+  "description": "Opens a draft pull request that changes application code. Use it only for a bug in code, never for a monitor, a threshold or an alert rule. Read each file you want to change with the GitHub source first, then give the whole new content of each file you change, or delete it. Make the smallest change that fixes the cause of the problem, and leave every other file and line as it is. Allowed repositories: quillcart/billing-portal, quillcart/cart-api, quillcart/ledger-api, acme/notifier, acme/receipt-render. Base branch: main. At most 3 files and 40 added and removed lines in all. Allowed paths: internal/**, cmd/**. A file may be at most 256 KiB. Symlinks, submodules and binary files cannot be changed. Deleting files is not allowed. These paths are never changed, even when an allowed path matches them: CI and build automation, ownership and review rules, Git settings and hooks, secrets and keys. The pull request is always a draft. Sidekick never merges it, asks for a review or assigns anyone: the repository's own checks run on it and a person reviews it before it can merge.",
+  "paramsSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "repo",
+      "baseBranch",
+      "title",
+      "body",
+      "files"
+    ],
+    "properties": {
+      "repo": {
+        "type": "string",
+        "description": "The repository, as owner/name."
+      },
+      "baseBranch": {
+        "type": "string",
+        "description": "The branch the pull request targets."
+      },
+      "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+      },
+      "body": {
+        "type": "string",
+        "maxLength": 8000,
+        "description": "The pull request description: what changes and why."
+      },
+      "files": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 25,
+        "description": "The files to change. Give the whole new content of each, or delete it.",
+        "items": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "content"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "The path from the root of the repository."
+                },
+                "content": {
+                  "type": "string",
+                  "description": "The whole new content of the file."
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "delete"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "The path from the root of the repository."
+                },
+                "delete": {
+                  "type": "boolean",
+                  "const": true
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

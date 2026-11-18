@@ -1,0 +1,346 @@
+# A crash loop with a stack trace that points at one line of application code,
+# and no recent deploy to undo: an account with no postings makes a statement
+# worker read the first element of an empty list. The right answer is a small
+# code change to that file. A revert pull request and a Kubernetes rollback
+# are on the route, but nothing recent changed and an older revision has the
+# same code.
+# Service down strategy, approved mode, true positive.
+id: code-change-billing-portal-empty-statement-panic
+title: Billing portal crash loop from a statement for an account with no postings
+tags: [service-down, crash, panic, code, actions, action-choice, true-positive]
+strategy: service-down
+now: 2026-11-12T06:40:00Z
+route:
+  mode: approved
+  actions: [github-code-change, github-revert, kubernetes-rollback]
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="BillingPortalCrashLooping"}'
+    alerts:
+      - status: firing
+        labels: { alertname: BillingPortalCrashLooping, service: billing-portal, namespace: billing, env: prod, severity: critical }
+        annotations:
+          summary: billing-portal restarted more than 5 times in 15m
+          description: The containers of billing-portal restarted 13 times in the last 15m.
+        startsAt: 2026-11-12T06:28:00Z
+        fingerprint: f3a96d2e07c85b14
+sources:
+  k8s:
+    tools: { snapshot: bench/tools/kubernetes.json }
+    fixtures:
+      - tool: get_workload
+        respond:
+          text: |
+            Deployment billing/billing-portal, created 2026-01-14T09:02:31Z
+            Replicas: 2 desired, 0 ready, 2 updated, 0 available, 2 unavailable
+            Generation: 77, observed 77
+            Revision: 22
+            Update strategy: RollingUpdate
+            Containers:
+              billing-portal: quillcart/billing-portal:2026.10.26-1
+            Conditions:
+              Available=False MinimumReplicasUnavailable: Deployment does not have minimum availability. (since 2026-11-12T06:24:40Z)
+              Progressing=True NewReplicaSetAvailable: ReplicaSet "billing-portal-6d7f9c85b4" has successfully progressed. (since 2026-10-26T10:14:02Z)
+            Pods (2, not ready first):
+              billing-portal-6d7f9c85b4-hx2vr Running, 0/1 ready, 7 restarts, node ip-10-0-2-17, started 2026-10-26T10:12:41Z, revision 22 (ReplicaSet billing-portal-6d7f9c85b4)
+              billing-portal-6d7f9c85b4-q9tnl Running, 0/1 ready, 6 restarts, node ip-10-0-2-52, started 2026-10-26T10:13:20Z, revision 22 (ReplicaSet billing-portal-6d7f9c85b4)
+      - tool: list_pod_problems
+        respond:
+          text: |
+            2 pods with problems in namespace billing (7 pods checked), most restarts first:
+            billing/billing-portal-6d7f9c85b4-hx2vr phase Running on node ip-10-0-2-17, owned by ReplicaSet/billing-portal-6d7f9c85b4, started 2026-10-26T10:12:41Z
+              billing-portal: waiting, CrashLoopBackOff: back-off 5m0s restarting failed container=billing-portal
+              billing-portal: last run ended with exit code 2 (Error) at 2026-11-12T06:39:44Z
+              billing-portal: 7 restarts
+            billing/billing-portal-6d7f9c85b4-q9tnl phase Running on node ip-10-0-2-52, owned by ReplicaSet/billing-portal-6d7f9c85b4, started 2026-10-26T10:13:20Z
+              billing-portal: waiting, CrashLoopBackOff: back-off 5m0s restarting failed container=billing-portal
+              billing-portal: last run ended with exit code 2 (Error) at 2026-11-12T06:38:12Z
+              billing-portal: 6 restarts
+      - tool: get_pod_logs
+        respond:
+          text: |
+            billing-portal-6d7f9c85b4-hx2vr, container billing-portal, last lines
+            2026-11-12T06:39:40Z INFO  billing-portal listening on :8080
+            2026-11-12T06:39:41Z INFO  statement worker: sending the statement of account acct_40913 (0 postings in the period)
+            panic: runtime error: index out of range [0] with length 0
+
+            goroutine 63 [running]:
+            github.com/quillcart/billing-portal/internal/statement.firstPostingDate(...)
+            	/src/internal/statement/summary.go:56
+            github.com/quillcart/billing-portal/internal/statement.Summarize({{0xc0001b2a10, 0x9}, {0xc0001b2a20, 0x6}, {0xc0001b2a30, 0x3}, {0x0, 0x0, 0x0}})
+            	/src/internal/statement/summary.go:40 +0x2d1
+            github.com/quillcart/billing-portal/internal/mailer.(*Worker).send(0xc00011c1e0, {0xc0000b6080, 0x9})
+            	/src/internal/mailer/worker.go:88 +0x9e
+            github.com/quillcart/billing-portal/internal/mailer.(*Worker).Run(0xc00011c1e0, {0x9a1f20, 0xc000132080})
+            	/src/internal/mailer/worker.go:61 +0x1d4
+            created by main.main in goroutine 1
+            	/src/cmd/billing-portal/main.go:74 +0x5f2
+            exit status 2
+      - tool: get_rollout_history
+        respond:
+          text: |
+            Deployment billing/billing-portal, newest first
+            revision 22, 2026-10-26T10:12:30Z, image quillcart/billing-portal:2026.10.26-1
+              changed: image quillcart/billing-portal:2026.10.19-2 -> quillcart/billing-portal:2026.10.26-1
+            revision 21, 2026-10-19T14:31:08Z, image quillcart/billing-portal:2026.10.19-2
+          evidence:
+            - { kind: deploy, title: billing-portal revision 22, url: "https://k8s.quillcart.example/billing/deployments/billing-portal/revisions/22" }
+      - tool: list_events
+        respond:
+          text: |
+            Namespace billing, newest first
+            06:39:50 Warning BackOff pod billing-portal-6d7f9c85b4-hx2vr Back-off restarting failed container billing-portal
+            06:38:20 Warning BackOff pod billing-portal-6d7f9c85b4-q9tnl Back-off restarting failed container billing-portal
+            06:24:40 Warning Unhealthy pod billing-portal-6d7f9c85b4-hx2vr Readiness probe failed: connection refused
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: query_range
+        match:
+          args:
+            query: { regex: "(?i)restart|crash|container" }
+        respond:
+          text: |
+            Restarts of the containers of billing-portal, last 3 hours, 5 minute points
+            03:40 to 06:20: 0
+            06:25 4, 06:30 9, 06:35 12, 06:40 13 (both pods)
+            min 0, max 13, last 13
+          evidence:
+            - { kind: metric, title: billing-portal restarts, url: "https://prometheus.quillcart.example/graph?g0.expr=kube_pod_container_status_restarts_total" }
+      - tool: query_range
+        match:
+          args:
+            query: { regex: "(?i)ready|replica|available|up\\b|kube_" }
+        respond:
+          text: |
+            Ready replicas of Deployment billing-portal, last 3 hours, 5 minute points
+            03:40 to 06:20: 2
+            06:25 to 06:40: 0 to 1, flapping with each restart
+            min 0, max 2, last 0
+      - tool: query_range
+        match:
+          args:
+            query: { regex: "(?i)requests|rps|rate|error|ratio|latency|duration" }
+        respond:
+          text: |
+            Requests per second of billing-portal, last 3 hours
+            03:40 to 06:20: 4 to 9
+            06:25 to 06:40: 0 to 2
+            min 0, max 9, last 0
+      - tool: query
+        respond:
+          text: |
+            Instant query at 2026-11-12T06:40:00Z
+            {deployment="billing-portal", namespace="billing"} 0
+            The value is the number of ready replicas.
+      - tool: list_alerts
+        respond:
+          text: |
+            1 alert firing
+            BillingPortalCrashLooping, firing since 2026-11-12T06:28:00Z, labels service=billing-portal namespace=billing env=prod severity=critical
+              summary: billing-portal restarted more than 5 times in 15m
+            No other alert is firing or pending for billing-portal or its dependencies.
+      - tool: get_rules
+        respond:
+          text: |
+            group billing-portal, alert BillingPortalCrashLooping, for 5m
+            expr: increase(kube_pod_container_status_restarts_total{namespace="billing",pod=~"billing-portal-.*"}[15m]) > 5
+            health ok, last evaluation 06:39:50
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        match:
+          args:
+            path: { regex: "internal/statement" }
+        respond:
+          text: |
+            9442e5ea192130ab2675a11eaa622f6119bd1505 2026-07-08T13:20:41Z "Show the first posting date on the statement summary" by tomas
+          evidence:
+            - { kind: commit, title: "9442e5e", url: "https://github.example.com/quillcart/billing-portal/commit/9442e5ea192130ab2675a11eaa622f6119bd1505" }
+      - tool: list_commits
+        respond:
+          text: |
+            8023e1a8402befba0c357a820e8bcb7c48d99030 2026-10-26T10:02:11Z "Raise Go to 1.26.1 and refresh the dependencies" by renovate
+            4b4b64c014d8a6a8cd35864d7dba861f1183cfac 2026-10-19T14:20:55Z "Add the VAT number to the invoice header" by lena
+          evidence:
+            - { kind: commit, title: "8023e1a", url: "https://github.example.com/quillcart/billing-portal/commit/8023e1a8402befba0c357a820e8bcb7c48d99030" }
+      - tool: get_commit
+        match:
+          args:
+            ref: { regex: "^9442e5e" }
+        respond:
+          text: |
+            9442e5ea192130ab2675a11eaa622f6119bd1505 "Show the first posting date on the statement summary"
+            author tomas, 2026-07-08T13:20:41Z, parent a0c4e18f27b95d3641e7c2a8f5d90b13e6a4c7d2
+            internal/statement/summary.go (+7 -1)
+              +  s.FirstDate = firstPostingDate(postings)
+              +func firstPostingDate(postings []Posting) time.Time {
+              +  return postings[0].Date
+              +}
+          evidence:
+            - { kind: commit, title: "9442e5e", url: "https://github.example.com/quillcart/billing-portal/commit/9442e5ea192130ab2675a11eaa622f6119bd1505" }
+      - tool: get_commit
+        match:
+          args:
+            ref: { regex: "^(8023e1a|main|HEAD)" }
+        respond:
+          text: |
+            8023e1a8402befba0c357a820e8bcb7c48d99030 "Raise Go to 1.26.1 and refresh the dependencies"
+            author renovate, 2026-10-26T10:02:11Z, parent 4b4b64c014d8a6a8cd35864d7dba861f1183cfac
+            go.mod (+2 -2)
+            go.sum (+9 -9)
+          evidence:
+            - { kind: commit, title: "8023e1a", url: "https://github.example.com/quillcart/billing-portal/commit/8023e1a8402befba0c357a820e8bcb7c48d99030" }
+      - tool: list_pull_requests
+        respond:
+          text: "No pull requests were opened or merged since the requested time."
+          noData: true
+      - tool: list_workflow_runs
+        respond:
+          text: 'run 9041 deploy billing-portal 2026-10-26T10:09:30Z success, commit 8023e1a. No deploy since.'
+          evidence:
+            - { kind: deploy, title: deploy billing-portal 9041, url: "https://github.example.com/quillcart/billing-portal/actions/runs/9041" }
+      - tool: get_file
+        match:
+          args:
+            path: { regex: "^/?(\\.)?/?$" }
+        respond:
+          text: |
+            quillcart/billing-portal, /, main, directory
+            cmd/
+            internal/
+            Dockerfile
+            Makefile
+            go.mod
+            go.sum
+      - tool: get_file
+        match:
+          args:
+            path: { regex: "^(\\./)?internal/?$" }
+        respond:
+          text: |
+            quillcart/billing-portal, internal, main, directory
+            invoice/
+            mailer/
+            statement/
+      - tool: get_file
+        match:
+          args:
+            path: { regex: "^(\\./)?internal/statement/?$" }
+        respond:
+          text: |
+            quillcart/billing-portal, internal/statement, main, directory
+            summary.go
+            summary_test.go
+          evidence:
+            - { kind: resource, title: internal/statement, url: "https://github.example.com/quillcart/billing-portal/tree/main/internal/statement" }
+      - tool: get_file
+        match:
+          args:
+            path: { regex: "internal/statement/summary\\.go$" }
+        respond:
+          text: |
+            quillcart/billing-portal, internal/statement/summary.go, main
+            // Package statement builds the monthly statement of an account.
+            package statement
+
+            import (
+            	"fmt"
+            	"sort"
+            	"time"
+            )
+
+            // Posting is one line of an account's activity.
+            type Posting struct {
+            	Date        time.Time
+            	Description string
+            	AmountCents int64
+            }
+
+            // Account is what a statement is built from.
+            type Account struct {
+            	ID       string
+            	Name     string
+            	Currency string
+            	Postings []Posting
+            }
+
+            // Summary is the text and the numbers at the top of a statement.
+            type Summary struct {
+            	AccountID   string
+            	Opening     string
+            	FirstDate   time.Time
+            	TotalCents  int64
+            	PostingText []string
+            }
+
+            // Summarize totals the postings of an account for the statement.
+            func Summarize(a Account) Summary {
+            	postings := append([]Posting(nil), a.Postings...)
+            	sort.Slice(postings, func(i, j int) bool { return postings[i].Date.Before(postings[j].Date) })
+
+            	s := Summary{AccountID: a.ID, Opening: openingLine(a)}
+            	s.FirstDate = firstPostingDate(postings)
+
+            	for _, p := range postings {
+            		s.TotalCents += p.AmountCents
+            		s.PostingText = append(s.PostingText, fmt.Sprintf("%s %s", p.Date.Format("2006-01-02"), p.Description))
+            	}
+
+            	return s
+            }
+
+            func openingLine(a Account) string {
+            	return fmt.Sprintf("Statement for %s (%s)", a.Name, a.Currency)
+            }
+
+            // firstPostingDate returns the date of the earliest posting.
+            func firstPostingDate(postings []Posting) time.Time {
+            	return postings[0].Date
+            }
+
+            // FormatTotal writes an amount in cents as a decimal text.
+            func FormatTotal(cents int64, currency string) string {
+            	sign := ""
+            	if cents < 0 {
+            		sign = "-"
+            		cents = -cents
+            	}
+
+            	return fmt.Sprintf("%s%d.%02d %s", sign, cents/100, cents%100, currency)
+            }
+          evidence:
+            - { kind: resource, title: internal/statement/summary.go, url: "https://github.example.com/quillcart/billing-portal/blob/main/internal/statement/summary.go" }
+actions:
+  github-code-change:
+    spec: { snapshot: bench/actions/github.code_change.json }
+  github-revert:
+    spec: { snapshot: bench/actions/github.revert.json }
+  kubernetes-rollback:
+    spec: { snapshot: bench/actions/kubernetes.rollback.json }
+default: no_data
+expected:
+  verdict: true_positive
+  rootCause:
+    summary: The statement worker of billing-portal sends the statement of an account with no postings (acct_40913), and firstPostingDate in internal/statement/summary.go reads postings[0] of an empty list. The panic ends the process, the message is read again after each restart, and both pods crash again. Nothing was deployed since 2026-10-26, and the line is from July.
+    rubric:
+      - { id: line, text: "Names the panic, an index out of range, at internal/statement/summary.go line 56 (firstPostingDate reading the first posting) for an account that has no postings", weight: 2, required: true }
+      - { id: nochange, text: "Finds that no recent deploy or change explains it: the last deploy was on 2026-10-26 and the code is older, so the data (an account with no postings) triggered it", weight: 1 }
+      - { id: fix, text: "Proposes a small code change that handles an empty list of postings in that function, and not a revert or a rollback", weight: 1 }
+  evidence:
+    - { calledTool: k8s__get_pod_logs }
+    - { calledTool: github__get_file }
+  proposals:
+    - action: github-code-change
+      params:
+        repo: { equals: quillcart/billing-portal }
+        baseBranch: { equals: main }
+        files[*].path: { equals: internal/statement/summary.go }
+        files[*].content: { contains: "func FormatTotal" }
+        files[1].path: { exists: false }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }
