@@ -11,6 +11,10 @@ import (
 	"github.com/nourtalaat/sidekick/internal/event"
 )
 
+// ProposeActionTool is the name of the built-in tool the model proposes
+// actions with.
+const ProposeActionTool = "propose_action"
+
 // Action is one configured, allowlisted action instance, for example
 // "monitor-pr" of type github.pull_request. Its limits are decoded from
 // config when the instance is built, so Validate needs only the parameters.

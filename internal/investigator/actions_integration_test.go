@@ -92,9 +92,9 @@ func TestProposeActionIsOfferedOnlyOutsideReadOnlyMode(t *testing.T) {
 			tools := promptTools(t, h.steps(t)[0])
 
 			if tt.wantOffered {
-				require.Contains(t, tools, proposals.ProposeActionTool)
+				require.Contains(t, tools, action.ProposeActionTool)
 			} else {
-				require.NotContains(t, tools, proposals.ProposeActionTool)
+				require.NotContains(t, tools, action.ProposeActionTool)
 			}
 		})
 	}
@@ -136,7 +136,7 @@ func TestProposeActionTool(t *testing.T) {
 			t.Parallel()
 
 			h := setup(t, options{turns: []modeltest.Turn{
-				turn(modeltest.Call("p1", proposals.ProposeActionTool, tt.input)),
+				turn(modeltest.Call("p1", action.ProposeActionTool, tt.input)),
 				turn(modeltest.Call("v1", report.SubmitVerdictTool, inconclusiveReport)),
 			}})
 			h.setMode(t, action.Approved)
@@ -184,7 +184,7 @@ func TestFollowUpMovesAReadWriteInvestigationToApprovedMode(t *testing.T) {
 	t.Parallel()
 
 	h := setup(t, options{turns: append(firstRun(),
-		turn(modeltest.Call("p1", proposals.ProposeActionTool, `{"action": "monitor-note", "params": {"title": "Slow checkout"}, "reason": "p99 doubled after the deploy."}`)),
+		turn(modeltest.Call("p1", action.ProposeActionTool, `{"action": "monitor-note", "params": {"title": "Slow checkout"}, "reason": "p99 doubled after the deploy."}`)),
 		turn(modeltest.Call("a1", report.AnswerFollowUpTool, answerC1)),
 	)})
 	h.setMode(t, action.ReadWrite)
