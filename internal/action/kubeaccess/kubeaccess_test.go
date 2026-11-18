@@ -3,6 +3,7 @@ package kubeaccess
 import (
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"testing"
 
@@ -64,7 +65,7 @@ func writeStatus(w http.ResponseWriter, code int, reason, message string) {
 }
 
 func testCluster(api *fakehttp.Server, token string) *Cluster {
-	return NewCluster(&rest.Config{Host: api.URL(), BearerToken: token}, account, podNamespace)
+	return NewCluster(ownConfig(api, token), account, podNamespace)
 }
 
 func TestOpenAsksForATokenAndReturnsTheAccess(t *testing.T) {
@@ -118,4 +119,13 @@ func TestRedact(t *testing.T) {
 	require.ErrorIs(t, got, cause)
 
 	require.EqualError(t, Redact(cause, []string{"zzz"}), cause.Error(), "an error with no secret reads the same")
+}
+
+// ownConfig returns the REST config of Sidekick's own account for the fake
+// API server. The dialer gives the clients built from it a transport of their
+// own: without one, client-go uses http.DefaultTransport, and every test
+// server that closes calls CloseIdleConnections on it, which can break the
+// request of a test that runs in parallel.
+func ownConfig(api *fakehttp.Server, token string) *rest.Config {
+	return &rest.Config{Host: api.URL(), BearerToken: token, Dial: (&net.Dialer{}).DialContext}
 }
