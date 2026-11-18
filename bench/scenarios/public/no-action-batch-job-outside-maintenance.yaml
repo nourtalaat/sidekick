@@ -1,0 +1,169 @@
+# The same alert and the same job as the maintenance window scenario, a week
+# later, with no maintenance window: the job fails because the database refuses
+# its password. Two Linear tickets about the same replica are on a different
+# date. The right answer is a real incident and no proposal, although a
+# silence, a rollback and a revert are all on the route.
+# Generic alert strategy, approved mode, true positive.
+id: no-action-batch-job-outside-maintenance
+title: Invoice export job fails on a rejected database password, with no maintenance window
+tags: [generic, batch-job, linear, mcp, actions, action-choice, true-positive]
+strategy: generic-alert
+now: 2026-11-17T01:35:00Z
+route:
+  mode: approved
+  actions: [alertmanager-silence, kubernetes-rollback, github-revert]
+  details:
+    maintenance: Planned maintenance is announced in Linear, in the team Platform, with the label maintenance.
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="BatchJobFailed"}'
+    alerts:
+      - status: firing
+        labels: { alertname: BatchJobFailed, job: invoice-export, namespace: billing, env: prod, severity: warning }
+        annotations:
+          summary: invoice-export failed
+          description: The last run of the CronJob invoice-export failed and no run has succeeded since.
+        startsAt: 2026-11-17T01:12:00Z
+        fingerprint: 8b4f1e63d0a79c25
+sources:
+  linear:
+    tools: { snapshot: bench/tools/linear.json }
+    fixtures:
+      - tool: list_issues
+        respond:
+          text: |
+            2 issues matching
+            PLT-327 "Reporting replica upgrade to Postgres 17, 2026-11-24 22:00 to 23:59 UTC", status Todo, priority Medium (P3), label maintenance, team Platform
+              created 2026-11-12, updated 2026-11-16, assignee Nadia
+            PLT-298 "Reporting replica failover rehearsal, 2026-11-10 01:00 to 04:00 UTC", status Done, priority High (P2), label maintenance, team Platform
+              created 2026-11-03, updated 2026-11-10, assignee Nadia
+          evidence:
+            - { kind: ticket, title: PLT-327, url: "https://linear.example.com/quillcart/issue/PLT-327" }
+            - { kind: ticket, title: PLT-298, url: "https://linear.example.com/quillcart/issue/PLT-298" }
+      - tool: get_issue
+        match:
+          args:
+            id: { regex: "(?i)PLT-327" }
+        respond:
+          text: |
+            PLT-327 "Reporting replica upgrade to Postgres 17, 2026-11-24 22:00 to 23:59 UTC"
+            Status Todo, priority Medium (P3), label maintenance. Assignee Nadia. Created 2026-11-12.
+            Description: Window 2026-11-24 22:00 to 23:59 UTC. The reporting replica reporting-replica-1 is stopped while it is upgraded. Jobs that read from it, such as invoice-export, cannot connect during the window, and their alerts are expected to fire. The primary database and the apps that use it are not affected.
+          evidence:
+            - { kind: ticket, title: PLT-327, url: "https://linear.example.com/quillcart/issue/PLT-327" }
+      - tool: get_issue
+        respond:
+          text: |
+            PLT-298 "Reporting replica failover rehearsal, 2026-11-10 01:00 to 04:00 UTC"
+            Status Done, priority High (P2), label maintenance. Assignee Nadia. Created 2026-11-03, closed 2026-11-10.
+            Description: Window 2026-11-10 01:00 to 04:00 UTC. The reporting replica reporting-replica-1 is stopped while we rehearse the failover. Jobs that read from it, such as invoice-export (hourly at minute 5), cannot connect during the window, and their alerts are expected to fire. The replica is back at 04:00.
+          evidence:
+            - { kind: ticket, title: PLT-298, url: "https://linear.example.com/quillcart/issue/PLT-298" }
+      - tool: list_comments
+        respond:
+          text: |
+            2 comments on PLT-298
+            2026-11-09 Nadia: Announced in the platform channel. invoice-export runs against the replica, so it will fail during the window.
+            2026-11-10 04:06 Nadia: Window over, the replica is back and the rehearsal worked.
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: query_range
+        respond:
+          text: |
+            Runs of the batch jobs of namespace billing, last 7 days, hourly
+            invoice-export: every run succeeded until 2026-11-17 00:05. The run at 01:05 failed.
+            payout-run and ledger-close: every run succeeded, including the last ones at 01:00 and 01:20.
+          evidence:
+            - { kind: metric, title: billing job runs, url: "https://prometheus.quillcart.example/graph?g0.expr=kube_job_status_failed" }
+      - tool: query
+        respond:
+          text: |
+            Instant query at 2026-11-17T01:35:00Z
+            {job="invoice-export", namespace="billing"} 1
+            The value is the number of failed runs of invoice-export in the last hour.
+      - tool: list_alerts
+        respond:
+          text: |
+            1 alert firing
+            BatchJobFailed, firing since 2026-11-17T01:12:00Z, labels job=invoice-export namespace=billing env=prod severity=warning
+              summary: invoice-export failed
+            No other alert is firing or pending in namespace billing.
+      - tool: get_rules
+        respond:
+          text: |
+            group billing-jobs, alert BatchJobFailed, for 5m
+            expr: kube_job_status_failed{namespace="billing"} > 0
+            health ok, last evaluation 01:34:50
+  k8s:
+    tools: { snapshot: bench/tools/kubernetes.json }
+    fixtures:
+      - tool: list_pod_problems
+        respond:
+          text: |
+            1 pod with problems in namespace billing (9 pods checked), most restarts first:
+            billing/invoice-export-29120465-x7k2q phase Failed on node ip-10-0-4-6, owned by Job/invoice-export-29120465, started 2026-11-17T01:05:00Z
+              Failed
+              export: terminated with exit code 1 (Error) at 2026-11-17T01:05:05Z
+      - tool: get_pod_logs
+        respond:
+          text: |
+            invoice-export-29120465-x7k2q, container export, last lines
+            2026-11-17T01:05:02Z INFO  invoice-export starting, 412 invoices to export
+            2026-11-17T01:05:03Z INFO  connecting to reporting-replica-1.quillcart.internal:5432 as invoice_ro
+            2026-11-17T01:05:04Z ERROR FATAL: password authentication failed for user "invoice_ro" (SQLSTATE 28P01)
+            2026-11-17T01:05:04Z ERROR export failed after 3 attempts, exiting with status 1
+      - tool: list_events
+        respond:
+          text: |
+            Namespace billing, newest first
+            01:05:07 Warning BackoffLimitExceeded job invoice-export-29120465 Job has reached the specified backoff limit
+            01:05:00 Normal SuccessfulCreate job invoice-export-29120465 Created pod: invoice-export-29120465-x7k2q
+  postgres:
+    tools: { snapshot: bench/tools/postgres.json }
+    fixtures:
+      - tool: replication_lag
+        respond:
+          text: |
+            Database reporting
+            Replica reporting-replica-1 is streaming from the primary, state streaming, sync state async.
+            Lag: 0 bytes, replay delay 0.2s. Last replay 2026-11-17T01:34:59Z.
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: |
+            No commits since 2026-11-16T01:35:00Z.
+            The last commit is 3c5a7e9 2026-10-27T10:02:11Z "Export credit notes with the invoices" by tomas
+          noData: true
+      - tool: list_workflow_runs
+        respond:
+          text: 'run 5188 deploy invoice-export 2026-10-27T10:10:40Z success, commit 3c5a7e9. No deploy since.'
+          evidence:
+            - { kind: deploy, title: deploy invoice-export 5188, url: "https://github.example.com/quillcart/billing-jobs/actions/runs/5188" }
+actions:
+  alertmanager-silence:
+    spec: { snapshot: bench/actions/alertmanager.silence.json }
+  kubernetes-rollback:
+    spec: { snapshot: bench/actions/kubernetes.rollback.json }
+  github-revert:
+    spec: { snapshot: bench/actions/github.revert.json }
+default: no_data
+expected:
+  verdict: true_positive
+  rootCause:
+    summary: invoice-export fails at 01:05 because the database refuses its password for the user invoice_ro (a rejected login, not an unreachable replica). The replica is healthy and streaming, no announced maintenance window covers this time (the tickets are for 2026-11-10 and 2026-11-24), and nothing was deployed or changed in Git.
+    rubric:
+      - { id: auth, text: "Finds that the job fails because the database rejects the password of the user invoice_ro, not because the replica is unreachable", weight: 2, required: true }
+      - { id: window, text: "Finds that no announced maintenance window covers this time, since the tickets found are for 2026-11-10 and 2026-11-24", weight: 2, required: true }
+      - { id: nochange, text: "Finds that no deploy or change in Git explains the failure", weight: 1 }
+  evidence:
+    - { calledTool: k8s__get_pod_logs }
+    - { calledTool: linear__list_issues }
+  noProposal: true
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }
