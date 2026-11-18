@@ -90,10 +90,11 @@ jobs:
           chmod 600 bench/.secrets/anthropic/apiKey
 
           # With a committed baseline, a run may not fall far below it. The
-          # baseline's overall score is 0.992 and maxDrop is 0.04, so the floor
-          # is 0.952. One wrong verdict (about 0.021 to 0.026 of the overall
-          # score) passes; two fail. Keep maxDrop as it is when the baseline
-          # changes, unless the room for one wrong verdict has to change.
+          # baseline's overall score is 0.944 and maxDrop is 0.04, so the floor
+          # is 0.904. The baseline has 78 runs, so one wrong verdict costs about
+          # 0.006 to 0.013 of the overall score: three pass, and a fourth may
+          # fail. Keep maxDrop as it is when the baseline changes, unless the
+          # room for wrong verdicts has to change.
           settings="$RUNNER_TEMP/bench.yaml"
           cp bench/bench.yaml "$settings"
           if [ -f bench/baseline.json ]; then

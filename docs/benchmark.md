@@ -144,7 +144,7 @@ code.
 | `no-action-latency-database-lock` | `true_positive` | `latency-alert` | `postgres`, `prometheus`, `k8s`, `github`, `launchdarkly`, and six mock actions |
 | `revert-argocd-auto-sync-bad-pool-size` | `true_positive` | `error-rate-alert` | `argocd`, `k8s`, `prometheus`, `github`, and the mock actions `argocd-rollback`, `github-revert`, `kubernetes-rollback` |
 | `revert-gitlab-flux-bad-merge-request` | `true_positive` | `service-down` | `k8s`, `prometheus`, `gitlab`, and the mock actions `gitlab-revert`, `kubernetes-rollback`, `github-revert` |
-| `silence-batch-job-maintenance-window` | `false_positive` | `generic-alert` | `linear` (MCP), `prometheus`, `k8s`, `postgres`, `github`, and the mock actions `alertmanager-silence`, `kubernetes-rollback`, `github-revert` |
+| `silence-batch-job-maintenance-window` | `false_positive` (`known_issue` also counts) | `generic-alert` | `linear` (MCP), `prometheus`, `k8s`, `postgres`, `github`, and the mock actions `alertmanager-silence`, `kubernetes-rollback`, `github-revert` |
 | `no-action-batch-job-outside-maintenance` | `true_positive` | `generic-alert` | `linear` (MCP), `prometheus`, `k8s`, `postgres`, `github`, and the same three mock actions |
 | `code-change-billing-portal-empty-statement-panic` | `true_positive` | `service-down` | `k8s`, `prometheus`, `github`, and the mock actions `github-code-change`, `github-revert`, `kubernetes-rollback` |
 | `monitor-fix-queue-depth-threshold-too-tight` | `false_positive` | `generic-alert` | `prometheus`, `k8s`, `github`, and the mock actions `monitor-pr`, `github-code-change` |
@@ -846,9 +846,10 @@ Markdown summary to the job summary. The run fails when a threshold in
 `bench/bench.yaml` is missed. When `bench/baseline.json` exists, the
 workflow also compares the run with it and fails when the overall score
 falls more than 0.04 below the baseline's. For the committed baseline,
-which scored 0.992, that puts the floor at about 0.95: one wrong verdict
-in the 39 runs of the public set stays above it, and two do not. The
-workflow sets `maxDrop` to 0.04 whatever the baseline is.
+which scored 0.944 over 78 runs (26 scenarios, 3 runs each), that puts the
+floor at about 0.90: one wrong verdict costs about 0.006 to 0.013, so three
+wrong verdicts stay above it, and a fourth may not. The workflow sets
+`maxDrop` to 0.04 whatever the baseline is.
 
 Every run calls a paid model for each scenario three times, so each
 run costs money; the `maxCostPerRunUSD` threshold and each scenario's
