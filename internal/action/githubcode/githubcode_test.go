@@ -11,6 +11,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/actiontest"
 	"github.com/nourtalaat/sidekick/internal/action/gitchange"
 	"github.com/nourtalaat/sidekick/internal/registry"
 )
@@ -326,4 +327,15 @@ func TestCheckProposalGitHubErrors(t *testing.T) {
 			require.Equal(t, tt.wantPermanent, errors.Is(err, action.ErrPermanent))
 		})
 	}
+}
+
+func TestSpecSnapshot(t *testing.T) {
+	t.Parallel()
+
+	b := newBed(t, func(l *Limits) {
+		l.Repos = []string{"quillcart/billing-portal", "quillcart/cart-api", "quillcart/ledger-api", "acme/notifier", "acme/receipt-render"}
+		l.Paths = []string{"internal/**", "cmd/**"}
+	})
+
+	actiontest.CheckSpecSnapshot(t, TypeName, b.code)
 }

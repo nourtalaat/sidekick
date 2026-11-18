@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/actiontest"
 	"github.com/nourtalaat/sidekick/internal/action/mute"
 	"github.com/nourtalaat/sidekick/internal/fakehttp"
 )
@@ -169,4 +170,15 @@ func TestSpec(t *testing.T) {
 	require.ElementsMatch(t, []string{"name", "value", "isRegex", "isEqual"}, schema.Properties.Matchers.Items.Required)
 	require.Contains(t, schema.Properties.Duration.Description, "from 5m to 6h")
 	require.Equal(t, mute.MaxCommentRunes, schema.Properties.Comment.MaxLength)
+}
+
+func TestSpecSnapshot(t *testing.T) {
+	t.Parallel()
+
+	api, am := newFakeAM(t, "")
+	cfg := testConfig(api.URL())
+	cfg.Limits.Scopes = []mute.Scope{{Labels: map[string][]string{"alertname": {"BatchJobFailed", "BatchJobLate"}, "env": {"prod"}}}}
+	cfg.Limits.MaxDuration = 6 * time.Hour
+
+	actiontest.CheckSpecSnapshot(t, Type, newTestSilencer(t, api, am, cfg))
 }

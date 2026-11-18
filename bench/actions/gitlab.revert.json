@@ -1,0 +1,45 @@
+{
+  "name": "revert",
+  "description": "Opens a draft merge request that reverts one commit or one merged merge request, when a recent change caused the alert. Name the commit by its full 40-character SHA, or the merge request by its IID; never both, and never several. It is refused if any file the change touched has changed since, if the change is not on the base branch, or is a revert already made by this action. A merge request merged by fast-forward with several commits is refused: name its commits one at a time instead. To fix forward rather than undo, use gitlab.merge_request. Allowed projects: quillcart/platform/cluster-config, quillcart/platform/app-config, quillcart/pricing/quote-engine. Base branch: main. The change must have landed on the base branch at most 72h0m0s ago, touch at most 5 files and 100 added and removed lines in all, and no refused path (CI files, ownership and review rules, Git hooks and settings, secrets and keys, and any path the operator adds).",
+  "paramsSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "project",
+      "baseBranch",
+      "title",
+      "body"
+    ],
+    "properties": {
+      "project": {
+        "type": "string",
+        "description": "The project, as its full path, such as group/project."
+      },
+      "baseBranch": {
+        "type": "string",
+        "description": "The branch the revert merge request targets."
+      },
+      "commit": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{40}$",
+        "description": "The full 40-character SHA of the one commit to revert. Give this or mergeRequest."
+      },
+      "mergeRequest": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "The IID of the one merged merge request to revert. Give this or commit."
+      },
+      "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120,
+        "description": "The merge request title: what is reverted and why, in one line."
+      },
+      "body": {
+        "type": "string",
+        "maxLength": 8000,
+        "description": "The merge request description: the reason for the revert."
+      }
+    }
+  }
+}

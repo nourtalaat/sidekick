@@ -1,0 +1,63 @@
+{
+  "name": "mute",
+  "description": "Silences alerts in Alertmanager for a limited time, from 5m to 6h. The silence starts when it is approved and ends by itself. Give the matchers of the alerts to silence, each with name, value, isRegex and isEqual (false means not equal), the duration as a Go duration such as 30m or 2h, and the reason as the comment. At most 10 matchers. A silence is allowed only when it pins every label of at least one scope with an equality matcher (isEqual true, isRegex false) on an allowed value; * in a value matches any text. Further matchers of any kind are allowed. scope 1 needs alertname in [BatchJobFailed, BatchJobLate] and env in [prod]. The proposal shows the firing alerts the silence would mute now. An approver can end the silence early.",
+  "paramsSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "matchers",
+      "duration",
+      "comment"
+    ],
+    "properties": {
+      "matchers": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 10,
+        "description": "The label matchers of the alerts to silence. All of them must match.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "value",
+            "isRegex",
+            "isEqual"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "The label name."
+            },
+            "value": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "The label value, or a regular expression when isRegex is true."
+            },
+            "isRegex": {
+              "type": "boolean"
+            },
+            "isEqual": {
+              "type": "boolean",
+              "description": "False turns = into != and =~ into !~."
+            }
+          }
+        }
+      },
+      "duration": {
+        "type": "string",
+        "maxLength": 32,
+        "description": "How long the silence lasts, as a Go duration such as 30m or 2h, from 5m to 6h."
+      },
+      "comment": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500,
+        "description": "Why the alerts are silenced."
+      }
+    }
+  }
+}
