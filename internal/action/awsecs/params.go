@@ -62,7 +62,7 @@ func paramsSchema(maxBack int) json.RawMessage {
 			"service": map[string]any{"type": "string", "minLength": 1, "description": "The name of the ECS service."},
 			"revisionsBack": map[string]any{
 				"type": "integer", "minimum": 1, "maximum": maxBack, "default": action.DefaultMaxRevisionsBack,
-				"description": "How many ACTIVE task definition revisions of the service's family to go back from the one it runs. Default 1.",
+				"description": "How many earlier task definition revisions of the service's family, that the service deployed and are ACTIVE, to go back from the one it runs. Default 1.",
 			},
 		},
 	}

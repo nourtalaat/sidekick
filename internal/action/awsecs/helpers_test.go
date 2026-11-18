@@ -495,6 +495,17 @@ func (f *fakeECS) setPrimary(taskDefinition string, deployment int) {
 	f.service.primary, f.service.deployment = taskDefinition, deployment
 }
 
+// deploymentIndex is the index in the history of the newest deployment of a
+// revision of checkout.
+func (f *fakeECS) deploymentIndex(t *testing.T, revision int) int {
+	t.Helper()
+
+	i := slices.IndexFunc(f.deployments, func(d fakeDeployment) bool { return d.family == "checkout" && d.revision == revision })
+	require.GreaterOrEqual(t, i, 0, "checkout:%d is not in the history", revision)
+
+	return i
+}
+
 // deploy replaces the history with deployments of checkout, newest first,
 // each a revision and a status, written as "41" or "41/STOPPED".
 func (f *fakeECS) deploy(t *testing.T, history ...string) {
