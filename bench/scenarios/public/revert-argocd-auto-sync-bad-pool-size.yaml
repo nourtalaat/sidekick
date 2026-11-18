@@ -1,0 +1,259 @@
+# An error rate alert after a person pushed a small config change straight to
+# the deploy repository of an Argo CD application that has auto-sync on. The
+# right answer is a revert pull request for that commit. The Argo CD rollback is
+# on the route, but Argo CD would sync the bad commit again, and the Kubernetes
+# rollback refuses a workload that Argo CD manages.
+# Error rate strategy, approved mode, true positive.
+id: revert-argocd-auto-sync-bad-pool-size
+title: Order intake errors after a pool size change that Argo CD synced by itself
+tags: [error-rate, argocd, config, deploy, actions, action-choice, true-positive]
+strategy: error-rate-alert
+now: 2026-11-04T09:20:00Z
+route:
+  mode: approved
+  actions: [argocd-rollback, github-revert, kubernetes-rollback]
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="OrderIntakeErrorRateHigh"}'
+    alerts:
+      - status: firing
+        labels: { alertname: OrderIntakeErrorRateHigh, service: order-intake, namespace: orders, env: prod, severity: critical }
+        annotations:
+          summary: order-intake 5xx ratio above 5% for 5m
+          description: 38% of requests to order-intake failed with 5xx in the last 5m. The threshold is 5%.
+        startsAt: 2026-11-04T09:08:00Z
+        fingerprint: 5d0c8e71b2a94f36
+sources:
+  argocd:
+    tools: { snapshot: bench/tools/argocd.json }
+    fixtures:
+      - tool: list_applications
+        respond:
+          text: |
+            Argo CD applications, 1 matching
+            storefront/order-intake  destination in-cluster/orders, Synced, Healthy, auto-sync on
+              deployed revision 0892a7412a0f3cf510dda6d66314252a507b95f8, last synced 2026-11-04T09:04:31Z
+          evidence:
+            - { kind: resource, title: storefront/order-intake, url: "https://argocd.quillcart.example/applications/storefront/order-intake" }
+      - tool: get_application
+        respond:
+          text: |
+            storefront/order-intake
+            source quillcart/deploy-config, path apps/order-intake, target revision main
+            destination in-cluster, namespace orders
+            sync policy: automated (prune on, self-heal on), so auto-sync is on
+            sync status Synced at revision 0892a7412a0f3cf510dda6d66314252a507b95f8, health Healthy
+            last operation: Sync, phase Succeeded, started 2026-11-04T09:04:20Z by automated sync policy, finished 09:04:31Z
+            images: quillcart/order-intake:2026.11.02-1
+          evidence:
+            - { kind: resource, title: storefront/order-intake, url: "https://argocd.quillcart.example/applications/storefront/order-intake" }
+      - tool: get_history
+        respond:
+          text: |
+            storefront/order-intake, newest first (current marked)
+            id 63 (current), revision 0892a7412a0f3cf510dda6d66314252a507b95f8, deployed 2026-11-04T09:04:31Z, started by automated sync policy
+              commit "Size the order-intake database pool for the smaller replica", by lena, 2026-11-04T09:03:40Z
+            id 62, revision 02081932a1c18359b3369efd7dea9512f271ff63, deployed 2026-11-02T15:12:09Z, started by automated sync policy
+              commit "Release order-intake 2026.11.02-1", by release-bot, 2026-11-02T15:11:50Z
+          evidence:
+            - { kind: deploy, title: order-intake history 63, url: "https://argocd.quillcart.example/applications/storefront/order-intake?operation=63" }
+  k8s:
+    tools: { snapshot: bench/tools/kubernetes.json }
+    fixtures:
+      - tool: get_workload
+        respond:
+          text: |
+            Deployment orders/order-intake, created 2026-03-18T10:21:44Z
+            Replicas: 4 desired, 4 ready, 4 updated, 4 available, 0 unavailable
+            Generation: 118, observed 118
+            Revision: 18
+            Update strategy: RollingUpdate
+            Containers:
+              order-intake: quillcart/order-intake:2026.11.02-1
+            Conditions:
+              Available=True MinimumReplicasAvailable: Deployment has minimum availability. (since 2026-03-18T10:21:50Z)
+              Progressing=True NewReplicaSetAvailable: ReplicaSet "order-intake-6c8d9b7f45" has successfully progressed. (since 2026-11-04T09:06:10Z)
+            Pods (4, not ready first):
+              order-intake-6c8d9b7f45-4kd2p Running, 1/1 ready, 0 restarts, node ip-10-0-2-31, started 2026-11-04T09:05:02Z, revision 18 (ReplicaSet order-intake-6c8d9b7f45)
+              order-intake-6c8d9b7f45-9vh7x Running, 1/1 ready, 0 restarts, node ip-10-0-2-44, started 2026-11-04T09:05:41Z, revision 18 (ReplicaSet order-intake-6c8d9b7f45)
+              order-intake-6c8d9b7f45-m2qzt Running, 1/1 ready, 0 restarts, node ip-10-0-1-12, started 2026-11-04T09:04:48Z, revision 18 (ReplicaSet order-intake-6c8d9b7f45)
+              order-intake-6c8d9b7f45-w8c5n Running, 1/1 ready, 0 restarts, node ip-10-0-1-19, started 2026-11-04T09:05:55Z, revision 18 (ReplicaSet order-intake-6c8d9b7f45)
+      - tool: list_pod_problems
+        respond:
+          text: "0 pods with problems in namespace orders (11 pods checked), most restarts first:"
+          noData: true
+      - tool: get_pod_logs
+        respond:
+          text: |
+            order-intake-6c8d9b7f45-4kd2p, container order-intake, last lines
+            2026-11-04T09:19:41Z INFO  POST /v1/orders 201 61ms
+            2026-11-04T09:19:44Z ERROR db: timeout acquiring a connection from the pool (size 4, 4 in use, 37 waiting) after 2000ms
+            2026-11-04T09:19:44Z INFO  POST /v1/orders 500 2003ms
+            2026-11-04T09:19:46Z ERROR db: timeout acquiring a connection from the pool (size 4, 4 in use, 41 waiting) after 2000ms
+            2026-11-04T09:19:46Z INFO  POST /v1/orders 500 2002ms
+            The first such error in this pod is at 2026-11-04T09:07:12Z. The pod started at 09:05:02 with DB_POOL_SIZE 4.
+      - tool: get_rollout_history
+        respond:
+          text: |
+            Deployment orders/order-intake, newest first
+            revision 18, 2026-11-04T09:04:35Z, image quillcart/order-intake:2026.11.02-1
+              changed: pod template annotation checksum/config
+            revision 17, 2026-11-02T15:12:20Z, image quillcart/order-intake:2026.11.02-1
+              changed: image quillcart/order-intake:2026.10.26-3 -> quillcart/order-intake:2026.11.02-1
+          evidence:
+            - { kind: deploy, title: order-intake revision 18, url: "https://k8s.quillcart.example/orders/deployments/order-intake/revisions/18" }
+      - tool: list_events
+        respond:
+          text: |
+            Namespace orders, newest first
+            09:06:10 Normal ScalingReplicaSet deployment order-intake Scaled down replica set order-intake-5f7c8d9b64 to 0 from 1
+            09:05:55 Normal ScalingReplicaSet deployment order-intake Scaled up replica set order-intake-6c8d9b7f45 to 4 from 3
+            09:04:35 Normal ScalingReplicaSet deployment order-intake Scaled up replica set order-intake-6c8d9b7f45 to 1 from 0
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: query_range
+        match:
+          args:
+            query: { regex: "(?i)5\\.\\.|5xx|error|ratio|status|code" }
+        respond:
+          text: |
+            Share of 5xx responses of order-intake, last 3 hours, 5 minute points
+            06:20 to 09:05: 0.1% to 0.3%
+            09:10 31%, 09:15 38%, 09:20 38%
+            min 0.1%, max 38%, last 38%
+          evidence:
+            - { kind: metric, title: order-intake 5xx ratio, url: "https://prometheus.quillcart.example/graph?g0.expr=order_intake_5xx_ratio" }
+      - tool: query_range
+        match:
+          args:
+            query: { regex: "(?i)pool|connection|db_" }
+        respond:
+          text: |
+            Database connections in use per pod of order-intake, last 3 hours, 5 minute points
+            06:20 to 09:00: 12 to 19 of 40
+            09:05 4 of 4 and from then 4 of 4 on every pod
+            Requests waiting for a connection: 0 until 09:05, then 35 to 45 per pod
+          evidence:
+            - { kind: metric, title: order-intake database pool, url: "https://prometheus.quillcart.example/graph?g0.expr=order_intake_db_pool_in_use" }
+      - tool: query_range
+        match:
+          args:
+            query: { regex: "(?i)requests|rps|rate|count|traffic|total" }
+        respond:
+          text: |
+            Requests per second of order-intake, last 3 hours
+            06:20 to 09:20: 44 to 61. Traffic is normal for the hour.
+            min 44, max 61, last 58
+      - tool: query
+        respond:
+          text: |
+            Instant query at 2026-11-04T09:20:00Z
+            {service="order-intake"} 0.38
+            The value is the share of 5xx responses over the last 5 minutes.
+          evidence:
+            - { kind: metric, title: order-intake 5xx ratio, url: "https://prometheus.quillcart.example/graph?g0.expr=order_intake_5xx_ratio" }
+      - tool: list_alerts
+        respond:
+          text: |
+            1 alert firing
+            OrderIntakeErrorRateHigh, firing since 2026-11-04T09:08:00Z, labels service=order-intake namespace=orders env=prod severity=critical
+              summary: order-intake 5xx ratio above 5% for 5m
+            No other alert is firing or pending for order-intake or its dependencies.
+      - tool: get_rules
+        respond:
+          text: |
+            group order-intake, alert OrderIntakeErrorRateHigh, for 5m
+            expr: sum(rate(http_requests_total{service="order-intake",code=~"5.."}[5m])) / sum(rate(http_requests_total{service="order-intake"}[5m])) > 0.05
+            health ok, last evaluation 09:19:50
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: |
+            0892a7412a0f3cf510dda6d66314252a507b95f8 2026-11-04T09:03:40Z "Size the order-intake database pool for the smaller replica" by lena
+            02081932a1c18359b3369efd7dea9512f271ff63 2026-11-02T15:11:50Z "Release order-intake 2026.11.02-1" by release-bot
+          evidence:
+            - { kind: commit, title: "0892a74", url: "https://github.example.com/quillcart/deploy-config/commit/0892a7412a0f3cf510dda6d66314252a507b95f8" }
+      - tool: get_commit
+        match:
+          args:
+            ref: { regex: "^(0892a74|main|HEAD)" }
+        respond:
+          text: |
+            0892a7412a0f3cf510dda6d66314252a507b95f8 "Size the order-intake database pool for the smaller replica"
+            author lena, 2026-11-04T09:03:40Z, parent 02081932a1c18359b3369efd7dea9512f271ff63, pushed to main
+            apps/order-intake/configmap.yaml (+1 -1)
+              -  DB_POOL_SIZE: "40"
+              +  DB_POOL_SIZE: "4"
+          evidence:
+            - { kind: commit, title: "0892a74", url: "https://github.example.com/quillcart/deploy-config/commit/0892a7412a0f3cf510dda6d66314252a507b95f8" }
+      - tool: list_pull_requests
+        respond:
+          text: "No pull requests were opened or merged in quillcart/deploy-config since the requested time."
+          noData: true
+      - tool: list_workflow_runs
+        respond:
+          text: "No workflow runs since the requested time. Argo CD deploys this repository."
+          noData: true
+      - tool: get_file
+        match:
+          args:
+            path: { regex: "^apps/order-intake/?$" }
+        respond:
+          text: |
+            quillcart/deploy-config, apps/order-intake, main, directory
+            configmap.yaml
+            deployment.yaml
+            kustomization.yaml
+            service.yaml
+          evidence:
+            - { kind: resource, title: apps/order-intake, url: "https://github.example.com/quillcart/deploy-config/tree/main/apps/order-intake" }
+      - tool: get_file
+        match:
+          args:
+            path: { regex: "apps/order-intake/configmap\\.ya?ml$" }
+        respond:
+          text: |
+            quillcart/deploy-config, apps/order-intake/configmap.yaml, main
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: order-intake
+            data:
+              DB_POOL_SIZE: "4"
+              DB_POOL_TIMEOUT_MS: "2000"
+              QUEUE_BATCH_SIZE: "50"
+          evidence:
+            - { kind: resource, title: apps/order-intake/configmap.yaml, url: "https://github.example.com/quillcart/deploy-config/blob/main/apps/order-intake/configmap.yaml" }
+actions:
+  argocd-rollback:
+    spec: { snapshot: bench/actions/argocd.rollback.json }
+  github-revert:
+    spec: { snapshot: bench/actions/github.revert.json }
+  kubernetes-rollback:
+    spec: { snapshot: bench/actions/kubernetes.rollback.json }
+default: no_data
+expected:
+  verdict: true_positive
+  rootCause:
+    summary: At 09:03 a person pushed commit 0892a7412a0f3cf510dda6d66314252a507b95f8 to main of quillcart/deploy-config, which sets DB_POOL_SIZE of order-intake to 4. Argo CD synced it by itself at 09:04, so every pod has 4 database connections, requests wait for one and time out, and 38% of requests return 5xx.
+    rubric:
+      - { id: pool, text: "Names the database connection pool size set to 4 (DB_POOL_SIZE) as why requests time out and fail", weight: 2, required: true }
+      - { id: commit, text: "Ties it to the commit 0892a74 in quillcart/deploy-config, which Argo CD synced automatically at 09:04", weight: 2, required: true }
+      - { id: fix, text: "Proposes reverting that commit, and not an Argo CD rollback, since auto-sync would apply the bad commit again", weight: 1 }
+  evidence:
+    - { calledTool: argocd__get_application }
+    - { citedURL: "https://github.example.com/quillcart/deploy-config/commit/0892a7412a0f3cf510dda6d66314252a507b95f8" }
+  proposals:
+    - action: github-revert
+      params:
+        repo: { equals: quillcart/deploy-config }
+        baseBranch: { equals: main }
+        commit: { equals: "0892a7412a0f3cf510dda6d66314252a507b95f8" }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }

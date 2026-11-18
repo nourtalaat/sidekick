@@ -26,7 +26,7 @@ const minDistractors = 3
 // actionTypes are the types of the real actions that the action-choice
 // scenarios use, and the one parameter value that names a change.
 var actionTypes = []string{
-	"kubernetes.rollback", "helm.rollback", "argocd.rollback", "aws.ecs_rollback", "launchdarkly.flag", "github.revert", "turn_off",
+	"kubernetes.rollback", "helm.rollback", "argocd.rollback", "aws.ecs_rollback", "launchdarkly.flag", "github.revert", "gitlab.revert", "turn_off",
 }
 
 func TestActionChoiceScenariosOfferAChoice(t *testing.T) {
@@ -63,6 +63,7 @@ func TestActionChoiceScenariosCoverTheActions(t *testing.T) {
 
 	for _, snapshot := range []string{
 		"kubernetes.rollback.json", "helm.rollback.json", "argocd.rollback.json", "aws.ecs_rollback.json", "launchdarkly.flag.json",
+		"github.revert.json", "gitlab.revert.json",
 	} {
 		require.Equal(t, 1, expecting[snapshot], "one scenario expects a proposal of %s", snapshot)
 	}

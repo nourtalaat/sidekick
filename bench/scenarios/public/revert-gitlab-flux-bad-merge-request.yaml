@@ -1,0 +1,296 @@
+# A service down alert after Flux applied a merged GitLab merge request that
+# makes a Deployment read a config map key that does not exist. The right
+# answer is a revert of that merge request. The Kubernetes rollback refuses a
+# workload that Flux manages, and the GitHub revert is for another host.
+# Service down strategy, approved mode, true positive.
+id: revert-gitlab-flux-bad-merge-request
+title: Quote engine down after Flux applied a merge request that reads a missing config key
+tags: [service-down, flux, gitlab, config, deploy, actions, action-choice, true-positive]
+strategy: service-down
+now: 2026-11-05T14:55:00Z
+route:
+  mode: approved
+  actions: [gitlab-revert, kubernetes-rollback, github-revert]
+  details:
+    gitops: Workloads in the namespaces pricing and search are deployed by Flux from the GitLab project quillcart/platform/cluster-config, and the Flux objects are in the namespace flux-system.
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="QuoteEngineDown"}'
+    alerts:
+      - status: firing
+        labels: { alertname: QuoteEngineDown, service: quote-engine, namespace: pricing, env: prod, severity: critical }
+        annotations:
+          summary: quote-engine has no ready instance
+          description: No instance of quote-engine has been ready for 10m.
+        startsAt: 2026-11-05T14:41:00Z
+        fingerprint: a27e4b90c5d13f68
+sources:
+  k8s:
+    tools: { snapshot: bench/tools/kubernetes.json }
+    fixtures:
+      - tool: get_workload
+        respond:
+          text: |
+            Deployment pricing/quote-engine, created 2026-02-09T08:30:12Z
+            Replicas: 2 desired, 0 ready, 2 updated, 0 available, 2 unavailable
+            Generation: 41, observed 41
+            Revision: 9
+            Update strategy: Recreate
+            Containers:
+              quote-engine: quillcart/quote-engine:2026.10.21-2
+            Conditions:
+              Available=False MinimumReplicasUnavailable: Deployment does not have minimum availability. (since 2026-11-05T14:30:19Z)
+              Progressing=True ReplicaSetUpdated: ReplicaSet "quote-engine-7b9d6c5f48" is progressing. (since 2026-11-05T14:30:19Z)
+            Pods (2, not ready first):
+              quote-engine-7b9d6c5f48-d4t9q Pending, 0/1 ready, 0 restarts, node ip-10-0-3-8, started 2026-11-05T14:30:20Z, revision 9 (ReplicaSet quote-engine-7b9d6c5f48)
+              quote-engine-7b9d6c5f48-zk6wm Pending, 0/1 ready, 0 restarts, node ip-10-0-3-21, started 2026-11-05T14:30:20Z, revision 9 (ReplicaSet quote-engine-7b9d6c5f48)
+      - tool: list_pod_problems
+        respond:
+          text: |
+            2 pods with problems in namespace pricing (6 pods checked), most restarts first:
+            pricing/quote-engine-7b9d6c5f48-d4t9q phase Pending on node ip-10-0-3-8, owned by ReplicaSet/quote-engine-7b9d6c5f48, started 2026-11-05T14:30:20Z
+              quote-engine: waiting, CreateContainerConfigError: couldn't find key QUOTE_DATABASE_URL in ConfigMap pricing/pricing-shared
+            pricing/quote-engine-7b9d6c5f48-zk6wm phase Pending on node ip-10-0-3-21, owned by ReplicaSet/quote-engine-7b9d6c5f48, started 2026-11-05T14:30:20Z
+              quote-engine: waiting, CreateContainerConfigError: couldn't find key QUOTE_DATABASE_URL in ConfigMap pricing/pricing-shared
+      - tool: get_pod_logs
+        respond:
+          text: "No logs: container quote-engine of pod quote-engine-7b9d6c5f48-d4t9q has not started (CreateContainerConfigError)."
+          noData: true
+      - tool: get_rollout_history
+        respond:
+          text: |
+            Deployment pricing/quote-engine, newest first
+            revision 9, 2026-11-05T14:30:19Z, image quillcart/quote-engine:2026.10.21-2
+              changed: environment of container quote-engine
+            revision 8, 2026-10-21T11:48:03Z, image quillcart/quote-engine:2026.10.21-2
+              changed: image quillcart/quote-engine:2026.10.09-1 -> quillcart/quote-engine:2026.10.21-2
+          evidence:
+            - { kind: deploy, title: quote-engine revision 9, url: "https://k8s.quillcart.example/pricing/deployments/quote-engine/revisions/9" }
+      - tool: list_events
+        match:
+          args:
+            namespace: { equals: flux-system }
+        respond:
+          text: |
+            Namespace flux-system, newest first
+            14:30:12 Normal ReconciliationSucceeded kustomization/pricing-apps Reconciliation finished in 1.2s, next run in 10m0s: applied revision main@sha1:7a7a3400b254c41517640fa0a0081041a5069c6a
+            14:30:11 Normal Progressing kustomization/pricing-apps ConfigMap/pricing/pricing-shared configured, Deployment/pricing/quote-engine configured
+            14:30:08 Normal NewArtifact gitrepository/cluster-config stored artifact for revision main@sha1:7a7a3400b254c41517640fa0a0081041a5069c6a from https://gitlab.example.com/quillcart/platform/cluster-config.git
+      - tool: list_events
+        respond:
+          text: |
+            Namespace pricing, newest first
+            14:30:22 Warning Failed pod quote-engine-7b9d6c5f48-d4t9q Error: couldn't find key QUOTE_DATABASE_URL in ConfigMap pricing/pricing-shared
+            14:30:22 Warning Failed pod quote-engine-7b9d6c5f48-zk6wm Error: couldn't find key QUOTE_DATABASE_URL in ConfigMap pricing/pricing-shared
+            14:30:20 Normal ScalingReplicaSet deployment quote-engine Scaled up replica set quote-engine-7b9d6c5f48 to 2
+            14:30:19 Normal ScalingReplicaSet deployment quote-engine Scaled down replica set quote-engine-5c6b7d8f9d to 0 from 2
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: query_range
+        match:
+          args:
+            query: { regex: "(?i)ready|replica|available|up\\b|kube_" }
+        respond:
+          text: |
+            Ready replicas of Deployment quote-engine, last 3 hours, 5 minute points
+            11:55 to 14:30: 2
+            14:35 0, 14:40 0, 14:45 0, 14:50 0, 14:55 0
+            min 0, max 2, last 0
+          evidence:
+            - { kind: metric, title: quote-engine ready replicas, url: "https://prometheus.quillcart.example/graph?g0.expr=kube_deployment_status_replicas_ready" }
+      - tool: query_range
+        match:
+          args:
+            query: { regex: "(?i)requests|rps|rate|error|ratio|latency|duration" }
+        respond:
+          text: |
+            Requests per second of quote-engine, last 3 hours
+            11:55 to 14:30: 85 to 120
+            14:35 to 14:55: 0 (no instance reports)
+            min 0, max 120, last 0
+      - tool: query
+        respond:
+          text: |
+            Instant query at 2026-11-05T14:55:00Z
+            {deployment="quote-engine", namespace="pricing"} 0
+            The value is the number of ready replicas.
+          evidence:
+            - { kind: metric, title: quote-engine ready replicas, url: "https://prometheus.quillcart.example/graph?g0.expr=kube_deployment_status_replicas_ready" }
+      - tool: list_alerts
+        respond:
+          text: |
+            1 alert firing
+            QuoteEngineDown, firing since 2026-11-05T14:41:00Z, labels service=quote-engine namespace=pricing env=prod severity=critical
+              summary: quote-engine has no ready instance
+            No other alert is firing or pending for quote-engine or its dependencies.
+      - tool: get_rules
+        respond:
+          text: |
+            group quote-engine, alert QuoteEngineDown, for 10m
+            expr: sum(kube_deployment_status_replicas_ready{namespace="pricing",deployment="quote-engine"}) == 0
+            health ok, last evaluation 14:54:50
+  gitlab:
+    tools: { snapshot: bench/tools/gitlab.json }
+    fixtures:
+      - tool: list_merge_requests
+        respond:
+          text: |
+            Merge requests of quillcart/platform/cluster-config, most recently updated first
+            !57 merged 2026-11-05T14:21:07Z by omar into main from feature/pricing-shared-config, 2 commits, merge commit 7a7a3400b254c41517640fa0a0081041a5069c6a
+              "Move quote-engine settings into the shared config map"
+            !56 merged 2026-10-28T09:40:55Z by lena into main from feature/search-replicas, 1 commit, merge commit a5ad3a8f757b073a2d6b5e55078217f4bd9a2df7
+              "Raise the search-api replicas to 6"
+          evidence:
+            - { kind: commit, title: "cluster-config!57", url: "https://gitlab.example.com/quillcart/platform/cluster-config/-/merge_requests/57" }
+      - tool: list_commits
+        respond:
+          text: |
+            7a7a3400b254c41517640fa0a0081041a5069c6a 2026-11-05T14:21:07Z "Merge branch 'feature/pricing-shared-config' into 'main'" by omar
+            32fcf0449ce5fe686b50551bc17d2d1e6b998552 2026-11-05T14:12:30Z "Read the quote-engine database URL from the shared config map" by omar
+            f21496089290cf0ae81cd3b5b57957ce09f15e9d 2026-11-05T14:05:44Z "Add the quote-engine database URL to the shared config map" by omar
+            a5ad3a8f757b073a2d6b5e55078217f4bd9a2df7 2026-10-28T09:40:55Z "Merge branch 'feature/search-replicas' into 'main'" by lena
+          evidence:
+            - { kind: commit, title: "7a7a340", url: "https://gitlab.example.com/quillcart/platform/cluster-config/-/commit/7a7a3400b254c41517640fa0a0081041a5069c6a" }
+      - tool: get_commit
+        match:
+          args:
+            ref: { regex: "^(7a7a340|main|HEAD)" }
+        respond:
+          text: |
+            7a7a3400b254c41517640fa0a0081041a5069c6a "Merge branch 'feature/pricing-shared-config' into 'main'"
+            author omar, 2026-11-05T14:21:07Z, parents a5ad3a8f757b073a2d6b5e55078217f4bd9a2df7 and 32fcf0449ce5fe686b50551bc17d2d1e6b998552
+            clusters/prod/pricing/configmap-pricing-shared.yaml (+1 -0)
+              +  QUOTE_DB_URL: "postgres://quote-ro@pricing-db.quillcart.internal:5432/quotes"
+            clusters/prod/pricing/quote-engine/deployment.yaml (+5 -3)
+              -        - name: DATABASE_URL
+              -          value: "postgres://quote-ro@pricing-db.quillcart.internal:5432/quotes"
+              +        - name: DATABASE_URL
+              +          valueFrom:
+              +            configMapKeyRef:
+              +              name: pricing-shared
+              +              key: QUOTE_DATABASE_URL
+          evidence:
+            - { kind: commit, title: "7a7a340", url: "https://gitlab.example.com/quillcart/platform/cluster-config/-/commit/7a7a3400b254c41517640fa0a0081041a5069c6a" }
+      - tool: get_commit
+        match:
+          args:
+            ref: { regex: "^f214960" }
+        respond:
+          text: |
+            f21496089290cf0ae81cd3b5b57957ce09f15e9d "Add the quote-engine database URL to the shared config map"
+            author omar, 2026-11-05T14:05:44Z, parent a5ad3a8f757b073a2d6b5e55078217f4bd9a2df7
+            clusters/prod/pricing/configmap-pricing-shared.yaml (+1 -0)
+              +  QUOTE_DB_URL: "postgres://quote-ro@pricing-db.quillcart.internal:5432/quotes"
+      - tool: get_commit
+        match:
+          args:
+            ref: { regex: "^32fcf04" }
+        respond:
+          text: |
+            32fcf0449ce5fe686b50551bc17d2d1e6b998552 "Read the quote-engine database URL from the shared config map"
+            author omar, 2026-11-05T14:12:30Z, parent f21496089290cf0ae81cd3b5b57957ce09f15e9d
+            clusters/prod/pricing/quote-engine/deployment.yaml (+5 -3)
+              -        - name: DATABASE_URL
+              -          value: "postgres://quote-ro@pricing-db.quillcart.internal:5432/quotes"
+              +        - name: DATABASE_URL
+              +          valueFrom:
+              +            configMapKeyRef:
+              +              name: pricing-shared
+              +              key: QUOTE_DATABASE_URL
+      - tool: list_pipelines
+        respond:
+          text: |
+            Pipelines of quillcart/platform/cluster-config, newest first
+            #9120 passed, ref main, commit 7a7a340, 2026-11-05T14:22:10Z, 1 job (validate-yaml: checks that the manifests are valid YAML)
+            #9097 passed, ref main, commit a5ad3a8, 2026-10-28T09:41:30Z
+          evidence:
+            - { kind: deploy, title: pipeline 9120, url: "https://gitlab.example.com/quillcart/platform/cluster-config/-/pipelines/9120" }
+      - tool: list_deployments
+        respond:
+          text: "No deployments recorded for quillcart/platform/cluster-config. Flux applies this repository."
+          noData: true
+      - tool: get_file
+        match:
+          args:
+            path: { regex: "^clusters/prod/pricing/?$" }
+        respond:
+          text: |
+            quillcart/platform/cluster-config, clusters/prod/pricing, main, directory
+            configmap-pricing-shared.yaml
+            kustomization.yaml
+            quote-engine/
+          evidence:
+            - { kind: resource, title: clusters/prod/pricing, url: "https://gitlab.example.com/quillcart/platform/cluster-config/-/tree/main/clusters/prod/pricing" }
+      - tool: get_file
+        match:
+          args:
+            path: { regex: "configmap-pricing-shared\\.ya?ml$" }
+        respond:
+          text: |
+            quillcart/platform/cluster-config, clusters/prod/pricing/configmap-pricing-shared.yaml, main
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: pricing-shared
+              namespace: pricing
+            data:
+              CURRENCY_SERVICE_URL: "http://currency.pricing.svc:8080"
+              QUOTE_DB_URL: "postgres://quote-ro@pricing-db.quillcart.internal:5432/quotes"
+      - tool: get_file
+        match:
+          args:
+            path: { regex: "quote-engine/deployment\\.ya?ml$" }
+        respond:
+          text: |
+            quillcart/platform/cluster-config, clusters/prod/pricing/quote-engine/deployment.yaml, main
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: quote-engine
+              namespace: pricing
+            spec:
+              replicas: 2
+              strategy:
+                type: Recreate
+              template:
+                spec:
+                  containers:
+                    - name: quote-engine
+                      image: quillcart/quote-engine:2026.10.21-2
+                      env:
+                        - name: DATABASE_URL
+                          valueFrom:
+                            configMapKeyRef:
+                              name: pricing-shared
+                              key: QUOTE_DATABASE_URL
+actions:
+  gitlab-revert:
+    spec: { snapshot: bench/actions/gitlab.revert.json }
+  kubernetes-rollback:
+    spec: { snapshot: bench/actions/kubernetes.rollback.json }
+  github-revert:
+    spec: { snapshot: bench/actions/github.revert.json }
+default: no_data
+expected:
+  verdict: true_positive
+  rootCause:
+    summary: Merge request !57 of quillcart/platform/cluster-config, merged at 14:21 and applied by Flux at 14:30, makes the quote-engine Deployment read the key QUOTE_DATABASE_URL of the config map pricing-shared, but the same merge request adds the key as QUOTE_DB_URL. The key is missing, the pods cannot start, and the Recreate strategy had already stopped the old ones, so no instance is ready.
+    rubric:
+      - { id: key, text: "Finds that the pods cannot start because the Deployment reads the config map key QUOTE_DATABASE_URL, which does not exist (the config map has QUOTE_DB_URL)", weight: 2, required: true }
+      - { id: mr, text: "Ties it to merge request !57 of quillcart/platform/cluster-config, applied by Flux at 14:30", weight: 2, required: true }
+      - { id: fix, text: "Proposes reverting merge request !57 in GitLab, and not a Kubernetes rollback, which a Flux-managed workload refuses", weight: 1 }
+  evidence:
+    - { calledTool: gitlab__list_merge_requests }
+    - { citedURL: "https://gitlab.example.com/quillcart/platform/cluster-config/-/merge_requests/57" }
+  proposals:
+    - action: gitlab-revert
+      params:
+        project: { equals: quillcart/platform/cluster-config }
+        baseBranch: { equals: main }
+        mergeRequest: { equals: 57 }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }
