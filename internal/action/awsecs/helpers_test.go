@@ -46,6 +46,14 @@ const (
 // at: 2026-05-04T09:30:00Z.
 const registeredAt = 1777887000
 
+// finishedAt is the epoch second the fake finished every deployment at:
+// 2026-05-04T09:40:00Z.
+const finishedAt = registeredAt + 600
+
+// maxRevisionArns is the most service revision ARNs one DescribeServiceRevisions
+// call takes.
+const maxRevisionArns = 20
+
 // The parameters of the rollbacks the tests propose.
 const (
 	paramsBack1 = `{"cluster":"shop","service":"checkout"}`
@@ -63,6 +71,16 @@ type fakeTaskDefinition struct {
 	hidden bool
 	// noRegistrant leaves out who registered it.
 	noRegistrant bool
+}
+
+// fakeDeployment is a deployment in the history of the fake service.
+type fakeDeployment struct {
+	family   string
+	revision int
+	status   string
+	// unreadable makes DescribeServiceRevisions report its service revision
+	// as missing.
+	unreadable bool
 }
 
 // fakeService is the service the fake ECS has.
@@ -87,12 +105,18 @@ type fakeECS struct {
 	noService   bool
 	service     fakeService
 	definitions []fakeTaskDefinition
+	// deployments are the deployments of the service, newest first.
+	deployments []fakeDeployment
 	// ops are the operations called, in order.
 	ops []string
 	// updates are the bodies of the UpdateService calls.
 	updates []json.RawMessage
 	// lists are the bodies of the ListTaskDefinitions calls.
 	lists []json.RawMessage
+	// deploymentLists are the bodies of the ListServiceDeployments calls.
+	deploymentLists []json.RawMessage
+	// revisionDescribes are the numbers of ARNs of the DescribeServiceRevisions calls.
+	revisionDescribes []int
 	// fail makes an operation answer with the response instead.
 	fail map[string]fakehttp.Response
 	// describeStatus gives DescribeTaskDefinition another status for a
@@ -102,7 +126,8 @@ type fakeECS struct {
 
 // newFakeECS returns a fake ECS and the fake STS that goes with it. The
 // service runs checkout:42 in deployment ecs-svc/100, and the family has
-// ACTIVE revisions 41, 40, 38 and 37, an INACTIVE 39, and a newer ACTIVE 43. Another family,
+// ACTIVE revisions 41, 40, 38, 37 and 36, an INACTIVE 39, and a newer ACTIVE 43.
+// The service deployed 42 down to 36, and never 43. Another family,
 // checkout-worker, shares the prefix.
 func newFakeECS(t *testing.T) (*fakeECS, *fakehttp.Server) {
 	t.Helper()
@@ -125,6 +150,10 @@ func newFakeECS(t *testing.T) (*fakeECS, *fakehttp.Server) {
 		fakeTaskDefinition{family: "checkout-worker", revision: 7, status: "ACTIVE", images: []string{"registry.example.com/worker:7"}},
 		fakeTaskDefinition{family: "checkout-worker", revision: 6, status: "ACTIVE", images: []string{"registry.example.com/worker:6"}},
 	)
+
+	for _, rev := range []int{42, 41, 40, 39, 38, 37, 36} {
+		f.deployments = append(f.deployments, fakeDeployment{family: "checkout", revision: rev, status: "SUCCESSFUL"})
+	}
 
 	api.HandleFunc(http.MethodPost, "/", f.serve)
 
@@ -178,6 +207,11 @@ func (f *fakeECS) serve(w http.ResponseWriter, req *http.Request) {
 	case "ListTaskDefinitions":
 		f.lists = append(f.lists, body)
 		out = f.listTaskDefinitions(body)
+	case "ListServiceDeployments":
+		f.deploymentLists = append(f.deploymentLists, body)
+		out = f.listServiceDeployments(body)
+	case "DescribeServiceRevisions":
+		out = f.describeServiceRevisions(body)
 	case "DescribeTaskDefinition":
 		out = f.describeTaskDefinition(w, body)
 	case "UpdateService":
@@ -302,6 +336,95 @@ func (f *fakeECS) listTaskDefinitions(body []byte) any {
 	return out
 }
 
+// deploymentArn is the ARN of the deployment at index i of the history, and
+// revisionArn of its service revision. The index makes both unique.
+func deploymentArn(i int) string {
+	return fmt.Sprintf("arn:aws:ecs:%s:%s:service-deployment/%s/%s/sd-%d", testRegion, testAccount, testCluster, testService, i)
+}
+
+func revisionArn(i int) string {
+	return fmt.Sprintf("arn:aws:ecs:%s:%s:service-revision/%s/%s/sr-%d", testRegion, testAccount, testCluster, testService, i)
+}
+
+// listServiceDeployments answers ListServiceDeployments as ECS does: the
+// deployments with one of the statuses, newest first, in pages.
+func (f *fakeECS) listServiceDeployments(body []byte) any {
+	var in struct {
+		Status     []string `json:"status"`
+		MaxResults int      `json:"maxResults"`
+		NextToken  string   `json:"nextToken"`
+	}
+
+	require.NoError(f.t, json.Unmarshal(body, &in))
+
+	var matching []int
+
+	for i, d := range f.deployments {
+		if len(in.Status) == 0 || slices.Contains(in.Status, d.status) {
+			matching = append(matching, i)
+		}
+	}
+
+	start := 0
+	if in.NextToken != "" {
+		var err error
+
+		start, err = strconv.Atoi(in.NextToken)
+		require.NoError(f.t, err)
+	}
+
+	end := min(start+in.MaxResults, len(matching))
+	brief := []any{}
+
+	for _, i := range matching[start:end] {
+		brief = append(brief, map[string]any{
+			"serviceDeploymentArn": deploymentArn(i), "targetServiceRevisionArn": revisionArn(i),
+			"status": f.deployments[i].status, "finishedAt": finishedAt,
+		})
+	}
+
+	out := map[string]any{"serviceDeployments": brief}
+	if end < len(matching) {
+		out["nextToken"] = strconv.Itoa(end)
+	}
+
+	return out
+}
+
+// describeServiceRevisions answers DescribeServiceRevisions: the task
+// definition of each service revision, and a failure for an ARN it does not
+// know.
+func (f *fakeECS) describeServiceRevisions(body []byte) any {
+	var in struct {
+		ServiceRevisionArns []string `json:"serviceRevisionArns"`
+	}
+
+	require.NoError(f.t, json.Unmarshal(body, &in))
+	require.LessOrEqual(f.t, len(in.ServiceRevisionArns), maxRevisionArns, "DescribeServiceRevisions takes at most 20 ARNs")
+
+	f.revisionDescribes = append(f.revisionDescribes, len(in.ServiceRevisionArns))
+
+	revisions, failures := []any{}, []any{}
+
+	for _, arn := range in.ServiceRevisionArns {
+		found := false
+
+		for i, d := range f.deployments {
+			if revisionArn(i) == arn && !d.unreadable {
+				found = true
+
+				revisions = append(revisions, map[string]any{"serviceRevisionArn": arn, "taskDefinition": arnOf(d.family, d.revision)})
+			}
+		}
+
+		if !found {
+			failures = append(failures, map[string]any{"arn": arn, "reason": "MISSING"})
+		}
+	}
+
+	return map[string]any{"serviceRevisions": revisions, "failures": failures}
+}
+
 // describeTaskDefinition answers DescribeTaskDefinition, or writes the error
 // itself and returns nil.
 func (f *fakeECS) describeTaskDefinition(w http.ResponseWriter, body []byte) any {
@@ -370,6 +493,33 @@ func (f *fakeECS) setPrimary(taskDefinition string, deployment int) {
 	defer f.mu.Unlock()
 
 	f.service.primary, f.service.deployment = taskDefinition, deployment
+}
+
+// deploymentIndex is the index in the history of the newest deployment of a
+// revision of checkout.
+func (f *fakeECS) deploymentIndex(t *testing.T, revision int) int {
+	t.Helper()
+
+	i := slices.IndexFunc(f.deployments, func(d fakeDeployment) bool { return d.family == "checkout" && d.revision == revision })
+	require.GreaterOrEqual(t, i, 0, "checkout:%d is not in the history", revision)
+
+	return i
+}
+
+// deploy replaces the history with deployments of checkout, newest first,
+// each a revision and a status, written as "41" or "41/STOPPED".
+func (f *fakeECS) deploy(t *testing.T, history ...string) {
+	t.Helper()
+
+	f.deployments = nil
+
+	for _, h := range history {
+		number, status, _ := strings.Cut(h, "/")
+		revision, err := strconv.Atoi(number)
+		require.NoError(t, err)
+
+		f.deployments = append(f.deployments, fakeDeployment{family: "checkout", revision: revision, status: cmpDefault(status, "SUCCESSFUL")})
+	}
 }
 
 // count returns how many times an operation was called.

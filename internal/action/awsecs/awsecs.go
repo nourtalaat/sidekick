@@ -28,6 +28,19 @@
 //     each container (types/types.go, TaskDefinition and ContainerDefinition).
 //     An INACTIVE task definition can be described only while a task or
 //     service uses it (api_op_DescribeTaskDefinition.go).
+//   - ListServiceDeployments takes a cluster, a service, an optional list of
+//     statuses (PENDING, SUCCESSFUL, STOPPED, STOP_REQUESTED, IN_PROGRESS,
+//     ROLLBACK_REQUESTED, ROLLBACK_IN_PROGRESS, ROLLBACK_SUCCESSFUL,
+//     ROLLBACK_FAILED) and a page size of 1 to 100, and returns brief
+//     deployments, newest first, each with an ARN, a status and the ARN of
+//     the service revision it deployed (api_op_ListServiceDeployments.go,
+//     types.ServiceDeploymentBrief). The ECS developer guide says ECS keeps
+//     the most recent 90 days of them. DescribeServiceRevisions takes up to
+//     20 service revision ARNs and returns the ARN of the task definition of
+//     each (types.ServiceRevision). Checked against a real account: a STOPPED
+//     deployment is the usual end of a rolling deployment that a newer one
+//     replaced, so only SUCCESSFUL ones show that the service ran well on a
+//     task definition.
 //   - ListTaskDefinitions takes familyPrefix, status (default ACTIVE only),
 //     sort (ASC or DESC, by family name and then by revision number, newest
 //     revision first for DESC) and a page size of 1 to 100, and returns task
@@ -36,7 +49,10 @@
 //     prefix, so the action keeps only the ARNs of exactly the family.
 //   - A revision number always increases by one, also after a revision is
 //     deregistered (types/types.go, TaskDefinition.Revision). Numbers follow
-//     the order of registration, which is not the order of deployment.
+//     the order of registration, which is not the order of deployment, and
+//     CI often deregisters a revision soon after the next one is deployed. An
+//     INACTIVE task definition cannot be put on a service
+//     (api_op_DeregisterTaskDefinition.go).
 //   - UpdateService takes a task definition as family:revision or an ARN and
 //     starts a new deployment for it. On the ECS controller it can change
 //     the task definition; on CODE_DEPLOY and EXTERNAL it cannot
@@ -46,7 +62,10 @@
 //   - UpdateService and DescribeServices act on the resource type service,
 //     arn:<partition>:ecs:<region>:<account>:service/<cluster>/<service>;
 //     DescribeTaskDefinition and ListTaskDefinitions have no resource type
-//     (the aws.iam#iamAction traits of the model). Whether UpdateService also
+//     (the aws.iam#iamAction traits of the model). ListServiceDeployments acts
+//     on the resource type service, and DescribeServiceRevisions on the types
+//     service and service-revision, arn:<partition>:ecs:<region>:<account>:service-revision/<cluster>/<service>/<id>
+//     (AWS Service Authorization Reference). Whether UpdateService also
 //     needs iam:PassRole is not in the model: the AWS Service Reference
 //     lists it for the call, with no word on when it is enforced, so the
 //     docs give it as an optional statement.
@@ -156,8 +175,10 @@ func (r *Rollback) Spec() action.Spec {
 
 	b.WriteString("Puts an Amazon ECS service back on an earlier revision of its task definition, through the ECS API. " +
 		"It changes only the task definition: the service starts a new deployment of the older revision. " +
-		"The older revision is the highest ACTIVE revision of the same task definition family that is below the one the service runs, " +
-		"or the one revisionsBack such revisions below. That revision may never have been deployed: check its image in the proposal. " +
+		"The older revision is the ACTIVE revision of the same task definition family, below the one the service runs, that the service deployed successfully most recently, " +
+		"or the one revisionsBack such revisions down. A revision the service never deployed is not chosen: ECS keeps about 90 days of deployment history, " +
+		"and a revision that is INACTIVE cannot be deployed. When ECS has no deployment history for the service, or Sidekick may not read it, " +
+		"the highest ACTIVE revision below the one the service runs is used instead, and the proposal says so: check its image in the proposal. " +
 		"It works only for services on the ECS deployment controller. ")
 	fmt.Fprintf(&b, "Accounts: %s. Regions: %s. Clusters: %s. Services: %s. ",
 		strings.Join(r.accounts, ", "), strings.Join(r.regions, ", "), strings.Join(r.limits.Clusters, ", "), strings.Join(r.limits.Services, ", "))
@@ -199,7 +220,7 @@ func (r *Rollback) Snapshot(ctx context.Context, raw json.RawMessage) (action.Sn
 
 	family, running, _ := parseTaskDefinition(st.taskDefinition)
 
-	revision, err := earlier(ctx, client, family, running, p.back())
+	chosen, err := chooseTarget(ctx, client, pos, family, running, p.back())
 	if err != nil {
 		return action.Snapshot{}, fmt.Errorf("find the task definition to go back to: %w", err)
 	}
@@ -209,12 +230,12 @@ func (r *Rollback) Snapshot(ctx context.Context, raw json.RawMessage) (action.Sn
 		return action.Snapshot{}, fmt.Errorf("read the running task definition: %w", err)
 	}
 
-	targetTD, err := activeTaskDefinition(ctx, client, taskDefinitionID(family, revision), "the service cannot be put on it")
+	targetTD, err := activeTaskDefinition(ctx, client, taskDefinitionID(family, chosen.revision), "the service cannot be put on it")
 	if err != nil {
 		return action.Snapshot{}, fmt.Errorf("read the task definition to go back to: %w", err)
 	}
 
-	snap, err := action.RevisionSnapshot(pos.name(), versionOf(st), revisionOf(runningTD), revisionOf(targetTD))
+	snap, err := action.RevisionSnapshot(pos.name(), versionOf(st), revisionOf(runningTD), targetRevisionOf(targetTD, chosen))
 	if err != nil {
 		return action.Snapshot{}, fmt.Errorf("make the snapshot: %w", err)
 	}

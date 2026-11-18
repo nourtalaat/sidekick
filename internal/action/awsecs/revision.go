@@ -22,6 +22,9 @@ const (
 	// screens label the field "Deployed by", and ECS records who registered
 	// the task definition, who may not be who updated the service.
 	registeredBy = "registered by "
+	// deployedNote says what DeployedAt is for a task definition that the
+	// deployment history shows on the service. It takes the deployment ID.
+	deployedNote = "The time is when deployment %s of this service, which succeeded, finished."
 )
 
 // Bounds of the version of a revision, which lists the images of the task
@@ -51,6 +54,25 @@ func revisionOf(td types.TaskDefinition) action.Revision {
 
 	if who := aws.ToString(td.RegisteredBy); who != "" {
 		rev.DeployedBy = registeredBy + who
+	}
+
+	return rev
+}
+
+// targetRevisionOf describes the task definition a rollback goes to. When
+// the deployment history shows the deployment that put it on the service,
+// the time is when that deployment finished. Otherwise the time is when the
+// task definition was registered, and the note says that the history could
+// not be used, when that is why.
+func targetRevisionOf(td types.TaskDefinition, c choice) action.Revision {
+	rev := revisionOf(td)
+
+	switch {
+	case c.deployment != nil:
+		rev.DeployedAt = c.deployment.at
+		rev.Notes = fmt.Sprintf(deployedNote, c.deployment.id)
+	case c.warning != "":
+		rev.Notes += " " + c.warning
 	}
 
 	return rev
