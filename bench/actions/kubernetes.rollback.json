@@ -1,6 +1,6 @@
 {
   "name": "rollback",
-  "description": "Puts a Deployment, StatefulSet or DaemonSet back on an earlier revision through the Kubernetes API, as kubectl rollout undo does. It changes the pod template only, and goes back revisionsBack revisions before the running one (default 1, at most 1). It refuses a workload with no earlier revision, a paused Deployment, and a workload managed by Argo CD or Flux. Allowed namespaces: shop, media, ledger, search, billing. Allowed kinds: Deployment, StatefulSet, DaemonSet. Allowed names: cart-api, media-resizer, ledger-api, search-api, billing-portal.",
+  "description": "Puts a Deployment, StatefulSet or DaemonSet back on an earlier revision through the Kubernetes API, as kubectl rollout undo does. It changes the pod template only, and goes back revisionsBack revisions before the running one (default 1, at most 1). It refuses a workload with no earlier revision, a paused Deployment, and a workload managed by Argo CD or Flux. Allowed namespaces: shop, media, ledger, search, billing, orders, pricing. Allowed kinds: Deployment, StatefulSet, DaemonSet. Allowed names: cart-api, media-resizer, ledger-api, search-api, billing-portal, order-intake, quote-engine.",
   "paramsSchema": {
     "type": "object",
     "additionalProperties": false,
