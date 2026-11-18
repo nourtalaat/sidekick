@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"slices"
 	"strconv"
@@ -110,7 +111,7 @@ func testRollback(t *testing.T, api *fakehttp.Server, change func(*Config)) *Rol
 		change(&cfg)
 	}
 
-	return newRollback("rollback", cfg, kubeaccess.NewCluster(&rest.Config{Host: api.URL(), BearerToken: ownToken}, cfg.serviceAccount(), podNamespace))
+	return newRollback("rollback", cfg, kubeaccess.NewCluster(ownConfig(api, ownToken), cfg.serviceAccount(), podNamespace))
 }
 
 // seed fills the fake API with its starting objects.
@@ -622,4 +623,13 @@ func writeStatus(w http.ResponseWriter, code int, reason, message string) {
 		"apiVersion": "v1", "kind": "Status", "status": "Failure",
 		"reason": reason, "message": message, "code": code,
 	})
+}
+
+// ownConfig returns the REST config of Sidekick's own account for the fake
+// API server. The dialer gives the clients built from it a transport of their
+// own: without one, client-go uses http.DefaultTransport, and every test
+// server that closes calls CloseIdleConnections on it, which can break the
+// request of a test that runs in parallel.
+func ownConfig(api *fakehttp.Server, token string) *rest.Config {
+	return &rest.Config{Host: api.URL(), BearerToken: token, Dial: (&net.Dialer{}).DialContext}
 }

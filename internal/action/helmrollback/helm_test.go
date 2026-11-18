@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"testing"
 
@@ -56,7 +57,7 @@ func newAPI(t *testing.T) *fakehttp.Server {
 
 // openerFor returns an opener for the fake API server.
 func openerFor(api *fakehttp.Server, driverName string) opener {
-	cluster := kubeaccess.NewCluster(&rest.Config{Host: api.URL(), BearerToken: ownToken}, account, podNamespace)
+	cluster := kubeaccess.NewCluster(ownConfig(api, ownToken), account, podNamespace)
 
 	return clusterOpener(cluster, driverName, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
@@ -82,7 +83,7 @@ func TestOpenerFailsWithoutTheOwnAccount(t *testing.T) {
 	t.Parallel()
 
 	api := newAPI(t)
-	cluster := kubeaccess.NewCluster(&rest.Config{Host: api.URL(), BearerToken: "another"}, account, podNamespace)
+	cluster := kubeaccess.NewCluster(ownConfig(api, "another"), account, podNamespace)
 
 	_, err := clusterOpener(cluster, "secret", nil)(t.Context(), "shop")
 	require.Error(t, err)
@@ -184,4 +185,13 @@ func TestHistoryErrorsHoldNoTokenAndSayThatTheAccountIsRefused(t *testing.T) {
 	require.True(t, apierrors.IsForbidden(err))
 	require.NotContains(t, err.Error(), mintedToken)
 	require.Contains(t, err.Error(), "[redacted]")
+}
+
+// ownConfig returns the REST config of Sidekick's own account for the fake
+// API server. The dialer gives the clients built from it a transport of their
+// own: without one, client-go uses http.DefaultTransport, and every test
+// server that closes calls CloseIdleConnections on it, which can break the
+// request of a test that runs in parallel.
+func ownConfig(api *fakehttp.Server, token string) *rest.Config {
+	return &rest.Config{Host: api.URL(), BearerToken: token, Dial: (&net.Dialer{}).DialContext}
 }
