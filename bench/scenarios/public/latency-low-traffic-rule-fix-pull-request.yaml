@@ -11,7 +11,7 @@ route:
   mode: approved
   actions: [monitor-pr]
   details:
-    alert-rules: Prometheus alert rules are kept in the Git repository acme/monitors, in prometheus/rules.
+    alert-rules: Prometheus alert rules are kept in the Git repository acme/monitors, one file per service, in prometheus/rules/<service>.yml.
 event:
   adapter: alertmanager
   payload:

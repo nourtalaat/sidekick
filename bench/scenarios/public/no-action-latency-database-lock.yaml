@@ -82,6 +82,27 @@ sources:
             min 0.18, max 4.8, last 4.8
           evidence:
             - { kind: metric, title: ledger-api p95 latency, url: "https://prometheus.quillcart.example/graph?g0.expr=ledger_api_p95" }
+      - tool: query
+        respond:
+          text: |
+            Instant query at 2026-10-21T02:40:00Z
+            {service="ledger-api", route="POST /v1/transfers"} 4.8
+            The value is the p95 latency in seconds over the last 5 minutes.
+          evidence:
+            - { kind: metric, title: ledger-api p95 latency, url: "https://prometheus.quillcart.example/graph?g0.expr=ledger_api_p95" }
+      - tool: list_alerts
+        respond:
+          text: |
+            1 alert firing
+            LedgerApiLatencyP95High, firing since 2026-10-21T02:27:00Z, labels service=ledger-api namespace=ledger env=prod severity=critical
+              summary: ledger-api p95 latency above 1s for 5m
+            No other alert is firing or pending for ledger-api or its dependencies.
+      - tool: get_rules
+        respond:
+          text: |
+            group ledger-api, alert LedgerApiLatencyP95High, for 5m
+            expr: histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{service="ledger-api",route="POST /v1/transfers"}[5m]))) > 1
+            health ok, last evaluation 02:39:50
   k8s:
     tools: { snapshot: bench/tools/kubernetes.json }
     fixtures:
