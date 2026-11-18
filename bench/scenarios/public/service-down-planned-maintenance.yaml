@@ -30,6 +30,7 @@ sources:
             Deployment search/search-indexer, 0 of 0 replicas ready, desired replicas 0
             image quillcart/search-indexer:2026.09.12-1
             annotations: quillcart.example/maintenance "2026-09-20T02:00Z to 2026-09-20T04:00Z, full reindex of catalog-v3"
+            Pods: none
           evidence:
             - { kind: resource, title: search-indexer deployment, url: "https://k8s.quillcart.example/search/deployments/search-indexer" }
       - tool: get_rollout_history

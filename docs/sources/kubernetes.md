@@ -37,7 +37,7 @@ The model sees each tool as `<source>__<tool>`, for example
 | Tool | Returns |
 |---|---|
 | `list_events` | Events for a namespace, or for one object by kind and name, newest first. It can keep only `Warning` or `Normal` events, and only those since a time (`since` is an RFC 3339 time or a duration back from now, such as `2h`). Default 50 events, at most 500. |
-| `get_workload` | The status of a Deployment, StatefulSet or DaemonSet: replicas, generation, revision, update strategy, conditions, container images, and the horizontal pod autoscaler that scales it, if any. |
+| `get_workload` | The status of a Deployment, StatefulSet or DaemonSet: replicas, generation, revision, update strategy, conditions, container images, the horizontal pod autoscaler that scales it, if any, and the workload's pods. A pod is listed when the workload's label selector finds it and the workload (or, for a Deployment, one of its ReplicaSets) controls it, so pods of another workload with the same labels are left out. Each pod has its name, phase, ready containers (such as `1/2`), restarts, node, start time, and revision (for a Deployment also its ReplicaSet), which are what `get_pod_logs` needs. Pods that are not ready come first, then pods by name; at most 50 pods, and the result says how many there are when more. If pods cannot be listed, the result says why and still has the rest. |
 | `list_pod_problems` | Pods with restarts, OOM kills, `CrashLoopBackOff`, image pull errors and other waiting reasons, pods that are pending or cannot be scheduled, failed or evicted pods, and running containers that are not ready. It can take a label selector. Pods that finished successfully are left out. Default 50 pods, at most 200, most restarts first. |
 | `get_rollout_history` | The ReplicaSet revisions of a Deployment, newest first, with their creation times, images, change cause and what changed from the revision before. Default 10 revisions, at most 50. |
 | `get_pod_logs` | The last lines of one container's logs, with timestamps: default 200 lines, at most 2,000, cut to the newest 256 KiB. It can read the container's previous run, for example the one before a crash. Only with `logs: true`. |
@@ -79,12 +79,12 @@ often hold credentials, so do not grant it any.
 | API group | Resources | Verbs | Used by |
 |---|---|---|---|
 | core (`""`) | `events` | `list` | `list_events` |
-| core (`""`) | `pods` | `list` | `list_pod_problems` |
+| core (`""`) | `pods` | `list` | `list_pod_problems`, `get_workload` |
 | core (`""`) | `pods/log` | `get` | `get_pod_logs`, only with `logs: true` |
 | core (`""`) | `nodes` (cluster scope) | `get`, `list` | `list_nodes` |
 | `apps` | `deployments` | `get` | `get_workload`, `get_rollout_history` |
 | `apps` | `statefulsets`, `daemonsets` | `get` | `get_workload` |
-| `apps` | `replicasets` | `list` | `get_rollout_history` |
+| `apps` | `replicasets` | `list` | `get_rollout_history`, `get_workload` for a Deployment's pods |
 | `autoscaling` | `horizontalpodautoscalers` | `list` | `get_workload` |
 
 A tool whose permission is missing fails with a tool error and the others

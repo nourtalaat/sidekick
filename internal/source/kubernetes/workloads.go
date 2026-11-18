@@ -52,6 +52,13 @@ type workloadView struct {
 	Autoscaler         *autoscalerView `json:"autoscaler,omitempty"`
 	// AutoscalerError says why autoscalers could not be read, if so.
 	AutoscalerError string `json:"autoscalerError,omitempty"`
+	// Pods are the workload's pods, not ready first and then by name, at
+	// most defaultPods of them.
+	Pods []podView `json:"pods"`
+	// PodsMatched is how many pods the workload has, before the cap.
+	PodsMatched int `json:"podsMatched"`
+	// PodsError says why pods could not be read, if so.
+	PodsError string `json:"podsError,omitempty"`
 }
 
 // replicaCounts are the replica numbers of a workload. For a DaemonSet,
@@ -91,18 +98,19 @@ type autoscalerView struct {
 }
 
 // getWorkload returns the status of one Deployment, StatefulSet or
-// DaemonSet, and the autoscaler that scales it.
+// DaemonSet, the autoscaler that scales it, and its pods.
 func (s *Source) getWorkload(ctx context.Context, c kubernetes.Interface, in workloadInput) (source.Result, error) {
 	if err := s.allowed(in.Namespace); err != nil {
 		return source.Result{}, fmt.Errorf("get workload: %w", err)
 	}
 
-	view, err := fetchWorkload(ctx, c, in)
+	view, scope, err := fetchWorkload(ctx, c, in)
 	if err != nil {
 		return source.Result{}, fmt.Errorf("get workload: %w", err)
 	}
 
 	view.Autoscaler, view.AutoscalerError = findAutoscaler(ctx, c, view.Kind, in.Namespace, in.Name)
+	view.Pods, view.PodsMatched, view.PodsError = findPods(ctx, c, view.Kind, in.Namespace, scope)
 
 	o := object{Kind: view.Kind, Resource: resourceOf(view.Kind), Namespace: in.Namespace, Name: in.Name}
 	command := kubectl("describe", strings.ToLower(view.Kind)+"/"+in.Name, "-n", in.Namespace)
@@ -110,34 +118,35 @@ func (s *Source) getWorkload(ctx context.Context, c kubernetes.Interface, in wor
 	return result(workloadText(view), view, s.links.evidence(source.EvidenceResource, []object{o}, command), false)
 }
 
-// fetchWorkload reads the workload of the input's kind.
-func fetchWorkload(ctx context.Context, c kubernetes.Interface, in workloadInput) (workloadView, error) {
+// fetchWorkload reads the workload of the input's kind, and what finds its
+// pods.
+func fetchWorkload(ctx context.Context, c kubernetes.Interface, in workloadInput) (workloadView, podScope, error) {
 	apps := c.AppsV1()
 
 	switch in.Kind {
 	case kindDeployment:
 		d, err := apps.Deployments(in.Namespace).Get(ctx, in.Name, metav1.GetOptions{})
 		if err != nil {
-			return workloadView{}, apiError("get", resDeployments, in.Namespace, err)
+			return workloadView{}, podScope{}, apiError("get", resDeployments, in.Namespace, err)
 		}
 
-		return deploymentView(d), nil
+		return deploymentView(d), podScope{selector: d.Spec.Selector, uid: d.UID}, nil
 	case kindStatefulSet:
 		st, err := apps.StatefulSets(in.Namespace).Get(ctx, in.Name, metav1.GetOptions{})
 		if err != nil {
-			return workloadView{}, apiError("get", resStatefulSets, in.Namespace, err)
+			return workloadView{}, podScope{}, apiError("get", resStatefulSets, in.Namespace, err)
 		}
 
-		return statefulSetView(st), nil
+		return statefulSetView(st), podScope{selector: st.Spec.Selector, uid: st.UID}, nil
 	case kindDaemonSet:
 		ds, err := apps.DaemonSets(in.Namespace).Get(ctx, in.Name, metav1.GetOptions{})
 		if err != nil {
-			return workloadView{}, apiError("get", resDaemonSets, in.Namespace, err)
+			return workloadView{}, podScope{}, apiError("get", resDaemonSets, in.Namespace, err)
 		}
 
-		return daemonSetView(ds), nil
+		return daemonSetView(ds), podScope{selector: ds.Spec.Selector, uid: ds.UID}, nil
 	default:
-		return workloadView{}, &source.ToolError{Message: fmt.Sprintf("kind: %q is not one of %s, %s and %s", in.Kind, kindDeployment, kindStatefulSet, kindDaemonSet)}
+		return workloadView{}, podScope{}, &source.ToolError{Message: fmt.Sprintf("kind: %q is not one of %s, %s and %s", in.Kind, kindDeployment, kindStatefulSet, kindDaemonSet)}
 	}
 }
 
@@ -297,6 +306,7 @@ func workloadText(v workloadView) string {
 
 	writeContainers(&b, v.Containers)
 	writeConditions(&b, "Conditions", v.Conditions)
+	writePods(&b, v)
 
 	switch a := v.Autoscaler; {
 	case a != nil:

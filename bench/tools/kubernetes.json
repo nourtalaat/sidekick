@@ -42,7 +42,7 @@
     },
     {
       "name": "get_workload",
-      "description": "Get the status of a Deployment, StatefulSet or DaemonSet: replicas, conditions, container images, rollout strategy and any horizontal pod autoscaler that scales it.",
+      "description": "Get the status of a Deployment, StatefulSet or DaemonSet: replicas, conditions, container images, rollout strategy, any horizontal pod autoscaler that scales it, and the names of its pods with their phase, readiness, restarts, node and revision.",
       "inputSchema": {
         "type": "object",
         "properties": {

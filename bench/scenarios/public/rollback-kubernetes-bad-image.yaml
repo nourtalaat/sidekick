@@ -44,6 +44,13 @@ sources:
             Deployment shop/cart-api, 6 of 6 replicas ready, 6 updated
             image quillcart/cart-api:2026.10.14-2, container cart-api, memory limit 512Mi
             strategy RollingUpdate, rollout complete at 10:05:52
+            Pods (6, not ready first):
+              cart-api-7c5d84f6b9-4hq2v Running, 1/1 ready, 0 restarts, node worker-12, started 2026-10-14T10:03:55Z, revision 31 (ReplicaSet cart-api-7c5d84f6b9)
+              cart-api-7c5d84f6b9-8mw5t Running, 1/1 ready, 0 restarts, node worker-14, started 2026-10-14T10:04:10Z, revision 31 (ReplicaSet cart-api-7c5d84f6b9)
+              cart-api-7c5d84f6b9-b6n9c Running, 1/1 ready, 0 restarts, node worker-15, started 2026-10-14T10:04:38Z, revision 31 (ReplicaSet cart-api-7c5d84f6b9)
+              cart-api-7c5d84f6b9-k2x7d Running, 1/1 ready, 0 restarts, node worker-12, started 2026-10-14T10:04:52Z, revision 31 (ReplicaSet cart-api-7c5d84f6b9)
+              cart-api-7c5d84f6b9-q9z4r Running, 1/1 ready, 0 restarts, node worker-16, started 2026-10-14T10:05:20Z, revision 31 (ReplicaSet cart-api-7c5d84f6b9)
+              cart-api-7c5d84f6b9-v3p8j Running, 1/1 ready, 0 restarts, node worker-14, started 2026-10-14T10:05:40Z, revision 31 (ReplicaSet cart-api-7c5d84f6b9)
             horizontal pod autoscaler cart-api, 6 to 12 replicas, now 6
       - tool: list_pod_problems
         respond:

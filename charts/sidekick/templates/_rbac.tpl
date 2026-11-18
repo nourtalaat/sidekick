@@ -45,7 +45,7 @@ nothing on Secrets or ConfigMaps. Takes a dict with "logs", which adds get
 on pods/log for get_pod_logs, and "namespaced", which leaves out nodes.
 */}}
 {{- define "sidekick.kubernetesSource.rules" -}}
-# list_events and list_pod_problems.
+# list_events, list_pod_problems and the pods of get_workload.
 - apiGroups: [""]
   resources: [events, pods]
   verbs: [list]
@@ -59,7 +59,7 @@ on pods/log for get_pod_logs, and "namespaced", which leaves out nodes.
 - apiGroups: [apps]
   resources: [deployments, statefulsets, daemonsets]
   verbs: [get]
-# get_rollout_history.
+# get_rollout_history, and the pods of a Deployment in get_workload.
 - apiGroups: [apps]
   resources: [replicasets]
   verbs: [list]
