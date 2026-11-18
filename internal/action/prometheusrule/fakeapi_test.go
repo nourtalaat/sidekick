@@ -3,6 +3,7 @@ package prometheusrule
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"regexp"
 	"slices"
@@ -102,10 +103,13 @@ func newFakeAPI(t *testing.T) (*fakehttp.Server, *fakeAPI) {
 	return api, f
 }
 
-// restConfig returns the config of Sidekick's own service account for the
-// fake server.
-func restConfig(api *fakehttp.Server) *rest.Config {
-	return &rest.Config{Host: api.URL(), BearerToken: ownToken}
+// restConfig returns the REST config of an account with token for the fake
+// server. The dialer gives the clients built from it a transport of their
+// own: without one, client-go uses http.DefaultTransport, and every test
+// server that closes calls CloseIdleConnections on it, which can break the
+// request of a test that runs in parallel.
+func restConfig(api *fakehttp.Server, token string) *rest.Config {
+	return &rest.Config{Host: api.URL(), BearerToken: token, Dial: (&net.Dialer{}).DialContext}
 }
 
 // touch moves the resourceVersion on, as a write to the status or to

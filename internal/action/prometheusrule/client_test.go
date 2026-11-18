@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"k8s.io/client-go/rest"
 
 	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/action/kubeaccess"
@@ -15,7 +14,7 @@ import (
 
 // testCluster returns the cluster for the fake API server.
 func testCluster(api *fakehttp.Server) *kubeaccess.Cluster {
-	return kubeaccess.NewCluster(restConfig(api), DefaultServiceAccount, podNamespace)
+	return kubeaccess.NewCluster(restConfig(api, ownToken), DefaultServiceAccount, podNamespace)
 }
 
 func TestSessionAsksForATokenAndUsesIt(t *testing.T) {
@@ -138,7 +137,7 @@ func TestOpenWithAWrongOwnToken(t *testing.T) {
 
 	api, _ := newFakeAPI(t)
 
-	c := kubeaccess.NewCluster(&rest.Config{Host: api.URL(), BearerToken: "another"}, DefaultServiceAccount, podNamespace)
+	c := kubeaccess.NewCluster(restConfig(api, "another"), DefaultServiceAccount, podNamespace)
 
 	_, err := openSession(context.Background(), c)
 	require.Error(t, err)
