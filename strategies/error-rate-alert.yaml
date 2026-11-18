@@ -24,6 +24,6 @@ falsePositiveSigns:
   - The errors come from one known noisy client or a health check, and users are not affected.
 verdictHints:
   truePositive: Name the error that rose and where it comes from, and put a rollback first when a change caused it.
-  falsePositive: Propose a minimum request count, counting only server errors, or leaving out the noisy client or endpoint. When 4xx answers to bots or scanners make up the rise and 5xx answers stay at their normal level, users are not affected; a small part you cannot explain does not make it inconclusive.
+  falsePositive: The fix is a minimum request count, counting only server errors, or leaving out the noisy client or endpoint. When 4xx answers to bots or scanners make up the rise and 5xx answers stay at their normal level, users are not affected; a small part you cannot explain does not make it inconclusive.
   duplicate: Name the open incident or alert that covers it, and point the responder to it instead of a separate fix.
   knownIssue: Name the ticket that tracks it, and say what it plans.

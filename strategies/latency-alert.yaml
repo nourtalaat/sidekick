@@ -24,6 +24,6 @@ falsePositiveSigns:
   - Latency is high only on a health check, batch or export endpoint that is slow by design.
 verdictHints:
   truePositive: Name the slowest downstream call or the change that made requests slower.
-  falsePositive: Propose a minimum request rate condition, a longer duration, or leaving out the slow endpoint. When traffic is only a few requests a minute and the same rise repeated on earlier days with no change, choose false_positive.
+  falsePositive: The fix is a minimum request rate condition, a longer duration, or leaving out the slow endpoint. When traffic is only a few requests a minute and the same rise repeated on earlier days with no change, choose false_positive.
   duplicate: Name the open incident or alert that covers it, and point the responder to it instead of a separate fix.
   knownIssue: Name the ticket that tracks it, and say what it plans.
