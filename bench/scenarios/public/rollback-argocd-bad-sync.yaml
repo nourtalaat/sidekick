@@ -1,0 +1,147 @@
+# An error rate alert after a person synced an Argo CD application by hand to a
+# revision that points at a search index that does not exist. Auto-sync is off.
+# The right answer is an Argo CD rollback; the Kubernetes rollback refuses a
+# workload that Argo CD manages, and a revert pull request is the other choice.
+# Error rate strategy, approved mode, true positive.
+id: rollback-argocd-bad-sync
+title: Search API errors after a manual Argo CD sync that pointed it at a missing index
+tags: [error-rate, argocd, config, deploy, actions, action-choice, true-positive]
+strategy: error-rate-alert
+now: 2026-10-16T12:05:00Z
+route:
+  mode: approved
+  actions: [argocd-rollback, kubernetes-rollback, github-revert]
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="SearchApiErrorRateHigh"}'
+    alerts:
+      - status: firing
+        labels: { alertname: SearchApiErrorRateHigh, service: search-api, namespace: search, env: prod, severity: critical }
+        annotations:
+          summary: search-api 5xx ratio above 5% for 5m
+          description: 41% of requests to search-api failed with 5xx in the last 5m. The threshold is 5%.
+        startsAt: 2026-10-16T11:52:00Z
+        fingerprint: 94e1b7c03a5d6f28
+sources:
+  argocd:
+    tools: { snapshot: bench/tools/argocd.json }
+    fixtures:
+      - tool: list_applications
+        respond:
+          text: |
+            Argo CD applications, 1 matching
+            storefront/search-api  destination in-cluster/search, Synced, Healthy, auto-sync off
+              deployed revision a91c3e7, last synced 2026-10-16T11:50:12Z
+          evidence:
+            - { kind: resource, title: storefront/search-api, url: "https://argocd.quillcart.example/applications/storefront/search-api" }
+      - tool: get_application
+        respond:
+          text: |
+            storefront/search-api
+            source quillcart/deploy-config, path apps/search-api, target revision main
+            destination in-cluster, namespace search
+            sync policy: none (manual sync), so auto-sync is off
+            sync status Synced at revision a91c3e7, health Healthy
+            last operation: Sync, phase Succeeded, started 2026-10-16T11:50:04Z by user hamza.k, finished 11:50:12Z
+            images: quillcart/search-api:2026.10.14-3
+          evidence:
+            - { kind: resource, title: storefront/search-api, url: "https://argocd.quillcart.example/applications/storefront/search-api" }
+      - tool: get_history
+        respond:
+          text: |
+            storefront/search-api, newest first (current marked)
+            id 52 (current), revision a91c3e7, deployed 2026-10-16T11:50:12Z, started by user hamza.k
+              commit "Point search-api at the products-v8 index alias", by hamza.k, 2026-10-16T11:44:30Z
+            id 51, revision 4be07d2, deployed 2026-10-14T16:20:41Z, started by user lena
+              commit "Raise search-api replicas to 6", by lena, 2026-10-14T16:12:09Z
+          evidence:
+            - { kind: deploy, title: search-api history 52, url: "https://argocd.quillcart.example/applications/storefront/search-api?operation=52" }
+  k8s:
+    tools: { snapshot: bench/tools/kubernetes.json }
+    fixtures:
+      - tool: get_workload
+        respond:
+          text: |
+            Deployment search/search-api, 6 of 6 replicas ready, 6 updated
+            image quillcart/search-api:2026.10.14-3, container search-api, memory limit 1Gi
+            strategy RollingUpdate, rollout complete at 11:51:40
+      - tool: list_pod_problems
+        respond:
+          text: "Namespace search, no pods with problems for search-api"
+          noData: true
+      - tool: get_pod_logs
+        respond:
+          text: |
+            search-api-6f9b8c7d54-t2m9z, container search-api, last lines
+            12:03:11 INFO GET /v1/search?q=lamp 200 38ms
+            12:03:14 ERROR search backend: index_not_found_exception: no such index [products-v8]
+            12:03:14 INFO GET /v1/search?q=shelf 502 12ms
+            12:03:19 ERROR search backend: index_not_found_exception: no such index [products-v8]
+            The first such error in this pod is at 11:51:05. Before that the alias was products-v7.
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: query_range
+        respond:
+          text: |
+            Share of 5xx responses of search-api, last 3 hours, 5 minute points
+            09:00 to 11:45: 0.1% to 0.3%
+            11:50 0.4%, 11:55 40%, 12:00 42%, 12:05 41%
+            min 0.1%, max 42%, last 41%
+          evidence:
+            - { kind: metric, title: search-api 5xx ratio, url: "https://prometheus.quillcart.example/graph?g0.expr=search_api_5xx_ratio" }
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: |
+            a91c3e7 2026-10-16T11:44:30Z "Point search-api at the products-v8 index alias" by hamza.k
+            4be07d2 2026-10-14T16:12:09Z "Raise search-api replicas to 6" by lena
+          evidence:
+            - { kind: commit, title: a91c3e7, url: "https://github.example.com/quillcart/deploy-config/commit/a91c3e7" }
+      - tool: get_commit
+        match:
+          args:
+            ref: { regex: "^a91c3e7" }
+        respond:
+          text: |
+            a91c3e7 "Point search-api at the products-v8 index alias"
+            apps/search-api/configmap.yaml (+1 -1)
+              -  INDEX_ALIAS: products-v7
+              +  INDEX_ALIAS: products-v8
+            The reindex job that creates products-v8 has not run yet.
+          evidence:
+            - { kind: commit, title: a91c3e7, url: "https://github.example.com/quillcart/deploy-config/commit/a91c3e7" }
+      - tool: list_workflow_runs
+        respond:
+          text: "No workflow runs since the requested time. Argo CD deploys this repository."
+          noData: true
+default: no_data
+actions:
+  argocd-rollback:
+    spec: { snapshot: bench/actions/argocd.rollback.json }
+  kubernetes-rollback:
+    spec: { snapshot: bench/actions/kubernetes.rollback.json }
+  github-revert:
+    spec: { snapshot: bench/actions/github.revert.json }
+expected:
+  verdict: true_positive
+  rootCause:
+    summary: At 11:50 a person synced revision a91c3e7 of search-api by hand, which points INDEX_ALIAS at products-v8, an index that does not exist yet, so searches fail with index_not_found and 41% of requests return 5xx.
+    rubric:
+      - { id: index, text: "Names the missing search index products-v8 (index_not_found) as why requests fail", weight: 2, required: true }
+      - { id: sync, text: "Ties it to the manual Argo CD sync at 11:50 of revision a91c3e7 (history entry 52)", weight: 2, required: true }
+      - { id: fix, text: "Proposes rolling the application back to the previous deployed revision first", weight: 1 }
+  evidence:
+    - { calledTool: argocd__get_history }
+    - { citedURL: "https://argocd.quillcart.example/applications/storefront/search-api?operation=52" }
+  proposals:
+    - action: argocd-rollback
+      params:
+        application: { equals: storefront/search-api }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }

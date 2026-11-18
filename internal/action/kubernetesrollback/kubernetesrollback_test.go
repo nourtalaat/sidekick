@@ -15,6 +15,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/actiontest"
 	"github.com/nourtalaat/sidekick/internal/registry"
 )
 
@@ -111,6 +112,20 @@ func TestSpec(t *testing.T) {
 	require.Contains(t, spec.Description, "Allowed names: checkout, ledger, agent.")
 	require.Contains(t, spec.Description, "at most 1)")
 	require.JSONEq(t, string(paramsSchema), string(spec.ParamsSchema))
+}
+
+func TestSpecSnapshot(t *testing.T) {
+	t.Parallel()
+
+	api, _ := newFakeAPI(t)
+	rollback := testRollback(t, api, func(c *Config) {
+		c.Limits = Limits{
+			Namespaces: []string{"shop", "media", "ledger", "search", "billing"},
+			Names:      []string{"cart-api", "media-resizer", "ledger-api", "search-api", "billing-portal"},
+		}
+	})
+
+	actiontest.CheckSpecSnapshot(t, Type, rollback)
 }
 
 func TestNewFailsOutsideACluster(t *testing.T) {

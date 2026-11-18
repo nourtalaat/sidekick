@@ -11,7 +11,7 @@ route:
   mode: approved
   actions: [monitor-pr]
   details:
-    alert-rules: Prometheus alert rules are kept in the Git repository acme/monitors, in prometheus/rules.
+    alert-rules: Prometheus alert rules are kept in the Git repository acme/monitors, one file per service, in prometheus/rules/<service>.yml.
 event:
   adapter: alertmanager
   payload:
@@ -72,6 +72,19 @@ sources:
           text: 'run 7120 deploy receipt-render 2026-09-14T11:40:05Z success. No deploy since.'
           evidence:
             - { kind: deploy, title: deploy receipt-render 7120, url: "https://github.example.com/acme/receipt-render/actions/runs/7120" }
+      - tool: get_file
+        match:
+          args:
+            repo: { equals: acme/monitors }
+            path: { regex: "^prometheus/rules/?$" }
+        respond:
+          text: |
+            acme/monitors, prometheus/rules, main, directory
+            checkout.yml
+            ledger.yml
+            receipt-render.yml
+          evidence:
+            - { kind: resource, title: prometheus/rules, url: "https://github.example.com/acme/monitors/tree/main/prometheus/rules" }
       - tool: get_file
         match:
           args:

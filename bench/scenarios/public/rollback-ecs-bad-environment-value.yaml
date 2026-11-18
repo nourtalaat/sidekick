@@ -1,0 +1,122 @@
+# An error rate alert after an ECS service moved to a task definition revision
+# with a malformed payments URL in its environment. The right answer is an ECS
+# rollback; a Kubernetes rollback and a revert pull request are on the route as
+# other choices. Error rate strategy, approved mode, true positive.
+id: rollback-ecs-bad-environment-value
+title: Order intake errors after a task definition revision set a malformed payments URL
+tags: [error-rate, aws, ecs, config, deploy, actions, action-choice, true-positive]
+strategy: error-rate-alert
+now: 2026-10-19T09:40:00Z
+route:
+  mode: approved
+  actions: [kubernetes-rollback, github-revert, ecs-rollback]
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="OrderIntakeErrorRateHigh"}'
+    alerts:
+      - status: firing
+        labels: { alertname: OrderIntakeErrorRateHigh, service: order-intake, cluster: quillcart-prod, env: prod, severity: critical }
+        annotations:
+          summary: order-intake 5xx ratio above 5% for 5m
+          description: 46% of requests to order-intake failed with 5xx in the last 5m. The threshold is 5%.
+        startsAt: 2026-10-19T09:15:00Z
+        fingerprint: b5a2d4e87c10f693
+sources:
+  aws:
+    tools: { snapshot: bench/tools/aws.json }
+    fixtures:
+      - tool: get_ecs_service
+        respond:
+          text: |
+            ECS service quillcart-prod/order-intake, ACTIVE, desired 6, running 6, pending 0
+            deployments:
+              PRIMARY ecs-svc/4417 order-intake:63, COMPLETED, created 2026-10-19T09:11:40Z, running 6
+              (order-intake:62 drained at 09:14:55)
+            events, newest first:
+              09:16:02 (service order-intake) has reached a steady state.
+              09:14:55 (service order-intake) deregistered 6 targets in (target-group order-intake-tg)
+              09:11:52 (service order-intake) registered 6 targets in (target-group order-intake-tg)
+          evidence:
+            - { kind: resource, title: order-intake service, url: "https://console.quillcart.example/ecs/quillcart-prod/order-intake" }
+      - tool: list_changes
+        respond:
+          text: |
+            CloudTrail write events, ecs.amazonaws.com, 08:40 to 09:40, newest first
+            09:11:38 UpdateService on service quillcart-prod/order-intake, task definition order-intake:63, by role deploy-bot
+            09:11:22 RegisterTaskDefinition family order-intake, revision 63, by role deploy-bot
+          evidence:
+            - { kind: resource, title: order-intake task definition 63, url: "https://console.quillcart.example/ecs/quillcart-prod/order-intake/task-definitions/63" }
+      - tool: query_logs
+        respond:
+          text: |
+            Log group /ecs/order-intake, 09:00 to 09:40, newest first, 3 of 2,611 matching lines shown
+            09:39:48 ERROR payments client: invalid base URL "https//payments-gw.quillcart.example": missing protocol scheme separator
+            09:39:41 ERROR payments client: invalid base URL "https//payments-gw.quillcart.example": missing protocol scheme separator
+            09:39:36 ERROR payments client: invalid base URL "https//payments-gw.quillcart.example": missing protocol scheme separator
+            First such line: 09:12:03. No such line before 09:12. The task definition of the tasks that log it is order-intake:63.
+          evidence:
+            - { kind: log_query, title: order-intake errors, url: "https://console.quillcart.example/logs/ecs/order-intake?filter=payments+client" }
+      - tool: query_metrics
+        respond:
+          text: |
+            HTTPCode_Target_5XX_Count of target group order-intake-tg, 1 minute sums, 08:40 to 09:40
+            08:40 to 09:11: 0 to 3
+            09:12 118, 09:15 340, 09:25 355, 09:35 349, 09:39 352
+            RequestCount about 750 per minute
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: |
+            3f6a8d1 2026-10-19T08:55:19Z "Move order-intake to the new payments gateway host" by omar
+            c2e90b4 2026-10-16T13:30:02Z "Add idempotency keys to order creation" by lena
+          evidence:
+            - { kind: commit, title: 3f6a8d1, url: "https://github.example.com/quillcart/order-intake/commit/3f6a8d1" }
+      - tool: get_commit
+        match:
+          args:
+            ref: { regex: "^3f6a8d1" }
+        respond:
+          text: |
+            3f6a8d1 "Move order-intake to the new payments gateway host"
+            infra/ecs/order-intake.taskdef.json (+1 -1)
+              -  { "name": "PAYMENTS_BASE_URL", "value": "https://payments.quillcart.example" }
+              +  { "name": "PAYMENTS_BASE_URL", "value": "https//payments-gw.quillcart.example" }
+            The image is not changed.
+          evidence:
+            - { kind: commit, title: 3f6a8d1, url: "https://github.example.com/quillcart/order-intake/commit/3f6a8d1" }
+      - tool: list_workflow_runs
+        respond:
+          text: 'run 3392 deploy order-intake 2026-10-19T09:10:48Z success, commit 3f6a8d1, task definition order-intake:63'
+          evidence:
+            - { kind: deploy, title: deploy order-intake 3392, url: "https://github.example.com/quillcart/order-intake/actions/runs/3392" }
+default: no_data
+actions:
+  kubernetes-rollback:
+    spec: { snapshot: bench/actions/kubernetes.rollback.json }
+  github-revert:
+    spec: { snapshot: bench/actions/github.revert.json }
+  ecs-rollback:
+    spec: { snapshot: bench/actions/aws.ecs_rollback.json }
+expected:
+  verdict: true_positive
+  rootCause:
+    summary: Task definition revision 63 of order-intake, deployed at 09:11, sets PAYMENTS_BASE_URL to "https//payments-gw.quillcart.example" (the colon is missing), so every call to the payments service fails and 46% of requests return 5xx.
+    rubric:
+      - { id: url, text: "Names the invalid payments URL (PAYMENTS_BASE_URL, missing colon) as why calls to payments fail", weight: 2, required: true }
+      - { id: taskdef, text: "Ties it to task definition revision 63 of order-intake, registered and deployed at 09:11", weight: 2, required: true }
+      - { id: fix, text: "Proposes going back to the previous task definition revision (62) first", weight: 1 }
+  evidence:
+    - { calledTool: aws__list_changes }
+    - { citedURL: "https://console.quillcart.example/ecs/quillcart-prod/order-intake/task-definitions/63" }
+  proposals:
+    - action: ecs-rollback
+      params:
+        cluster: { equals: quillcart-prod }
+        service: { equals: order-intake }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }

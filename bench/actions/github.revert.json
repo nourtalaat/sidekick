@@ -1,0 +1,45 @@
+{
+  "name": "revert",
+  "description": "Opens a draft pull request that reverts one commit or one merged pull request, when a recent change caused the alert. Name the commit by its full 40-character SHA, or the pull request by its number; never both, and never several. It is refused if any file the change touched has changed since, if the change is not on the base branch, or is a revert already made by this action. For a pull request that was rebased, or whose files other commits changed since, name its commits one at a time instead. To fix forward rather than undo, use github.code_change. Allowed repositories: quillcart/cart-api, quillcart/billing-portal, quillcart/deploy-config, quillcart/order-intake, quillcart/web-shop, quillcart/ledger-api. Base branch: main. The change must have landed on the base branch at most 72h0m0s ago, touch at most 5 files and 100 added and removed lines in all, and no refused path (CI files, ownership and review rules, Git hooks and settings, secrets and keys, and any path the operator adds).",
+  "paramsSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "repo",
+      "baseBranch",
+      "title",
+      "body"
+    ],
+    "properties": {
+      "repo": {
+        "type": "string",
+        "description": "The repository, as owner/name."
+      },
+      "baseBranch": {
+        "type": "string",
+        "description": "The branch the revert pull request targets."
+      },
+      "commit": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{40}$",
+        "description": "The full 40-character SHA of the one commit to revert. Give this or pullRequest."
+      },
+      "pullRequest": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "The number of the one merged pull request to revert. Give this or commit."
+      },
+      "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120,
+        "description": "The pull request title: what is reverted and why, in one line."
+      },
+      "body": {
+        "type": "string",
+        "maxLength": 8000,
+        "description": "The pull request description: the reason for the revert."
+      }
+    }
+  }
+}

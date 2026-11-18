@@ -1,0 +1,147 @@
+# An error rate alert after a Helm values change cut an upstream timeout to
+# 500 ms. The image did not change, so the right answer is a Helm rollback of
+# the release, with a Kubernetes rollback and a revert pull request on the
+# route as other choices. Error rate strategy, approved mode, true positive.
+id: rollback-helm-bad-values
+title: Billing portal timeouts after a Helm values change cut the upstream timeout to 500 ms
+tags: [error-rate, helm, kubernetes, config, deploy, actions, action-choice, true-positive]
+strategy: error-rate-alert
+now: 2026-10-15T14:30:00Z
+route:
+  mode: approved
+  actions: [kubernetes-rollback, helm-rollback, github-revert]
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="BillingPortalErrorRateHigh"}'
+    alerts:
+      - status: firing
+        labels: { alertname: BillingPortalErrorRateHigh, service: billing-portal, namespace: billing, env: prod, severity: critical }
+        annotations:
+          summary: billing-portal 5xx ratio above 5% for 5m
+          description: 28% of requests to billing-portal failed with 504 in the last 5m. The threshold is 5%.
+        startsAt: 2026-10-15T14:11:00Z
+        fingerprint: 0d83f5a6b19c2e47
+sources:
+  k8s:
+    tools: { snapshot: bench/tools/kubernetes.json }
+    fixtures:
+      - tool: get_rollout_history
+        respond:
+          text: |
+            Deployment billing/billing-portal, newest first
+            revision 12, 2026-10-15T14:02:10Z, image quillcart/billing-portal:3.8.0
+              changed: pod template annotation checksum/config 5e1f -> a93c
+            revision 11, 2026-10-13T09:25:48Z, image quillcart/billing-portal:3.8.0
+          evidence:
+            - { kind: deploy, title: billing-portal revision 12, url: "https://k8s.quillcart.example/billing/deployments/billing-portal/revisions/12" }
+      - tool: get_workload
+        respond:
+          text: |
+            Deployment billing/billing-portal, 4 of 4 replicas ready, 4 updated
+            image quillcart/billing-portal:3.8.0, container portal, memory limit 512Mi
+            strategy RollingUpdate, rollout complete at 14:03:30
+      - tool: list_pod_problems
+        respond:
+          text: "Namespace billing, no pods with problems for billing-portal"
+          noData: true
+      - tool: get_pod_logs
+        respond:
+          text: |
+            billing-portal-58f7c9d4b6-lw8xk, container portal, last lines
+            14:28:03 INFO GET /invoices 200 41ms
+            14:28:09 ERROR upstream ledger-api GET /v1/balances: context deadline exceeded after 500ms
+            14:28:09 INFO GET /balances 504 502ms
+            14:28:15 ERROR upstream ledger-api GET /v1/balances: context deadline exceeded after 500ms
+            Upstream timeout is 500ms (UPSTREAM_TIMEOUT_MS=500). The first such error in this pod is at 14:03:44.
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: query_range
+        respond:
+          text: |
+            Share of 504 responses of billing-portal, last 3 hours, 5 minute points
+            11:30 to 14:00: 0.0% to 0.2%
+            14:05 3%, 14:10 26%, 14:15 29%, 14:20 28%, 14:25 28%, 14:30 28%
+            min 0.0%, max 29%, last 28%
+          evidence:
+            - { kind: metric, title: billing-portal 504 ratio, url: "https://prometheus.quillcart.example/graph?g0.expr=billing_portal_504_ratio" }
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: |
+            e84b2a7 2026-10-15T13:48:20Z "Lower upstream timeouts for billing-portal" by tariq
+            19c07d3 2026-10-12T10:05:44Z "Bump billing-portal to 3.8.0" by lena
+          evidence:
+            - { kind: commit, title: e84b2a7, url: "https://github.example.com/quillcart/billing-portal/commit/e84b2a7" }
+      - tool: get_commit
+        match:
+          args:
+            ref: { regex: "^e84b2a7" }
+        respond:
+          text: |
+            e84b2a7 "Lower upstream timeouts for billing-portal"
+            deploy/values-prod.yaml (+2 -2)
+              -  upstreamTimeoutMs: 5000
+              +  upstreamTimeoutMs: 500
+              -  upstreamRetryTimeoutMs: 2000
+              +  upstreamRetryTimeoutMs: 200
+            The chart renders these values into the billing-portal ConfigMap. The image is not changed.
+          evidence:
+            - { kind: commit, title: e84b2a7, url: "https://github.example.com/quillcart/billing-portal/commit/e84b2a7" }
+      - tool: get_file
+        match:
+          args:
+            path: { regex: "\\.github/workflows/deploy\\.ya?ml$" }
+        respond:
+          text: |
+            quillcart/billing-portal, .github/workflows/deploy.yml, main
+            name: deploy
+            on:
+              push:
+                branches: [main]
+            jobs:
+              deploy:
+                runs-on: ubuntu-latest
+                steps:
+                  - uses: actions/checkout@v4
+                  - run: >
+                      helm upgrade --install billing-portal charts/billing-portal
+                      --namespace billing --values deploy/values-prod.yaml --atomic
+          evidence:
+            - { kind: resource, title: deploy.yml, url: "https://github.example.com/quillcart/billing-portal/blob/main/.github/workflows/deploy.yml" }
+      - tool: list_workflow_runs
+        respond:
+          text: 'run 4417 deploy billing-portal 2026-10-15T14:01:25Z success, commit e84b2a7'
+          evidence:
+            - { kind: deploy, title: deploy billing-portal 4417, url: "https://github.example.com/quillcart/billing-portal/actions/runs/4417" }
+default: no_data
+actions:
+  kubernetes-rollback:
+    spec: { snapshot: bench/actions/kubernetes.rollback.json }
+  helm-rollback:
+    spec: { snapshot: bench/actions/helm.rollback.json }
+  github-revert:
+    spec: { snapshot: bench/actions/github.revert.json }
+expected:
+  verdict: true_positive
+  rootCause:
+    summary: The deploy at 14:01 changed the Helm values of billing-portal and lowered the upstream timeout from 5000 ms to 500 ms, so calls to ledger-api time out and about 28% of requests fail with 504.
+    rubric:
+      - { id: timeout, text: "Names the 500 ms upstream timeout, with calls to ledger-api timing out, as why requests fail", weight: 2, required: true }
+      - { id: values, text: "Ties it to the Helm values change (upstreamTimeoutMs 5000 to 500 in values-prod.yaml, deployed at 14:01)", weight: 2, required: true }
+      - { id: fix, text: "Proposes going back to the previous Helm release revision first", weight: 1 }
+  evidence:
+    - { calledTool: github__get_commit }
+    - { citedURL: "https://github.example.com/quillcart/billing-portal/commit/e84b2a7" }
+  proposals:
+    - action: helm-rollback
+      params:
+        release: { equals: billing-portal }
+        namespace: { equals: billing }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }

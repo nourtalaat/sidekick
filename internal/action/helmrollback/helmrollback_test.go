@@ -21,6 +21,7 @@ import (
 	"helm.sh/helm/v4/pkg/storage/driver"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/actiontest"
 )
 
 const (
@@ -260,6 +261,16 @@ func TestSpec(t *testing.T) {
 	require.NoError(t, json.Unmarshal(spec.ParamsSchema, &schema))
 	require.Equal(t, []string{"release", "namespace"}, schema.Required)
 	require.Equal(t, 3, schema.Properties["revisionsBack"].Maximum)
+}
+
+func TestSpecSnapshot(t *testing.T) {
+	t.Parallel()
+
+	rollback := newAction(t, newFakeCluster(t), func(c *Config) {
+		c.Limits = Limits{Namespaces: []string{"billing", "shop"}, Releases: []string{"billing-portal", "ledger-*"}}
+	})
+
+	actiontest.CheckSpecSnapshot(t, Type, rollback)
 }
 
 func TestApprovalOnly(t *testing.T) {

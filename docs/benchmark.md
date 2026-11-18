@@ -102,7 +102,7 @@ neither Postgres nor Docker.
 sidekick bench validate --scenarios bench/scenarios/public --config sidekick.yaml
 ```
 
-When every scenario is valid it prints `scenarios checked: 14, problems: 0`.
+When every scenario is valid it prints `scenarios checked: 20, problems: 0`.
 It takes `--scenarios` and `--config`, as `bench run` does. The config is read
 for its strategies and model connectors, so the secrets of the connectors
 must be readable; nothing is sent to a provider. It exits with `0` when every
@@ -111,11 +111,11 @@ scenario is valid and `2` for a bad flag, config file or scenario file.
 ## The public scenarios
 
 `bench/scenarios/public` is the set that the project's own benchmark runs:
-14 scenarios about invented companies, services and data, so nothing in them
+20 scenarios about invented companies, services and data, so nothing in them
 comes from a real system. Together they cover every verdict, each of the four
 built-in strategies, triage skipping a duplicate, a source that is down, the
-first MCP sources (SigNoz, Datadog, Sentry and Linear), and a proposal of an
-action. Each has a
+first MCP sources (SigNoz, Datadog, Sentry and Linear), a proposal of an
+action, and the choice between rollback and flag actions. Each has a
 rubric for the judge and, except the triage one, checks of the run made in
 code.
 
@@ -135,6 +135,12 @@ code.
 | `flapping-disk-usage-threshold` | `flapping` | `generic-alert` | `prometheus`, `k8s` |
 | `triage-duplicate-second-monitor` | `duplicate` | `generic-alert` | `linear` (MCP), `prometheus` |
 | `inconclusive-metrics-gap` | `inconclusive` | `generic-alert` | `prometheus`, `k8s`, `github` |
+| `rollback-kubernetes-bad-image` | `true_positive` | `error-rate-alert` | `k8s`, `prometheus`, `github`, and the mock actions `kubernetes-rollback`, `helm-rollback`, `github-revert` |
+| `rollback-helm-bad-values` | `true_positive` | `error-rate-alert` | `k8s`, `prometheus`, `github`, and the mock actions `kubernetes-rollback`, `helm-rollback`, `github-revert` |
+| `rollback-argocd-bad-sync` | `true_positive` | `error-rate-alert` | `argocd`, `k8s`, `prometheus`, `github`, and the mock actions `argocd-rollback`, `kubernetes-rollback`, `github-revert` |
+| `rollback-ecs-bad-environment-value` | `true_positive` | `error-rate-alert` | `aws`, `github`, and the mock actions `ecs-rollback`, `kubernetes-rollback`, `github-revert` |
+| `flag-launchdarkly-turn-off` | `true_positive` | `error-rate-alert` | `launchdarkly`, `k8s`, `prometheus`, `github`, and the mock actions `launchdarkly-flag`, `kubernetes-rollback`, `github-revert` |
+| `no-action-latency-database-lock` | `true_positive` | `latency-alert` | `postgres`, `prometheus`, `k8s`, `github`, `launchdarkly`, and six mock actions |
 
 - Every scenario runs with the strategy it names, but when the config sets a
   `model.roles.triage` role, triage runs first and may choose another
@@ -153,6 +159,18 @@ code.
   a pull request that changes that rule, so the scenario expects one
   `monitor-pr` proposal for that repository, branch and file. Proposing
   nothing, or a change somewhere else, scores wrong.
+- The six scenarios tagged `action-choice` (`rollback-*`, `flag-launchdarkly-turn-off`
+  and `no-action-latency-database-lock`) run in approved mode and list more
+  than one mock action on the route, so the model has to choose. Their
+  snapshots in `bench/actions` come from the real `kubernetes.rollback`,
+  `helm.rollback`, `argocd.rollback`, `aws.ecs_rollback`, `launchdarkly.flag`
+  and `github.revert` actions. Five scenarios expect one proposal with its
+  parameters checked: a Kubernetes, Helm, Argo CD or ECS rollback, or turning
+  a flag off in production. Any extra proposal, such as a revert pull request
+  next to the rollback, scores wrong. The sixth expects `noProposal`: a
+  database lock causes the latency and nothing changed, so rolling back
+  anything is wrong. No fixture names an action or its parameters where a
+  real tool would not show them, and a unit test checks this.
 - Each MCP source's scenario uses the tool snapshot that
   [its docs page](sources/signoz.md) describes: `bench/tools/signoz.json`,
   `datadog.json`, `sentry.json` and `linear.json`.

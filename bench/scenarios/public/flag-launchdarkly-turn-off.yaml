@@ -1,0 +1,164 @@
+# An error rate alert after a feature flag was turned on for everyone in
+# production. There was no deploy. The right answer is to turn the flag off in
+# production; a Kubernetes rollback and a revert pull request are on the route
+# as other choices. Error rate strategy, approved mode, true positive.
+id: flag-launchdarkly-turn-off
+title: Express checkout errors after a feature flag went from 5% of users to everyone
+tags: [error-rate, launchdarkly, feature-flag, actions, action-choice, true-positive]
+strategy: error-rate-alert
+now: 2026-10-20T15:30:00Z
+route:
+  mode: approved
+  actions: [github-revert, launchdarkly-flag, kubernetes-rollback]
+event:
+  adapter: alertmanager
+  payload:
+    version: "4"
+    status: firing
+    receiver: sidekick
+    groupKey: '{}:{alertname="ExpressPayErrorRateHigh"}'
+    alerts:
+      - status: firing
+        labels: { alertname: ExpressPayErrorRateHigh, service: web-shop, namespace: shop, route: /checkout/express, env: prod, severity: critical }
+        annotations:
+          summary: web-shop /checkout/express 5xx ratio above 5% for 5m
+          description: 22% of requests to /checkout/express failed with 5xx in the last 5m. The threshold is 5%.
+        startsAt: 2026-10-20T15:12:00Z
+        fingerprint: 7d1c3f90a2b84e56
+sources:
+  launchdarkly:
+    tools: { snapshot: bench/tools/launchdarkly.json }
+    fixtures:
+      - tool: list_flag_changes
+        match:
+          args:
+            environment: { equals: production }
+        respond:
+          text: |
+            Flag changes in project quillcart-web, environment production, 2026-10-13T15:30:00Z to now, newest first
+            2026-10-20T15:04:19Z checkout-express-pay, updated targeting by devon.r
+              summary: the default rule now serves true to everyone (was a 5% rollout)
+              comment: "Launch to 100%"
+            2026-10-16T10:22:51Z checkout-express-pay, updated targeting by devon.r
+              summary: added a 5% rollout of true
+              comment: "Start the rollout"
+            2026-10-15T09:10:03Z promo-banner-v2, turned on by lena
+              summary: turned on in production
+          evidence:
+            - { kind: resource, title: checkout-express-pay changes, url: "https://launchdarkly.quillcart.example/quillcart-web/production/features/checkout-express-pay/history" }
+      - tool: get_flag
+        match:
+          args:
+            flag: { equals: checkout-express-pay }
+        respond:
+          text: |
+            Flag checkout-express-pay, project quillcart-web, environment production
+            on, 0 targeting rules, 0 individual targets
+            when on and no rule matches: serves true
+            when off: serves false
+            last changed 2026-10-20T15:04:19Z
+          evidence:
+            - { kind: resource, title: checkout-express-pay, url: "https://launchdarkly.quillcart.example/quillcart-web/production/features/checkout-express-pay" }
+  k8s:
+    tools: { snapshot: bench/tools/kubernetes.json }
+    fixtures:
+      - tool: get_rollout_history
+        respond:
+          text: |
+            Deployment shop/web-shop, newest first
+            revision 58, 2026-10-19T14:20:33Z, image quillcart/web-shop:2026.10.19-1
+              changed: image quillcart/web-shop:2026.10.16-2 -> quillcart/web-shop:2026.10.19-1
+            revision 57, 2026-10-16T11:48:09Z, image quillcart/web-shop:2026.10.16-2
+          evidence:
+            - { kind: deploy, title: web-shop revision 58, url: "https://k8s.quillcart.example/shop/deployments/web-shop/revisions/58" }
+      - tool: get_workload
+        respond:
+          text: |
+            Deployment shop/web-shop, 8 of 8 replicas ready, 8 updated
+            image quillcart/web-shop:2026.10.19-1, container web-shop, memory limit 1Gi
+            strategy RollingUpdate, rollout complete 2026-10-19T14:24:10Z
+      - tool: list_pod_problems
+        respond:
+          text: "Namespace shop, no pods with problems for web-shop"
+          noData: true
+      - tool: get_pod_logs
+        respond:
+          text: |
+            web-shop-5b8d7f6c94-qk4zn, container web-shop, last lines
+            15:28:40 INFO GET /checkout 200 52ms
+            15:28:44 ERROR express-pay: provider call failed: 503 from pay-express.quillcart.example (circuit open)
+            15:28:44 INFO POST /checkout/express 502 31ms
+            15:28:47 INFO POST /checkout/standard 200 214ms
+            The first such error in this pod is at 15:05:12. Standard checkout is not affected.
+  prometheus:
+    tools: { snapshot: bench/tools/prometheus.json }
+    fixtures:
+      - tool: query_range
+        respond:
+          text: |
+            Share of 5xx responses of web-shop on route /checkout/express, last 3 hours, 5 minute points
+            12:30 to 15:00: 0.1% to 0.4%
+            15:05 2%, 15:10 19%, 15:15 23%, 15:20 22%, 15:25 22%, 15:30 22%
+            min 0.1%, max 23%, last 22%
+          evidence:
+            - { kind: metric, title: express checkout 5xx ratio, url: "https://prometheus.quillcart.example/graph?g0.expr=web_shop_express_5xx_ratio" }
+      - tool: query
+        respond:
+          text: |
+            Instant query at 2026-10-20T15:30:00Z
+            {service="web-shop", route="/checkout/express"} 0.22
+            The value is the share of 5xx responses on that route over the last 5 minutes.
+          evidence:
+            - { kind: metric, title: express checkout 5xx ratio, url: "https://prometheus.quillcart.example/graph?g0.expr=web_shop_express_5xx_ratio" }
+      - tool: list_alerts
+        respond:
+          text: |
+            1 alert firing
+            ExpressPayErrorRateHigh, firing since 2026-10-20T15:12:00Z, labels service=web-shop namespace=shop route=/checkout/express env=prod severity=critical
+              summary: web-shop /checkout/express 5xx ratio above 5% for 5m
+            No other alert is firing or pending for web-shop or its dependencies.
+      - tool: get_rules
+        respond:
+          text: |
+            group web-shop, alert ExpressPayErrorRateHigh, for 5m
+            expr: sum(rate(http_requests_total{service="web-shop",route="/checkout/express",code=~"5.."}[5m])) / sum(rate(http_requests_total{service="web-shop",route="/checkout/express"}[5m])) > 0.05
+            health ok, last evaluation 15:29:50
+  github:
+    tools: { snapshot: bench/tools/github.json }
+    fixtures:
+      - tool: list_commits
+        respond:
+          text: "No commits since the requested time."
+          noData: true
+      - tool: list_workflow_runs
+        respond:
+          text: 'run 5208 deploy web-shop 2026-10-19T14:19:40Z success, commit 91d4e0c. No deploy since.'
+          evidence:
+            - { kind: deploy, title: deploy web-shop 5208, url: "https://github.example.com/quillcart/web-shop/actions/runs/5208" }
+default: no_data
+actions:
+  github-revert:
+    spec: { snapshot: bench/actions/github.revert.json }
+  launchdarkly-flag:
+    spec: { snapshot: bench/actions/launchdarkly.flag.json }
+  kubernetes-rollback:
+    spec: { snapshot: bench/actions/kubernetes.rollback.json }
+expected:
+  verdict: true_positive
+  rootCause:
+    summary: At 15:04 the flag checkout-express-pay was changed in production from a 5% rollout to everyone, and the express-pay provider answers 503 under that load, so 22% of requests to /checkout/express fail.
+    rubric:
+      - { id: provider, text: "Names the failing express-pay provider calls (503, circuit open) as why requests fail", weight: 2, required: true }
+      - { id: flag, text: "Ties it to the flag checkout-express-pay turned on for everyone in production at 15:04", weight: 2, required: true }
+      - { id: fix, text: "Proposes turning the flag off in production first", weight: 1 }
+  evidence:
+    - { calledTool: launchdarkly__list_flag_changes }
+    - { citedURL: "https://launchdarkly.quillcart.example/quillcart-web/production/features/checkout-express-pay/history" }
+  proposals:
+    - action: launchdarkly-flag
+      params:
+        project: { equals: quillcart-web }
+        environment: { equals: production }
+        flag: { equals: checkout-express-pay }
+        change: { equals: turn_off }
+limits: { maxToolCalls: 30, maxCostUSD: 0.50 }

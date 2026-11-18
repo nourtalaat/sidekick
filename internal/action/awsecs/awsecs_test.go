@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nourtalaat/sidekick/internal/action"
+	"github.com/nourtalaat/sidekick/internal/action/actiontest"
 )
 
 const secondAccount = "444455556666"
@@ -101,6 +102,16 @@ func TestSpec(t *testing.T) {
 	require.JSONEq(t, `{"type":"integer","minimum":1,"maximum":3,"default":1,
 		"description":"How many ACTIVE task definition revisions of the service's family to go back from the one it runs. Default 1."}`,
 		propertyOf(t, spec.ParamsSchema, "revisionsBack"))
+}
+
+func TestSpecSnapshot(t *testing.T) {
+	t.Parallel()
+
+	rollback, _ := newTestAction(t, func(c *Config) {
+		c.Limits = Limits{Clusters: []string{"quillcart-prod"}, Services: []string{"order-intake", "notify-*"}}
+	})
+
+	actiontest.CheckSpecSnapshot(t, Type, rollback)
 }
 
 // propertyOf returns one property of a JSON Schema.
