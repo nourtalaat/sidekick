@@ -53,6 +53,13 @@ sources:
           text: |
             Deployment dispatch/webhook-dispatcher, 6 of 6 replicas ready
             image quillcart/webhook-dispatcher:2026.09.10-2, no change since 2026-09-10
+            Pods (6, not ready first):
+              webhook-dispatcher-6f8c9d7b54-2d6fk Running, 1/1 ready, 0 restarts, node worker-03, started 2026-09-10T08:31:12Z, revision 23 (ReplicaSet webhook-dispatcher-6f8c9d7b54)
+              webhook-dispatcher-6f8c9d7b54-7hq3m Running, 1/1 ready, 0 restarts, node worker-04, started 2026-09-10T08:31:40Z, revision 23 (ReplicaSet webhook-dispatcher-6f8c9d7b54)
+              webhook-dispatcher-6f8c9d7b54-9vb8n Running, 1/1 ready, 0 restarts, node worker-05, started 2026-09-10T08:32:05Z, revision 23 (ReplicaSet webhook-dispatcher-6f8c9d7b54)
+              webhook-dispatcher-6f8c9d7b54-c4t5x Running, 1/1 ready, 0 restarts, node worker-03, started 2026-09-10T08:32:31Z, revision 23 (ReplicaSet webhook-dispatcher-6f8c9d7b54)
+              webhook-dispatcher-6f8c9d7b54-j6w2z Running, 1/1 ready, 0 restarts, node worker-04, started 2026-09-10T08:33:02Z, revision 23 (ReplicaSet webhook-dispatcher-6f8c9d7b54)
+              webhook-dispatcher-6f8c9d7b54-r8s9g Running, 1/1 ready, 0 restarts, node worker-05, started 2026-09-10T08:33:30Z, revision 23 (ReplicaSet webhook-dispatcher-6f8c9d7b54)
   github:
     tools: { snapshot: bench/tools/github.json }
     fixtures:
