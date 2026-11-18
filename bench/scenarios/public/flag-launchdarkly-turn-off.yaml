@@ -77,6 +77,15 @@ sources:
             Deployment shop/web-shop, 8 of 8 replicas ready, 8 updated
             image quillcart/web-shop:2026.10.19-1, container web-shop, memory limit 1Gi
             strategy RollingUpdate, rollout complete 2026-10-19T14:24:10Z
+            Pods (8, not ready first):
+              web-shop-5b8d7f6c94-qk4zn Running, 1/1 ready, 0 restarts, node worker-21, started 2026-10-19T14:20:50Z, revision 58 (ReplicaSet web-shop-5b8d7f6c94)
+              web-shop-5b8d7f6c94-6tr8w Running, 1/1 ready, 0 restarts, node worker-22, started 2026-10-19T14:21:12Z, revision 58 (ReplicaSet web-shop-5b8d7f6c94)
+              web-shop-5b8d7f6c94-b2m5x Running, 1/1 ready, 0 restarts, node worker-23, started 2026-10-19T14:21:40Z, revision 58 (ReplicaSet web-shop-5b8d7f6c94)
+              web-shop-5b8d7f6c94-dn7vh Running, 1/1 ready, 0 restarts, node worker-21, started 2026-10-19T14:22:05Z, revision 58 (ReplicaSet web-shop-5b8d7f6c94)
+              web-shop-5b8d7f6c94-l9c3f Running, 1/1 ready, 0 restarts, node worker-24, started 2026-10-19T14:22:31Z, revision 58 (ReplicaSet web-shop-5b8d7f6c94)
+              web-shop-5b8d7f6c94-x4g6s Running, 1/1 ready, 0 restarts, node worker-22, started 2026-10-19T14:23:02Z, revision 58 (ReplicaSet web-shop-5b8d7f6c94)
+              web-shop-5b8d7f6c94-z8j2p Running, 1/1 ready, 0 restarts, node worker-23, started 2026-10-19T14:23:30Z, revision 58 (ReplicaSet web-shop-5b8d7f6c94)
+              web-shop-5b8d7f6c94-h5k9y Running, 1/1 ready, 0 restarts, node worker-24, started 2026-10-19T14:23:58Z, revision 58 (ReplicaSet web-shop-5b8d7f6c94)
       - tool: list_pod_problems
         respond:
           text: "Namespace shop, no pods with problems for web-shop"

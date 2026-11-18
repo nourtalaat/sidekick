@@ -49,6 +49,11 @@ sources:
             Deployment media/media-resizer, 0 of 4 replicas ready
             image quillcart/media-resizer:2026.09.19-1, container resizer, memory request 128Mi, memory limit 256Mi
             strategy RollingUpdate, no horizontal pod autoscaler
+            Pods (4, not ready first):
+              media-resizer-6d9c7f5b8-2xk4p Running, 0/1 ready, 14 restarts, node worker-31, started 2026-09-19T07:58:41Z, revision 9 (ReplicaSet media-resizer-6d9c7f5b8)
+              media-resizer-6d9c7f5b8-8vq7t Running, 0/1 ready, 13 restarts, node worker-32, started 2026-09-19T07:58:41Z, revision 9 (ReplicaSet media-resizer-6d9c7f5b8)
+              media-resizer-6d9c7f5b8-m5n2c Running, 0/1 ready, 14 restarts, node worker-31, started 2026-09-19T07:58:42Z, revision 9 (ReplicaSet media-resizer-6d9c7f5b8)
+              media-resizer-6d9c7f5b8-wz9hd Running, 0/1 ready, 12 restarts, node worker-33, started 2026-09-19T07:58:43Z, revision 9 (ReplicaSet media-resizer-6d9c7f5b8)
       - tool: get_rollout_history
         respond:
           text: |

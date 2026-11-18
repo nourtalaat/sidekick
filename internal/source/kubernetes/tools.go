@@ -71,7 +71,8 @@ func (s *Source) toolset() ([]source.Tool, map[string]handler, error) {
 		{
 			name: toolGetWorkload,
 			description: "Get the status of a Deployment, StatefulSet or DaemonSet: replicas, conditions, " +
-				"container images, rollout strategy and any horizontal pod autoscaler that scales it.",
+				"container images, rollout strategy, any horizontal pod autoscaler that scales it, and the names of its pods " +
+				"with their phase, readiness, restarts, node and revision.",
 			schema: objectSchema(map[string]*jsonschema.Schema{
 				"namespace": s.namespaceSchema("The namespace of the workload."),
 				"kind":      enumSchema("The kind of workload.", kindDeployment, kindStatefulSet, kindDaemonSet),
