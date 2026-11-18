@@ -260,7 +260,11 @@ func TestSystemPromptVersion(t *testing.T) {
 				"system.tmpl changed: change prompt.Version, then set systemTemplateSum to the new sum")
 			require.NotContains(t, systemPrompt, "<no value>")
 			require.NotContains(t, systemPromptWithActions, "<no value>")
-			require.True(t, strings.HasPrefix(systemPromptWithActions, systemPrompt[:strings.Index(systemPrompt, "# Finishing")]),
+
+			before, after, found := strings.Cut(systemPrompt, "# Finishing")
+			require.True(t, found)
+			require.Equal(t, before+"# Proposing a fix", systemPromptWithActions[:len(before)+len("# Proposing a fix")])
+			require.True(t, strings.HasSuffix(systemPromptWithActions, "# Finishing"+after),
 				"the rules for proposing a fix only add a section before Finishing")
 		})
 	}
