@@ -4434,26 +4434,55 @@ The model proposes a `cluster`, a `service` and, optionally, `revisionsBack`
 anything is sent, Sidekick checks them against the config.
 
 **Which task definition.** The running one is the task definition of the
-service's primary deployment. The one it goes back to is the highest ACTIVE
-revision of the same task definition family that is lower than the running
-one, and with `revisionsBack` above 1, the one that many ACTIVE revisions
-down. Revisions that are INACTIVE or were deleted are skipped. ECS numbers
-revisions in the order they were registered, so this is the order of
-registration, not the order of deployment: a revision that a build registered
-and nobody deployed can be the one it goes back to. The proposal shows both
-task definitions with their container images, when they were registered, and
-who registered them (ECS does not record who updated the service, so the
-screens show "registered by" in that place). Read the image before you approve.
+service's primary deployment. The one it goes back to is the ACTIVE revision
+of the same task definition family, lower than the running one, that the
+service deployed successfully most recently, and with `revisionsBack` above 1,
+the one that many such revisions down. Sidekick reads the service's deployment
+history from ECS to tell. Only deployments that finished with the status
+`SUCCESSFUL` count: a deployment that a newer one replaced before it finished
+(ECS calls it `STOPPED`), one that is still running and one that ECS rolled
+back do not. A revision deployed again and again counts once. Revisions that
+are INACTIVE are skipped, since ECS cannot put a service on an INACTIVE task
+definition, and so are ACTIVE revisions that a build registered and nobody
+deployed.
+
+ECS keeps only the most recent 90 days of a service's deployments. A revision
+that ran only before that is not in the history, so it is not chosen, even if
+it is still ACTIVE. Some teams deregister the previous revision soon after
+each deploy; in one account we checked, that left the running revision as the
+only ACTIVE one that appeared in the history. There the action refuses, and
+the message names the earlier revisions the service did deploy (they are
+INACTIVE) and the ACTIVE ones that the history does not show. To go back to
+such a revision, register its task definition again or roll back in the ECS
+console.
+
+When ECS has no deployment history for the service, or the role may not read
+it (the policy below was set up before the history was used), Sidekick falls
+back to the order of registration: the highest ACTIVE revision below the
+running one, or `revisionsBack` such revisions down. ECS numbers revisions in
+the order they were registered, not deployed, so that revision may never have
+run on the service. The proposal then says so in the notes of the task
+definition it goes back to. A call to ECS that fails for now (a rate limit or
+a server error) is not a reason to fall back: the proposal fails and Sidekick
+tries again.
+
+The proposal shows both task definitions with their container images. For a
+task definition taken from the deployment history, the time is when that
+deployment finished, and the notes name the deployment. For one chosen by the
+order of registration, the time is when it was registered and the screens show
+"registered by" where they would show who deployed it, because ECS does not
+record who updated the service. Read the image before you approve.
 
 **Refused when the model proposes**, with a message it can act on: a cluster,
 service, account, Region or number of revisions outside the limits; a service
 that does not exist, or is not ACTIVE; a service on the CodeDeploy or an
 external deployment controller (only the ECS controller is supported); a
 service with no primary deployment; no ACTIVE revision, or fewer than asked,
-below the running one; and a target that is not ACTIVE. The search for earlier
+below the running one; fewer ACTIVE revisions that the service deployed than
+asked, as above; and a target that is not ACTIVE. The search for earlier
 revisions reads the newest 1000 task definitions whose family name starts with
-the family's name, and refuses with a message to that effect when it does not
-find enough.
+the family's name, and the newest 300 successful deployments of the service,
+and refuses with a message to that effect when it does not find enough.
 
 **When it runs.** Right before it writes, Sidekick reads the service again. If
 the service already runs the task definition it was to go back to, which
@@ -4475,11 +4504,15 @@ fails when the old task definition is not ACTIVE any more. Lowering
 
 **The role.** Create a role for the action in each account, separate from the
 read-only role of the AWS source, and attach this policy and nothing else. It
-limits `ecs:DescribeServices` and `ecs:UpdateService` to the allowed services,
-one line per cluster and service (wildcards are fine, for example
-`service/shop/cart-*`). `ecs:DescribeTaskDefinition` and
-`ecs:ListTaskDefinitions` cannot be limited to resources. Use `arn:aws-us-gov:`
-or `arn:aws-cn:` in GovCloud or China.
+limits `ecs:DescribeServices`, `ecs:ListServiceDeployments` and
+`ecs:UpdateService` to the allowed services, one line per cluster and service
+(wildcards are fine, for example `service/shop/cart-*`), and
+`ecs:DescribeServiceRevisions` to the same services and their service
+revisions. `ecs:DescribeTaskDefinition` and `ecs:ListTaskDefinitions` cannot be
+limited to resources. Use `arn:aws-us-gov:` or `arn:aws-cn:` in GovCloud or
+China. Without `ecs:ListServiceDeployments` and `ecs:DescribeServiceRevisions`
+the action still works, but it falls back to the order of registration, as
+described above.
 
 ```json
 {
@@ -4488,10 +4521,21 @@ or `arn:aws-cn:` in GovCloud or China.
     {
       "Sid": "ChangeAllowedServices",
       "Effect": "Allow",
-      "Action": ["ecs:DescribeServices", "ecs:UpdateService"],
+      "Action": ["ecs:DescribeServices", "ecs:ListServiceDeployments", "ecs:UpdateService"],
       "Resource": [
         "arn:aws:ecs:us-east-1:111122223333:service/shop/checkout",
         "arn:aws:ecs:us-east-1:111122223333:service/shop/cart-*"
+      ]
+    },
+    {
+      "Sid": "ReadDeploymentHistory",
+      "Effect": "Allow",
+      "Action": "ecs:DescribeServiceRevisions",
+      "Resource": [
+        "arn:aws:ecs:us-east-1:111122223333:service/shop/checkout",
+        "arn:aws:ecs:us-east-1:111122223333:service/shop/cart-*",
+        "arn:aws:ecs:us-east-1:111122223333:service-revision/shop/checkout/*",
+        "arn:aws:ecs:us-east-1:111122223333:service-revision/shop/cart-*/*"
       ]
     },
     {
@@ -4547,7 +4591,9 @@ each Region in `regions`.
 
 The calls were checked against the source of the AWS SDK for Go v2 at the tag
 `service/ecs/v1.102.0`, and the permissions against the model of the ECS API
-in the same tag and AWS's published list of ECS permissions.
+in the same tag and AWS's published list of ECS permissions. The deployment
+history calls were also tried against a real account, with read-only
+permissions.
 
 ##### `aws.lambda_rollback`
 
