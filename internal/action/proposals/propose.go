@@ -171,7 +171,7 @@ func (s *Service) Spec(route string, mode action.Mode) (model.ToolSpec, bool) {
 		return model.ToolSpec{}, false
 	}
 
-	return model.ToolSpec{Name: ProposeActionTool, Description: desc.String(), InputSchema: schema}, true
+	return model.ToolSpec{Name: action.ProposeActionTool, Description: desc.String(), InputSchema: schema}, true
 }
 
 // Propose checks a propose_action call against the route's rules and

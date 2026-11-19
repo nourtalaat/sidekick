@@ -140,6 +140,14 @@ The model sees the built-in tools and the tools of the route's sources:
   later, or someone asks a follow-up question, it is in `approved` mode and
   proposals wait for a person (see
   [read + write mode](configuration.md#read--write-mode-and-trusted-senders)).
+  When the tool is offered, the system prompt also tells the model to
+  propose a fix it found when one of the route's actions makes exactly that
+  change, instead of only describing the fix in the report. The model first
+  reads what the action needs: for a change to files, the current content of
+  each file, read with a source such as [GitHub](sources/github.md). It
+  proposes nothing when no action fits, when a rollback has no change to
+  blame, when a silence would hide a real problem, or when the verdict is
+  inconclusive. Without `propose_action` the prompt has no such text.
 - **Source tools** are named `<source>__<tool>`, for example
   `signoz__search_logs`. A route's `sources` list limits them to those
   sources; without one, every source's tools are offered. See

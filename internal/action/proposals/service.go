@@ -18,10 +18,6 @@ import (
 	"github.com/nourtalaat/sidekick/internal/redact"
 )
 
-// ProposeActionTool is the name of the built-in tool the model proposes
-// actions with.
-const ProposeActionTool = "propose_action"
-
 // The actions of the audit entries a proposal writes. Each entry has the
 // proposal as its target and the investigation's ID.
 const (

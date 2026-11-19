@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/nourtalaat/sidekick/internal/action"
 	"github.com/nourtalaat/sidekick/internal/event"
 	"github.com/nourtalaat/sidekick/internal/model"
 	"github.com/nourtalaat/sidekick/internal/report"
@@ -25,7 +26,7 @@ import (
 var update = flag.Bool("update", false, "rewrite the golden files in fixture/")
 
 // systemTemplateSum is the SHA-256 of system.tmpl at the current Version.
-const systemTemplateSum = "5827107e01f19f45838152c6734ba467308bd641542c4cf14da81a9317bde8d8"
+const systemTemplateSum = "0ffd0d0a74bf0283bbdc3a5fc85ad5ee1b3d4466e5c87d9935ee33122aff2fd0"
 
 func TestBuildGolden(t *testing.T) {
 	t.Parallel()
@@ -44,6 +45,31 @@ func TestBuildGolden(t *testing.T) {
 			in: Input{
 				Strategy: builtIn,
 				Tools:    testTools(),
+				Group: Group{
+					Count: 1,
+					First: event.Event{
+						Intake:     "alertmanager",
+						Kind:       event.KindAlert,
+						AlertName:  "CheckoutHighErrorRate",
+						Title:      "Checkout error rate above 5%",
+						Text:       "Error rate for checkout-api is 7.2% over the last 5 minutes.",
+						Service:    "checkout-api",
+						Severity:   event.SeverityCritical,
+						Sender:     event.Sender{Kind: event.SenderSystem, Name: "Alertmanager"},
+						Labels:     map[string]string{"team": "payments", "env": "prod", "alertname": "CheckoutHighErrorRate"},
+						Links:      []event.Link{{Title: "Runbook", URL: "https://runbooks.example.com/checkout"}},
+						StartsAt:   startsAt,
+						ReceivedAt: receivedAt,
+					},
+				},
+				Route: RouteContext{Name: "default"},
+			},
+		},
+		{
+			name: "approved-mode-with-actions",
+			in: Input{
+				Strategy: builtIn,
+				Tools:    append(testTools(), proposeTool()),
 				Group: Group{
 					Count: 1,
 					First: event.Event{
@@ -179,6 +205,43 @@ func TestBuildParts(t *testing.T) {
 	}
 }
 
+func TestBuildProposeRule(t *testing.T) {
+	t.Parallel()
+
+	st := loadStrategy(t, "", strategy.GenericAlert)
+
+	tests := []struct {
+		name     string
+		tools    []model.ToolSpec
+		wantRule bool
+	}{
+		{name: "no propose_action tool leaves the rule out", tools: testTools()},
+		{name: "no tools leaves the rule out"},
+		{name: "a propose_action tool adds the rule", tools: append(testTools(), proposeTool()), wantRule: true},
+		{name: "a source tool that ends in propose_action does not add the rule", tools: []model.ToolSpec{{Name: "jira__propose_action"}}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := Build(Input{Strategy: st, Tools: tt.tools, Route: RouteContext{Name: "default"}})
+
+			require.Len(t, req.System, 2)
+			require.Equal(t, tt.wantRule, strings.Contains(req.System[0].Text, "# Proposing a fix"))
+
+			if tt.wantRule {
+				require.Equal(t, systemPromptWithActions, req.System[0].Text)
+				require.Contains(t, req.System[0].Text, "You have the propose_action tool.")
+				require.Contains(t, req.System[0].Text, "propose it before you call submit_verdict")
+			} else {
+				require.Equal(t, systemPrompt, req.System[0].Text)
+				require.NotContains(t, req.System[0].Text, action.ProposeActionTool)
+			}
+		})
+	}
+}
+
 func TestSystemPromptVersion(t *testing.T) {
 	t.Parallel()
 
@@ -196,6 +259,13 @@ func TestSystemPromptVersion(t *testing.T) {
 			require.Equal(t, systemTemplateSum, hex.EncodeToString(sum[:]),
 				"system.tmpl changed: change prompt.Version, then set systemTemplateSum to the new sum")
 			require.NotContains(t, systemPrompt, "<no value>")
+			require.NotContains(t, systemPromptWithActions, "<no value>")
+
+			before, after, found := strings.Cut(systemPrompt, "# Finishing")
+			require.True(t, found)
+			require.Equal(t, before+"# Proposing a fix", systemPromptWithActions[:len(before)+len("# Proposing a fix")])
+			require.True(t, strings.HasSuffix(systemPromptWithActions, "# Finishing"+after),
+				"the rules for proposing a fix only add a section before Finishing")
 		})
 	}
 }
@@ -209,6 +279,11 @@ func testTools() []model.ToolSpec {
 		{Name: "record_finding", Description: "Record one finding.", InputSchema: json.RawMessage(`{"type":"object"}`)},
 		{Name: "signoz__query_metrics", Description: "Query metrics.", InputSchema: json.RawMessage(`{"type":"object"}`)},
 	}
+}
+
+// proposeTool returns the propose_action tool as the investigator offers it.
+func proposeTool() model.ToolSpec {
+	return model.ToolSpec{Name: action.ProposeActionTool, Description: "Propose one change.", InputSchema: json.RawMessage(`{"type":"object"}`)}
 }
 
 // loadStrategy loads the strategy name from the built-in strategies and

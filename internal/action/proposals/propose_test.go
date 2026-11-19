@@ -76,7 +76,7 @@ func TestSpec(t *testing.T) {
 				return
 			}
 
-			require.Equal(t, ProposeActionTool, spec.Name)
+			require.Equal(t, action.ProposeActionTool, spec.Name)
 
 			var schema struct {
 				Required   []string `json:"required"`

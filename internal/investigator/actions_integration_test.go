@@ -57,10 +57,15 @@ func (h *harness) setMode(t *testing.T, mode action.Mode) {
 	require.NoError(t, err)
 }
 
+// proposeRuleHeading starts the part of the system prompt that tells the
+// model to propose a fix it found.
+const proposeRuleHeading = "# Proposing a fix"
+
 func TestProposeActionIsOfferedOnlyOutsideReadOnlyMode(t *testing.T) {
 	t.Parallel()
 
 	approvedRoute := action.RoutePolicy{Mode: action.Approved, Actions: []string{"monitor-note"}}
+	readWriteRoute := action.RoutePolicy{Mode: action.ReadWrite, Actions: []string{"monitor-note"}}
 
 	tests := []struct {
 		name        string
@@ -70,6 +75,7 @@ func TestProposeActionIsOfferedOnlyOutsideReadOnlyMode(t *testing.T) {
 		wantOffered bool
 	}{
 		{name: "an approved investigation on a route with actions", mode: action.Approved, route: approvedRoute, wantOffered: true},
+		{name: "a read-write investigation on a route with actions", mode: action.ReadWrite, route: readWriteRoute, wantOffered: true},
 		{name: "a read-only investigation", mode: action.ReadOnly, route: approvedRoute},
 		{name: "a route with no action", mode: action.Approved, route: action.RoutePolicy{Mode: action.Approved}},
 		{name: "a route that is read-only now", mode: action.Approved, route: action.RoutePolicy{Mode: action.ReadOnly, Actions: []string{"monitor-note"}}},
@@ -89,15 +95,30 @@ func TestProposeActionIsOfferedOnlyOutsideReadOnlyMode(t *testing.T) {
 
 			require.NoError(t, h.run(t))
 
-			tools := promptTools(t, h.steps(t)[0])
+			prompt := h.steps(t)[0]
+			tools := promptTools(t, prompt)
 
 			if tt.wantOffered {
-				require.Contains(t, tools, proposals.ProposeActionTool)
+				require.Contains(t, tools, action.ProposeActionTool)
+				require.Contains(t, promptSystem(t, prompt), proposeRuleHeading)
 			} else {
-				require.NotContains(t, tools, proposals.ProposeActionTool)
+				require.NotContains(t, tools, action.ProposeActionTool)
+				require.NotContains(t, promptSystem(t, prompt), proposeRuleHeading)
 			}
 		})
 	}
+}
+
+// promptSystem returns the first system text of a prompt step.
+func promptSystem(t *testing.T, prompt db.Step) string {
+	t.Helper()
+
+	var p storedPrompt
+
+	require.NoError(t, json.Unmarshal(prompt.Parts, &p))
+	require.NotEmpty(t, p.System)
+
+	return p.System[0].Text
 }
 
 func TestProposeActionTool(t *testing.T) {
@@ -136,7 +157,7 @@ func TestProposeActionTool(t *testing.T) {
 			t.Parallel()
 
 			h := setup(t, options{turns: []modeltest.Turn{
-				turn(modeltest.Call("p1", proposals.ProposeActionTool, tt.input)),
+				turn(modeltest.Call("p1", action.ProposeActionTool, tt.input)),
 				turn(modeltest.Call("v1", report.SubmitVerdictTool, inconclusiveReport)),
 			}})
 			h.setMode(t, action.Approved)
@@ -184,7 +205,7 @@ func TestFollowUpMovesAReadWriteInvestigationToApprovedMode(t *testing.T) {
 	t.Parallel()
 
 	h := setup(t, options{turns: append(firstRun(),
-		turn(modeltest.Call("p1", proposals.ProposeActionTool, `{"action": "monitor-note", "params": {"title": "Slow checkout"}, "reason": "p99 doubled after the deploy."}`)),
+		turn(modeltest.Call("p1", action.ProposeActionTool, `{"action": "monitor-note", "params": {"title": "Slow checkout"}, "reason": "p99 doubled after the deploy."}`)),
 		turn(modeltest.Call("a1", report.AnswerFollowUpTool, answerC1)),
 	)})
 	h.setMode(t, action.ReadWrite)

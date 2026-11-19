@@ -162,7 +162,7 @@ func (r *run) builtin(ctx context.Context, call model.ToolCall) (newStep, error)
 		if !finding {
 			content = rejectedText("finding", problems)
 		}
-	case proposals.ProposeActionTool:
+	case action.ProposeActionTool:
 		res, err := r.proposeAction(ctx, call)
 		if err != nil {
 			return newStep{}, fmt.Errorf("propose the action: %w", err)

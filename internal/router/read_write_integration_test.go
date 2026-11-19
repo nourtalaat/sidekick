@@ -194,7 +194,7 @@ func TestProposalOnAReadWriteRoute(t *testing.T) {
 			require.NoError(t, err)
 
 			conn := modeltest.New(t, model.Capabilities{ToolCalling: true},
-				modeltest.ToolUse(model.Usage{}, modeltest.Call("p1", proposals.ProposeActionTool, proposeNote)),
+				modeltest.ToolUse(model.Usage{}, modeltest.Call("p1", action.ProposeActionTool, proposeNote)),
 				modeltest.ToolUse(model.Usage{}, modeltest.Call("v1", report.SubmitVerdictTool, inconclusiveReport)),
 			)
 			conn.ExpectAllUsed()
